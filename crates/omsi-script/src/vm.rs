@@ -1,6 +1,6 @@
 //! The virtual machine.
 
-use crate::{compile::Program, BlockId, NameId, Op, SysVar};
+use crate::{BlockId, NameId, Op, SysVar, compile::Program};
 
 /// The 8-slot float stack, the register file (ten cells, `l0`…`l9` / `s0`…`s9`, like the
 /// original's `TCache`) and the 8-slot string stack.
@@ -13,7 +13,11 @@ pub struct Stacks {
 
 impl Default for Stacks {
     fn default() -> Self {
-        Self { st: [0.0; 8], reg: [0.0; 10], sst: Default::default() }
+        Self {
+            st: [0.0; 8],
+            reg: [0.0; 10],
+            sst: Default::default(),
+        }
     }
 }
 
@@ -90,7 +94,10 @@ pub struct State {
 
 impl State {
     pub fn new(p: &Program) -> Self {
-        Self { vars: vec![0.0; p.var_names.len()], str_vars: vec![String::new(); p.str_var_names.len()] }
+        Self {
+            vars: vec![0.0; p.var_names.len()],
+            str_vars: vec![String::new(); p.str_var_names.len()],
+        }
     }
     #[inline]
     pub fn get(&self, id: crate::VarId) -> f32 {
@@ -188,8 +195,20 @@ fn splitmix64(mut z: u64) -> u64 {
 impl Default for Vm {
     fn default() -> Self {
         let session = SESSION_SEED.load(std::sync::atomic::Ordering::Relaxed);
-        let rng = if session == 0 { FIXED_RNG } else { splitmix64(session ^ splitmix64(SEEDED.fetch_add(1, std::sync::atomic::Ordering::Relaxed))) | 1 };
-        Self { stacks: Stacks::default(), rng, depth: 0, budget: MAX_OPS, starved: false }
+        let rng = if session == 0 {
+            FIXED_RNG
+        } else {
+            splitmix64(
+                session ^ splitmix64(SEEDED.fetch_add(1, std::sync::atomic::Ordering::Relaxed)),
+            ) | 1
+        };
+        Self {
+            stacks: Stacks::default(),
+            rng,
+            depth: 0,
+            budget: MAX_OPS,
+            starved: false,
+        }
     }
 }
 
@@ -248,7 +267,13 @@ impl Vm {
 
     /// `blocks` run one after the other on empty stacks, sharing one budget: with a budget
     /// for each block, a script made of many blocks would stall the game as many times over.
-    fn run_frame_blocks(&mut self, p: &Program, blocks: &[BlockId], state: &mut State, host: &mut dyn Host) {
+    fn run_frame_blocks(
+        &mut self,
+        p: &Program,
+        blocks: &[BlockId],
+        state: &mut State,
+        host: &mut dyn Host,
+    ) {
         self.budget = MAX_OPS;
         for &b in blocks {
             self.stacks.clear();
@@ -257,7 +282,13 @@ impl Vm {
     }
 
     /// Fire a `{trigger:name}` block. Returns false when the trigger does not exist.
-    pub fn run_trigger(&mut self, p: &Program, name: &str, state: &mut State, host: &mut dyn Host) -> bool {
+    pub fn run_trigger(
+        &mut self,
+        p: &Program,
+        name: &str,
+        state: &mut State,
+        host: &mut dyn Host,
+    ) -> bool {
         match p.trigger(name) {
             Some(b) => {
                 // OMSI passes the key state to a trigger: 1 on press and 0 on release.
@@ -265,7 +296,11 @@ impl Vm {
                 // the stack also lets release blocks such as `kw_m_enginestart_off` store
                 // the released state in their anti-repeat variable.
                 self.stacks.clear();
-                let value = if name.to_ascii_lowercase().ends_with("_off") { 0.0 } else { 1.0 };
+                let value = if name.to_ascii_lowercase().ends_with("_off") {
+                    0.0
+                } else {
+                    1.0
+                };
                 self.stacks.push(value);
                 self.budget = MAX_OPS;
                 self.run_block(p, b, state, host);
@@ -285,9 +320,18 @@ impl Vm {
         self.run_block(p, block, state, host);
     }
 
-    pub fn run_block(&mut self, p: &Program, block: BlockId, state: &mut State, host: &mut dyn Host) {
+    pub fn run_block(
+        &mut self,
+        p: &Program,
+        block: BlockId,
+        state: &mut State,
+        host: &mut dyn Host,
+    ) {
         if self.depth >= MAX_DEPTH {
-            log::warn!("script macro recursion too deep in {}", p.blocks[block as usize].name);
+            log::warn!(
+                "script macro recursion too deep in {}",
+                p.blocks[block as usize].name
+            );
             return;
         }
         self.depth += 1;
@@ -297,7 +341,10 @@ impl Vm {
             if self.budget == 0 {
                 if !self.starved {
                     self.starved = true;
-                    log::warn!("script: {} ran out of its instructions for one run and was cut short", p.blocks[block as usize].name);
+                    log::warn!(
+                        "script: {} ran out of its instructions for one run and was cut short",
+                        p.blocks[block as usize].name
+                    );
                 }
                 break;
             }
@@ -369,7 +416,11 @@ fn exec_hot(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut 
         Op::Load(id) => s.push(state.vars[*id as usize]),
         Op::Store(id) => {
             if !s.st[0].is_finite() && debug_nan() {
-                log::warn!("script: {} = {} (the first number that is not one)", p.var_name(*id).unwrap_or("?"), s.st[0]);
+                log::warn!(
+                    "script: {} = {} (the first number that is not one)",
+                    p.var_name(*id).unwrap_or("?"),
+                    s.st[0]
+                );
             }
             state.vars[*id as usize] = s.st[0]
         }
@@ -416,7 +467,13 @@ fn exec_hot(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut 
         Op::Exp => un!(|a: f32| a.exp()),
         Op::Sqrt => un!(|a: f32| if a > 0.0 { a.sqrt() } else { 0.0 }),
         Op::Sqr => un!(|a: f32| a * a),
-        Op::Sgn => un!(|a: f32| if a > 0.0 { 1.0 } else if a < 0.0 { -1.0 } else { 0.0 }),
+        Op::Sgn => un!(|a: f32| if a > 0.0 {
+            1.0
+        } else if a < 0.0 {
+            -1.0
+        } else {
+            0.0
+        }),
         Op::Abs => un!(|a: f32| a.abs()),
         Op::Trunc => un!(|a: f32| a.trunc()),
         Op::Pi => s.push(std::f32::consts::PI),
@@ -428,7 +485,9 @@ fn exec_hot(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut 
 #[inline(never)]
 fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut dyn Host) {
     match op {
-        Op::Macro(_) | Op::Random | Op::JumpIfZero(_) | Op::Jump(_) => unreachable!("handled by run_block"),
+        Op::Macro(_) | Op::Random | Op::JumpIfZero(_) | Op::Jump(_) => {
+            unreachable!("handled by run_block")
+        }
         Op::Callback(n) => host.callback(p.name(*n), *n, s, state),
         Op::SoundTrigger(n) => host.sound_trigger_vars(p.name(*n), *n, &state.vars),
         Op::SoundTriggerFile(n) => {
@@ -474,7 +533,10 @@ fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut
             let v = if n >= 1000.0 {
                 "ERROR".to_string()
             } else {
-                pat.chars().cycle().take(if pat.is_empty() { 0 } else { omsi_round(n) }).collect()
+                pat.chars()
+                    .cycle()
+                    .take(if pat.is_empty() { 0 } else { omsi_round(n) })
+                    .collect()
             };
             s.sst[0] = v;
         }
@@ -511,7 +573,11 @@ fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut
             let n = omsi_round(s.pop());
             let t = &mut s.sst[0];
             let keep = t.chars().count().saturating_sub(n);
-            let at = t.char_indices().nth(keep).map(|(i, _)| i).unwrap_or(t.len());
+            let at = t
+                .char_indices()
+                .nth(keep)
+                .map(|(i, _)| i)
+                .unwrap_or(t.len());
             t.truncate(at);
         }
         // `$SetLength*` read their width and leave it on the number stack: Omsi.exe's
@@ -551,7 +617,9 @@ fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut
         other => {
             static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
             if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                log::error!("script: instruction {other:?} reached the string/host dispatch; skipped");
+                log::error!(
+                    "script: instruction {other:?} reached the string/host dispatch; skipped"
+                );
             }
         }
     }
@@ -571,7 +639,12 @@ fn debug_nan() -> bool {
 /// swallowed the text.
 fn str_to_float(s: &str) -> f32 {
     let t = s.trim();
-    if t.is_empty() || !t.bytes().any(|b| b.is_ascii_digit()) || !t.bytes().all(|b| b.is_ascii_digit() || matches!(b, b'.' | b'-' | b'+' | b'e' | b'E')) {
+    if t.is_empty()
+        || !t.bytes().any(|b| b.is_ascii_digit())
+        || !t
+            .bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b'.' | b'-' | b'+' | b'e' | b'E'))
+    {
         return -1.0;
     }
     t.parse::<f32>().unwrap_or(-1.0)
@@ -579,18 +652,18 @@ fn str_to_float(s: &str) -> f32 {
 
 #[inline]
 fn b2f(b: bool) -> f32 {
-    if b {
-        1.0
-    } else {
-        0.0
-    }
+    if b { 1.0 } else { 0.0 }
 }
 
 /// Delphi's `Round` of a string function's count (ties to even, as the FPU rounds), none
 /// below 0: Omsi.exe rounds the counts of `$cutBegin`, `$cutEnd`, `$SetLength*` and `$*`.
 fn omsi_round(v: f32) -> usize {
     let r = (v as f64).round_ties_even();
-    if r.is_finite() && r > 0.0 { r.min(1e9) as usize } else { 0 }
+    if r.is_finite() && r > 0.0 {
+        r.min(1e9) as usize
+    } else {
+        0
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -630,7 +703,9 @@ fn set_length(s: &str, n: usize, align: Align) -> String {
 /// (-5 in "04" is "00-5").
 fn int_to_str_enh(v: f32, fmt: &str) -> String {
     let mut chars = fmt.chars();
-    let (Some(pad), rest) = (chars.next(), chars.as_str()) else { return "ERROR".into() };
+    let (Some(pad), rest) = (chars.next(), chars.as_str()) else {
+        return "ERROR".into();
+    };
     if rest.is_empty() {
         return "ERROR".into();
     }
@@ -650,7 +725,7 @@ fn int_to_str_enh(v: f32, fmt: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compile::{compile, CompileInput};
+    use crate::compile::{CompileInput, compile};
 
     fn prog(src: &str) -> Program {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -662,13 +737,24 @@ mod tests {
         let vl = dir.join("v.txt");
         std::fs::write(&vl, "a\nb\nresult\n").unwrap();
         let cf = dir.join("c.txt");
-        std::fs::write(&cf, "[const]\nk\n2.5\n[newcurve]\ncv\n[pnt]\n0\n0\n[pnt]\n10\n100\n").unwrap();
-        compile(&CompileInput { varlists: vec![vl], constfiles: vec![cf], scripts: vec![script], ..Default::default() })
+        std::fs::write(
+            &cf,
+            "[const]\nk\n2.5\n[newcurve]\ncv\n[pnt]\n0\n0\n[pnt]\n10\n100\n",
+        )
+        .unwrap();
+        compile(&CompileInput {
+            varlists: vec![vl],
+            constfiles: vec![cf],
+            scripts: vec![script],
+            ..Default::default()
+        })
     }
 
     #[test]
     fn init_stores_follows_the_macros_init_calls() {
-        let p = prog("{init}\n(M.L.m)\n{end}\n{macro:m}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.b)\n{end}\n");
+        let p = prog(
+            "{init}\n(M.L.m)\n{end}\n{macro:m}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.b)\n{end}\n",
+        );
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         assert!(p.init_stores(p.var("a").unwrap()));
         assert!(!p.init_stores(p.var("b").unwrap()));
@@ -688,16 +774,25 @@ mod tests {
         super::set_session_seed(12345);
         let a: Vec<f32> = (0..16).map(|_| draw()).collect();
         assert!(a.iter().all(|v| (400000.0..900000.0).contains(v)), "{a:?}");
-        let distinct = a.iter().map(|v| *v as i64).collect::<std::collections::BTreeSet<_>>().len();
+        let distinct = a
+            .iter()
+            .map(|v| *v as i64)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
         assert!(distinct >= 15, "{a:?}");
-        assert!(a.iter().any(|v| *v > 650000.0) && a.iter().any(|v| *v < 650000.0), "{a:?}");
+        assert!(
+            a.iter().any(|v| *v > 650000.0) && a.iter().any(|v| *v < 650000.0),
+            "{a:?}"
+        );
     }
 
     /// A macro that calls itself twice, 64 deep, would make 2^64 calls: the run is cut short
     /// at its budget, the game goes on, and the next run has a budget of its own.
     #[test]
     fn a_script_that_would_run_for_ever_is_cut_short() {
-        let p = prog("{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n{frame}\n(M.L.m)\n{end}\n");
+        let p = prog(
+            "{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n{frame}\n(M.L.m)\n{end}\n",
+        );
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         let mut vm = Vm::new();
         let mut st = State::new(&p);
@@ -706,15 +801,26 @@ mod tests {
         let a = st.get(p.var("a").unwrap());
         assert!(a > 1000.0, "{a}");
         vm.run_frame(&p, &mut st, &mut NullHost);
-        assert!(st.get(p.var("a").unwrap()) > a, "the next run had a budget of its own");
-        assert!(t0.elapsed() < std::time::Duration::from_secs(10), "{:?}", t0.elapsed());
+        assert!(
+            st.get(p.var("a").unwrap()) > a,
+            "the next run had a budget of its own"
+        );
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(10),
+            "{:?}",
+            t0.elapsed()
+        );
     }
 
     /// A chain of macros run 10 x 10 x ... times, as GPM's AFR4 printer reads its depot file.
     fn nested_count(top: &str) -> String {
         let mut src = String::from("{macro:m1}\n(L.L.a) 1 + (S.L.a)\n{end}\n");
         for k in 1..7 {
-            src.push_str(&format!("{{macro:m{}}}\n{}\n{{end}}\n", k + 1, format!("(M.L.m{k}) ").repeat(10)));
+            src.push_str(&format!(
+                "{{macro:m{}}}\n{}\n{{end}}\n",
+                k + 1,
+                format!("(M.L.m{k}) ").repeat(10)
+            ));
         }
         src.push_str(&format!("{{{top}}}\n(M.L.m7)\n{{end}}\n"));
         src
@@ -743,13 +849,18 @@ mod tests {
 
     #[test]
     fn an_init_block_that_would_run_for_ever_is_cut_short() {
-        let p = prog("{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n{init}\n(M.L.m)\n{end}\n");
+        let p =
+            prog("{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n{init}\n(M.L.m)\n{end}\n");
         let mut vm = Vm::new();
         let mut st = State::new(&p);
         let t0 = std::time::Instant::now();
         vm.run_init(&p, &mut st, &mut NullHost);
         assert!(st.get(p.var("a").unwrap()) > 1000.0);
-        assert!(t0.elapsed() < std::time::Duration::from_secs(10), "{:?}", t0.elapsed());
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(10),
+            "{:?}",
+            t0.elapsed()
+        );
     }
 
     /// The budget is one vehicle's frame, not one block's: a script split into many
@@ -762,13 +873,21 @@ mod tests {
         let vl = dir.join("v.txt");
         std::fs::write(&vl, "a\n").unwrap();
         let mut scripts = vec![dir.join("m.osc")];
-        std::fs::write(&scripts[0], "{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n").unwrap();
+        std::fs::write(
+            &scripts[0],
+            "{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n",
+        )
+        .unwrap();
         for k in 0..50 {
             let f = dir.join(format!("f{k}.osc"));
             std::fs::write(&f, "{frame}\n(M.L.m)\n{end}\n").unwrap();
             scripts.push(f);
         }
-        let p = compile(&CompileInput { varlists: vec![vl], scripts, ..Default::default() });
+        let p = compile(&CompileInput {
+            varlists: vec![vl],
+            scripts,
+            ..Default::default()
+        });
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         assert_eq!(p.frame.len(), 50);
         let mut vm = Vm::new();
@@ -794,7 +913,9 @@ mod tests {
     #[test]
     fn unknown_curve_takes_its_argument() {
         // the O530 Facelift's converter line with two curves its constfile lacks
-        let p = prog("{init}\n7 (S.L.b) 3 (L.L.b) (F.L.nocurve) (L.L.b) (F.L.cv) * max (S.L.result) (S.L.a)\n(L.L.b) (F.L.cv) (S.L.b)\n{end}\n");
+        let p = prog(
+            "{init}\n7 (S.L.b) 3 (L.L.b) (F.L.nocurve) (L.L.b) (F.L.cv) * max (S.L.result) (S.L.a)\n(L.L.b) (F.L.cv) (S.L.b)\n{end}\n",
+        );
         assert_eq!(p.errors.len(), 1, "{:?}", p.errors);
         assert!(p.errors[0].message.contains("functioninvalid"));
         let mut vm = Vm::new();
@@ -844,7 +965,9 @@ mod tests {
     #[test]
     fn if_keeps_its_condition() {
         // the SD200's parking brake release and the chura matrix's `{if} *`
-        let p = prog("{init}\n1 (S.L.a) 7 (L.L.a) {if} ! (S.L.a) {endif}\n5 d -1 = ! {if} * (S.L.b) {endif}\n3 (S.L.result) 0 {if} 9 (S.L.result) {else} (S.L.result) {endif}\n{end}\n");
+        let p = prog(
+            "{init}\n1 (S.L.a) 7 (L.L.a) {if} ! (S.L.a) {endif}\n5 d -1 = ! {if} * (S.L.b) {endif}\n3 (S.L.result) 0 {if} 9 (S.L.result) {else} (S.L.result) {endif}\n{end}\n",
+        );
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         let mut vm = Vm::new();
         let mut st = State::new(&p);
@@ -873,13 +996,23 @@ mod tests {
 
     #[test]
     fn triggers_that_set_a_variable() {
-        let p = prog("{trigger:on}\n1 (S.L.a)\n{end}\n{trigger:off}\n0 (S.L.b) (S.L.a)\n{end}\n{macro:m}\n(L.L.a) ! (S.L.a)\n{end}\n{trigger:tog}\n(M.L.m)\n{end}\n{trigger:ai_x}\n1 (S.L.a)\n{end}\n{trigger:other}\n1 (S.L.b)\n{end}\n");
+        let p = prog(
+            "{trigger:on}\n1 (S.L.a)\n{end}\n{trigger:off}\n0 (S.L.b) (S.L.a)\n{end}\n{macro:m}\n(L.L.a) ! (S.L.a)\n{end}\n{trigger:tog}\n(M.L.m)\n{end}\n{trigger:ai_x}\n1 (S.L.a)\n{end}\n{trigger:other}\n1 (S.L.b)\n{end}\n",
+        );
         assert!(p.errors.is_empty(), "{:?}", p.errors);
-        assert_eq!(p.triggers_setting("a"), vec!["on".to_string(), "tog".to_string()]);
+        assert_eq!(
+            p.triggers_setting("a"),
+            vec!["on".to_string(), "tog".to_string()]
+        );
         assert_eq!(p.triggers_setting("b"), vec!["other".to_string()]);
         assert!(p.triggers_setting("nonexistent").is_empty());
-        let p = prog("{init}\n\"f1\" (M.V.GetFontIndex) (S.L.a) \"x\" \"f2\" (M.V.GetFontIndex) (S.L.b)\n{end}\n");
-        assert_eq!(p.literal_arguments("getfontindex"), vec!["f1".to_string(), "f2".to_string()]);
+        let p = prog(
+            "{init}\n\"f1\" (M.V.GetFontIndex) (S.L.a) \"x\" \"f2\" (M.V.GetFontIndex) (S.L.b)\n{end}\n",
+        );
+        assert_eq!(
+            p.literal_arguments("getfontindex"),
+            vec!["f1".to_string(), "f2".to_string()]
+        );
         assert_eq!(p.callbacks_used(), vec!["GetFontIndex".to_string()]);
     }
 
@@ -916,7 +1049,12 @@ mod tests {
         std::fs::write(dir.join("t.osc"), src).unwrap();
         std::fs::write(dir.join("v.txt"), "a\nb\nresult\n").unwrap();
         std::fs::write(dir.join("s.txt"), "s\n").unwrap();
-        let p = compile(&CompileInput { varlists: vec![dir.join("v.txt")], stringvarlists: vec![dir.join("s.txt")], scripts: vec![dir.join("t.osc")], ..Default::default() });
+        let p = compile(&CompileInput {
+            varlists: vec![dir.join("v.txt")],
+            stringvarlists: vec![dir.join("s.txt")],
+            scripts: vec![dir.join("t.osc")],
+            ..Default::default()
+        });
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         let mut vm = Vm::new();
         let mut st = State::new(&p);
@@ -975,7 +1113,9 @@ mod tests {
     /// `{endif}` as OMSI's does, instead of running what follows it every time.
     #[test]
     fn orphan_else_skips_to_the_next_endif() {
-        let p = prog("{init}\n1 (S.L.a)\n1 {if} 2 (S.L.a) {endif} {endif}\n{else} 3 (S.L.a) {endif}\n{end}\n");
+        let p = prog(
+            "{init}\n1 (S.L.a)\n1 {if} 2 (S.L.a) {endif} {endif}\n{else} 3 (S.L.a) {endif}\n{end}\n",
+        );
         let mut st = State::new(&p);
         let mut vm = Vm::new();
         vm.run_init(&p, &mut st, &mut NullHost);
@@ -988,7 +1128,10 @@ mod tests {
         let mut st = State::new(&p);
         let mut vm = Vm::new();
         vm.run_init(&p, &mut st, &mut NullHost);
-        (p.var("result").map_or(f32::NAN, |r| st.vars[r as usize]), vm.stacks.top_str().to_string())
+        (
+            p.var("result").map_or(f32::NAN, |r| st.vars[r as usize]),
+            vm.stacks.top_str().to_string(),
+        )
     }
 
     /// The width of `$SetLength*` stays on the number stack (added to the 3 below it here),
@@ -997,7 +1140,11 @@ mod tests {
     fn length_ops_and_the_number_stack() {
         let padded = [("$SetLengthR", "   xyz"), ("$SetLengthL", "xyz   ")];
         for (op, want) in padded {
-            assert_eq!(after_init(&format!("3 \"xyz\" 6 {op} + (S.L.result)")), (9.0, want.to_string()), "{op}");
+            assert_eq!(
+                after_init(&format!("3 \"xyz\" 6 {op} + (S.L.result)")),
+                (9.0, want.to_string()),
+                "{op}"
+            );
         }
         let (sum, centred) = after_init("3 \"xyz\" 6 $SetLengthC + (S.L.result)");
         assert_eq!((sum, centred.trim(), centred.len()), (9.0, "xyz", 6));
@@ -1076,10 +1223,13 @@ mod tests {
         assert_eq!(st.get(hits), 1.0, "frame on press must see the flag");
         vm.run_trigger(&p, "ibox_taste_A1_drag", &mut st, &mut NullHost);
         vm.run_frame(&p, &mut st, &mut NullHost);
-        assert_eq!(st.get(hits), 1.0, "cleared flag must not hit again while held");
+        assert_eq!(
+            st.get(hits),
+            1.0,
+            "cleared flag must not hit again while held"
+        );
         assert_eq!(st.get(taste), 0.0);
     }
-
 }
 
 /// A line number as a display of three digit cells and a letter cell shows it: the digits
@@ -1088,8 +1238,15 @@ mod tests {
 /// letter) is left as it is. See `compat::four_char_matrix`.
 pub fn digits_first(text: &str) -> String {
     let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
-    let others: Vec<char> = text.chars().filter(|c| !c.is_ascii_digit() && !c.is_whitespace()).collect();
-    if digits.is_empty() || digits.len() > 3 || others.len() > 1 || others.iter().any(|c| !c.is_alphabetic()) {
+    let others: Vec<char> = text
+        .chars()
+        .filter(|c| !c.is_ascii_digit() && !c.is_whitespace())
+        .collect();
+    if digits.is_empty()
+        || digits.len() > 3
+        || others.len() > 1
+        || others.iter().any(|c| !c.is_alphabetic())
+    {
         return text.to_string();
     }
     let letter = others.first().copied().unwrap_or(' ');
@@ -1146,7 +1303,14 @@ mod str_op_tests {
             Op::StrRepeat => {
                 let n = s.pop();
                 let pat = s.pop_str();
-                let v = if n >= 1000.0 { "ERROR".to_string() } else { pat.chars().cycle().take(if pat.is_empty() { 0 } else { omsi_round(n) }).collect() };
+                let v = if n >= 1000.0 {
+                    "ERROR".to_string()
+                } else {
+                    pat.chars()
+                        .cycle()
+                        .take(if pat.is_empty() { 0 } else { omsi_round(n) })
+                        .collect()
+                };
                 s.push_str(v)
             }
             Op::StrLength => {
@@ -1154,7 +1318,10 @@ mod str_op_tests {
                 s.push(n as f32)
             }
             Op::StrRemoveSpaces => {
-                let v = s.pop_str().trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' ' | '"')).to_string();
+                let v = s
+                    .pop_str()
+                    .trim_matches(|c| matches!(c, '\t' | '\n' | '\r' | ' ' | '"'))
+                    .to_string();
                 s.push_str(v)
             }
             Op::StrCutBegin => {
@@ -1201,9 +1368,20 @@ mod str_op_tests {
     #[test]
     fn string_ops_in_place_do_what_they_did() {
         let mut p = Program::default();
-        p.strings = [" 206 to jkkyz.bmp ", "\"Rathaus Spandau\"", "Bf. Zoologischer Garten", "", "ab", "M45", "12.5", "Ünter den Linden ", "\t\n", "-3"]
-            .map(String::from)
-            .to_vec();
+        p.strings = [
+            " 206 to jkkyz.bmp ",
+            "\"Rathaus Spandau\"",
+            "Bf. Zoologischer Garten",
+            "",
+            "ab",
+            "M45",
+            "12.5",
+            "Ünter den Linden ",
+            "\t\n",
+            "-3",
+        ]
+        .map(String::from)
+        .to_vec();
         let ids: Vec<StrVarId> = ["t", "u", "v"].map(|n| p.declare_str_var(n)).to_vec();
         let ops = |r: u64, p: &Program| -> Op {
             let pick = |n: usize| (r >> 8) as usize % n;
@@ -1223,7 +1401,21 @@ mod str_op_tests {
                 15 => Op::StrIntToStr,
                 16 => Op::StrDigitsFirst,
                 17 => Op::StrToFloat,
-                _ => Op::Push([0.0, 1.0, 2.4, 2.5, 3.5, 7.0, -2.0, 25.0, 1000.0, f32::NAN, -1e12][pick(11)]),
+                _ => Op::Push(
+                    [
+                        0.0,
+                        1.0,
+                        2.4,
+                        2.5,
+                        3.5,
+                        7.0,
+                        -2.0,
+                        25.0,
+                        1000.0,
+                        f32::NAN,
+                        -1e12,
+                    ][pick(11)],
+                ),
             }
         };
         let mut r: u64 = 0x2545_f491_4f6c_dd1d;
@@ -1237,8 +1429,14 @@ mod str_op_tests {
                 let op = ops(r, &p);
                 exec_op(&mut a, &op, &p, &mut sa, &mut NullHost);
                 reference_str_op(&mut b, &op, &p, &mut sb);
-                let same_st = a.st.iter().zip(&b.st).all(|(x, y)| x == y || (x.is_nan() && y.is_nan()));
-                assert!(same_st && a.sst == b.sst && sa.str_vars == sb.str_vars, "{op:?}: {a:?} / {b:?}");
+                let same_st =
+                    a.st.iter()
+                        .zip(&b.st)
+                        .all(|(x, y)| x == y || (x.is_nan() && y.is_nan()));
+                assert!(
+                    same_st && a.sst == b.sst && sa.str_vars == sb.str_vars,
+                    "{op:?}: {a:?} / {b:?}"
+                );
             }
         }
     }

@@ -18,10 +18,19 @@ struct Prim {
 }
 
 /// Write `out` from the vehicle as it stands now. `scheme` is the paint scheme index.
-pub fn export_glb(root: &Path, vt: &VehicleType, vehicle: &VehicleInstance, scheme: Option<usize>, out: &Path) -> Result<()> {
+pub fn export_glb(
+    root: &Path,
+    vt: &VehicleType,
+    vehicle: &VehicleInstance,
+    scheme: Option<usize>,
+    out: &Path,
+) -> Result<()> {
     let textures = omsi_texture::TextureCache::new();
     let dirs = vt.texture_dirs(root);
-    let (subst, _scheme_dir): (hashbrown::HashMap<String, String>, Option<std::path::PathBuf>) = match scheme {
+    let (subst, _scheme_dir): (
+        hashbrown::HashMap<String, String>,
+        Option<std::path::PathBuf>,
+    ) = match scheme {
         Some(i) => vt.scheme_substitutions(i, omsi_texture::find_texture),
         None => (vt.default_substitutions(root), None),
     };
@@ -38,109 +47,181 @@ pub fn export_glb(root: &Path, vt: &VehicleType, vehicle: &VehicleInstance, sche
     let mut skipped = 0;
     // the vehicle itself, then every coupled part (the rear of an articulated bus) at its
     // offset from the front section
-    let mut parts: Vec<(&VehicleType, Vec<(glam::Mat4, &omsi_sim::vehicle::MeshProps, usize)>)> = Vec::new();
-    parts.push((vt, (0..vt.meshes.len()).map(|i| (vehicle.mesh_local_transform(i), &vehicle.mesh_props[i], i)).collect()));
+    let mut parts: Vec<(
+        &VehicleType,
+        Vec<(glam::Mat4, &omsi_sim::vehicle::MeshProps, usize)>,
+    )> = Vec::new();
+    parts.push((
+        vt,
+        (0..vt.meshes.len())
+            .map(|i| (vehicle.mesh_local_transform(i), &vehicle.mesh_props[i], i))
+            .collect(),
+    ));
     for t in &vehicle.trailers {
         let offset = glam::Mat4::from_translation((t.position - vehicle.position).as_vec3());
-        parts.push((&t.ty, (0..t.ty.meshes.len()).map(|i| (offset * t.mesh_local_transform(i), &t.mesh_props[i], i)).collect()));
+        parts.push((
+            &t.ty,
+            (0..t.ty.meshes.len())
+                .map(|i| (offset * t.mesh_local_transform(i), &t.mesh_props[i], i))
+                .collect(),
+        ));
     }
     for (vt, meshes) in &parts {
-    for (xf, props, i) in meshes.iter().copied() {
-        let vm = &vt.meshes[i];
-        let def = &vt.model.meshes[vm.def_index];
-        // resting pose: what an outside observer sees
-        if !props.visible || (def.viewpoint != 0 && def.viewpoint & 1 == 0) {
-            skipped += 1;
-            continue;
-        }
-        let normal_xf = xf.inverse().transpose();
-        for (first, count, slot) in &vm.data.ranges {
-            let (first, count, slot) = (*first as usize, *count as usize, *slot as usize);
-            if count == 0 {
+        for (xf, props, i) in meshes.iter().copied() {
+            let vm = &vt.meshes[i];
+            let def = &vt.model.meshes[vm.def_index];
+            // resting pose: what an outside observer sees
+            if !props.visible || (def.viewpoint != 0 && def.viewpoint & 1 == 0) {
+                skipped += 1;
                 continue;
             }
-            // the dirt film and other [matl_alphascale] overlays are faded out on a clean
-            // bus: leave them out rather than showing them opaque
-            if props.slot_alpha.get(slot).copied().unwrap_or(1.0) < 0.05 {
-                continue;
-            }
-            let mat = vm.materials.get(slot);
-            let tex_name = mat.map(|m| m.texture.trim().to_string()).unwrap_or_default();
-            let tex_name = subst.get(&tex_name.to_ascii_lowercase()).cloned().unwrap_or(tex_name);
-            // OMSI reads the diffuse alpha only as an alpha test ([matl_alpha] 1) or a
-            // blend ([matl_alpha] 2); otherwise it is the reflection mask and the surface
-            // is opaque - treated as a cutout, the NL202's body (alpha 0.15) vanished and
-            // left the dark interior and dirt layers showing through
-            let alpha_mode = vm.overrides.iter().filter(|o| o.texture.eq_ignore_ascii_case(&tex_name) || o.texture.eq_ignore_ascii_case(mat.map(|m| m.texture.as_str()).unwrap_or(""))).map(|o| o.alpha).max().unwrap_or(0);
-            let alpha_override = alpha_mode >= 2;
-            let key = format!("{}|{}", tex_name.to_ascii_lowercase(), alpha_mode);
-            let material = match material_index.get(&key) {
-                Some(m) => *m,
-                None => {
-                    // `null.bmp` is the exporters' "no texture": the material colour alone
-                    let img = if crate::is_null_texture(&tex_name) {
-                        None
-                    } else {
-                        match image_index.get(&tex_name.to_ascii_lowercase()) {
-                            Some(v) => *v,
-                            None => {
-                                let found = textures.get(&tex_name, &dirs_all).and_then(|img| {
-                                    let mut png = Vec::new();
-                                    let enc = image::codecs::png::PngEncoder::new(&mut png);
-                                    use image::ImageEncoder;
-                                    enc.write_image(&img.rgba, img.width, img.height, image::ExtendedColorType::Rgba8).ok()?;
-                                    images.push((png, img.has_alpha));
-                                    Some(images.len() - 1)
-                                });
-                                image_index.insert(tex_name.to_ascii_lowercase(), found);
-                                found
-                            }
-                        }
-                    };
-                    let has_alpha = img.map(|k| images[k].1).unwrap_or(false);
-                    let colour = mat.map(|m| m.diffuse).unwrap_or([1.0; 4]);
-                    // with a texture its alpha alone counts (D3D's default stage), so the
-                    // material's own alpha (0.7 on the Citaro's door leaves, 0 on its glass)
-                    // does not make a surface see-through
-                    let alpha = if img.is_some() { 1.0 } else { colour[3] };
-                    materials.push((img, (has_alpha || img.is_none()) && alpha_override, [colour[0], colour[1], colour[2], if has_alpha && alpha_mode == 1 { -1.0 } else { alpha }]));
-                    material_names.push(format!("{} (slot alpha {:.2})", tex_name, props.slot_alpha.get(slot).copied().unwrap_or(1.0)));
-                    material_index.insert(key, materials.len() - 1);
-                    materials.len() - 1
+            let normal_xf = xf.inverse().transpose();
+            for (first, count, slot) in &vm.data.ranges {
+                let (first, count, slot) = (*first as usize, *count as usize, *slot as usize);
+                if count == 0 {
+                    continue;
                 }
-            };
-            // gather the vertices this range uses, re-indexed
-            let mut remap: HashMap<u32, u32> = HashMap::new();
-            let mut prim = Prim { positions: Vec::new(), normals: Vec::new(), uvs: Vec::new(), indices: Vec::with_capacity(count), material, name: format!("{} [{slot}] a={:.2}", def.file, props.slot_alpha.get(slot).copied().unwrap_or(1.0)) };
-            for &vi in &vm.data.indices[first..first + count] {
-                let ni = match remap.get(&vi) {
-                    Some(n) => *n,
+                // the dirt film and other [matl_alphascale] overlays are faded out on a clean
+                // bus: leave them out rather than showing them opaque
+                if props.slot_alpha.get(slot).copied().unwrap_or(1.0) < 0.05 {
+                    continue;
+                }
+                let mat = vm.materials.get(slot);
+                let tex_name = mat
+                    .map(|m| m.texture.trim().to_string())
+                    .unwrap_or_default();
+                let tex_name = subst
+                    .get(&tex_name.to_ascii_lowercase())
+                    .cloned()
+                    .unwrap_or(tex_name);
+                // OMSI reads the diffuse alpha only as an alpha test ([matl_alpha] 1) or a
+                // blend ([matl_alpha] 2); otherwise it is the reflection mask and the surface
+                // is opaque - treated as a cutout, the NL202's body (alpha 0.15) vanished and
+                // left the dark interior and dirt layers showing through
+                let alpha_mode = vm
+                    .overrides
+                    .iter()
+                    .filter(|o| {
+                        o.texture.eq_ignore_ascii_case(&tex_name)
+                            || o.texture
+                                .eq_ignore_ascii_case(mat.map(|m| m.texture.as_str()).unwrap_or(""))
+                    })
+                    .map(|o| o.alpha)
+                    .max()
+                    .unwrap_or(0);
+                let alpha_override = alpha_mode >= 2;
+                let key = format!("{}|{}", tex_name.to_ascii_lowercase(), alpha_mode);
+                let material = match material_index.get(&key) {
+                    Some(m) => *m,
                     None => {
-                        let p = xf.transform_point3(vm.data.positions[vi as usize]);
-                        let n = normal_xf.transform_vector3(vm.data.normals.get(vi as usize).copied().unwrap_or(Vec3::Z)).normalize_or_zero();
-                        let uv = vm.data.uvs.get(vi as usize).copied().unwrap_or_default();
-                        // glTF is y up, right-handed: x right, y up, z towards the viewer;
-                        // the model frame is x right, y forward, z up
-                        prim.positions.push([p.x, p.z, -p.y]);
-                        prim.normals.push([n.x, n.z, -n.y]);
-                        prim.uvs.push([uv.x, uv.y]);
-                        let k = prim.positions.len() as u32 - 1;
-                        remap.insert(vi, k);
-                        k
+                        // `null.bmp` is the exporters' "no texture": the material colour alone
+                        let img = if crate::is_null_texture(&tex_name) {
+                            None
+                        } else {
+                            match image_index.get(&tex_name.to_ascii_lowercase()) {
+                                Some(v) => *v,
+                                None => {
+                                    let found =
+                                        textures.get(&tex_name, &dirs_all).and_then(|img| {
+                                            let mut png = Vec::new();
+                                            let enc = image::codecs::png::PngEncoder::new(&mut png);
+                                            use image::ImageEncoder;
+                                            enc.write_image(
+                                                &img.rgba,
+                                                img.width,
+                                                img.height,
+                                                image::ExtendedColorType::Rgba8,
+                                            )
+                                            .ok()?;
+                                            images.push((png, img.has_alpha));
+                                            Some(images.len() - 1)
+                                        });
+                                    image_index.insert(tex_name.to_ascii_lowercase(), found);
+                                    found
+                                }
+                            }
+                        };
+                        let has_alpha = img.map(|k| images[k].1).unwrap_or(false);
+                        let colour = mat.map(|m| m.diffuse).unwrap_or([1.0; 4]);
+                        // with a texture its alpha alone counts (D3D's default stage), so the
+                        // material's own alpha (0.7 on the Citaro's door leaves, 0 on its glass)
+                        // does not make a surface see-through
+                        let alpha = if img.is_some() { 1.0 } else { colour[3] };
+                        materials.push((
+                            img,
+                            (has_alpha || img.is_none()) && alpha_override,
+                            [
+                                colour[0],
+                                colour[1],
+                                colour[2],
+                                if has_alpha && alpha_mode == 1 {
+                                    -1.0
+                                } else {
+                                    alpha
+                                },
+                            ],
+                        ));
+                        material_names.push(format!(
+                            "{} (slot alpha {:.2})",
+                            tex_name,
+                            props.slot_alpha.get(slot).copied().unwrap_or(1.0)
+                        ));
+                        material_index.insert(key, materials.len() - 1);
+                        materials.len() - 1
                     }
                 };
-                prim.indices.push(ni);
+                // gather the vertices this range uses, re-indexed
+                let mut remap: HashMap<u32, u32> = HashMap::new();
+                let mut prim = Prim {
+                    positions: Vec::new(),
+                    normals: Vec::new(),
+                    uvs: Vec::new(),
+                    indices: Vec::with_capacity(count),
+                    material,
+                    name: format!(
+                        "{} [{slot}] a={:.2}",
+                        def.file,
+                        props.slot_alpha.get(slot).copied().unwrap_or(1.0)
+                    ),
+                };
+                for &vi in &vm.data.indices[first..first + count] {
+                    let ni = match remap.get(&vi) {
+                        Some(n) => *n,
+                        None => {
+                            let p = xf.transform_point3(vm.data.positions[vi as usize]);
+                            let n = normal_xf
+                                .transform_vector3(
+                                    vm.data.normals.get(vi as usize).copied().unwrap_or(Vec3::Z),
+                                )
+                                .normalize_or_zero();
+                            let uv = vm.data.uvs.get(vi as usize).copied().unwrap_or_default();
+                            // glTF is y up, right-handed: x right, y up, z towards the viewer;
+                            // the model frame is x right, y forward, z up
+                            prim.positions.push([p.x, p.z, -p.y]);
+                            prim.normals.push([n.x, n.z, -n.y]);
+                            prim.uvs.push([uv.x, uv.y]);
+                            let k = prim.positions.len() as u32 - 1;
+                            remap.insert(vi, k);
+                            k
+                        }
+                    };
+                    prim.indices.push(ni);
+                }
+                // glTF's front faces are counter-clockwise; OMSI's arrive clockwise in the
+                // model frame (see `omsi_geometry::mesh_from_o3d`)
+                for tri in prim.indices.chunks_exact_mut(3) {
+                    tri.swap(1, 2);
+                }
+                prims.push(prim);
             }
-            // glTF's front faces are counter-clockwise; OMSI's arrive clockwise in the
-            // model frame (see `omsi_geometry::mesh_from_o3d`)
-            for tri in prim.indices.chunks_exact_mut(3) {
-                tri.swap(1, 2);
-            }
-            prims.push(prim);
         }
     }
-    }
-    log::info!("glb: {} primitives, {} materials, {} textures ({skipped} meshes hidden)", prims.len(), materials.len(), images.len());
+    log::info!(
+        "glb: {} primitives, {} materials, {} textures ({skipped} meshes hidden)",
+        prims.len(),
+        materials.len(),
+        images.len()
+    );
     // --- pack the binary chunk
     let mut bin: Vec<u8> = Vec::new();
     let mut buffer_views = Vec::new();
@@ -152,7 +233,8 @@ pub fn export_glb(root: &Path, vt: &VehicleType, vehicle: &VehicleInstance, sche
         }
         let offset = bin.len();
         bin.extend_from_slice(bytes);
-        let mut v = serde_json::json!({ "buffer": 0, "byteOffset": offset, "byteLength": bytes.len() });
+        let mut v =
+            serde_json::json!({ "buffer": 0, "byteOffset": offset, "byteLength": bytes.len() });
         if let Some(t) = target {
             v["target"] = serde_json::json!(t);
         }
@@ -186,7 +268,9 @@ pub fn export_glb(root: &Path, vt: &VehicleType, vehicle: &VehicleInstance, sche
         let v = push_view(&mut bin, png, None);
         gltf_images.push(serde_json::json!({ "bufferView": v, "mimeType": "image/png" }));
     }
-    let gltf_textures: Vec<serde_json::Value> = (0..images.len()).map(|i| serde_json::json!({ "source": i, "sampler": 0 })).collect();
+    let gltf_textures: Vec<serde_json::Value> = (0..images.len())
+        .map(|i| serde_json::json!({ "source": i, "sampler": 0 }))
+        .collect();
     let gltf_materials: Vec<serde_json::Value> = materials
         .iter()
         .enumerate()
@@ -206,7 +290,9 @@ pub fn export_glb(root: &Path, vt: &VehicleType, vehicle: &VehicleInstance, sche
             m
         })
         .collect();
-    let nodes: Vec<serde_json::Value> = (0..meshes.len()).map(|i| serde_json::json!({ "mesh": i })).collect();
+    let nodes: Vec<serde_json::Value> = (0..meshes.len())
+        .map(|i| serde_json::json!({ "mesh": i }))
+        .collect();
     let json = serde_json::json!({
         "asset": { "version": "2.0", "generator": "openOMSI" },
         "scene": 0,
@@ -243,7 +329,11 @@ pub fn export_glb(root: &Path, vt: &VehicleType, vehicle: &VehicleInstance, sche
         std::fs::create_dir_all(d).ok();
     }
     std::fs::write(out, &file).with_context(|| format!("writing {}", out.display()))?;
-    log::info!("wrote {} ({:.1} MB)", out.display(), file.len() as f64 / 1e6);
+    log::info!(
+        "wrote {} ({:.1} MB)",
+        out.display(),
+        file.len() as f64 / 1e6
+    );
     Ok(())
 }
 

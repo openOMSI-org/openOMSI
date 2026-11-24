@@ -281,7 +281,9 @@ fn check_night_coverage(samples: u32) {
                 );
             }
             let p = &rgba[(32 * 64 + 32) * 4..][..3];
-            eprintln!("night coverage rendered: {samples}x classic={classic} enhanced={enhanced} {case:?}: {p:?}");
+            eprintln!(
+                "night coverage rendered: {samples}x classic={classic} enhanced={enhanced} {case:?}: {p:?}"
+            );
             if case.night_alpha == Some(128) {
                 assert!(
                     p[0] > 96,

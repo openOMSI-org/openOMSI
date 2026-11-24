@@ -17,7 +17,8 @@ pub fn lane_time(l: &super::Lane) -> f32 {
 /// What a turn from lane `a` into lane `b` costs (s): straight on nothing, a turn a few
 /// seconds (a left turn across the oncoming traffic a little more), turning round a lot.
 fn turn_cost(net: &Network, a: &super::Lane, b: &super::Lane) -> f32 {
-    let d = super::wrap_deg(b.start_heading() - a.end_heading()) + super::wrap_deg(b.end_heading() - b.start_heading());
+    let d = super::wrap_deg(b.start_heading() - a.end_heading())
+        + super::wrap_deg(b.end_heading() - b.start_heading());
     if d.abs() > 150.0 {
         60.0
     } else if d.abs() > 35.0 {
@@ -36,16 +37,35 @@ fn turn_cost(net: &Network, a: &super::Lane, b: &super::Lane) -> f32 {
 /// ahead past part of it either. Times, not lengths: each lane at its speed, turns and turning
 /// round cost, a change to the next lane of the same road (`left`/`right`) is allowed.
 /// `max_cost` is in metres (as far as the search goes, at about 8 m/s).
-pub fn way_back(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost: f32) -> Option<(Vec<usize>, usize)> {
+pub fn way_back(
+    net: &Network,
+    bus: DVec3,
+    heading: f64,
+    ahead: &[usize],
+    max_cost: f32,
+) -> Option<(Vec<usize>, usize)> {
     way_search(net, bus, heading, ahead, max_cost, true)
 }
 
 /// The quickest way onto any of `targets` (lanes in no order: the lanes at a stop).
-pub fn way_to_any(net: &Network, bus: DVec3, heading: f64, targets: &[usize], max_cost: f32) -> Option<(Vec<usize>, usize)> {
+pub fn way_to_any(
+    net: &Network,
+    bus: DVec3,
+    heading: f64,
+    targets: &[usize],
+    max_cost: f32,
+) -> Option<(Vec<usize>, usize)> {
     way_search(net, bus, heading, targets, max_cost, false)
 }
 
-fn way_search(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost: f32, along: bool) -> Option<(Vec<usize>, usize)> {
+fn way_search(
+    net: &Network,
+    bus: DVec3,
+    heading: f64,
+    ahead: &[usize],
+    max_cost: f32,
+    along: bool,
+) -> Option<(Vec<usize>, usize)> {
     use std::cmp::Ordering;
     use std::collections::BinaryHeap;
     // the lane under the bus going its way; else (a depot, a car park, the grass) the
@@ -62,10 +82,23 @@ fn way_search(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost
             Some((i, d, angle_diff(heading, h as f64).abs(), s))
         })
         .collect();
-    let pick = |max_d: f64, max_a: f64| cands.iter().filter(|c| c.1 < max_d && c.2 < max_a).min_by(|a, b| (a.1 + a.2 * 0.1).total_cmp(&(b.1 + b.2 * 0.1))).copied();
-    let start = pick(14.0, 70.0).or_else(|| pick(80.0, 100.0)).or_else(|| pick(80.0, 181.0));
+    let pick = |max_d: f64, max_a: f64| {
+        cands
+            .iter()
+            .filter(|c| c.1 < max_d && c.2 < max_a)
+            .min_by(|a, b| (a.1 + a.2 * 0.1).total_cmp(&(b.1 + b.2 * 0.1)))
+            .copied()
+    };
+    let start = pick(14.0, 70.0)
+        .or_else(|| pick(80.0, 100.0))
+        .or_else(|| pick(80.0, 181.0));
     if omsi_cfg::flags::OMSI_DEBUG_NAV.is_set() {
-        log::info!("navigator: way search from {:?} ({} street lanes within 90 m) to {} route lanes", start.map(|s| s.0), cands.len(), ahead.len());
+        log::info!(
+            "navigator: way search from {:?} ({} street lanes within 90 m) to {} route lanes",
+            start.map(|s| s.0),
+            cands.len(),
+            ahead.len()
+        );
     }
     let (start, _, _, s0) = start?;
     let window = &ahead[..ahead.len().min(400)];
@@ -108,10 +141,17 @@ fn way_search(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost
         if best.is_some_and(|b| cost >= b.0) || cost > limit {
             break;
         }
-        let Some(l) = net.lanes.get(lane) else { continue };
+        let Some(l) = net.lanes.get(lane) else {
+            continue;
+        };
         if let Some(&k) = targets.get(&lane) {
             // (the start lane is on the route only ahead of the bus: its remaining part)
-            let total = cost + to_go[k] - if lane == start && along { s0 / l.length().max(0.5) * lane_time(l) } else { 0.0 };
+            let total = cost + to_go[k]
+                - if lane == start && along {
+                    s0 / l.length().max(0.5) * lane_time(l)
+                } else {
+                    0.0
+                };
             if best.map(|b| total < b.0).unwrap_or(true) {
                 best = Some((total, lane, k));
             }
@@ -139,7 +179,9 @@ fn way_search(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost
         // the next lane of the same road, the same way: changed into on the way
         for n in [l.left, l.right].into_iter().flatten() {
             let Some(nl) = net.lanes.get(n) else { continue };
-            if nl.kind != LaneKind::Street || angle_diff(nl.start_heading() as f64, l.start_heading() as f64).abs() > 30.0 {
+            if nl.kind != LaneKind::Street
+                || angle_diff(nl.start_heading() as f64, l.start_heading() as f64).abs() > 30.0
+            {
                 continue;
             }
             let c = cost + through * 0.5 + 4.0;
@@ -170,7 +212,11 @@ fn way_search(net: &Network, bus: DVec3, heading: f64, ahead: &[usize], max_cost
     let mut out: Vec<usize> = Vec::with_capacity(path.len());
     for (i, &l) in path.iter().enumerate() {
         let next = path.get(i + 1).copied().unwrap_or(reached);
-        let beside = net.lanes.get(l).map(|x| x.left == Some(next) || x.right == Some(next)).unwrap_or(false);
+        let beside = net
+            .lanes
+            .get(l)
+            .map(|x| x.left == Some(next) || x.right == Some(next))
+            .unwrap_or(false);
         if !beside {
             out.push(l);
         }
@@ -184,7 +230,14 @@ pub fn lanes_near(net: &Network, c: DVec2, radius: f64) -> Vec<usize> {
     let (cx, cy) = Network::grid_cell(c.extend(0.0));
     let r = (radius / 50.0).ceil() as i32;
     if net.grid.is_empty() {
-        return (0..net.lanes.len()).filter(|&i| net.lanes[i].points.iter().any(|q| (q.truncate() - c).length() < radius)).collect();
+        return (0..net.lanes.len())
+            .filter(|&i| {
+                net.lanes[i]
+                    .points
+                    .iter()
+                    .any(|q| (q.truncate() - c).length() < radius)
+            })
+            .collect();
     }
     for gx in cx - r..=cx + r {
         for gy in cy - r..=cy + r {

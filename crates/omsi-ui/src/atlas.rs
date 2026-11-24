@@ -44,7 +44,18 @@ const MAX_SIZE: u32 = 4096;
 
 impl Atlas {
     pub fn new(size: u32) -> Atlas {
-        Atlas { size, rgba: vec![0; (size * size * 4) as usize], entries: HashMap::new(), shelf_y: 0, shelf_h: 0, cursor_x: 0, dirty: Some([0, 0, size, size]), frame: 0, generation: 0, overflowed: false }
+        Atlas {
+            size,
+            rgba: vec![0; (size * size * 4) as usize],
+            entries: HashMap::new(),
+            shelf_y: 0,
+            shelf_h: 0,
+            cursor_x: 0,
+            dirty: Some([0, 0, size, size]),
+            frame: 0,
+            generation: 0,
+            overflowed: false,
+        }
     }
 
     /// Start of a frame: an atlas more than nine tenths full is cleared now, before
@@ -110,7 +121,14 @@ impl Atlas {
         self.put_pixels(key, w, h, ascent, |i| [255, 255, 255, alpha[i]])
     }
 
-    fn put_pixels(&mut self, key: Key, w: u32, h: u32, ascent: f32, pixel: impl Fn(usize) -> [u8; 4]) -> Sprite {
+    fn put_pixels(
+        &mut self,
+        key: Key,
+        w: u32,
+        h: u32,
+        ascent: f32,
+        pixel: impl Fn(usize) -> [u8; 4],
+    ) -> Sprite {
         let at = match self.alloc(w, h) {
             Some(a) => a,
             None => {
@@ -134,12 +152,25 @@ impl Atlas {
             None => r,
             Some(d) => {
                 let (x0, y0) = (d[0].min(r[0]), d[1].min(r[1]));
-                let (x1, y1) = ((d[0] + d[2]).max(r[0] + r[2]), (d[1] + d[3]).max(r[1] + r[3]));
+                let (x1, y1) = (
+                    (d[0] + d[2]).max(r[0] + r[2]),
+                    (d[1] + d[3]).max(r[1] + r[3]),
+                );
                 [x0, y0, x1 - x0, y1 - y0]
             }
         });
         let s = self.size as f32;
-        let sprite = Sprite { uv: [at.0 as f32 / s, at.1 as f32 / s, (at.0 + w) as f32 / s, (at.1 + h) as f32 / s], w: w as f32, h: h as f32, ascent };
+        let sprite = Sprite {
+            uv: [
+                at.0 as f32 / s,
+                at.1 as f32 / s,
+                (at.0 + w) as f32 / s,
+                (at.1 + h) as f32 / s,
+            ],
+            w: w as f32,
+            h: h as f32,
+            ascent,
+        };
         self.entries.insert(key, (sprite, self.frame));
         sprite
     }
@@ -259,9 +290,11 @@ mod tests {
         let has_bleed = (0..28).any(|py| {
             (0..28).any(|px| {
                 let p = pixel(x + px, y + py);
-                p[3] == 0 && p[0..3] != [0, 0, 0]
+                p[3] == 0
+                    && p[0..3] != [0, 0, 0]
                     && (py.saturating_sub(1)..=(py + 1).min(27)).any(|ny| {
-                        (px.saturating_sub(1)..=(px + 1).min(27)).any(|nx| pixel(x + nx, y + ny)[3] > 0)
+                        (px.saturating_sub(1)..=(px + 1).min(27))
+                            .any(|nx| pixel(x + nx, y + ny)[3] > 0)
                     })
             })
         });
@@ -275,6 +308,9 @@ mod tests {
     fn three_digit_speed_limit_fits_inside_the_sign_at_navigator_size() {
         let fonts = Fonts::new();
         let width = fonts.width("120", 9.5, Weight::Black);
-        assert!(width <= 19.0, "three-digit text is {width:.2}px wide; sign centre is 19px");
+        assert!(
+            width <= 19.0,
+            "three-digit text is {width:.2}px wide; sign centre is 19px"
+        );
     }
 }

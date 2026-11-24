@@ -51,7 +51,9 @@ fn an_info_with_everything_at_its_longest_fits_one_datagram() {
     p.destination = "Weiden (Oberpfalz) Bahnhof/ZOB – über Stockerhut ".repeat(3);
     p.tour = "ä".repeat(70);
     p.figure = format!("Humans/{}/{}.hum", "é".repeat(60), "f".repeat(120));
-    p.texts = (0..MAX_TEXTS).map(|k| format!("{k}ß{}", "ñ".repeat(40))).collect();
+    p.texts = (0..MAX_TEXTS)
+        .map(|k| format!("{k}ß{}", "ñ".repeat(40)))
+        .collect();
     let text = p.encode_info();
     assert!(text.len() <= MAX_DATAGRAM, "{} bytes", text.len());
     let parts: Vec<&str> = text.split('|').collect();
@@ -86,19 +88,34 @@ fn info_carries_the_freetex_pictures_and_an_older_info_has_none() {
     assert!(q.freetex.is_empty());
     assert_eq!(q.texts, p.texts);
     // and with everything else at its longest the INFO still fits one datagram
-    p.freetex = (0..MAX_FREETEX).map(|k| format!("{k}{}", "é".repeat(200))).collect();
+    p.freetex = (0..MAX_FREETEX)
+        .map(|k| format!("{k}{}", "é".repeat(200)))
+        .collect();
     p.bus = format!("Vehicles/{}/{}.bus", "Ü".repeat(60), "b".repeat(120));
-    p.texts = (0..MAX_TEXTS).map(|k| format!("{k}ß{}", "ñ".repeat(40))).collect();
+    p.texts = (0..MAX_TEXTS)
+        .map(|k| format!("{k}ß{}", "ñ".repeat(40)))
+        .collect();
     assert!(p.encode_info().len() <= MAX_DATAGRAM);
 }
 
 #[test]
 fn info_drops_freetex_pictures_that_leave_the_vehicle() {
     let mut p = pose(1.5);
-    p.freetex = vec![r"\\attacker.example\s\x.bmp".into(), r"..\..\Anzeigen\17.tga".into(), "C:/x.bmp".into()];
+    p.freetex = vec![
+        r"\\attacker.example\s\x.bmp".into(),
+        r"..\..\Anzeigen\17.tga".into(),
+        "C:/x.bmp".into(),
+    ];
     let text = p.encode_info();
     let q = Pose::decode_info(&text.split('|').collect::<Vec<_>>()).unwrap();
-    assert_eq!(q.freetex, vec![String::new(), r"..\..\Anzeigen\17.tga".to_string(), String::new()]);
+    assert_eq!(
+        q.freetex,
+        vec![
+            String::new(),
+            r"..\..\Anzeigen\17.tga".to_string(),
+            String::new()
+        ]
+    );
 }
 
 #[test]
@@ -235,7 +252,7 @@ fn vehicle_paths_from_the_network() {
 
 #[test]
 fn addresses_are_told_apart() {
-    use addrs::{classify, AddrKind};
+    use addrs::{AddrKind, classify};
     let ip = |s: &str| s.parse::<Ipv4Addr>().unwrap();
     // the interfaces of the Mac this was written on: Hamachi, Tailscale, wifi
     assert_eq!(classify(ip("25.34.223.28"), "en9"), AddrKind::Hamachi);
@@ -277,9 +294,21 @@ fn addresses_are_told_apart() {
     assert_eq!(
         got,
         vec![
-            (ip("25.61.2.10"), AddrKind::Hamachi, Some(ip("25.255.255.255"))),
-            (ip("192.168.0.105"), AddrKind::Lan, Some(ip("192.168.0.255"))),
-            (ip("172.29.160.1"), AddrKind::Virtual, Some(ip("172.29.175.255"))),
+            (
+                ip("25.61.2.10"),
+                AddrKind::Hamachi,
+                Some(ip("25.255.255.255"))
+            ),
+            (
+                ip("192.168.0.105"),
+                AddrKind::Lan,
+                Some(ip("192.168.0.255"))
+            ),
+            (
+                ip("172.29.160.1"),
+                AddrKind::Virtual,
+                Some(ip("172.29.175.255"))
+            ),
         ]
     );
 }
@@ -292,7 +321,9 @@ fn only_nearby_games_hear_where_the_host_is() {
     assert!(addrs::is_local_peer(at("100.74.245.63:5000")));
     assert!(!addrs::is_local_peer(at("[2001:db8::1]:5000")));
     let far = at("198.51.100.77:5000");
-    let near = addrs::local_addresses().iter().any(|l| l.ip.octets()[..3] == [198, 51, 100]);
+    let near = addrs::local_addresses()
+        .iter()
+        .any(|l| l.ip.octets()[..3] == [198, 51, 100]);
     assert_eq!(addrs::is_local_peer(far), near);
 }
 
@@ -360,9 +391,11 @@ fn session_codes() {
         protocol: 2,
         ..c.clone()
     };
-    assert!(describe_join(&old.encode())
-        .unwrap_err()
-        .contains("protocol 2"));
+    assert!(
+        describe_join(&old.encode())
+            .unwrap_err()
+            .contains("protocol 2")
+    );
     assert!(
         LanSession::join(&old.encode(), "x", world("m"), Duration::from_millis(10))
             .err()
@@ -414,9 +447,16 @@ fn session_codes() {
     // cut short while copying
     let short = &text[..text.len() - 5];
     assert!(looks_like_code(short));
-    assert!(SessionCode::decode(short).unwrap_err().contains("copy the whole code"));
+    assert!(
+        SessionCode::decode(short)
+            .unwrap_err()
+            .contains("copy the whole code")
+    );
     let d = describe_join(&text).unwrap();
-    assert!(d.contains("25.34.223.28:27015 (Hamachi)") && d.contains("192.168.1.174:27015 (LAN)"), "{d}");
+    assert!(
+        d.contains("25.34.223.28:27015 (Hamachi)") && d.contains("192.168.1.174:27015 (LAN)"),
+        "{d}"
+    );
     assert_eq!(
         parse_join(&text).unwrap(),
         JoinTarget::Direct {
@@ -484,16 +524,22 @@ fn join_targets() {
     assert!(parse_join("27015:27015").is_err());
     assert!(describe_join("27015:27015").is_err());
     assert!(describe_join("").unwrap().contains("search"));
-    assert!(describe_join("27016")
-        .unwrap()
-        .contains("this computer, port 27016"));
-    assert!(describe_join(&c.encode())
-        .unwrap()
-        .contains("10.0.0.7:27015"));
+    assert!(
+        describe_join("27016")
+            .unwrap()
+            .contains("this computer, port 27016")
+    );
+    assert!(
+        describe_join(&c.encode())
+            .unwrap()
+            .contains("10.0.0.7:27015")
+    );
     assert!(describe_join("OMSI-ABCD-EFGH").is_err());
-    assert!(describe_join("bus-pc.local:27020")
-        .unwrap()
-        .contains("bus-pc.local, port 27020"));
+    assert!(
+        describe_join("bus-pc.local:27020")
+            .unwrap()
+            .contains("bus-pc.local, port 27020")
+    );
     assert!(describe_join("hello world").is_err());
 }
 
@@ -553,10 +599,15 @@ fn animation_snapshots_keep_owner_timestamps_when_relayed_between_clients() {
                 }
             }
         }
-        if received.iter().all(|got| *got) { break; }
+        if received.iter().all(|got| *got) {
+            break;
+        }
         std::thread::sleep(Duration::from_millis(5));
     }
-    assert_eq!(received, [true; 3], "host, direct client and relayed client must get the owner's frame clock");
+    assert_eq!(
+        received, [true; 3],
+        "host, direct client and relayed client must get the owner's frame clock"
+    );
 }
 
 #[test]
@@ -591,14 +642,20 @@ fn variable_recovery_has_its_own_rate_budget_and_checks_the_sender() {
     let mut sender = vars::VarSender::default();
     let messages = sender.tick(PROTOCOL as u8, 7, 99, &[0], &[42.0], &[], &[], 0.1);
     host.on_vars(&messages[0], "127.0.0.1:29002".parse().unwrap());
-    assert!(host.take_vars().is_empty(), "a different address cannot send for this peer");
+    assert!(
+        host.take_vars().is_empty(),
+        "a different address cannot send for this peer"
+    );
     host.on_vars(&messages[0], from);
     let received = host.take_vars();
     assert_eq!(received.len(), 1, "pose traffic must not starve variables");
     assert_eq!(received[0].floats, vec![(0, 42.0)]);
     host.peers.get_mut(&7).unwrap().variables.tokens = 0.0;
     host.on_vars(&messages[0], from);
-    assert!(host.take_vars().is_empty(), "variable traffic is still rate limited");
+    assert!(
+        host.take_vars().is_empty(),
+        "variable traffic is still rate limited"
+    );
 }
 
 #[test]
@@ -615,11 +672,20 @@ fn host_and_clients_exchange_complete_variable_tables() {
     let ids: Vec<u16> = (0..600).map(|k| k * 2).collect();
     let values: Vec<f32> = (0..600).map(|k| k as f32 + 0.5).collect();
     let string_ids: Vec<u16> = (0..20).collect();
-    let strings: Vec<String> = (0..20).map(|k| format!("{k}:{}", "árvíz".repeat(if k == 19 { 600 } else { 60 }))).collect();
-    let schema = var_schema::Schema { floats: (0..300).map(|i| format!("variable_{i:04}")).collect(), ..Default::default() };
+    let strings: Vec<String> = (0..20)
+        .map(|k| format!("{k}:{}", "árvíz".repeat(if k == 19 { 600 } else { 60 })))
+        .collect();
+    let schema = var_schema::Schema {
+        floats: (0..300).map(|i| format!("variable_{i:04}")).collect(),
+        ..Default::default()
+    };
     let schema_text = schema.encode().unwrap();
     let mut received_schemas = [false; 3];
-    let mut received = [vars::VarsIn::default(), vars::VarsIn::default(), vars::VarsIn::default()];
+    let mut received = [
+        vars::VarsIn::default(),
+        vars::VarsIn::default(),
+        vars::VarsIn::default(),
+    ];
     for _ in 0..30 {
         host.send_var_schema(schema.table_hash(), &schema_text, 0.1);
         a.send_var_schema(schema.table_hash(), &schema_text, 0.1);
@@ -630,9 +696,15 @@ fn host_and_clients_exchange_complete_variable_tables() {
         b.tick(0.1, &poses[2]);
         let a_id = a.my_id;
         let host_id = host.my_id;
-        for (slot, session, owner) in [(0, &mut host, a_id), (1, &mut a, host_id), (2, &mut b, a_id)] {
+        for (slot, session, owner) in [
+            (0, &mut host, a_id),
+            (1, &mut a, host_id),
+            (2, &mut b, a_id),
+        ] {
             for manifest in session.take_var_schemas() {
-                if manifest.id != owner { continue; }
+                if manifest.id != owner {
+                    continue;
+                }
                 for (_, text) in manifest.strings {
                     assert_eq!(var_schema::Schema::decode(&text), Some(schema.clone()));
                     received_schemas[slot] = true;
@@ -673,19 +745,42 @@ fn clients_receive_ai_script_context_only_from_the_host() {
     let mut a = LanSession::join_addr(vec![addr], None, "a", world("m")).unwrap();
     let mut b = LanSession::join_addr(vec![addr], None, "b", world("m")).unwrap();
     let poses = [pose(100.0), pose(200.0), pose(300.0)];
-    pump(&mut [&mut host, &mut a, &mut b], &poses, 150, |s| s[1].connected && s[2].connected && s[0].peers.len() == 2);
+    pump(&mut [&mut host, &mut a, &mut b], &poses, 150, |s| {
+        s[1].connected && s[2].connected && s[0].peers.len() == 2
+    });
     let context = ai_context::Context {
-        active: 1.0, line: "042".into(), terminus: 3,
-        stops: (0..100).map(|i| (i, format!("árvíztűrő bus stop {i}"), i as f32 * 60.0, i as f32 * 60.0 + 10.0)).collect(),
-        index: 5, delay: -12.5, system: [42.0; 22],
+        active: 1.0,
+        line: "042".into(),
+        terminus: 3,
+        stops: (0..100)
+            .map(|i| {
+                (
+                    i,
+                    format!("árvíztűrő bus stop {i}"),
+                    i as f32 * 60.0,
+                    i as f32 * 60.0 + 10.0,
+                )
+            })
+            .collect(),
+        index: 5,
+        delay: -12.5,
+        system: [42.0; 22],
     };
     let mut receiver = ai_context::Receiver::default();
     let mut received = None;
     for page in 0..20 {
-        host.send_ai_context(a.my_id, &context.packet(PROTOCOL as u8, 7, page as u32, page).unwrap());
+        host.send_ai_context(
+            a.my_id,
+            &context
+                .packet(PROTOCOL as u8, 7, page as u32, page)
+                .unwrap(),
+        );
         a.tick(0.1, &poses[1]);
         for packet in a.take_ai_contexts() {
-            if let Some((id, value)) = receiver.receive(&packet, PROTOCOL as u8) { assert_eq!(id, 7); received = Some(value); }
+            if let Some((id, value)) = receiver.receive(&packet, PROTOCOL as u8) {
+                assert_eq!(id, 7);
+                received = Some(value);
+            }
         }
     }
     assert_eq!(received, Some(context.clone()));
@@ -712,8 +807,22 @@ fn script_textures_initialize_and_update_through_the_host_in_both_directions() {
         find(s[2], 200.0).is_some() && find(s[1], 100.0).is_some()
     });
     assert!(a.connected && b.connected);
-    let host_image = Image { width: 2, height: 1, mipmaps: false, rgba: Arc::new(vec![1, 2, 3, 4, 5, 6, 7, 8]) };
-    let mut client_image = Image { width: 64, height: 64, mipmaps: true, rgba: Arc::new((0..64 * 64 * 4).map(|k| ((k * 107 + k / 13) % 256) as u8).collect()) };
+    let host_image = Image {
+        width: 2,
+        height: 1,
+        mipmaps: false,
+        rgba: Arc::new(vec![1, 2, 3, 4, 5, 6, 7, 8]),
+    };
+    let mut client_image = Image {
+        width: 64,
+        height: 64,
+        mipmaps: true,
+        rgba: Arc::new(
+            (0..64 * 64 * 4)
+                .map(|k| ((k * 107 + k / 13) % 256) as u8)
+                .collect(),
+        ),
+    };
     host.set_script_textures(7, vec![Some(host_image.clone())]);
     a.set_script_textures(8, vec![Some(client_image.clone())]);
     host.subscribe_script_textures(a.my_id, 8);
@@ -725,14 +834,27 @@ fn script_textures_initialize_and_update_through_the_host_in_both_directions() {
     assert_eq!(a.take_script_textures()[0].image, host_image);
     let received = b.take_script_textures();
     assert_eq!(received.len(), 2);
-    assert_eq!(received.iter().find(|i| i.owner == a.my_id).unwrap().image, client_image);
-    assert_eq!(received.iter().find(|i| i.owner == host.my_id).unwrap().image, host_image);
+    assert_eq!(
+        received.iter().find(|i| i.owner == a.my_id).unwrap().image,
+        client_image
+    );
+    assert_eq!(
+        received
+            .iter()
+            .find(|i| i.owner == host.my_id)
+            .unwrap()
+            .image,
+        host_image
+    );
     Arc::make_mut(&mut client_image.rgba)[3] = 123;
     a.set_script_textures(8, vec![Some(client_image.clone())]);
     pump(&mut [&mut host, &mut a, &mut b], &poses, 30, |_| false);
     assert_eq!(host.take_script_textures()[0].image, client_image);
     assert_eq!(b.take_script_textures()[0].image, client_image);
-    assert!(a.take_script_textures().is_empty(), "unchanged host textures are not resent");
+    assert!(
+        a.take_script_textures().is_empty(),
+        "unchanged host textures are not resent"
+    );
 }
 
 #[test]
@@ -882,7 +1004,8 @@ fn a_client_takes_the_hosts_world_and_clock() {
 
 #[test]
 fn host_weather_changes_are_sent_immediately_in_clock() {
-    let mut host = LanSession::host(27921, "host", world("maps/Grundorf/global.cfg"), true).unwrap();
+    let mut host =
+        LanSession::host(27921, "host", world("maps/Grundorf/global.cfg"), true).unwrap();
     let port = host.local_addr().unwrap().port();
     let mut client = LanSession::join(
         &port.to_string(),
@@ -894,15 +1017,35 @@ fn host_weather_changes_are_sent_immediately_in_clock() {
     for s in [&mut host, &mut client] {
         s.heartbeat = 0.05;
     }
-    pump(&mut [&mut host, &mut client], &[pose(1.0), pose(2.0)], 80, |s| s[1].connected);
+    pump(
+        &mut [&mut host, &mut client],
+        &[pose(1.0), pose(2.0)],
+        80,
+        |s| s[1].connected,
+    );
     let _ = client.take_host_clock();
 
     let custom = "custom:vis=5000;br=0.80;wd=90;ws=4.0;t=22.0;rh=70;p=1013;c=2;cb=120;pt=1;pi=80;wet=0.50;snow=0;snowroad=0";
     host.clock_acc = 0.0;
     host.set_weather(custom);
-    assert!(host.clock_acc >= CLOCK_EVERY, "weather change must force the next CLOCK");
-    pump(&mut [&mut host, &mut client], &[pose(1.0), pose(2.0)], 20, |s| s[1].host_clock.is_some());
-    assert_eq!(client.take_host_clock().expect("custom weather clock").world.weather, custom);
+    assert!(
+        host.clock_acc >= CLOCK_EVERY,
+        "weather change must force the next CLOCK"
+    );
+    pump(
+        &mut [&mut host, &mut client],
+        &[pose(1.0), pose(2.0)],
+        20,
+        |s| s[1].host_clock.is_some(),
+    );
+    assert_eq!(
+        client
+            .take_host_clock()
+            .expect("custom weather clock")
+            .world
+            .weather,
+        custom
+    );
 
     // the same weather again sends nothing new
     host.clock_acc = 0.0;
@@ -910,9 +1053,24 @@ fn host_weather_changes_are_sent_immediately_in_clock() {
     assert_eq!(host.clock_acc, 0.0);
 
     host.set_weather("");
-    assert!(host.clock_acc >= CLOCK_EVERY, "clearing weather must force the next CLOCK");
-    pump(&mut [&mut host, &mut client], &[pose(1.0), pose(2.0)], 20, |s| s[1].host_clock.is_some());
-    assert_eq!(client.take_host_clock().expect("default weather clock").world.weather, "");
+    assert!(
+        host.clock_acc >= CLOCK_EVERY,
+        "clearing weather must force the next CLOCK"
+    );
+    pump(
+        &mut [&mut host, &mut client],
+        &[pose(1.0), pose(2.0)],
+        20,
+        |s| s[1].host_clock.is_some(),
+    );
+    assert_eq!(
+        client
+            .take_host_clock()
+            .expect("default weather clock")
+            .world
+            .weather,
+        ""
+    );
 }
 
 #[test]
@@ -1040,9 +1198,10 @@ fn a_private_line_reaches_one_player_only() {
         s.take_events();
     }
     let anton = a.my_id;
-    assert!(host
-        .say_to(anton, "Admin (private)", "take tour 13/1 at 04:47")
-        .is_ok());
+    assert!(
+        host.say_to(anton, "Admin (private)", "take tour 13/1 at 04:47")
+            .is_ok()
+    );
     assert!(host.say_to(9999, "Admin (private)", "nobody").is_err());
     assert!(a.say_to(host.my_id, "x", "a client cannot").is_err());
     pump(&mut [&mut host, &mut a, &mut b], &poses, 40, |s| {
@@ -1062,7 +1221,10 @@ fn a_private_line_reaches_one_player_only() {
     };
     assert_eq!(
         chat(&mut a),
-        [("Admin (private)".to_string(), "take tour 13/1 at 04:47".to_string())]
+        [(
+            "Admin (private)".to_string(),
+            "take tour 13/1 at 04:47".to_string()
+        )]
     );
     // (a little longer for Berta: nothing comes)
     pump(&mut [&mut host, &mut a, &mut b], &poses, 20, |_| false);
@@ -1199,7 +1361,9 @@ fn old_protocol_is_turned_away() {
             }
         }
         assert!(
-            answers.iter().all(|a| a.starts_with(&format!("REJECT|{PROTOCOL}|")))
+            answers
+                .iter()
+                .all(|a| a.starts_with(&format!("REJECT|{PROTOCOL}|")))
                 && answers.iter().any(|a| a.contains(want)),
             "{answers:?}"
         );
@@ -1234,7 +1398,8 @@ fn state_of(id: u32, x: f64) -> Vec<u8> {
 #[test]
 fn a_client_listens_to_its_host_only() {
     let host = raw();
-    let mut c = LanSession::join_addr(vec![host.local_addr().unwrap()], None, "c", world("m")).unwrap();
+    let mut c =
+        LanSession::join_addr(vec![host.local_addr().unwrap()], None, "c", world("m")).unwrap();
     let mine = pose(1.0);
     host.send_to(welcome_msg(5).as_bytes(), to_client(&c))
         .unwrap();
@@ -1272,20 +1437,23 @@ fn a_client_listens_to_its_host_only() {
     assert_eq!(c.my_id, 5);
     assert_eq!(c.peer_count(), 1, "no stranger's states");
     assert!(c.peers().all(|p| p.pose.id == 1));
-    assert!(!c
-        .take_events()
-        .iter()
-        .any(|e| matches!(e, LanEvent::Chat { .. })));
-    assert!(c
-        .take_host_clock()
-        .map(|h| h.world.weather != "x")
-        .unwrap_or(true));
+    assert!(
+        !c.take_events()
+            .iter()
+            .any(|e| matches!(e, LanEvent::Chat { .. }))
+    );
+    assert!(
+        c.take_host_clock()
+            .map(|h| h.world.weather != "x")
+            .unwrap_or(true)
+    );
 }
 
 #[test]
 fn a_client_takes_a_limited_number_of_players() {
     let host = raw();
-    let mut c = LanSession::join_addr(vec![host.local_addr().unwrap()], None, "c", world("m")).unwrap();
+    let mut c =
+        LanSession::join_addr(vec![host.local_addr().unwrap()], None, "c", world("m")).unwrap();
     host.send_to(welcome_msg(2).as_bytes(), to_client(&c))
         .unwrap();
     for id in 3..(3 + 3 * MAX_PEERS as u32) {
@@ -1303,7 +1471,8 @@ fn a_client_takes_a_limited_number_of_players() {
 #[test]
 fn old_states_do_not_overtake_new_ones() {
     let host = raw();
-    let mut c = LanSession::join_addr(vec![host.local_addr().unwrap()], None, "c", world("m")).unwrap();
+    let mut c =
+        LanSession::join_addr(vec![host.local_addr().unwrap()], None, "c", world("m")).unwrap();
     host.send_to(welcome_msg(2).as_bytes(), to_client(&c))
         .unwrap();
     let mut p = pose(10.0);
@@ -1427,7 +1596,8 @@ fn the_host_checks_and_limits_what_it_relays() {
 #[test]
 fn idle_buses_send_less() {
     let host = raw();
-    let mut c = LanSession::join_addr(vec![host.local_addr().unwrap()], None, "c", world("m")).unwrap();
+    let mut c =
+        LanSession::join_addr(vec![host.local_addr().unwrap()], None, "c", world("m")).unwrap();
     host.send_to(welcome_msg(4).as_bytes(), to_client(&c))
         .unwrap();
     // (the simulated seconds pass quickly: the silent host must not time out meanwhile)
@@ -1465,8 +1635,13 @@ fn idle_buses_send_less() {
 #[test]
 fn a_player_without_a_bus_sends_a_heartbeat() {
     let host = raw();
-    let mut c =
-        LanSession::join_addr(vec![host.local_addr().unwrap()], None, "observer", world("m")).unwrap();
+    let mut c = LanSession::join_addr(
+        vec![host.local_addr().unwrap()],
+        None,
+        "observer",
+        world("m"),
+    )
+    .unwrap();
     host.send_to(welcome_msg(4).as_bytes(), to_client(&c))
         .unwrap();
     let none = Pose::default();
@@ -1489,6 +1664,7 @@ fn a_player_without_a_bus_sends_a_heartbeat() {
     );
 }
 
+mod car_vars;
 mod connections;
 
 mod lifecycle;

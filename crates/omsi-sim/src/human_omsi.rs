@@ -116,7 +116,8 @@ impl DMat {
 
     /// A point through the matrix (D3DXVec3TransformCoord).
     pub fn point(&self, p: Vec3) -> Vec3 {
-        let r = |j: usize| p.x * self.0[0][j] + p.y * self.0[1][j] + p.z * self.0[2][j] + self.0[3][j];
+        let r =
+            |j: usize| p.x * self.0[0][j] + p.y * self.0[1][j] + p.z * self.0[2][j] + self.0[3][j];
         let w = r(3);
         let w = if w.abs() > 1e-12 { w } else { 1.0 };
         Vec3::new(r(0) / w, r(1) / w, r(2) / w)
@@ -174,7 +175,13 @@ pub struct OmsiRig {
 
 impl OmsiRig {
     pub fn new(def: &Human) -> OmsiRig {
-        let l = |i: usize| def.links.get(i).copied().filter(|v| v.is_finite()).unwrap_or(0.0);
+        let l = |i: usize| {
+            def.links
+                .get(i)
+                .copied()
+                .filter(|v| v.is_finite())
+                .unwrap_or(0.0)
+        };
         // [links] lists x, y (forward), z (up); Omsi.exe stores (x, z, y)
         let hip = Vec3::new(l(0), l(2), l(1));
         let knee = Vec3::new(l(3), l(5), l(4));
@@ -220,7 +227,13 @@ const KNEE_CURVE: [(f32, f32); 4] = [(0.0, 1.0), (0.2, 0.0), (0.8, 0.0), (1.0, 1
 /// The knee through a running stride: never straight - a little bent under
 /// the body while the foot is down, a short stance - and folded well up behind as the leg
 /// swings through (the heel kick).
-const RUN_KNEE_CURVE: [(f32, f32); 5] = [(0.0, 1.0), (0.22, 0.2), (0.5, 0.15), (0.72, 0.3), (1.0, 1.0)];
+const RUN_KNEE_CURVE: [(f32, f32); 5] = [
+    (0.0, 1.0),
+    (0.22, 0.2),
+    (0.5, 0.15),
+    (0.72, 0.3),
+    (1.0, 1.0),
+];
 
 /// sub_7f061c: piecewise linear, the first or last value outside the points.
 fn curve(c: &[(f32, f32)], x: f32) -> f32 {
@@ -302,7 +315,11 @@ pub struct OmsiAnim {
 
 impl Default for OmsiAnim {
     fn default() -> Self {
-        OmsiAnim { phase: 0.0, angles: [0.0; 30], bob: 0.0 }
+        OmsiAnim {
+            phase: 0.0,
+            angles: [0.0; 30],
+            bob: 0.0,
+        }
     }
 }
 
@@ -323,7 +340,11 @@ impl OmsiAnim {
         let rel = (inp.speed.abs() / 1.2).min(1.0);
         // (from 2 m/s the walk turns into a run - a longer stride, the knees higher, a lean
         // forward, the elbows bent; nothing changes at a walking pace)
-        let run = if inp.kind == 1 { crate::human::run_factor(inp.speed.abs()) } else { 0.0 };
+        let run = if inp.kind == 1 {
+            crate::human::run_factor(inp.speed.abs())
+        } else {
+            0.0
+        };
         let stride = rel * rig.stride * (1.0 + RUN_STRIDE * run);
         // stooping under a low ceiling
         let l20 = inp.room_height - rig.waist.y;
@@ -358,7 +379,10 @@ impl OmsiAnim {
                     self.phase += inp.moved / stride;
                 }
                 // (0x6275e3: a foot down at 0.2, 0.7, 1.2 and 1.7)
-                if [0.2f32, 0.7, 1.2, 1.7].iter().any(|&t| t <= self.phase && before < t) {
+                if [0.2f32, 0.7, 1.2, 1.7]
+                    .iter()
+                    .any(|&t| t <= self.phase && before < t)
+                {
                     ev.step = true;
                 }
                 if self.phase > 2.0 {
@@ -384,7 +408,10 @@ impl OmsiAnim {
                 a[2] = spread;
                 a[3] = spread;
                 let l24 = ((4.0 * std::f32::consts::PI * p).cos() - 1.0) / 2.0;
-                bob = (1.0 - (std::f32::consts::PI / 180.0 * swing).cos()) * (0.8 * rig.hip.y) * l24 * (1.0 - (1.0 - RUN_BOB) * run);
+                bob = (1.0 - (std::f32::consts::PI / 180.0 * swing).cos())
+                    * (0.8 * rig.hip.y)
+                    * l24
+                    * (1.0 - (1.0 - RUN_BOB) * run);
                 a[11] -= swing * l24 * rig.waist_bend;
                 a[12] += swing * l24 * rig.waist_bend + RUN_LEAN * run;
                 a[29] = (2.0 * std::f32::consts::PI * p).sin() * 5.0;
@@ -430,7 +457,9 @@ impl OmsiAnim {
                 a[13] = -3.0;
                 a[15] = rig.beta - 3.0;
                 a[17] = -30.0;
-                a[19] = (sin2 - 0.2) * (upright * rig.arm_swing * swing) * (1.0 + RUN_ARM_SWING * run) + stoop * 0.5;
+                a[19] =
+                    (sin2 - 0.2) * (upright * rig.arm_swing * swing) * (1.0 + RUN_ARM_SWING * run)
+                        + stoop * 0.5;
                 let walk_elbow = (sin2 + 1.0) * (upright * rig.arm_swing * swing) * 1.5;
                 a[21] = walk_elbow + (RUN_ELBOW + 15.0 * sin2 - walk_elbow) * run;
             }
@@ -451,7 +480,11 @@ impl OmsiAnim {
             let l38 = v.length();
             let c = ((l30 * l30 + l34 * l34) - l38 * l38) / (2.0 * l30 * l34);
             let c = if c > 1.0 { 1.0 } else { c };
-            a[22] = if c > -1.0 { 180.0 - c.acos() / DEG } else { 0.0 };
+            a[22] = if c > -1.0 {
+                180.0 - c.acos() / DEG
+            } else {
+                0.0
+            };
             let c = ((l30 * l30 + l38 * l38) - l34 * l34) / (2.0 * l30 * l38);
             let c = if c > 1.0 { 1.0 } else { c };
             a[20] = if c > -1.0 { -(c.acos() / DEG) } else { 0.0 };
@@ -488,7 +521,10 @@ impl OmsiAnim {
                     a[14] = -3.0;
                     a[16] = rig.beta - 3.0;
                     a[18] = -30.0;
-                    a[20] = (-sin2 - 0.2) * (upright * rig.arm_swing * swing) * (1.0 + RUN_ARM_SWING * run) + stoop * 0.5;
+                    a[20] = (-sin2 - 0.2)
+                        * (upright * rig.arm_swing * swing)
+                        * (1.0 + RUN_ARM_SWING * run)
+                        + stoop * 0.5;
                     let walk_elbow = (-sin2 + 1.0) * (upright * rig.arm_swing * swing) * 1.2;
                     a[22] = walk_elbow + (RUN_ELBOW - 15.0 * sin2 - walk_elbow) * run;
                 }
@@ -530,7 +566,15 @@ impl OmsiAnim {
         let a = &self.angles;
         let t = DMat::translation;
         let m = |x: f32, y: f32, z: f32| Vec3::new(x, y, z);
-        let (h, k, w, s, e, n, hd) = (rig.hip, rig.knee, rig.waist, rig.shoulder, rig.elbow, rig.neck, rig.hand);
+        let (h, k, w, s, e, n, hd) = (
+            rig.hip,
+            rig.knee,
+            rig.waist,
+            rig.shoulder,
+            rig.elbow,
+            rig.neck,
+            rig.hand,
+        );
         let mut b = [DMat::IDENTITY; BONES];
         // the pelvis: about the hip line, with the bob (+0x4f0)
         let pelvis = t(-h)
@@ -538,7 +582,10 @@ impl OmsiAnim {
             .mul(&t(m(0.0, self.bob, 0.0)))
             .mul(&t(h));
         // 8: the hip (lower torso), about the waist
-        let waist = t(-w).mul(&DMat::rot_y(RAD * a[10])).mul(&DMat::rot_x(RAD * a[9])).mul(&t(w));
+        let waist = t(-w)
+            .mul(&DMat::rot_y(RAD * a[10]))
+            .mul(&DMat::rot_x(RAD * a[9]))
+            .mul(&t(w));
         b[8] = waist.mul(&pelvis);
         // 0, 1: the thighs, from the hip bone with its turn taken out again
         let hl = m(-h.x, h.y, h.z);
@@ -559,7 +606,11 @@ impl OmsiAnim {
         b[2] = t(-kl).mul(&DMat::rot_x(RAD * a[4])).mul(&t(kl)).mul(&b[0]);
         b[3] = t(-k).mul(&DMat::rot_x(RAD * a[5])).mul(&t(k)).mul(&b[1]);
         // 9: the upper body, about the waist, on the pelvis
-        b[9] = t(-w).mul(&DMat::rot_x(RAD * a[12])).mul(&DMat::rot_y(RAD * a[29])).mul(&t(w)).mul(&pelvis);
+        b[9] = t(-w)
+            .mul(&DMat::rot_x(RAD * a[12]))
+            .mul(&DMat::rot_y(RAD * a[29]))
+            .mul(&t(w))
+            .mul(&pelvis);
         // 4, 5: the upper arms, about the shoulders
         let sl = m(-s.x, s.y, s.z);
         b[4] = t(-sl)
@@ -620,8 +671,8 @@ mod tests {
             feet_dist: 0.04,
             seat_height: 0.83,
             links: vec![
-                0.09, 0.0, 0.92, 0.09, -0.03, 0.53, 0.02, 1.17, 0.18, -0.05, 1.43, 0.44, -0.04, 1.41, -0.02, 1.55, 0.69,
-                -0.03, 1.43, 0.9, -0.03, 1.43,
+                0.09, 0.0, 0.92, 0.09, -0.03, 0.53, 0.02, 1.17, 0.18, -0.05, 1.43, 0.44, -0.04,
+                1.41, -0.02, 1.55, 0.69, -0.03, 1.43, 0.9, -0.03, 1.43,
             ],
             walk_param: [1.4, 80.0, 1.0, 1.0, 0.0],
             ..Default::default()
@@ -655,14 +706,33 @@ mod tests {
         // the money tray and the ticket slot are: the fingers end there, the elbow under the
         // shoulder - not the arm raised up and out
         let r = rig();
-        for target in [Vec3::new(0.25, 1.0, 0.4), Vec3::new(0.1, 1.2, 0.45), Vec3::new(0.35, 1.1, 0.2)] {
+        for target in [
+            Vec3::new(0.25, 1.0, 0.4),
+            Vec3::new(0.1, 1.2, 0.45),
+            Vec3::new(0.35, 1.1, 0.2),
+        ] {
             let mut an = OmsiAnim::default();
-            an.advance(&r, &AnimInput { kind: 0, room_height: 50.0, dt_ms: 16.0, reach: Some(target), ..Default::default() });
+            an.advance(
+                &r,
+                &AnimInput {
+                    kind: 0,
+                    room_height: 50.0,
+                    dt_ms: 16.0,
+                    reach: Some(target),
+                    ..Default::default()
+                },
+            );
             let b = an.bones_d3d(&r);
             let finger = b[7].point(r.finger);
             let elbow = b[5].point(r.elbow);
-            assert!((finger - target).length() < 0.05, "{target:?}: the fingers at {finger:?}");
-            assert!(elbow.y < r.shoulder.y, "{target:?}: the elbow at {elbow:?} above the shoulder");
+            assert!(
+                (finger - target).length() < 0.05,
+                "{target:?}: the fingers at {finger:?}"
+            );
+            assert!(
+                elbow.y < r.shoulder.y,
+                "{target:?}: the elbow at {elbow:?} above the shoulder"
+            );
         }
     }
 
@@ -670,13 +740,24 @@ mod tests {
     fn standing_pose_keeps_the_feet_on_the_floor() {
         let r = rig();
         let mut an = OmsiAnim::default();
-        an.advance(&r, &AnimInput { kind: 0, room_height: 50.0, dt_ms: 16.0, ..Default::default() });
+        an.advance(
+            &r,
+            &AnimInput {
+                kind: 0,
+                room_height: 50.0,
+                dt_ms: 16.0,
+                ..Default::default()
+            },
+        );
         let b = an.bones(&r);
         // the right ankle region (a point just above the floor under the knee) stays at its
         // height: the leg only turns in by feetdist / (2 x hip height) about the hip
         let foot = Vec3::new(0.09, -0.03, 0.05);
         let p = b[3].transform_point3(foot);
-        assert!((p.z - foot.z).abs() < 0.01 && (p.x - foot.x).abs() < 0.03, "{p:?}");
+        assert!(
+            (p.z - foot.z).abs() < 0.01 && (p.x - foot.x).abs() < 0.03,
+            "{p:?}"
+        );
         // the head is where the model has it (no turn)
         let head = Vec3::new(0.0, -0.02, 1.65);
         assert!((b[10].transform_point3(head) - head).length() < 1e-4);
@@ -691,7 +772,14 @@ mod tests {
         for _ in 0..200 {
             let ev = an.advance(
                 &r,
-                &AnimInput { kind: 1, speed: 1.2, moved: 1.2 * 0.016, room_height: 50.0, dt_ms: 16.0, ..Default::default() },
+                &AnimInput {
+                    kind: 1,
+                    speed: 1.2,
+                    moved: 1.2 * 0.016,
+                    room_height: 50.0,
+                    dt_ms: 16.0,
+                    ..Default::default()
+                },
             );
             steps += ev.step as u32;
             max_thigh = max_thigh.max(an.angles[0].abs());
@@ -709,23 +797,52 @@ mod tests {
         let r = rig();
         let go = |speed: f32| {
             let mut an = OmsiAnim::default();
-            let (mut steps, mut thigh, mut knee, mut elbow, mut lean) = (0u32, 0f32, 0f32, 0f32, 0f32);
+            let (mut steps, mut thigh, mut knee, mut elbow, mut lean) =
+                (0u32, 0f32, 0f32, 0f32, 0f32);
             for _ in 0..300 {
-                let ev = an.advance(&r, &AnimInput { kind: 1, speed, moved: speed * 0.016, room_height: 50.0, dt_ms: 16.0, ..Default::default() });
+                let ev = an.advance(
+                    &r,
+                    &AnimInput {
+                        kind: 1,
+                        speed,
+                        moved: speed * 0.016,
+                        room_height: 50.0,
+                        dt_ms: 16.0,
+                        ..Default::default()
+                    },
+                );
                 steps += ev.step as u32;
                 thigh = thigh.max(an.angles[0].abs());
                 knee = knee.max(an.angles[4]);
                 elbow += an.angles[21] / 300.0;
                 lean = lean.max(an.angles[12]);
             }
-            (steps as f32 / (speed * 300.0 * 0.016), thigh, knee, elbow, lean)
+            (
+                steps as f32 / (speed * 300.0 * 0.016),
+                thigh,
+                knee,
+                elbow,
+                lean,
+            )
         };
         let (walk_steps, walk_thigh, walk_knee, walk_elbow, walk_lean) = go(1.2);
         let (run_steps, run_thigh, run_knee, run_elbow, run_lean) = go(3.4);
-        assert!(run_steps < walk_steps * 0.75, "fewer steps a metre: {run_steps} vs {walk_steps}");
-        assert!(run_thigh > walk_thigh * 1.3 && run_knee > walk_knee * 1.2, "thigh {run_thigh} knee {run_knee}");
-        assert!(run_knee <= 105.0, "the knee no more than a right angle and a bit: {run_knee}");
-        assert!(run_elbow > 60.0 && walk_elbow < 40.0, "elbows {run_elbow} vs {walk_elbow}");
+        assert!(
+            run_steps < walk_steps * 0.75,
+            "fewer steps a metre: {run_steps} vs {walk_steps}"
+        );
+        assert!(
+            run_thigh > walk_thigh * 1.3 && run_knee > walk_knee * 1.2,
+            "thigh {run_thigh} knee {run_knee}"
+        );
+        assert!(
+            run_knee <= 105.0,
+            "the knee no more than a right angle and a bit: {run_knee}"
+        );
+        assert!(
+            run_elbow > 60.0 && walk_elbow < 40.0,
+            "elbows {run_elbow} vs {walk_elbow}"
+        );
         assert!(run_lean > walk_lean + 4.0, "lean {run_lean} vs {walk_lean}");
         // under 2 m/s nothing of the run: the thigh as `walking_swings_the_legs_and_plays_steps`
         let (_, thigh_15, ..) = go(1.9);
@@ -736,7 +853,16 @@ mod tests {
     fn sitting_bends_hips_and_knees() {
         let r = rig();
         let mut an = OmsiAnim::default();
-        an.advance(&r, &AnimInput { kind: 2, room_height: 50.0, seat_height: 0.45, dt_ms: 16.0, ..Default::default() });
+        an.advance(
+            &r,
+            &AnimInput {
+                kind: 2,
+                room_height: 50.0,
+                seat_height: 0.45,
+                dt_ms: 16.0,
+                ..Default::default()
+            },
+        );
         assert!(an.angles[0] >= 60.0 && an.angles[4] >= 90.0);
         assert_eq!(an.angles[9], -20.0);
     }

@@ -33,7 +33,14 @@ pub struct ChainOut {
 impl Chain {
     pub fn new(coupler: RailCoupler, mass: Vec<f32>, v0: f32) -> Chain {
         let n = mass.len().max(1);
-        Chain { coupler, mass: if mass.is_empty() { vec![1000.0] } else { mass }, speed: vec![v0; n], gap: vec![0.0; n.saturating_sub(1)], force: vec![0.0; n.saturating_sub(1)], broken: None }
+        Chain {
+            coupler,
+            mass: if mass.is_empty() { vec![1000.0] } else { mass },
+            speed: vec![v0; n],
+            gap: vec![0.0; n.saturating_sub(1)],
+            force: vec![0.0; n.saturating_sub(1)],
+            broken: None,
+        }
     }
 
     /// One step of `dt`; `external[i]` is the net force on car `i` from outside the couplings
@@ -53,9 +60,11 @@ impl Chain {
                 // free play: between -half and +half nothing; beyond it the draft gear works
                 let g = self.gap[i];
                 let f = if g > half {
-                    (self.coupler.stiffness * (g - half) + self.coupler.damping * rel.max(0.0)).max(0.0)
+                    (self.coupler.stiffness * (g - half) + self.coupler.damping * rel.max(0.0))
+                        .max(0.0)
                 } else if g < -half {
-                    (self.coupler.stiffness * (g + half) + self.coupler.damping * rel.min(0.0)).min(0.0)
+                    (self.coupler.stiffness * (g + half) + self.coupler.damping * rel.min(0.0))
+                        .min(0.0)
                 } else {
                     0.0
                 };
@@ -75,9 +84,21 @@ impl Chain {
             }
         }
         if self.broken.is_none() {
-            self.broken = self.force.iter().position(|f| f.abs() > self.coupler.max_force);
+            self.broken = self
+                .force
+                .iter()
+                .position(|f| f.abs() > self.coupler.max_force);
         }
-        ChainOut { speed: self.speed.iter().zip(&self.mass).map(|(v, m)| v * m).sum::<f32>() / self.mass.iter().sum::<f32>(), peak }
+        ChainOut {
+            speed: self
+                .speed
+                .iter()
+                .zip(&self.mass)
+                .map(|(v, m)| v * m)
+                .sum::<f32>()
+                / self.mass.iter().sum::<f32>(),
+            peak,
+        }
     }
 }
 
@@ -106,11 +127,21 @@ mod tests {
         // 60 kN at the head of 240 t: ~0.25 m/s²
         pull_head(&mut c, 60_000.0, 0.4);
         // the head is moving already; the last car, with 0.3 m of slack in each of five couplings, not yet
-        assert!(c.speed[0] > c.speed[5] + 0.03, "head {} tail {}", c.speed[0], c.speed[5]);
+        assert!(
+            c.speed[0] > c.speed[5] + 0.03,
+            "head {} tail {}",
+            c.speed[0],
+            c.speed[5]
+        );
         assert!(c.gap[0] > c.gap[4], "the front coupling is stretched first");
         pull_head(&mut c, 60_000.0, 20.0);
         // in the end they all run together
-        assert!((c.speed[0] - c.speed[5]).abs() < 0.05, "head {} tail {}", c.speed[0], c.speed[5]);
+        assert!(
+            (c.speed[0] - c.speed[5]).abs() < 0.05,
+            "head {} tail {}",
+            c.speed[0],
+            c.speed[5]
+        );
         let a = c.speed[5] / 20.4;
         assert!((a - 0.25).abs() < 0.04, "{a}");
     }
@@ -136,7 +167,11 @@ mod tests {
             ext[0] = -150_000.0;
             peak = peak.max(c.step(0.01, &ext).peak);
         }
-        assert!(c.force.iter().all(|f| *f <= 1.0), "buffers push when the head slows: {:?}", c.force);
+        assert!(
+            c.force.iter().all(|f| *f <= 1.0),
+            "buffers push when the head slows: {:?}",
+            c.force
+        );
         assert!(peak > 10_000.0, "{peak}");
     }
 

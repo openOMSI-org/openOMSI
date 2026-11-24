@@ -130,7 +130,9 @@ fn each_op(p: &Program, block: BlockId, f: &mut dyn FnMut(&[Op], usize)) {
         if !seen.insert(b) {
             continue;
         }
-        let Some(blk) = p.blocks.get(b as usize) else { continue };
+        let Some(blk) = p.blocks.get(b as usize) else {
+            continue;
+        };
         for (i, op) in blk.ops.iter().enumerate() {
             if let Op::Macro(m) = op {
                 todo.push(*m);
@@ -191,8 +193,19 @@ fn constants_stored(p: &Program, block: BlockId, var: VarId) -> Vec<f32> {
 
 /// Values the block itself (not its macros) compares `var` with (`(L.L.var) c =`).
 fn gate_values(p: &Program, block: BlockId, var: VarId) -> Vec<f32> {
-    let Some(b) = p.blocks.get(block as usize) else { return Vec::new() };
-    b.ops.windows(3).filter_map(|w| if let (Op::Load(v), Op::Push(c), Op::Eq) = (&w[0], &w[1], &w[2]) { (*v == var).then_some(*c) } else { None }).collect()
+    let Some(b) = p.blocks.get(block as usize) else {
+        return Vec::new();
+    };
+    b.ops
+        .windows(3)
+        .filter_map(|w| {
+            if let (Op::Load(v), Op::Push(c), Op::Eq) = (&w[0], &w[1], &w[2]) {
+                (*v == var).then_some(*c)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 impl Unit {
@@ -200,7 +213,9 @@ impl Unit {
         let mut u = Unit {
             mode: p.var("IBIS_mode"),
             line: p.var("IBIS_LinieKurs").or_else(|| p.var("IBIS_Linie")),
-            route: p.var("IBIS_RouteIndex").or_else(|| p.var("ibox_routenindex")),
+            route: p
+                .var("IBIS_RouteIndex")
+                .or_else(|| p.var("ibox_routenindex")),
             terminus: p.var("IBIS_TerminusIndex"),
             // Aachen's ibox keeps the stop on `ibox_busstop` (no stock `IBIS_busstop`).
             busstop: p.var("IBIS_busstop").or_else(|| p.var("ibox_busstop")),
@@ -211,16 +226,24 @@ impl Unit {
             n.sort();
             n
         };
-        let press_keys: Vec<&String> = names.iter().filter(|n| !n.ends_with("_off") && !n.ends_with("_drag") && !n.starts_with("ai_")).collect();
+        let press_keys: Vec<&String> = names
+            .iter()
+            .filter(|n| !n.ends_with("_off") && !n.ends_with("_drag") && !n.starts_with("ai_"))
+            .collect();
         // number keys: ten triggers <prefix>0 … <prefix>9; a driver's first
         for driver_only in [true, false] {
             for n in &press_keys {
-                let Some(prefix) = n.strip_suffix('0') else { continue };
+                let Some(prefix) = n.strip_suffix('0') else {
+                    continue;
+                };
                 if prefix.is_empty() || prefix.ends_with(|c: char| c.is_ascii_digit()) {
                     continue;
                 }
                 let keys: Vec<String> = (0..10).map(|d| format!("{prefix}{d}")).collect();
-                if keys.iter().all(|k| p.trigger(k).is_some() && (!driver_only || operable(k))) {
+                if keys
+                    .iter()
+                    .all(|k| p.trigger(k).is_some() && (!driver_only || operable(k)))
+                {
                     u.keypads.push((prefix.to_string(), keys));
                 }
             }
@@ -228,7 +251,8 @@ impl Unit {
                 break;
             }
         }
-        let digit_keys: HashSet<String> = u.keypads.iter().flat_map(|k| k.1.iter().cloned()).collect();
+        let digit_keys: HashSet<String> =
+            u.keypads.iter().flat_map(|k| k.1.iter().cloned()).collect();
         // what the number keys type into: written by them (not by letting go) and read by
         // an entry key - or by the number keys themselves, like the count of digits typed
         // (a leading 0 changes nothing else)
@@ -237,14 +261,25 @@ impl Unit {
         for k in &digit_keys {
             let b = p.trigger(k).unwrap();
             let (f, s) = stores(p, b);
-            let (of, os) = p.trigger(&format!("{k}_off")).map(|o| stores(p, o)).unwrap_or_default();
-            typed.0.extend(f.difference(&of).copied().filter(|v| Some(*v) != u.mode));
+            let (of, os) = p
+                .trigger(&format!("{k}_off"))
+                .map(|o| stores(p, o))
+                .unwrap_or_default();
+            typed
+                .0
+                .extend(f.difference(&of).copied().filter(|v| Some(*v) != u.mode));
             typed.1.extend(s.difference(&os).copied());
             let (lf, ls) = loads(p, b);
             digit_reads.0.extend(lf);
             digit_reads.1.extend(ls);
         }
-        let refused = |n: &str| ["cancel", "loesch", "lösch", "clear", "storno", "korr", "back", "rueck", "zurueck"].iter().any(|w| n.contains(w));
+        let refused = |n: &str| {
+            [
+                "cancel", "loesch", "lösch", "clear", "storno", "korr", "back", "rueck", "zurueck",
+            ]
+            .iter()
+            .any(|w| n.contains(w))
+        };
         let driver = |n: &str| operable(n) || !press_keys.iter().any(|k| operable(k));
         // entry keys: read what was typed and move the mode
         for n in &press_keys {
@@ -253,38 +288,61 @@ impl Unit {
             }
             let b = p.trigger(n).unwrap();
             let (lf, ls) = loads(p, b);
-            let reads_input = typed.0.iter().any(|v| lf.contains(v)) || typed.1.iter().any(|v| ls.contains(v));
+            let reads_input =
+                typed.0.iter().any(|v| lf.contains(v)) || typed.1.iter().any(|v| ls.contains(v));
             let moves_mode = u.mode.map(|m| stores(p, b).0.contains(&m)).unwrap_or(false);
             if reads_input && moves_mode {
                 u.enters.push(n.to_string());
             }
         }
-        let rank = |n: &str, words: &[&str]| words.iter().position(|w| n.contains(w)).unwrap_or(words.len());
+        let rank = |n: &str, words: &[&str]| {
+            words
+                .iter()
+                .position(|w| n.contains(w))
+                .unwrap_or(words.len())
+        };
         // a unit whose keys only store a key code for its frame macro: the entry key by its
         // name, among the keys of the keypad's own script
         if u.enters.is_empty() && !u.keypads.is_empty() {
-            let pad_file = p.trigger(&u.keypads[0].1[1]).map(|b| p.blocks[b as usize].file.clone());
+            let pad_file = p
+                .trigger(&u.keypads[0].1[1])
+                .map(|b| p.blocks[b as usize].file.clone());
             for n in &press_keys {
                 let low = n.to_ascii_lowercase();
                 let same_file = p.trigger(n).map(|b| p.blocks[b as usize].file.clone()) == pad_file;
                 if digit_keys.contains(n.as_str()) || refused(&low) || !driver(n) || !same_file {
                     continue;
                 }
-                if ["eingabe", "enter", "ok", "quit", "bestaet", "confirm", "_e"].iter().any(|w| low.contains(w)) {
+                if ["eingabe", "enter", "ok", "quit", "bestaet", "confirm", "_e"]
+                    .iter()
+                    .any(|w| low.contains(w))
+                {
                     u.enters.push(n.to_string());
                 }
             }
         }
-        u.enters.sort_by_key(|n| rank(n, &["eingabe", "enter", "ok", "quit"]));
+        u.enters
+            .sort_by_key(|n| rank(n, &["eingabe", "enter", "ok", "quit"]));
         for e in &u.enters {
             let b = p.trigger(e).unwrap();
             let (lf, ls) = loads(p, b);
-            u.input.extend(typed.0.iter().filter(|v| lf.contains(*v) || digit_reads.0.contains(*v)));
-            u.input_str.extend(typed.1.iter().filter(|v| ls.contains(*v) || digit_reads.1.contains(*v)));
+            u.input.extend(
+                typed
+                    .0
+                    .iter()
+                    .filter(|v| lf.contains(*v) || digit_reads.0.contains(*v)),
+            );
+            u.input_str.extend(
+                typed
+                    .1
+                    .iter()
+                    .filter(|v| ls.contains(*v) || digit_reads.1.contains(*v)),
+            );
             // the numbers it compares with: `… (C.L.driver_pin) =`
             each_op(p, b, &mut |ops, i| {
                 if let (Op::Const(c), Some(Op::Eq)) = (&ops[i], ops.get(i + 1)) {
-                    if *c >= 1.0 && *c < 1e8 && c.fract() == 0.0 && !u.logins.contains(&(*c as u32)) {
+                    if *c >= 1.0 && *c < 1e8 && c.fract() == 0.0 && !u.logins.contains(&(*c as u32))
+                    {
                         u.logins.push(*c as u32);
                     }
                 }
@@ -297,21 +355,44 @@ impl Unit {
         // mode keys: store a mode other than 0
         if let Some(m) = u.mode {
             for n in &press_keys {
-                if digit_keys.contains(n.as_str()) || u.enters.contains(n) || refused(n) || !driver(n) {
+                if digit_keys.contains(n.as_str())
+                    || u.enters.contains(n)
+                    || refused(n)
+                    || !driver(n)
+                {
                     continue;
                 }
-                if constants_stored(p, p.trigger(n).unwrap(), m).iter().any(|c| *c != 0.0) {
+                if constants_stored(p, p.trigger(n).unwrap(), m)
+                    .iter()
+                    .any(|c| *c != 0.0)
+                {
                     u.mode_keys.push(n.to_string());
                 }
             }
-            u.mode_keys.sort_by_key(|n| rank(n, &["linie", "line", "lsk", "kurs", "route", "ziel", "dest", "terminus"]));
+            u.mode_keys.sort_by_key(|n| {
+                rank(
+                    n,
+                    &[
+                        "linie", "line", "lsk", "kurs", "route", "ziel", "dest", "terminus",
+                    ],
+                )
+            });
             // no key stores a mode: the frame macro switches it on a key code, so any key of
             // the keypad may open an entry screen (the Procity's 7 = line, 0 then 3 = code)
             if u.mode_keys.is_empty() && u.input.is_empty() && u.input_str.is_empty() {
-                let pad_file = u.keypads.first().and_then(|k| p.trigger(&k.1[1])).map(|b| p.blocks[b as usize].file.clone());
+                let pad_file = u
+                    .keypads
+                    .first()
+                    .and_then(|k| p.trigger(&k.1[1]))
+                    .map(|b| p.blocks[b as usize].file.clone());
                 for n in &press_keys {
-                    let same_file = p.trigger(n).map(|b| p.blocks[b as usize].file.clone()) == pad_file;
-                    if same_file && driver(n) && !u.enters.contains(n) && !refused(&n.to_ascii_lowercase()) {
+                    let same_file =
+                        p.trigger(n).map(|b| p.blocks[b as usize].file.clone()) == pad_file;
+                    if same_file
+                        && driver(n)
+                        && !u.enters.contains(n)
+                        && !refused(&n.to_ascii_lowercase())
+                    {
                         u.mode_keys.push(n.to_string());
                     }
                 }
@@ -330,10 +411,19 @@ impl Unit {
         for e in &u.enters {
             let b = p.trigger(e).unwrap();
             let (f, s) = stores(p, b);
-            let (of, os) = p.trigger(&format!("{e}_off")).map(|o| stores(p, o)).unwrap_or_default();
+            let (of, os) = p
+                .trigger(&format!("{e}_off"))
+                .map(|o| stores(p, o))
+                .unwrap_or_default();
             let goal = [u.mode, u.line, u.route, u.terminus, u.busstop];
-            u.watch.extend(f.iter().filter(|v| !of.contains(*v) && (states.contains(*v) || u.input.contains(*v) || goal.contains(&Some(**v)))));
-            u.watch_str.extend(s.iter().filter(|v| !os.contains(*v) && u.input_str.contains(*v)));
+            u.watch.extend(f.iter().filter(|v| {
+                !of.contains(*v)
+                    && (states.contains(*v) || u.input.contains(*v) || goal.contains(&Some(**v)))
+            }));
+            u.watch_str.extend(
+                s.iter()
+                    .filter(|v| !os.contains(*v) && u.input_str.contains(*v)),
+            );
         }
         // (a key-code unit's entry key stores only the key code, which its frame resets:
         // what the entry moves is found by comparing everything)
@@ -346,14 +436,26 @@ impl Unit {
         u.watch_str.sort_unstable();
         u.watch_str.dedup();
         // a card or switch of the unit: a pure toggle its script compares with 1
-        let unit_files: HashSet<&std::path::Path> = u.keypads.iter().flat_map(|k| k.1.iter()).filter_map(|k| p.trigger(k)).map(|b| p.blocks[b as usize].file.as_path()).collect();
+        let unit_files: HashSet<&std::path::Path> = u
+            .keypads
+            .iter()
+            .flat_map(|k| k.1.iter())
+            .filter_map(|k| p.trigger(k))
+            .map(|b| p.blocks[b as usize].file.as_path())
+            .collect();
         for n in &press_keys {
             if !driver(n) {
                 continue;
             }
             let blk = &p.blocks[p.trigger(n).unwrap() as usize];
-            let ops: Vec<&Op> = blk.ops.iter().filter(|o| !matches!(o, Op::SoundTrigger(_))).collect();
-            let [Op::Load(a), Op::Not, Op::Store(b)] = ops.as_slice() else { continue };
+            let ops: Vec<&Op> = blk
+                .ops
+                .iter()
+                .filter(|o| !matches!(o, Op::SoundTrigger(_)))
+                .collect();
+            let [Op::Load(a), Op::Not, Op::Store(b)] = ops.as_slice() else {
+                continue;
+            };
             if a != b {
                 continue;
             }
@@ -370,7 +472,12 @@ impl Unit {
                 }
                 let mut adds = false;
                 each_op(p, p.trigger(n).unwrap(), &mut |ops, i| {
-                    if i >= 3 && ops[i] == Op::Store(bs) && ops[i - 1] == Op::Add && ops[i - 2] == Op::Push(1.0) && ops[i - 3] == Op::Load(bs) {
+                    if i >= 3
+                        && ops[i] == Op::Store(bs)
+                        && ops[i - 1] == Op::Add
+                        && ops[i - 2] == Op::Push(1.0)
+                        && ops[i - 3] == Op::Load(bs)
+                    {
                         adds = true;
                     }
                 });
@@ -378,21 +485,52 @@ impl Unit {
                     u.next_stop.push(n.to_string());
                 }
             }
-            u.next_stop.sort_by_key(|n| rank(n, &["stumm", "mute", "silent", "quiet"]));
+            u.next_stop
+                .sort_by_key(|n| rank(n, &["stumm", "mute", "silent", "quiet"]));
         }
         // the variable the number keys test before they type (the ALMEX's screen), the keys
         // that set it, and the screen a driver drives with: where the entry and stop keys
         // work but the number keys do not
         if let Some((_, keys)) = u.keypads.first() {
             let blk = &p.blocks[p.trigger(&keys[1]).unwrap() as usize];
-            let gate = blk.ops.windows(3).find_map(|w| if let (Op::Load(v), Op::Push(_), Op::Eq) = (&w[0], &w[1], &w[2]) { Some(*v) } else { None }).filter(|v| Some(*v) != u.mode);
+            let gate = blk
+                .ops
+                .windows(3)
+                .find_map(|w| {
+                    if let (Op::Load(v), Op::Push(_), Op::Eq) = (&w[0], &w[1], &w[2]) {
+                        Some(*v)
+                    } else {
+                        None
+                    }
+                })
+                .filter(|v| Some(*v) != u.mode);
             if let Some(g) = gate {
-                let setters: Vec<String> = press_keys.iter().filter(|n| driver(n) && !digit_keys.contains(n.as_str()) && constants_stored(p, p.trigger(n).unwrap(), g).iter().any(|c| *c != 0.0)).map(|n| n.to_string()).collect();
-                let values = |keys: &[String]| -> HashSet<i64> { keys.iter().filter_map(|k| p.trigger(k)).flat_map(|b| gate_values(p, b, g)).map(|c| c as i64).collect() };
+                let setters: Vec<String> = press_keys
+                    .iter()
+                    .filter(|n| {
+                        driver(n)
+                            && !digit_keys.contains(n.as_str())
+                            && constants_stored(p, p.trigger(n).unwrap(), g)
+                                .iter()
+                                .any(|c| *c != 0.0)
+                    })
+                    .map(|n| n.to_string())
+                    .collect();
+                let values = |keys: &[String]| -> HashSet<i64> {
+                    keys.iter()
+                        .filter_map(|k| p.trigger(k))
+                        .flat_map(|b| gate_values(p, b, g))
+                        .map(|c| c as i64)
+                        .collect()
+                };
                 let digits = values(keys);
                 let enter = values(&u.enters);
                 let stop = values(&u.next_stop);
-                let mut driving: Vec<i64> = enter.iter().filter(|v| !digits.contains(*v) && (stop.is_empty() || stop.contains(*v))).copied().collect();
+                let mut driving: Vec<i64> = enter
+                    .iter()
+                    .filter(|v| !digits.contains(*v) && (stop.is_empty() || stop.contains(*v)))
+                    .copied()
+                    .collect();
                 driving.sort_unstable();
                 u.session = Some((g, setters, driving.first().map(|v| *v as f32)));
             }
@@ -404,7 +542,13 @@ impl Unit {
                 each_op(p, p.trigger(k).unwrap(), &mut |ops, i| {
                     if let Op::Store(v) = ops[i] {
                         if let Some(c) = stored_constant(ops, i) {
-                            if c != 0.0 && v != m && !u.input.contains(&v) && !goal.contains(&Some(v)) && states.contains(&v) && !entry_screens.contains(&(v, c)) {
+                            if c != 0.0
+                                && v != m
+                                && !u.input.contains(&v)
+                                && !goal.contains(&Some(v))
+                                && states.contains(&v)
+                                && !entry_screens.contains(&(v, c))
+                            {
                                 entry_screens.push((v, c));
                             }
                         }
@@ -414,8 +558,18 @@ impl Unit {
             for (v, c) in entry_screens {
                 let keys: Vec<String> = press_keys
                     .iter()
-                    .filter(|n| refused(n) && driver(n) && !digit_keys.contains(n.as_str()) && !u.enters.contains(n) && !u.mode_keys.contains(n))
-                    .filter(|n| constants_stored(p, p.trigger(n).unwrap(), v).iter().any(|x| *x != c && *x != 0.0))
+                    .filter(|n| {
+                        refused(n)
+                            && driver(n)
+                            && !digit_keys.contains(n.as_str())
+                            && !u.enters.contains(n)
+                            && !u.mode_keys.contains(n)
+                    })
+                    .filter(|n| {
+                        constants_stored(p, p.trigger(n).unwrap(), v)
+                            .iter()
+                            .any(|x| *x != c && *x != 0.0)
+                    })
                     .map(|n| n.to_string())
                     .collect();
                 if !keys.is_empty() {
@@ -437,7 +591,9 @@ impl Unit {
             self.logins,
             self.toggles.iter().map(|t| &t.0).collect::<Vec<_>>(),
             self.next_stop,
-            self.session.as_ref().map(|(g, k, h)| (vn(g), k.clone(), *h)),
+            self.session
+                .as_ref()
+                .map(|(g, k, h)| (vn(g), k.clone(), *h)),
             self.home.as_ref().map(|(g, k)| (vn(g), k.clone())),
             self.input.iter().map(vn).collect::<Vec<_>>()
         )
@@ -457,7 +613,15 @@ struct Sim {
 
 impl Clone for Sim {
     fn clone(&self) -> Sim {
-        Sim { program: self.program.clone(), state: self.state.clone(), host: self.host.scratch(), vm: Vm::new(), t: self.t, presses: self.presses.clone(), mode: self.mode }
+        Sim {
+            program: self.program.clone(),
+            state: self.state.clone(),
+            host: self.host.scratch(),
+            vm: Vm::new(),
+            t: self.t,
+            presses: self.presses.clone(),
+            mode: self.mode,
+        }
     }
 }
 
@@ -473,7 +637,9 @@ thread_local! {
 /// busy for two and a half minutes, and the displays stayed blank until the duty was set
 /// directly after that. `OMSI_IBIS_BUDGET` (seconds) changes it.
 fn trial_budget() -> std::time::Duration {
-    let s = omsi_cfg::flags::OMSI_IBIS_BUDGET.parse::<f64>().unwrap_or(10.0);
+    let s = omsi_cfg::flags::OMSI_IBIS_BUDGET
+        .parse::<f64>()
+        .unwrap_or(10.0);
     std::time::Duration::from_secs_f64(s.max(0.1))
 }
 
@@ -509,11 +675,19 @@ impl Sim {
         let p = self.program.clone();
         self.host.fired_file_triggers.clear();
         let at = self.t;
-        self.vm.run_trigger(&p, key, &mut self.state, &mut self.host);
+        self.vm
+            .run_trigger(&p, key, &mut self.state, &mut self.host);
         let announces = !self.host.fired_file_triggers.is_empty();
-        self.presses.push(Press { at, key: key.to_string(), mode, announces, quiet: false });
+        self.presses.push(Press {
+            at,
+            key: key.to_string(),
+            mode,
+            announces,
+            quiet: false,
+        });
         self.frames(HOLD);
-        self.vm.run_trigger(&p, &format!("{key}_off"), &mut self.state, &mut self.host);
+        self.vm
+            .run_trigger(&p, &format!("{key}_off"), &mut self.state, &mut self.host);
         self.frames(GAP);
     }
 
@@ -546,7 +720,11 @@ fn differs(a: &Sim, b: &Sim, vars: &[VarId], strs: &[u32]) -> bool {
     if vars.is_empty() && strs.is_empty() {
         return a.state.vars != b.state.vars || a.state.str_vars != b.state.str_vars;
     }
-    vars.iter().any(|v| a.state.vars.get(*v as usize) != b.state.vars.get(*v as usize)) || strs.iter().any(|v| a.state.str_vars.get(*v as usize) != b.state.str_vars.get(*v as usize))
+    vars.iter()
+        .any(|v| a.state.vars.get(*v as usize) != b.state.vars.get(*v as usize))
+        || strs
+            .iter()
+            .any(|v| a.state.str_vars.get(*v as usize) != b.state.str_vars.get(*v as usize))
 }
 
 /// Digit layouts to try for an entry that takes up to `room` digits.
@@ -608,14 +786,38 @@ impl Typist {
     /// that boots, wants a log-in and asks twice): in `background` they run on a worker
     /// thread and the typing starts when they are done - the keys come a little later than
     /// the trial had them, which only finds the unit further along.
-    pub fn new(v: &VehicleInstance, target: Target, operable: &dyn Fn(&str) -> bool, background: bool) -> Typist {
+    pub fn new(
+        v: &VehicleInstance,
+        target: Target,
+        operable: &dyn Fn(&str) -> bool,
+        background: bool,
+    ) -> Typist {
         let p = v.ty.program.clone();
         let unit = Unit::learn(&p, operable);
         if debug() {
             log::info!("IBIS unit: {}; target {target:?}", unit.describe(&p));
         }
-        let base = Sim { program: p.clone(), state: v.state.clone(), host: v.host.scratch(), vm: Vm::new(), t: 0.0, presses: Vec::new(), mode: unit.mode };
-        let mut typist = Typist { target: target.clone(), unit: unit.clone(), plan: None, t: 0.0, slip: 0.0, waited: 0.0, next: 0, releases: Vec::new(), outcome: None, planning: None };
+        let base = Sim {
+            program: p.clone(),
+            state: v.state.clone(),
+            host: v.host.scratch(),
+            vm: Vm::new(),
+            t: 0.0,
+            presses: Vec::new(),
+            mode: unit.mode,
+        };
+        let mut typist = Typist {
+            target: target.clone(),
+            unit: unit.clone(),
+            plan: None,
+            t: 0.0,
+            slip: 0.0,
+            waited: 0.0,
+            next: 0,
+            releases: Vec::new(),
+            outcome: None,
+            planning: None,
+        };
         let search = move || {
             let t0 = std::time::Instant::now();
             DEADLINE.with(|d| d.set(Some(t0 + trial_budget())));
@@ -624,17 +826,29 @@ impl Typist {
             let found = found.filter(|_| t0.elapsed() < trial_budget());
             match found {
                 Some(pl) => {
-                    log::info!("IBIS: {} ({} keys over {:.1} s, found in {:.0} ms)", pl.summary, pl.presses.len(), pl.length, t0.elapsed().as_secs_f64() * 1000.0);
+                    log::info!(
+                        "IBIS: {} ({} keys over {:.1} s, found in {:.0} ms)",
+                        pl.summary,
+                        pl.presses.len(),
+                        pl.length,
+                        t0.elapsed().as_secs_f64() * 1000.0
+                    );
                     Ok(pl)
                 }
-                None => Err(format!("no way to type the duty found ({}; {:.0} ms of trials)", unit.describe(&p), t0.elapsed().as_secs_f64() * 1000.0)),
+                None => Err(format!(
+                    "no way to type the duty found ({}; {:.0} ms of trials)",
+                    unit.describe(&p),
+                    t0.elapsed().as_secs_f64() * 1000.0
+                )),
             }
         };
         if background {
             let (tx, rx) = std::sync::mpsc::channel();
-            let spawned = std::thread::Builder::new().name("ibis-typist".into()).spawn(move || {
-                let _ = tx.send(search());
-            });
+            let spawned = std::thread::Builder::new()
+                .name("ibis-typist".into())
+                .spawn(move || {
+                    let _ = tx.send(search());
+                });
             match spawned {
                 Ok(_) => typist.planning = Some(rx),
                 Err(e) => typist.outcome = Some(Err(format!("no thread for the trials: {e}"))),
@@ -654,7 +868,9 @@ impl Typist {
 
     /// Whether the IBIS variables show the target.
     pub fn shows(&self, v: &VehicleInstance) -> bool {
-        goal_met(&self.unit, &self.target, &|id| v.state.vars.get(id as usize).copied())
+        goal_met(&self.unit, &self.target, &|id| {
+            v.state.vars.get(id as usize).copied()
+        })
     }
 
     /// The result once the typing is over: what was typed, or why it could not be.
@@ -680,7 +896,9 @@ impl Typist {
         if self.outcome.is_some() {
             return false;
         }
-        let Some(plan) = self.plan.as_ref() else { return false };
+        let Some(plan) = self.plan.as_ref() else {
+            return false;
+        };
         self.t += dt;
         let now = self.t - self.slip;
         let mut i = 0;
@@ -694,7 +912,10 @@ impl Typist {
         }
         if let Some(press) = plan.presses.get(self.next) {
             if now >= press.at {
-                let mode = self.unit.mode.and_then(|m| v.state.vars.get(m as usize).copied());
+                let mode = self
+                    .unit
+                    .mode
+                    .and_then(|m| v.state.vars.get(m as usize).copied());
                 if press.mode.is_none() || mode == press.mode {
                     let announced = v.host.fired_file_triggers.len();
                     v.trigger(&press.key);
@@ -709,7 +930,13 @@ impl Typist {
                     self.slip += dt;
                     self.waited += dt;
                     if self.waited > SLIP {
-                        let msg = format!("gave up at key {} ({}): the unit is in mode {:?}, the trial had {:?}", self.next + 1, press.key, mode, press.mode);
+                        let msg = format!(
+                            "gave up at key {} ({}): the unit is in mode {:?}, the trial had {:?}",
+                            self.next + 1,
+                            press.key,
+                            mode,
+                            press.mode
+                        );
                         self.finish(v, Err(msg));
                         return false;
                     }
@@ -724,8 +951,14 @@ impl Typist {
         if self.shows(v) {
             self.finish(v, Ok(summary));
         } else {
-            let got = [self.unit.line, self.unit.route, self.unit.terminus].map(|x| x.and_then(|m| v.state.vars.get(m as usize).copied()));
-            self.finish(v, Err(format!("typed, but the IBIS shows line/route/terminus {got:?}")));
+            let got = [self.unit.line, self.unit.route, self.unit.terminus]
+                .map(|x| x.and_then(|m| v.state.vars.get(m as usize).copied()));
+            self.finish(
+                v,
+                Err(format!(
+                    "typed, but the IBIS shows line/route/terminus {got:?}"
+                )),
+            );
         }
         false
     }
@@ -750,15 +983,25 @@ fn debug() -> bool {
 }
 
 fn goal_met(u: &Unit, t: &Target, var: &dyn Fn(VarId) -> Option<f32>) -> bool {
-    let is = |v: Option<VarId>, x: f32| v.and_then(var).map(|y| (y - x).abs() < 0.5).unwrap_or(true);
+    let is =
+        |v: Option<VarId>, x: f32| v.and_then(var).map(|y| (y - x).abs() < 0.5).unwrap_or(true);
     let has_any = u.line.is_some() || u.route.is_some() || u.terminus.is_some();
-    has_any && is(u.line, t.line as f32) && t.route_index.map(|r| is(u.route, r as f32)).unwrap_or(true) && is(u.terminus, t.terminus_index as f32)
+    has_any
+        && is(u.line, t.line as f32)
+        && t.route_index.map(|r| is(u.route, r as f32)).unwrap_or(true)
+        && is(u.terminus, t.terminus_index as f32)
 }
 
 /// How many of the target's variables a state shows.
 fn progress(u: &Unit, t: &Target, s: &Sim) -> usize {
-    let is = |v: Option<VarId>, x: f32| v.is_some() && s.var(v).map(|y| (y - x).abs() < 0.5).unwrap_or(false);
-    is(u.line, t.line as f32) as usize + t.route_index.map(|r| is(u.route, r as f32) as usize).unwrap_or(0) + is(u.terminus, t.terminus_index as f32) as usize
+    let is = |v: Option<VarId>, x: f32| {
+        v.is_some() && s.var(v).map(|y| (y - x).abs() < 0.5).unwrap_or(false)
+    };
+    is(u.line, t.line as f32) as usize
+        + t.route_index
+            .map(|r| is(u.route, r as f32) as usize)
+            .unwrap_or(0)
+        + is(u.terminus, t.terminus_index as f32) as usize
 }
 
 fn met(u: &Unit, t: &Target, s: &Sim) -> bool {
@@ -786,8 +1029,24 @@ fn find_plan(u: &Unit, t: &Target, base: Sim) -> Option<Plan> {
         while at < t.stop as i64 {
             // the silent key for the stops passed over, the announcing one for the last
             let last = at + 1 == t.stop as i64;
-            let order: Vec<&String> = if last { u.next_stop.iter().rev().collect() } else { u.next_stop.iter().collect() };
-            let mut tries: Vec<(&String, f32)> = order.iter().map(|k| (*k, if Some(*k) == working { KEY_WAIT } else { STOP_KEY_WAIT })).collect();
+            let order: Vec<&String> = if last {
+                u.next_stop.iter().rev().collect()
+            } else {
+                u.next_stop.iter().collect()
+            };
+            let mut tries: Vec<(&String, f32)> = order
+                .iter()
+                .map(|k| {
+                    (
+                        *k,
+                        if Some(*k) == working {
+                            KEY_WAIT
+                        } else {
+                            STOP_KEY_WAIT
+                        },
+                    )
+                })
+                .collect();
             if working.is_none() {
                 if let Some(t) = tries.last_mut() {
                     t.1 = KEY_WAIT;
@@ -818,7 +1077,14 @@ fn find_plan(u: &Unit, t: &Target, base: Sim) -> Option<Plan> {
             at = sim.var(Some(bs)).unwrap_or(0.0).round() as i64;
         }
         if at > start {
-            steps.push(format!("stop {at}{}", if quiet > 0 { format!(" ({quiet} passed over without their announcement)") } else { String::new() }));
+            steps.push(format!(
+                "stop {at}{}",
+                if quiet > 0 {
+                    format!(" ({quiet} passed over without their announcement)")
+                } else {
+                    String::new()
+                }
+            ));
         }
     }
     // back to the screen the driver drives with
@@ -843,23 +1109,43 @@ fn find_plan(u: &Unit, t: &Target, base: Sim) -> Option<Plan> {
             tried.press(k);
             tried.frames(0.5);
             let moved_on = tried.var(Some(*g)) != sim.var(Some(*g));
-            let kept = met(u, t, &tried) && tried.var(u.mode) == sim.var(u.mode) && u.busstop.map(|b| tried.var(Some(b)) == sim.var(Some(b))).unwrap_or(true);
+            let kept = met(u, t, &tried)
+                && tried.var(u.mode) == sim.var(u.mode)
+                && u.busstop
+                    .map(|b| tried.var(Some(b)) == sim.var(Some(b)))
+                    .unwrap_or(true);
             if moved_on && kept {
-                steps.push(format!("screen {} ({k})", tried.var(Some(*g)).unwrap_or(0.0)));
+                steps.push(format!(
+                    "screen {} ({k})",
+                    tried.var(Some(*g)).unwrap_or(0.0)
+                ));
                 sim = tried;
                 break;
             }
         }
     }
     sim.frames(0.5);
-    Some(Plan { length: sim.t, summary: steps.join(", "), presses: sim.presses })
+    Some(Plan {
+        length: sim.t,
+        summary: steps.join(", "),
+        presses: sim.presses,
+    })
 }
 
 /// The entry, after the driver's card, log-in and screen where the unit wants them. The
 /// log-in is tried at once, then not at all (a driver already logged in, who may have to
 /// open the unit's menu first), then after waiting for the unit to boot.
-fn entry_with_prerequisites(u: &Unit, t: &Target, base: &Sim, steps: &mut Vec<String>) -> Option<Sim> {
-    let logins: &[Option<f32>] = if u.logins.is_empty() { &[None] } else { &[Some(2.0), None, Some(BOOT_WAIT)] };
+fn entry_with_prerequisites(
+    u: &Unit,
+    t: &Target,
+    base: &Sim,
+    steps: &mut Vec<String>,
+) -> Option<Sim> {
+    let logins: &[Option<f32>] = if u.logins.is_empty() {
+        &[None]
+    } else {
+        &[Some(2.0), None, Some(BOOT_WAIT)]
+    };
     let p = &base.program;
     let file_of = |key: &str| p.trigger(key).map(|b| p.blocks[b as usize].file.clone());
     for (prefix, digits) in &u.keypads {
@@ -882,12 +1168,18 @@ fn entry_with_prerequisites(u: &Unit, t: &Target, base: &Sim, steps: &mut Vec<St
                     let mut step = String::new();
                     let logged_in = u.logins.iter().all(|n| {
                         let typed = type_number(u, &mut s, digits, &n.to_string(), *wait);
-                        let entered = typed && s.press_when(enter, KEY_WAIT, &|a, b| differs(a, b, &u.watch, &u.watch_str));
+                        let entered = typed
+                            && s.press_when(enter, KEY_WAIT, &|a, b| {
+                                differs(a, b, &u.watch, &u.watch_str)
+                            });
                         step = format!("{n}: typed {typed} entered {entered}");
                         entered
                     });
                     if debug() {
-                        log::info!("IBIS log-in trial with {enter} after {wait} s: {} ({step})", if logged_in { "done" } else { "failed" });
+                        log::info!(
+                            "IBIS log-in trial with {enter} after {wait} s: {} ({step})",
+                            if logged_in { "done" } else { "failed" }
+                        );
                     }
                     if !logged_in {
                         continue;
@@ -901,7 +1193,9 @@ fn entry_with_prerequisites(u: &Unit, t: &Target, base: &Sim, steps: &mut Vec<St
                 if let Some((g, keys, _)) = &u.session {
                     let g = *g;
                     for k in keys.iter().filter(|k| !u.enters.contains(k)) {
-                        if s.clone().press_when(k, 0.0, &|a, b| a.var(Some(g)) != b.var(Some(g))) {
+                        if s.clone()
+                            .press_when(k, 0.0, &|a, b| a.var(Some(g)) != b.var(Some(g)))
+                        {
                             screens.push(Some(k));
                         }
                     }
@@ -929,7 +1223,9 @@ fn entry_with_prerequisites(u: &Unit, t: &Target, base: &Sim, steps: &mut Vec<St
 fn type_number(u: &Unit, s: &mut Sim, digits: &[String], number: &str, wait: f32) -> bool {
     number.chars().all(|c| {
         let d = c.to_digit(10).unwrap_or(0) as usize;
-        s.press_when(&digits[d], wait, &|a, b| differs(a, b, &u.input, &u.input_str))
+        s.press_when(&digits[d], wait, &|a, b| {
+            differs(a, b, &u.input, &u.input_str)
+        })
     })
 }
 
@@ -952,7 +1248,14 @@ fn room(u: &Unit, s: &Sim, digits: &[String]) -> usize {
 /// A mode key (or none), a number and the entry key, confirmed as often as the unit asks;
 /// a second entry when the first one set part of the duty. Returns the state and what was
 /// typed.
-fn entry(u: &Unit, t: &Target, s: &Sim, digits: &[String], enter: &str, depth: usize) -> Option<(Sim, String)> {
+fn entry(
+    u: &Unit,
+    t: &Target,
+    s: &Sim,
+    digits: &[String],
+    enter: &str,
+    depth: usize,
+) -> Option<(Sim, String)> {
     let before = progress(u, t, s);
     let mut keys: Vec<Vec<&String>> = u.mode_keys.iter().map(|k| vec![k]).collect();
     keys.push(Vec::new());
@@ -969,7 +1272,9 @@ fn entry(u: &Unit, t: &Target, s: &Sim, digits: &[String], enter: &str, depth: u
         let mode = u.mode;
         let mut ok = true;
         for k in &prefix {
-            if !s1.press_when(k, if u.dynamic { 0.5 } else { 2.0 }, &|a, b| a.var(mode) != b.var(mode) || (!u.dynamic && differs(a, b, &u.input, &u.input_str))) {
+            if !s1.press_when(k, if u.dynamic { 0.5 } else { 2.0 }, &|a, b| {
+                a.var(mode) != b.var(mode) || (!u.dynamic && differs(a, b, &u.input, &u.input_str))
+            }) {
                 ok = false;
                 break;
             }
@@ -977,7 +1282,13 @@ fn entry(u: &Unit, t: &Target, s: &Sim, digits: &[String], enter: &str, depth: u
         if !ok {
             continue;
         }
-        let key: Option<String> = (!prefix.is_empty()).then(|| prefix.iter().map(|k| k.as_str()).collect::<Vec<_>>().join(" "));
+        let key: Option<String> = (!prefix.is_empty()).then(|| {
+            prefix
+                .iter()
+                .map(|k| k.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        });
         let key = key.as_ref();
         // a unit learnt by trial: what the number keys type into on this screen - the
         // string that a press of 1 makes end in a 1
@@ -989,16 +1300,35 @@ fn entry(u: &Unit, t: &Target, s: &Sim, digits: &[String], enter: &str, depth: u
             idle.frames(HOLD + GAP);
             let typed: Vec<u32> = (0..pressed.state.str_vars.len() as u32)
                 .filter(|&i| {
-                    let (a, b) = (&pressed.state.str_vars[i as usize], &idle.state.str_vars[i as usize]);
+                    let (a, b) = (
+                        &pressed.state.str_vars[i as usize],
+                        &idle.state.str_vars[i as usize],
+                    );
                     a != b && a.trim_end().ends_with('1') && a.trim().len() > b.trim().len()
                 })
                 .collect();
             if debug() {
                 let changed: Vec<String> = (0..pressed.state.str_vars.len())
                     .filter(|&i| pressed.state.str_vars[i] != idle.state.str_vars[i])
-                    .map(|i| format!("{}={:?} (idle {:?})", pressed.program.str_var_names.get(i).cloned().unwrap_or_default(), pressed.state.str_vars[i], idle.state.str_vars[i]))
+                    .map(|i| {
+                        format!(
+                            "{}={:?} (idle {:?})",
+                            pressed
+                                .program
+                                .str_var_names
+                                .get(i)
+                                .cloned()
+                                .unwrap_or_default(),
+                            pressed.state.str_vars[i],
+                            idle.state.str_vars[i]
+                        )
+                    })
                     .collect();
-                log::info!("IBIS probe after {:?} (mode {:?}): strings changed by 1: {changed:?}", prefix, s1.var(u.mode));
+                log::info!(
+                    "IBIS probe after {:?} (mode {:?}): strings changed by 1: {changed:?}",
+                    prefix,
+                    s1.var(u.mode)
+                );
             }
             if typed.is_empty() {
                 continue;
@@ -1019,7 +1349,11 @@ fn entry(u: &Unit, t: &Target, s: &Sim, digits: &[String], enter: &str, depth: u
             n = room(u, &s1, digits);
         }
         if debug() {
-            log::info!("IBIS trial prefix {:?}: mode {:?}, room {n}", key, s1.var(u.mode));
+            log::info!(
+                "IBIS trial prefix {:?}: mode {:?}, room {n}",
+                key,
+                s1.var(u.mode)
+            );
         }
         if n == 0 {
             continue;
@@ -1055,9 +1389,22 @@ fn entry(u: &Unit, t: &Target, s: &Sim, digits: &[String], enter: &str, depth: u
                     }
                 }
             }
-            let what = format!("{}{layout}{quit_with}", key.map(|k| format!("{k} ")).unwrap_or_default());
+            let what = format!(
+                "{}{layout}{quit_with}",
+                key.map(|k| format!("{k} ")).unwrap_or_default()
+            );
             if debug() {
-                log::info!("IBIS trial (depth {depth}): {what} + {enter} -> mode {:?} line {:?} route {:?} terminus {:?} at {:.1} s (want {} {:?} {})", s2.var(u.mode), s2.var(u.line), s2.var(u.route), s2.var(u.terminus), s2.t, t.line, t.route_index, t.terminus_index);
+                log::info!(
+                    "IBIS trial (depth {depth}): {what} + {enter} -> mode {:?} line {:?} route {:?} terminus {:?} at {:.1} s (want {} {:?} {})",
+                    s2.var(u.mode),
+                    s2.var(u.line),
+                    s2.var(u.route),
+                    s2.var(u.terminus),
+                    s2.t,
+                    t.line,
+                    t.route_index,
+                    t.terminus_index
+                );
             }
             if met(u, t, &s2) {
                 return Some((s2, what));
@@ -1079,7 +1426,9 @@ fn confirm(u: &Unit, t: &Target, s: &mut Sim, enter: &str) {
     for _ in 0..MAX_CONFIRM {
         let shown = met(u, t, s);
         let mut pressed = s.clone();
-        if !pressed.press_when(enter, if shown { 0.0 } else { KEY_WAIT }, &|a, b| differs(a, b, &u.watch, &u.watch_str)) {
+        if !pressed.press_when(enter, if shown { 0.0 } else { KEY_WAIT }, &|a, b| {
+            differs(a, b, &u.watch, &u.watch_str)
+        }) {
             return;
         }
         if shown && !met(u, t, &pressed) {
@@ -1095,11 +1444,41 @@ mod tests {
 
     #[test]
     fn layouts_fit_the_room() {
-        let t = Target { line: 5, suffix: 0, route: Some(1), terminus_code: Some(34), route_index: Some(3), terminus_index: 7, stop: 0 };
-        assert_eq!(layouts(&t, 10), vec!["005000001", "0050000001", "500", "01", "034", "00500", "5", "1", "34"]);
-        assert_eq!(layouts(&t, 5), vec!["500", "01", "034", "00500", "5", "1", "34"]);
+        let t = Target {
+            line: 5,
+            suffix: 0,
+            route: Some(1),
+            terminus_code: Some(34),
+            route_index: Some(3),
+            terminus_index: 7,
+            stop: 0,
+        };
+        assert_eq!(
+            layouts(&t, 10),
+            vec![
+                "005000001",
+                "0050000001",
+                "500",
+                "01",
+                "034",
+                "00500",
+                "5",
+                "1",
+                "34"
+            ]
+        );
+        assert_eq!(
+            layouts(&t, 5),
+            vec!["500", "01", "034", "00500", "5", "1", "34"]
+        );
         assert_eq!(layouts(&t, 2), vec!["01", "5", "1", "34"]);
-        let t = Target { line: 137, suffix: 0, route: None, terminus_code: Some(5), ..Default::default() };
+        let t = Target {
+            line: 137,
+            suffix: 0,
+            route: None,
+            terminus_code: Some(5),
+            ..Default::default()
+        };
         assert_eq!(layouts(&t, 5), vec!["13700", "005", "137", "5"]);
     }
 }

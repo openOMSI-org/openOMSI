@@ -9,7 +9,11 @@ const MAX_PATH: usize = 260;
 /// empty or dotted-only parts. The error says what is wrong.
 pub fn inside(base: &Path, rel: &str) -> Result<PathBuf, String> {
     let clean = clean(rel)?;
-    Ok(if clean.is_empty() { base.to_path_buf() } else { base.join(clean) })
+    Ok(if clean.is_empty() {
+        base.to_path_buf()
+    } else {
+        base.join(clean)
+    })
 }
 
 /// `rel` checked and written with `/` (empty: the folder itself).
@@ -34,18 +38,36 @@ pub fn clean(rel: &str) -> Result<String, String> {
             return Err(format!("\"{rel}\": a name cannot end in a dot or a space"));
         }
         let stem = part.split('.').next().unwrap_or("").to_ascii_uppercase();
-        if matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "COM1" | "COM2" | "COM3" | "COM4" | "LPT1" | "LPT2" | "LPT3") {
+        if matches!(
+            stem.as_str(),
+            "CON"
+                | "PRN"
+                | "AUX"
+                | "NUL"
+                | "COM1"
+                | "COM2"
+                | "COM3"
+                | "COM4"
+                | "LPT1"
+                | "LPT2"
+                | "LPT3"
+        ) {
             return Err(format!("\"{rel}\": {stem} is a device name"));
         }
         // (a component the system reads as a root - only reachable through the checks above
         // on odd systems, but checked as the last word)
-        if Path::new(part).components().any(|c| !matches!(c, Component::Normal(_))) {
+        if Path::new(part)
+            .components()
+            .any(|c| !matches!(c, Component::Normal(_)))
+        {
             return Err(format!("\"{rel}\": not a plain name"));
         }
         parts.push(part);
     }
     if rel.starts_with(['/', '\\']) {
-        return Err(format!("\"{rel}\": the path is relative to the plugin's folder"));
+        return Err(format!(
+            "\"{rel}\": the path is relative to the plugin's folder"
+        ));
     }
     Ok(parts.join("/"))
 }
@@ -61,7 +83,20 @@ mod tests {
         assert_eq!(inside(base, "a\\b.txt").unwrap(), base.join("a/b.txt"));
         assert_eq!(inside(base, "./x").unwrap(), base.join("x"));
         assert_eq!(inside(base, "").unwrap(), base);
-        for bad in ["../x", "a/../../x", "/etc/passwd", "\\x", "C:/x", "c:x", "a/NUL", "con.txt", "x.", "x ", "...", "a\0b"] {
+        for bad in [
+            "../x",
+            "a/../../x",
+            "/etc/passwd",
+            "\\x",
+            "C:/x",
+            "c:x",
+            "a/NUL",
+            "con.txt",
+            "x.",
+            "x ",
+            "...",
+            "a\0b",
+        ] {
             assert!(inside(base, bad).is_err(), "{bad}");
         }
     }

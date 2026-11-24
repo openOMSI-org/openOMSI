@@ -20,6 +20,13 @@ pub trait DriverCar {
     fn anim_factor(&self, _i: usize, _anim: usize) -> Option<f32> {
         None
     }
+    /// The driver's seat: the vehicle's first `[drivpos]`.
+    fn driver_seat(&self) -> Option<omsi_vehicle::cabin::PassPos> {
+        super::cabin_of(&self.ty().def)?
+            .driver_positions
+            .first()
+            .cloned()
+    }
 }
 
 impl DriverCar for VehicleInstance {
@@ -45,6 +52,47 @@ impl DriverCar for VehicleInstance {
 
     fn anim_factor(&self, i: usize, anim: usize) -> Option<f32> {
         self.animators.get(i)?.anims.get(anim).map(|a| a.0.factor)
+    }
+}
+
+/// A coupled part with a driver's cab of its own (the NF6D's rear cab), as the driver sitting
+/// in it reads it: its body and meshes, its own variables where it runs its own scripts,
+/// else the leading vehicle's.
+pub struct PartCar<'a> {
+    pub part: &'a omsi_sim::vehicle::TrailerPart,
+    pub main: &'a VehicleInstance,
+}
+
+impl DriverCar for PartCar<'_> {
+    fn ty(&self) -> &VehicleType {
+        &self.part.ty
+    }
+
+    fn position(&self) -> DVec3 {
+        self.part.position
+    }
+
+    fn body_rotation(&self) -> Mat4 {
+        self.part.body_rotation()
+    }
+
+    fn var(&self, name: &str) -> Option<f32> {
+        self.part.run_var(name).or_else(|| self.main.var(name))
+    }
+
+    fn mesh_transform(&self, i: usize) -> Option<Mat4> {
+        self.part.mesh_transforms.get(i).copied()
+    }
+
+    /// The cab's seat as [`super::part_cab_seat`] finds it (the NF6D's rear cab car has no
+    /// cabin of its own: the seat of its section's stand-in, where its cab is).
+    fn driver_seat(&self) -> Option<omsi_vehicle::cabin::PassPos> {
+        let k = self
+            .main
+            .trailers
+            .iter()
+            .position(|t| std::ptr::eq(t, self.part))?;
+        super::part_cab_seat(self.main, k)
     }
 }
 

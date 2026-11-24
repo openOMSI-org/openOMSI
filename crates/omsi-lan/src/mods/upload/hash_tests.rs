@@ -6,13 +6,16 @@ impl Folder {
     fn new(name: &str) -> Self {
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("omsi-hash-{name}-{}-{id}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("omsi-hash-{name}-{}-{id}", std::process::id()));
         std::fs::create_dir_all(&path).unwrap();
         Self(path)
     }
 }
 impl Drop for Folder {
-    fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 #[test]
@@ -29,7 +32,10 @@ fn cached_hash_checks_header_and_changed_files_are_rehashed() {
     std::fs::write(&p, b"[mesh] changed and longer").unwrap();
     let (changed, fresh) = hashed_one("model.cfg", &p, &cache).unwrap();
     assert!(fresh.is_some());
-    assert_eq!(changed.sha256, crate::mods::sha256_of(&std::fs::read(&p).unwrap()));
+    assert_eq!(
+        changed.sha256,
+        crate::mods::sha256_of(&std::fs::read(&p).unwrap())
+    );
     assert_ne!(changed.sha256, first.sha256);
     std::fs::write(&p, b"MZnot a model").unwrap();
     let md = std::fs::metadata(&p).unwrap();
@@ -64,7 +70,10 @@ fn virtual_memory_takes_precedence_over_disk_and_cache() {
     std::fs::write(&p, b"disk").unwrap();
     omsi_cfg::vfs::put_memory_file(p.clone(), std::sync::Arc::from(&b"virtual"[..]));
     let md = std::fs::metadata(&p).unwrap();
-    let cache = HashMap::from([(p.to_string_lossy().into_owned(), (md.len(), modified_secs(&md), "stale".into()))]);
+    let cache = HashMap::from([(
+        p.to_string_lossy().into_owned(),
+        (md.len(), modified_secs(&md), "stale".into()),
+    )]);
     let (entry, fresh) = hashed_one("texture.cfg", &p, &cache).unwrap();
     assert!(fresh.is_none());
     assert_eq!(entry.sha256, crate::mods::sha256_of(b"virtual"));
@@ -75,14 +84,21 @@ fn mounted_zip_entries_use_the_vfs_fingerprint() {
     let dir = Folder::new("zip");
     let zip_path = dir.0.join("pack.zip");
     let mut zip = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
-    zip.start_file("maps/Test/global.cfg", zip::write::SimpleFileOptions::default()).unwrap();
+    zip.start_file(
+        "maps/Test/global.cfg",
+        zip::write::SimpleFileOptions::default(),
+    )
+    .unwrap();
     zip.write_all(b"[name]\nTest map\n").unwrap();
     zip.finish().unwrap();
     let mount = omsi_cfg::vfs::mount_zip(&zip_path).unwrap();
     let p = mount.join("maps/Test/global.cfg");
     let (entry, fresh) = hashed_one("maps/Test/global.cfg", &p, &HashMap::new()).unwrap();
     assert!(fresh.is_none());
-    assert_eq!(entry.sha256, crate::mods::sha256_of(&omsi_cfg::vfs::read(&p).unwrap()));
+    assert_eq!(
+        entry.sha256,
+        crate::mods::sha256_of(&omsi_cfg::vfs::read(&p).unwrap())
+    );
 }
 
 #[test]

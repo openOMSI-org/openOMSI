@@ -10,7 +10,10 @@ pub mod package;
 pub mod terrain;
 pub mod tile;
 
-pub use ailists::{active_chrono_dirs, chrono_deactivated_lines, date_code, typgroup_entry_valid, AiGroup, AiLists, DepotEntry};
+pub use ailists::{
+    AiGroup, AiLists, DepotEntry, active_chrono_dirs, chrono_deactivated_lines, date_code,
+    typgroup_entry_valid,
+};
 pub use calendar::{Calendar, Holiday, HolidayRange, TimeZone};
 pub use global::{EntryPoint, GlobalCfg, GroundTex, MapTileRef};
 pub use terrain::Terrain;
@@ -23,7 +26,8 @@ pub const TILE_SIZE: f64 = 300.0;
 /// 271 cross-tile spline links of Berlin-Spandau, spread 0.14 m).
 pub const WORLD_TILE_SIZE: f64 = 371.9;
 
-static TILE_SIZE_BITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x4072_C000_0000_0000); // 300.0
+static TILE_SIZE_BITS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0x4072_C000_0000_0000); // 300.0
 
 /// Tile edge of the loaded map (set once by the loader from `[worldcoordinates]`).
 pub fn tile_size() -> f64 {
@@ -43,7 +47,8 @@ static WORLD_COORDS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBo
 /// `world_row_width(ty)`, the upper one `world_row_width(ty + 1)`, as high as the upper
 /// edge is wide. Berlin-Spandau's rows are 371.6..372.2 m.
 pub fn world_row_width(ty: i32) -> f64 {
-    let lat = 2.0 * (std::f64::consts::TAU * ty as f64 / 65536.0).exp().atan() - std::f64::consts::FRAC_PI_2;
+    let lat = 2.0 * (std::f64::consts::TAU * ty as f64 / 65536.0).exp().atan()
+        - std::f64::consts::FRAC_PI_2;
     40_075_016.69 * lat.cos() / 65536.0
 }
 
@@ -114,7 +119,10 @@ pub fn world_to_tile_local(x: f64, y: f64) -> ((i32, i32), (f64, f64)) {
     let ts = tile_size();
     let (tx, ty) = ((x / ts).floor() as i32, (y / ts).floor() as i32);
     let (kx, ky) = world_tile_scale(ty);
-    ((tx, ty), ((x - tx as f64 * ts) / kx, (y - ty as f64 * ts) / ky))
+    (
+        (tx, ty),
+        ((x - tx as f64 * ts) / kx, (y - ty as f64 * ts) / ky),
+    )
 }
 
 /// Latitude and longitude (degrees) of a point given in tile (tx, ty)'s own frame on a
@@ -125,7 +133,8 @@ pub fn tile_local_to_lat_lon(tx: i32, ty: i32, local_x: f64, local_y: f64) -> (f
     let (w0, w1) = (world_row_width(ty), world_row_width(ty + 1));
     let lon = ((tx + 32768) as f64 + local_x / ((w0 + w1) / 2.0)) / 65536.0 * 360.0 - 180.0;
     let row = ty as f64 + local_y / w1;
-    let lat = 2.0 * (std::f64::consts::TAU * row / 65536.0).exp().atan() - std::f64::consts::FRAC_PI_2;
+    let lat =
+        2.0 * (std::f64::consts::TAU * row / 65536.0).exp().atan() - std::f64::consts::FRAC_PI_2;
     (lat.to_degrees(), lon)
 }
 

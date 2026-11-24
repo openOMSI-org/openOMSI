@@ -9,7 +9,9 @@
 //! deleting them.
 
 use super::*;
-use omsi_map::ailists::{AiGroup, AiLists, AiTypGroup, AiVehicleEntry, DepotEntry, USER_LISTS_FILE};
+use omsi_map::ailists::{
+    AiGroup, AiLists, AiTypGroup, AiVehicleEntry, DepotEntry, USER_LISTS_FILE,
+};
 use omsi_timetable::CarUse;
 
 /// The names of the rule files made here; the `!` sorts them before the map's own records,
@@ -62,13 +64,30 @@ impl From<&AiGroup> for GroupJson {
             name: g.name.clone(),
             depot: g.is_depot,
             hof: g.hof.clone(),
-            vehicles: g.vehicles.iter().map(|v| VehicleJson { file: v.file.clone(), weight: v.weight }).collect(),
+            vehicles: g
+                .vehicles
+                .iter()
+                .map(|v| VehicleJson {
+                    file: v.file.clone(),
+                    weight: v.weight,
+                })
+                .collect(),
             typgroups: g
                 .typgroups
                 .iter()
                 .map(|t| TypGroupJson {
                     file: t.file.clone(),
-                    entries: t.entries.iter().map(|e| EntryJson { number: e.number.clone(), registration: e.registration.clone(), paint: e.paint.clone(), from: e.from, to: e.to }).collect(),
+                    entries: t
+                        .entries
+                        .iter()
+                        .map(|e| EntryJson {
+                            number: e.number.clone(),
+                            registration: e.registration.clone(),
+                            paint: e.paint.clone(),
+                            from: e.from,
+                            to: e.to,
+                        })
+                        .collect(),
                 })
                 .collect(),
         }
@@ -79,7 +98,16 @@ impl GroupJson {
     fn to_group(&self) -> AiGroup {
         AiGroup {
             name: self.name.clone(),
-            vehicles: self.vehicles.iter().map(|v| AiVehicleEntry { file: v.file.clone(), weight: v.weight.max(0.0), number: None, registration: None }).collect(),
+            vehicles: self
+                .vehicles
+                .iter()
+                .map(|v| AiVehicleEntry {
+                    file: v.file.clone(),
+                    weight: v.weight.max(0.0),
+                    number: None,
+                    registration: None,
+                })
+                .collect(),
             hof: self.hof.clone().filter(|h| !h.trim().is_empty()),
             is_depot: self.depot,
             typgroups: self
@@ -87,7 +115,17 @@ impl GroupJson {
                 .iter()
                 .map(|t| AiTypGroup {
                     file: t.file.clone(),
-                    entries: t.entries.iter().map(|e| DepotEntry { number: e.number.clone(), registration: e.registration.clone(), paint: e.paint.clone(), from: e.from, to: e.to }).collect(),
+                    entries: t
+                        .entries
+                        .iter()
+                        .map(|e| DepotEntry {
+                            number: e.number.clone(),
+                            registration: e.registration.clone(),
+                            paint: e.paint.clone(),
+                            from: e.from,
+                            to: e.to,
+                        })
+                        .collect(),
                 })
                 .collect(),
         }
@@ -131,13 +169,27 @@ struct Place {
 
 fn place(map: &str) -> Result<Place> {
     let global = resolve_content(map)?;
-    let map_dir = global.parent().map(Path::to_path_buf).with_context(|| format!("{map} is not a map file"))?;
-    let rel = PathBuf::from(map.replace('\\', "/")).parent().map(Path::to_path_buf).unwrap_or_default();
-    if rel.as_os_str().is_empty() || !rel.components().all(|c| matches!(c, std::path::Component::Normal(_))) {
+    let map_dir = global
+        .parent()
+        .map(Path::to_path_buf)
+        .with_context(|| format!("{map} is not a map file"))?;
+    let rel = PathBuf::from(map.replace('\\', "/"))
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    if rel.as_os_str().is_empty()
+        || !rel
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
+    {
         return Err(anyhow!("{map} is not a map file"));
     }
     let content = content_dir().context("no content folder")?;
-    Ok(Place { content, map_dir, rel })
+    Ok(Place {
+        content,
+        map_dir,
+        rel,
+    })
 }
 
 impl Place {
@@ -150,11 +202,17 @@ impl Place {
 }
 
 fn files_of(dir: &Path, prefix: &str) -> Vec<PathBuf> {
-    let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
     let mut v: Vec<PathBuf> = rd
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("ocu")) && p.file_name().is_some_and(|n| n.to_string_lossy().to_ascii_lowercase().starts_with(prefix)))
+        .filter(|p| {
+            p.extension().is_some_and(|e| e.eq_ignore_ascii_case("ocu"))
+                && p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().to_ascii_lowercase().starts_with(prefix))
+        })
         .collect();
     v.sort();
     v
@@ -176,12 +234,19 @@ pub fn vehicles(refresh: bool) -> Result<Vec<AiVehicle>> {
         list.sort();
         for (n, is_dir) in list {
             let name = n.to_string_lossy().to_string();
-            let r = if rel.is_empty() { name.clone() } else { format!("{rel}\\{name}") };
+            let r = if rel.is_empty() {
+                name.clone()
+            } else {
+                format!("{rel}\\{name}")
+            };
             if is_dir {
                 if depth > 0 && !name.starts_with('.') {
                     walk(&d.join(&n), &r, depth - 1, out);
                 }
-            } else if Path::new(&name).extension().is_some_and(|e| e.eq_ignore_ascii_case("bus") || e.eq_ignore_ascii_case("ovh")) {
+            } else if Path::new(&name)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("bus") || e.eq_ignore_ascii_case("ovh"))
+            {
                 out.push((r, d.join(&n)));
             }
         }
@@ -206,8 +271,16 @@ pub fn vehicles(refresh: bool) -> Result<Vec<AiVehicle>> {
                     }
                     let air = matches!(v.kind, omsi_vehicle::vehicle::VehicleKind::Other(3));
                     let named = format!("{} {}", v.manufacturer.trim(), v.type_name.trim());
-                    let stem = f.file_stem().unwrap_or_default().to_string_lossy().to_string();
-                    let name = if named.trim().is_empty() { display_bus_name(&stem) } else { display_bus_name(&named) };
+                    let stem = f
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    let name = if named.trim().is_empty() {
+                        display_bus_name(&stem)
+                    } else {
+                        display_bus_name(&named)
+                    };
                     // (what OMSI offers the player to drive has a `[friendlyname]`; the rest is the
                     // AI's own: cars, lorries and the buses made for the traffic)
                     let kind = if air {
@@ -217,13 +290,23 @@ pub fn vehicles(refresh: bool) -> Result<Vec<AiVehicle>> {
                     } else {
                         "ai"
                     };
-                    Some(AiVehicle { file: format!("Vehicles\\{folder}\\{r}"), name, folder: folder.clone(), kind: kind.into() })
+                    Some(AiVehicle {
+                        file: format!("Vehicles\\{folder}\\{r}"),
+                        name,
+                        folder: folder.clone(),
+                        kind: kind.into(),
+                    })
                 })
                 .collect()
         })
         .collect();
     let mut out: Vec<AiVehicle> = lists.drain(..).flatten().collect();
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.file.cmp(&b.file)));
+    out.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then(a.file.cmp(&b.file))
+    });
     *KEPT.lock().unwrap_or_else(|e| e.into_inner()) = Some(out.clone());
     Ok(out)
 }
@@ -232,7 +315,7 @@ pub fn vehicles(refresh: bool) -> Result<Vec<AiVehicle>> {
 pub fn paints(file: &str) -> Result<Vec<String>> {
     let path = resolve_content(&file.replace('\\', "/"))?;
     let v = omsi_vehicle::Vehicle::load(&path).map_err(|e| anyhow!("{file}: {e}"))?;
-    Ok(paint_schemes(&v).0)
+    Ok(paint_schemes(&v).names)
 }
 
 fn rule_of(c: &CarUse) -> Option<RuleJson> {
@@ -242,14 +325,24 @@ fn rule_of(c: &CarUse) -> Option<RuleJson> {
         let (f, l) = c.types_prefered.clone()?;
         ("prefer", f, l)
     };
-    Some(RuleJson { line: c.line.trim().to_string(), mode: mode.into(), factor, types })
+    Some(RuleJson {
+        line: c.line.trim().to_string(),
+        mode: mode.into(),
+        factor,
+        types,
+    })
 }
 
 /// Everything the page shows of one map on `date`.
 pub fn view(map: &str, date: &str) -> Result<Value> {
     let p = place(map)?;
-    let date = if date.trim().is_empty() { DEFAULT_DATE } else { date.trim() };
-    let code = omsi_map::date_code(date).with_context(|| i18n::trf("'{date}' is not a date (YYYY-MM-DD)", &[("date", &date)]))?;
+    let date = if date.trim().is_empty() {
+        DEFAULT_DATE
+    } else {
+        date.trim()
+    };
+    let code = omsi_map::date_code(date)
+        .with_context(|| i18n::trf("'{date}' is not a date (YYYY-MM-DD)", &[("date", &date)]))?;
     let chrono = omsi_map::active_chrono_dirs(&p.map_dir, code);
     let base = omsi_map::ailists::ailists_with_chrono_base(&p.map_dir, &chrono);
     let user = AiLists::user_edits(&p.map_dir);
@@ -257,10 +350,18 @@ pub fn view(map: &str, date: &str) -> Result<Value> {
     effective.update(user.clone());
     // the groups the random traffic is made of: those `unsched_vehgroups.txt` names, else
     // the default group alone (as the game reads them)
-    let unscheduled: Option<Vec<String>> = omsi_cfg::CfgFile::read(&omsi_cfg::resolve_path(&p.map_dir, "unsched_vehgroups.txt"))
-        .ok()
-        .map(|f| omsi_map::ailists::parse_unsched_vehgroups(&f).into_iter().map(|(n, _)| n.trim().to_ascii_lowercase()).collect());
-    let same = |a: &AiGroup, b: &AiGroup| a.is_depot == b.is_depot && a.name.trim().eq_ignore_ascii_case(b.name.trim());
+    let unscheduled: Option<Vec<String>> =
+        omsi_cfg::CfgFile::read(&omsi_cfg::resolve_path(&p.map_dir, "unsched_vehgroups.txt"))
+            .ok()
+            .map(|f| {
+                omsi_map::ailists::parse_unsched_vehgroups(&f)
+                    .into_iter()
+                    .map(|(n, _)| n.trim().to_ascii_lowercase())
+                    .collect()
+            });
+    let same = |a: &AiGroup, b: &AiGroup| {
+        a.is_depot == b.is_depot && a.name.trim().eq_ignore_ascii_case(b.name.trim())
+    };
     let groups: Vec<Value> = effective
         .groups
         .iter()
@@ -282,7 +383,11 @@ pub fn view(map: &str, date: &str) -> Result<Value> {
     // the lines and the groups of their tours
     let off = omsi_map::chrono_deactivated_lines(&chrono);
     let data = omsi_timetable::TimetableData::load_with_chrono(&p.map_dir, &chrono, &off);
-    let ours: Vec<RuleJson> = files_of(&p.rules_dir(), RULE_PREFIX).iter().filter_map(|f| CarUse::load(f).ok()).filter_map(|c| rule_of(&c)).collect();
+    let ours: Vec<RuleJson> = files_of(&p.rules_dir(), RULE_PREFIX)
+        .iter()
+        .filter_map(|f| CarUse::load(f).ok())
+        .filter_map(|c| rule_of(&c))
+        .collect();
     let all_rules = CarUse::load_dir(&p.map_dir);
     let lines: Vec<Value> = data
         .lines
@@ -318,14 +423,29 @@ pub fn view(map: &str, date: &str) -> Result<Value> {
 /// ones. Nothing differing and no rule: the player's files are gone, the map as it was.
 pub fn save(map: &str, date: &str, groups: &[GroupJson], rules: &[RuleJson]) -> Result<Value> {
     let p = place(map)?;
-    let date = if date.trim().is_empty() { DEFAULT_DATE } else { date.trim() };
-    let code = omsi_map::date_code(date).with_context(|| i18n::trf("'{date}' is not a date (YYYY-MM-DD)", &[("date", &date)]))?;
-    let base = omsi_map::ailists::ailists_with_chrono_base(&p.map_dir, &omsi_map::active_chrono_dirs(&p.map_dir, code));
+    let date = if date.trim().is_empty() {
+        DEFAULT_DATE
+    } else {
+        date.trim()
+    };
+    let code = omsi_map::date_code(date)
+        .with_context(|| i18n::trf("'{date}' is not a date (YYYY-MM-DD)", &[("date", &date)]))?;
+    let base = omsi_map::ailists::ailists_with_chrono_base(
+        &p.map_dir,
+        &omsi_map::active_chrono_dirs(&p.map_dir, code),
+    );
     let mut text = String::new();
     let mut changed = 0;
     for g in groups {
         let own = g.to_group();
-        let same_as_map = base.groups.iter().find(|b| b.is_depot == own.is_depot && b.name.trim().eq_ignore_ascii_case(own.name.trim())).map(GroupJson::from).is_some_and(|b| b == *g);
+        let same_as_map = base
+            .groups
+            .iter()
+            .find(|b| {
+                b.is_depot == own.is_depot && b.name.trim().eq_ignore_ascii_case(own.name.trim())
+            })
+            .map(GroupJson::from)
+            .is_some_and(|b| b == *g);
         if !same_as_map {
             text.push_str(&own.to_cfg());
             changed += 1;
@@ -347,15 +467,33 @@ pub fn save(map: &str, date: &str, groups: &[GroupJson], rules: &[RuleJson]) -> 
         if !text.is_empty() {
             stage(p.lists_file(), text)?;
         }
-        for r in rules.iter().filter(|r| !r.line.trim().is_empty() && !r.types.is_empty() && (r.mode == "only" || r.mode == "prefer")) {
-            let types: String = r.types.iter().map(|t| format!("{}\r\n", clean(t))).collect();
+        for r in rules.iter().filter(|r| {
+            !r.line.trim().is_empty()
+                && !r.types.is_empty()
+                && (r.mode == "only" || r.mode == "prefer")
+        }) {
+            let types: String = r
+                .types
+                .iter()
+                .map(|t| format!("{}\r\n", clean(t)))
+                .collect();
             let body = if r.mode == "only" {
                 format!("[onlytypes]\r\n{types}[end]\r\n")
             } else {
-                format!("[types_prefered]\r\n{}\r\n{types}[end]\r\n", r.factor.clamp(0.0, 1.0))
+                format!(
+                    "[types_prefered]\r\n{}\r\n{types}[end]\r\n",
+                    r.factor.clamp(0.0, 1.0)
+                )
             };
-            let text = format!("[valid]\r\n10000101\r\n99991231\r\n\r\n[line]\r\n{}\r\n\r\n{body}", clean(&r.line));
-            stage(p.rules_dir().join(format!("{RULE_PREFIX}{:03}.ocu", made + 1)), text)?;
+            let text = format!(
+                "[valid]\r\n10000101\r\n99991231\r\n\r\n[line]\r\n{}\r\n\r\n{body}",
+                clean(&r.line)
+            );
+            stage(
+                p.rules_dir()
+                    .join(format!("{RULE_PREFIX}{:03}.ocu", made + 1)),
+                text,
+            )?;
             made += 1;
         }
         Ok(())
@@ -401,16 +539,35 @@ mod tests {
             name: "Busses".into(),
             hof: Some("Grundorf".into()),
             is_depot: true,
-            typgroups: vec![AiTypGroup { file: "Vehicles\\a\\b.bus".into(), entries: vec![DepotEntry { number: "1".into(), registration: "X".into(), paint: "red".into(), from: Some(19900101), to: None }] }],
+            typgroups: vec![AiTypGroup {
+                file: "Vehicles\\a\\b.bus".into(),
+                entries: vec![DepotEntry {
+                    number: "1".into(),
+                    registration: "X".into(),
+                    paint: "red".into(),
+                    from: Some(19900101),
+                    to: None,
+                }],
+            }],
             ..Default::default()
         };
-        assert_eq!(GroupJson::from(&GroupJson::from(&g).to_group()), GroupJson::from(&g));
+        assert_eq!(
+            GroupJson::from(&GroupJson::from(&g).to_group()),
+            GroupJson::from(&g)
+        );
     }
 
     #[test]
     fn rules_read_back() {
-        let c = CarUse { line: " 5 ".into(), types_prefered: Some((0.5, vec!["Vehicles\\a\\b.bus".into()])), ..Default::default() };
+        let c = CarUse {
+            line: " 5 ".into(),
+            types_prefered: Some((0.5, vec!["Vehicles\\a\\b.bus".into()])),
+            ..Default::default()
+        };
         let r = rule_of(&c).unwrap();
-        assert_eq!((r.line.as_str(), r.mode.as_str(), r.factor), ("5", "prefer", 0.5));
+        assert_eq!(
+            (r.line.as_str(), r.mode.as_str(), r.factor),
+            ("5", "prefer", 0.5)
+        );
     }
 }

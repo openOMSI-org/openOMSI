@@ -36,9 +36,11 @@ There are two channels:
 
 On the Beta channel the updater offers the newest release, beta or stable, that has a file
 for this computer and is not listed in `release/health.json`, and *Choose a version…* lists
-the betas too (marked *Beta*). Changing the channel looks for an update again at once. Back on Stable, nothing is taken away: the
-beta installed stays until a newer stable release comes out, or an older one is chosen in
-*Choose a version…*.
+the betas too (marked *Beta*). Changing the channel looks for an update again at once.
+On Stable, an installed beta normally stays until a newer stable release comes out or the
+player picks an older one in *Choose a version…*. If the installed version is listed as
+broken, the desktop updater can offer the current stable release even when it is older.
+With automatic updates on, the existing update flow installs it when the game is closed.
 
 ### Beta: a release started by hand
 
@@ -124,11 +126,14 @@ on `main`:
 { "bad": ["0.2.31"], "message": "0.2.31 loses the timetable after a stop" }
 ```
 
-Every start of a listed version notes it; the next start installs a newer release when there
-is one, else goes back to the version before (when its files are still kept, i.e. the listed
-version has not been running long), and tells the player why with the message. Then push the
-fix and promote its beta as soon as it is checked. The list is read from GitHub with a short wait at each start; offline,
-nothing happens. Take a version off the list once nobody runs it any more.
+Every start of a listed version notes it. On the next start, the guard tries the updater's
+candidate, then the locally preserved previous version if one is available, and tells the
+player why. For a download of an older stable build, the updater requires the platform
+archive's SHA-256 from the GitHub API and uses the same staged self-test as a regular update.
+The guard can install this replacement regardless of the launcher's automatic-update setting.
+The list is read from GitHub with a short wait. Push the fix and promote its beta as soon as
+it is checked so players without a working previous build can update. Take a version off the
+list once nobody runs it any more.
 
 Before any update replaces a program, the new one must pass `openomsi --self-test` (it starts,
 says its version and ends): a release that cannot even be loaded on a computer is refused there
@@ -137,10 +142,11 @@ and never offered again.
 
 ## The website
 
-[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) publishes `site/` together with
-the Markdown files of `docs/` to GitHub Pages
-(https://openomsi.org/) whenever they change on `main`. The site renders
-the Markdown in the browser, so a documentation change is one edit in `docs/`.
+[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) builds `site/` from
+the Markdown files of `docs/` (a static generator, see [`site/README.md`](../site/README.md)) and publishes
+it to GitHub Pages (https://openomsi.org/) whenever they change on `main`. A documentation
+change is one edit in `docs/`: the build cuts long documents into chapters, makes the menu,
+the search index and the links between pages, and fails on a broken link.
 The Download page offers the latest stable release. Beta downloads have a separate page
 with the same platform cards and installation instructions; when no beta is newer than
 stable, it links back to stable instead of offering an older build. The release history

@@ -24,7 +24,10 @@ pub struct ButtonDevices {
 
 impl ButtonDevices {
     pub fn new() -> ButtonDevices {
-        let mut d = ButtonDevices { devices: Vec::new(), scanned: Instant::now() };
+        let mut d = ButtonDevices {
+            devices: Vec::new(),
+            scanned: Instant::now(),
+        };
         d.scan();
         d
     }
@@ -32,17 +35,26 @@ impl ButtonDevices {
     /// Open the devices of this kind not open yet (and so one plugged in later).
     fn scan(&mut self) {
         self.scanned = Instant::now();
-        let Ok(dir) = std::fs::read_dir("/sys/class/input") else { return };
-        let mut nodes: Vec<String> = dir.filter_map(|e| e.ok()?.file_name().into_string().ok()).filter(|n| n.starts_with("event")).collect();
+        let Ok(dir) = std::fs::read_dir("/sys/class/input") else {
+            return;
+        };
+        let mut nodes: Vec<String> = dir
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .filter(|n| n.starts_with("event"))
+            .collect();
         nodes.sort();
         for node in nodes {
             if self.devices.iter().any(|d| d.node == node) {
                 continue;
             }
             let sys = format!("/sys/class/input/{node}/device");
-            let Ok(name) = std::fs::read_to_string(format!("{sys}/name")) else { continue };
+            let Ok(name) = std::fs::read_to_string(format!("{sys}/name")) else {
+                continue;
+            };
             let name = name.trim().to_string();
-            let caps = |kind: &str| std::fs::read_to_string(format!("{sys}/capabilities/{kind}")).unwrap_or_default();
+            let caps = |kind: &str| {
+                std::fs::read_to_string(format!("{sys}/capabilities/{kind}")).unwrap_or_default()
+            };
             let key_bits = caps("key");
             let keys = crate::controllers::key_bitmap_buttons(&key_bits);
             // (joystick and gamepad buttons only, and a device with two axes or more is gilrs's.
@@ -52,18 +64,33 @@ impl ButtonDevices {
             if bit_count(&caps("abs")) >= 2
                 || bit_count(&caps("rel")) > 0
                 || has_keyboard_keys(&key_bits)
-                || !keys.iter().any(|c| crate::controllers::code_button(*c).is_some())
+                || !keys
+                    .iter()
+                    .any(|c| crate::controllers::code_button(*c).is_some())
                 || udev_says_no_joystick(&node)
             {
                 continue;
             }
-            match OpenOptions::new().read(true).custom_flags(libc::O_NONBLOCK).open(format!("/dev/input/{node}")) {
+            match OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(format!("/dev/input/{node}"))
+            {
                 Ok(file) => {
                     let buttons = crate::controllers::declared_button_count(&name);
-                    log::info!("game controller: {name} (/dev/input/{node}), {buttons} buttons, no axes: read from evdev");
-                    self.devices.push(Device { name, node, file, buttons });
+                    log::info!(
+                        "game controller: {name} (/dev/input/{node}), {buttons} buttons, no axes: read from evdev"
+                    );
+                    self.devices.push(Device {
+                        name,
+                        node,
+                        file,
+                        buttons,
+                    });
                 }
-                Err(e) => log::warn!("game controller: {name} (/dev/input/{node}) cannot be read: {e}"),
+                Err(e) => {
+                    log::warn!("game controller: {name} (/dev/input/{node}) cannot be read: {e}")
+                }
             }
         }
     }
@@ -88,14 +115,19 @@ impl ButtonDevices {
                             if kind != EV_KEY || value > 1 {
                                 continue;
                             }
-                            if let Some(b) = crate::controllers::evdev_button_number(&d.name, code) {
+                            if let Some(b) = crate::controllers::evdev_button_number(&d.name, code)
+                            {
                                 out.push((d.name.clone(), b, value == 1));
                             }
                         }
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                     Err(e) => {
-                        log::info!("game controller: {} (/dev/input/{}) went away: {e}", d.name, d.node);
+                        log::info!(
+                            "game controller: {} (/dev/input/{}) went away: {e}",
+                            d.name,
+                            d.node
+                        );
                         gone.push(i);
                         break;
                     }
@@ -115,19 +147,32 @@ impl ButtonDevices {
 
 /// A key below the buttons (0x100, the bitmap's last four words): a keyboard's.
 fn has_keyboard_keys(bitmap: &str) -> bool {
-    bitmap.split_whitespace().rev().take(4).filter_map(|w| u64::from_str_radix(w, 16).ok()).any(|w| w != 0)
+    bitmap
+        .split_whitespace()
+        .rev()
+        .take(4)
+        .filter_map(|w| u64::from_str_radix(w, 16).ok())
+        .any(|w| w != 0)
 }
 
 /// udev's database classifies the device and it is not a joystick (without the database,
 /// in a container, nothing is known).
 fn udev_says_no_joystick(node: &str) -> bool {
-    let Ok(dev) = std::fs::read_to_string(format!("/sys/class/input/{node}/dev")) else { return false };
-    let Ok(data) = std::fs::read_to_string(format!("/run/udev/data/c{}", dev.trim())) else { return false };
+    let Ok(dev) = std::fs::read_to_string(format!("/sys/class/input/{node}/dev")) else {
+        return false;
+    };
+    let Ok(data) = std::fs::read_to_string(format!("/run/udev/data/c{}", dev.trim())) else {
+        return false;
+    };
     !data.lines().any(|l| l == "E:ID_INPUT_JOYSTICK=1")
 }
 
 fn bit_count(bitmap: &str) -> u32 {
-    bitmap.split_whitespace().filter_map(|w| u64::from_str_radix(w, 16).ok()).map(u64::count_ones).sum()
+    bitmap
+        .split_whitespace()
+        .filter_map(|w| u64::from_str_radix(w, 16).ok())
+        .map(u64::count_ones)
+        .sum()
 }
 
 #[cfg(test)]
@@ -142,8 +187,12 @@ mod tests {
     #[test]
     fn keyboards_and_mice_are_told_from_a_gear_shifter() {
         // the Aerosoft gear shifter, a gaming mouse, a keyboard's media keys
-        assert!(!super::has_keyboard_keys("3f 0 0 0 0 0 0 ffff00000000 0 0 0 0"));
+        assert!(!super::has_keyboard_keys(
+            "3f 0 0 0 0 0 0 ffff00000000 0 0 0 0"
+        ));
         assert!(!super::has_keyboard_keys("ffffffff0000 0 0 0 0"));
-        assert!(super::has_keyboard_keys("3f00733fff 0 0 483ffff17aff32d bfd4444600000000 1 130ff38b17d000 677bfad9415fed 19ed68000004400 10000002"));
+        assert!(super::has_keyboard_keys(
+            "3f00733fff 0 0 483ffff17aff32d bfd4444600000000 1 130ff38b17d000 677bfad9415fed 19ed68000004400 10000002"
+        ));
     }
 }

@@ -85,7 +85,11 @@ impl GroundSound {
                 }
             }
         }
-        GroundSound { size, ids, ..Default::default() }
+        GroundSound {
+            size,
+            ids,
+            ..Default::default()
+        }
     }
 
     /// The ground's surface id at tile-local (x, y); asphalt where nothing is known.
@@ -140,17 +144,33 @@ mod tests {
     #[test]
     fn a_road_face_wins_over_the_ground_below_it() {
         let mut ts = TileSurface::new(32);
-        ts.sound = GroundSound { size: 1, ids: vec![4], ..Default::default() };
+        ts.sound = GroundSound {
+            size: 1,
+            ids: vec![4],
+            ..Default::default()
+        };
         // a cobbled road plate 10 x 10 m at 0.2 m
         let a = Vec3::new(10.0, 10.0, 0.2);
-        let (b, c, d) = (Vec3::new(20.0, 10.0, 0.2), Vec3::new(20.0, 20.0, 0.2), Vec3::new(10.0, 20.0, 0.2));
+        let (b, c, d) = (
+            Vec3::new(20.0, 10.0, 0.2),
+            Vec3::new(20.0, 20.0, 0.2),
+            Vec3::new(10.0, 20.0, 0.2),
+        );
         for tri in [[a, b, c], [a, c, d]] {
             assert!(ts.drive.push_kind(tri, false));
             ts.drive.tag_last(2);
         }
         ts.finish();
-        assert_eq!(ts.surface_under(15.0, 15.0, 0.2, Some(0.0)), 2, "on the road");
-        assert_eq!(ts.surface_under(30.0, 30.0, 0.0, Some(0.0)), 4, "on the grass beside it");
+        assert_eq!(
+            ts.surface_under(15.0, 15.0, 0.2, Some(0.0)),
+            2,
+            "on the road"
+        );
+        assert_eq!(
+            ts.surface_under(30.0, 30.0, 0.0, Some(0.0)),
+            4,
+            "on the grass beside it"
+        );
         // the bare ground over the plate (a buried face): the ground's
         assert_eq!(ts.surface_under(15.0, 15.0, 1.0, Some(1.0)), 4);
         // the ground a little over the road it is cut away for: the road's

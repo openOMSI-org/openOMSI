@@ -8,9 +8,9 @@
 //! host answers a game of an older protocol (`OMSIMODS/1`, `OMSIMODS/2`) with an `ERR` line
 //! that says to update.
 
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
-use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, UnparsedPublicKey, X25519};
-use ring::hkdf::{Salt, HKDF_SHA256};
+use ring::aead::{Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey};
+use ring::agreement::{EphemeralPrivateKey, UnparsedPublicKey, X25519, agree_ephemeral};
+use ring::hkdf::{HKDF_SHA256, Salt};
 use ring::rand::SystemRandom;
 use std::io::{self, BufRead, Read, Write};
 
@@ -29,12 +29,18 @@ fn proof_text(session: u64, client: &str, host: &str) -> Vec<u8> {
 }
 
 pub(crate) fn prove(key: &omsi_net::hostkey::HostKey, client: &str, host: &str) -> String {
-    format!("{} {}", hex(key.public()), hex(&key.sign("mods", &proof_text(key.session(), client, host))))
+    format!(
+        "{} {}",
+        hex(key.public()),
+        hex(&key.sign("mods", &proof_text(key.session(), client, host)))
+    )
 }
 
 pub(crate) fn proven(session: u64, client: &str, host: &str, public: &str, sig: &str) -> bool {
     match (unhex(public), unhex(sig)) {
-        (Some(p), Some(s)) => omsi_net::hostkey::verify(session, &p, "mods", &proof_text(session, client, host), &s),
+        (Some(p), Some(s)) => {
+            omsi_net::hostkey::verify(session, &p, "mods", &proof_text(session, client, host), &s)
+        }
         _ => false,
     }
 }
@@ -54,9 +60,15 @@ pub(crate) struct Handshake {
 impl Handshake {
     pub(crate) fn new() -> io::Result<Handshake> {
         let rng = SystemRandom::new();
-        let private = EphemeralPrivateKey::generate(&X25519, &rng).map_err(|_| io::Error::other("no key pair"))?;
+        let private = EphemeralPrivateKey::generate(&X25519, &rng)
+            .map_err(|_| io::Error::other("no key pair"))?;
         let mut public = [0u8; 32];
-        public.copy_from_slice(private.compute_public_key().map_err(|_| io::Error::other("no public key"))?.as_ref());
+        public.copy_from_slice(
+            private
+                .compute_public_key()
+                .map_err(|_| io::Error::other("no public key"))?
+                .as_ref(),
+        );
         Ok(Handshake { private, public })
     }
 
@@ -67,23 +79,41 @@ impl Handshake {
 
     /// The keys of the connection: (ours for sending, ours for receiving). `client` says
     /// which side this is; `peer` is the other side's public key (hex).
-    pub(crate) fn finish(self, session: u64, client: bool, peer: &str) -> io::Result<(LessSafeKey, LessSafeKey)> {
-        let peer = unhex(peer).filter(|p| p.len() == 32).ok_or_else(|| bad("a bad key in the greeting"))?;
-        let (client_pub, server_pub) = if client { (self.public.to_vec(), peer.clone()) } else { (peer.clone(), self.public.to_vec()) };
+    pub(crate) fn finish(
+        self,
+        session: u64,
+        client: bool,
+        peer: &str,
+    ) -> io::Result<(LessSafeKey, LessSafeKey)> {
+        let peer = unhex(peer)
+            .filter(|p| p.len() == 32)
+            .ok_or_else(|| bad("a bad key in the greeting"))?;
+        let (client_pub, server_pub) = if client {
+            (self.public.to_vec(), peer.clone())
+        } else {
+            (peer.clone(), self.public.to_vec())
+        };
         let mut salt = b"openOMSI LAN mods 2 ".to_vec();
         salt.extend_from_slice(&session.to_be_bytes());
-        let derive = |shared: &[u8]| -> Result<(LessSafeKey, LessSafeKey), ring::error::Unspecified> {
-            let prk = Salt::new(HKDF_SHA256, &salt).extract(shared);
-            let key = |dir: &[u8]| -> Result<LessSafeKey, ring::error::Unspecified> {
-                let info = [dir, &client_pub, &server_pub];
-                Ok(LessSafeKey::new(UnboundKey::from(prk.expand(&info, &CHACHA20_POLY1305)?)))
+        let derive =
+            |shared: &[u8]| -> Result<(LessSafeKey, LessSafeKey), ring::error::Unspecified> {
+                let prk = Salt::new(HKDF_SHA256, &salt).extract(shared);
+                let key = |dir: &[u8]| -> Result<LessSafeKey, ring::error::Unspecified> {
+                    let info = [dir, &client_pub, &server_pub];
+                    Ok(LessSafeKey::new(UnboundKey::from(
+                        prk.expand(&info, &CHACHA20_POLY1305)?,
+                    )))
+                };
+                let (c2s, s2c) = (key(b"client to host")?, key(b"host to client")?);
+                Ok(if client { (c2s, s2c) } else { (s2c, c2s) })
             };
-            let (c2s, s2c) = (key(b"client to host")?, key(b"host to client")?);
-            Ok(if client { (c2s, s2c) } else { (s2c, c2s) })
-        };
-        agree_ephemeral(self.private, &UnparsedPublicKey::new(&X25519, &peer), derive)
-            .map_err(|_| bad("the key agreement failed"))?
-            .map_err(|_| bad("the key agreement failed"))
+        agree_ephemeral(
+            self.private,
+            &UnparsedPublicKey::new(&X25519, &peer),
+            derive,
+        )
+        .map_err(|_| bad("the key agreement failed"))?
+        .map_err(|_| bad("the key agreement failed"))
     }
 }
 
@@ -95,7 +125,10 @@ fn unhex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) || !s.is_ascii() {
         return None;
     }
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
+        .collect()
 }
 
 fn bad(msg: &str) -> io::Error {
@@ -119,16 +152,24 @@ pub(crate) struct SecureWriter<W: Write> {
 
 impl<W: Write> SecureWriter<W> {
     pub(crate) fn new(inner: W, key: LessSafeKey) -> Self {
-        SecureWriter { inner, key, seq: 0, buf: Vec::with_capacity(FRAME + TAG) }
+        SecureWriter {
+            inner,
+            key,
+            seq: 0,
+            buf: Vec::with_capacity(FRAME + TAG),
+        }
     }
 
     fn send(&mut self) -> io::Result<()> {
         if self.buf.is_empty() {
             return Ok(());
         }
-        self.key.seal_in_place_append_tag(nonce(self.seq), Aad::empty(), &mut self.buf).map_err(|_| io::Error::other("cannot seal a frame"))?;
+        self.key
+            .seal_in_place_append_tag(nonce(self.seq), Aad::empty(), &mut self.buf)
+            .map_err(|_| io::Error::other("cannot seal a frame"))?;
         self.seq += 1;
-        self.inner.write_all(&(self.buf.len() as u32).to_be_bytes())?;
+        self.inner
+            .write_all(&(self.buf.len() as u32).to_be_bytes())?;
         self.inner.write_all(&self.buf)?;
         self.buf.clear();
         Ok(())
@@ -162,7 +203,13 @@ pub(crate) struct SecureReader<R: Read> {
 
 impl<R: Read> SecureReader<R> {
     pub(crate) fn new(inner: R, key: LessSafeKey) -> Self {
-        SecureReader { inner, key, seq: 0, plain: Vec::new(), pos: 0 }
+        SecureReader {
+            inner,
+            key,
+            seq: 0,
+            plain: Vec::new(),
+            pos: 0,
+        }
     }
 
     /// The next frame into `plain`; false at the end of the stream.
@@ -184,7 +231,11 @@ impl<R: Read> SecureReader<R> {
         }
         self.plain.resize(len, 0);
         self.inner.read_exact(&mut self.plain)?;
-        let n = self.key.open_in_place(nonce(self.seq), Aad::empty(), &mut self.plain).map_err(|_| bad("a frame was changed on the way (or another key)"))?.len();
+        let n = self
+            .key
+            .open_in_place(nonce(self.seq), Aad::empty(), &mut self.plain)
+            .map_err(|_| bad("a frame was changed on the way (or another key)"))?
+            .len();
         self.seq += 1;
         self.plain.truncate(n);
         self.pos = 0;
@@ -224,7 +275,10 @@ mod tests {
     fn pair() -> ((LessSafeKey, LessSafeKey), (LessSafeKey, LessSafeKey)) {
         let (c, s) = (Handshake::new().unwrap(), Handshake::new().unwrap());
         let (cp, sp) = (c.public_hex(), s.public_hex());
-        (c.finish(42, true, &sp).unwrap(), s.finish(42, false, &cp).unwrap())
+        (
+            c.finish(42, true, &sp).unwrap(),
+            s.finish(42, false, &cp).unwrap(),
+        )
     }
 
     #[test]
@@ -260,7 +314,11 @@ mod tests {
         let mut changed = wire.clone();
         changed[6] ^= 0x20;
         let mut line = String::new();
-        assert!(SecureReader::new(&changed[..], s_recv).read_line(&mut line).is_err());
+        assert!(
+            SecureReader::new(&changed[..], s_recv)
+                .read_line(&mut line)
+                .is_err()
+        );
         // the second frame first
         let ((c_send, _), (_, s_recv)) = pair();
         let mut w = SecureWriter::new(Vec::new(), c_send);
@@ -270,7 +328,11 @@ mod tests {
         w.write_all(b"BYE\n").unwrap();
         w.flush().unwrap();
         let swapped = [&w.inner[first..], &w.inner[..first]].concat();
-        assert!(SecureReader::new(&swapped[..], s_recv).read_line(&mut line).is_err());
+        assert!(
+            SecureReader::new(&swapped[..], s_recv)
+                .read_line(&mut line)
+                .is_err()
+        );
     }
 
     #[test]
@@ -283,7 +345,11 @@ mod tests {
         w.write_all(b"LIST\n").unwrap();
         w.flush().unwrap();
         let mut line = String::new();
-        assert!(SecureReader::new(&w.inner[..], s_recv).read_line(&mut line).is_err());
+        assert!(
+            SecureReader::new(&w.inner[..], s_recv)
+                .read_line(&mut line)
+                .is_err()
+        );
         assert!(Handshake::new().unwrap().finish(1, true, "zz").is_err());
     }
 }

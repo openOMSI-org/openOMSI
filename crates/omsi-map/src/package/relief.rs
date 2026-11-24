@@ -36,7 +36,11 @@ impl Package {
 
     /// Looks for contour lines, called once by `open`.
     pub(super) fn load_relief(&mut self) {
-        self.has_contours = self.index.iter().any(|e| self.data.get(e.at..e.at + e.len).is_some_and(Self::chunk_has_contours));
+        self.has_contours = self.index.iter().any(|e| {
+            self.data
+                .get(e.at..e.at + e.len)
+                .is_some_and(Self::chunk_has_contours)
+        });
     }
 
     /// The package carries contour lines (the city map then has a button for them).
@@ -77,7 +81,11 @@ impl Package {
                 for _ in 0..n {
                     points.push(self.to_world(r.f32()?, r.f32()?));
                 }
-                out.push(super::Line { class, width, points });
+                out.push(super::Line {
+                    class,
+                    width,
+                    points,
+                });
             }
             Some(())
         })();
@@ -92,7 +100,9 @@ impl Package {
         self.contour_marks.get_or_init(|| {
             let mut out = Vec::new();
             for e in &self.index {
-                let Some(body) = self.data.get(e.at..e.at + e.len) else { continue };
+                let Some(body) = self.data.get(e.at..e.at + e.len) else {
+                    continue;
+                };
                 for l in &self.contours_of(body) {
                     let index = l.class == LINE_CONTOUR_INDEX;
                     let (gap, mut run) = (if index { 700.0 } else { 450.0 }, 0.0f64);
@@ -100,7 +110,11 @@ impl Package {
                     for s in l.points.windows(2) {
                         run += ((s[1].0 - s[0].0).powi(2) + (s[1].1 - s[0].1).powi(2)).sqrt();
                         if run >= next {
-                            out.push((((s[0].0 + s[1].0) * 0.5, (s[0].1 + s[1].1) * 0.5), (l.width + self.terrain_offset).round() as i32, index));
+                            out.push((
+                                ((s[0].0 + s[1].0) * 0.5, (s[0].1 + s[1].1) * 0.5),
+                                (l.width + self.terrain_offset).round() as i32,
+                                index,
+                            ));
                             next = run + gap;
                         }
                     }
@@ -125,7 +139,11 @@ mod tests {
         let mut body = Vec::new();
         body.extend(0u32.to_le_bytes());
         body.extend(3u32.to_le_bytes());
-        for (class, h, y) in [(LINE_CONTOUR, 10.0f32, 0.0f32), (LINE_CONTOUR_INDEX, 50.0, 40.0), (super::super::LINE_RIVER, 3.0, 80.0)] {
+        for (class, h, y) in [
+            (LINE_CONTOUR, 10.0f32, 0.0f32),
+            (LINE_CONTOUR_INDEX, 50.0, 40.0),
+            (super::super::LINE_RIVER, 3.0, 80.0),
+        ] {
             body.extend([class, 0]);
             body.extend(h.to_le_bytes());
             body.extend(u32::MAX.to_le_bytes());
@@ -153,7 +171,15 @@ mod tests {
         f.extend((at as u64).to_le_bytes());
         f.extend((body.len() as u32).to_le_bytes());
         f.extend(body);
-        let mut p = Package::parse(f, "Test".into(), String::new(), super::super::Palette::dark(), super::super::Palette::light(), 300.0).expect("valid");
+        let mut p = Package::parse(
+            f,
+            "Test".into(),
+            String::new(),
+            super::super::Palette::dark(),
+            super::super::Palette::light(),
+            300.0,
+        )
+        .expect("valid");
         p.load_relief();
         p
     }
@@ -164,7 +190,13 @@ mod tests {
         assert!(p.has_contours());
         let l = p.layers(None);
         assert_eq!(l.lines.len(), 1, "the river only");
-        assert_eq!(l.contours.iter().map(|c| (c.class, c.width as i32)).collect::<Vec<_>>(), vec![(LINE_CONTOUR, 10), (LINE_CONTOUR_INDEX, 50)]);
+        assert_eq!(
+            l.contours
+                .iter()
+                .map(|c| (c.class, c.width as i32))
+                .collect::<Vec<_>>(),
+            vec![(LINE_CONTOUR, 10), (LINE_CONTOUR_INDEX, 50)]
+        );
     }
 
     #[test]
@@ -175,13 +207,19 @@ mod tests {
         // 1 km of an index line: a mark at 150 m, the next 700 m later is past the end; 1 km of a plain one: 100 m, then 450 m later
         assert_eq!(marks.iter().filter(|m| m.2).count(), 1);
         assert!(marks.iter().filter(|m| !m.2).count() >= 2);
-        assert!(marks.iter().all(|m| m.1 == if m.2 { 52 } else { 12 }), "{marks:?}");
+        assert!(
+            marks.iter().all(|m| m.1 == if m.2 { 52 } else { 12 }),
+            "{marks:?}"
+        );
     }
 
     #[test]
     fn the_marks_are_made_only_when_asked_and_a_frame_can_see_whether_they_are_there() {
         let p = with_contours();
-        assert!(p.contour_marks_ready().is_none(), "nothing is made by opening the package");
+        assert!(
+            p.contour_marks_ready().is_none(),
+            "nothing is made by opening the package"
+        );
         let made = p.contour_marks().len();
         assert!(made > 0);
         assert_eq!(p.contour_marks_ready().map(|m| m.len()), Some(made));

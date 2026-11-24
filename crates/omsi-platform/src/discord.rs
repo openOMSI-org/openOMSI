@@ -3,8 +3,8 @@
 use omsi_launcher_lib::i18n::{tr, trf};
 use std::io::{self, Read, Write};
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -51,15 +51,36 @@ pub struct Show {
 
 impl Default for Show {
     fn default() -> Self {
-        Self { map: true, bus: true, line: true, stop: true, players: true, buttons: true }
+        Self {
+            map: true,
+            bus: true,
+            line: true,
+            stop: true,
+            players: true,
+            buttons: true,
+        }
     }
 }
 
 impl Show {
-    pub const KEYS: [&'static str; 6] = ["discord_map", "discord_bus", "discord_line", "discord_stop", "discord_players", "discord_buttons"];
+    pub const KEYS: [&'static str; 6] = [
+        "discord_map",
+        "discord_bus",
+        "discord_line",
+        "discord_stop",
+        "discord_players",
+        "discord_buttons",
+    ];
 
     fn slots(&mut self) -> [&mut bool; 6] {
-        [&mut self.map, &mut self.bus, &mut self.line, &mut self.stop, &mut self.players, &mut self.buttons]
+        [
+            &mut self.map,
+            &mut self.bus,
+            &mut self.line,
+            &mut self.stop,
+            &mut self.players,
+            &mut self.buttons,
+        ]
     }
 
     pub fn set(&mut self, key: &str, on: bool) {
@@ -69,7 +90,11 @@ impl Show {
     }
 
     pub fn to_text(mut self) -> String {
-        Self::KEYS.iter().zip(self.slots()).map(|(k, on)| format!("{k}={}\n", *on as u8)).collect()
+        Self::KEYS
+            .iter()
+            .zip(self.slots())
+            .map(|(k, on)| format!("{k}={}\n", *on as u8))
+            .collect()
     }
 }
 
@@ -88,19 +113,27 @@ pub struct ServerLimit {
 }
 
 impl ServerLimit {
-    pub fn get(&mut self, target: &str, ask: impl FnOnce(&str) -> Option<usize> + Send + 'static) -> usize {
+    pub fn get(
+        &mut self,
+        target: &str,
+        ask: impl FnOnce(&str) -> Option<usize> + Send + 'static,
+    ) -> usize {
         if self.asked.as_ref().is_none_or(|(asked, _)| asked != target) {
             let max = Arc::new(AtomicUsize::new(0));
             let found = max.clone();
             let server = target.to_string();
-            let _ = std::thread::Builder::new().name("discord-server-size".into()).spawn(move || {
-                if let Some(n) = ask(&server) {
-                    found.store(n, Ordering::Relaxed);
-                }
-            });
+            let _ = std::thread::Builder::new()
+                .name("discord-server-size".into())
+                .spawn(move || {
+                    if let Some(n) = ask(&server) {
+                        found.store(n, Ordering::Relaxed);
+                    }
+                });
             self.asked = Some((target.to_string(), max));
         }
-        self.asked.as_ref().map_or(0, |(_, max)| max.load(Ordering::Relaxed))
+        self.asked
+            .as_ref()
+            .map_or(0, |(_, max)| max.load(Ordering::Relaxed))
     }
 
     pub fn forget(&mut self) {
@@ -130,17 +163,29 @@ impl Presence {
         if let (true, Some((line, _))) = (show.line, game.duty) {
             details.push(trf("Line {line}", &[("line", &line.trim())]));
         }
-        let party = game.players.filter(|(session, n, max)| multiplayer && *session != 0 && *n > 0 && max >= n).map(|(session, n, max)| (party_id(session), n, max));
+        let party = game
+            .players
+            .filter(|(session, n, max)| multiplayer && *session != 0 && *n > 0 && max >= n)
+            .map(|(session, n, max)| (party_id(session), n, max));
         let mut state = Vec::new();
-        let next_stop = game.next_stop.filter(|(name, _)| show.stop && game.duty.is_some() && !name.trim().is_empty());
+        let next_stop = game
+            .next_stop
+            .filter(|(name, _)| show.stop && game.duty.is_some() && !name.trim().is_empty());
         match (bus, next_stop) {
-            (Some(_), Some((stop, delay))) => state.push(format!("{}: {} ({})", tr("Next stop"), compact(stop, 28), delay_text(delay))),
+            (Some(_), Some((stop, delay))) => state.push(format!(
+                "{}: {} ({})",
+                tr("Next stop"),
+                compact(stop, 28),
+                delay_text(delay)
+            )),
             (Some((short, _)), None) => {
                 if show.bus {
                     state.push(compact(short, 16));
                 }
                 match game.duty {
-                    Some((_, tour)) if show.line => state.push(trf("Tour {tour}", &[("tour", &tour.trim())])),
+                    Some((_, tour)) if show.line => {
+                        state.push(trf("Tour {tour}", &[("tour", &tour.trim())]))
+                    }
                     None => state.push(tr("Free drive")),
                     _ => {}
                 }
@@ -177,7 +222,12 @@ impl Presence {
         })
     }
 
-    pub fn for_launcher(enabled: bool, launching: bool, game_running: bool, show_buttons: bool) -> Option<Self> {
+    pub fn for_launcher(
+        enabled: bool,
+        launching: bool,
+        game_running: bool,
+        show_buttons: bool,
+    ) -> Option<Self> {
         (enabled && !launching && !game_running).then(|| Self {
             details: tr("In launcher"),
             state: tr("Preparing a drive"),
@@ -192,12 +242,20 @@ fn buttons(shown: bool) -> Vec<(String, &'static str)> {
     if !shown {
         return Vec::new();
     }
-    vec![(tr("Get openOMSI"), WEBSITE), (tr("Join the Discord"), COMMUNITY)]
+    vec![
+        (tr("Get openOMSI"), WEBSITE),
+        (tr("Join the Discord"), COMMUNITY),
+    ]
 }
 
 fn delay_text(delay: f32) -> String {
     let secs = delay.abs().round() as i64;
-    format!("{}{}:{:02}", if delay < 0.0 { "-" } else { "+" }, secs / 60, secs % 60)
+    format!(
+        "{}{}:{:02}",
+        if delay < 0.0 { "-" } else { "+" },
+        secs / 60,
+        secs % 60
+    )
 }
 
 /// Shorten at a word boundary without interpreting names supplied by content packs.
@@ -239,14 +297,14 @@ fn overlapped_io(
     buffer: &mut [u8],
     write: bool,
 ) -> io::Result<usize> {
-    use windows::core::PCWSTR;
     use windows::Win32::{
         Foundation::WAIT_OBJECT_0,
         System::{
-            Threading::{CreateEventW, WaitForSingleObject},
             IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED},
+            Threading::{CreateEventW, WaitForSingleObject},
         },
     };
+    use windows::core::PCWSTR;
 
     let event = unsafe { CreateEventW(None, true, false, PCWSTR::null()) }
         .map_err(|e| io::Error::other(e.to_string()))?;
@@ -369,14 +427,14 @@ fn connect() -> Option<Pipe> {
         }
         #[cfg(windows)]
         {
-            use windows::core::PCWSTR;
             use windows::Win32::{
                 Foundation::{GENERIC_READ, GENERIC_WRITE},
                 Storage::FileSystem::{
-                    CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_FLAG_OVERLAPPED, FILE_SHARE_MODE,
+                    CreateFileW, FILE_FLAG_OVERLAPPED, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_MODE,
                     OPEN_EXISTING,
                 },
             };
+            use windows::core::PCWSTR;
             let path: Vec<u16> = format!(r"\\.\pipe\discord-ipc-{i}")
                 .encode_utf16()
                 .chain([0])
@@ -647,7 +705,7 @@ fn run_with<T: Read + Write>(
 
         match read_frame(pipe.as_mut().unwrap(), &mut pending) {
             Ok(Some(frame)) if answer_ping(pipe.as_mut().unwrap(), &frame).unwrap_or(false) => {
-                continue
+                continue;
             }
             Ok(Some(frame)) => {
                 let Some(value) = text(&frame) else {
@@ -775,9 +833,33 @@ mod tests {
         omsi_launcher_lib::i18n::pin_language("ENG");
         let show = Show::default();
         let bus = Some(("Bus", "Full bus name"));
-        assert_eq!(Presence::for_game(&Game { bus, ..Default::default() }, show), None);
-        assert_eq!(Presence::for_game(&Game { map: Some(" "), ..Default::default() }, show), None);
-        let online = Game { map: Some("Map"), bus, duty: Some((" 5 ", " 2 ")), players: Some((7, 3, 16)), ..Default::default() };
+        assert_eq!(
+            Presence::for_game(
+                &Game {
+                    bus,
+                    ..Default::default()
+                },
+                show
+            ),
+            None
+        );
+        assert_eq!(
+            Presence::for_game(
+                &Game {
+                    map: Some(" "),
+                    ..Default::default()
+                },
+                show
+            ),
+            None
+        );
+        let online = Game {
+            map: Some("Map"),
+            bus,
+            duty: Some((" 5 ", " 2 ")),
+            players: Some((7, 3, 16)),
+            ..Default::default()
+        };
         let p = Presence::for_game(&online, show).unwrap();
         assert_eq!(p.details, "Map | Line 5");
         assert_eq!(p.state, "Bus | Tour 2");
@@ -785,7 +867,14 @@ mod tests {
         assert_eq!(p.small, Some(("online", "Multiplayer".into())));
         assert_eq!(p.party, Some((party_id(7), 3, 16)));
         assert_eq!(p.buttons.len(), 2);
-        let walk = Presence::for_game(&Game { map: Some("Map"), ..Default::default() }, show).unwrap();
+        let walk = Presence::for_game(
+            &Game {
+                map: Some("Map"),
+                ..Default::default()
+            },
+            show,
+        )
+        .unwrap();
         assert_eq!(walk.state, "On foot");
         assert_eq!(walk.small, Some(("walk", "On foot".into())));
         assert_eq!(walk.party, None);
@@ -794,13 +883,33 @@ mod tests {
     #[test]
     fn each_part_can_be_hidden() {
         omsi_launcher_lib::i18n::pin_language("ENG");
-        let game = Game { map: Some("Map"), bus: Some(("Bus", "Full bus name")), duty: Some(("5", "2")), next_stop: Some(("Hauptbahnhof", 83.0)), players: Some((7, 3, 16)) };
+        let game = Game {
+            map: Some("Map"),
+            bus: Some(("Bus", "Full bus name")),
+            duty: Some(("5", "2")),
+            next_stop: Some(("Hauptbahnhof", 83.0)),
+            players: Some((7, 3, 16)),
+        };
         let all = Presence::for_game(&game, Show::default()).unwrap();
         assert_eq!(all.state, "Next stop: Hauptbahnhof (+1:23)");
         assert!(all.large_text.ends_with("Full bus name"));
-        let early = Presence::for_game(&Game { next_stop: Some(("Hauptbahnhof", -5.4)), ..game }, Show::default()).unwrap();
+        let early = Presence::for_game(
+            &Game {
+                next_stop: Some(("Hauptbahnhof", -5.4)),
+                ..game
+            },
+            Show::default(),
+        )
+        .unwrap();
         assert!(early.state.contains("(-0:05)"));
-        let none = Show { map: false, bus: false, line: false, stop: false, players: false, buttons: false };
+        let none = Show {
+            map: false,
+            bus: false,
+            line: false,
+            stop: false,
+            players: false,
+            buttons: false,
+        };
         let hidden = Presence::for_game(&game, none).unwrap();
         assert_eq!(hidden.details, "");
         assert_eq!(hidden.state, "Driving");
@@ -811,17 +920,47 @@ mod tests {
         let a = activity(&hidden, 1, true);
         assert!(a.get("details").is_none());
         assert!(a.get("party").is_none() && a.get("buttons").is_none());
-        let no_stop = Presence::for_game(&game, Show { stop: false, ..Show::default() }).unwrap();
+        let no_stop = Presence::for_game(
+            &game,
+            Show {
+                stop: false,
+                ..Show::default()
+            },
+        )
+        .unwrap();
         assert_eq!(no_stop.state, "Bus | Tour 2");
         let mut show = Show::default();
         show.set("discord_stop", false);
         show.set("unknown", false);
-        assert_eq!(show, Show { stop: false, ..Show::default() });
-        assert!(show.to_text().contains("discord_stop=0\ndiscord_players=1\n"));
-        let unknown_max = Presence::for_game(&Game { players: Some((7, 3, 0)), ..game }, Show::default()).unwrap();
+        assert_eq!(
+            show,
+            Show {
+                stop: false,
+                ..Show::default()
+            }
+        );
+        assert!(
+            show.to_text()
+                .contains("discord_stop=0\ndiscord_players=1\n")
+        );
+        let unknown_max = Presence::for_game(
+            &Game {
+                players: Some((7, 3, 0)),
+                ..game
+            },
+            Show::default(),
+        )
+        .unwrap();
         assert_eq!(unknown_max.party, None);
         assert!(unknown_max.state.ends_with("Multiplayer"));
-        let no_session = Presence::for_game(&Game { players: Some((0, 3, 16)), ..game }, Show::default()).unwrap();
+        let no_session = Presence::for_game(
+            &Game {
+                players: Some((0, 3, 16)),
+                ..game
+            },
+            Show::default(),
+        )
+        .unwrap();
         assert_eq!(no_session.party, None);
     }
 
@@ -1062,7 +1201,11 @@ mod tests {
         assert_eq!(a["buttons"][0]["label"].as_str().unwrap().len(), 32);
         assert_eq!(a["buttons"][0]["url"], WEBSITE);
         let plain = activity(&p, 1234, false);
-        assert!(plain.get("assets").is_none() && plain.get("party").is_none() && plain.get("buttons").is_none());
+        assert!(
+            plain.get("assets").is_none()
+                && plain.get("party").is_none()
+                && plain.get("buttons").is_none()
+        );
     }
 
     #[test]
@@ -1071,7 +1214,12 @@ mod tests {
         let idle = Presence::for_launcher(true, false, false, true).unwrap();
         assert_eq!(idle.details, "In launcher");
         assert_eq!(idle.buttons.len(), 2);
-        assert!(Presence::for_launcher(true, false, false, false).unwrap().buttons.is_empty());
+        assert!(
+            Presence::for_launcher(true, false, false, false)
+                .unwrap()
+                .buttons
+                .is_empty()
+        );
         assert_eq!(Presence::for_launcher(false, false, false, true), None);
         assert_eq!(Presence::for_launcher(true, true, false, true), None);
         assert_eq!(Presence::for_launcher(true, false, true, true), None);
@@ -1115,16 +1263,21 @@ mod tests {
         omsi_launcher_lib::i18n::pin_language("ENG");
         let game = Game {
             map: Some("Grundorf"),
-            bus: Some(("MB O550 Euro3 Automatik", "Thueringer Wald MB O550 Euro3 Automatik")),
+            bus: Some((
+                "MB O550 Euro3 Automatik",
+                "Thueringer Wald MB O550 Euro3 Automatik",
+            )),
             duty: Some(("76", "1")),
             ..Default::default()
         };
         let presence = Presence::for_game(&game, Show::default()).unwrap();
         assert_eq!(presence.details, "Grundorf | Line 76");
         assert_eq!(presence.state, "MB O550 Euro3... | Tour 1");
-        assert!(presence
-            .large_text
-            .contains("Thueringer Wald MB O550 Euro3 Automatik"));
+        assert!(
+            presence
+                .large_text
+                .contains("Thueringer Wald MB O550 Euro3 Automatik")
+        );
         assert_eq!(compact("🚌".repeat(20).as_str(), 16).chars().count(), 16);
     }
 
@@ -1132,10 +1285,19 @@ mod tests {
     fn a_driven_bus_with_an_empty_type_uses_its_full_name() {
         omsi_launcher_lib::i18n::pin_language("ENG");
         for short in ["", "   "] {
-            let free = Game { map: Some("Grundorf"), bus: Some((short, "MAN NL202")), ..Default::default() };
+            let free = Game {
+                map: Some("Grundorf"),
+                bus: Some((short, "MAN NL202")),
+                ..Default::default()
+            };
             let free = Presence::for_game(&free, Show::default()).unwrap();
             assert_eq!(free.state, "MAN NL202 | Free drive");
-            let duty = Game { map: Some("Grundorf"), bus: Some((short, "MAN NL202")), duty: Some(("76", "1")), ..Default::default() };
+            let duty = Game {
+                map: Some("Grundorf"),
+                bus: Some((short, "MAN NL202")),
+                duty: Some(("76", "1")),
+                ..Default::default()
+            };
             let duty = Presence::for_game(&duty, Show::default()).unwrap();
             assert_eq!(duty.state, "MAN NL202 | Tour 1");
             assert!(duty.large_text.ends_with("MAN NL202"));

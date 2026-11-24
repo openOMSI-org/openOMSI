@@ -20,14 +20,25 @@ const SEASONS: &[&str] = &["wintersnowfall", "wintersnow", "winter", "fall", "sp
 
 /// The files of `ty` in paint `scheme` (None: its own look), with the depot file `hof` its
 /// displays use. Absolute paths, each an existing file.
-pub(crate) fn of_type(root: &Path, ty: &VehicleType, scheme: Option<usize>, hof: Option<&Path>) -> Vec<PathBuf> {
+pub(crate) fn of_type(
+    root: &Path,
+    ty: &VehicleType,
+    scheme: Option<usize>,
+    hof: Option<&Path>,
+) -> Vec<PathBuf> {
     of_parts(root, ty, &[], scheme, hof)
 }
 
 /// `of_type` for a vehicle already loaded with its rear sections (`parts`, front to back):
 /// those are taken as they are instead of being read from the disk again - an articulated
 /// bus's trailer was loaded a second time for its list.
-pub(crate) fn of_parts(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Option<usize>, hof: Option<&Path>) -> Vec<PathBuf> {
+pub(crate) fn of_parts(
+    root: &Path,
+    ty: &VehicleType,
+    parts: &[&VehicleType],
+    scheme: Option<usize>,
+    hof: Option<&Path>,
+) -> Vec<PathBuf> {
     let _listing = Listing::start();
     let mut out = BTreeSet::new();
     add_type(root, ty, parts, scheme, &mut out, 0, false);
@@ -97,7 +108,11 @@ fn add(out: &mut BTreeSet<PathBuf>, p: PathBuf) {
 /// paint changes (scripts, meshes, sounds and their folders, the fonts - every `.oft` read)
 /// is gathered once, and for each other paint only its textures. The server's fleet check
 /// went through all of a bus once per paint: 40 to 90 s for a bus of ten.
-pub(crate) fn of_type_paints(root: &Path, ty: &VehicleType, schemes: &[Option<usize>]) -> Vec<PathBuf> {
+pub(crate) fn of_type_paints(
+    root: &Path,
+    ty: &VehicleType,
+    schemes: &[Option<usize>],
+) -> Vec<PathBuf> {
     let _listing = Listing::start();
     let mut out = BTreeSet::new();
     for (i, scheme) in schemes.iter().enumerate() {
@@ -107,14 +122,30 @@ pub(crate) fn of_type_paints(root: &Path, ty: &VehicleType, schemes: &[Option<us
 }
 
 /// (`textures_only`: the paint's textures, of it and its rear sections - the rest was taken)
-fn add_type(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Option<usize>, out: &mut BTreeSet<PathBuf>, depth: usize, textures_only: bool) {
+fn add_type(
+    root: &Path,
+    ty: &VehicleType,
+    parts: &[&VehicleType],
+    scheme: Option<usize>,
+    out: &mut BTreeSet<PathBuf>,
+    depth: usize,
+    textures_only: bool,
+) {
     let def = &ty.def;
     if textures_only {
         add_textures(root, ty, scheme, out);
         if depth < MAX_COUPLED_PARTS {
             if let Some(p) = def.couple_back_path() {
                 match VehicleType::load(root, &p) {
-                    Ok(part) => add_type(root, &part, &[], scheme.filter(|i| *i < part.paint_schemes.len()), out, depth + 1, true),
+                    Ok(part) => add_type(
+                        root,
+                        &part,
+                        &[],
+                        scheme.filter(|i| *i < part.paint_schemes.len()),
+                        out,
+                        depth + 1,
+                        true,
+                    ),
                     Err(e) => log::warn!("bus files: {}: {e}", p.display()),
                 }
             }
@@ -124,14 +155,23 @@ fn add_type(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Optio
     let here = def.dir();
     add(out, def.path.clone());
     let s = &def.scripts;
-    for p in s.varlists.iter().chain(&s.stringvarlists).chain(&s.scripts).chain(&s.constfiles) {
+    for p in s
+        .varlists
+        .iter()
+        .chain(&s.stringvarlists)
+        .chain(&s.scripts)
+        .chain(&s.constfiles)
+    {
         add(out, p.clone());
     }
     add(out, ty.model.path.clone());
     for vm in &ty.meshes {
         add(out, vm.file.clone());
     }
-    for rel in [&def.paths, &def.passenger_cabin, &def.number_file].into_iter().flatten() {
+    for rel in [&def.paths, &def.passenger_cabin, &def.number_file]
+        .into_iter()
+        .flatten()
+    {
         add(out, omsi_cfg::resolve_path(here, rel));
     }
     if let Some((list, _, _)) = &def.registration_list {
@@ -141,15 +181,35 @@ fn add_type(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Optio
         add_sounds(&omsi_cfg::resolve_path(here, rel), out);
     }
     add_textures(root, ty, scheme, out);
-    add_fonts(root, ty.model.text_textures.iter().map(|t| t.font.as_str()), out);
+    add_fonts(
+        root,
+        ty.model.text_textures.iter().map(|t| t.font.as_str()),
+        out,
+    );
     // the rear sections of an articulated bus, each a vehicle of its own
     if depth < MAX_COUPLED_PARTS {
         if let Some(p) = def.couple_back_path().filter(|p| !out.contains(p)) {
             // (the section the vehicle has loaded already, when it is that file)
             match parts.split_first().filter(|(part, _)| part.def.path == p) {
-                Some((part, rest)) => add_type(root, part, rest, scheme.filter(|i| *i < part.paint_schemes.len()), out, depth + 1, false),
+                Some((part, rest)) => add_type(
+                    root,
+                    part,
+                    rest,
+                    scheme.filter(|i| *i < part.paint_schemes.len()),
+                    out,
+                    depth + 1,
+                    false,
+                ),
                 None => match VehicleType::load(root, &p) {
-                    Ok(part) => add_type(root, &part, &[], scheme.filter(|i| *i < part.paint_schemes.len()), out, depth + 1, false),
+                    Ok(part) => add_type(
+                        root,
+                        &part,
+                        &[],
+                        scheme.filter(|i| *i < part.paint_schemes.len()),
+                        out,
+                        depth + 1,
+                        false,
+                    ),
                     Err(e) => log::warn!("bus files: {}: {e}", p.display()),
                 },
             }
@@ -160,11 +220,18 @@ fn add_type(root: &Path, ty: &VehicleType, parts: &[&VehicleType], scheme: Optio
 /// A sound config, its clips, and every other sound beside them (a script names one by
 /// itself, `[sound] N`: which is known only when it plays).
 fn add_sounds(cfg: &Path, out: &mut BTreeSet<PathBuf>) {
-    let Ok(c) = omsi_vehicle::SoundCfg::load(cfg) else { return };
+    let Ok(c) = omsi_vehicle::SoundCfg::load(cfg) else {
+        return;
+    };
     add(out, cfg.to_path_buf());
     let dir = cfg.parent().unwrap_or(Path::new(""));
     // (its fixed clips, as the mixer finds them; `[sound] N` names none)
-    let clips: Vec<PathBuf> = c.sounds.iter().filter(|def| def.file.trim().parse::<i32>().is_err()).map(|def| omsi_cfg::resolve_path(dir, &def.file)).collect();
+    let clips: Vec<PathBuf> = c
+        .sounds
+        .iter()
+        .filter(|def| def.file.trim().parse::<i32>().is_err())
+        .map(|def| omsi_cfg::resolve_path(dir, &def.file))
+        .collect();
     let mut folders: BTreeSet<PathBuf> = BTreeSet::new();
     for p in clips {
         if let Some(f) = p.parent() {
@@ -193,7 +260,12 @@ fn add_textures(root: &Path, ty: &VehicleType, scheme: Option<usize>, out: &mut 
             if let Some(d) = d {
                 // the scheme's own description (`.cti`): which of them it is
                 for (name, is_dir) in list_dir(&d).unwrap_or_default() {
-                    if !is_dir && name.to_string_lossy().to_ascii_lowercase().ends_with(".cti") {
+                    if !is_dir
+                        && name
+                            .to_string_lossy()
+                            .to_ascii_lowercase()
+                            .ends_with(".cti")
+                    {
                         add(out, d.join(&name));
                     }
                 }
@@ -210,7 +282,12 @@ fn add_textures(root: &Path, ty: &VehicleType, scheme: Option<usize>, out: &mut 
             m
         }
     };
-    let subst = |name: &str| subst.get(&name.trim().to_ascii_lowercase()).cloned().unwrap_or_else(|| name.trim().to_string());
+    let subst = |name: &str| {
+        subst
+            .get(&name.trim().to_ascii_lowercase())
+            .cloned()
+            .unwrap_or_else(|| name.trim().to_string())
+    };
     let mut wanted: Vec<(String, Vec<PathBuf>)> = Vec::new();
     for vm in &ty.meshes {
         for m in &vm.materials {
@@ -255,7 +332,15 @@ fn add_textures(root: &Path, ty: &VehicleType, scheme: Option<usize>, out: &mut 
                 add(out, p);
             }
             let pbr = omsi_texture::pbr::find(&found);
-            for p in pbr.normals.into_iter().map(|n| n.0).chain(pbr.rough).chain(pbr.metal).chain(pbr.ao).chain(pbr.packed.map(|p| p.0)) {
+            for p in pbr
+                .normals
+                .into_iter()
+                .map(|n| n.0)
+                .chain(pbr.rough)
+                .chain(pbr.metal)
+                .chain(pbr.ao)
+                .chain(pbr.packed.map(|p| p.0))
+            {
                 add(out, p);
             }
         }
@@ -267,7 +352,9 @@ fn add_textures(root: &Path, ty: &VehicleType, scheme: Option<usize>, out: &mut 
 /// (`Winter\bus.dds`) - whatever the game would look for at night, in winter or in another
 /// graphics mode.
 pub(crate) fn variants(found: &Path) -> Vec<PathBuf> {
-    let (Some(dir), Some(stem)) = (found.parent(), found.file_stem()) else { return vec![found.to_path_buf()] };
+    let (Some(dir), Some(stem)) = (found.parent(), found.file_stem()) else {
+        return vec![found.to_path_buf()];
+    };
     let stem = stem.to_string_lossy().to_ascii_lowercase();
     let mut folders = vec![dir.to_path_buf()];
     for (name, is_dir) in list_dir(dir).unwrap_or_default() {
@@ -279,7 +366,10 @@ pub(crate) fn variants(found: &Path) -> Vec<PathBuf> {
     for f in folders {
         for (name, is_dir) in list_dir(&f).unwrap_or_default() {
             let n = name.to_string_lossy().to_ascii_lowercase();
-            let goes = n.strip_prefix(&stem).and_then(|rest| rest.chars().next()).is_some_and(|c| matches!(c, '.' | '_' | '-'));
+            let goes = n
+                .strip_prefix(&stem)
+                .and_then(|rest| rest.chars().next())
+                .is_some_and(|c| matches!(c, '.' | '_' | '-'));
             if !is_dir && goes {
                 out.push(f.join(&name));
             }
@@ -291,8 +381,15 @@ pub(crate) fn variants(found: &Path) -> Vec<PathBuf> {
 }
 
 /// The `.oft` files of the content folders that define one of `fonts`, with their bitmaps.
-pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, out: &mut BTreeSet<PathBuf>) {
-    let wanted: BTreeSet<String> = fonts.map(|f| f.trim().to_lowercase()).filter(|f| !f.is_empty()).collect();
+pub(crate) fn add_fonts<'a>(
+    root: &Path,
+    fonts: impl Iterator<Item = &'a str>,
+    out: &mut BTreeSet<PathBuf>,
+) {
+    let wanted: BTreeSet<String> = fonts
+        .map(|f| f.trim().to_lowercase())
+        .filter(|f| !f.is_empty())
+        .collect();
     if wanted.is_empty() {
         return;
     }
@@ -313,7 +410,12 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
         let list = list_dir(&dir);
         let (mut ofts, mut unread) = (0, 0);
         for (name, is_dir) in list.clone().unwrap_or_default() {
-            if is_dir || !name.to_string_lossy().to_ascii_lowercase().ends_with(".oft") {
+            if is_dir
+                || !name
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .ends_with(".oft")
+            {
                 continue;
             }
             ofts += 1;
@@ -325,15 +427,29 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
             let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
             let mut bitmaps = Vec::new();
             for (i, l) in lines.iter().enumerate() {
-                if l.eq_ignore_ascii_case("[newfont]") && lines.get(i + 1).is_some_and(|n| wanted.contains(&n.to_lowercase())) {
-                    bitmaps.extend(lines.iter().skip(i + 2).take(2).map(|b| omsi_cfg::resolve_path(&dir, b)));
+                if l.eq_ignore_ascii_case("[newfont]")
+                    && lines
+                        .get(i + 1)
+                        .is_some_and(|n| wanted.contains(&n.to_lowercase()))
+                {
+                    bitmaps.extend(
+                        lines
+                            .iter()
+                            .skip(i + 2)
+                            .take(2)
+                            .map(|b| omsi_cfg::resolve_path(&dir, b)),
+                    );
                 }
             }
             if !bitmaps.is_empty() {
                 found.push((path, text, bitmaps));
             }
         }
-        seen.push(format!("{} ({} entries, {ofts} .oft, {unread} unreadable)", dir.display(), list.map(|l| l.len()).unwrap_or(0)));
+        seen.push(format!(
+            "{} ({} entries, {ofts} .oft, {unread} unreadable)",
+            dir.display(),
+            list.map(|l| l.len()).unwrap_or(0)
+        ));
     }
     for (path, _, bitmaps) in without_copies(found) {
         add(out, path);
@@ -343,7 +459,9 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
     }
     // (a display's font that is nowhere: its sign stays blank for the others too)
     if out.len() == before {
-        log::warn!("bus files: no font of {wanted:?} in {seen:?}: its signs stay blank for the other players");
+        log::warn!(
+            "bus files: no font of {wanted:?} in {seen:?}: its signs stay blank for the other players"
+        );
     }
 }
 
@@ -352,7 +470,9 @@ pub(crate) fn add_fonts<'a>(root: &Path, fonts: impl Iterator<Item = &'a str>, o
 fn oft_text(path: &Path) -> Option<String> {
     type Texts = std::collections::HashMap<PathBuf, (u64, Option<std::time::SystemTime>, String)>;
     static TEXTS: std::sync::Mutex<Option<Texts>> = std::sync::Mutex::new(None);
-    let Ok(meta) = std::fs::metadata(path) else { return omsi_cfg::vfs::read_text(path).ok() };
+    let Ok(meta) = std::fs::metadata(path) else {
+        return omsi_cfg::vfs::read_text(path).ok();
+    };
     let stamp = (meta.len(), meta.modified().ok());
     let mut texts = TEXTS.lock().unwrap_or_else(|e| e.into_inner());
     if let Some((len, time, text)) = texts.get_or_insert_with(Default::default).get(path) {
@@ -362,7 +482,11 @@ fn oft_text(path: &Path) -> Option<String> {
     }
     drop(texts);
     let text = omsi_cfg::vfs::read_text(path).ok()?;
-    TEXTS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(Default::default).insert(path.to_path_buf(), (stamp.0, stamp.1, text.clone()));
+    TEXTS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(Default::default)
+        .insert(path.to_path_buf(), (stamp.0, stamp.1, text.clone()));
     Some(text)
 }
 
@@ -370,14 +494,22 @@ fn oft_text(path: &Path) -> Option<String> {
 /// its folder (Windows' `LCD_7-Segment (2).oft` next to `LCD_7-Segment.oft`) draws the same
 /// letters, yet it made the bus another version for every player and server without the copy.
 /// Of the same text, the shortest name is kept (then the first by name).
-pub(super) fn without_copies(found: Vec<(PathBuf, String, Vec<PathBuf>)>) -> Vec<(PathBuf, String, Vec<PathBuf>)> {
+pub(super) fn without_copies(
+    found: Vec<(PathBuf, String, Vec<PathBuf>)>,
+) -> Vec<(PathBuf, String, Vec<PathBuf>)> {
     let rank = |p: &Path| {
-        let n = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let n = p
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         (n.chars().count(), n)
     };
     let mut kept: Vec<(PathBuf, String, Vec<PathBuf>)> = Vec::new();
     for f in found {
-        match kept.iter().position(|k| k.0.parent() == f.0.parent() && k.1 == f.1) {
+        match kept
+            .iter()
+            .position(|k| k.0.parent() == f.0.parent() && k.1 == f.1)
+        {
             Some(i) if rank(&f.0) < rank(&kept[i].0) => kept[i] = f,
             Some(_) => {}
             None => kept.push(f),
@@ -391,8 +523,16 @@ pub(super) fn without_copies(found: Vec<(PathBuf, String, Vec<PathBuf>)>) -> Vec
 pub(crate) fn relative(root: &Path, path: &Path) -> Option<String> {
     let mut roots = omsi_cfg::content_roots();
     roots.push(root.to_path_buf());
-    let r = roots.iter().filter(|r| path.starts_with(r)).max_by_key(|r| r.components().count())?;
-    let rest: Vec<String> = path.strip_prefix(r).ok()?.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+    let r = roots
+        .iter()
+        .filter(|r| path.starts_with(r))
+        .max_by_key(|r| r.components().count())?;
+    let rest: Vec<String> = path
+        .strip_prefix(r)
+        .ok()?
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
     (!rest.is_empty()).then(|| rest.join("/"))
 }
 
@@ -401,7 +541,8 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("openomsi-busfiles-{name}-{}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("openomsi-busfiles-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -418,16 +559,32 @@ mod tests {
             std::fs::write(d.join("b.dds"), "b").unwrap();
             {
                 let _inner = Listing::start();
-                assert_eq!(names(list_dir(&d)), 1, "a listing within one keeps what it read");
+                assert_eq!(
+                    names(list_dir(&d)),
+                    1,
+                    "a listing within one keeps what it read"
+                );
             }
-            assert_eq!(names(list_dir(&d)), 1, "the inner one's end does not end the outer");
+            assert_eq!(
+                names(list_dir(&d)),
+                1,
+                "the inner one's end does not end the outer"
+            );
         }
-        assert_eq!(names(list_dir(&d)), 2, "after the listing the folder is read again");
+        assert_eq!(
+            names(list_dir(&d)),
+            2,
+            "after the listing the folder is read again"
+        );
         let oft = d.join("f.oft");
         std::fs::write(&oft, "[newfont]\nA\n").unwrap();
         assert_eq!(oft_text(&oft).as_deref(), Some("[newfont]\nA\n"));
         std::fs::write(&oft, "[newfont]\nBB\n").unwrap();
-        assert_eq!(oft_text(&oft).as_deref(), Some("[newfont]\nBB\n"), "a changed file is read again");
+        assert_eq!(
+            oft_text(&oft).as_deref(),
+            Some("[newfont]\nBB\n"),
+            "a changed file is read again"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -435,13 +592,39 @@ mod tests {
     fn a_texture_brings_its_night_winter_and_side_files_and_nothing_else() {
         let d = temp("variants");
         let tex = d.join("Texture");
-        for f in ["Texture/body.dds", "Texture/body.dds.cfg", "Texture/body_nn.png", "Texture/body-night.dds", "Texture/Winter/body.dds", "Texture/bodywork.dds", "Texture/other.dds", "Texture/Logos/body.dds"] {
+        for f in [
+            "Texture/body.dds",
+            "Texture/body.dds.cfg",
+            "Texture/body_nn.png",
+            "Texture/body-night.dds",
+            "Texture/Winter/body.dds",
+            "Texture/bodywork.dds",
+            "Texture/other.dds",
+            "Texture/Logos/body.dds",
+        ] {
             let p = f.split('/').fold(d.clone(), |p, c| p.join(c));
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(&p, b"x").unwrap();
         }
-        let got: Vec<String> = variants(&tex.join("body.dds")).iter().map(|p| p.strip_prefix(&d).unwrap().to_string_lossy().replace('\\', "/")).collect();
-        assert_eq!(got, vec!["Texture/Winter/body.dds", "Texture/body-night.dds", "Texture/body.dds", "Texture/body.dds.cfg", "Texture/body_nn.png"]);
+        let got: Vec<String> = variants(&tex.join("body.dds"))
+            .iter()
+            .map(|p| {
+                p.strip_prefix(&d)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                "Texture/Winter/body.dds",
+                "Texture/body-night.dds",
+                "Texture/body.dds",
+                "Texture/body.dds.cfg",
+                "Texture/body_nn.png"
+            ]
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -450,19 +633,29 @@ mod tests {
         let d = temp("fonts");
         std::fs::create_dir_all(d.join("Fonts")).unwrap();
         std::fs::write(d.join("Fonts/matrix.oft"), "[newfont]\nMatrix 16\nmatrix16.bmp\nmatrix16_a.bmp\n\n[newfont]\nOther\nother.bmp\nother_a.bmp\n").unwrap();
-        std::fs::write(d.join("Fonts/unused.oft"), "[newfont]\nUnused\nu.bmp\nu_a.bmp\n").unwrap();
+        std::fs::write(
+            d.join("Fonts/unused.oft"),
+            "[newfont]\nUnused\nu.bmp\nu_a.bmp\n",
+        )
+        .unwrap();
         for f in ["matrix16.bmp", "matrix16_a.bmp", "other.bmp", "u.bmp"] {
             std::fs::write(d.join("Fonts").join(f), b"x").unwrap();
         }
         let mut out = BTreeSet::new();
         add_fonts(&d, ["matrix 16"].into_iter(), &mut out);
-        let got: Vec<String> = out.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        let got: Vec<String> = out
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
         assert_eq!(got, vec!["matrix.oft", "matrix16.bmp", "matrix16_a.bmp"]);
         // a copy of it Windows made beside it changes nothing
         std::fs::copy(d.join("Fonts/matrix.oft"), d.join("Fonts/matrix (2).oft")).unwrap();
         let mut again = BTreeSet::new();
         add_fonts(&d, ["Matrix 16"].into_iter(), &mut again);
-        let names: Vec<String> = again.iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        let names: Vec<String> = again
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
         assert_eq!(names, vec!["matrix.oft", "matrix16.bmp", "matrix16_a.bmp"]);
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -470,7 +663,10 @@ mod tests {
     #[test]
     fn a_path_is_named_from_its_closest_root() {
         let root = PathBuf::from("/omsi");
-        assert_eq!(relative(&root, Path::new("/omsi/Vehicles/B/b.bus")).as_deref(), Some("Vehicles/B/b.bus"));
+        assert_eq!(
+            relative(&root, Path::new("/omsi/Vehicles/B/b.bus")).as_deref(),
+            Some("Vehicles/B/b.bus")
+        );
         assert_eq!(relative(&root, Path::new("/elsewhere/x.dds")), None);
     }
 
@@ -478,36 +674,75 @@ mod tests {
     /// include its night maps, the sounds beside its clips and its paint's description.
     #[test]
     fn a_stock_bus_is_complete() {
-        let Some(root) = std::env::var_os("OMSI_ROOT").map(PathBuf::from) else { return };
+        let Some(root) = std::env::var_os("OMSI_ROOT").map(PathBuf::from) else {
+            return;
+        };
         // as the game has it: its content folder first, laid out with an empty `Fonts`
         let content = temp("stock-content");
         omsi_cfg::ensure_content_layout(&content).unwrap();
         omsi_cfg::add_content_root_first(content.clone());
         omsi_cfg::add_content_root(root.clone());
         let bus = omsi_cfg::resolve_path(&root, "Vehicles/MAN_SD200/MAN_SD77.bus");
-        let Ok(ty) = VehicleType::load(&root, &bus) else { return };
-        let files = of_type(&root, &ty, (!ty.paint_schemes.is_empty()).then_some(0), None);
-        let names: Vec<String> = files.iter().filter_map(|p| relative(&root, p)).map(|r| r.to_lowercase()).collect();
+        let Ok(ty) = VehicleType::load(&root, &bus) else {
+            return;
+        };
+        let files = of_type(
+            &root,
+            &ty,
+            (!ty.paint_schemes.is_empty()).then_some(0),
+            None,
+        );
+        let names: Vec<String> = files
+            .iter()
+            .filter_map(|p| relative(&root, p))
+            .map(|r| r.to_lowercase())
+            .collect();
         assert!(names.iter().any(|n| n.ends_with(".bus")), "{names:?}");
         assert!(names.iter().any(|n| n.ends_with(".o3d")));
         assert!(names.iter().any(|n| n.ends_with(".osc")));
         assert!(names.iter().any(|n| n.ends_with(".wav")));
-        assert!(names.iter().any(|n| n.ends_with(".dds") || n.ends_with(".bmp") || n.ends_with(".tga") || n.ends_with(".jpg")));
+        assert!(names.iter().any(|n| n.ends_with(".dds")
+            || n.ends_with(".bmp")
+            || n.ends_with(".tga")
+            || n.ends_with(".jpg")));
         // the fonts its displays write with: without them another player's copy shows blank signs
         let fonts: Vec<&String> = names.iter().filter(|n| n.starts_with("fonts/")).collect();
-        eprintln!("{} files for MAN_SD77, fonts {:?} of {:?}", names.len(), fonts, ty.model.text_textures.iter().map(|t| &t.font).collect::<Vec<_>>());
-        assert!(ty.model.text_textures.is_empty() || fonts.iter().any(|n| n.ends_with(".oft")), "no font of its displays: {fonts:?}");
+        eprintln!(
+            "{} files for MAN_SD77, fonts {:?} of {:?}",
+            names.len(),
+            fonts,
+            ty.model
+                .text_textures
+                .iter()
+                .map(|t| &t.font)
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            ty.model.text_textures.is_empty() || fonts.iter().any(|n| n.ends_with(".oft")),
+            "no font of its displays: {fonts:?}"
+        );
     }
 
     /// Every paint at once is the union of each paint on its own (`OMSI_ROOT`, a stock bus).
     #[test]
     fn all_paints_at_once_are_each_paint_together() {
-        let Some(root) = std::env::var_os("OMSI_ROOT").map(PathBuf::from) else { return };
+        let Some(root) = std::env::var_os("OMSI_ROOT").map(PathBuf::from) else {
+            return;
+        };
         let bus = omsi_cfg::resolve_path(&root, "Vehicles/MAN_SD200/MAN_SD77.bus");
-        let Ok(ty) = VehicleType::load(&root, &bus) else { return };
-        let schemes: Vec<Option<usize>> = std::iter::once(None).chain((0..ty.paint_schemes.len()).map(Some)).collect();
-        let union: BTreeSet<PathBuf> = schemes.iter().flat_map(|s| of_type(&root, &ty, *s, None)).collect();
-        assert_eq!(of_type_paints(&root, &ty, &schemes), union.into_iter().collect::<Vec<_>>());
+        let Ok(ty) = VehicleType::load(&root, &bus) else {
+            return;
+        };
+        let schemes: Vec<Option<usize>> = std::iter::once(None)
+            .chain((0..ty.paint_schemes.len()).map(Some))
+            .collect();
+        let union: BTreeSet<PathBuf> = schemes
+            .iter()
+            .flat_map(|s| of_type(&root, &ty, *s, None))
+            .collect();
+        assert_eq!(
+            of_type_paints(&root, &ty, &schemes),
+            union.into_iter().collect::<Vec<_>>()
+        );
     }
 }
-

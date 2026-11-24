@@ -8,11 +8,19 @@ use glam::DVec3;
 pub enum TrafficArrival {
     /// A crossing's light program, numbered as the lanes name it (`Lane::traffic_light`):
     /// the programs come in the order of their numbers.
-    Light { index: usize, object: i64, controller: TrafficLightController },
+    Light {
+        index: usize,
+        object: i64,
+        controller: TrafficLightController,
+    },
     /// A tile placed for the first time: its lanes, and its parked cars (world position and
     /// heading in degrees) - together, so that whoever takes them has every parked car with
     /// the lanes it stands beside.
-    Tile { tile: (i32, i32), lanes: Vec<Lane>, parked: Vec<(DVec3, f64)> },
+    Tile {
+        tile: (i32, i32),
+        lanes: Vec<Lane>,
+        parked: Vec<(DVec3, f64)>,
+    },
 }
 
 /// What a take of the traffic's inbox brought, gathered.
@@ -32,8 +40,16 @@ impl TrafficArrivals {
         let mut out = TrafficArrivals::default();
         for a in list {
             match a {
-                TrafficArrival::Light { index, object, controller } => out.lights.push((index, object, controller)),
-                TrafficArrival::Tile { tile, lanes, parked } => {
+                TrafficArrival::Light {
+                    index,
+                    object,
+                    controller,
+                } => out.lights.push((index, object, controller)),
+                TrafficArrival::Tile {
+                    tile,
+                    lanes,
+                    parked,
+                } => {
                     out.lanes.extend(lanes);
                     out.parked.extend(parked);
                     out.tiles.push(tile);

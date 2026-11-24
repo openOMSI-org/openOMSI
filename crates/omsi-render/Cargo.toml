@@ -16,7 +16,6 @@ omsi-cfg = { path = "../omsi-cfg" }
 omsi-geometry = { path = "../omsi-geometry" }
 omsi-texture = { path = "../omsi-texture" }
 wgpu.workspace = true
-wgpu-mx.workspace = true
 bytemuck.workspace = true
 glam.workspace = true
 pollster.workspace = true
@@ -48,6 +47,7 @@ objc2-metal = { version = "0.3.2", default-features = false, features = ["std", 
 libc.workspace = true
 
 [dev-dependencies]
+image.workspace = true
 naga = { workspace = true, features = ["spv-out", "glsl-out", "hlsl-out"] }
 env_logger.workspace = true
 

@@ -141,7 +141,15 @@ thread_local! {
     static GLYPHS: std::cell::RefCell<HashMap<GlyphKey, Option<Arc<GlyphBmp>>>> = std::cell::RefCell::new(HashMap::new());
 }
 
-fn glyph_bmp(font: &FontRef<'static>, bold: bool, face: u8, id: ab_glyph::GlyphId, px: f32, sx: u8, sy: u8) -> Option<Arc<GlyphBmp>> {
+fn glyph_bmp(
+    font: &FontRef<'static>,
+    bold: bool,
+    face: u8,
+    id: ab_glyph::GlyphId,
+    px: f32,
+    sx: u8,
+    sy: u8,
+) -> Option<Arc<GlyphBmp>> {
     let key = (id.0, px.to_bits(), bold, face, sx, sy);
     GLYPHS.with(|g| {
         let mut g = g.borrow_mut();
@@ -162,14 +170,29 @@ fn glyph_bmp(font: &FontRef<'static>, bold: bool, face: u8, id: ab_glyph::GlyphI
                     cov[(gy * w + gx) as usize] = (c.clamp(0.0, 1.0) * 255.0).round() as u8;
                 }
             });
-            Arc::new(GlyphBmp { w, h, ox: b.min.x.floor() as i32, oy: b.min.y.floor() as i32, cov })
+            Arc::new(GlyphBmp {
+                w,
+                h,
+                ox: b.min.x.floor() as i32,
+                oy: b.min.y.floor() as i32,
+                cov,
+            })
         });
         g.insert(key, bmp.clone());
         bmp
     })
 }
 
-pub(crate) fn draw_text(cv: &mut Canvas, font: &FontRef<'static>, bold: bool, px: f32, x: f32, base_y: f32, color: [u8; 4], s: &str) {
+pub(crate) fn draw_text(
+    cv: &mut Canvas,
+    font: &FontRef<'static>,
+    bold: bool,
+    px: f32,
+    x: f32,
+    base_y: f32,
+    color: [u8; 4],
+    s: &str,
+) {
     let sc = PxScale::from(px);
     let sf = font.as_scaled(sc);
     let mut cx = x;
@@ -181,31 +204,31 @@ pub(crate) fn draw_text(cv: &mut Canvas, font: &FontRef<'static>, bold: bool, px
             continue;
         }
         face_for(font, bold, ch, |face, id, fi| {
-        let sf = if fi == 0 { sf } else { face.as_scaled(sc) };
-        if let Some((p, pf)) = prev {
-            if pf == fi {
-                cx += sf.kern(p, id);
-            }
-        }
-        let fx = cx.floor();
-        let sx = (((cx - fx) * SUB) as u8).min(SUB as u8 - 1);
-        if let Some(g) = glyph_bmp(face, bold, fi, id, px, sx, sy) {
-            let (bx, by) = (fx as i32 + g.ox, fy as i32 + g.oy);
-            for gy in 0..g.h {
-                let y = by + gy as i32;
-                if y < 0 || y >= cv.h as i32 {
-                    continue;
+            let sf = if fi == 0 { sf } else { face.as_scaled(sc) };
+            if let Some((p, pf)) = prev {
+                if pf == fi {
+                    cx += sf.kern(p, id);
                 }
-                let row = &g.cov[(gy * g.w) as usize..((gy + 1) * g.w) as usize];
-                for (gx, &v) in row.iter().enumerate() {
-                    if v != 0 {
-                        cv.blend(bx + gx as i32, y, color, v as f32 * (1.0 / 255.0));
+            }
+            let fx = cx.floor();
+            let sx = (((cx - fx) * SUB) as u8).min(SUB as u8 - 1);
+            if let Some(g) = glyph_bmp(face, bold, fi, id, px, sx, sy) {
+                let (bx, by) = (fx as i32 + g.ox, fy as i32 + g.oy);
+                for gy in 0..g.h {
+                    let y = by + gy as i32;
+                    if y < 0 || y >= cv.h as i32 {
+                        continue;
+                    }
+                    let row = &g.cov[(gy * g.w) as usize..((gy + 1) * g.w) as usize];
+                    for (gx, &v) in row.iter().enumerate() {
+                        if v != 0 {
+                            cv.blend(bx + gx as i32, y, color, v as f32 * (1.0 / 255.0));
+                        }
                     }
                 }
             }
-        }
-        cx += sf.h_advance(id);
-        prev = Some((id, fi));
+            cx += sf.h_advance(id);
+            prev = Some((id, fi));
         });
     }
 }
@@ -221,7 +244,15 @@ fn corner_cov(r: [f32; 4], rad: f32, x: i32, y: i32) -> f32 {
 
 /// Draw `img` inside `clip` (rounded by `radius`), its top-left corner at (`ox`, `oy`),
 /// tiled along the axes that repeat. Only the pixels of the clip are visited.
-fn draw_tiles(cv: &mut Canvas, img: &Img, clip: [f32; 4], radius: f32, ox: i32, oy: i32, rep: (bool, bool)) {
+fn draw_tiles(
+    cv: &mut Canvas,
+    img: &Img,
+    clip: [f32; 4],
+    radius: f32,
+    ox: i32,
+    oy: i32,
+    rep: (bool, bool),
+) {
     if !clip.iter().all(|v| v.is_finite()) || !radius.is_finite() {
         return;
     }
@@ -253,7 +284,11 @@ fn draw_tiles(cv: &mut Canvas, img: &Img, clip: [f32; 4], radius: f32, ox: i32, 
         let mut tx = tx0;
         for x in x0..x1 {
             let i = row + tx as usize * 4;
-            let cov = if ycorner && ((x as f32) < cl || (x as f32 + 1.0) > cr) { corner_cov(clip, rad, x, y) } else { 1.0 };
+            let cov = if ycorner && ((x as f32) < cl || (x as f32 + 1.0) > cr) {
+                corner_cov(clip, rad, x, y)
+            } else {
+                1.0
+            };
             cv.put(x, y, &img.rgba[i..i + 4], cov);
             tx += 1;
             if tx == iw {
@@ -264,13 +299,21 @@ fn draw_tiles(cv: &mut Canvas, img: &Img, clip: [f32; 4], radius: f32, ox: i32, 
 }
 
 /// The `background-image` of `st` over `rect` (size, repeat and position as CSS has them).
-pub(crate) fn paint_bg(cv: &mut Canvas, imgs: &ImageStore, rect: [f32; 4], radius: f32, st: &Style) {
+pub(crate) fn paint_bg(
+    cv: &mut Canvas,
+    imgs: &ImageStore,
+    rect: [f32; 4],
+    radius: f32,
+    st: &Style,
+) {
     let Some(src) = &st.bg_img else { return };
     let (rw, rh) = (rect[2], rect[3]);
     if !rect.iter().all(|v| v.is_finite()) || rw < 1.0 || rh < 1.0 {
         return;
     }
-    let Some((iw, ih)) = imgs.dims(src) else { return };
+    let Some((iw, ih)) = imgs.dims(src) else {
+        return;
+    };
     let (iw, ih) = (iw as f32, ih as f32);
     let (tw, th) = match st.bg_size {
         BgSize::Auto => (iw, ih),
@@ -292,14 +335,27 @@ pub(crate) fn paint_bg(cv: &mut Canvas, imgs: &ImageStore, rect: [f32; 4], radiu
     if !tw.is_finite() || !th.is_finite() {
         return;
     }
-    let (tw, th) = ((tw.round() as i64).clamp(1, 16384) as u32, (th.round() as i64).clamp(1, 16384) as u32);
-    let Some(tile) = imgs.scaled(src, tw, th) else { return };
+    let (tw, th) = (
+        (tw.round() as i64).clamp(1, 16384) as u32,
+        (th.round() as i64).clamp(1, 16384) as u32,
+    );
+    let Some(tile) = imgs.scaled(src, tw, th) else {
+        return;
+    };
     let ox = rect[0] + st.bg_pos[0].px(rw - tw as f32);
     let oy = rect[1] + st.bg_pos[1].px(rh - th as f32);
     if !ox.is_finite() || !oy.is_finite() {
         return;
     }
-    draw_tiles(cv, &tile, rect, radius, ox.round() as i32, oy.round() as i32, st.bg_repeat);
+    draw_tiles(
+        cv,
+        &tile,
+        rect,
+        radius,
+        ox.round() as i32,
+        oy.round() as i32,
+        st.bg_repeat,
+    );
 }
 
 /// An `<img>`: the picture stretched over the content box of the element.
@@ -309,14 +365,29 @@ fn paint_img(cv: &mut Canvas, lay: &Layouter, b: &LBox) {
         return;
     }
     let [pt, pr, pb, pl] = b.st.padding;
-    let area = [b.rect[0] + pl, b.rect[1] + pt, b.rect[2] - pl - pr, b.rect[3] - pt - pb];
+    let area = [
+        b.rect[0] + pl,
+        b.rect[1] + pt,
+        b.rect[2] - pl - pr,
+        b.rect[3] - pt - pb,
+    ];
     if !area.iter().all(|v| v.is_finite()) || area[2] < 0.5 || area[3] < 0.5 {
         return;
     }
     let w = (area[2].round() as i64).clamp(1, 16384) as u32;
     let h = (area[3].round() as i64).clamp(1, 16384) as u32;
-    let Some(pic) = lay.imgs.scaled(&n.src, w, h) else { return };
-    draw_tiles(cv, &pic, area, b.st.radius, area[0].round() as i32, area[1].round() as i32, (false, false));
+    let Some(pic) = lay.imgs.scaled(&n.src, w, h) else {
+        return;
+    };
+    draw_tiles(
+        cv,
+        &pic,
+        area,
+        b.st.radius,
+        area[0].round() as i32,
+        area[1].round() as i32,
+        (false, false),
+    );
 }
 
 pub(crate) fn paint(cv: &mut Canvas, lay: &Layouter, b: &LBox) {
@@ -340,7 +411,16 @@ pub(crate) fn paint(cv: &mut Canvas, lay: &Layouter, b: &LBox) {
                     let font = if li.bold { lay.bold } else { lay.reg };
                     let sf = font.as_scaled(PxScale::from(li.px));
                     let base = l.y + (l.h - (sf.ascent() - sf.descent())) / 2.0 + sf.ascent();
-                    draw_text(cv, font, li.bold, li.px, l.x + li.dx, base, li.color, &li.text);
+                    draw_text(
+                        cv,
+                        font,
+                        li.bold,
+                        li.px,
+                        l.x + li.dx,
+                        base,
+                        li.color,
+                        &li.text,
+                    );
                 }
             }
         }
