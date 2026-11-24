@@ -108,6 +108,8 @@ and leaves the string (the chura matrix drops strings itself with `(S.$.t) $leng
 
 Blocks: `{init}`, `{frame}`, `{frame_ai}`, `{macro:name}`, `{trigger:name}` … `{end}`; control flow
 `{if} … {else} … {endif}` on `st[0] != 0` (the condition is *not* popped). Comments start with `'`.
+Only `{end}` ends a block: one without it runs on into the next
+block's code, across script files too (the Opel Manta's `antrieb_frame` into `calc_eng_M`).
 `%stackdump%` dumps the stack to the log. Macro, trigger and variable names are case-insensitive.
 A trigger or macro defined in two script files is the **later** file's: the O530 Citaro pack's
 `engine.osc` redefines `cp_batterietrennschalter_toggle` of its `cockpit.osc` (the ignition key

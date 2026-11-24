@@ -524,9 +524,16 @@ pub fn compile(input: &CompileInput) -> Program {
         missing_curve: None,
         declare_unknown: input.declare_unknown,
         file_frames: (0, 0),
+        reached: 0,
     };
     for f in &files {
         c.compile_file(f);
+    }
+    // (the last block of the last file has no block to run on into)
+    if c.reached != 0
+        && let Some(op) = p.blocks.last_mut().and_then(|b| b.ops.last_mut())
+    {
+        *op = Op::Jump(u32::MAX);
     }
     p.consts = consts;
     // Resolve macro calls.
@@ -558,6 +565,9 @@ struct Compiler<'a> {
     missing_curve: Option<u32>,
     declare_unknown: bool,
     file_frames: (usize, usize),
+    /// Not 0 when the last block runs on into the next (0x80), with the entry kinds (1 init,
+    /// 2 frame, 4 frame_ai) whose code runs on into it.
+    reached: u8,
 }
 
 #[derive(PartialEq)]
@@ -656,6 +666,7 @@ impl<'a> Compiler<'a> {
                                     }
                                     Some(_) => {
                                         let (kinds, mut block, _) = cur.take().unwrap();
+                                        self.fall_through(&mut block);
                                         let end = block.ops.len() as u32;
                                         for idx in orphan_elses
                                             .drain(..)
@@ -665,12 +676,12 @@ impl<'a> Compiler<'a> {
                                             patch(&mut block.ops[idx], end);
                                         }
                                         log::debug!(
-                                            "{}:{}: {{{b}}} starts while block {} is open (implicit end)",
+                                            "{}:{}: {{{b}}} starts while block {} is open (it runs on into this one)",
                                             f.path.display(),
                                             line_no,
                                             block.name
                                         );
-                                        self.finish_block(kinds, block);
+                                        self.finish_block(kinds, block, true);
                                         cur = Some((
                                             vec![kind],
                                             Block {
@@ -722,7 +733,7 @@ impl<'a> Compiler<'a> {
                                     for (_, op) in extra_elses.drain(..) {
                                         patch(&mut block.ops[op], end);
                                     }
-                                    self.finish_block(kinds, block);
+                                    self.finish_block(kinds, block, false);
                                 } else {
                                     // Surplus {end} tokens are common in stock content; ignored.
                                     log::debug!(
@@ -855,6 +866,7 @@ impl<'a> Compiler<'a> {
             }
         }
         if let Some((kinds, mut block, _)) = cur.take() {
+            self.fall_through(&mut block); // (into the next file's first block)
             let end = block.ops.len() as u32;
             for idx in orphan_elses
                 .drain(..)
@@ -864,7 +876,7 @@ impl<'a> Compiler<'a> {
                 patch(&mut block.ops[idx], end);
             }
             log::debug!("{}: missing {{end}} at end of file", f.path.display());
-            self.finish_block(kinds, block);
+            self.finish_block(kinds, block, true);
         }
     }
 
@@ -874,13 +886,35 @@ impl<'a> Compiler<'a> {
         self.pending.push((block_idx, op_idx, name));
     }
 
-    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block) {
+    /// A block without its `{end}` runs on into the next block (the next to finish; `compile`
+    /// takes it back past the last). Omsi.exe sub_5d1db8 links the words of all script files
+    /// into one chain: a header marks where a block starts in it, only `{end}` cuts it (the
+    /// Opel Manta's `antrieb_frame` runs on into `calc_eng_M`). Called before the jumps are
+    /// patched, so a `{end}` inside an `{if}` still leaves the block.
+    fn fall_through(&mut self, block: &mut Block) {
+        let next = self.p.blocks.len() as BlockId + 1;
+        block.ops.push(Op::Macro(next));
+    }
+
+    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block, falls: bool) {
         let id = self.p.blocks.len() as BlockId;
         self.p.blocks.push(block);
         kinds.dedup();
+        let mut own = 0;
         for kind in kinds {
-            self.register(kind, id);
+            let bit = match kind {
+                BlockKind::Init => 1,
+                BlockKind::Frame => 2,
+                BlockKind::FrameAi => 4,
+                _ => 0,
+            };
+            own |= bit;
+            // a `{frame}` the `{frame}` above runs on into runs there, not twice a frame
+            if bit & self.reached == 0 {
+                self.register(kind, id);
+            }
         }
+        self.reached = if falls { 0x80 | self.reached | own } else { 0 };
     }
 
     #[rustfmt::skip]
@@ -1358,12 +1392,11 @@ mod tests {
         assert_eq!(distinct.frame.len(), 2);
         let stacked = program_of("{frame}\n{frame}\n3 (S.L.c)\n{end}\n");
         assert_eq!(stacked.frame.len(), 1);
+        // a frame block without its end runs on into the next one, which runs there only
         let cut_short = program_of("{frame}\n1 (S.L.a)\n{frame}\n2 (S.L.b)\n{end}\n");
-        assert_eq!(
-            cut_short.frame.len(),
-            2,
-            "a frame block without its end, cut short by the next header, still runs"
-        );
+        assert_eq!(cut_short.frame.len(), 1);
+        let first = &cut_short.blocks[cut_short.frame[0] as usize].ops;
+        assert_eq!(first.last(), Some(&Op::Macro(cut_short.frame[0] + 1)));
     }
 
     #[test]
