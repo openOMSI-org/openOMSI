@@ -782,6 +782,7 @@ pub(crate) fn open_url(url: &str) {
 /// Put `text` on the phone's clipboard (`ClipboardManager.setPrimaryClip` with a plain text
 /// `ClipData`); false when the system's clipboard could not be reached. Without it "Copy
 /// server code" put nothing there and the code could not be pasted anywhere (#3769).
+#[rustfmt::skip]
 pub(crate) fn set_clipboard(text: &str) -> bool {
     let t = text.to_string();
     with_activity(|env, activity| {
