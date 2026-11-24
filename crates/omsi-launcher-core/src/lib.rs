@@ -5275,12 +5275,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         "pax_short_rides_stand={}\n",
         b("pax_short_rides_stand", false)
     ));
-    text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
-    text.push_str(&format!("pax_no_ticket={}\n", b("pax_no_ticket", false)));
-    text.push_str(&format!(
-        "pax_entry_doors={}\n",
-        entry_doors_setting(v.get("pax_entry_doors").and_then(|x| x.as_str()))
-    ));
+    let ed = entry_doors_setting(v.get("pax_entry_doors").and_then(|x| x.as_str()));
+    text.push_str(&format!("auto_announce={}\npax_no_ticket={}\npax_entry_doors={ed}\n", b("auto_announce", false), b("pax_no_ticket", false)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),
