@@ -26,20 +26,20 @@ pub(crate) fn scene_shader_with(gl: bool, extra: &str) -> String {
     );
     let path = array_path();
     let src = arrays_as_textures(&materials_from_heap(&joined), path);
-    if gl && path.no_storage() {
+    frame_from_heap(&if gl && path.no_storage() {
         compares_without_gather(&src)
     } else {
         src
-    }
+    })
 }
 
 pub(crate) fn scene_shader_for(gl: bool, path: ArrayPath) -> String {
     let src = arrays_as_textures(&scene_shader_text(gl), path);
-    if gl && path.no_storage() {
+    frame_from_heap(&if gl && path.no_storage() {
         compares_without_gather(&src)
     } else {
         src
-    }
+    })
 }
 
 fn without_tree_fade(src: &str) -> String {
@@ -289,7 +289,8 @@ pub(crate) fn materials_from_heap(src: &str) -> String {
         &format!(
             "{decl}
 // (the material's textures and samplers by their places in the heap, see `materials_from_heap`)
-struct MxMaterial {{ row: u32, diffuse: u32, sampler: u32, trans: u32, night: u32, light: u32, env: u32, envmask: u32, bump: u32, pbr_normal: u32, pbr_orm: u32, tile_sampler: u32 }};
+// (and after them the frame's places, set once a pass: `FrameHeap`)
+struct MxMaterial {{ row: u32, diffuse: u32, sampler: u32, trans: u32, night: u32, light: u32, env: u32, envmask: u32, bump: u32, pbr_normal: u32, pbr_orm: u32, tile_sampler: u32, ground: u32 }};
 var<immediate> mx_mat: MxMaterial;"
         ),
     );
@@ -344,7 +345,9 @@ pub(crate) fn glsl_through_mx(
             m
         }
     };
-    let s = glsl::stage(&m, stage, Some(entry), constants).map_err(|e| e.to_string())?;
+    // (as on a device whose stage has no storage buffers: the frame's read-only views as
+    // uniform blocks, `views_as_uniforms`)
+    let s = glsl::stage_with(&m, stage, Some(entry), constants, true).map_err(|e| e.to_string())?;
     let layout = glsl::Layout::for_pipeline(&[&s])?;
     let options = glsl::Options {
         version,
@@ -357,6 +360,143 @@ pub(crate) fn glsl_through_mx(
 }
 
 /// `src` with every whole word `word` (not part of a longer name) replaced by `with`.
+/// The scene shader's frame (the camera group's textures, samplers and buffers), its material
+/// table row and the vehicle reflection's uniform read from mX's heap: no bind group but group
+/// 3's (the multisampled pane depth, the temporal motion; the heap has no multisampled
+/// textures). Each declaration of groups 0 to 2 goes; its texture or sampler is read from the
+/// heap array of its kind, its buffer through a typed view of the heap (`@group(7)`, a
+/// binding a type), all at the places the draw's immediates carry after the material's
+/// (`FrameHeap`). The last step of the scene shader's forms: the others match the bound names.
+pub(crate) fn frame_from_heap(src: &str) -> String {
+    // (the variable, the immediates' field it is read at)
+    const FIELDS: [(&str, &str); 26] = [
+        ("vehicle_reflection", "ground"),
+        ("t_shadow", "shadow"),
+        ("t_shadow_far", "shadow_far"),
+        ("t_ao", "ao"),
+        ("t_probe", "probe"),
+        ("t_sky_lut", "sky_lut"),
+        ("t_lmap", "lmap_tex"),
+        ("s_shadow", "s_shadow"),
+        ("s_ao", "s_ao"),
+        ("s_lin", "s_lin"),
+        ("camera", "camera"),
+        ("models", "models"),
+        ("models_tex", "models"),
+        ("inst_params", "inst_params"),
+        ("inst_params_tex", "inst_params"),
+        ("draw_list", "draw_list"),
+        ("draw_list_tex", "draw_list"),
+        ("lights", "lights"),
+        ("lights_tex", "lights"),
+        ("grid", "grid"),
+        ("grid_tex", "grid"),
+        ("enh", "enh"),
+        ("lmap", "lmap"),
+        ("snow_track_px", "snow_px"),
+        ("snow_track", "snow"),
+        ("material", "row"),
+    ];
+    let mut out = src.replace('\r', "");
+    let mut views: Vec<(String, String)> = Vec::new(); // (type, view array)
+    let mut decls = String::new();
+    let lines: Vec<String> = out.lines().map(str::to_string).collect();
+    let mut kept = Vec::with_capacity(lines.len());
+    let mut swaps: Vec<(String, String)> = Vec::new();
+    for line in lines {
+        let t = line.trim_start();
+        let group = ["@group(0)", "@group(1)", "@group(2)"]
+            .iter()
+            .any(|g| t.starts_with(g));
+        let Some(var) = t.find(" var").filter(|_| group) else {
+            kept.push(line);
+            continue;
+        };
+        let decl = t[var + 4..].trim_end().trim_end_matches(';');
+        let (space, rest) = match decl.strip_prefix('<') {
+            Some(r) => {
+                let close = r.find('>').expect("scene shader: a var's space");
+                (r[..close].trim(), r[close + 1..].trim())
+            }
+            None => ("", decl.trim()),
+        };
+        let (name, ty) = rest.split_once(':').expect("scene shader: a var's type");
+        let (name, ty) = (name.trim(), ty.trim());
+        let field = FIELDS
+            .iter()
+            .find(|f| f.0 == name)
+            .unwrap_or_else(|| panic!("scene shader: {name} has no place in the frame's heap"))
+            .1;
+        let place = format!("mx_mat.{field}");
+        let read = match (space, ty) {
+            ("", "texture_2d<f32>") => format!("mx_tex2d[{place}]"),
+            ("", "texture_2d<u32>") => format!("mx_tex2d_u32[{place}]"),
+            ("", "texture_depth_2d") => format!("mx_texdepth[{place}]"),
+            ("", "texture_cube<f32>") => format!("mx_texcube[{place}]"),
+            ("", "sampler") => format!("mx_samplers[{place}]"),
+            ("", "sampler_comparison") => format!("mx_samplers_cmp[{place}]"),
+            (_, _) => {
+                // a buffer: a typed view of its type (a struct, as views must be)
+                let k = views.iter().position(|v| v.0 == ty).unwrap_or_else(|| {
+                    let k = views.len();
+                    let binding = 16 + k;
+                    let array = format!("mx_view{k}");
+                    let wrapped = !ty.starts_with(char::is_uppercase);
+                    if wrapped {
+                        decls.push_str(&format!("struct MxView{k} {{ v: {ty} }};\n"));
+                    }
+                    decls.push_str(&format!(
+                        "@group(7) @binding({binding}) var<storage, read> {array}: binding_array<{}>;\n",
+                        if wrapped { format!("MxView{k}") } else { ty.to_string() }
+                    ));
+                    views.push((ty.to_string(), array));
+                    k
+                });
+                let wrapped = !ty.starts_with(char::is_uppercase);
+                format!("{}[{place}]{}", views[k].1, if wrapped { ".v" } else { "" })
+            }
+        };
+        swaps.push((name.to_string(), read));
+    }
+    out = kept.join("\n");
+    for (name, read) in &swaps {
+        out = replace_ident(&out, name, read);
+    }
+    // the frame's places after the material's in the draw's immediates (`FrameHeap`)
+    let head = "tile_sampler: u32, ground: u32 }";
+    assert!(out.contains(head), "scene shader: the immediates' struct");
+    out = out.replacen(
+        head,
+        "tile_sampler: u32, ground: u32, shadow: u32, shadow_far: u32, ao: u32, probe: u32, sky_lut: u32, lmap_tex: u32, s_shadow: u32, s_ao: u32, s_lin: u32, camera: u32, models: u32, inst_params: u32, draw_list: u32, lights: u32, grid: u32, enh: u32, lmap: u32, snow_px: u32, snow: u32 }",
+        1,
+    );
+    format!("{decls}{out}")
+}
+
+/// `replace_word` for a variable: not where the word is a member (`enh.lights`) or declares
+/// one (`lights: vec4<f32>,` in a struct).
+pub(crate) fn replace_ident(src: &str, word: &str, with: &str) -> String {
+    let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(src.len());
+    let mut rest = src;
+    while let Some(k) = rest.find(word) {
+        let before = rest[..k].chars().next_back();
+        let member = rest[..k].trim_end().ends_with('.');
+        let after_text = rest[k + word.len()..].trim_start();
+        let declares = after_text.starts_with(':') && !after_text.starts_with("::");
+        let after = rest[k + word.len()..].chars().next();
+        out.push_str(&rest[..k]);
+        if before.is_some_and(is_name) || after.is_some_and(is_name) || member || declares {
+            out.push_str(word);
+        } else {
+            out.push_str(with);
+        }
+        rest = &rest[k + word.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn replace_word(src: &str, word: &str, with: &str) -> String {
     let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let mut out = String::with_capacity(src.len());

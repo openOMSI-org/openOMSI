@@ -209,78 +209,84 @@ impl Renderer {
     ) {
         let views: Vec<&mx::TextureView> =
             textures.iter().map(|t| &scene.textures[*t].view).collect();
-        let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("sky"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: mx::BindingResource::TextureView(views[0]),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::TextureView(views[1]),
-                },
-                mx::BindGroupEntry {
-                    binding: 2,
-                    resource: mx::BindingResource::TextureView(views[2]),
-                },
-                mx::BindGroupEntry {
-                    binding: 3,
-                    resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
-                },
-                mx::BindGroupEntry {
-                    binding: 4,
-                    resource: mx::BindingResource::TextureView(match clouds {
-                        Some(c) => &scene.textures[c].view,
-                        None => &self.black_texture.view,
-                    }),
-                },
-                mx::BindGroupEntry {
-                    binding: 5,
-                    resource: mx::BindingResource::Sampler(&self.sampler),
-                },
-                mx::BindGroupEntry {
-                    binding: 6,
-                    resource: mx::BindingResource::TextureView(&self.sky.cloud_shape_view),
-                },
-                mx::BindGroupEntry {
-                    binding: 7,
-                    resource: mx::BindingResource::TextureView(&self.sky.cloud_detail_view),
-                },
-                mx::BindGroupEntry {
-                    binding: 8,
-                    resource: mx::BindingResource::Sampler(&self.sky.cloud_sampler),
-                },
-                mx::BindGroupEntry {
-                    binding: 9,
-                    resource: mx::BindingResource::TextureView(match vanilla_clouds {
-                        Some(c) => &scene.textures[c].view,
-                        None => &self.black_texture.view,
-                    }),
-                },
-                mx::BindGroupEntry {
-                    binding: 10,
-                    resource: self.sky.vanilla_sky_buf.as_entire_binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 11,
-                    resource: mx::BindingResource::TextureView(match sun {
-                        Some(s) => &scene.textures[s].view,
-                        None => &self.black_texture.view,
-                    }),
-                },
-                mx::BindGroupEntry {
-                    binding: 12,
-                    resource: self.sky.cloud_view_buf.as_entire_binding(),
-                },
-            ],
-        });
+        let bg = HeapGroup::of(
+            &self.sky.layout,
+            1,
+            &mx::BindGroupDescriptor {
+                label: Some("sky"),
+                entries: &[
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: mx::BindingResource::TextureView(views[0]),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::TextureView(views[1]),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 2,
+                        resource: mx::BindingResource::TextureView(views[2]),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 3,
+                        resource: mx::BindingResource::Sampler(&self.sky.sky_sampler),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 4,
+                        resource: mx::BindingResource::TextureView(match clouds {
+                            Some(c) => &scene.textures[c].view,
+                            None => &self.black_texture.view,
+                        }),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 5,
+                        resource: mx::BindingResource::Sampler(&self.sampler),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 6,
+                        resource: mx::BindingResource::TextureView(&self.sky.cloud_shape_view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 7,
+                        resource: mx::BindingResource::TextureView(&self.sky.cloud_detail_view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 8,
+                        resource: mx::BindingResource::Sampler(&self.sky.cloud_sampler),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 9,
+                        resource: mx::BindingResource::TextureView(match vanilla_clouds {
+                            Some(c) => &scene.textures[c].view,
+                            None => &self.black_texture.view,
+                        }),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 10,
+                        resource: self.sky.vanilla_sky_buf.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 11,
+                        resource: mx::BindingResource::TextureView(match sun {
+                            Some(s) => &scene.textures[s].view,
+                            None => &self.black_texture.view,
+                        }),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 12,
+                        resource: self.sky.cloud_view_buf.as_entire_binding(),
+                    },
+                ],
+            },
+        );
         scene.sky_bind_group = Some(bg);
     }
 }
 
 /// The sky: its layout, sampler, dome, the classic sky's weather, the enhanced clouds' noise, the sky table and the sky being computed.
 pub(crate) struct SkyRes {
+    /// The sky module's places in the heap (`SkyBase::layout`).
+    pub(crate) layout: crate::shaders::HeapLayout,
     /// The enhanced sky tone-mapped into the plain pass's target: the sky of the mirrors
     /// of an Enhanced picture (sky_enhanced.wgsl `fs_enhanced_mirror`).
     pub(crate) sky_mirror_pipeline: Option<mx::RenderPipeline>,

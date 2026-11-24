@@ -6,8 +6,18 @@ since=${2:-}
 
 newer() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }
 
+# The entries a release adds are the ones that came into the "Unreleased" section since the
+# previous release; the sections of the versions below it are history and never count.
+unreleased() {
+  git show "$1:CHANGELOG.md" 2>/dev/null | awk '/^## Unreleased/ {f = 1; next} /^## / {f = 0} f'
+}
+
 added_since() {
-  git diff --unified=0 "$1" "$2" -- CHANGELOG.md | grep '^+' | grep -v '^+++' | sed 's/^+//' | grep -v '^## ' || true
+  before=$(mktemp) after=$(mktemp)
+  unreleased "$1" > "$before"
+  unreleased "$2" > "$after"
+  diff "$before" "$after" | grep '^>' | sed 's/^> //' | grep -v '^## ' || true
+  rm -f "$before" "$after"
 }
 
 if [ -z "$since" ]; then
