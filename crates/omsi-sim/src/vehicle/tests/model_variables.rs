@@ -66,6 +66,7 @@ fn diagnostic_type(reverse: bool) -> VehicleType {
             def_index,
             data: MeshData::default(),
             file: PathBuf::new(),
+            stamp: 0,
             materials: vec![omsi_o3d::Material {
                 texture: "lamp.png".into(),
                 ..Default::default()
