@@ -179,16 +179,20 @@ pub(super) fn humans(cx: HumansCx, dt: f32) {
             (None, Some(b)) => b,
             (None, None) => DVec3::ZERO,
         };
-        // (the trips due at the stops soon: once a game minute, #1415)
+        // (the trips due at the stops soon: once a game minute, #1415; where their buses are,
+        // which takes them off the stops they have passed, every frame, #3506)
         if let (Some(s), Some(t)) = (cx.traffic.schedule.as_ref(), cx.traffic.traffic.as_ref()) {
+            let duty = cx.duty.duty.as_ref();
             if (t.day_time - h.due_at).abs() >= 60.0 {
                 let t0 = std::time::Instant::now();
-                h.due_dests = Some(s.due_destinations(t.day_time));
+                h.due_dests = Some(s.due_trips(t.day_time, Some(&t.sim), duty));
                 h.due_at = t.day_time;
                 if omsi_cfg::flags::OMSI_PROFILE.is_set() {
                     h.stage_stats
                         .add("due destinations", t0.elapsed().as_secs_f64() * 1000.0);
                 }
+            } else if let Some(d) = h.due_dests.as_mut() {
+                d.buses = s.tour_buses(Some(&t.sim), duty);
             }
         }
         if h.stop_targets.is_none() {

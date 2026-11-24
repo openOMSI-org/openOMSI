@@ -207,7 +207,13 @@ fn a_worked_timetable_fills_a_stop_to_the_share_its_trips_ask_for() {
     h.stop_targets = Some(targets);
     let mut due = crate::timetable_run::DueTrips::default();
     due.dests.insert(42, HashSet::from(["Centrum".to_string()]));
-    due.share.insert(42, 0.5);
+    let call = |departure, share| crate::timetable_run::DueVisit {
+        tour: 1,
+        departure,
+        station: 0,
+        share,
+    };
+    due.visits.insert(42, vec![call(0, 0.5)]);
     h.due_dests = Some(due);
     let stop = h.stops.get_mut(&42).unwrap();
     h.center = stop.pos;
@@ -229,7 +235,15 @@ fn a_worked_timetable_fills_a_stop_to_the_share_its_trips_ask_for() {
     h.stops_tick(0.1, &world);
     assert_eq!(h.stops[&42].want, 2, "half of the stop's 4");
     // two trips due at once ask for all of it, never more
-    h.due_dests.as_mut().unwrap().share.insert(42, 1.7);
+    h.due_dests
+        .as_mut()
+        .unwrap()
+        .visits
+        .insert(42, vec![call(0, 1.0), call(1, 0.7)]);
     h.stops_tick(0.1, &world);
     assert_eq!(h.stops[&42].want, 4);
+    // the tour's bus has left the stop on the second of them: neither asks for anybody now
+    h.due_dests.as_mut().unwrap().buses.insert(1, 1, 1);
+    h.stops_tick(0.1, &world);
+    assert_eq!(h.stops[&42].want, 0);
 }

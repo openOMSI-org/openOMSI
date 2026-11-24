@@ -1131,7 +1131,9 @@ fn people_still_turn_up_for_a_bus_some_minutes_late() {
     let now = 10.0 * 3600.0;
     assert!(pax_turn_up_for(now - 7.0 * 60.0, now));
     assert!(pax_turn_up_for(now + 10.0 * 60.0, now));
-    assert!(!pax_turn_up_for(now - 20.0 * 60.0, now));
+    // (up to 40 minutes late, unless its bus has passed the stop: 0x61a068, `TourBuses`)
+    assert!(pax_turn_up_for(now - 30.0 * 60.0, now));
+    assert!(!pax_turn_up_for(now - 40.0 * 60.0, now));
     // (a quarter of an hour ahead the trip asks for nobody yet, 0x61a068)
     assert!(!pax_turn_up_for(now + 15.0 * 60.0, now));
     assert!(!pax_turn_up_for(now + 20.0 * 60.0, now));
