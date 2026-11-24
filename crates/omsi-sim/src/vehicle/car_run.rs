@@ -527,8 +527,9 @@ impl omsi_script::Host for SilentHost<'_> {
         self.1.triggers.push(name.to_string());
     }
     fn sound_trigger_file(&mut self, name: &str, file: &str) {
-        // (as the leading vehicle's host: `" " (T.F.x)` plays nothing)
-        if !file.trim().is_empty() {
+        // (as the leading vehicle's host: `" " (T.F.x)` plays nothing, `"" (T.F.x)` plays
+        // the entry's file again - 0x74f2e8)
+        if file.is_empty() || !file.trim().is_empty() {
             self.1.files.push((name.to_string(), file.to_string()));
         }
     }
