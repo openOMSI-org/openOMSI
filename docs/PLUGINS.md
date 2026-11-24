@@ -636,13 +636,6 @@ only to ports from 1024 up. It holds at most 256 MB of memory.
 * `omsi.ui.update` changes one element of a panel; setting the whole panel every frame
   costs more.
 
-### Reference
-
-Every function and event, as the game's API registry describes them (also as JSON in
-[`plugin-api.json`](plugin-api.json), for tools and other plugin languages). `[x]` is an
-optional argument; a permission is what a plugin packed with a list of permissions must have
-declared to call the function (a plain `.lua` file has all except native process access, which always requires player opt-in).
-
 ### Native helper programs
 
 The interactive game asks for permission when a plugin first tries to start a native helper. The host-owned window initially shows the plugin name, the application's filename and the number of arguments, together with the safety warning and decision descriptions. **Details** reveals the full executable path, plugin entry path, individual arguments and working directory; **Hide details** collapses them again. Each new request starts collapsed, and opening details never approves execution. **Allow once** covers only that launch. **Always allow** stores a hash-bound approval in `~/.openomsi/plugin-process-permissions.json` (on Windows, `%USERPROFILE%\.openomsi\plugin-process-permissions.json`). It applies only to that entry, folder snapshot and helper; changed content asks again. **Deny** blocks all native helpers for that canonical plugin entry for the current game session, even if helper names, content or arguments change. Escape also denies; Enter never automatically approves. The game and other plugins keep running while a request waits. Unload/reload cancels it. Packages must still declare `process`. Dialog text and buttons are translated into every supported interface language; plugin names, file paths and arguments are displayed literally and are never sent to translation.
@@ -669,6 +662,13 @@ Load/reload only selects a manifest candidate by its absolute lexical entry/fold
 `process.start` returns a plugin-owned handle; `status` and `exit_code` poll without blocking. Lua `process.wait` suspends the top-level callback while the game and other plugins continue. Nested event callbacks and manual coroutines cannot wait. Stop, disable and reload cancel pending waits and terminate direct children. Windows assigns children atomically to a kill-on-close Job Object, including descendants, so abrupt game termination also cleans them up. Linux sets `PR_SET_PDEATHSIG` for direct children with a parent-race check; descendants are not covered. On macOS only normal plugin lifecycle cleanup is provided. Completed handles retain status until `forget`; the limit is 32 handles per plugin. Windows closes the job on forget, killing any remaining descendants. Plugins without consent keep direct callback dispatch; approved Lua plugins reuse completed callback coroutines.
 
 On macOS, helpers extracted from ZIP files may need their executable bit restored (`chmod +x /absolute/path/to/helper`) and may be blocked by Gatekeeper quarantine. Review the downloaded helper and use macOS's normal security approval flow before running it; the plugin host does not remove quarantine automatically.
+
+### Reference
+
+Every function and event, as the game's API registry describes them (also as JSON in
+[`plugin-api.json`](plugin-api.json), for tools and other plugin languages). `[x]` is an
+optional argument; a permission is what a plugin packed with a list of permissions must have
+declared to call the function (a plain `.lua` file has all except native process access, which always requires player opt-in).
 
 <!-- api:begin (written from the registry: OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest) -->
 

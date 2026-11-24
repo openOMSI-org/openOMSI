@@ -5,6 +5,10 @@
 //! were shown far too dark. There the window is configured as plain RGBA8, every frame is
 //! drawn into an sRGB stand-in as before, and one pass encodes it into the window.
 
+/// `SHADER`, its group read from the heap.
+pub(crate) static SRGB: crate::shaders::HeapModule =
+    crate::shaders::HeapModule::new(|| SHADER.to_string());
+
 const SHADER: &str = "
 @group(0) @binding(0) var picture: texture_2d<f32>;
 
@@ -26,7 +30,7 @@ fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
 pub(crate) struct SrgbEncode {
     pipeline: mx::RenderPipeline,
     /// The stand-in, its view and the bind group reading it, at the window's size.
-    stand_in: std::cell::RefCell<Option<(mx::Texture, mx::TextureView, mx::BindGroup)>>,
+    stand_in: std::cell::RefCell<Option<(mx::Texture, mx::TextureView, crate::shaders::HeapGroup)>>,
     format: mx::TextureFormat,
 }
 
@@ -44,7 +48,7 @@ impl SrgbEncode {
         let module = device
             .create_shader_module(&mx::ShaderModuleDescriptor {
                 label: Some("sRGB encode"),
-                source: &*SHADER,
+                source: &SRGB.wgsl(),
             })
             .expect("mX: a shader");
         let pipeline = device
@@ -105,13 +109,17 @@ impl SrgbEncode {
             let view = texture
                 .create_view(&Default::default())
                 .expect("mX: a texture view");
-            let group = device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("sRGB encode"),
-                entries: &[mx::BindGroupEntry {
-                    binding: 0,
-                    resource: mx::BindingResource::TextureView(&view),
-                }],
-            });
+            let group = crate::shaders::HeapGroup::of(
+                SRGB.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("sRGB encode"),
+                    entries: &[mx::BindGroupEntry {
+                        binding: 0,
+                        resource: mx::BindingResource::TextureView(&view),
+                    }],
+                },
+            );
             *stand_in = Some((texture, view, group));
         }
         stand_in
@@ -157,7 +165,7 @@ impl SrgbEncode {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, group);
+            group.set(&mut pass);
             pass.draw(0..3, 0..1);
         }
         queue.submit([encoder.finish()]);
