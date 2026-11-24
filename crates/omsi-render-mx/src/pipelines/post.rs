@@ -3,13 +3,18 @@
 use super::common::*;
 use crate::*;
 
+/// post.wgsl, its groups read from the heap.
+pub(crate) static POST: HeapModule = HeapModule::new(|| {
+    crate::shaders::hot_wgsl(include_str!("../post.wgsl"), "post.wgsl").to_string()
+});
+
 pub(crate) struct Post {
     pub pipelines: PostPipelines,
     pub buf: mx::Buffer,
     pub sampler: mx::Sampler,
     pub meter_view: mx::TextureView,
     pub adapt_views: [mx::TextureView; 2],
-    pub adapt_bg: [mx::BindGroup; 2],
+    pub adapt_bg: [HeapGroup; 2],
 }
 
 pub(crate) fn build(
@@ -24,7 +29,7 @@ pub(crate) fn build(
         device,
         mx::ShaderModuleDescriptor {
             label: Some("post"),
-            source: &*(crate::shaders::hot_wgsl(include_str!("../post.wgsl"), "post.wgsl")),
+            source: &POST.wgsl(),
         },
     );
     let post_buf = uniform_buffer(
@@ -74,35 +79,39 @@ pub(crate) fn build(
     let adapt_views = [tiny("exposure a"), tiny("exposure b")];
     // adapt_bg[k] reads the meter and adapt[k] (and draws into the other one)
     let adapt_bg = [0usize, 1].map(|k| {
-        device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("exposure"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: post_buf.as_entire_binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::TextureView(&meter_view),
-                },
-                mx::BindGroupEntry {
-                    binding: 2,
-                    resource: mx::BindingResource::Sampler(&post_sampler),
-                },
-                mx::BindGroupEntry {
-                    binding: 3,
-                    resource: mx::BindingResource::TextureView(&adapt_views[k]),
-                },
-                mx::BindGroupEntry {
-                    binding: 4,
-                    resource: mx::BindingResource::TextureView(&white_texture.view),
-                },
-                mx::BindGroupEntry {
-                    binding: 5,
-                    resource: mx::BindingResource::TextureView(&white_texture.view),
-                },
-            ],
-        })
+        HeapGroup::of(
+            POST.layout(),
+            0,
+            &mx::BindGroupDescriptor {
+                label: Some("exposure"),
+                entries: &[
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: post_buf.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::TextureView(&meter_view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 2,
+                        resource: mx::BindingResource::Sampler(&post_sampler),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 3,
+                        resource: mx::BindingResource::TextureView(&adapt_views[k]),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 4,
+                        resource: mx::BindingResource::TextureView(&white_texture.view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 5,
+                        resource: mx::BindingResource::TextureView(&white_texture.view),
+                    },
+                ],
+            },
+        )
     });
     Post {
         pipelines: post,

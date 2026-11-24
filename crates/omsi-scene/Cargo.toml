@@ -42,3 +42,5 @@ wgpu.workspace = true
 [dev-dependencies]
 pollster.workspace = true
 zip.workspace = true
+omsi-pack = { path = "../omsi-pack" }
+ring.workspace = true

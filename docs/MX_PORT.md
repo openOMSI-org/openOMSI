@@ -108,6 +108,73 @@ each, 4.41-4.50 ms (bind groups 4.37-4.58 ms; through Metal's argument buffer 5.
 pictures match the bind-group build's to run noise (510 pixels of 2 million); 194 + 86 tests
 pass as before, under Metal's validation.
 
+## GPU work (2026-11-23)
+
+The cab of the MAN EN92 at Grundorf's first stop (`--drive 3`), 1920x1080 Enhanced, the
+default settings (4x MSAA, SSAO), release, M4, `OMSI_BENCH=300` and `OMSI_GPU_TIMERS=1`, cost
+28 ms of GPU a frame on mX and 25 ms on wgpu (the speed figures above are another view): the
+main pass alone 19 to 22 ms. Neither multisampling (1x: the same) nor the number of draws
+(240) was the cause; the enhanced fragment shader was. Cut to the texture alone it took 1.3 ms.
+
+- **Lean pipelines** (`override LEAN`, `LEAN_GLASS`, `WET`, `SNOW` in the scene shader,
+  `frame_plan.rs` `main_key`): the shader's branches are uniform per draw, but the code of the
+  rare ones (glass and its films, water, bump and PBR maps, LED panels, glow, debug views, and
+  the weather's: the wet road with its puddles, the snow) took registers from every pixel.
+  Plain materials are drawn with pipelines specialized without them, blended ones with the
+  glass branch kept, in four sets by the frame's weather (dry, rain, snow, both). They are made
+  on two threads of their own after the renderer is up and used as they come; until then, and
+  where the driver fails on one, the full pipeline draws. (Apple's compiler service crashed on
+  the variants with the wet road and the snow together, and once hung on one: hence the
+  weathers apart and the background threads.)
+- **The ground pass with MSAA and AO**: the painted terrain's layers were lit each in full
+  and blended (4 ms here) unless MSAA was 1x and SSAO off, because the ground picture took the
+  camera group's AO slot. It is read through the heap now (`FrameHeap::ground`, immediates
+  after the material's places) and drawn with a depth of the terrain's own, so a
+  multisampled pass finds the ground at the edges too.
+
+Release builds of origin/main (e7e5571) and of this work, run in turns, two runs each:
+
+| Grundorf cab, 1920x1080 Enhanced | GPU wait before | after | main pass before | after | frame (fps) before | after |
+|---|---|---|---|---|---|---|
+| day, Sommerlich 12:00 | 29.5 ms | 12.6 ms | 22.7 ms | 6.3 ms | 31.2 ms (32) | 14.3 ms (70) |
+| rain, Schmuddelwetter | 26.6 ms | 15.3 ms | 19.8 ms | 8.3 ms | 27.9 ms (36) | 16.9 ms (59) |
+| night 22:30 | 28.1 ms | 13.1 ms | 20.8 ms | 5.9 ms | 30.8 ms (32) | 15.7 ms (64) |
+
+Metal 2 (`MX_METAL_BOUND=1`): 12.9 ms, main pass 6.3 ms. The renderer's GPU tests: 285 of 289
+pass on Metal, the other four as before (the two coplanar prints, `spv_dump`,
+`xr_diagnostics`). An offscreen run's `~/.openomsi/gpu-fallback.cfg` (a pipeline the driver
+refused at start) quietly turns every later run to 1x MSAA and basic pipelines: check that a
+benchmark's log has no "drawing with 1x MSAA".
+
+`OMSI_NO_LEAN=1` draws with the full pipelines, for comparison.
+
+## The rest in the heap (2026-11-24)
+
+The renderer draws without bind groups but where mX's heap cannot hold what a shader reads.
+
+- **The scene shader** (`frame_from_heap`, `FrameHeap`): the camera group's textures,
+  samplers and buffers (the camera, the instances' places and parameters, the draw list, the
+  lights and their grid, the enhanced uniform, the light maps, the snow track), the material
+  table's row (a buffer view a row: `MaterialTable::immediates`) and the puddles' vehicle plane
+  are read from the heap at places the draw's immediates carry after the material's: 32
+  `u32`, 128 bytes, the most Vulkan and mX's Direct3D 12 promise. On Metal mX binds those views
+  directly and keeps the frame's constants in the constant address space (mX 650b244); OpenGL
+  without storage buffers in a stage reads them as uniform blocks.
+- **Every other module** (`groups_to_heap`, `HeapGroup`): its root declarations become heap
+  reads at places in its own immediates, in the order of their group and binding
+  (`HeapLayout`, worked out from the same source the module is compiled from); a `HeapGroup`
+  is made from the entries a bind group was made from and writes the places into a pass.
+  A module-scope name is replaced only where no parameter or local shadows it
+  (`replace_globals`). The camera group is a `HeapGroup` per module that reads it
+  (`CameraHeaps`); the bind group itself is gone.
+- **Left as bind groups**: the ray tracing's passes (storage textures, acceleration
+  structures, writable buffers), the multisampled pane depth (the heap has no multisampled
+  textures) and the temporal upscaling's motion group (the scene shader's 128 bytes of
+  immediates are taken).
+
+The picture and the GPU time are as before (Grundorf cab, the same 12.4 ms with and without
+the heap); the renderer's tests pass as before.
+
 ## Older GPUs (2026-11-18)
 
 - **Direct3D 11** is a graphics API choice on Windows (`graphics_api=dx11`, "DirectX 11" in the

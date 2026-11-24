@@ -51,7 +51,6 @@ impl Renderer {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         pass.set_bind_group(3, bg);
         // (plain opaque parts only, prepass codes 0 and 1: a cut-out or transmap layer, the dirt
         // on a windscreen, left its depth in scattered texels, and the motion through the glass
@@ -102,7 +101,6 @@ impl Renderer {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         let blended = |b: &Batch| matches!(b.pipe / 4, PIPE_BLEND | PIPE_BLEND_NO_WRITE);
         let cull = |pipe: u8| ((pipe >> 1) & 1) as usize;
         for batches in [&plan.main_batches, &plan.cab_batches] {
