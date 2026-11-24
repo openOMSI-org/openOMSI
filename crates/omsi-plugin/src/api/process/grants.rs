@@ -33,7 +33,10 @@ impl ProcessGrant {
         }
         let entry = entry.canonicalize().map_err(|e| e.to_string())?;
         let folder = folder.canonicalize().map_err(|e| e.to_string())?;
-        let names: std::collections::BTreeSet<String> = helpers.iter().map(|name| super::super::paths::clean(name)).collect::<Result<_, _>>()?;
+        let names: std::collections::BTreeSet<String> = helpers
+            .iter()
+            .map(|name| super::super::paths::clean(name))
+            .collect::<Result<_, _>>()?;
         let files = super::content::snapshot(&entry, &folder, &names)?;
         let mut allowed = BTreeMap::new();
         for name in helpers {
@@ -63,7 +66,12 @@ impl ProcessGrant {
         entry.canonicalize().ok().as_ref() == Some(&self.entry)
             && folder.canonicalize().ok().as_ref() == Some(&self.folder)
             && hash(entry).is_ok_and(|h| h == self.sha256)
-            && super::content::snapshot(&self.entry, &self.folder, &self.helpers.keys().cloned().collect()).is_ok_and(|files| files == self.files)
+            && super::content::snapshot(
+                &self.entry,
+                &self.folder,
+                &self.helpers.keys().cloned().collect(),
+            )
+            .is_ok_and(|files| files == self.files)
     }
 }
 
@@ -180,7 +188,14 @@ mod tests {
     fn fixture() -> (PathBuf, PathBuf, ProcessGrants) {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!("omsi-grants-{}-{}-{unique}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let root = std::env::temp_dir().join(format!(
+            "omsi-grants-{}-{}-{unique}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         std::fs::create_dir_all(root.join("modules")).unwrap();
         let entry = root.join("plugin.lua");
         std::fs::write(&entry, "return 1").unwrap();
@@ -249,7 +264,15 @@ mod tests {
     #[test]
     fn mutable_saves_data_and_unrelated_shared_assets_do_not_revoke_consent() {
         let (root, entry, grants) = fixture();
-        for name in ["plugin.save.lua", "other.save.lua", "plugin.data/cache.json", "other.data/large.bin", "data/status.txt", "other/assets/picture.bmp", "other.exe"] {
+        for name in [
+            "plugin.save.lua",
+            "other.save.lua",
+            "plugin.data/cache.json",
+            "other.data/large.bin",
+            "data/status.txt",
+            "other/assets/picture.bmp",
+            "other.exe",
+        ] {
             let path = root.join(name);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, "normal writable data").unwrap();
@@ -271,8 +294,17 @@ mod tests {
         std::fs::write(root.join("helper.dll"), "native code").unwrap();
         std::fs::write(root.join("config.xml"), "immutable package asset").unwrap();
         let grant = ProcessGrant::capture(&entry, &root, &["helper.exe".into()]).unwrap();
-        assert!(crate::lua::DiskSource { path: entry.clone() }.module("data.module").is_some());
-        let grants = ProcessGrants { grants: vec![grant], ..Default::default() };
+        assert!(
+            crate::lua::DiskSource {
+                path: entry.clone()
+            }
+            .module("data.module")
+            .is_some()
+        );
+        let grants = ProcessGrants {
+            grants: vec![grant],
+            ..Default::default()
+        };
         std::fs::write(root.join("data.save.lua"), "return { counter = 1 }").unwrap();
         std::fs::write(root.join("data/state.json"), "{\"counter\":1}").unwrap();
         assert!(grants.allows(&entry, Some(&root)));
@@ -292,14 +324,26 @@ mod tests {
         let (root, entry, grants) = fixture();
         let data = root.join("plugin.data");
         std::fs::create_dir(&data).unwrap();
-        for i in 0..4100 { std::fs::write(data.join(format!("{i}.json")), "{}").unwrap(); }
-        std::fs::File::create(data.join("large.bin")).unwrap().set_len(257 * 1024 * 1024).unwrap();
+        for i in 0..4100 {
+            std::fs::write(data.join(format!("{i}.json")), "{}").unwrap();
+        }
+        std::fs::File::create(data.join("large.bin"))
+            .unwrap()
+            .set_len(257 * 1024 * 1024)
+            .unwrap();
         assert!(grants.allows(&entry, Some(&root)));
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn shared_folder_keeps_importable_code_and_native_libraries_in_consent() {
-        for name in ["data/code.lua", "plugin.data/code.lua", "shared/other.lua", "helper.dll", "lib/loader.so.1", "lib/loader.dylib"] {
+        for name in [
+            "data/code.lua",
+            "plugin.data/code.lua",
+            "shared/other.lua",
+            "helper.dll",
+            "lib/loader.so.1",
+            "lib/loader.dylib",
+        ] {
             let (root, entry, grants) = fixture();
             let path = root.join(name);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -332,7 +376,11 @@ mod tests {
         let other_entry = other.join("plugin.lua");
         std::fs::copy(&entry, &other_entry).unwrap();
         assert!(grants.has_candidate(&other_entry, Some(&other)));
-        assert!(grants.helper(&other_entry, Some(&other), "helper.exe").is_err());
+        assert!(
+            grants
+                .helper(&other_entry, Some(&other), "helper.exe")
+                .is_err()
+        );
         std::fs::write(&entry, "modified plugin").unwrap();
         assert!(grants.has_candidate(&short, short.parent()));
         assert!(grants.helper(&short, short.parent(), "helper.exe").is_err());

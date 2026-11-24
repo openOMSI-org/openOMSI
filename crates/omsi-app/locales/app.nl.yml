@@ -3637,6 +3637,11 @@
 "Lights on in a downpour": "Licht aan bij een wolkbreuk"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Overdag zijn bij zware regen sommige ramen van huizen verlicht, omdat het donker genoeg wordt om het licht aan te doen"
 
+"Buses of this session": "Bussen van deze sessie"
+"every bus": "elke bus"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Bussen waarin spelers mogen rijden, gescheiden door ; : mappen of busbestanden. Leeg: elke bus."
+"only these buses can be driven here ({list})": "alleen deze bussen mogen hier worden gereden ({list})"
+
 "Read the map's passenger numbers exactly": "Lees passagiersaantallen van de kaart exact"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passagiers: een halte met 0,7 behoudt 0,7 personen in plaats van afronding naar 1 vóór de dichtheid; uit: afronding van OMSI 2"
 "Load a situation...": "Situatie laden..."

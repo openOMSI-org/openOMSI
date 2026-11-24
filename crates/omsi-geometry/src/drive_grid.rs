@@ -46,7 +46,11 @@ fn plan_weights(a: Vec3, b: Vec3, c: Vec3, x: f32, y: f32, tol: f32) -> Option<(
             };
         }
     }
-    (best_distance <= (tol as f64).powi(2)).then_some((weights.0 as f32, weights.1 as f32, weights.2 as f32))
+    (best_distance <= (tol as f64).powi(2)).then_some((
+        weights.0 as f32,
+        weights.1 as f32,
+        weights.2 as f32,
+    ))
 }
 
 /// The box outside which [`plan_weights`] accepts no point of `abc`, matching the
@@ -74,8 +78,15 @@ impl HeightMap {
 
     /// From an RGBA picture (row by row from the top).
     pub fn from_rgba(width: usize, height: usize, rgba: &[u8]) -> Option<HeightMap> {
-        (width > 0 && height > 0 && rgba.len() >= width * height * 4)
-            .then(|| HeightMap { width, height, red: rgba.chunks_exact(4).take(width * height).map(|p| p[0]).collect() })
+        (width > 0 && height > 0 && rgba.len() >= width * height * 4).then(|| HeightMap {
+            width,
+            height,
+            red: rgba
+                .chunks_exact(4)
+                .take(width * height)
+                .map(|p| p[0])
+                .collect(),
+        })
     }
 
     /// The ground's lift (m) at texture coordinates `uv`, tiled and filtered between four
@@ -113,19 +124,42 @@ pub struct SurfFaces {
 impl SurfFaces {
     /// Only where a texture has a map, and the mesh texture coordinates to lay it on.
     pub fn of(mesh: &MeshData, maps: &[Option<std::sync::Arc<HeightMap>>]) -> Option<SurfFaces> {
-        (maps.iter().any(Option::is_some) && mesh.uvs.len() == mesh.positions.len())
-            .then(|| SurfFaces { uvs: mesh.uvs.clone(), ranges: mesh.ranges.clone(), maps: maps.to_vec(), ids: Vec::new() })
+        (maps.iter().any(Option::is_some) && mesh.uvs.len() == mesh.positions.len()).then(|| {
+            SurfFaces {
+                uvs: mesh.uvs.clone(),
+                ranges: mesh.ranges.clone(),
+                maps: maps.to_vec(),
+                ids: Vec::new(),
+            }
+        })
     }
 
     /// [`SurfFaces::of`] with the `[surface]` ids of the slots' textures: kept where a
     /// texture has a map or a surface other than asphalt.
-    pub fn tagged(mesh: &MeshData, maps: &[Option<std::sync::Arc<HeightMap>>], ids: &[u8]) -> Option<SurfFaces> {
+    pub fn tagged(
+        mesh: &MeshData,
+        maps: &[Option<std::sync::Arc<HeightMap>>],
+        ids: &[u8],
+    ) -> Option<SurfFaces> {
         if !ids.iter().any(|i| *i != 0) {
             return Self::of(mesh, maps);
         }
-        let uvs = if mesh.uvs.len() == mesh.positions.len() { mesh.uvs.clone() } else { Vec::new() };
-        let maps = if uvs.is_empty() { Vec::new() } else { maps.to_vec() };
-        Some(SurfFaces { uvs, ranges: mesh.ranges.clone(), maps, ids: ids.to_vec() })
+        let uvs = if mesh.uvs.len() == mesh.positions.len() {
+            mesh.uvs.clone()
+        } else {
+            Vec::new()
+        };
+        let maps = if uvs.is_empty() {
+            Vec::new()
+        } else {
+            maps.to_vec()
+        };
+        Some(SurfFaces {
+            uvs,
+            ranges: mesh.ranges.clone(),
+            maps,
+            ids: ids.to_vec(),
+        })
     }
 
     /// The `[surface]` id of face `j`.
@@ -143,9 +177,16 @@ impl SurfFaces {
     }
 
     /// The map and corner texture coordinates of face `j` (indices `tri`).
-    pub(crate) fn face(&self, j: usize, tri: &[u32]) -> Option<(&std::sync::Arc<HeightMap>, [Vec2; 3])> {
+    pub(crate) fn face(
+        &self,
+        j: usize,
+        tri: &[u32],
+    ) -> Option<(&std::sync::Arc<HeightMap>, [Vec2; 3])> {
         let first = (j * 3) as u32;
-        let r = self.ranges.iter().find(|r| first >= r.0 && first < r.0 + r.1)?;
+        let r = self
+            .ranges
+            .iter()
+            .find(|r| first >= r.0 && first < r.0 + r.1)?;
         let m = self.maps.get(r.2 as usize)?.as_ref()?;
         let uv = [0, 1, 2].map(|k| self.uvs.get(tri[k] as usize).copied());
         Some((m, [uv[0]?, uv[1]?, uv[2]?]))
@@ -153,7 +194,10 @@ impl SurfFaces {
 
     /// Bytes held on the heap (the maps are shared).
     pub fn heap_bytes(&self) -> usize {
-        self.uvs.capacity() * 8 + self.ranges.capacity() * 12 + self.maps.capacity() * 8 + self.ids.capacity()
+        self.uvs.capacity() * 8
+            + self.ranges.capacity() * 12
+            + self.maps.capacity() * 8
+            + self.ids.capacity()
     }
 }
 
@@ -190,7 +234,14 @@ impl DriveGrid {
 
     /// Bytes the grid holds on the heap.
     pub fn heap_bytes(&self) -> usize {
-        self.tris.capacity() * std::mem::size_of::<[Vec3; 3]>() + self.ridge.capacity() + self.bump_of.capacity() * 4 + self.bumps.capacity() * std::mem::size_of::<(u32, [Vec2; 3])>() + self.start.capacity() * 4 + self.items.capacity() * 4 + self.reach.capacity() * 16 + self.surface.capacity()
+        self.tris.capacity() * std::mem::size_of::<[Vec3; 3]>()
+            + self.ridge.capacity()
+            + self.bump_of.capacity() * 4
+            + self.bumps.capacity() * std::mem::size_of::<(u32, [Vec2; 3])>()
+            + self.start.capacity() * 4
+            + self.items.capacity() * 4
+            + self.reach.capacity() * 16
+            + self.surface.capacity()
     }
 
     /// Add a triangle; walls (faces steeper than about 70°) are left out, they are nothing
@@ -214,11 +265,20 @@ impl DriveGrid {
 
     /// Add a triangle drawn with a texture that has a `.surf` map, with the texture
     /// coordinates of its corners.
-    pub fn push_surf(&mut self, p: [Vec3; 3], uv: [Vec2; 3], map: &std::sync::Arc<HeightMap>) -> bool {
+    pub fn push_surf(
+        &mut self,
+        p: [Vec3; 3],
+        uv: [Vec2; 3],
+        map: &std::sync::Arc<HeightMap>,
+    ) -> bool {
         if !self.push_kind(p, false) {
             return false;
         }
-        let m = match self.maps.iter().position(|m| std::sync::Arc::ptr_eq(m, map)) {
+        let m = match self
+            .maps
+            .iter()
+            .position(|m| std::sync::Arc::ptr_eq(m, map))
+        {
             Some(m) => m,
             None => {
                 self.maps.push(map.clone());
@@ -276,7 +336,9 @@ impl DriveGrid {
                 continue;
             }
             let [a, b, c] = self.tris[i as usize];
-            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else { continue };
+            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else {
+                continue;
+            };
             let z = l1 * a.z + l2 * b.z + l3 * c.z;
             if z <= top && best.is_none_or(|(old, _)| z > old) {
                 best = Some((z, self.surface.get(i as usize).copied().unwrap_or(0)));
@@ -301,11 +363,23 @@ impl DriveGrid {
         if tagged {
             self.surface.resize(self.tris.len(), 0);
         }
-        for (k, ((t, r), b)) in self.tris.iter().zip(self.ridge.iter()).zip(self.bump_of.iter()).enumerate() {
+        for (k, ((t, r), b)) in self
+            .tris
+            .iter()
+            .zip(self.ridge.iter())
+            .zip(self.bump_of.iter())
+            .enumerate()
+        {
             // (bucketed with the seam tolerance round it: a point that close is on it)
             let e = SEAM_TOLERANCE;
-            let (lo_x, hi_x) = (t[0].x.min(t[1].x).min(t[2].x) - e, t[0].x.max(t[1].x).max(t[2].x) + e);
-            let (lo_y, hi_y) = (t[0].y.min(t[1].y).min(t[2].y) - e, t[0].y.max(t[1].y).max(t[2].y) + e);
+            let (lo_x, hi_x) = (
+                t[0].x.min(t[1].x).min(t[2].x) - e,
+                t[0].x.max(t[1].x).max(t[2].x) + e,
+            );
+            let (lo_y, hi_y) = (
+                t[0].y.min(t[1].y).min(t[2].y) - e,
+                t[0].y.max(t[1].y).max(t[2].y) + e,
+            );
             if hi_x < 0.0 || hi_y < 0.0 || lo_x > tile || lo_y > tile {
                 continue;
             }
@@ -318,7 +392,10 @@ impl DriveGrid {
                 keep_surface.push(self.surface[k]);
             }
         }
-        self.reach = keep.iter().map(|t| plan_reach(t[0], t[1], t[2], SEAM_TOLERANCE)).collect();
+        self.reach = keep
+            .iter()
+            .map(|t| plan_reach(t[0], t[1], t[2], SEAM_TOLERANCE))
+            .collect();
         self.tris = keep;
         self.ridge = keep_ridge;
         self.bump_of = keep_bump;
@@ -359,15 +436,23 @@ impl DriveGrid {
     /// Highest road face below the point, with its upward geometric normal.
     /// Reflections need the actual plane rather than a raster texel's height.
     pub fn surface_below(&self, x: f32, y: f32, top: f32) -> Option<(f32, Vec3)> {
-        if self.cells == 0 || x < 0.0 || y < 0.0 { return None; }
+        if self.cells == 0 || x < 0.0 || y < 0.0 {
+            return None;
+        }
         let (cx, cy) = ((x / self.cell) as usize, (y / self.cell) as usize);
-        if cx >= self.cells || cy >= self.cells { return None; }
+        if cx >= self.cells || cy >= self.cells {
+            return None;
+        }
         let k = cy * self.cells + cx;
         let mut best: Option<(f32, Vec3)> = None;
         for &i in &self.items[self.start[k] as usize..self.start[k + 1] as usize] {
-            if self.ridge.get(i as usize).copied().unwrap_or(false) || !self.reaches(i, x, y) { continue; }
+            if self.ridge.get(i as usize).copied().unwrap_or(false) || !self.reaches(i, x, y) {
+                continue;
+            }
             let [a, b, c] = self.tris[i as usize];
-            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else { continue };
+            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else {
+                continue;
+            };
             let z = l1 * a.z + l2 * b.z + l3 * c.z;
             if z <= top && best.is_none_or(|(old, _)| z > old) {
                 let n = (b - a).cross(c - a).normalize();
@@ -398,13 +483,24 @@ impl DriveGrid {
                 continue;
             }
             let [a, b, c] = self.tris[i as usize];
-            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else { continue };
+            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else {
+                continue;
+            };
             let mut z = l1 * a.z + l2 * b.z + l3 * c.z;
-            if let Some(&(m, uv)) = self.bump_of.get(i as usize).and_then(|&b| self.bumps.get(b as usize)) {
+            if let Some(&(m, uv)) = self
+                .bump_of
+                .get(i as usize)
+                .and_then(|&b| self.bumps.get(b as usize))
+            {
                 z += self.maps[m as usize].lift(uv[0] * l1 + uv[1] * l2 + uv[2] * l3);
             }
             if self.ridge.get(i as usize).copied().unwrap_or(false) {
-                *walls = Probe { below: *walls, above: None }.merge(Probe::of(z, f32::MAX)).below;
+                *walls = Probe {
+                    below: *walls,
+                    above: None,
+                }
+                .merge(Probe::of(z, f32::MAX))
+                .below;
             } else {
                 if let Some(slot) = road.get_mut(n) {
                     *slot = z;
@@ -417,7 +513,9 @@ impl DriveGrid {
 
     #[inline]
     fn reaches(&self, i: u32, x: f32, y: f32) -> bool {
-        self.reach.get(i as usize).is_none_or(|r| x >= r[0] && y >= r[1] && x <= r[2] && y <= r[3])
+        self.reach
+            .get(i as usize)
+            .is_none_or(|r| x >= r[0] && y >= r[1] && x <= r[2] && y <= r[3])
     }
 
     fn probe_kind(&self, x: f32, y: f32, z_top: f32, ridges: bool) -> Probe {
@@ -431,13 +529,21 @@ impl DriveGrid {
         }
         let k = cy * self.cells + cx;
         for &i in &self.items[self.start[k] as usize..self.start[k + 1] as usize] {
-            if self.ridge.get(i as usize).copied().unwrap_or(false) != ridges || !self.reaches(i, x, y) {
+            if self.ridge.get(i as usize).copied().unwrap_or(false) != ridges
+                || !self.reaches(i, x, y)
+            {
                 continue;
             }
             let [a, b, c] = self.tris[i as usize];
-            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else { continue };
+            let Some((l1, l2, l3)) = plan_weights(a, b, c, x, y, SEAM_TOLERANCE) else {
+                continue;
+            };
             let mut z = l1 * a.z + l2 * b.z + l3 * c.z;
-            if let Some(&(m, uv)) = self.bump_of.get(i as usize).and_then(|&b| self.bumps.get(b as usize)) {
+            if let Some(&(m, uv)) = self
+                .bump_of
+                .get(i as usize)
+                .and_then(|&b| self.bumps.get(b as usize))
+            {
                 z += self.maps[m as usize].lift(uv[0] * l1 + uv[1] * l2 + uv[2] * l3);
             }
             out = out.merge(Probe::of(z, z_top));

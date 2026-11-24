@@ -35,7 +35,10 @@ fn local(d: Duration) -> Option<Now> {
             year: tm.tm_year + 1900,
             month: tm.tm_mon + 1,
             day: tm.tm_mday,
-            secs: tm.tm_hour as f64 * 3600.0 + tm.tm_min as f64 * 60.0 + tm.tm_sec as f64 + d.subsec_nanos() as f64 / 1e9,
+            secs: tm.tm_hour as f64 * 3600.0
+                + tm.tm_min as f64 * 60.0
+                + tm.tm_sec as f64
+                + d.subsec_nanos() as f64 / 1e9,
         })
     }
 }
@@ -48,7 +51,10 @@ fn local(_d: Duration) -> Option<Now> {
         year: t.wYear as i32,
         month: t.wMonth as i32,
         day: t.wDay as i32,
-        secs: t.wHour as f64 * 3600.0 + t.wMinute as f64 * 60.0 + t.wSecond as f64 + t.wMilliseconds as f64 / 1000.0,
+        secs: t.wHour as f64 * 3600.0
+            + t.wMinute as f64 * 60.0
+            + t.wSecond as f64
+            + t.wMilliseconds as f64 / 1000.0,
     })
 }
 
@@ -74,7 +80,9 @@ pub fn clock_now(base: &SimClock) -> Option<SimClock> {
 
 /// Seconds `real` is ahead of `mine` (negative: behind), across midnight too.
 pub fn gap(mine: &SimClock, real: &SimClock) -> f64 {
-    (day_number(real.year, real.day_of_year) - day_number(mine.year, mine.day_of_year)) as f64 * 86400.0 + (real.time - mine.time)
+    (day_number(real.year, real.day_of_year) - day_number(mine.year, mine.day_of_year)) as f64
+        * 86400.0
+        + (real.time - mine.time)
 }
 
 /// A dedicated server runs on the real time (`real_time` in its server.cfg): its clock

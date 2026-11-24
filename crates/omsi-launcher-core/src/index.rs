@@ -21,7 +21,12 @@ const INDEX_VERSION: u32 = 4;
 pub fn mtime_ns(p: &Path) -> u64 {
     let archive = omsi_cfg::vfs::archive_of(p);
     let p = archive.as_deref().unwrap_or(p);
-    std::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64).unwrap_or(0)
+    std::fs::metadata(p)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
 }
 
 fn hasher() -> std::collections::hash_map::DefaultHasher {
@@ -39,8 +44,18 @@ pub fn folder_stamp(dirs: &[PathBuf]) -> u64 {
                 .flatten()
                 .map(|e| {
                     let md = e.metadata().ok();
-                    let t = md.as_ref().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64).unwrap_or(0);
-                    (e.file_name().to_string_lossy().to_string(), t, md.map(|m| if m.is_dir() { 0 } else { m.len() }).unwrap_or(0))
+                    let t = md
+                        .as_ref()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_nanos() as u64)
+                        .unwrap_or(0);
+                    (
+                        e.file_name().to_string_lossy().to_string(),
+                        t,
+                        md.map(|m| if m.is_dir() { 0 } else { m.len() })
+                            .unwrap_or(0),
+                    )
                 })
                 .collect();
             items.sort();
@@ -106,10 +121,15 @@ fn with_store<R>(f: impl FnOnce(&mut Store) -> R) -> R {
     let mut guard = STORE.lock().unwrap_or_else(|e| e.into_inner());
     let s = guard.get_or_insert_with(Store::default);
     if !s.loaded {
-        let disk: Option<Store> = std::fs::read(store_path()).ok().and_then(|b| serde_json::from_slice(&b).ok());
+        let disk: Option<Store> = std::fs::read(store_path())
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok());
         *s = match disk {
             Some(d) if d.version == INDEX_VERSION => d,
-            _ => Store { version: INDEX_VERSION, ..Default::default() },
+            _ => Store {
+                version: INDEX_VERSION,
+                ..Default::default()
+            },
         };
         s.loaded = true;
     }
@@ -118,7 +138,11 @@ fn with_store<R>(f: impl FnOnce(&mut Store) -> R) -> R {
 
 /// The value for `key`, from the cache when `stamp` (and the dependencies recorded with
 /// it) are unchanged, else made anew by `make`, which also names its dependencies.
-pub fn cached<T: Serialize + DeserializeOwned>(key: &str, stamp: u64, make: impl FnOnce() -> (T, Vec<PathBuf>)) -> T {
+pub fn cached<T: Serialize + DeserializeOwned>(
+    key: &str,
+    stamp: u64,
+    make: impl FnOnce() -> (T, Vec<PathBuf>),
+) -> T {
     // (the files looked at and the value read outside the lock: the lists are read by
     // several threads at once)
     let entry = with_store(|s| s.entries.get(key).map(|e| (e.stamp, e.deps.clone())));
@@ -126,7 +150,12 @@ pub fn cached<T: Serialize + DeserializeOwned>(key: &str, stamp: u64, make: impl
         if combine(stamp, deps_stamp(&deps)) == full {
             // (read from the cached value itself: it was copied out whole first - a deep copy
             // of a map's or a vehicle folder's tree for every list asked for - and read then)
-            let v = with_store(|s| s.entries.get(key).filter(|e| e.stamp == full).and_then(|e| T::deserialize(&e.value).ok()));
+            let v = with_store(|s| {
+                s.entries
+                    .get(key)
+                    .filter(|e| e.stamp == full)
+                    .and_then(|e| T::deserialize(&e.value).ok())
+            });
             if let Some(v) = v {
                 return v;
             }
@@ -136,7 +165,14 @@ pub fn cached<T: Serialize + DeserializeOwned>(key: &str, stamp: u64, make: impl
     let json = serde_json::to_value(&value).unwrap_or(serde_json::Value::Null);
     let full = combine(stamp, deps_stamp(&deps));
     with_store(|s| {
-        s.entries.insert(key.to_string(), Entry { stamp: full, deps, value: json });
+        s.entries.insert(
+            key.to_string(),
+            Entry {
+                stamp: full,
+                deps,
+                value: json,
+            },
+        );
         s.dirty = true;
     });
     value
@@ -148,7 +184,8 @@ pub fn save(prefix: &str, keep: Option<&[String]>) {
     with_store(|s| {
         if let Some(keep) = keep {
             let before = s.entries.len();
-            s.entries.retain(|k, _| !k.starts_with(prefix) || keep.contains(k));
+            s.entries
+                .retain(|k, _| !k.starts_with(prefix) || keep.contains(k));
             if s.entries.len() != before {
                 s.dirty = true;
             }
@@ -186,7 +223,11 @@ pub fn content_stamp(bases: &[PathBuf], inbox: Option<&Path>) -> String {
                 continue;
             }
             if let Ok(rd) = std::fs::read_dir(&d) {
-                let mut subs: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+                let mut subs: Vec<PathBuf> = rd
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.is_dir())
+                    .collect();
                 subs.sort();
                 for s in subs {
                     mtime_ns(&s).hash(&mut h);
@@ -199,7 +240,12 @@ pub fn content_stamp(bases: &[PathBuf], inbox: Option<&Path>) -> String {
     }
     // (the folders listed under the lock, looked at after it: thousands of them were
     // looked at with the lock held, and every list asked for meanwhile waited)
-    let mut deps: Vec<PathBuf> = with_store(|s| s.entries.values().flat_map(|e| e.deps.iter().cloned()).collect());
+    let mut deps: Vec<PathBuf> = with_store(|s| {
+        s.entries
+            .values()
+            .flat_map(|e| e.deps.iter().cloned())
+            .collect()
+    });
     deps.sort();
     deps.dedup();
     for d in &deps {

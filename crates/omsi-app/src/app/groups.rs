@@ -43,6 +43,12 @@ pub(crate) struct VrState {
     pub(crate) vr_zoom_active: bool,
 }
 
+/// The bus path the host check last saw.
+#[derive(Default)]
+pub(crate) struct HostBusCheck {
+    pub(crate) path: Option<std::path::PathBuf>,
+}
+
 /// The multiplayer session: the LAN or server connection and the other players seen in it.
 /// (none at the start)
 #[derive(Default)]
@@ -64,6 +70,15 @@ pub(crate) struct NetState {
     /// Set only by the dedicated server's teleport capability response.
     /// None means an older server or a player-hosted LAN session.
     pub(crate) dedicated_teleport: Option<bool>,
+    /// The buses the session we host drives, from `--session-buses` (#1464), parsed once:
+    /// empty, every bus.
+    pub(crate) session_buses: Option<Vec<String>>,
+    /// Peers whose vehicle has already been checked against `session_buses` (#1464).
+    pub(crate) session_buses_checked: std::collections::HashMap<u32, String>,
+    /// The host's own vehicle checked against `session_buses` (#1464), so a path is read only
+    /// when the vehicle changes.
+    pub(crate) host_bus_checked: Option<HostBusCheck>,
+
     pub(crate) mods_server: Option<omsi_lan::mods::Server>,
     pub(crate) remotes: lan::LanGame,
     /// The shared world: the host's traffic and people, sent (host) or mirrored (client).

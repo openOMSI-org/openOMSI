@@ -3264,6 +3264,11 @@
 "Lights on in a downpour": "Нөсер жаңбырда шам жанады"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Күндіз қатты жаңбыр кезінде кейбір үйлердің терезелерінде шам жанады, өйткені жарықты қосатындай қараңғы болады"
 
+"Buses of this session": "Осы сессияның автобустары"
+"every bus": "барлық автобус"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Ойыншылар жүргізе алатын автобустар, ; арқылы бөлінген. Бос: барлық автобус."
+"only these buses can be driven here ({list})": "мұнда тек осы автобустарды жүргізуге болады ({list})"
+
 "Read the map's passenger numbers exactly": "Картадағы жолаушылар санын дәл оқу"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Жолаушылар: 0,7 көрсетілген аялдама тығыздықтан бұрын 1-ге дейін дөңгелектенбей 0,7 болып қалады; өшірулі: OMSI 2 дөңгелектеуі"
 "Load a situation...": "Жағдайды жүктеу..."

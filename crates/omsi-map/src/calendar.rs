@@ -106,7 +106,13 @@ impl TimeZone {
                     let params = [r.f32(), r.f32(), r.f32()];
                     t.dst.push(Dst { start, end, params });
                 }
-                "location" => t.location = r.rest_of_block().into_iter().map(|s| s.to_string()).collect(),
+                "location" => {
+                    t.location = r
+                        .rest_of_block()
+                        .into_iter()
+                        .map(|s| s.to_string())
+                        .collect()
+                }
                 _ => {}
             }
         }

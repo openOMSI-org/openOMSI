@@ -39,12 +39,21 @@ pub fn physical_memory() -> Option<u64> {
     #[cfg(windows)]
     {
         use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
-        let mut m = MEMORYSTATUSEX { dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32, ..Default::default() };
+        let mut m = MEMORYSTATUSEX {
+            dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+            ..Default::default()
+        };
         // SAFETY: a MEMORYSTATUSEX with its length set, as the call wants it
         unsafe { GlobalMemoryStatusEx(&mut m) }.ok()?;
         (m.ullTotalPhys > 0).then_some(m.ullTotalPhys)
     }
-    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "linux", target_os = "android", windows)))]
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "android",
+        windows
+    )))]
     {
         None
     }

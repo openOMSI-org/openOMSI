@@ -83,9 +83,22 @@ impl KeyboardCfg {
         // The IBIS's next stop with its announcement (`IBIS_vor`) has no key in OMSI's own
         // file: only the mouse on the IBIS reached it. Q (scan code 16, no modifier: Ctrl+Q
         // ends the game, Shift+Q is the microphone) gives it one where Q is still free.
-        let q_taken = self.game.iter().chain(self.vehicles.iter()).any(|b| b.scan_code == 16 && b.chord() == 0);
-        if !q_taken && !self.vehicles.iter().any(|b| b.action.eq_ignore_ascii_case("IBIS_vor")) {
-            self.vehicles.push(KeyBinding { action: "IBIS_vor".into(), scan_code: 16, modifier: 0 });
+        let q_taken = self
+            .game
+            .iter()
+            .chain(self.vehicles.iter())
+            .any(|b| b.scan_code == 16 && b.chord() == 0);
+        if !q_taken
+            && !self
+                .vehicles
+                .iter()
+                .any(|b| b.action.eq_ignore_ascii_case("IBIS_vor"))
+        {
+            self.vehicles.push(KeyBinding {
+                action: "IBIS_vor".into(),
+                scan_code: 16,
+                modifier: 0,
+            });
         }
         // the LAN chat's keys, which the player can move like any other (#130): V shows
         // and hides the chat (scan code 47, bound to nothing in OMSI's file), and the line
@@ -93,43 +106,115 @@ impl KeyboardCfg {
         // OMSI's own gives it to the manual gearbox's `kw_s_minus` (a German keyboard's '-',
         // with `kw_s_plus` on 'Ü' next to it), so the chat took the gear down away in a LAN
         // game. Then it is the key left of 1 ('`', '^'; 41), or '\' / '#' (43).
-        let taken = |k: &KeyboardCfg, sc: i32| k.game.iter().chain(k.vehicles.iter()).any(|b| b.scan_code == sc && b.chord() == 0 && !b.action.to_ascii_lowercase().starts_with("chat_"));
-        let open_key = [53, 41, 43].into_iter().find(|&sc| !taken(&self, sc)).unwrap_or(53);
+        let taken = |k: &KeyboardCfg, sc: i32| {
+            k.game.iter().chain(k.vehicles.iter()).any(|b| {
+                b.scan_code == sc
+                    && b.chord() == 0
+                    && !b.action.to_ascii_lowercase().starts_with("chat_")
+            })
+        };
+        let open_key = [53, 41, 43]
+            .into_iter()
+            .find(|&sc| !taken(&self, sc))
+            .unwrap_or(53);
         // (a file written while the default was '/' whatever the gearbox had: moved off it)
-        if let Some(b) = self.game.iter_mut().find(|b| b.action.eq_ignore_ascii_case("chat_open")) {
+        if let Some(b) = self
+            .game
+            .iter_mut()
+            .find(|b| b.action.eq_ignore_ascii_case("chat_open"))
+        {
             if b.scan_code == 53 && b.chord() == 0 && open_key != 53 {
                 b.scan_code = open_key;
             }
         }
         for (action, scan_code) in [("chat_toggle", 47), ("chat_open", open_key)] {
-            if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
-                self.game.push(KeyBinding { action: action.into(), scan_code, modifier: 0 });
+            if !self
+                .game
+                .iter()
+                .any(|b| b.action.eq_ignore_ascii_case(action))
+            {
+                self.game.push(KeyBinding {
+                    action: action.into(),
+                    scan_code,
+                    modifier: 0,
+                });
             }
         }
         // a manual gearbox's gears up and down: Ctrl+Up / Ctrl+Down (DIK 200 / 208), keys the
         // game used to hold for itself whatever the file said - an entry of their own, they
         // can be put on other keys or cleared (#907, #930). An existing entry wins.
         for (action, scan_code) in [("gear_up", 200), ("gear_down", 208)] {
-            if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
-                self.game.push(KeyBinding { action: action.into(), scan_code, modifier: KEY_CTRL });
+            if !self
+                .game
+                .iter()
+                .any(|b| b.action.eq_ignore_ascii_case(action))
+            {
+                self.game.push(KeyBinding {
+                    action: action.into(),
+                    scan_code,
+                    modifier: KEY_CTRL,
+                });
             }
         }
-        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("view_zoom_hold")) {
-            self.game.push(KeyBinding { action: "view_zoom_hold".into(), scan_code: 0, modifier: 0 });
+        if !self
+            .game
+            .iter()
+            .any(|b| b.action.eq_ignore_ascii_case("view_zoom_hold"))
+        {
+            self.game.push(KeyBinding {
+                action: "view_zoom_hold".into(),
+                scan_code: 0,
+                modifier: 0,
+            });
         }
-        let u_taken = self.game.iter().chain(self.vehicles.iter()).any(|b| b.scan_code == 22 && b.chord() & (KEY_SHIFT | KEY_CTRL) == 0);
-        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("clean_screen")) {
+        let u_taken = self
+            .game
+            .iter()
+            .chain(self.vehicles.iter())
+            .any(|b| b.scan_code == 22 && b.chord() & (KEY_SHIFT | KEY_CTRL) == 0);
+        if !self
+            .game
+            .iter()
+            .any(|b| b.action.eq_ignore_ascii_case("clean_screen"))
+        {
             let (scan_code, modifier) = if u_taken { (0, 0) } else { (22, KEY_ALT) };
-            self.game.push(KeyBinding { action: "clean_screen".into(), scan_code, modifier });
+            self.game.push(KeyBinding {
+                action: "clean_screen".into(),
+                scan_code,
+                modifier,
+            });
         }
-        let g_taken = self.game.iter().chain(self.vehicles.iter()).any(|b| b.scan_code == 34 && b.chord() & (KEY_SHIFT | KEY_CTRL | KEY_ALT) == KEY_SHIFT | KEY_CTRL);
-        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("get_up")) {
-            let (scan_code, modifier) = if g_taken { (0, 0) } else { (34, KEY_CTRL | KEY_SHIFT) };
-            self.game.push(KeyBinding { action: "get_up".into(), scan_code, modifier });
+        let g_taken = self.game.iter().chain(self.vehicles.iter()).any(|b| {
+            b.scan_code == 34
+                && b.chord() & (KEY_SHIFT | KEY_CTRL | KEY_ALT) == KEY_SHIFT | KEY_CTRL
+        });
+        if !self
+            .game
+            .iter()
+            .any(|b| b.action.eq_ignore_ascii_case("get_up"))
+        {
+            let (scan_code, modifier) = if g_taken {
+                (0, 0)
+            } else {
+                (34, KEY_CTRL | KEY_SHIFT)
+            };
+            self.game.push(KeyBinding {
+                action: "get_up".into(),
+                scan_code,
+                modifier,
+            });
         }
         for action in ["blinker_left_toggle", "blinker_right_toggle"] {
-            if !self.vehicles.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
-                self.vehicles.push(KeyBinding { action: action.into(), scan_code: 0, modifier: 0 });
+            if !self
+                .vehicles
+                .iter()
+                .any(|b| b.action.eq_ignore_ascii_case(action))
+            {
+                self.vehicles.push(KeyBinding {
+                    action: action.into(),
+                    scan_code: 0,
+                    modifier: 0,
+                });
             }
         }
         // one key that goes between the cabin and the outside. OMSI's own
@@ -138,21 +223,53 @@ impl KeyboardCfg {
         // presses one twice and passes through a view they did not want). On the list unbound,
         // as the indicator toggles are: whoever wants it gives it a key, and nobody else loses
         // one to it.
-        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("view_toggle_interior")) {
-            self.game.push(KeyBinding { action: "view_toggle_interior".into(), scan_code: 0, modifier: 0 });
+        if !self
+            .game
+            .iter()
+            .any(|b| b.action.eq_ignore_ascii_case("view_toggle_interior"))
+        {
+            self.game.push(KeyBinding {
+                action: "view_toggle_interior".into(),
+                scan_code: 0,
+                modifier: 0,
+            });
         }
-        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("head_tracking_recenter")) {
-            self.game.push(KeyBinding { action: "head_tracking_recenter".into(), scan_code: 0, modifier: 0 });
+        if !self
+            .game
+            .iter()
+            .any(|b| b.action.eq_ignore_ascii_case("head_tracking_recenter"))
+        {
+            self.game.push(KeyBinding {
+                action: "head_tracking_recenter".into(),
+                scan_code: 0,
+                modifier: 0,
+            });
         }
-        if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case("pax_door_request")) {
-            self.game.push(KeyBinding { action: "pax_door_request".into(), scan_code: 31, modifier: KEY_CTRL | KEY_ALT });
+        if !self
+            .game
+            .iter()
+            .any(|b| b.action.eq_ignore_ascii_case("pax_door_request"))
+        {
+            self.game.push(KeyBinding {
+                action: "pax_door_request".into(),
+                scan_code: 31,
+                modifier: KEY_CTRL | KEY_ALT,
+            });
         }
         // voice chat in multiplayer (hold to talk): nearby on V, the session-wide radio on B -
         // when free, else unbound (the first radio key was X, #1230: a file that has it keeps it)
         for (action, scan_code) in [("voice_nearby", 47), ("voice_radio", 48)] {
-            if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
+            if !self
+                .game
+                .iter()
+                .any(|b| b.action.eq_ignore_ascii_case(action))
+            {
                 let free = !taken(&self, scan_code);
-                self.game.push(KeyBinding { action: action.into(), scan_code: if free { scan_code } else { 0 }, modifier: 0 });
+                self.game.push(KeyBinding {
+                    action: action.into(),
+                    scan_code: if free { scan_code } else { 0 },
+                    modifier: 0,
+                });
             }
         }
         self
@@ -168,8 +285,16 @@ impl KeyboardCfg {
             ("vr_toggle_navigator", 49, KEY_SHIFT | KEY_CTRL),
             ("vr_position_navigator", 50, KEY_SHIFT | KEY_CTRL),
         ] {
-            if !self.game.iter().any(|b| b.action.eq_ignore_ascii_case(action)) {
-                self.game.push(KeyBinding { action: action.into(), scan_code, modifier });
+            if !self
+                .game
+                .iter()
+                .any(|b| b.action.eq_ignore_ascii_case(action))
+            {
+                self.game.push(KeyBinding {
+                    action: action.into(),
+                    scan_code,
+                    modifier,
+                });
             }
         }
         self
@@ -269,12 +394,30 @@ mod tests {
 
     #[test]
     fn indicator_toggles_are_unbound_and_preserve_existing_bindings() {
-        let custom = KeyBinding { action: "BLINKER_LEFT_TOGGLE".into(), scan_code: 44, modifier: 0 };
-        let cfg = KeyboardCfg { vehicles: vec![custom.clone()], ..Default::default() }
-            .with_game_defaults().with_game_defaults();
-        assert_eq!(cfg.vehicles.iter().filter(|b| b.action.eq_ignore_ascii_case("blinker_left_toggle")).count(), 1);
+        let custom = KeyBinding {
+            action: "BLINKER_LEFT_TOGGLE".into(),
+            scan_code: 44,
+            modifier: 0,
+        };
+        let cfg = KeyboardCfg {
+            vehicles: vec![custom.clone()],
+            ..Default::default()
+        }
+        .with_game_defaults()
+        .with_game_defaults();
+        assert_eq!(
+            cfg.vehicles
+                .iter()
+                .filter(|b| b.action.eq_ignore_ascii_case("blinker_left_toggle"))
+                .count(),
+            1
+        );
         assert!(cfg.vehicles.contains(&custom));
-        let right = cfg.vehicles.iter().find(|b| b.action == "blinker_right_toggle").unwrap();
+        let right = cfg
+            .vehicles
+            .iter()
+            .find(|b| b.action == "blinker_right_toggle")
+            .unwrap();
         assert_eq!((right.scan_code, right.modifier), (0, 0));
     }
 
@@ -282,14 +425,40 @@ mod tests {
     /// toggles are: a player who wants it gives it one, and nobody else loses a key to it.
     #[test]
     fn the_interior_toggle_is_unbound_and_a_players_own_key_wins() {
-        let cfg = KeyboardCfg::default().with_game_defaults().with_game_defaults();
-        let b = cfg.game.iter().find(|b| b.action == "view_toggle_interior").unwrap();
+        let cfg = KeyboardCfg::default()
+            .with_game_defaults()
+            .with_game_defaults();
+        let b = cfg
+            .game
+            .iter()
+            .find(|b| b.action == "view_toggle_interior")
+            .unwrap();
         assert_eq!((b.scan_code, b.modifier), (0, 0));
-        assert_eq!(cfg.game.iter().filter(|b| b.action == "view_toggle_interior").count(), 1);
+        assert_eq!(
+            cfg.game
+                .iter()
+                .filter(|b| b.action == "view_toggle_interior")
+                .count(),
+            1
+        );
         // (a key the player gave it stays where they put it)
-        let custom = KeyBinding { action: "View_Toggle_Interior".into(), scan_code: 44, modifier: 0 };
-        let cfg = KeyboardCfg { game: vec![custom.clone()], ..Default::default() }.with_game_defaults();
-        assert_eq!(cfg.game.iter().filter(|b| b.action.eq_ignore_ascii_case("view_toggle_interior")).count(), 1);
+        let custom = KeyBinding {
+            action: "View_Toggle_Interior".into(),
+            scan_code: 44,
+            modifier: 0,
+        };
+        let cfg = KeyboardCfg {
+            game: vec![custom.clone()],
+            ..Default::default()
+        }
+        .with_game_defaults();
+        assert_eq!(
+            cfg.game
+                .iter()
+                .filter(|b| b.action.eq_ignore_ascii_case("view_toggle_interior"))
+                .count(),
+            1
+        );
         assert!(cfg.game.contains(&custom));
     }
 
@@ -297,86 +466,235 @@ mod tests {
     /// wheel's button); one they gave it stays.
     #[test]
     fn the_head_tracking_recentre_is_unbound_and_a_players_own_key_wins() {
-        let cfg = KeyboardCfg::default().with_game_defaults().with_game_defaults();
-        let b = cfg.game.iter().find(|b| b.action == "head_tracking_recenter").unwrap();
+        let cfg = KeyboardCfg::default()
+            .with_game_defaults()
+            .with_game_defaults();
+        let b = cfg
+            .game
+            .iter()
+            .find(|b| b.action == "head_tracking_recenter")
+            .unwrap();
         assert_eq!((b.scan_code, b.modifier), (0, 0));
-        assert_eq!(cfg.game.iter().filter(|b| b.action == "head_tracking_recenter").count(), 1);
-        let custom = KeyBinding { action: "head_tracking_recenter".into(), scan_code: 59, modifier: KEY_SHIFT };
-        let cfg = KeyboardCfg { game: vec![custom.clone()], ..Default::default() }.with_game_defaults();
-        assert_eq!(cfg.game.iter().filter(|b| b.action == "head_tracking_recenter").collect::<Vec<_>>(), vec![&custom]);
+        assert_eq!(
+            cfg.game
+                .iter()
+                .filter(|b| b.action == "head_tracking_recenter")
+                .count(),
+            1
+        );
+        let custom = KeyBinding {
+            action: "head_tracking_recenter".into(),
+            scan_code: 59,
+            modifier: KEY_SHIFT,
+        };
+        let cfg = KeyboardCfg {
+            game: vec![custom.clone()],
+            ..Default::default()
+        }
+        .with_game_defaults();
+        assert_eq!(
+            cfg.game
+                .iter()
+                .filter(|b| b.action == "head_tracking_recenter")
+                .collect::<Vec<_>>(),
+            vec![&custom]
+        );
     }
 
     /// The manual gearbox's Ctrl+Up / Ctrl+Down are entries of the list, which stay as the
     /// player moved or cleared them (#907).
     #[test]
     fn the_gear_keys_are_in_the_list_and_can_be_moved() {
-        let key = |c: &KeyboardCfg, a: &str| c.game.iter().filter(|b| b.action == a).map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
-        let cfg = KeyboardCfg::default().with_game_defaults().with_game_defaults();
+        let key = |c: &KeyboardCfg, a: &str| {
+            c.game
+                .iter()
+                .filter(|b| b.action == a)
+                .map(|b| (b.scan_code, b.modifier))
+                .collect::<Vec<_>>()
+        };
+        let cfg = KeyboardCfg::default()
+            .with_game_defaults()
+            .with_game_defaults();
         assert_eq!(key(&cfg, "gear_up"), vec![(200, KEY_CTRL)]);
         assert_eq!(key(&cfg, "gear_down"), vec![(208, KEY_CTRL)]);
-        let cleared = KeyboardCfg { game: vec![KeyBinding { action: "gear_up".into(), scan_code: 0, modifier: 0 }], ..Default::default() }.with_game_defaults();
+        let cleared = KeyboardCfg {
+            game: vec![KeyBinding {
+                action: "gear_up".into(),
+                scan_code: 0,
+                modifier: 0,
+            }],
+            ..Default::default()
+        }
+        .with_game_defaults();
         assert_eq!(key(&cleared, "gear_up"), vec![(0, 0)]);
     }
 
     #[test]
     fn the_clean_screen_takes_alt_u_only_when_u_is_free() {
-        let key = |c: &KeyboardCfg| c.game.iter().filter(|b| b.action == "clean_screen").map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
-        assert_eq!(key(&KeyboardCfg::default().with_game_defaults().with_game_defaults()), vec![(22, KEY_ALT)]);
-        let mine = KeyBinding { action: "kw_lights".into(), scan_code: 22, modifier: 0 };
-        let cfg = KeyboardCfg { vehicles: vec![mine.clone()], ..Default::default() }.with_game_defaults();
+        let key = |c: &KeyboardCfg| {
+            c.game
+                .iter()
+                .filter(|b| b.action == "clean_screen")
+                .map(|b| (b.scan_code, b.modifier))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            key(&KeyboardCfg::default()
+                .with_game_defaults()
+                .with_game_defaults()),
+            vec![(22, KEY_ALT)]
+        );
+        let mine = KeyBinding {
+            action: "kw_lights".into(),
+            scan_code: 22,
+            modifier: 0,
+        };
+        let cfg = KeyboardCfg {
+            vehicles: vec![mine.clone()],
+            ..Default::default()
+        }
+        .with_game_defaults();
         assert_eq!(key(&cfg), vec![(0, 0)]);
         assert!(cfg.vehicles.contains(&mine));
     }
 
     #[test]
     fn getting_up_takes_ctrl_shift_g_only_when_it_is_free() {
-        let key = |c: &KeyboardCfg| c.game.iter().filter(|b| b.action == "get_up").map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
-        assert_eq!(key(&KeyboardCfg::default().with_game_defaults().with_game_defaults()), vec![(34, KEY_CTRL | KEY_SHIFT)]);
-        let mine = KeyBinding { action: "kw_tuer".into(), scan_code: 34, modifier: KEY_CTRL | KEY_SHIFT };
-        let cfg = KeyboardCfg { vehicles: vec![mine.clone()], ..Default::default() }.with_game_defaults();
+        let key = |c: &KeyboardCfg| {
+            c.game
+                .iter()
+                .filter(|b| b.action == "get_up")
+                .map(|b| (b.scan_code, b.modifier))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            key(&KeyboardCfg::default()
+                .with_game_defaults()
+                .with_game_defaults()),
+            vec![(34, KEY_CTRL | KEY_SHIFT)]
+        );
+        let mine = KeyBinding {
+            action: "kw_tuer".into(),
+            scan_code: 34,
+            modifier: KEY_CTRL | KEY_SHIFT,
+        };
+        let cfg = KeyboardCfg {
+            vehicles: vec![mine.clone()],
+            ..Default::default()
+        }
+        .with_game_defaults();
         assert_eq!(key(&cfg), vec![(0, 0)]);
         assert!(cfg.vehicles.contains(&mine));
-        let alt = KeyBinding { action: "kw_x".into(), scan_code: 34, modifier: KEY_CTRL | KEY_SHIFT | KEY_ALT };
-        assert_eq!(key(&KeyboardCfg { vehicles: vec![alt], ..Default::default() }.with_game_defaults()), vec![(34, KEY_CTRL | KEY_SHIFT)], "Ctrl+Shift+Alt+G leaves Ctrl+Shift+G free");
+        let alt = KeyBinding {
+            action: "kw_x".into(),
+            scan_code: 34,
+            modifier: KEY_CTRL | KEY_SHIFT | KEY_ALT,
+        };
+        assert_eq!(
+            key(&KeyboardCfg {
+                vehicles: vec![alt],
+                ..Default::default()
+            }
+            .with_game_defaults()),
+            vec![(34, KEY_CTRL | KEY_SHIFT)],
+            "Ctrl+Shift+Alt+G leaves Ctrl+Shift+G free"
+        );
     }
 
     #[test]
     fn the_chat_keys_are_in_the_list_and_a_moved_one_stays_moved() {
         let cfg = KeyboardCfg::default().with_game_defaults();
-        let key = |c: &KeyboardCfg, a: &str| c.game.iter().filter(|b| b.action == a).map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
+        let key = |c: &KeyboardCfg, a: &str| {
+            c.game
+                .iter()
+                .filter(|b| b.action == a)
+                .map(|b| (b.scan_code, b.modifier))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(key(&cfg, "chat_toggle"), vec![(47, 0)]);
         assert_eq!(key(&cfg, "chat_open"), vec![(53, 0)]);
-        let moved = KeyboardCfg { game: vec![KeyBinding { action: "chat_open".into(), scan_code: 20, modifier: KEY_CTRL }], ..Default::default() }.with_game_defaults();
+        let moved = KeyboardCfg {
+            game: vec![KeyBinding {
+                action: "chat_open".into(),
+                scan_code: 20,
+                modifier: KEY_CTRL,
+            }],
+            ..Default::default()
+        }
+        .with_game_defaults();
         assert_eq!(key(&moved, "chat_open"), vec![(20, KEY_CTRL)]);
     }
 
     #[test]
     fn passenger_request_key_has_ctrl_alt_s_and_preserves_custom_or_cleared_bindings() {
         let action = "pax_door_request";
-        let cfg = KeyboardCfg::default().with_game_defaults().with_game_defaults();
+        let cfg = KeyboardCfg::default()
+            .with_game_defaults()
+            .with_game_defaults();
         let bindings: Vec<_> = cfg.game.iter().filter(|b| b.action == action).collect();
         assert_eq!(bindings.len(), 1);
-        assert_eq!((bindings[0].scan_code, bindings[0].modifier), (31, KEY_CTRL | KEY_ALT));
+        assert_eq!(
+            (bindings[0].scan_code, bindings[0].modifier),
+            (31, KEY_CTRL | KEY_ALT)
+        );
         for scan_code in [0, 44] {
-            let custom = KeyBinding { action: action.into(), scan_code, modifier: KEY_SHIFT };
-            let cfg = KeyboardCfg { game: vec![custom.clone()], ..Default::default() }.with_game_defaults();
-            assert_eq!(cfg.game.iter().filter(|b| b.action == action).collect::<Vec<_>>(), vec![&custom]);
+            let custom = KeyBinding {
+                action: action.into(),
+                scan_code,
+                modifier: KEY_SHIFT,
+            };
+            let cfg = KeyboardCfg {
+                game: vec![custom.clone()],
+                ..Default::default()
+            }
+            .with_game_defaults();
+            assert_eq!(
+                cfg.game
+                    .iter()
+                    .filter(|b| b.action == action)
+                    .collect::<Vec<_>>(),
+                vec![&custom]
+            );
         }
     }
 
     #[test]
     fn the_voice_keys_default_to_v_and_b_when_free() {
-        let key = |c: &KeyboardCfg, a: &str| c.game.iter().filter(|b| b.action == a).map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
-        let cfg = KeyboardCfg::default().with_game_defaults().with_game_defaults();
+        let key = |c: &KeyboardCfg, a: &str| {
+            c.game
+                .iter()
+                .filter(|b| b.action == a)
+                .map(|b| (b.scan_code, b.modifier))
+                .collect::<Vec<_>>()
+        };
+        let cfg = KeyboardCfg::default()
+            .with_game_defaults()
+            .with_game_defaults();
         assert_eq!(key(&cfg, "voice_nearby"), vec![(47, 0)]);
         assert_eq!(key(&cfg, "voice_radio"), vec![(48, 0)]);
         // a file from the first radio key keeps it
-        let custom = KeyBinding { action: "voice_radio".into(), scan_code: 45, modifier: 0 };
-        let cfg = KeyboardCfg { game: vec![custom.clone()], ..Default::default() }.with_game_defaults();
+        let custom = KeyBinding {
+            action: "voice_radio".into(),
+            scan_code: 45,
+            modifier: 0,
+        };
+        let cfg = KeyboardCfg {
+            game: vec![custom.clone()],
+            ..Default::default()
+        }
+        .with_game_defaults();
         assert_eq!(key(&cfg, "voice_radio"), vec![(45, 0)]);
         // a key already taken: unbound rather than stealing another key
-        let taken = KeyBinding { action: "horn".into(), scan_code: 47, modifier: 0 };
-        let cfg = KeyboardCfg { vehicles: vec![taken], ..Default::default() }.with_game_defaults();
+        let taken = KeyBinding {
+            action: "horn".into(),
+            scan_code: 47,
+            modifier: 0,
+        };
+        let cfg = KeyboardCfg {
+            vehicles: vec![taken],
+            ..Default::default()
+        }
+        .with_game_defaults();
         assert_eq!(key(&cfg, "voice_nearby"), vec![(0, 0)]);
         assert_eq!(key(&cfg, "voice_radio"), vec![(48, 0)]);
     }
@@ -384,28 +702,71 @@ mod tests {
     #[test]
     fn the_chat_leaves_the_manual_gearbox_its_gear_down_key() {
         // OMSI's stock file: '/' (53) is kw_s_minus, so the chat line opens on the key left of 1
-        let gear = KeyBinding { action: "kw_s_minus".into(), scan_code: 53, modifier: 0 };
-        let key = |c: &KeyboardCfg, a: &str| c.game.iter().filter(|b| b.action == a).map(|b| (b.scan_code, b.modifier)).collect::<Vec<_>>();
-        let cfg = KeyboardCfg { vehicles: vec![gear.clone()], ..Default::default() }.with_game_defaults();
+        let gear = KeyBinding {
+            action: "kw_s_minus".into(),
+            scan_code: 53,
+            modifier: 0,
+        };
+        let key = |c: &KeyboardCfg, a: &str| {
+            c.game
+                .iter()
+                .filter(|b| b.action == a)
+                .map(|b| (b.scan_code, b.modifier))
+                .collect::<Vec<_>>()
+        };
+        let cfg = KeyboardCfg {
+            vehicles: vec![gear.clone()],
+            ..Default::default()
+        }
+        .with_game_defaults();
         assert_eq!(key(&cfg, "chat_open"), vec![(41, 0)]);
         assert!(cfg.vehicles.contains(&gear));
         // a file saved while the chat was on '/' as well: moved off it, once
-        let old = KeyboardCfg { game: vec![KeyBinding { action: "chat_open".into(), scan_code: 53, modifier: 0 }], vehicles: vec![gear.clone()] }.with_game_defaults().with_game_defaults();
+        let old = KeyboardCfg {
+            game: vec![KeyBinding {
+                action: "chat_open".into(),
+                scan_code: 53,
+                modifier: 0,
+            }],
+            vehicles: vec![gear.clone()],
+        }
+        .with_game_defaults()
+        .with_game_defaults();
         assert_eq!(key(&old, "chat_open"), vec![(41, 0)]);
         // '/' moved to Shift+'/' by the player stays there
-        let shifted = KeyboardCfg { game: vec![KeyBinding { action: "chat_open".into(), scan_code: 53, modifier: KEY_SHIFT }], vehicles: vec![gear] }.with_game_defaults();
+        let shifted = KeyboardCfg {
+            game: vec![KeyBinding {
+                action: "chat_open".into(),
+                scan_code: 53,
+                modifier: KEY_SHIFT,
+            }],
+            vehicles: vec![gear],
+        }
+        .with_game_defaults();
         assert_eq!(key(&shifted, "chat_open"), vec![(53, KEY_SHIFT)]);
     }
 
     #[test]
     fn the_third_value_is_held_shift_ctrl_as_omsi_reads_it() {
-        let b = |m: i32| KeyBinding { action: "a".into(), scan_code: 38, modifier: m };
+        let b = |m: i32| KeyBinding {
+            action: "a".into(),
+            scan_code: 38,
+            modifier: m,
+        };
         // throttle-like (1: held): the plain key, not Shift+key
         assert!(b(1).matches(0) && !b(1).matches(KEY_SHIFT));
         // Standlicht: Shift+L; exit: Ctrl+Q; the changer: Shift+Ctrl
-        assert!(b(2).matches(chord(true, false, false)) && !b(2).matches(chord(false, true, false)));
-        assert!(b(4).matches(chord(false, true, false)) && !b(4).matches(chord(true, false, false)));
-        assert!(b(6).matches(chord(true, true, false)) && b(3).matches(KEY_SHIFT) && b(5).matches(KEY_CTRL));
+        assert!(
+            b(2).matches(chord(true, false, false)) && !b(2).matches(chord(false, true, false))
+        );
+        assert!(
+            b(4).matches(chord(false, true, false)) && !b(4).matches(chord(true, false, false))
+        );
+        assert!(
+            b(6).matches(chord(true, true, false))
+                && b(3).matches(KEY_SHIFT)
+                && b(5).matches(KEY_CTRL)
+        );
         // Alt: Omsi.exe's keys fire with it held; ours with Alt want it
         assert!(b(0).matches(KEY_ALT) && b(8).matches(KEY_ALT) && !b(8).matches(0));
         assert_eq!(b(3).chord(), KEY_SHIFT);
@@ -413,14 +774,40 @@ mod tests {
 
     #[test]
     fn vr_defaults_keep_custom_and_unbound_keys() {
-        let custom = KeyBinding { action: "vr_recenter".into(), scan_code: 0, modifier: 0 };
-        let cfg = KeyboardCfg { game: vec![custom.clone()], ..Default::default() }
-            .with_vr_defaults().with_vr_defaults();
-        assert_eq!(cfg.game.iter().filter(|b| b.action == "vr_recenter").count(), 1);
+        let custom = KeyBinding {
+            action: "vr_recenter".into(),
+            scan_code: 0,
+            modifier: 0,
+        };
+        let cfg = KeyboardCfg {
+            game: vec![custom.clone()],
+            ..Default::default()
+        }
+        .with_vr_defaults()
+        .with_vr_defaults();
+        assert_eq!(
+            cfg.game
+                .iter()
+                .filter(|b| b.action == "vr_recenter")
+                .count(),
+            1
+        );
         assert!(cfg.game.contains(&custom));
-        assert!(cfg.game.iter().any(|b| b.action == "vr_toggle_mode" && b.scan_code == 66));
-        assert_eq!(cfg.game.iter().filter(|b| b.action == "vr_toggle_navigator").count(), 1);
-        assert!(cfg.game.iter().any(|b| b.action == "vr_toggle_navigator" && b.scan_code == 49 && b.modifier == (KEY_SHIFT | KEY_CTRL)));
+        assert!(
+            cfg.game
+                .iter()
+                .any(|b| b.action == "vr_toggle_mode" && b.scan_code == 66)
+        );
+        assert_eq!(
+            cfg.game
+                .iter()
+                .filter(|b| b.action == "vr_toggle_navigator")
+                .count(),
+            1
+        );
+        assert!(cfg.game.iter().any(|b| b.action == "vr_toggle_navigator"
+            && b.scan_code == 49
+            && b.modifier == (KEY_SHIFT | KEY_CTRL)));
     }
 
     #[test]

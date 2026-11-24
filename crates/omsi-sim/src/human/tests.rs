@@ -13,8 +13,8 @@ fn rig() -> Rig {
         height: 1.77,
         seat_height: 0.82,
         links: vec![
-            0.09, 0.0, 0.92, 0.09, -0.03, 0.53, 0.02, 1.17, 0.18, -0.05, 1.43, 0.44, -0.04,
-            1.41, -0.02, 1.55, 0.69, -0.03, 1.43, 0.9, -0.03, 1.43,
+            0.09, 0.0, 0.92, 0.09, -0.03, 0.53, 0.02, 1.17, 0.18, -0.05, 1.43, 0.44, -0.04, 1.41,
+            -0.02, 1.55, 0.69, -0.03, 1.43, 0.9, -0.03, 1.43,
         ],
         walk_param: [1.4, 80.0, 1.0, 1.0, 0.0],
         ..Default::default()
@@ -59,7 +59,11 @@ fn rig_is_sane() {
     // `[walk_param]` 1.4 (the stride) / 80 (an arm angle): 0.7 m steps
     assert!((r.walk_step - 0.7).abs() < 1e-6, "{}", r.walk_step);
     // slower than 1.2 m/s the stride shortens and the pace stays: 2.4 / 1.4 steps a second
-    assert!((r.cadence(0.6) - 2.4 / 1.4).abs() < 1e-4, "{}", r.cadence(0.6));
+    assert!(
+        (r.cadence(0.6) - 2.4 / 1.4).abs() < 1e-4,
+        "{}",
+        r.cadence(0.6)
+    );
 }
 
 #[test]
@@ -531,14 +535,23 @@ fn a_sudden_turn_keeps_the_legs_under_the_hips() {
     for _ in 0..120 {
         p.advance(&r, &stand, 1.0 / 60.0);
     }
-    let turned = PoseInput { heading: 90.0, ..PoseInput::default() };
+    let turned = PoseInput {
+        heading: 90.0,
+        ..PoseInput::default()
+    };
     let mut worst = 0.0f32;
     for _ in 0..90 {
         p.advance(&r, &turned, 1.0 / 60.0);
         let posed = p.bones(&r);
-        let hips = posed.bones[HIP].transform_vector3(Vec3::Y).truncate().normalize();
+        let hips = posed.bones[HIP]
+            .transform_vector3(Vec3::Y)
+            .truncate()
+            .normalize();
         for side in 0..2 {
-            let foot = posed.bones[FOOT[side]].transform_vector3(Vec3::Y).truncate().normalize();
+            let foot = posed.bones[FOOT[side]]
+                .transform_vector3(Vec3::Y)
+                .truncate()
+                .normalize();
             worst = worst.max(hips.dot(foot).clamp(-1.0, 1.0).acos().to_degrees());
         }
     }
@@ -552,9 +565,14 @@ fn a_sudden_turn_keeps_the_legs_under_the_hips() {
 fn every_way_of_standing_puts_the_hands_where_it_should() {
     let r = rig();
     for (way, check) in [
-        (Idle::Clasped, (|w: Vec3, _s: f32| w.y > 0.08) as fn(Vec3, f32) -> bool),
+        (
+            Idle::Clasped,
+            (|w: Vec3, _s: f32| w.y > 0.08) as fn(Vec3, f32) -> bool,
+        ),
         (Idle::Behind, |w, _| w.y < -0.05),
-        (Idle::Crossed, |w, s| w.y > 0.1 && w.z > 1.1 && w.x * s > 0.0),
+        (Idle::Crossed, |w, s| {
+            w.y > 0.1 && w.z > 1.1 && w.x * s > 0.0
+        }),
         (Idle::Phone, |w, _| w.y > 0.1 && w.z > 1.0),
     ] {
         let mut p = Pose::new(3);
@@ -563,10 +581,21 @@ fn every_way_of_standing_puts_the_hands_where_it_should() {
             p.advance(&r, &PoseInput::default(), 1.0 / 60.0);
         }
         let posed = p.bones(&r);
-        assert!(posed.ok && posed.bones.iter().all(|b| b.is_finite()), "{way:?}");
+        assert!(
+            posed.ok && posed.bones.iter().all(|b| b.is_finite()),
+            "{way:?}"
+        );
         for side in 0..2 {
-            assert!(check(posed.wrist[side], SIDE[side]), "{way:?}: wrist {side} at {:?}", posed.wrist[side]);
-            assert!(posed.sole[side].abs() < 0.02, "{way:?}: sole {}", posed.sole[side]);
+            assert!(
+                check(posed.wrist[side], SIDE[side]),
+                "{way:?}: wrist {side} at {:?}",
+                posed.wrist[side]
+            );
+            assert!(
+                posed.sole[side].abs() < 0.02,
+                "{way:?}: sole {}",
+                posed.sole[side]
+            );
         }
     }
     let mut p = Pose::new(3);
@@ -576,7 +605,11 @@ fn every_way_of_standing_puts_the_hands_where_it_should() {
     }
     let posed = p.bones(&r);
     let side = if p.style[2] > 0.0 { 1 } else { 0 };
-    assert!(posed.wrist[side].x * SIDE[side] > 0.2 && posed.wrist[side].z > 0.85, "hand on the hip at {:?}", posed.wrist[side]);
+    assert!(
+        posed.wrist[side].x * SIDE[side] > 0.2 && posed.wrist[side].z > 0.85,
+        "hand on the hip at {:?}",
+        posed.wrist[side]
+    );
 }
 
 #[test]
@@ -584,20 +617,32 @@ fn a_standing_rider_keeps_the_hands_down() {
     let r = rig();
     let mut p = Pose::new(3);
     (p.idle_from, p.idle_to) = (Idle::Hang, Idle::Hang);
-    let input = PoseInput { hold: 1.0, ..Default::default() };
+    let input = PoseInput {
+        hold: 1.0,
+        ..Default::default()
+    };
     for _ in 0..200 {
         p.advance(&r, &input, 1.0 / 60.0);
     }
     let posed = p.bones(&r);
     for side in 0..2 {
-        assert!(posed.wrist[side].z < r.shoulder[side].z, "wrist {side} at {:?}", posed.wrist[side]);
+        assert!(
+            posed.wrist[side].z < r.shoulder[side].z,
+            "wrist {side} at {:?}",
+            posed.wrist[side]
+        );
     }
 }
 
 #[test]
 fn changing_the_way_of_standing_keeps_the_hands_out_of_the_body() {
     let r = rig();
-    for (from, to) in [(Idle::Behind, Idle::Clasped), (Idle::Behind, Idle::Phone), (Idle::Clasped, Idle::Behind), (Idle::Phone, Idle::Behind)] {
+    for (from, to) in [
+        (Idle::Behind, Idle::Clasped),
+        (Idle::Behind, Idle::Phone),
+        (Idle::Clasped, Idle::Behind),
+        (Idle::Phone, Idle::Behind),
+    ] {
         let mut p = Pose::new(3);
         (p.idle_from, p.idle_to, p.idle_t) = (from, from, 1e9);
         for _ in 0..120 {
@@ -609,8 +654,15 @@ fn changing_the_way_of_standing_keeps_the_hands_out_of_the_body() {
             let posed = p.bones(&r);
             for side in 0..2 {
                 let w = posed.wrist[side];
-                let inside = w.x.abs() < 0.12 && w.y.abs() < 0.08 && w.z > r.hip[side].z - 0.05 && w.z < r.shoulder[side].z;
-                assert!(!inside, "{from:?} to {to:?}: wrist {side} at {w:?}, mix {}", p.idle_mix);
+                let inside = w.x.abs() < 0.12
+                    && w.y.abs() < 0.08
+                    && w.z > r.hip[side].z - 0.05
+                    && w.z < r.shoulder[side].z;
+                assert!(
+                    !inside,
+                    "{from:?} to {to:?}: wrist {side} at {w:?}, mix {}",
+                    p.idle_mix
+                );
             }
         }
     }
@@ -630,13 +682,22 @@ fn setting_off_steps_left_and_right_in_turn() {
             for i in 0..(5.0 / dt) as usize {
                 let v = if (i as f32) * dt < 1.0 { 0.0 } else { speed };
                 pos.y += v * dt as f64;
-                let input = PoseInput { activity: Activity::Walk, origin: pos, velocity: DVec2::new(0.0, v), ..Default::default() };
+                let input = PoseInput {
+                    activity: Activity::Walk,
+                    origin: pos,
+                    velocity: DVec2::new(0.0, v),
+                    ..Default::default()
+                };
                 p.advance(&r, &input, dt);
                 let ankle = p.bones(&r).ankle;
                 if let Some(last) = last_ankle {
                     for side in 0..2 {
                         let jump = (ankle[side] - last[side]).length() / dt;
-                        assert!(jump < 8.0, "seed {seed} dt {dt}: foot {side} jumped at {jump} m/s at {}", i as f32 * dt);
+                        assert!(
+                            jump < 8.0,
+                            "seed {seed} dt {dt}: foot {side} jumped at {jump} m/s at {}",
+                            i as f32 * dt
+                        );
                     }
                 }
                 last_ankle = Some(ankle);
@@ -648,7 +709,10 @@ fn setting_off_steps_left_and_right_in_turn() {
                 }
             }
             assert!(steps.len() >= 6, "seed {seed} dt {dt}: {steps:?}");
-            assert!(steps.windows(2).all(|w| w[0] != w[1]), "seed {seed} dt {dt}: one foot stepped twice running: {steps:?}");
+            assert!(
+                steps.windows(2).all(|w| w[0] != w[1]),
+                "seed {seed} dt {dt}: one foot stepped twice running: {steps:?}"
+            );
         }
     }
 }
@@ -663,13 +727,21 @@ fn walking_looks_where_it_goes() {
         for i in 0..600 {
             let v = if i < 200 { 0.0 } else { 1.2 };
             pos.y += v / 60.0;
-            let input = PoseInput { activity: Activity::Walk, origin: pos, velocity: DVec2::new(0.0, v), ..Default::default() };
+            let input = PoseInput {
+                activity: Activity::Walk,
+                origin: pos,
+                velocity: DVec2::new(0.0, v),
+                ..Default::default()
+            };
             p.advance(&r, &input, 1.0 / 60.0);
             if i > 320 {
                 worst = worst.max(p.head.x.abs());
             }
         }
-        assert!(worst < 30.0, "seed {seed}: the head turned {worst} degrees while walking");
+        assert!(
+            worst < 30.0,
+            "seed {seed}: the head turned {worst} degrees while walking"
+        );
     }
 }
 
@@ -686,6 +758,14 @@ fn people_stand_and_walk_in_ways_of_their_own() {
         let (rt, _) = p.rest_target(&r, 1, DVec3::ZERO, 0.0, false);
         (rt.x - l.x) as f32
     };
-    assert!(spread(&width) > 0.1, "stance widths spread {}", spread(&width));
-    assert!(spread(&|p: &Pose| p.pace) > 0.18, "paces spread {}", spread(&|p: &Pose| p.pace));
+    assert!(
+        spread(&width) > 0.1,
+        "stance widths spread {}",
+        spread(&width)
+    );
+    assert!(
+        spread(&|p: &Pose| p.pace) > 0.18,
+        "paces spread {}",
+        spread(&|p: &Pose| p.pace)
+    );
 }

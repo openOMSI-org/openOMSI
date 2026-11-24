@@ -35,7 +35,7 @@ nothing is drawn. `server.cfg` is written with a comment for every key on the fi
 | `radius` | how many tiles round the map's first entry point are kept loaded (0: the whole map) |
 | `admin_password`, `moderator_password` | administration in the game, the web panel and `POST /admin` (see [Administration](#administration)); at least 12 characters each, empty: nobody |
 | `admin_web`, `admin_web_origins`, `admin_trusted_proxies`, `admin_proxy_header` | where the web panel (`/admin/` on the web port) can be reached from: `local` (what a new `server.cfg` writes), `remote` through trusted proxies (passwords of at least 16 characters, else `local`), or `off` (a file from before the panel, without the key) |
-| `vehicles` | the buses players may drive, separated by `;` (empty: every bus on the server) |
+| `vehicles` | the buses players may drive, separated by `;`: bus files (`Vehicles/MAN_SD200/MAN_SD77.bus`) or their folders (`Vehicles/MAN_SD200`), the latter for every bus in the folder (empty: every bus on the server) |
 | `share_positions` | `GET /players` on the web port (below) |
 | `accept_uploads`, `uploads_keep_days` | players' buses (below) |
 | `share_maps` | a player who joins without the server's map gets it from the server (the map and everything it uses, gigabytes for a big map); off (the written default), players install it themselves and are told which one is missing |
@@ -211,7 +211,9 @@ them on to every other player, so nobody sees a stand-in.
   the disk cannot hold it. A bus being sent, and every file of it, is never let go meanwhile.
   To forget a bus by hand, stop the server and delete its `.json`.
 * With `vehicles` empty the players may choose any bus they have, not only the server's own;
-  with a `vehicles` list only those buses are taken.
+  with a `vehicles` list only those buses are taken. A session a player hosts sets its own
+  list with `--session-buses "<bus>;<bus>"` (the same spellings); a player who drives another
+  bus is sent away and told which ones the session has, as on a dedicated server.
 * `accept_uploads = 0` switches it off. A player's game hosting a session (`--lan-host`) takes
   the joining players' buses the same way, and keeps its own bus in its store for them.
 

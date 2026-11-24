@@ -45,7 +45,10 @@ fn segment_distance(p: [f64; 3], a: [f64; 3], b: [f64; 3]) -> (f64, f64) {
     let len2 = (ab[0] * ab[0] + ab[1] * ab[1]).max(1e-9);
     let t = (((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / len2).clamp(0.0, 1.0);
     let q = [a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + (b[2] - a[2]) * t];
-    (((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt(), (p[2] - q[2]).abs())
+    (
+        ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt(),
+        (p[2] - q[2]).abs(),
+    )
 }
 
 impl Electrification {
@@ -55,7 +58,11 @@ impl Electrification {
         if self.spans.is_empty() {
             return None;
         }
-        let reach = if self.third_rail { RAIL_REACH } else { WIRE_REACH };
+        let reach = if self.third_rail {
+            RAIL_REACH
+        } else {
+            WIRE_REACH
+        };
         let nominal = self.net.voltage;
         let mut best: Option<(f64, &str)> = None;
         for sp in &self.spans {
@@ -70,7 +77,10 @@ impl Electrification {
             None => 0.0,
             Some((_, section)) => {
                 let live = self.section(section).is_none_or(|s| s.live);
-                let in_gap = self.gaps.iter().any(|g| ((p[0] - g.pos[0]).powi(2) + (p[1] - g.pos[1]).powi(2)).sqrt() < g.length_m as f64 * 0.5);
+                let in_gap = self.gaps.iter().any(|g| {
+                    ((p[0] - g.pos[0]).powi(2) + (p[1] - g.pos[1]).powi(2)).sqrt()
+                        < g.length_m as f64 * 0.5
+                });
                 if live && !in_gap { nominal } else { 0.0 }
             }
         };
@@ -85,8 +95,14 @@ mod tests {
     fn line(third: bool) -> Electrification {
         let mut is = Vec::new();
         let p = if third { "thirdrail" } else { "catenary" };
-        let text = format!("[{p}_net]\nvoltage 750\n[{p}_section]\nid A\n[{p}_section]\nid B\nlive no\n[{p}_span]\nsection A\np 0 0 6\np 100 0 6\n[{p}_span]\nsection B\np 100 0 6\np 200 0 6\n[{p}_gap]\npos 50 0 6\nlength 10\n");
-        let text = if third { text } else { text.replace("_gap]", "_insulator]") };
+        let text = format!(
+            "[{p}_net]\nvoltage 750\n[{p}_section]\nid A\n[{p}_section]\nid B\nlive no\n[{p}_span]\nsection A\np 0 0 6\np 100 0 6\n[{p}_span]\nsection B\np 100 0 6\np 200 0 6\n[{p}_gap]\npos 50 0 6\nlength 10\n"
+        );
+        let text = if third {
+            text
+        } else {
+            text.replace("_gap]", "_insulator]")
+        };
         Electrification::parse(&text, "x.cfg", third, &mut is)
     }
 
@@ -101,11 +117,30 @@ mod tests {
     #[test]
     fn none_under_a_dead_section_in_a_break_or_off_the_line() {
         let e = line(false);
-        assert_eq!(e.supply_at([150.0, 0.0, 5.0]).unwrap().volts, 0.0, "section B has no substation");
-        assert_eq!(e.supply_at([52.0, 0.0, 5.0]).unwrap().volts, 0.0, "in the break");
-        assert_eq!(e.supply_at([20.0, 0.0, 5.0]).unwrap().volts, 750.0, "outside it");
-        assert_eq!(e.supply_at([20.0, 30.0, 5.0]).unwrap().volts, 0.0, "30 m away from the wire");
-        assert!(Electrification::default().supply_at([0.0; 3]).is_none(), "a map without a line: nothing is known");
+        assert_eq!(
+            e.supply_at([150.0, 0.0, 5.0]).unwrap().volts,
+            0.0,
+            "section B has no substation"
+        );
+        assert_eq!(
+            e.supply_at([52.0, 0.0, 5.0]).unwrap().volts,
+            0.0,
+            "in the break"
+        );
+        assert_eq!(
+            e.supply_at([20.0, 0.0, 5.0]).unwrap().volts,
+            750.0,
+            "outside it"
+        );
+        assert_eq!(
+            e.supply_at([20.0, 30.0, 5.0]).unwrap().volts,
+            0.0,
+            "30 m away from the wire"
+        );
+        assert!(
+            Electrification::default().supply_at([0.0; 3]).is_none(),
+            "a map without a line: nothing is known"
+        );
     }
 
     #[test]
@@ -119,11 +154,24 @@ mod tests {
 
     #[test]
     fn a_sagging_line_weakens_the_drive() {
-        let s = |v| Supply { volts: v, nominal: 600.0 }.drive_factor();
+        let s = |v| {
+            Supply {
+                volts: v,
+                nominal: 600.0,
+            }
+            .drive_factor()
+        };
         assert_eq!(s(600.0), 1.0);
         assert_eq!(s(500.0), 1.0);
         assert!((s(420.0) - 0.667).abs() < 0.01);
         assert_eq!(s(250.0), 0.0);
-        assert_eq!(Supply { volts: 0.0, nominal: 0.0 }.drive_factor(), 1.0);
+        assert_eq!(
+            Supply {
+                volts: 0.0,
+                nominal: 0.0
+            }
+            .drive_factor(),
+            1.0
+        );
     }
 }

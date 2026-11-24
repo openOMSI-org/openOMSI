@@ -3871,6 +3871,11 @@
 "Lights on in a downpour": "Ljus tänds vid skyfall"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "På dagen vid kraftigt regn lyser några av husens fönster, eftersom det blir mörkt nog att tända ljuset"
 
+"Buses of this session": "Bussar för denna session"
+"every bus": "alla bussar"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Bussar som spelare får köra, separerade med ; : mappar eller bussfiler. Tomt: alla bussar."
+"only these buses can be driven here ({list})": "bara dessa bussar får köras här ({list})"
+
 "Read the map's passenger numbers exactly": "Läs kartans passagerarantal exakt"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passagerare: en hållplats med 0,7 behåller 0,7 personer istället för avrundning till 1 före tätheten; av: OMSI 2-avrundning"
 "Load a situation...": "Läs in en situation..."

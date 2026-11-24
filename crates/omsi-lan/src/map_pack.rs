@@ -15,7 +15,7 @@
 //! player who joins without it gets it from the server, and one who has it in the same
 //! version fetches nothing (the files are compared by their SHA-256).
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
@@ -50,27 +50,53 @@ pub struct Packed {
 pub fn pack(map: &str, to: &Path) -> Result<Packed> {
     let cfg = map_cfg(map);
     if omsi_cfg::find_in_roots(&cfg).is_none() {
-        bail!("no map {cfg} here (the name of its folder under maps, e.g. \"Brasil Viagem Xtreme\")");
+        bail!(
+            "no map {cfg} here (the name of its folder under maps, e.g. \"Brasil Viagem Xtreme\")"
+        );
     }
     // (into one of the folders it is read from, a file would be linked onto itself)
     let target = std::path::absolute(to).unwrap_or_else(|_| to.to_path_buf());
-    if let Some(r) = omsi_cfg::content_roots().into_iter().find(|r| target.starts_with(r) || r.starts_with(&target)) {
-        bail!("{} is the content folder {} or in it: pack into the server's own folder", to.display(), r.display());
+    if let Some(r) = omsi_cfg::content_roots()
+        .into_iter()
+        .find(|r| target.starts_with(r) || r.starts_with(&target))
+    {
+        bail!(
+            "{} is the content folder {} or in it: pack into the server's own folder",
+            to.display(),
+            r.display()
+        );
     }
     let t0 = Instant::now();
     eprintln!("Listing what {cfg} needs...");
     let (files, missing) = crate::mods::session_files(&cfg, None, None, None);
-    let total: u64 = files.iter().filter_map(|(_, p)| omsi_cfg::vfs::file_size(p)).sum();
-    eprintln!("{} files, {:.1} MB (listed in {:.1} s)", files.len(), total as f64 / 1e6, t0.elapsed().as_secs_f64());
-    let zip = to.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
-    let mut out = Packed { files: files.len(), bytes: total, missing, ..Default::default() };
+    let total: u64 = files
+        .iter()
+        .filter_map(|(_, p)| omsi_cfg::vfs::file_size(p))
+        .sum();
+    eprintln!(
+        "{} files, {:.1} MB (listed in {:.1} s)",
+        files.len(),
+        total as f64 / 1e6,
+        t0.elapsed().as_secs_f64()
+    );
+    let zip = to
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("zip"));
+    let mut out = Packed {
+        files: files.len(),
+        bytes: total,
+        missing,
+        ..Default::default()
+    };
     let mut said = Instant::now();
     let mut done = 0u64;
     let mut writer = if zip {
         if let Some(d) = to.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(d)?;
         }
-        Some(zip::ZipWriter::new(std::fs::File::create(to).with_context(|| to.display().to_string())?))
+        Some(zip::ZipWriter::new(
+            std::fs::File::create(to).with_context(|| to.display().to_string())?,
+        ))
     } else {
         std::fs::create_dir_all(to).with_context(|| to.display().to_string())?;
         None
@@ -80,9 +106,19 @@ pub fn pack(map: &str, to: &Path) -> Result<Packed> {
         match writer.as_mut() {
             Some(z) => {
                 let data = omsi_cfg::vfs::read(src).with_context(|| src.display().to_string())?;
-                let packed_already = [".dds", ".png", ".jpg", ".jpeg", ".ogg", ".zip", ".rar", ".7z"].iter().any(|e| name.to_ascii_lowercase().ends_with(e));
-                let method = if packed_already { zip::CompressionMethod::Stored } else { zip::CompressionMethod::Deflated };
-                let options = zip::write::SimpleFileOptions::default().compression_method(method).large_file(data.len() as u64 >= 1 << 32);
+                let packed_already = [
+                    ".dds", ".png", ".jpg", ".jpeg", ".ogg", ".zip", ".rar", ".7z",
+                ]
+                .iter()
+                .any(|e| name.to_ascii_lowercase().ends_with(e));
+                let method = if packed_already {
+                    zip::CompressionMethod::Stored
+                } else {
+                    zip::CompressionMethod::Deflated
+                };
+                let options = zip::write::SimpleFileOptions::default()
+                    .compression_method(method)
+                    .large_file(data.len() as u64 >= 1 << 32);
                 z.start_file(name.as_str(), options)?;
                 z.write_all(&data)?;
                 out.copied += 1;
@@ -90,12 +126,18 @@ pub fn pack(map: &str, to: &Path) -> Result<Packed> {
             }
             None => {
                 let dst = name.split('/').fold(to.to_path_buf(), |p, c| p.join(c));
-                done += place(src, &dst, &mut out).with_context(|| format!("{} -> {}", src.display(), dst.display()))?;
+                done += place(src, &dst, &mut out)
+                    .with_context(|| format!("{} -> {}", src.display(), dst.display()))?;
             }
         }
         if said.elapsed().as_secs() >= 2 {
             said = Instant::now();
-            eprintln!("  {:.0}% ({:.0} of {:.0} MB)", done as f64 * 100.0 / total.max(1) as f64, done as f64 / 1e6, total as f64 / 1e6);
+            eprintln!(
+                "  {:.0}% ({:.0} of {:.0} MB)",
+                done as f64 * 100.0 / total.max(1) as f64,
+                done as f64 / 1e6,
+                total as f64 / 1e6
+            );
         }
     }
     if let Some(z) = writer {
@@ -109,8 +151,16 @@ pub fn pack(map: &str, to: &Path) -> Result<Packed> {
 /// A file's name as it is called on the disk, relative to the content root it is in.
 fn disk_name(path: &Path) -> Option<String> {
     let roots = omsi_cfg::content_roots();
-    let r = roots.iter().filter(|r| path.starts_with(r)).max_by_key(|r| r.components().count())?;
-    let rest: Vec<String> = path.strip_prefix(r).ok()?.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+    let r = roots
+        .iter()
+        .filter(|r| path.starts_with(r))
+        .max_by_key(|r| r.components().count())?;
+    let rest: Vec<String> = path
+        .strip_prefix(r)
+        .ok()?
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
     (!rest.is_empty()).then(|| rest.join("/"))
 }
 
@@ -135,7 +185,10 @@ fn place(src: &Path, dst: &Path, out: &mut Packed) -> Result<u64> {
     let data = omsi_cfg::vfs::read(src)?;
     std::fs::write(dst, &data)?;
     if let Some(t) = meta.and_then(|m| m.modified().ok()) {
-        let _ = std::fs::File::options().write(true).open(dst).and_then(|f| f.set_modified(t));
+        let _ = std::fs::File::options()
+            .write(true)
+            .open(dst)
+            .and_then(|f| f.set_modified(t));
     }
     out.copied += 1;
     Ok(data.len() as u64)
@@ -148,13 +201,22 @@ fn write_report(to: &Path, cfg: &str, p: &Packed) -> Result<()> {
         p.files, p.bytes, p.linked, p.copied, p.kept
     );
     if !p.missing.is_empty() {
-        text.push_str(&format!("\n# named by the map but not found on the machine that packed it ({}):\n", p.missing.len()));
+        text.push_str(&format!(
+            "\n# named by the map but not found on the machine that packed it ({}):\n",
+            p.missing.len()
+        ));
         for m in &p.missing {
             text.push_str(m);
             text.push('\n');
         }
     }
-    let name = format!("openomsi-map-pack-{}.txt", cfg.split('/').nth(1).unwrap_or("map").replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_"));
+    let name = format!(
+        "openomsi-map-pack-{}.txt",
+        cfg.split('/')
+            .nth(1)
+            .unwrap_or("map")
+            .replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_")
+    );
     std::fs::write(to.join(name), text)?;
     Ok(())
 }
@@ -173,7 +235,10 @@ pub fn run(map: &str, to: &Path) -> Result<()> {
         to.display()
     );
     if !p.missing.is_empty() {
-        eprintln!("{} files the map names are not on this machine (the server and its players lack them too):", p.missing.len());
+        eprintln!(
+            "{} files the map names are not on this machine (the server and its players lack them too):",
+            p.missing.len()
+        );
         for m in p.missing.iter().take(20) {
             eprintln!("  {m}");
         }
@@ -187,9 +252,15 @@ mod tests {
 
     #[test]
     fn a_map_is_named_by_its_folder_its_path_or_its_global_cfg() {
-        assert_eq!(map_cfg("Brasil Viagem Xtreme"), "maps/Brasil Viagem Xtreme/global.cfg");
+        assert_eq!(
+            map_cfg("Brasil Viagem Xtreme"),
+            "maps/Brasil Viagem Xtreme/global.cfg"
+        );
         assert_eq!(map_cfg("maps/Grundorf"), "maps/Grundorf/global.cfg");
         assert_eq!(map_cfg("maps\\Grundorf\\"), "maps/Grundorf/global.cfg");
-        assert_eq!(map_cfg("\"maps/Grundorf/global.cfg\""), "maps/Grundorf/global.cfg");
+        assert_eq!(
+            map_cfg("\"maps/Grundorf/global.cfg\""),
+            "maps/Grundorf/global.cfg"
+        );
     }
 }

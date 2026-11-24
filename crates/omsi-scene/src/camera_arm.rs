@@ -396,7 +396,9 @@ fn ray_triangle(o: Vec3, d: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option<f32> {
 /// [`free_length`] met the ground at once and the camera stayed trapped under the bus (#702).
 pub fn lift_pivot(world: &World, pivot: DVec3) -> DVec3 {
     match world.camera_ground(pivot.x, pivot.y, pivot.z + GROUND_CLEARANCE) {
-        Some(g) if pivot.z < g + GROUND_CLEARANCE => DVec3::new(pivot.x, pivot.y, g + GROUND_CLEARANCE),
+        Some(g) if pivot.z < g + GROUND_CLEARANCE => {
+            DVec3::new(pivot.x, pivot.y, g + GROUND_CLEARANCE)
+        }
         _ => pivot,
     }
 }

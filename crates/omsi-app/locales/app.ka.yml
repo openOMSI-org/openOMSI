@@ -4424,6 +4424,11 @@
 "Lights on in a downpour": "შუქი თავსხმა წვიმისას"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "დღისით ძლიერი წვიმისას სახლების ზოგიერთ ფანჯარაში შუქი ინთება, რადგან საკმარისად ბნელდება"
 
+"Buses of this session": "ამ სესიის ავტობუსები"
+"every bus": "ყველა ავტობუსი"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "ავტობუსები მოთამაშეებისთვის, გამოყოფილი ;-ით. ცარიელი: ყველა ავტობუსი."
+"only these buses can be driven here ({list})": "აქ მხოლოდ ამ ავტობუსების მართვაა შესაძლებელი ({list})"
+
 "Read the map's passenger numbers exactly": "რუკის მგზავრთა რაოდენობის ზუსტი წაკითხვა"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "მგზავრები: 0.7-იანი გაჩერება ინარჩუნებს 0.7 ადამიანს 1-მდე დამრგვალების ნაცვლად; გამორთული: OMSI 2 დამრგვალება"
 "Load a situation...": "სიტუაციის ჩატვირთვა..."

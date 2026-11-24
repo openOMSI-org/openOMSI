@@ -42,7 +42,15 @@ fn the_remote_menu_sends_away_the_player_picked() {
     let mut admin = Player::join(&mut s, port, "Chefe");
     let mut pichau = Player::join(&mut s, port, "Pichau");
     let mut fan = Player::join(&mut s, port, "pichau_fan");
-    assert_eq!(login(&mut s, &mut admin, &mut [&mut pichau, &mut fan], "admin secret"), "admin-ok admin");
+    assert_eq!(
+        login(
+            &mut s,
+            &mut admin,
+            &mut [&mut pichau, &mut fan],
+            "admin secret"
+        ),
+        "admin-ok admin"
+    );
     let mut panel = Panel::default();
     panel.take(&Command::AdminOk(Some(omsi_admin::Role::Admin)));
     // the menu fills from the server's answers
@@ -55,27 +63,45 @@ fn the_remote_menu_sends_away_the_player_picked() {
         std::thread::sleep(Duration::from_millis(10));
     }
     let lines = panel.player_lines(&tr);
-    let pichau_line = lines.iter().find(|l| l.0.starts_with("Pichau (#")).expect("Pichau listed").clone();
+    let pichau_line = lines
+        .iter()
+        .find(|l| l.0.starts_with("Pichau (#"))
+        .expect("Pichau listed")
+        .clone();
     assert!(lines.iter().any(|l| l.0.starts_with("pichau_fan (#")));
     let main = panel.main_lines(Instant::now(), &tr);
     assert!(main.iter().any(|l| l.1 == "send passengers 0"), "{main:?}");
     // pick Pichau, ask to send them away, say yes
-    let AdminMenu::Player(t) = pick(&mut admin, &mut panel, &pichau_line.1) else { panic!("a player's page") };
+    let AdminMenu::Player(t) = pick(&mut admin, &mut panel, &pichau_line.1) else {
+        panic!("a player's page")
+    };
     let ask = panel.one_player_lines(t, &tr)[1].1.clone();
-    let AdminMenu::Confirm(verb, t2) = pick(&mut admin, &mut panel, &ask) else { panic!("the question") };
+    let AdminMenu::Confirm(verb, t2) = pick(&mut admin, &mut panel, &ask) else {
+        panic!("the question")
+    };
     assert_eq!(t2, t);
     let confirm = panel.confirm_lines(&verb, t, &tr);
     assert!(confirm[0].0.contains("Pichau (#"), "{confirm:?}");
-    assert!(matches!(pick(&mut admin, &mut panel, &confirm[1].1), AdminMenu::Send(_)));
+    assert!(matches!(
+        pick(&mut admin, &mut panel, &confirm[1].1),
+        AdminMenu::Send(_)
+    ));
     let t0 = Instant::now();
-    while (panel.results.is_empty() || pichau.lan.turned_away.is_none()) && t0.elapsed() < Duration::from_secs(5) {
+    while (panel.results.is_empty() || pichau.lan.turned_away.is_none())
+        && t0.elapsed() < Duration::from_secs(5)
+    {
         menu_step(&mut admin, &mut panel);
         pichau.step();
         fan.step();
         s.step();
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert_eq!(panel.results[0].1, omsi_admin::Status::Applied, "{:?}", panel.results);
+    assert_eq!(
+        panel.results[0].1,
+        omsi_admin::Status::Applied,
+        "{:?}",
+        panel.results
+    );
     assert!(pichau.lan.turned_away.is_some());
     assert!(fan.lan.connected && fan.lan.turned_away.is_none());
     // the menu's next answer has no Pichau, and the old page says to pick again
@@ -87,9 +113,16 @@ fn the_remote_menu_sends_away_the_player_picked() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert!(panel.player(t).is_none());
-    assert_eq!(AdminMenu::parse(&panel.confirm_lines("kick", t, &tr)[0].1), AdminMenu::Players);
+    assert_eq!(
+        AdminMenu::parse(&panel.confirm_lines("kick", t, &tr)[0].1),
+        AdminMenu::Players
+    );
     // a world operation from the menu: the server applies it and says so
-    let line = panel.main_lines(Instant::now(), &tr).into_iter().find(|l| l.1 == "send passengers 0").unwrap();
+    let line = panel
+        .main_lines(Instant::now(), &tr)
+        .into_iter()
+        .find(|l| l.1 == "send passengers 0")
+        .unwrap();
     pick(&mut admin, &mut panel, &line.1);
     let t0 = Instant::now();
     while s.adm.passenger_density != Some(0.0) && t0.elapsed() < Duration::from_secs(5) {
@@ -110,7 +143,10 @@ fn a_silent_server_is_shown_as_such() {
     assert_eq!(panel.due(t0).len(), 3);
     assert!(!panel.silent(t0 + Duration::from_secs(1)));
     let lines = panel.main_lines(t0 + Duration::from_secs(7), &tr);
-    assert!(lines[0].0.starts_with("The server does not answer"), "{lines:?}");
+    assert!(
+        lines[0].0.starts_with("The server does not answer"),
+        "{lines:?}"
+    );
     // the older menu's full list is still offered
     assert!(lines.iter().any(|l| l.1 == "classic"));
 }

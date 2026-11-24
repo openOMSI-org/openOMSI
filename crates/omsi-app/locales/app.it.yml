@@ -3283,6 +3283,11 @@
 "Lights on in a downpour": "Luci accese durante un acquazzone"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Di giorno, con pioggia forte, alcune finestre delle case si illuminano, perché diventa abbastanza buio da accendere la luce"
 
+"Buses of this session": "Autobus di questa sessione"
+"every bus": "ogni autobus"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Gli autobus che i giocatori possono guidare, separati da ; : cartelle come MAN_SD200 o file di autobus. I giocatori con altri veicoli saranno espulsi. Vuoto: ogni autobus."
+"only these buses can be driven here ({list})": "solo questi autobus possono essere guidati qui ({list})"
+
 "Read the map's passenger numbers exactly": "Leggi esattamente i numeri dei passeggeri della mappa"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passeggeri: una fermata con 0,7 mantiene 0,7 persone anziché arrotondare a 1 prima della densità; disattivato: arrotondamento di OMSI 2"
 "Load a situation...": "Carica una situazione..."

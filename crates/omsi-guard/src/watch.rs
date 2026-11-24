@@ -9,9 +9,16 @@ use crate::process::{alive, kill};
 
 /// Start the watcher of the launcher `pid` (its state in `state`).
 pub fn spawn(pid: u32, state: &Path) {
-    let Ok(exe) = std::env::current_exe() else { return };
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
     let mut cmd = std::process::Command::new(exe);
-    cmd.arg("--guard-watch").arg(pid.to_string()).arg(state).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    cmd.arg("--guard-watch")
+        .arg(pid.to_string())
+        .arg(state)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -25,7 +32,9 @@ pub fn spawn(pid: u32, state: &Path) {
 }
 
 fn read(state: &Path) -> String {
-    std::fs::read_to_string(state).map(|s| s.trim().to_string()).unwrap_or_default()
+    std::fs::read_to_string(state)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
 }
 
 /// What a state file says about how the start went: None while it runs.
@@ -40,12 +49,21 @@ fn verdict(s: &str) -> Option<Option<End>> {
 /// The watcher's whole life: wait for the launcher's first frames, its end or the deadline;
 /// heal after a failed start.
 pub fn run(args: &[String]) -> i32 {
-    let (Some(pid), Some(state)) = (args.first().and_then(|p| p.parse::<u32>().ok()), args.get(1)) else {
+    let (Some(pid), Some(state)) = (
+        args.first().and_then(|p| p.parse::<u32>().ok()),
+        args.get(1),
+    ) else {
         return 2;
     };
     let state = Path::new(state);
     let version = omsi_platform::VERSION.to_string();
-    let deadline = Duration::from_secs_f64(omsi_cfg::flags::OMSI_GUARD_DEADLINE.var().and_then(|s| s.trim().parse::<f64>().ok()).filter(|s| *s > 0.0).unwrap_or(120.0));
+    let deadline = Duration::from_secs_f64(
+        omsi_cfg::flags::OMSI_GUARD_DEADLINE
+            .var()
+            .and_then(|s| s.trim().parse::<f64>().ok())
+            .filter(|s| *s > 0.0)
+            .unwrap_or(120.0),
+    );
     // the project's list of broken releases, asked meanwhile (never holding anything up)
     let listed = {
         let version = version.clone();
@@ -73,7 +91,11 @@ pub fn run(args: &[String]) -> i32 {
         while !listed.is_finished() && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(100));
         }
-        let verdict = if listed.is_finished() { listed.join().ok().flatten() } else { None };
+        let verdict = if listed.is_finished() {
+            listed.join().ok().flatten()
+        } else {
+            None
+        };
         match verdict {
             // (the way back stays: the next start takes it)
             Some(why) => {
@@ -89,17 +111,26 @@ pub fn run(args: &[String]) -> i32 {
         return 0;
     };
     crate::journal::update(|j| j.end(pid, end));
-    crate::note(&format!("the launcher {pid} of {version} failed to start ({end:?}) after {:.1} s", started.elapsed().as_secs_f64()));
+    crate::note(&format!(
+        "the launcher {pid} of {version} failed to start ({end:?}) after {:.1} s",
+        started.elapsed().as_secs_f64()
+    ));
     let j = Journal::load();
     if j.gave_up.contains(&version) {
         return 0;
     }
     if j.broken(Kind::Launcher, version.as_str(), alive) {
-        crate::rescue::run(&format!("the launcher {}", match end {
-            End::Hang => "hung before its first frames",
-            End::Error => "ended on an error before its first frames",
-            _ => "crashed before its first frames",
-        }), crate::rescue::Mode::AfterFailure);
+        crate::rescue::run(
+            &format!(
+                "the launcher {}",
+                match end {
+                    End::Hang => "hung before its first frames",
+                    End::Error => "ended on an error before its first frames",
+                    _ => "crashed before its first frames",
+                }
+            ),
+            crate::rescue::Mode::AfterFailure,
+        );
     } else {
         crate::note("one failed start of a version that ran here before: not healed yet");
     }

@@ -34,41 +34,25 @@ impl LanSession {
     }
 
     pub fn publish_sound(&mut self, event: sounds::Event) {
-        if !self.connected || (event.ai != 0 && self.role != Role::Host) { return; }
+        if !self.connected || (event.ai != 0 && self.role != Role::Host) {
+            return;
+        }
         let peers: Vec<u32> = self.peers.keys().copied().collect();
         self.sounds.publish(&peers, event);
     }
 
     pub fn take_sounds(&mut self) -> Vec<sounds::Incoming> {
-        self.sounds.take_incoming().into_iter().filter(|s| s.event.ai == 0 || s.owner == 1).collect()
+        self.sounds
+            .take_incoming()
+            .into_iter()
+            .filter(|s| s.event.ai == 0 || s.owner == 1)
+            .collect()
     }
 
     pub(super) fn route_sound(&self, data: &[u8]) {
-        let Some(a) = sounds::address(data, PROTOCOL as u8) else { return; };
-        match self.role {
-            Role::Host => if let Some(to) = self.peers.get(&a.to).and_then(|p| p.addr) { self.send(data, to); },
-            Role::Client => if let Some(host) = self.host { self.send(data, host); },
-        }
-    }
-
-    pub(super) fn on_sound(&mut self, data: &[u8], from: SocketAddr) {
-        let Some(a) = sounds::address(data, PROTOCOL as u8) else { return; };
-        if a.from == self.my_id || a.from == 0 || a.to == 0 { return; }
-        match self.role {
-            Role::Host => {
-                // (an acknowledgement is a bare header with a bucket of its own: charged to the
-                // sound rate, one dropped made its event be sent again, and again, past it)
-                let (rate, traffic) = if sounds::is_ack(data, PROTOCOL as u8) { (SOUND_ACK_RATE, PeerTraffic::SoundAcks) } else { (SOUND_RATE, PeerTraffic::Sounds) };
-                if self.checked_peer(a.from, from, rate, traffic).is_none() { return; }
-                if a.to != self.my_id { self.route_sound(data); return; }
-            }
-            Role::Client => if a.to != self.my_id || !self.peers.contains_key(&a.from) { return; },
-        }
-        if let Some(reply) = self.sounds.receive(PROTOCOL as u8, self.my_id, data) { self.route_sound(&reply); }
-    }
-
-    pub(super) fn route_script_texture(&self, data: &[u8]) {
-        let Some(a) = scripttex::address(data, PROTOCOL as u8) else { return };
+        let Some(a) = sounds::address(data, PROTOCOL as u8) else {
+            return;
+        };
         match self.role {
             Role::Host => {
                 if let Some(to) = self.peers.get(&a.to).and_then(|p| p.addr) {
@@ -76,27 +60,96 @@ impl LanSession {
                 }
             }
             Role::Client => {
-                if let Some(host) = self.host { self.send(data, host); }
+                if let Some(host) = self.host {
+                    self.send(data, host);
+                }
+            }
+        }
+    }
+
+    pub(super) fn on_sound(&mut self, data: &[u8], from: SocketAddr) {
+        let Some(a) = sounds::address(data, PROTOCOL as u8) else {
+            return;
+        };
+        if a.from == self.my_id || a.from == 0 || a.to == 0 {
+            return;
+        }
+        match self.role {
+            Role::Host => {
+                // (an acknowledgement is a bare header with a bucket of its own: charged to the
+                // sound rate, one dropped made its event be sent again, and again, past it)
+                let (rate, traffic) = if sounds::is_ack(data, PROTOCOL as u8) {
+                    (SOUND_ACK_RATE, PeerTraffic::SoundAcks)
+                } else {
+                    (SOUND_RATE, PeerTraffic::Sounds)
+                };
+                if self.checked_peer(a.from, from, rate, traffic).is_none() {
+                    return;
+                }
+                if a.to != self.my_id {
+                    self.route_sound(data);
+                    return;
+                }
+            }
+            Role::Client => {
+                if a.to != self.my_id || !self.peers.contains_key(&a.from) {
+                    return;
+                }
+            }
+        }
+        if let Some(reply) = self.sounds.receive(PROTOCOL as u8, self.my_id, data) {
+            self.route_sound(&reply);
+        }
+    }
+
+    pub(super) fn route_script_texture(&self, data: &[u8]) {
+        let Some(a) = scripttex::address(data, PROTOCOL as u8) else {
+            return;
+        };
+        match self.role {
+            Role::Host => {
+                if let Some(to) = self.peers.get(&a.to).and_then(|p| p.addr) {
+                    self.send(data, to);
+                }
+            }
+            Role::Client => {
+                if let Some(host) = self.host {
+                    self.send(data, host);
+                }
             }
         }
     }
 
     pub(super) fn on_script_texture(&mut self, data: &[u8], from: SocketAddr) {
-        let Some(a) = scripttex::address(data, PROTOCOL as u8) else { return };
-        if a.from == self.my_id || a.from == 0 || a.to == 0 { return; }
+        let Some(a) = scripttex::address(data, PROTOCOL as u8) else {
+            return;
+        };
+        if a.from == self.my_id || a.from == 0 || a.to == 0 {
+            return;
+        }
         match self.role {
             Role::Host => {
-                if self.checked_peer(a.from, from, TEXTURE_RATE, PeerTraffic::Textures).is_none() { return; }
+                if self
+                    .checked_peer(a.from, from, TEXTURE_RATE, PeerTraffic::Textures)
+                    .is_none()
+                {
+                    return;
+                }
                 if a.to != self.my_id {
                     self.route_script_texture(data);
                     return;
                 }
             }
             Role::Client => {
-                if a.to != self.my_id || !self.peers.contains_key(&a.from) { return; }
+                if a.to != self.my_id || !self.peers.contains_key(&a.from) {
+                    return;
+                }
             }
         }
-        for reply in self.script_textures.receive(PROTOCOL as u8, self.my_id, data) {
+        for reply in self
+            .script_textures
+            .receive(PROTOCOL as u8, self.my_id, data)
+        {
             self.route_script_texture(&reply);
         }
     }
@@ -105,9 +158,27 @@ impl LanSession {
     /// `floats[k]`, the same for the strings, `table` names them (a hash of their names). Called
     /// every frame; it sends what is due.
     #[allow(clippy::too_many_arguments)]
-    pub fn send_vars(&mut self, table: u32, float_ids: &[u16], floats: &[f32], string_ids: &[u16], strings: &[String], dt: f32) {
-        self.var_sender.subscribers(&self.peers.keys().copied().collect::<Vec<_>>());
-        let msgs = self.var_sender.tick(PROTOCOL as u8, self.my_id, table, float_ids, floats, string_ids, strings, dt);
+    pub fn send_vars(
+        &mut self,
+        table: u32,
+        float_ids: &[u16],
+        floats: &[f32],
+        string_ids: &[u16],
+        strings: &[String],
+        dt: f32,
+    ) {
+        self.var_sender
+            .subscribers(&self.peers.keys().copied().collect::<Vec<_>>());
+        let msgs = self.var_sender.tick(
+            PROTOCOL as u8,
+            self.my_id,
+            table,
+            float_ids,
+            floats,
+            string_ids,
+            strings,
+            dt,
+        );
         for m in msgs {
             match self.role {
                 Role::Host => self.broadcast(&m, None),
@@ -124,56 +195,105 @@ impl LanSession {
     /// the leading vehicle's: `table` names them (the game's hash of the cars' tables, in
     /// the train's order), `floats` and `strings` hold them all in that order.
     pub fn send_car_vars(&mut self, table: u32, floats: &[f32], strings: &[String], dt: f32) {
-        self.car_sender.subscribers(&self.peers.keys().copied().collect::<Vec<_>>());
-        let float_ids: Vec<u16> = (0..floats.len().min(u16::MAX as usize + 1)).map(|i| i as u16).collect();
-        let string_ids: Vec<u16> = (0..strings.len().min(u16::MAX as usize + 1)).map(|i| i as u16).collect();
+        self.car_sender
+            .subscribers(&self.peers.keys().copied().collect::<Vec<_>>());
+        let float_ids: Vec<u16> = (0..floats.len().min(u16::MAX as usize + 1))
+            .map(|i| i as u16)
+            .collect();
+        let string_ids: Vec<u16> = (0..strings.len().min(u16::MAX as usize + 1))
+            .map(|i| i as u16)
+            .collect();
         let floats = &floats[..float_ids.len()];
         let strings = &strings[..string_ids.len()];
-        for mut packet in self.car_sender.tick(PROTOCOL as u8, self.my_id, table, &float_ids, floats, &string_ids, strings, dt) {
+        for mut packet in self.car_sender.tick(
+            PROTOCOL as u8,
+            self.my_id,
+            table,
+            &float_ids,
+            floats,
+            &string_ids,
+            strings,
+            dt,
+        ) {
             packet[0] = vars::CAR_VARS_MAGIC;
             match self.role {
                 Role::Host => self.broadcast(&packet, None),
-                Role::Client => { if let Some(host) = self.host { self.send(&packet, host); } }
+                Role::Client => {
+                    if let Some(host) = self.host {
+                        self.send(&packet, host);
+                    }
+                }
             }
         }
     }
 
     /// The others' coupled cars' own variables that came since the last call, oldest first.
-    pub fn take_car_vars(&mut self) -> Vec<vars::VarsIn> { std::mem::take(&mut self.cars_in) }
+    pub fn take_car_vars(&mut self) -> Vec<vars::VarsIn> {
+        std::mem::take(&mut self.cars_in)
+    }
 
     /// Model animation variables, sampled on the same clock as the vehicle pose.
     pub fn send_animation_vars(&mut self, table: u32, values: &[(u16, f32)], dt: f32) {
         let sent_ms = self.stamp_ms();
-        for packet in self.animation_sender.tick(PROTOCOL as u8, self.my_id, table, sent_ms, values, dt) {
+        for packet in
+            self.animation_sender
+                .tick(PROTOCOL as u8, self.my_id, table, sent_ms, values, dt)
+        {
             match self.role {
                 Role::Host => self.broadcast(&packet, None),
-                Role::Client => { if let Some(host) = self.host { self.send(&packet, host); } }
+                Role::Client => {
+                    if let Some(host) = self.host {
+                        self.send(&packet, host);
+                    }
+                }
             }
         }
     }
 
     /// Repeat the name manifest using independently recovered string fragments.
     pub fn send_var_schema(&mut self, table: u32, schema: &str, dt: f32) {
-        self.schema_sender.subscribers(&self.peers.keys().copied().collect::<Vec<_>>());
+        self.schema_sender
+            .subscribers(&self.peers.keys().copied().collect::<Vec<_>>());
         let texts = [schema.to_owned()];
-        for mut packet in self.schema_sender.tick(PROTOCOL as u8, self.my_id, table, &[], &[], &[0], &texts, dt) {
+        for mut packet in self.schema_sender.tick(
+            PROTOCOL as u8,
+            self.my_id,
+            table,
+            &[],
+            &[],
+            &[0],
+            &texts,
+            dt,
+        ) {
             packet[0] = var_schema::MAGIC;
             match self.role {
                 Role::Host => self.broadcast(&packet, None),
-                Role::Client => { if let Some(host) = self.host { self.send(&packet, host); } }
+                Role::Client => {
+                    if let Some(host) = self.host {
+                        self.send(&packet, host);
+                    }
+                }
             }
         }
     }
 
-    pub fn take_var_schemas(&mut self) -> Vec<vars::VarsIn> { std::mem::take(&mut self.schemas_in) }
+    pub fn take_var_schemas(&mut self) -> Vec<vars::VarsIn> {
+        std::mem::take(&mut self.schemas_in)
+    }
 
     /// Host-only AI script context pages, alongside the shared world poses.
     pub fn send_ai_context(&self, to: u32, data: &[u8]) {
-        if self.role != Role::Host || data.len() > MAX_DATAGRAM { return; }
-        if let Some(addr) = self.peers.get(&to).and_then(|p| p.addr) { self.send(data, addr); }
+        if self.role != Role::Host || data.len() > MAX_DATAGRAM {
+            return;
+        }
+        if let Some(addr) = self.peers.get(&to).and_then(|p| p.addr) {
+            self.send(data, addr);
+        }
     }
 
-    pub fn take_ai_contexts(&mut self) -> Vec<Vec<u8>> { std::mem::take(&mut self.ai_context_in) }
+    pub fn take_ai_contexts(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.ai_context_in)
+    }
 
     /// The others' vehicle variables that came since the last call, oldest first.
     pub fn take_vars(&mut self) -> Vec<vars::VarsIn> {
@@ -186,7 +306,9 @@ impl LanSession {
 
     pub(super) fn on_variable_packet(&mut self, data: &[u8], from: SocketAddr, channel: Channel) {
         let schema = channel == Channel::Schema;
-        let Some(v) = vars::decode(data, PROTOCOL as u8) else { return };
+        let Some(v) = vars::decode(data, PROTOCOL as u8) else {
+            return;
+        };
         if v.id == self.my_id || v.id == 0 {
             return;
         }
@@ -222,7 +344,9 @@ impl LanSession {
             Channel::Schema => &mut self.schema_receiver,
             Channel::Cars => &mut self.car_receiver,
         };
-        let Some(v) = receiver.receive(data, PROTOCOL as u8) else { return };
+        let Some(v) = receiver.receive(data, PROTOCOL as u8) else {
+            return;
+        };
         if let Some((index, version)) = receiver.completed_fragment(data) {
             let mut ack = vec![0xEB, PROTOCOL as u8];
             ack.extend_from_slice(&self.my_id.to_le_bytes());
@@ -234,11 +358,15 @@ impl LanSession {
             self.route_string_ack(&ack, v.id);
         }
         if schema {
-            if self.schemas_in.len() < 128 && !v.strings.is_empty() { self.schemas_in.push(v); }
+            if self.schemas_in.len() < 128 && !v.strings.is_empty() {
+                self.schemas_in.push(v);
+            }
             return;
         }
         if channel == Channel::Cars {
-            if self.cars_in.len() < 1024 { self.cars_in.push(v); }
+            if self.cars_in.len() < 1024 {
+                self.cars_in.push(v);
+            }
             return;
         }
         // (a game that stopped reading does not pile them up without end)
@@ -246,7 +374,6 @@ impl LanSession {
             self.vars_in.push(v);
         }
     }
-
 }
 
 /// The variable channels (`vars.rs`): the leading vehicle's variables, their name
@@ -272,7 +399,17 @@ impl Channel {
 /// Bind versioned traffic to the freshly issued connection secret. Relays unwrap and
 /// rewrap for the destination, so old sessions cannot poison a retained peer's state.
 pub(super) fn session_bound(data: &[u8]) -> bool {
-    data.first().is_some_and(|b| [sounds::MAGIC, voice_net::MAGIC, vars::VARS_MAGIC, var_schema::MAGIC, vars::CAR_VARS_MAGIC, 0xEB].contains(b))
+    data.first().is_some_and(|b| {
+        [
+            sounds::MAGIC,
+            voice_net::MAGIC,
+            vars::VARS_MAGIC,
+            var_schema::MAGIC,
+            vars::CAR_VARS_MAGIC,
+            0xEB,
+        ]
+        .contains(b)
+    })
 }
 
 impl LanSession {
@@ -300,16 +437,28 @@ impl LanSession {
             Role::Host => self.peers.get(&to).and_then(|p| p.addr),
             Role::Client => self.host,
         };
-        if let Some(addr) = addr { self.send(data, addr); }
+        if let Some(addr) = addr {
+            self.send(data, addr);
+        }
     }
 
     pub(super) fn on_string_ack(&mut self, data: &[u8], from: SocketAddr) {
-        if data.len() != 25 || data[1] != PROTOCOL as u8 || data[24] > Channel::Cars as u8 { return; }
+        if data.len() != 25 || data[1] != PROTOCOL as u8 || data[24] > Channel::Cars as u8 {
+            return;
+        }
         let sender = u32::from_le_bytes(data[2..6].try_into().unwrap());
         let to = u32::from_le_bytes(data[6..10].try_into().unwrap());
-        if self.role == Role::Host && self.checked_peer(sender, from, VAR_RATE, PeerTraffic::Variables).is_none() { return; }
+        if self.role == Role::Host
+            && self
+                .checked_peer(sender, from, VAR_RATE, PeerTraffic::Variables)
+                .is_none()
+        {
+            return;
+        }
         if to != self.my_id {
-            if self.role == Role::Host { self.route_string_ack(data, to); }
+            if self.role == Role::Host {
+                self.route_string_ack(data, to);
+            }
             return;
         }
         let table = u32::from_le_bytes(data[10..14].try_into().unwrap());
@@ -330,9 +479,15 @@ impl LanSession {
         if session_sync::session_bound(data) {
             let secret = match self.role {
                 Role::Client => self.rebind_secret,
-                Role::Host => self.peers.values().find(|p| p.addr == Some(to)).map(|p| p.secret),
+                Role::Host => self
+                    .peers
+                    .values()
+                    .find(|p| p.addr == Some(to))
+                    .map(|p| p.secret),
             };
-            let Some(secret) = secret else { return; };
+            let Some(secret) = secret else {
+                return;
+            };
             framed.push(0xEA);
             framed.extend_from_slice(&secret);
             framed.extend_from_slice(data);
@@ -342,7 +497,6 @@ impl LanSession {
             self.sent.set(self.sent.get() + data.len() as u64);
         }
     }
-
 }
 
 impl LanSession {
@@ -364,10 +518,13 @@ impl LanSession {
             self.peers.len() + 1
         );
         let msg = match self.peers.get(&id) {
-            Some(p) if p.home == Some(to) => format!("{msg}|{}|{:016x}", admission::secret_hex(&p.secret), p.nonce.unwrap_or(0)),
+            Some(p) if p.home == Some(to) => format!(
+                "{msg}|{}|{:016x}",
+                admission::secret_hex(&p.secret),
+                p.nonce.unwrap_or(0)
+            ),
             _ => msg,
         };
         self.send(msg.as_bytes(), to);
     }
-
 }

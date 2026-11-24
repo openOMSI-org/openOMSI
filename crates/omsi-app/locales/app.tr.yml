@@ -3278,6 +3278,11 @@
 "Lights on in a downpour": "Sağanakta yanan ışıklar"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Gündüz şiddetli yağmurda bazı evlerin pencerelerinde ışık yanar, çünkü ışığı açacak kadar karanlık olur"
 
+"Buses of this session": "Bu oturumun otobüsleri"
+"every bus": "her otobüs"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Oyuncuların sürebileceği otobüsler, ; ile ayrılmış. Boş: her otobüs."
+"only these buses can be driven here ({list})": "burada yalnızca bu otobüsler sürülebilir ({list})"
+
 "Read the map's passenger numbers exactly": "Haritanın yolcu sayılarını tam olarak oku"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Yolcular: 0,7 olan durak yoğunluktan önce 1'e yuvarlanmak yerine 0,7 kalır; kapalı: OMSI 2 yuvarlaması"
 "Load a situation...": "Durum yükle..."

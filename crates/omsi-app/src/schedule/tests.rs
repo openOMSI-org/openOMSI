@@ -2,7 +2,11 @@
 
 /// A vehicle of the script `osc` that declares the variables `varlist` and the string
 /// variables `stringvarlist` (one a line).
-pub(crate) fn script_test_vehicle(osc: &str, varlist: &str, stringvarlist: &str) -> omsi_sim::VehicleInstance {
+pub(crate) fn script_test_vehicle(
+    osc: &str,
+    varlist: &str,
+    stringvarlist: &str,
+) -> omsi_sim::VehicleInstance {
     // (a folder of its own: tests run side by side)
     static MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

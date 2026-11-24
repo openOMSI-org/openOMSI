@@ -2972,6 +2972,11 @@
 "Lights on in a downpour": "Ilaw sa malakas na ulan"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Sa araw kapag malakas ang ulan, may mga bintana ng bahay na may ilaw, dahil sapat na ang dilim para magbukas ng ilaw"
 
+"Buses of this session": "Mga bus ng sesyong ito"
+"every bus": "bawat bus"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Mga bus na maaaring imaneho ng mga manlalaro, pinaghihiwalay ng ;. Blangko: bawat bus."
+"only these buses can be driven here ({list})": "dito ay maaari lamang imaneho ang mga bus na ito ({list})"
+
 "Read the map's passenger numbers exactly": "Basahin nang eksakto ang bilang ng pasahero sa mapa"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Mga pasahero: ang hintuan na may 0.7 ay nagpapanatili ng 0.7 tao sa halip na i-round up sa 1; naka-off: pag-round ng OMSI 2"
 "Load a situation...": "Mag-load ng sitwasyon..."

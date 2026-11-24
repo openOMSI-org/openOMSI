@@ -7,7 +7,7 @@ use omsi_texture::TextureData;
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, OnceLock, Weak};
+use std::sync::{Arc, OnceLock, Weak, mpsc};
 use std::time::{Duration, Instant, SystemTime};
 
 const POLL: Duration = Duration::from_millis(250);
@@ -153,7 +153,11 @@ impl FreeTextureReloads {
 
     pub fn remember(&self, id: TextureId, data: Arc<TextureData>) {
         let mut images = self.snapshots.lock();
-        let used: usize = images.iter().filter(|(key, _)| **key != id).map(|(_, d)| d.cpu_bytes()).sum();
+        let used: usize = images
+            .iter()
+            .filter(|(key, _)| **key != id)
+            .map(|(_, d)| d.cpu_bytes())
+            .sum();
         if used.saturating_add(data.cpu_bytes()) <= 64 * 1024 * 1024 {
             images.insert(id, data);
         } else {
@@ -517,15 +521,17 @@ mod tests {
         let (watch, _) = mpsc::channel();
         let (_, ready) = mpsc::channel();
         let versions = Arc::new(Mutex::new(HashMap::from([(picture.path.clone(), new)])));
-        assert!(reloads
-            .worker
-            .set(Some(Worker {
-                watch,
-                ready: Mutex::new(ready),
-                versions,
-                sampled: Default::default(),
-            }))
-            .is_ok());
+        assert!(
+            reloads
+                .worker
+                .set(Some(Worker {
+                    watch,
+                    ready: Mutex::new(ready),
+                    versions,
+                    sampled: Default::default(),
+                }))
+                .is_ok()
+        );
         assert!(!reloads.accepts(&picture.path, Some(old)));
         assert!(!reloads.accepts(&picture.path, None));
         assert!(reloads.accepts(&picture.path, Some(new)));
@@ -533,8 +539,20 @@ mod tests {
 
     fn wait_until_sampled(reloads: &FreeTextureReloads, files: usize) {
         let until = Instant::now() + Duration::from_secs(60);
-        while reloads.worker.get().unwrap().as_ref().unwrap().sampled.load(std::sync::atomic::Ordering::Acquire) < files {
-            assert!(Instant::now() < until, "the worker never sampled the original file");
+        while reloads
+            .worker
+            .get()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .sampled
+            .load(std::sync::atomic::Ordering::Acquire)
+            < files
+        {
+            assert!(
+                Instant::now() < until,
+                "the worker never sampled the original file"
+            );
             std::thread::sleep(Duration::from_millis(5));
         }
     }
@@ -597,10 +615,17 @@ mod tests {
         let versions = Arc::new(Mutex::new(HashMap::new()));
         let sampled = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let (seen, counted) = (versions.clone(), sampled.clone());
-        assert!(reloads
-            .worker
-            .set(Some(Worker { watch, ready: Mutex::new(ready), versions, sampled }))
-            .is_ok());
+        assert!(
+            reloads
+                .worker
+                .set(Some(Worker {
+                    watch,
+                    ready: Mutex::new(ready),
+                    versions,
+                    sampled
+                }))
+                .is_ok()
+        );
         reloads.watch(picture.path.clone(), 7, &picture.shared, 4096);
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(1));

@@ -32,15 +32,17 @@ impl Schedule {
 
     /// The timetable buses at the end of their trip: each takes its tour's next trip on
     /// where it stands, or goes.
-    pub(super) fn tour_handover(
-        &mut self,
-        world: &World,
-        traffic: &mut Traffic,
-        day_time: f64,
-    ) {
-        let done: Vec<u64> = traffic.cars.iter().filter(|c| c.trip_done()).map(|c| c.id).collect();
+    pub(super) fn tour_handover(&mut self, world: &World, traffic: &mut Traffic, day_time: f64) {
+        let done: Vec<u64> = traffic
+            .cars
+            .iter()
+            .filter(|c| c.trip_done())
+            .map(|c| c.id)
+            .collect();
         for id in done {
-            let Some(ci) = traffic.cars.iter().position(|c| c.id == id) else { continue };
+            let Some(ci) = traffic.cars.iter().position(|c| c.id == id) else {
+                continue;
+            };
             if self.sim.tour_held(id, day_time) {
                 continue;
             }
@@ -73,7 +75,9 @@ impl Schedule {
             } else if !taken {
                 traffic.release(ci);
                 if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-                    log::info!("scheduled bus {id}: trip over, no next trip of its tour to take on here: it drives off");
+                    log::info!(
+                        "scheduled bus {id}: trip over, no next trip of its tour to take on here: it drives off"
+                    );
                 }
             }
         }
@@ -111,7 +115,13 @@ impl Schedule {
     /// renderer: the buses of the player's tour taken off, the departures due queued.
     /// Whether the traffic is still loading; None for a LAN client, which draws the host's
     /// timetable buses.
-    pub fn tick_due(&mut self, world: &World, traffic: &mut Traffic, day_time: f64, window: f64) -> Option<bool> {
+    pub fn tick_due(
+        &mut self,
+        world: &World,
+        traffic: &mut Traffic,
+        day_time: f64,
+        window: f64,
+    ) -> Option<bool> {
         if traffic.is_mirror() {
             return None;
         }
@@ -120,13 +130,22 @@ impl Schedule {
                 log::info!("timetable: bus {id} of the player's tour taken off the road");
             }
         }
-        Some(self.sim.queue_due(&*world.data(), &mut traffic.sim, day_time, window))
+        Some(
+            self.sim
+                .queue_due(&*world.data(), &mut traffic.sim, day_time, window),
+        )
     }
 
     /// The timetable's tick after the vehicle sets (see [`Schedule::tick`]), without the
     /// renderer: the tours' buses at the end of a trip take the next on or go, and a few of
     /// the departures due are put on the road (more while the traffic is `loading`).
-    pub fn tick_spawn(&mut self, world: &World, traffic: &mut Traffic, day_time: f64, loading: bool) {
+    pub fn tick_spawn(
+        &mut self,
+        world: &World,
+        traffic: &mut Traffic,
+        day_time: f64,
+        loading: bool,
+    ) {
         self.tour_handover(world, traffic, day_time);
         // a handful per call: spawning a bus builds its meshes, and a whole rush hour at
         // once is a frame that lasts seconds; and only a few tries: a departure that has to
@@ -137,7 +156,11 @@ impl Schedule {
         // put in plain view only then (`queued_at_startup`), and tried a few at a time some
         // came too late for it and never appeared.
         let (mut spawned, mut tried) = (0, 0);
-        let tries = if loading || traffic.loading_phase() { 24 } else { RETRIES_PER_CALL };
+        let tries = if loading || traffic.loading_phase() {
+            24
+        } else {
+            RETRIES_PER_CALL
+        };
         while spawned < if loading { 3 } else { 1 } && tried < tries {
             let Some(i) = self.sim.next_pending() else {
                 break;

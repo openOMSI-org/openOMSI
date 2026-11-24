@@ -18,7 +18,7 @@
 //! track 4711                      // the map's spline or object of the track beside it
 //! ```
 
-use crate::doc::{parse, Block, Issues};
+use crate::doc::{Block, Issues, parse};
 use omsi_cfg::transport::ModeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -67,7 +67,9 @@ pub struct Station {
 
 impl Station {
     pub fn platform(&self, id: &str) -> Option<&Platform> {
-        self.platforms.iter().find(|p| p.id.eq_ignore_ascii_case(id))
+        self.platforms
+            .iter()
+            .find(|p| p.id.eq_ignore_ascii_case(id))
     }
 }
 
@@ -79,7 +81,9 @@ pub struct Stations {
 impl Stations {
     /// A station by its id (without regard to case).
     pub fn get(&self, id: &str) -> Option<&Station> {
-        self.list.iter().find(|s| s.id.eq_ignore_ascii_case(id.trim()))
+        self.list
+            .iter()
+            .find(|s| s.id.eq_ignore_ascii_case(id.trim()))
     }
 
     pub fn parse(text: &str, file: &str, issues: &mut Vec<crate::doc::Issue>) -> Stations {
@@ -108,7 +112,10 @@ impl Stations {
             let mut pids: Vec<&str> = Vec::new();
             for p in &s.platforms {
                 if pids.iter().any(|x| x.eq_ignore_ascii_case(&p.id)) {
-                    is.error(p.line, format!("station {}: platform {} is used twice", s.id, p.id));
+                    is.error(
+                        p.line,
+                        format!("station {}: platform {} is used twice", s.id, p.id),
+                    );
                 }
                 pids.push(&p.id);
             }
@@ -116,7 +123,10 @@ impl Stations {
         for s in &out.list {
             for h in &s.hub {
                 if out.get(h).is_none() {
-                    is.warn(s.line, format!("station {}: hub {h} is not a station of this file", s.id));
+                    is.warn(
+                        s.line,
+                        format!("station {}: hub {h} is not a station of this file", s.id),
+                    );
                 }
             }
         }
@@ -138,7 +148,10 @@ fn read_station(b: &Block, is: &mut Issues) -> Station {
         }
     }
     Station {
-        name: b.get("name").map(str::to_string).unwrap_or_else(|| id.clone()),
+        name: b
+            .get("name")
+            .map(str::to_string)
+            .unwrap_or_else(|| id.clone()),
         id,
         modes,
         pos: b.vec3("pos"),
@@ -153,12 +166,18 @@ fn read_platform(b: &Block, is: &mut Issues) -> Platform {
     let side = match b.get("side") {
         None => Side::default(),
         Some(v) => Side::from_name(v).unwrap_or_else(|| {
-            is.error(b.line_of("side"), format!("side {v} is not left, right, island or both"));
+            is.error(
+                b.line_of("side"),
+                format!("side {v} is not left, right, island or both"),
+            );
             Side::default()
         }),
     };
     Platform {
-        id: b.get("id").map(str::to_string).unwrap_or_else(|| "1".to_string()),
+        id: b
+            .get("id")
+            .map(str::to_string)
+            .unwrap_or_else(|| "1".to_string()),
         side,
         length_m: b.metres("length").unwrap_or(0.0),
         height_m: b.metres("height").unwrap_or(0.0),
@@ -176,23 +195,39 @@ mod tests {
     #[test]
     fn a_station_with_platforms() {
         let mut issues = Vec::new();
-        let s = Stations::parse("[station]\nid Sokol\nname Sokol Square\nmodes metro, tram\nhub Sokol_bus\n[platform]\nid 1\nside island\nlength 150 m\nscreen_doors yes\ntrack 77\n[platform]\nid 2\n[station]\nid Sokol_bus\nmodes bus\n", "stations.cfg", &mut issues);
+        let s = Stations::parse(
+            "[station]\nid Sokol\nname Sokol Square\nmodes metro, tram\nhub Sokol_bus\n[platform]\nid 1\nside island\nlength 150 m\nscreen_doors yes\ntrack 77\n[platform]\nid 2\n[station]\nid Sokol_bus\nmodes bus\n",
+            "stations.cfg",
+            &mut issues,
+        );
         assert!(issues.is_empty(), "{issues:?}");
         let sokol = s.get("sokol").unwrap();
         assert_eq!(sokol.name, "Sokol Square");
-        assert!(sokol.modes.contains(TransportMode::Metro) && sokol.modes.contains(TransportMode::Tram));
+        assert!(
+            sokol.modes.contains(TransportMode::Metro) && sokol.modes.contains(TransportMode::Tram)
+        );
         assert_eq!(sokol.platforms.len(), 2);
         let p = sokol.platform("1").unwrap();
-        assert_eq!((p.side, p.length_m, p.screen_doors, p.track), (Side::Island, 150.0, true, Some(77)));
+        assert_eq!(
+            (p.side, p.length_m, p.screen_doors, p.track),
+            (Side::Island, 150.0, true, Some(77))
+        );
         assert_eq!(s.get("Sokol_bus").unwrap().name, "Sokol_bus");
     }
 
     #[test]
     fn mistakes_are_reported() {
         let mut issues = Vec::new();
-        Stations::parse("[platform]\nid 1\n[station]\nid A\nmodes spaceship\nhub Nowhere\n[station]\nid a\n", "stations.cfg", &mut issues);
+        Stations::parse(
+            "[platform]\nid 1\n[station]\nid A\nmodes spaceship\nhub Nowhere\n[station]\nid a\n",
+            "stations.cfg",
+            &mut issues,
+        );
         let text: Vec<String> = issues.iter().map(|i| i.to_string()).collect();
-        assert!(text.iter().any(|t| t.contains("needs a [station]")), "{text:?}");
+        assert!(
+            text.iter().any(|t| t.contains("needs a [station]")),
+            "{text:?}"
+        );
         assert!(text.iter().any(|t| t.contains("no known mode")), "{text:?}");
         assert!(text.iter().any(|t| t.contains("hub Nowhere")), "{text:?}");
         assert!(text.iter().any(|t| t.contains("used twice")), "{text:?}");

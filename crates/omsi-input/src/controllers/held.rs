@@ -1,4 +1,4 @@
-use super::{find_device_cfg, latch_release, names_match, DeviceCfg};
+use super::{DeviceCfg, find_device_cfg, latch_release, names_match};
 use crate::actions::is_game_action;
 
 struct Held {
@@ -17,19 +17,44 @@ struct Held {
 pub(super) struct HeldButtons(Vec<Held>);
 
 impl HeldButtons {
-    pub(super) fn event(&mut self, cfg: &[DeviceCfg], name: &str, button: usize, down: bool, actions: &mut Vec<(String, bool)>) {
+    pub(super) fn event(
+        &mut self,
+        cfg: &[DeviceCfg],
+        name: &str,
+        button: usize,
+        down: bool,
+        actions: &mut Vec<(String, bool)>,
+    ) {
         if down {
-            if self.0.iter().any(|h| names_match(&h.device, name) && h.button == button) {
+            if self
+                .0
+                .iter()
+                .any(|h| names_match(&h.device, name) && h.button == button)
+            {
                 return;
             }
-            let Some(d) = find_device_cfg(cfg, name) else { return };
+            let Some(d) = find_device_cfg(cfg, name) else {
+                return;
+            };
             let bound = d.actions_of(button);
             if bound.is_empty() {
                 return;
             }
             actions.extend(bound.iter().map(|a| (a.clone(), true)));
-            self.0.push(Held { device: name.to_string(), button, actions: bound, latching: d.latching.contains(&button), continuous: d.continuous(button), fresh: true, out: false });
-        } else if let Some(i) = self.0.iter().position(|h| names_match(&h.device, name) && h.button == button) {
+            self.0.push(Held {
+                device: name.to_string(),
+                button,
+                actions: bound,
+                latching: d.latching.contains(&button),
+                continuous: d.continuous(button),
+                fresh: true,
+                out: false,
+            });
+        } else if let Some(i) = self
+            .0
+            .iter()
+            .position(|h| names_match(&h.device, name) && h.button == button)
+        {
             let h = self.0.remove(i);
             actions.extend(h.actions.iter().map(|a| (a.clone(), false)));
             if h.latching {
@@ -64,13 +89,22 @@ impl HeldButtons {
     }
 
     pub(super) fn while_editing(&mut self, name: &str, button: usize, down: bool) {
-        if let Some(h) = self.0.iter_mut().find(|h| names_match(&h.device, name) && h.button == button) {
+        if let Some(h) = self
+            .0
+            .iter_mut()
+            .find(|h| names_match(&h.device, name) && h.button == button)
+        {
             h.out = !down;
         }
     }
 
     pub(super) fn resume(&mut self, cfg: &[DeviceCfg], actions: &mut Vec<(String, bool)>) {
-        let out: Vec<(String, usize)> = self.0.iter().filter(|h| h.out).map(|h| (h.device.clone(), h.button)).collect();
+        let out: Vec<(String, usize)> = self
+            .0
+            .iter()
+            .filter(|h| h.out)
+            .map(|h| (h.device.clone(), h.button))
+            .collect();
         for (name, button) in out {
             self.event(cfg, &name, button, false, actions);
         }
@@ -92,9 +126,20 @@ mod tests {
     use super::*;
 
     fn wheel() -> Vec<DeviceCfg> {
-        let mut d = DeviceCfg { name: "Wheel".into(), ..Default::default() };
-        d.buttons = vec![("bus_doorfront0".into(), "0".into()), ("retarder_up".into(), "1".into()), ("gear_up".into(), "1".into())];
-        d.more = vec![(0, "bus_doorfront1".into()), (0, "bus_doorrear0".into()), (2, "sim_pause".into())];
+        let mut d = DeviceCfg {
+            name: "Wheel".into(),
+            ..Default::default()
+        };
+        d.buttons = vec![
+            ("bus_doorfront0".into(), "0".into()),
+            ("retarder_up".into(), "1".into()),
+            ("gear_up".into(), "1".into()),
+        ];
+        d.more = vec![
+            (0, "bus_doorfront1".into()),
+            (0, "bus_doorrear0".into()),
+            (2, "sim_pause".into()),
+        ];
         vec![d]
     }
 
@@ -104,7 +149,17 @@ mod tests {
         held.event(&cfg, "Wheel", 0, true, &mut actions);
         held.event(&cfg, "Wheel", 0, false, &mut actions);
         let names: Vec<(&str, bool)> = actions.iter().map(|(a, d)| (a.as_str(), *d)).collect();
-        assert_eq!(names, [("bus_doorfront0", true), ("bus_doorfront1", true), ("bus_doorrear0", true), ("bus_doorfront0", false), ("bus_doorfront1", false), ("bus_doorrear0", false)]);
+        assert_eq!(
+            names,
+            [
+                ("bus_doorfront0", true),
+                ("bus_doorfront1", true),
+                ("bus_doorrear0", true),
+                ("bus_doorfront0", false),
+                ("bus_doorfront1", false),
+                ("bus_doorrear0", false)
+            ]
+        );
     }
 
     #[test]
@@ -123,7 +178,13 @@ mod tests {
     fn the_gears_repeat_but_the_game_switches_do_not() {
         let (cfg, mut held, mut actions) = (wheel(), HeldButtons::default(), Vec::new());
         held.event(&cfg, "Wheel", 2, true, &mut actions);
-        assert_eq!(actions, [("gear_up".to_string(), true), ("sim_pause".to_string(), true)]);
+        assert_eq!(
+            actions,
+            [
+                ("gear_up".to_string(), true),
+                ("sim_pause".to_string(), true)
+            ]
+        );
         assert!(held.repeating().is_empty());
         assert_eq!(held.repeating(), ["gear_up"]);
     }

@@ -45,7 +45,11 @@ pub struct BlockSys {
 impl TrafficSim {
     /// Give the traffic the map's blocks (found on the whole network by a worker).
     pub fn set_blocks(&mut self, defs: Vec<BlockDef>) {
-        self.blocks = BlockSys { resolved: vec![Resolved::default(); defs.len()], defs, generation: None };
+        self.blocks = BlockSys {
+            resolved: vec![Resolved::default(); defs.len()],
+            defs,
+            generation: None,
+        };
     }
 
     /// Find the live lanes of the blocks again when the network has grown.
@@ -58,7 +62,9 @@ impl TrafficSim {
             let mut lanes = Vec::new();
             let mut entry = None;
             for (k, (key, reversed)) in d.lanes.iter().enumerate() {
-                let Some(l) = self.net.find(*key, Some(*reversed)) else { continue };
+                let Some(l) = self.net.find(*key, Some(*reversed)) else {
+                    continue;
+                };
                 if k == 0 || entry.is_none() {
                     entry = entry.or(Some(l));
                 }
@@ -92,8 +98,15 @@ impl TrafficSim {
         if lanes.is_empty() {
             return false;
         }
-        let cars = self.cars.iter().enumerate().any(|(j, c)| Some(j) != except && !c.gone && c.is_train() && self.train_lanes(c).iter().any(|l| lanes.contains(l)));
-        let player = self.player_rail.is_some_and(|p| p.train && lanes.contains(&p.lane));
+        let cars = self.cars.iter().enumerate().any(|(j, c)| {
+            Some(j) != except
+                && !c.gone
+                && c.is_train()
+                && self.train_lanes(c).iter().any(|l| lanes.contains(l))
+        });
+        let player = self
+            .player_rail
+            .is_some_and(|p| p.train && lanes.contains(&p.lane));
         cars || player
     }
 
@@ -116,7 +129,9 @@ impl TrafficSim {
             if mine.iter().any(|l| r.lanes.contains(l)) {
                 continue;
             }
-            let Some(&(_, d)) = way.iter().skip(1).find(|(l, _)| *l == entry) else { continue };
+            let Some(&(_, d)) = way.iter().skip(1).find(|(l, _)| *l == entry) else {
+                continue;
+            };
             if d - st.front < -0.5 || !self.block_busy(b, Some(i)) {
                 continue;
             }
@@ -151,7 +166,14 @@ impl TrafficSim {
                 out.insert(k.id);
             }
         };
-        for c in self.cars.iter().filter(|c| !c.gone && self.net.lanes.get(c.state.lane).is_some_and(|l| l.kind == LaneKind::Rail)) {
+        for c in self.cars.iter().filter(|c| {
+            !c.gone
+                && self
+                    .net
+                    .lanes
+                    .get(c.state.lane)
+                    .is_some_and(|l| l.kind == LaneKind::Rail)
+        }) {
             self.train_lanes(c).into_iter().for_each(&mut add);
         }
         if let Some(p) = self.player_rail {
@@ -215,12 +237,28 @@ impl SwitchBoard {
     /// The positions to put the points in this frame: the trains' `requests` as the rules allow
     /// them, and the defaults of switches nobody has asked for lately. `occupied` are the rail
     /// pieces a train is on, `aspects` what the signals show.
-    pub fn decide(&mut self, dt: f32, requests: &[(i64, u16)], occupied: &hashbrown::HashSet<i64>, aspects: &hashbrown::HashMap<i64, f32>) -> Vec<(i64, u16)> {
-        let mut out: Vec<(i64, u16)> = requests.iter().copied().filter(|(o, _)| !self.rules.iter().any(|r| r.object == *o)).collect();
+    pub fn decide(
+        &mut self,
+        dt: f32,
+        requests: &[(i64, u16)],
+        occupied: &hashbrown::HashSet<i64>,
+        aspects: &hashbrown::HashMap<i64, f32>,
+    ) -> Vec<(i64, u16)> {
+        let mut out: Vec<(i64, u16)> = requests
+            .iter()
+            .copied()
+            .filter(|(o, _)| !self.rules.iter().any(|r| r.object == *o))
+            .collect();
         for (rule, st) in self.rules.iter().zip(self.state.iter_mut()) {
             let busy = occupied.contains(&rule.object);
-            let locked = rule.locked_by.is_some_and(|s| aspects.get(&s).copied().unwrap_or(0.0) > 0.5);
-            let asked: Vec<u16> = requests.iter().filter(|(o, _)| *o == rule.object).map(|r| r.1).collect();
+            let locked = rule
+                .locked_by
+                .is_some_and(|s| aspects.get(&s).copied().unwrap_or(0.0) > 0.5);
+            let asked: Vec<u16> = requests
+                .iter()
+                .filter(|(o, _)| *o == rule.object)
+                .map(|r| r.1)
+                .collect();
             let hold = busy || locked;
             let want = match rule.drive {
                 SwitchDrive::Manual => None,
@@ -257,14 +295,26 @@ impl SwitchBoard {
 
 #[cfg(test)]
 mod tests {
-    use super::super::scenario_tests::{traffic, Fixture};
+    use super::super::scenario_tests::{Fixture, traffic};
     use super::*;
     use crate::traffic::LaneBuilder;
     use glam::DVec3;
 
     fn rail(start: f64, key: i64) -> crate::traffic::Lane {
-        let mut l = LaneBuilder::arc(DVec3::new(0.0, start, 0.0), 0.0, 200.0, 0.0, 0.0, LaneKind::Rail, 1.5);
-        l.key = Some(LaneKey { tile: (0, 0), id: key, path: 0 });
+        let mut l = LaneBuilder::arc(
+            DVec3::new(0.0, start, 0.0),
+            0.0,
+            200.0,
+            0.0,
+            0.0,
+            LaneKind::Rail,
+            1.5,
+        );
+        l.key = Some(LaneKey {
+            tile: (0, 0),
+            id: key,
+            path: 0,
+        });
         l
     }
 
@@ -288,12 +338,29 @@ mod tests {
         let f = Fixture::new();
         std::fs::write(f.dir.join("car.bus"), "[type]\n2\n[model]\nmodel.cfg\n").unwrap();
         let ty = Arc::new(VehicleType::load_ai(&f.dir, &f.dir.join("car.bus")).unwrap());
-        Fixture { dir: f.dir.clone(), ty }
+        Fixture {
+            dir: f.dir.clone(),
+            ty,
+        }
     }
 
     fn add_train(t: &mut TrafficSim, f: &Fixture, lane: usize, s: f32, speed: f32) -> usize {
-        let vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
-        let id = t.place_car(vehicle, LaneKind::Rail, lane, s, f.ty.clone(), 1, None, None, Some(speed), None);
+        let vehicle = VehicleInstance::new(
+            f.ty.clone(),
+            crate::VehicleHost::new(crate::SimClock::default()),
+        );
+        let id = t.place_car(
+            vehicle,
+            LaneKind::Rail,
+            lane,
+            s,
+            f.ty.clone(),
+            1,
+            None,
+            None,
+            Some(speed),
+            None,
+        );
         let i = t.cars.iter().position(|c| c.id == id).unwrap();
         // (a timetable route over all three lanes)
         t.cars[i].state.route = vec![0, 1, 2];
@@ -302,7 +369,11 @@ mod tests {
     }
 
     fn key(id: i64) -> LaneKey {
-        LaneKey { tile: (0, 0), id, path: 0 }
+        LaneKey {
+            tile: (0, 0),
+            id,
+            path: 0,
+        }
     }
 
     #[test]
@@ -310,22 +381,39 @@ mod tests {
         let f = train_fixture();
         let mut t = traffic(&f, track());
         // block "B" is the middle lane; a train stands in it, another comes up behind
-        t.set_blocks(vec![BlockDef { id: "B".into(), lanes: vec![(key(2), false)], signal: Some(900) }]);
+        t.set_blocks(vec![BlockDef {
+            id: "B".into(),
+            lanes: vec![(key(2), false)],
+            signal: Some(900),
+        }]);
         let _ahead = add_train(&mut t, &f, 1, 100.0, 0.0);
         let behind = add_train(&mut t, &f, 0, 50.0, 10.0);
         if !t.cars[behind].is_train() {
             panic!("the fixture is no train");
         }
-        let stop = t.block_stop(behind).expect("held before the occupied block");
-        assert!((stop - 150.0).abs() < 2.0, "the block's entry is 150 m ahead: {stop}");
-        assert_eq!(t.block_aspects().get(&900), Some(&0.0), "its signal shows stop");
+        let stop = t
+            .block_stop(behind)
+            .expect("held before the occupied block");
+        assert!(
+            (stop - 150.0).abs() < 2.0,
+            "the block's entry is 150 m ahead: {stop}"
+        );
+        assert_eq!(
+            t.block_aspects().get(&900),
+            Some(&0.0),
+            "its signal shows stop"
+        );
     }
 
     #[test]
     fn a_free_block_lets_the_train_in() {
         let f = train_fixture();
         let mut t = traffic(&f, track());
-        t.set_blocks(vec![BlockDef { id: "B".into(), lanes: vec![(key(2), false)], signal: Some(900) }]);
+        t.set_blocks(vec![BlockDef {
+            id: "B".into(),
+            lanes: vec![(key(2), false)],
+            signal: Some(900),
+        }]);
         let only = add_train(&mut t, &f, 0, 50.0, 10.0);
         assert_eq!(t.block_stop(only), None);
         assert_eq!(t.block_aspects().get(&900), Some(&1.0));
@@ -335,7 +423,11 @@ mod tests {
     fn a_train_in_the_block_is_not_held_by_it() {
         let f = train_fixture();
         let mut t = traffic(&f, track());
-        t.set_blocks(vec![BlockDef { id: "B".into(), lanes: vec![(key(2), false), (key(3), false)], signal: None }]);
+        t.set_blocks(vec![BlockDef {
+            id: "B".into(),
+            lanes: vec![(key(2), false), (key(3), false)],
+            signal: None,
+        }]);
         let inside = add_train(&mut t, &f, 1, 50.0, 5.0);
         assert_eq!(t.block_stop(inside), None);
     }
@@ -344,7 +436,11 @@ mod tests {
     fn the_tail_of_a_train_keeps_the_block_busy() {
         let f = train_fixture();
         let mut t = traffic(&f, track());
-        t.set_blocks(vec![BlockDef { id: "A".into(), lanes: vec![(key(1), false)], signal: Some(7) }]);
+        t.set_blocks(vec![BlockDef {
+            id: "A".into(),
+            lanes: vec![(key(1), false)],
+            signal: Some(7),
+        }]);
         // a long train whose nose is 5 m into lane 1 and whose tail is still on lane 0
         let long = add_train(&mut t, &f, 1, 5.0, 3.0);
         t.cars[long].state.rear = 40.0;
@@ -353,8 +449,18 @@ mod tests {
         assert_eq!(t.block_aspects().get(&7), Some(&1.0));
     }
 
-    fn rule(object: i64, default: Option<u16>, drive: SwitchDrive, locked_by: Option<i64>) -> SwitchRule {
-        SwitchRule { object, default_path: default, drive, locked_by }
+    fn rule(
+        object: i64,
+        default: Option<u16>,
+        drive: SwitchDrive,
+        locked_by: Option<i64>,
+    ) -> SwitchRule {
+        SwitchRule {
+            object,
+            default_path: default,
+            drive,
+            locked_by,
+        }
     }
 
     #[test]
@@ -402,7 +508,14 @@ mod tests {
         b.configure(vec![rule(5, Some(0), SwitchDrive::Manual, None)]);
         let none = hashbrown::HashSet::new();
         let noasp = hashbrown::HashMap::new();
-        assert_eq!(b.decide(0.1, &[], &none, &noasp), vec![(5, 0)], "they rest in their default");
-        assert!(b.decide(0.1, &[(5, 1)], &none, &noasp).is_empty(), "no AI request throws them");
+        assert_eq!(
+            b.decide(0.1, &[], &none, &noasp),
+            vec![(5, 0)],
+            "they rest in their default"
+        );
+        assert!(
+            b.decide(0.1, &[(5, 1)], &none, &noasp).is_empty(),
+            "no AI request throws them"
+        );
     }
 }

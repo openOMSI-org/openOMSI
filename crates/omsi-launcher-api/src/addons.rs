@@ -42,13 +42,26 @@ struct Addon {
 /// and none of the characters other programs read in other ways (a backslash, quotes, `<>`):
 /// the system opens the address, not only a browser that follows the standard.
 fn homepage_ok(text: &str) -> bool {
-    let odd = |c: char| c.is_whitespace() || c.is_control() || matches!(c, '\\' | '"' | '\'' | '<' | '>' | '^' | '`' | '{' | '}' | '|');
+    let odd = |c: char| {
+        c.is_whitespace()
+            || c.is_control()
+            || matches!(
+                c,
+                '\\' | '"' | '\'' | '<' | '>' | '^' | '`' | '{' | '}' | '|'
+            )
+    };
     if !text.starts_with("https://") || text.len() > 200 || text.chars().any(odd) {
         return false;
     }
-    let Ok(u) = url::Url::parse(text) else { return false };
+    let Ok(u) = url::Url::parse(text) else {
+        return false;
+    };
     let named = matches!(u.host(), Some(url::Host::Domain(d)) if d.contains('.') && !d.ends_with('.') && d != "localhost" && !d.ends_with(".localhost"));
-    u.scheme() == "https" && u.username().is_empty() && u.password().is_none() && u.port().is_none() && named
+    u.scheme() == "https"
+        && u.username().is_empty()
+        && u.password().is_none()
+        && u.port().is_none()
+        && named
 }
 
 /// What is wrong with an entry, if anything: it is then left out of the page.
@@ -188,33 +201,46 @@ mod tests {
         ] {
             assert!(!homepage_ok(url), "{url}");
         }
-        for url in ["https://example.org", "https://example.org/an-addon?x=1#top", "https://Example.ORG/", "https://example.org/team@example/"] {
+        for url in [
+            "https://example.org",
+            "https://example.org/an-addon?x=1#top",
+            "https://Example.ORG/",
+            "https://example.org/team@example/",
+        ] {
             assert!(homepage_ok(url), "{url}");
         }
     }
 
     #[test]
     fn long_texts_and_odd_icons_are_refused() {
-        assert!(problem(&Addon {
-            description: "x".repeat(201),
-            ..addon()
-        })
-        .is_some());
-        assert!(problem(&Addon {
-            name: " ".into(),
-            ..addon()
-        })
-        .is_some());
-        assert!(problem(&Addon {
-            id: "An Add-on".into(),
-            ..addon()
-        })
-        .is_some());
-        assert!(problem(&Addon {
-            translations: BTreeMap::from([("de".into(), "x".repeat(201))]),
-            ..addon()
-        })
-        .is_some());
+        assert!(
+            problem(&Addon {
+                description: "x".repeat(201),
+                ..addon()
+            })
+            .is_some()
+        );
+        assert!(
+            problem(&Addon {
+                name: " ".into(),
+                ..addon()
+            })
+            .is_some()
+        );
+        assert!(
+            problem(&Addon {
+                id: "An Add-on".into(),
+                ..addon()
+            })
+            .is_some()
+        );
+        assert!(
+            problem(&Addon {
+                translations: BTreeMap::from([("de".into(), "x".repeat(201))]),
+                ..addon()
+            })
+            .is_some()
+        );
         for icon in [
             "../logo.svg",
             "https://example.org/icon.png",

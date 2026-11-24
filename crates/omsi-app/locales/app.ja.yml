@@ -3319,6 +3319,11 @@
 "Lights on in a downpour": "豪雨時の窓明かり"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "日中の激しい雨では、明かりをつけるほど暗くなるため、家々の窓の一部に明かりがともります"
 
+"Buses of this session": "このセッションのバス"
+"every bus": "すべてのバス"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "プレイヤーが運転できるバス（; で区切る）。フォルダ名またはバスファイル。空欄：すべてのバス。"
+"only these buses can be driven here ({list})": "ここではこれらのバスのみ運転できます ({list})"
+
 "Read the map's passenger numbers exactly": "マップの乗客数を正確に読み取る"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "乗客：0.7と設定された停留所は密度を掛ける前に1へ切り上げられず0.7人のまま保持されます。オフ：OMSI 2の丸め処理"
 "Load a situation...": "状況を読み込む..."

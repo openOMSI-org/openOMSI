@@ -25,7 +25,11 @@ pub(in crate::mods) struct Notices {
 
 impl Default for Notices {
     fn default() -> Notices {
-        Notices { shown: Mutex::new(None), seq: std::sync::atomic::AtomicU64::new(1), last: Mutex::new((0, String::new())) }
+        Notices {
+            shown: Mutex::new(None),
+            seq: std::sync::atomic::AtomicU64::new(1),
+            last: Mutex::new((0, String::new())),
+        }
     }
 }
 
@@ -41,7 +45,10 @@ pub(in crate::mods) fn show(text: impl Into<String>, done: u64, total: u64, busy
 }
 
 pub(in crate::mods) fn mb(b: u64) -> String {
-    format!("{:.0} MB", (b as f64 / 1e6).max(if b > 0 { 1.0 } else { 0.0 }))
+    format!(
+        "{:.0} MB",
+        (b as f64 / 1e6).max(if b > 0 { 1.0 } else { 0.0 })
+    )
 }
 
 /// While the start waits for our bus to be sent: the loading screen's line and how far.
@@ -63,13 +70,21 @@ const CARD_DONE: f32 = 8.0;
 /// card stays, s: while it goes on, its text following the progress). None while the line
 /// is the one shown already, or while the loading screen says it.
 pub fn notice() -> Option<(String, String, f32)> {
-    notices().next_card(loading().is_some()).map(|(before, text, busy)| (before, text, if busy { CARD_GOING_ON } else { CARD_DONE }))
+    notices()
+        .next_card(loading().is_some())
+        .map(|(before, text, busy)| (before, text, if busy { CARD_GOING_ON } else { CARD_DONE }))
 }
 
 impl Notices {
     pub(in crate::mods) fn show(&self, text: impl Into<String>, done: u64, total: u64, busy: bool) {
         let seq = self.seq.fetch_add(1, Ordering::Relaxed);
-        *self.shown.lock().unwrap_or_else(|e| e.into_inner()) = Some(Shown { seq, text: text.into(), done, total, busy });
+        *self.shown.lock().unwrap_or_else(|e| e.into_inner()) = Some(Shown {
+            seq,
+            text: text.into(),
+            done,
+            total,
+            busy,
+        });
     }
 
     /// No line any more (a host that takes no uploads: nothing to tell about it).
@@ -81,14 +96,23 @@ impl Notices {
     pub(super) fn line(&self) -> Option<(String, f32)> {
         let s = self.shown.lock().unwrap_or_else(|e| e.into_inner());
         let s = s.as_ref()?;
-        let p = if s.total > 0 { s.done as f32 / s.total as f32 } else { 0.0 };
+        let p = if s.total > 0 {
+            s.done as f32 / s.total as f32
+        } else {
+            0.0
+        };
         Some((s.text.clone(), p))
     }
 
     /// The line for a card, when it is a new one (see `notice`); `loading`: the loading
     /// screen says it now.
     pub(super) fn next_card(&self, loading: bool) -> Option<(String, String, bool)> {
-        let (seq, text, busy) = self.shown.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| (s.seq, s.text.clone(), s.busy))?;
+        let (seq, text, busy) = self
+            .shown
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|s| (s.seq, s.text.clone(), s.busy))?;
         let mut last = self.last.lock().unwrap_or_else(|e| e.into_inner());
         // (under the loading screen the screen says it)
         if last.0 == seq || (busy && loading) {
@@ -102,6 +126,10 @@ impl Notices {
     /// How far the line has come: (bytes done, bytes in all).
     #[cfg(test)]
     pub(super) fn progress(&self) -> Option<(u64, u64)> {
-        self.shown.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|s| (s.done, s.total))
+        self.shown
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|s| (s.done, s.total))
     }
 }

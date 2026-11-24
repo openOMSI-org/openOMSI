@@ -12,6 +12,7 @@ impl App {
             self.net.speed_limit_welcome = None;
             self.net.dedicated_teleport = None;
         }
+        self.enforce_host_session_bus();
         let walker = self.walker_pose();
         let radio_keyed = self.voice_radio_keyed();
         self.tell_took_parked(dt);
@@ -92,6 +93,42 @@ impl App {
             world: self.world.as_deref(),
         };
         if lan.role == omsi_net::Role::Host {
+            // (#1464) the buses this session drives: a player who drives another is sent away
+            // and told the list, as a dedicated server does with its server.cfg's `vehicles`
+            if self.net.session_buses.is_none() {
+                self.net.session_buses = Some(self.args.session_bus_list());
+            }
+            let list = self.net.session_buses.as_deref().unwrap_or_default();
+            if !list.is_empty() {
+                let mut changed = false;
+                for p in lan.peers() {
+                    if p.has_info
+                        && !p.pose.bus.is_empty()
+                        && self
+                            .net
+                            .session_buses_checked
+                            .get(&p.pose.id)
+                            .map(|s| s.as_str())
+                            != Some(&p.pose.bus)
+                    {
+                        changed = true;
+                        break;
+                    }
+                }
+                if changed {
+                    self.net
+                        .session_buses_checked
+                        .retain(|id, _| lan.peers().any(|p| p.pose.id == *id));
+                    omsi_lan::server_cfg::enforce_vehicles_with(lan, list);
+                    for p in lan.peers() {
+                        if p.has_info && !p.pose.bus.is_empty() {
+                            self.net
+                                .session_buses_checked
+                                .insert(p.pose.id, p.pose.bus.clone());
+                        }
+                    }
+                }
+            }
             if let Some(t) = self.session.traffic.as_mut() {
                 // (the sounds of a car go by its id in the traffic table, as the clients know it)
                 for c in &mut t.sim.cars {
@@ -174,6 +211,10 @@ impl App {
         }
         let receive_started = std::time::Instant::now();
         let mirror_audio_ms = phase.elapsed().as_secs_f64() * 1000.0;
+        let host = AppLanHost {
+            args: &self.args,
+            world: self.world.as_deref(),
+        };
         let updates = lan::tick_receive(
             lan,
             &mut self.net.remotes,
@@ -239,6 +280,67 @@ impl App {
                 tail_ms
             );
         }
+    }
+
+    fn enforce_host_session_bus(&mut self) {
+        if !self
+            .net
+            .lan
+            .as_ref()
+            .is_some_and(|l| l.role == omsi_net::Role::Host)
+        {
+            return;
+        }
+        if self.net.session_buses.is_none() {
+            self.net.session_buses = Some(self.args.session_bus_list());
+        }
+        let list = self.net.session_buses.as_deref().unwrap_or_default();
+        if list.is_empty() {
+            return;
+        }
+        let current = self
+            .player
+            .as_ref()
+            .map(|p| p.vehicle.ty.def.path.as_path())
+            .filter(|p| !p.as_os_str().is_empty())
+            .or_else(|| self.args.bus.as_deref().map(std::path::Path::new))
+            .filter(|p| !p.as_os_str().is_empty());
+        if self
+            .net
+            .host_bus_checked
+            .as_ref()
+            .is_some_and(|c| c.path.as_deref() == current)
+        {
+            return;
+        }
+        let Some(path) = current else {
+            self.net.host_bus_checked = Some(HostBusCheck { path: None });
+            return;
+        };
+        let bus = path.to_string_lossy();
+        if omsi_lan::server_cfg::allows(list, &bus) {
+            self.net.host_bus_checked = Some(HostBusCheck {
+                path: Some(path.to_path_buf()),
+            });
+            return;
+        }
+        log::warn!("session: host bus {bus} is not in session_buses list: removed");
+        let names: Vec<&str> = list
+            .iter()
+            .map(|v| v.rsplit('/').next().unwrap_or(v))
+            .collect();
+        let reason = omsi_ui::i18n::tr_fill(
+            "only these buses can be driven here ({list})",
+            &[("{list}", &names.join(", "))],
+        );
+        self.net.host_bus_checked = Some(HostBusCheck {
+            path: Some(path.to_path_buf()),
+        });
+        self.args.bus = None;
+        if self.player.is_some() {
+            self.remove_driven_vehicle();
+        }
+        self.service_msg = Some((reason, 4.0));
     }
 
     /// A command another player's game sent ours (`LanSession::command`): read by the session
@@ -600,3 +702,7 @@ impl omsi_lan::host::LanHost for AppLanHost<'_> {
         crate::find_hof_named(cfg.hof.as_deref(), self.world?, ty)
     }
 }
+
+#[cfg(test)]
+#[path = "lan_tick_tests.rs"]
+mod tests;

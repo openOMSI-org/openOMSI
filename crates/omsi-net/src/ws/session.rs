@@ -47,13 +47,13 @@ fn first_success<T: Send + 'static>(jobs: Vec<Query<T>>, timeout: Duration) -> R
             Ok(Ok(value)) => return Ok(value),
             Ok(Err(e)) => failure = Some(e),
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(failure.unwrap_or_else(|| "the host did not answer".into()))
+                return Err(failure.unwrap_or_else(|| "the host did not answer".into()));
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 return Err(format!(
                     "the host did not answer within {} seconds",
                     timeout.as_secs_f32()
-                ))
+                ));
             }
         }
     }

@@ -2973,6 +2973,11 @@
 "Lights on in a downpour": "Lampu menyala ketika hujan lebat"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Pada waktu siang ketika hujan lebat, sesetengah tingkap rumah bercahaya kerana cukup gelap untuk memasang lampu"
 
+"Buses of this session": "Bas sesi ini"
+"every bus": "semua bas"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "Bas yang boleh dipandu oleh pemain, dipisahkan oleh ;. Kosong: semua bas."
+"only these buses can be driven here ({list})": "hanya bas-bas ini yang boleh dipandu di sini ({list})"
+
 "Read the map's passenger numbers exactly": "Baca bilangan penumpang peta dengan tepat"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Penumpang: perhentian bernilai 0.7 mengekalkan 0.7 orang dan bukannya dibulatkan ke 1; mati: pembulatan OMSI 2"
 "Load a situation...": "Muatkan situasi..."

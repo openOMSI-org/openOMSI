@@ -8854,12 +8854,27 @@ _version: 2
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on":
   en: "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on"
 
+"Buses of this session":
+  en: "Buses of this session"
+"every bus":
+  en: "every bus"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.":
+  en: "The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus."
+
+"only these buses can be driven here ({list})":
+  en: "only these buses can be driven here ({list})"
+
 "Read the map's passenger numbers exactly":
   en: "Read the map's passenger numbers exactly"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding":
   en: "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding"
 "Load a situation...":
+  en: "Load a situation..."
 "Enter saves, Esc cancels":
+  en: "Enter saves, Esc cancels"
 "Save under a name...":
+  en: "Save under a name..."
 "No saved situation of this map yet":
+  en: "No saved situation of this map yet"
 "Saved as \"{}\"":
+  en: "Saved as \"{}\""

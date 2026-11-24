@@ -17,7 +17,11 @@ pub(crate) struct Fixture {
 impl Fixture {
     pub(crate) fn new() -> Fixture {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let dir = std::env::temp_dir().join(format!("omsi-traffic-service-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let dir = std::env::temp_dir().join(format!(
+            "omsi-traffic-service-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("car.bus"), "[model]\nmodel.cfg\n").unwrap();
         std::fs::write(dir.join("model.cfg"), "").unwrap();
@@ -39,13 +43,40 @@ const STOP_ID: i64 = 77;
 /// One straight road north, 1.5 km long (lane 0), and the road back beside it (lane 1).
 pub(crate) fn road(f: &Fixture) -> TrafficSim {
     let north = LaneBuilder::arc(DVec3::ZERO, 0.0, 1500.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let south = LaneBuilder::arc(DVec3::new(-3.5, 1500.0, 0.0), 180.0, 1500.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![north, south], ..Default::default() };
+    let south = LaneBuilder::arc(
+        DVec3::new(-3.5, 1500.0, 0.0),
+        180.0,
+        1500.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut net = Network {
+        lanes: vec![north, south],
+        ..Default::default()
+    };
     net.link(1.5);
     net.build_grid();
     net.compute_reach();
-    let random = RandomTypes { types: Vec::new(), groups: Vec::new(), group_curves: false, group_uvg: Vec::new(), uvg_defaults: Vec::new() };
-    let mut t = TrafficSim::assemble(&f.dir, net, random, Vec::new(), HashMap::new(), (Vec::new(), Vec::new()), Vec::new(), (1.0, 0), 0);
+    let random = RandomTypes {
+        types: Vec::new(),
+        groups: Vec::new(),
+        group_curves: false,
+        group_uvg: Vec::new(),
+        uvg_defaults: Vec::new(),
+    };
+    let mut t = TrafficSim::assemble(
+        &f.dir,
+        net,
+        random,
+        Vec::new(),
+        HashMap::new(),
+        (Vec::new(), Vec::new()),
+        Vec::new(),
+        (1.0, 0),
+        0,
+    );
     t.day_time = 8.0 * 3600.0;
     t
 }
@@ -53,21 +84,60 @@ pub(crate) fn road(f: &Fixture) -> TrafficSim {
 /// A timetable bus on lane 0 at `s` going `speed`, its trip's one stop leaving at `depart`
 /// seconds from now (a stop the trip ends at, served whoever wants it).
 fn add_bus(t: &mut TrafficSim, f: &Fixture, id: u64, s: f32, speed: f32, depart: f64) -> u64 {
-    let stops = vec![Stop { ri: 0, s: STOP_S, bay: 0.0, depart: t.day_time + depart, id: STOP_ID, side: 0.0 }];
+    let stops = vec![Stop {
+        ri: 0,
+        s: STOP_S,
+        bay: 0.0,
+        depart: t.day_time + depart,
+        id: STOP_ID,
+        side: 0.0,
+    }];
     let setup = BusSetup {
         route: vec![0],
         stops,
         number: None,
         hof: None,
-        timetable: AiTimetable { line: String::new(), terminus: String::new(), stops: Vec::new() },
+        timetable: AiTimetable {
+            line: String::new(),
+            terminus: String::new(),
+            stops: Vec::new(),
+        },
     };
-    let vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
-    t.place_car(vehicle, LaneKind::Street, 0, s, f.ty.clone(), id * 0x101, None, Some(id), Some(speed), Some(setup))
+    let vehicle = VehicleInstance::new(
+        f.ty.clone(),
+        crate::VehicleHost::new(crate::SimClock::default()),
+    );
+    t.place_car(
+        vehicle,
+        LaneKind::Street,
+        0,
+        s,
+        f.ty.clone(),
+        id * 0x101,
+        None,
+        Some(id),
+        Some(speed),
+        Some(setup),
+    )
 }
 
 pub(super) fn add_car(t: &mut TrafficSim, f: &Fixture, id: u64, s: f32, speed: f32) -> u64 {
-    let vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
-    t.place_car(vehicle, LaneKind::Street, 0, s, f.ty.clone(), id * 0x77, None, Some(id), Some(speed), None)
+    let vehicle = VehicleInstance::new(
+        f.ty.clone(),
+        crate::VehicleHost::new(crate::SimClock::default()),
+    );
+    t.place_car(
+        vehicle,
+        LaneKind::Street,
+        0,
+        s,
+        f.ty.clone(),
+        id * 0x77,
+        None,
+        Some(id),
+        Some(speed),
+        None,
+    )
 }
 
 fn car(t: &TrafficSim, id: u64) -> &AiCar {
@@ -85,7 +155,12 @@ struct Log {
 
 /// Run the scene for `secs` in steps, noting each bus's door openings; `each` sees the
 /// scene before every step.
-fn run(t: &mut TrafficSim, ids: &[u64], secs: f32, mut each: impl FnMut(&mut TrafficSim, f32)) -> Vec<Log> {
+fn run(
+    t: &mut TrafficSim,
+    ids: &[u64],
+    secs: f32,
+    mut each: impl FnMut(&mut TrafficSim, f32),
+) -> Vec<Log> {
     let mut logs = vec![Log::default(); ids.len()];
     let mut time = 0.0;
     let dt = super::fixed_step::SIM_DT;
@@ -95,9 +170,14 @@ fn run(t: &mut TrafficSim, ids: &[u64], secs: f32, mut each: impl FnMut(&mut Tra
         time += dt;
         let boarding = t.cars.iter().filter(|c| c.at_station()).count();
         // (the bus at the berth and the one right behind it, as in OMSI 2 - never a third)
-        assert!(boarding <= 2, "{boarding} buses with their doors open at one stop at {time:.1} s");
+        assert!(
+            boarding <= 2,
+            "{boarding} buses with their doors open at one stop at {time:.1} s"
+        );
         for (k, &id) in ids.iter().enumerate() {
-            let Some(c) = t.cars.iter().find(|c| c.id == id) else { continue };
+            let Some(c) = t.cars.iter().find(|c| c.id == id) else {
+                continue;
+            };
             let b = c.bus.as_ref().unwrap();
             logs[k].held |= b.held_berth().is_some();
             let open = c.at_station();
@@ -118,13 +198,21 @@ fn run(t: &mut TrafficSim, ids: &[u64], secs: f32, mut each: impl FnMut(&mut Tra
 fn three_buses_at_one_berth_serve_it_once_each_in_turn() {
     let f = Fixture::new();
     let mut t = road(&f);
-    let ids = [add_bus(&mut t, &f, 1, 220.0, 8.0, 0.0), add_bus(&mut t, &f, 2, 195.0, 8.0, 0.0), add_bus(&mut t, &f, 3, 170.0, 8.0, 0.0)];
+    let ids = [
+        add_bus(&mut t, &f, 1, 220.0, 8.0, 0.0),
+        add_bus(&mut t, &f, 2, 195.0, 8.0, 0.0),
+        add_bus(&mut t, &f, 3, 170.0, 8.0, 0.0),
+    ];
     let mut docked_while_occupied = false;
     let mut together = false;
     let logs = run(&mut t, &ids, 150.0, |t, _| {
         together |= t.cars.iter().filter(|c| c.at_station()).count() == 2;
         // the one with the doors open at the berth is in it alone: nobody else's body in it
-        for c in t.cars.iter().filter(|c| c.at_station() && c.bus.as_ref().is_some_and(|b| b.held_berth().is_some())) {
+        for c in t
+            .cars
+            .iter()
+            .filter(|c| c.at_station() && c.bus.as_ref().is_some_and(|b| b.held_berth().is_some()))
+        {
             for o in t.cars.iter().filter(|o| o.id != c.id) {
                 let (a, b) = (o.state.s - o.state.rear, o.state.s + o.state.front);
                 docked_while_occupied |= b > STOP_S - c.state.rear && a < STOP_S + c.state.front;
@@ -132,14 +220,38 @@ fn three_buses_at_one_berth_serve_it_once_each_in_turn() {
         }
     });
     for (k, l) in logs.iter().enumerate() {
-        assert_eq!(l.opened_at.len(), 1, "bus {} opened its doors {} times: {l:?}", ids[k], l.opened_at.len());
+        assert_eq!(
+            l.opened_at.len(),
+            1,
+            "bus {} opened its doors {} times: {l:?}",
+            ids[k],
+            l.opened_at.len()
+        );
     }
-    assert!(logs[0].opened_at[0].abs() < 2.5 && logs[0].held, "{:?}", logs[0]);
-    assert!(logs[1].opened_at[0] > 2.5 && logs[1].opened_at[0] < berths::SERVE_QUEUED_REACH, "the second served from {:.1} m", logs[1].opened_at[0]);
-    assert!(logs[2].opened_at[0].abs() < 2.5 && logs[2].held, "{:?}", logs[2]);
+    assert!(
+        logs[0].opened_at[0].abs() < 2.5 && logs[0].held,
+        "{:?}",
+        logs[0]
+    );
+    assert!(
+        logs[1].opened_at[0] > 2.5 && logs[1].opened_at[0] < berths::SERVE_QUEUED_REACH,
+        "the second served from {:.1} m",
+        logs[1].opened_at[0]
+    );
+    assert!(
+        logs[2].opened_at[0].abs() < 2.5 && logs[2].held,
+        "{:?}",
+        logs[2]
+    );
     assert!(together, "the first two served the stop together");
     assert!(!docked_while_occupied, "a bus docked into another one");
-    assert_eq!(t.berths.holder(berths::BerthKey { stop: STOP_ID, lane: 0 }), None);
+    assert_eq!(
+        t.berths.holder(berths::BerthKey {
+            stop: STOP_ID,
+            lane: 0
+        }),
+        None
+    );
     assert_eq!(t.berths.granted, t.berths.released);
 }
 
@@ -162,11 +274,19 @@ fn an_occupied_stop_is_waited_for() {
                 c.state.max_speed_kmh = 50.0;
             }
         }
-        opened_while_there |= here && time < 15.0 && t.cars.iter().any(|c| c.id == bus && c.at_station());
+        opened_while_there |=
+            here && time < 15.0 && t.cars.iter().any(|c| c.id == bus && c.at_station());
     });
-    assert!(!opened_while_there, "the bus served the stop while the car stood in it");
+    assert!(
+        !opened_while_there,
+        "the bus served the stop while the car stood in it"
+    );
     assert_eq!(logs[0].opened_at.len(), 1, "{:?}", logs[0]);
-    assert!(logs[0].opened_at[0].abs() < 2.5, "served {:.1} m before the point", logs[0].opened_at[0]);
+    assert!(
+        logs[0].opened_at[0].abs() < 2.5,
+        "served {:.1} m before the point",
+        logs[0].opened_at[0]
+    );
 }
 
 /// A bus on its layover holds the berth for a quarter of an hour: the bus behind serves the
@@ -176,16 +296,42 @@ fn a_berth_held_for_long_is_served_from_behind() {
     let f = Fixture::new();
     let mut t = road(&f);
     let resting = add_bus(&mut t, &f, 1, STOP_S, 0.0, 900.0);
-    t.cars.iter_mut().find(|c| c.id == resting).unwrap().bus.as_mut().unwrap().layover = true;
-    t.cars.iter_mut().find(|c| c.id == resting).unwrap().bus.as_mut().unwrap().put_out = true;
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == resting)
+        .unwrap()
+        .bus
+        .as_mut()
+        .unwrap()
+        .layover = true;
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == resting)
+        .unwrap()
+        .bus
+        .as_mut()
+        .unwrap()
+        .put_out = true;
     let coming = add_bus(&mut t, &f, 2, 200.0, 8.0, 0.0);
     let logs = run(&mut t, &[resting, coming], 90.0, |_, _| {});
-    assert!(logs[0].held && logs[0].opened_at.is_empty(), "the layover bus: {:?}", logs[0]);
+    assert!(
+        logs[0].held && logs[0].opened_at.is_empty(),
+        "the layover bus: {:?}",
+        logs[0]
+    );
     assert_eq!(logs[1].opened_at.len(), 1, "{:?}", logs[1]);
-    assert!(logs[1].opened_at[0] > 2.5 && logs[1].opened_at[0] < berths::SERVE_BEHIND_REACH, "served from {:.1} m", logs[1].opened_at[0]);
+    assert!(
+        logs[1].opened_at[0] > 2.5 && logs[1].opened_at[0] < berths::SERVE_BEHIND_REACH,
+        "served from {:.1} m",
+        logs[1].opened_at[0]
+    );
     assert!(!logs[1].held, "it held the berth");
     let c = car(&t, coming);
-    assert!(c.bus.as_ref().unwrap().stops.is_empty() && !c.at_stop(), "it went on: {:?}", c.bus.as_ref().map(|b| b.phase));
+    assert!(
+        c.bus.as_ref().unwrap().stops.is_empty() && !c.at_stop(),
+        "it went on: {:?}",
+        c.bus.as_ref().map(|b| b.phase)
+    );
 }
 
 /// A bus on a long stand at a stop several lines share, and three buses of other lines
@@ -196,16 +342,48 @@ fn buses_behind_a_long_stand_serve_and_go_round_it() {
     let f = Fixture::new();
     let mut t = road(&f);
     let resting = add_bus(&mut t, &f, 1, STOP_S, 0.0, 1800.0);
-    t.cars.iter_mut().find(|c| c.id == resting).unwrap().bus.as_mut().unwrap().layover = true;
-    t.cars.iter_mut().find(|c| c.id == resting).unwrap().bus.as_mut().unwrap().put_out = true;
-    let coming: Vec<u64> = [(2, 200.0), (3, 140.0), (4, 80.0)].iter().map(|&(id, s)| add_bus(&mut t, &f, id, s, 8.0, 0.0)).collect();
-    let ids: Vec<u64> = std::iter::once(resting).chain(coming.iter().copied()).collect();
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == resting)
+        .unwrap()
+        .bus
+        .as_mut()
+        .unwrap()
+        .layover = true;
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == resting)
+        .unwrap()
+        .bus
+        .as_mut()
+        .unwrap()
+        .put_out = true;
+    let coming: Vec<u64> = [(2, 200.0), (3, 140.0), (4, 80.0)]
+        .iter()
+        .map(|&(id, s)| add_bus(&mut t, &f, id, s, 8.0, 0.0))
+        .collect();
+    let ids: Vec<u64> = std::iter::once(resting)
+        .chain(coming.iter().copied())
+        .collect();
     let logs = run(&mut t, &ids, 300.0, |_, _| {});
-    assert!(logs[0].opened_at.is_empty(), "the layover bus: {:?}", logs[0]);
+    assert!(
+        logs[0].opened_at.is_empty(),
+        "the layover bus: {:?}",
+        logs[0]
+    );
     for (k, id) in coming.iter().enumerate() {
-        assert_eq!(logs[k + 1].opened_at.len(), 1, "bus {id}: {:?}", logs[k + 1]);
+        assert_eq!(
+            logs[k + 1].opened_at.len(),
+            1,
+            "bus {id}: {:?}",
+            logs[k + 1]
+        );
         let c = car(&t, *id);
-        assert!(c.state.s > STOP_S + 20.0, "bus {id} is still at {:.0} m (the stop at {STOP_S})", c.state.s);
+        assert!(
+            c.state.s > STOP_S + 20.0,
+            "bus {id} is still at {:.0} m (the stop at {STOP_S})",
+            c.state.s
+        );
     }
 }
 
@@ -216,20 +394,60 @@ fn a_layover_behind_moves_up_once_the_berth_is_free() {
     let f = Fixture::new();
     let mut t = road(&f);
     let first = add_bus(&mut t, &f, 1, STOP_S, 0.0, 100.0);
-    t.cars.iter_mut().find(|c| c.id == first).unwrap().bus.as_mut().unwrap().layover = true;
-    t.cars.iter_mut().find(|c| c.id == first).unwrap().bus.as_mut().unwrap().put_out = true;
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == first)
+        .unwrap()
+        .bus
+        .as_mut()
+        .unwrap()
+        .layover = true;
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == first)
+        .unwrap()
+        .bus
+        .as_mut()
+        .unwrap()
+        .put_out = true;
     let second = add_bus(&mut t, &f, 2, 230.0, 6.0, 900.0);
-    t.cars.iter_mut().find(|c| c.id == second).unwrap().bus.as_mut().unwrap().layover = true;
-    t.cars.iter_mut().find(|c| c.id == second).unwrap().bus.as_mut().unwrap().put_out = true;
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == second)
+        .unwrap()
+        .bus
+        .as_mut()
+        .unwrap()
+        .layover = true;
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == second)
+        .unwrap()
+        .bus
+        .as_mut()
+        .unwrap()
+        .put_out = true;
     let mut moved_open = false;
     run(&mut t, &[first, second], 200.0, |t, _| {
-        moved_open |= t.cars.iter().any(|c| c.id == second && c.at_station() && c.state.speed > 0.1);
+        moved_open |= t
+            .cars
+            .iter()
+            .any(|c| c.id == second && c.at_station() && c.state.speed > 0.1);
     });
     let c = car(&t, second);
     let b = c.bus.as_ref().unwrap();
     assert!(!moved_open, "it moved with its doors open");
-    assert!((STOP_S - c.state.s).abs() < 2.5, "it stands {:.1} m before the point", STOP_S - c.state.s);
-    assert!(b.at_stop() && !b.behind, "{:?} behind {}", b.phase, b.behind);
+    assert!(
+        (STOP_S - c.state.s).abs() < 2.5,
+        "it stands {:.1} m before the point",
+        STOP_S - c.state.s
+    );
+    assert!(
+        b.at_stop() && !b.behind,
+        "{:?} behind {}",
+        b.phase,
+        b.behind
+    );
     assert!(b.held_berth().is_some());
 }
 
@@ -245,10 +463,41 @@ fn buses_setting_down_behind_one_at_the_end_of_its_trip_serve_from_behind() {
     let ids: Vec<u64> = [(1, 1390.0), (2, 1365.0), (3, 1340.0)]
         .iter()
         .map(|&(id, s)| {
-            let stops = vec![Stop { ri: 0, s: END_STOP, bay: 0.0, depart: t.day_time, id: STOP_ID, side: 0.0 }];
-            let setup = BusSetup { route: vec![0], stops, number: None, hof: None, timetable: AiTimetable { line: String::new(), terminus: String::new(), stops: Vec::new() } };
-            let vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
-            t.place_car(vehicle, LaneKind::Street, 0, s, f.ty.clone(), id * 0x101, None, Some(id), Some(8.0), Some(setup))
+            let stops = vec![Stop {
+                ri: 0,
+                s: END_STOP,
+                bay: 0.0,
+                depart: t.day_time,
+                id: STOP_ID,
+                side: 0.0,
+            }];
+            let setup = BusSetup {
+                route: vec![0],
+                stops,
+                number: None,
+                hof: None,
+                timetable: AiTimetable {
+                    line: String::new(),
+                    terminus: String::new(),
+                    stops: Vec::new(),
+                },
+            };
+            let vehicle = VehicleInstance::new(
+                f.ty.clone(),
+                crate::VehicleHost::new(crate::SimClock::default()),
+            );
+            t.place_car(
+                vehicle,
+                LaneKind::Street,
+                0,
+                s,
+                f.ty.clone(),
+                id * 0x101,
+                None,
+                Some(id),
+                Some(8.0),
+                Some(setup),
+            )
         })
         .collect();
     let mut opened: Vec<Vec<f32>> = vec![Vec::new(); 3];
@@ -267,11 +516,24 @@ fn buses_setting_down_behind_one_at_the_end_of_its_trip_serve_from_behind() {
         }
     }
     let first = car(&t, ids[0]);
-    assert!(first.trip_done() && first.bus.as_ref().unwrap().held_berth().is_some(), "the first stands at the berth at the end of its trip");
+    assert!(
+        first.trip_done() && first.bus.as_ref().unwrap().held_berth().is_some(),
+        "the first stands at the berth at the end of its trip"
+    );
     for (k, o) in opened.iter().enumerate() {
-        assert_eq!(o.len(), 1, "bus {} opened its doors {} times", ids[k], o.len());
+        assert_eq!(
+            o.len(),
+            1,
+            "bus {} opened its doors {} times",
+            ids[k],
+            o.len()
+        );
     }
-    assert!(opened[2][0] > berths::SERVE_QUEUED_REACH && opened[2][0] < berths::SERVE_BEHIND_REACH, "the third served from {:.1} m", opened[2][0]);
+    assert!(
+        opened[2][0] > berths::SERVE_QUEUED_REACH && opened[2][0] < berths::SERVE_BEHIND_REACH,
+        "the third served from {:.1} m",
+        opened[2][0]
+    );
 }
 
 /// A bus too fast to stop at its stop runs past it: the stop is missed - the doors stay
@@ -297,7 +559,13 @@ fn an_overshot_stop_is_missed_without_opening_the_doors() {
     let c = car(&t, bus);
     assert_eq!(c.bus.as_ref().unwrap().missed, vec![STOP_ID]);
     assert!(c.state.s > 300.0, "it went on: at {:.1}", c.state.s);
-    assert_eq!(t.berths.holder(berths::BerthKey { stop: STOP_ID, lane: 0 }), None);
+    assert_eq!(
+        t.berths.holder(berths::BerthKey {
+            stop: STOP_ID,
+            lane: 0
+        }),
+        None
+    );
 }
 
 /// Nobody wants an ordinary stop on the way: the bus drives past it. A stop its timetable
@@ -312,14 +580,26 @@ fn an_unwanted_stop_is_passed_and_a_timing_point_served() {
         {
             let b = t.cars[0].bus.as_mut().unwrap();
             // a stop further on is the trip's last
-            b.stops.push_back(Stop { ri: 0, s: 900.0, bay: 0.0, depart: 8.0 * 3600.0 + 120.0, id: 99, side: 0.0 });
+            b.stops.push_back(Stop {
+                ri: 0,
+                s: 900.0,
+                bay: 0.0,
+                depart: 8.0 * 3600.0 + 120.0,
+                id: 99,
+                side: 0.0,
+            });
             b.last_stop = Some(99);
             if always {
                 b.always = vec![STOP_ID];
             }
         }
         let logs = run(&mut t, &[bus], 40.0, |_, _| {});
-        assert_eq!(logs[0].opened_at.len(), always as usize, "always {always}: {:?}", logs[0]);
+        assert_eq!(
+            logs[0].opened_at.len(),
+            always as usize,
+            "always {always}: {:?}",
+            logs[0]
+        );
         assert!(car(&t, bus).bus.as_ref().unwrap().missed.is_empty());
     }
 }
@@ -331,7 +611,10 @@ fn a_bus_taken_off_gives_its_berth_back() {
     let mut t = road(&f);
     let bus = add_bus(&mut t, &f, 1, STOP_S, 0.0, 300.0);
     run(&mut t, &[bus], 2.0, |_, _| {});
-    let key = berths::BerthKey { stop: STOP_ID, lane: 0 };
+    let key = berths::BerthKey {
+        stop: STOP_ID,
+        lane: 0,
+    };
     assert_eq!(t.berths.holder(key), Some(bus));
     let i = t.cars.iter().position(|c| c.id == bus).unwrap();
     t.take_off(i, Removal::TakenOver);
@@ -395,14 +678,25 @@ fn pulling_out_of_a_bay_waits_for_a_car_close_behind() {
                     let b = car(t, bus);
                     let o = car(t, id);
                     let gap = b.state.s - b.state.rear - (o.state.s + o.state.front);
-                    left_with_car_behind = Some(gap > 0.0 && gap < berths::PULL_OUT_BEHIND && o.state.speed > berths::PULL_OUT_COMING);
+                    left_with_car_behind = Some(
+                        gap > 0.0
+                            && gap < berths::PULL_OUT_BEHIND
+                            && o.state.speed > berths::PULL_OUT_COMING,
+                    );
                 }
             }
         });
         if bay > 0.0 {
-            assert_eq!(left_with_car_behind, Some(false), "bay {bay}: pulled out in front of the car");
+            assert_eq!(
+                left_with_car_behind,
+                Some(false),
+                "bay {bay}: pulled out in front of the car"
+            );
         } else {
-            assert!(waited < 2.0, "in line with the lane it waited {waited:.1} s");
+            assert!(
+                waited < 2.0,
+                "in line with the lane it waited {waited:.1} s"
+            );
         }
     }
 }
@@ -430,7 +724,11 @@ fn a_holder_kept_short_of_its_point_serves_from_there_after_a_long_wait() {
     });
     assert!(put.is_some());
     assert_eq!(logs[0].opened_at.len(), 1, "{:?}", logs[0]);
-    assert!((SERVE_HERE_LONG_TEST..12.0).contains(&logs[0].opened_at[0]), "served {:.1} m before the point", logs[0].opened_at[0]);
+    assert!(
+        (SERVE_HERE_LONG_TEST..12.0).contains(&logs[0].opened_at[0]),
+        "served {:.1} m before the point",
+        logs[0].opened_at[0]
+    );
     assert!(car(&t, bus).bus.as_ref().unwrap().missed.is_empty());
 }
 

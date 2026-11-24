@@ -37,10 +37,15 @@ impl Buses {
     /// session's), if it is that file: read only once its size and hash say so.
     pub(super) fn own_copy(&self, e: &Entry) -> Option<Vec<u8>> {
         let (_, p) = omsi_cfg::find_in_roots(&e.path).filter(|(r, _)| !omsi_cfg::is_sandbox(r))?;
-        if !self.local_sha(&p, e.size).is_some_and(|h| h.eq_ignore_ascii_case(&e.sha256)) {
+        if !self
+            .local_sha(&p, e.size)
+            .is_some_and(|h| h.eq_ignore_ascii_case(&e.sha256))
+        {
             return None;
         }
-        omsi_cfg::vfs::read(&p).ok().filter(|d| d.len() as u64 == e.size && crate::mods::sha256_of(d).eq_ignore_ascii_case(&e.sha256))
+        omsi_cfg::vfs::read(&p).ok().filter(|d| {
+            d.len() as u64 == e.size && crate::mods::sha256_of(d).eq_ignore_ascii_case(&e.sha256)
+        })
     }
 
     /// The SHA-256 of the local file `p` if it has `size` bytes: nothing is read for another
@@ -51,12 +56,20 @@ impl Buses {
             if omsi_cfg::vfs::file_size(p) != Some(size) {
                 return None;
             }
-            return omsi_cfg::vfs::read(p).ok().filter(|d| d.len() as u64 == size).map(|d| crate::mods::sha256_of(&d));
+            return omsi_cfg::vfs::read(p)
+                .ok()
+                .filter(|d| d.len() as u64 == size)
+                .map(|d| crate::mods::sha256_of(&d));
         };
         if !md.is_file() || md.len() != size {
             return None;
         }
-        let mtime = md.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+        let mtime = md
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         let shas = || self.local_shas.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((_, _, h)) = shas().get(p).filter(|(s, t, _)| *s == size && *t == mtime) {
             return Some(h.clone());

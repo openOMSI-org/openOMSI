@@ -5,14 +5,13 @@ use crate::scene::World;
 
 impl Traffic {
     /// Attach explicitly listed cars (a `.zug` train): (type, reversed).
-    pub fn attach_cars(
-        &mut self,
-        car: usize,
-        cars: &[(Arc<VehicleType>, bool)],
-    ) {
+    pub fn attach_cars(&mut self, car: usize, cars: &[(Arc<VehicleType>, bool)]) {
         let c = &mut self.sim.cars[car];
         for (t, rev) in cars {
-            self.events.push(TrafficEvent::TrailerAdded { id: c.id, ty: t.clone() });
+            self.events.push(TrafficEvent::TrailerAdded {
+                id: c.id,
+                ty: t.clone(),
+            });
             c.vehicle.attach_trailer_ex(t.clone(), *rev);
         }
     }
@@ -37,13 +36,16 @@ impl Traffic {
     /// (the first, the one that drives, is not).
     pub(crate) fn consist(&self, ci: usize) -> Vec<(Arc<VehicleType>, bool)> {
         let v = &self.sim.cars[ci].vehicle;
-        std::iter::once((v.ty.clone(), false)).chain(v.trailers.iter().map(|t| (t.ty.clone(), t.reversed))).collect()
+        std::iter::once((v.ty.clone(), false))
+            .chain(v.trailers.iter().map(|t| (t.ty.clone(), t.reversed)))
+            .collect()
     }
 
     /// Couple `cars` behind car `ci` instead of the ones it has (a train made up anew).
     pub(crate) fn set_trailers(&mut self, ci: usize, cars: &[(Arc<VehicleType>, bool)]) {
         let c = &mut self.sim.cars[ci];
-        self.events.push(TrafficEvent::TrailersReleased { id: c.id });
+        self.events
+            .push(TrafficEvent::TrailersReleased { id: c.id });
         c.vehicle.trailers.clear();
         self.attach_cars(ci, cars);
     }
@@ -55,22 +57,66 @@ impl Traffic {
     /// in the opposite order, each turned round. `behind`: the lanes the train has behind
     /// it now, nearest last, for the track its cars stand on. The car keeps its id and its
     /// service.
-    pub(crate) fn turn_train(&mut self, world: &World, ci: usize, lane: usize, s: f32, behind: &[usize], reversed: bool) {
-        let cars: Vec<(Arc<VehicleType>, bool)> = self.consist(ci).into_iter().rev().map(|(t, r)| (t, !r)).collect();
-        let Some((lead, lead_turned)) = cars.first().cloned() else { return };
+    pub(crate) fn turn_train(
+        &mut self,
+        world: &World,
+        ci: usize,
+        lane: usize,
+        s: f32,
+        behind: &[usize],
+        reversed: bool,
+    ) {
+        let cars: Vec<(Arc<VehicleType>, bool)> = self
+            .consist(ci)
+            .into_iter()
+            .rev()
+            .map(|(t, r)| (t, !r))
+            .collect();
+        let Some((lead, lead_turned)) = cars.first().cloned() else {
+            return;
+        };
         if lead_turned {
             // (a lead car turned round is drawn facing the way: none of the stock trains has one)
-            log::debug!("train {}: its last car leads turned round", self.sim.cars[ci].id);
+            log::debug!(
+                "train {}: its last car leads turned round",
+                self.sim.cars[ci].id
+            );
         }
-        let (id, seed, scheme) = (self.sim.cars[ci].id, self.sim.cars[ci].seed, self.sim.cars[ci].scheme);
+        let (id, seed, scheme) = (
+            self.sim.cars[ci].id,
+            self.sim.cars[ci].seed,
+            self.sim.cars[ci].scheme,
+        );
         // (where its cars stood, front to back: they stand there still, the other way round)
-        let before: Vec<DVec3> = std::iter::once(self.sim.cars[ci].vehicle.position).chain(self.sim.cars[ci].vehicle.trailers.iter().map(|t| t.position)).collect();
+        let before: Vec<DVec3> = std::iter::once(self.sim.cars[ci].vehicle.position)
+            .chain(
+                self.sim.cars[ci]
+                    .vehicle
+                    .trailers
+                    .iter()
+                    .map(|t| t.position),
+            )
+            .collect();
         let center = self.sim.viewer.map(|v| v.pos).unwrap_or_default();
         let kind = self.sim.net.lanes[lane].kind;
         // (the new car takes the id: the old one's renders are let go once it is replaced)
         self.events.push(TrafficEvent::Detached { id });
-        self.create_car(world, center, kind, lane, s, lead, seed, Some(scheme), Some(id), Some(0.0), None);
-        let Some(mut new) = self.sim.cars.pop() else { return };
+        self.create_car(
+            world,
+            center,
+            kind,
+            lane,
+            s,
+            lead,
+            seed,
+            Some(scheme),
+            Some(id),
+            Some(0.0),
+            None,
+        );
+        let Some(mut new) = self.sim.cars.pop() else {
+            return;
+        };
         let old = &mut self.sim.cars[ci];
         // its service goes with it (its line and destination are set for the trip it takes
         // on); the way it drives, from where it stands
@@ -92,12 +138,30 @@ impl Traffic {
         let c = &mut self.sim.cars[ci];
         let trail = &c.rail_trail;
         let (state, net) = (&c.state, &self.sim.net);
-        c.vehicle.retrail(0.0, &|d| Some(rail_behind(trail, state, net, d)));
-        let after: Vec<DVec3> = std::iter::once(c.vehicle.position).chain(c.vehicle.trailers.iter().map(|t| t.position)).collect();
-        let moved = before.iter().rev().zip(&after).map(|(a, b)| (*a - *b).truncate().length()).fold(0.0f64, f64::max);
+        c.vehicle
+            .retrail(0.0, &|d| Some(rail_behind(trail, state, net, d)));
+        let after: Vec<DVec3> = std::iter::once(c.vehicle.position)
+            .chain(c.vehicle.trailers.iter().map(|t| t.position))
+            .collect();
+        let moved = before
+            .iter()
+            .rev()
+            .zip(&after)
+            .map(|(a, b)| (*a - *b).truncate().length())
+            .fold(0.0f64, f64::max);
         log::info!(
             "train {id} turned round: {} (its cars {:.1} m at most from where they stood)",
-            std::iter::once(&c.vehicle.ty).chain(c.vehicle.trailers.iter().map(|t| &t.ty)).map(|t| t.def.path.file_stem().unwrap_or_default().to_string_lossy().to_string()).collect::<Vec<_>>().join(" + "),
+            std::iter::once(&c.vehicle.ty)
+                .chain(c.vehicle.trailers.iter().map(|t| &t.ty))
+                .map(|t| t
+                    .def
+                    .path
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string())
+                .collect::<Vec<_>>()
+                .join(" + "),
             moved
         );
     }
@@ -144,7 +208,12 @@ impl Traffic {
 
     /// See [`Traffic::trailer_chain`]: from `ty` (turned round: `rev`) towards the back of
     /// the train, or towards its front, the nearest first.
-    pub(crate) fn coupled_chain(&mut self, ty: &Arc<VehicleType>, rev: bool, toward_back: bool) -> Vec<(Arc<VehicleType>, bool)> {
+    pub(crate) fn coupled_chain(
+        &mut self,
+        ty: &Arc<VehicleType>,
+        rev: bool,
+        toward_back: bool,
+    ) -> Vec<(Arc<VehicleType>, bool)> {
         let key = (ty.def.path.clone(), rev, toward_back);
         if let Some(chain) = self.sim.coupled_chains.get(&key) {
             return chain.clone();
@@ -153,7 +222,8 @@ impl Traffic {
         let (mut lead, mut lead_rev) = (ty.clone(), rev);
         let mut seen = vec![lead.def.path.clone()];
         for _ in 0..crate::spawn::MAX_COUPLED_PARTS {
-            let Some((path, r)) = crate::spawn::next_coupled(&lead.def, lead_rev, toward_back) else {
+            let Some((path, r)) = crate::spawn::next_coupled(&lead.def, lead_rev, toward_back)
+            else {
                 break;
             };
             // a consist that comes round again ends here (see `spawn::chain_has_part`)
@@ -161,16 +231,17 @@ impl Traffic {
                 break;
             }
             let root = self.sim.root.clone();
-            let t =
-                self.sim.trailer_types.entry(path.clone()).or_insert_with(
-                    || match VehicleType::load_ai(&root, &path) {
-                        Ok(t) => Some(Arc::new(t)),
-                        Err(e) => {
-                            log::warn!("trailer {}: {e}", path.display());
-                            None
-                        }
-                    },
-                );
+            let t = self
+                .sim
+                .trailer_types
+                .entry(path.clone())
+                .or_insert_with(|| match VehicleType::load_ai(&root, &path) {
+                    Ok(t) => Some(Arc::new(t)),
+                    Err(e) => {
+                        log::warn!("trailer {}: {e}", path.display());
+                        None
+                    }
+                });
             let Some(t) = t.clone() else { break };
             out.push((t.clone(), r));
             seen.push(path);

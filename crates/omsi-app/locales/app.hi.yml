@@ -3265,6 +3265,11 @@
 "Lights on in a downpour": "मूसलाधार बारिश में रोशनी"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "दिन में तेज़ बारिश के दौरान कुछ घरों की खिड़कियों में रोशनी जलती है, क्योंकि इतना अंधेरा हो जाता है कि बत्ती जलानी पड़े"
 
+"Buses of this session": "इस सत्र की बसें"
+"every bus": "प्रत्येक बस"
+"The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.": "खिलाड़ियों द्वारा चलाई जाने वाली बसें, ; से अलग की गई। खाली: प्रत्येक बस।"
+"only these buses can be driven here ({list})": "यहाँ केवल ये बसें चलाई जा सकती हैं ({list})"
+
 "Read the map's passenger numbers exactly": "मानचित्र की यात्री संख्या को सटीक रूप से पढ़ें"
 "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "यात्री: 0.7 वाला स्टॉप घनत्व से पहले 1 में बदलने के बजाय 0.7 रहता है; बंद: OMSI 2 का राउंडिंग"
 "Load a situation...": "स्थिति लोड करें..."

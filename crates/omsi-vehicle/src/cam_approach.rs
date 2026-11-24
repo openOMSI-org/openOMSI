@@ -27,7 +27,11 @@ pub fn approach(cur: &crate::Camera, target: &crate::Camera, dt: f32) -> crate::
     let rest = left_after(dt);
     let l = |x: f32, y: f32| y - (y - x) * rest;
     crate::Camera {
-        pos: [l(cur.pos[0], target.pos[0]), l(cur.pos[1], target.pos[1]), l(cur.pos[2], target.pos[2])],
+        pos: [
+            l(cur.pos[0], target.pos[0]),
+            l(cur.pos[1], target.pos[1]),
+            l(cur.pos[2], target.pos[2]),
+        ],
         dist: l(cur.dist, target.dist),
         fov: l(cur.fov, target.fov),
         yaw: target.yaw - wrap_deg(target.yaw - cur.yaw) * rest,
@@ -73,7 +77,15 @@ mod tests {
     use super::*;
 
     fn cam(x: f32, yaw: f32, fov: f32) -> crate::Camera {
-        crate::Camera { pos: [x, 0.0, 1.8], dist: 0.0, fov, yaw, pitch: 0.0, extra: None, fixed: false }
+        crate::Camera {
+            pos: [x, 0.0, 1.8],
+            dist: 0.0,
+            fov,
+            yaw,
+            pitch: 0.0,
+            extra: None,
+            fixed: false,
+        }
     }
 
     #[test]
@@ -83,7 +95,11 @@ mod tests {
         let (from, to) = (cam(1.0, 20.0, 50.0), cam(0.0, 0.0, 60.0));
         let one = approach(&from, &to, 1.0 / 60.0);
         let k = (-1.0f32 / 12.0).exp();
-        assert!((one.pos[0] - k).abs() < 1e-5 && (one.yaw - 20.0 * k).abs() < 1e-4 && (one.fov - (60.0 - 10.0 * k)).abs() < 1e-4);
+        assert!(
+            (one.pos[0] - k).abs() < 1e-5
+                && (one.yaw - 20.0 * k).abs() < 1e-4
+                && (one.fov - (60.0 - 10.0 * k)).abs() < 1e-4
+        );
         let mut c = from.clone();
         for _ in 0..12 {
             c = approach(&c, &to, 1.0 / 60.0);
@@ -99,7 +115,10 @@ mod tests {
     #[test]
     fn a_long_frame_counts_no_more_than_200_ms() {
         let (from, to) = (cam(1.0, 0.0, 60.0), cam(0.0, 0.0, 60.0));
-        assert_eq!(approach(&from, &to, 2.0).pos[0], approach(&from, &to, 0.2).pos[0]);
+        assert_eq!(
+            approach(&from, &to, 2.0).pos[0],
+            approach(&from, &to, 0.2).pos[0]
+        );
         assert!((left_after(0.2) - (-1.0f32).exp()).abs() < 1e-6);
     }
 
@@ -114,7 +133,9 @@ mod tests {
     fn f1_returns_home_on_the_same_curve() {
         assert_eq!(home((30.0, -10.0), 0.5, 0.0), ((30.0, -10.0), 0.5, false));
         let (look, zoom, done) = home((30.0, -10.0), 0.5, 0.2);
-        assert!((look.0 - 30.0 * (-1.0f32).exp()).abs() < 1e-3 && zoom > 0.5 && zoom < 1.0 && !done);
+        assert!(
+            (look.0 - 30.0 * (-1.0f32).exp()).abs() < 1e-3 && zoom > 0.5 && zoom < 1.0 && !done
+        );
         assert_eq!(home((30.0, -10.0), 0.5, 5.0), ((0.0, 0.0), 1.0, true));
         assert_eq!(step(1.0), 0.2);
     }
