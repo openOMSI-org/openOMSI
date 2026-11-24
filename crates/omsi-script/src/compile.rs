@@ -529,16 +529,22 @@ pub fn compile(input: &CompileInput) -> Program {
         c.compile_file(f);
     }
     p.consts = consts;
-    // Resolve macro calls.
+    // Resolve macro calls. Omsi.exe sub_5d1db8 reads all script files as one stream of words
+    // and builds it from the last word to the first, registering each `{macro:}` header as it
+    // passes it: a `(M.L.name)` can only find a macro whose header comes after the call (the
+    // last definition of the name, if that is below the call). One defined above its call - or
+    // a macro calling itself - is `SC_ErrorInCommand_macroinvalid` there and does nothing.
+    // Blocks are numbered in the order of their headers, so "after the call" is a higher id.
     for (block, op, name) in pending {
         match p.macros.get(&name).copied() {
-            Some(id) => p.blocks[block].ops[op] = Op::Macro(id),
-            None => {
+            Some(id) if id as usize > block => p.blocks[block].ops[op] = Op::Macro(id),
+            found => {
                 let (file, line) = (p.blocks[block].file.clone(), p.blocks[block].line);
+                let why = found.map_or("not found", |_| "is defined above its call");
                 p.errors.push(ScriptError {
                     file,
                     line,
-                    message: format!("SC_ErrorInCommand_macroinvalid: macro \"{name}\" not found"),
+                    message: format!("SC_ErrorInCommand_macroinvalid: macro \"{name}\" {why}"),
                 });
                 // A missing macro leaves the stack untouched in the original; emulate by
                 // replacing with a no-op pair.
@@ -1348,6 +1354,31 @@ mod tests {
                 .any(|e| e.message.contains("unterminated string"))
         );
         assert_eq!(p.frame.len(), 1);
+    }
+
+    /// Omsi.exe sub_5d1db8 finds a `(M.L.name)` only among the macros defined below the call:
+    /// one defined above it, or the macro itself, is `macroinvalid` and the call does nothing.
+    #[test]
+    fn a_macro_call_finds_only_a_macro_defined_below_it() {
+        let p = program_of(
+            "{macro:above}\n1 (S.L.a)\n{end}\n{frame}\n(M.L.above) (M.L.below)\n{end}\n{macro:below}\n(M.L.below) 2 (S.L.b)\n{end}\n",
+        );
+        let frame = &p.blocks[p.frame[0] as usize].ops;
+        let below = p.macro_block("below").unwrap();
+        assert!(!matches!(frame[0], Op::Macro(_)), "{frame:?}");
+        assert_eq!(frame[1], Op::Macro(below));
+        let body = &p.blocks[below as usize].ops;
+        assert!(!matches!(body[0], Op::Macro(_)), "{body:?}");
+        let msgs: Vec<&str> = p.errors.iter().map(|e| e.message.as_str()).collect();
+        assert_eq!(msgs.len(), 2, "{msgs:?}");
+        assert!(
+            msgs[0].contains("macroinvalid: macro \"above\""),
+            "{msgs:?}"
+        );
+        assert!(
+            msgs[1].contains("macroinvalid: macro \"below\""),
+            "{msgs:?}"
+        );
     }
 
     #[test]
