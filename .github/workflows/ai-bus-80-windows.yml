@@ -1,0 +1,150 @@
+name: Windows x64 portable - AI bus 80 km/h
+
+on:
+  push:
+    branches: [test/ai-bus-speed-80]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-bus-80-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      matrix:
+        arch: [x64]
+    env:
+      CARGO_TERM_COLOR: always
+      TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Stamp test version (disable upstream auto-updates)
+        shell: bash
+        run: echo "OPENOMSI_VERSION=$(sh scripts/version.sh)-pr0-ai80" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.TARGET }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ env.TARGET }}
+          save-if: true
+          workspaces: |
+            . -> target
+            launcher/src-tauri -> target
+      - name: Build
+        shell: cmd
+        run: scripts\build-windows.cmd %TARGET%
+      # Microsoft's shader compiler for DirectX 12 (dxcompiler.dll, dxil.dll beside the
+      # program): without it wgpu falls back to the old FXC, which is slow and refuses
+      # some of the game's shaders. DirectX 12 is the way round a Vulkan driver that fails.
+      - name: DirectX shader compiler
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R microsoft/DirectXShaderCompiler --pattern "dxc_*.zip" -D dxc
+          $zip = Get-ChildItem dxc/*.zip | Where-Object { $_.Name -notmatch "linux|pdb" } | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath dxc/x
+          $arch = if ("${{ matrix.arch }}" -eq "arm64") { "arm64" } else { "x64" }
+          Copy-Item "dxc/x/bin/$arch/dxcompiler.dll", "dxc/x/bin/$arch/dxil.dll" dist/windows/
+          Get-ChildItem dist/windows
+      # Google's ANGLE (OpenGL ES over Direct3D 11) for the "ANGLE (DirectX 11)" graphics API:
+      # libEGL.dll and libGLESv2.dll built from ANGLE's own source by
+      # openOMSI-org/angle-openomsi, taken by its release tag and checked against the
+      # SHA-256 recorded here (and the DLLs against the release's own SHA256SUMS). x64 only:
+      # there is no ARM64 build, and the game skips the option without the DLLs.
+      - name: ANGLE (DirectX 11)
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANGLE_TAG: angle-8091-36b74e4dd4
+          ANGLE_SHA256: 1c0086155a17445110dd97400018ca6e72ea245ef178989b457720ee1fba3af5
+        run: |
+          gh release download $env:ANGLE_TAG -R openOMSI-org/angle-openomsi --pattern "*-windows-x64.zip" -D angle
+          $zip = Get-ChildItem angle/*.zip | Select-Object -First 1
+          $have = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower()
+          if ($have -ne $env:ANGLE_SHA256) { throw "ANGLE zip: SHA-256 $have, expected $env:ANGLE_SHA256" }
+          Expand-Archive $zip.FullName -DestinationPath angle/x
+          $dir = Get-ChildItem angle/x -Directory | Select-Object -First 1
+          foreach ($line in Get-Content (Join-Path $dir.FullName "SHA256SUMS")) {
+            $want, $name = $line -split '\s+\*?', 2
+            $got = (Get-FileHash (Join-Path $dir.FullName $name) -Algorithm SHA256).Hash.ToLower()
+            if ($got -ne $want.ToLower()) { throw "ANGLE ${name}: SHA-256 $got, expected $want" }
+          }
+          Copy-Item (Join-Path $dir.FullName "libEGL.dll"), (Join-Path $dir.FullName "libGLESv2.dll"), (Join-Path $dir.FullName "LICENSE-ANGLE.txt") dist/windows/
+          Get-ChildItem dist/windows
+      # NVIDIA DLSS is NOT bundled in any openOMSI release. A player may
+      # download the official SDK explicitly through the Windows launcher.
+      # The AMD FidelityFX binaries below retain their own MIT terms.
+      # The four specific signed FidelityFX SDK 2.4.0 DLLs below are explicitly
+      # MIT-licensed exceptions in the pinned SDK's Kits/FidelityFX/docs/license.md.
+      # Keep the exact file allowlist, upstream license and third-party notices.
+      - name: AMD FidelityFX SDK 2.4.0 (FSR 3, x64; MIT-listed DLLs)
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          git init -q ffx
+          git -C ffx remote add origin https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
+          git -C ffx sparse-checkout set --no-cone /Kits/FidelityFX/signedbin/amd_fidelityfx_loader_dx12.dll /Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_dx12.dll /Kits/FidelityFX/signedbin/amd_fidelityfx_loader_vk.dll /Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_vk.dll /Kits/FidelityFX/docs/license.md /3rdpartynotice.md
+          git -C ffx fetch -q --depth 1 origin 7539ae8b6568ad29ed78a753404351daf3b5cca7
+          git -C ffx checkout -q FETCH_HEAD
+          if ((git -C ffx rev-parse HEAD) -ne '7539ae8b6568ad29ed78a753404351daf3b5cca7') { throw 'FidelityFX SDK commit mismatch' }
+          $files = @('amd_fidelityfx_loader_dx12.dll', 'amd_fidelityfx_upscaler_dx12.dll', 'amd_fidelityfx_loader_vk.dll', 'amd_fidelityfx_upscaler_vk.dll')
+          $licence = Get-Content ffx/Kits/FidelityFX/docs/license.md -Raw
+          $mitSection = $licence.IndexOf('These source files')
+          $mitGrant = $licence.IndexOf('are subject to the following license:', $mitSection)
+          if ($mitSection -lt 0 -or $mitGrant -lt 0 -or $licence.Substring($mitGrant) -notmatch 'Permission is hereby granted') { throw 'FidelityFX MIT exception section missing' }
+          foreach ($file in $files) {
+            $entry = 'Kits\FidelityFX\signedbin\' + $file
+            if ($licence.Substring($mitSection, $mitGrant - $mitSection) -notlike ('*' + $entry + '*')) { throw "Not explicitly MIT-licensed: $file" }
+            $signed = Get-AuthenticodeSignature (Join-Path ffx/Kits/FidelityFX/signedbin $file)
+            if ($signed.Status -ne 'Valid' -or $signed.SignerCertificate.Subject -notmatch '(^|, )O=Advanced Micro Devices(,|$)') { throw "AMD signature of ${file}: $($signed.Status)" }
+            Copy-Item (Join-Path ffx/Kits/FidelityFX/signedbin $file) dist/windows/
+          }
+          Copy-Item ffx/Kits/FidelityFX/docs/license.md dist/windows/LICENSE-FidelityFX.md
+          Copy-Item ffx/3rdpartynotice.md dist/windows/THIRD-PARTY-FidelityFX.md
+          $note = @(
+            'These four DLLs are listed as MIT-licensed exceptions in the pinned AMD FidelityFX SDK 2.4.0 license:',
+            'amd_fidelityfx_loader_dx12.dll, amd_fidelityfx_upscaler_dx12.dll,',
+            'amd_fidelityfx_loader_vk.dll, amd_fidelityfx_upscaler_vk.dll',
+            'Original SDK commit: 7539ae8b6568ad29ed78a753404351daf3b5cca7',
+            'Full license: LICENSE-FidelityFX.md (MIT grant is near the end)',
+            'Additional upstream third-party notices: THIRD-PARTY-FidelityFX.md'
+          ) -join "`n"
+          Set-Content -Path dist/windows/FidelityFX-BINARIES-NOTICE.txt -Value $note -Encoding UTF8
+          Get-ChildItem dist/windows/amd_fidelityfx_*.dll | Select-Object Name,Length
+      - name: Visual C++ runtime
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          $crt = Get-ChildItem "$vs\VC\Redist\MSVC\*\${{ matrix.arch }}\Microsoft.VC*.CRT" -Directory -ErrorAction SilentlyContinue | Sort-Object FullName | Select-Object -Last 1
+          $dir = if ($crt) { $crt.FullName } elseif ("${{ matrix.arch }}" -eq "x64") { "$env:SystemRoot\System32" } else { throw "no ARM64 Visual C++ runtime in $vs" }
+          foreach ($dll in "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll") {
+            Copy-Item (Join-Path $dir $dll) dist/windows/
+          }
+          Get-ChildItem dist/windows
+      - name: Verify portable files and package
+        shell: pwsh
+        run: |
+          foreach ($file in @('openomsi.exe','openomsi-launcher.exe','openomsi-launcher-app.exe','omsi-plugin-host32.exe','steam_api64.dll','vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll')) {
+            if (-not (Test-Path "dist/windows/$file")) { throw "Missing $file" }
+          }
+          Copy-Item README.md, LICENSE dist/windows/
+          New-Item -ItemType Directory -Force out | Out-Null
+          Compress-Archive -Path dist/windows/* -DestinationPath "out/openOMSI-ai80-windows-x64-portable.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openOMSI-ai80-windows-x64-portable
+          path: out/openOMSI-ai80-windows-x64-portable.zip
+          if-no-files-found: error
+          retention-days: 14
