@@ -17,8 +17,11 @@ pub struct LightStop {
 }
 
 /// How far before its stop line a vehicle asks a light for green when the program gives no
-/// `[approachdist]` (m): about four seconds at town speed.
-pub const DEFAULT_APPROACH: f32 = 50.0;
+/// `[approachdist]` (m). Omsi.exe's `.sco` reader (0x7b4214) starts every `[traffic_light]`
+/// with an approach distance of 10 m, and its path search (0x716970) asks the light only
+/// once the path start is nearer than that; a default of 50 m had a demand light turn for
+/// a car four seconds before it came to the line.
+pub const DEFAULT_APPROACH: f32 = 10.0;
 
 /// From how far before the stop line (m) a rail vehicle asks a light whose program gives
 /// no distance (unset or 0, as level crossings mostly do): about its braking distance from
