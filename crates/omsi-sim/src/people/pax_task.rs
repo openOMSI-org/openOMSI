@@ -1,5 +1,6 @@
 //! Passengers' tasks (sub_62e42c): setting one up and what each task does every frame.
 
+use super::entry_doors::EntryDoors;
 use super::pax_stops::entry_on_platform;
 use super::*;
 
@@ -379,7 +380,13 @@ impl PeopleSim {
             .map(|k| bn.entry_open.get(k).copied().unwrap_or(false))
             .collect();
         let is_buying = p.ticket == TICKET_BUY;
-        let search_list: Vec<_> = if is_player && is_buying {
+        let has_ticket_sale = flags
+            .iter()
+            .enumerate()
+            .any(|(k, f)| list[k].is_some() && !f.0);
+        let restrict_noticketsale =
+            is_buying && ((is_player && doors != EntryDoors::AsBus) || has_ticket_sale);
+        let search_list: Vec<_> = if restrict_noticketsale {
             list.iter()
                 .enumerate()
                 .map(|(k, pt)| {

@@ -352,3 +352,14 @@ fn ai_bus_ticket_buyers_keep_fallback_when_all_doors_are_noticketsale() {
     h.pax_mut(0).unwrap().ticket = TICKET_BUY;
     assert!(door_chosen(&mut h, &bus).is_some());
 }
+
+#[test]
+fn player_default_as_bus_ticket_buyers_keep_fallback_when_all_doors_are_noticketsale() {
+    let (mut h, bus) = bus_with_cabin_entries(
+        "player-as-bus-all-nosale",
+        "[entry]\n0\n{noticketsale}\n\n[entry]\n1\n{noticketsale}\n\n[exit]\n1\n\n",
+    );
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    h.entry_doors = EntryDoors::AsBus;
+    assert!(door_chosen(&mut h, &bus).is_some());
+}
