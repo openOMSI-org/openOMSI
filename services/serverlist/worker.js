@@ -44,7 +44,7 @@ export class List extends DurableObject {
   }
 
   forget(now) {
-    for (const [id, l] of [...this.listings]) if (l.beat < now - TTL_MS) this.listings.delete(id);
+    for (const [id, l] of [...this.listings]) if (l.beat < now - TTL_MS) this.listings.delete(id).catch(() => {});
     if (now - this.swept > 60000) { this.registers.sweep(now); this.swept = now; }
   }
 
@@ -108,6 +108,10 @@ export class List extends DurableObject {
     if (Number.isFinite(p)) l.players = Math.max(0, Math.min(l.max_players || 1000, Math.trunc(p)));
     if (!l.verified && now - l.lastTry > 15000) await this.verify(l, now);
     else if (l.verified && now - l.verifiedAt > REVERIFY_MS) await this.verify(l, now);
+    // (the check fetches the server's page, and other requests run meanwhile: one that took
+    // the listing away - an unlist, a register of the same address - must not see it written
+    // back from this stale copy)
+    if (this.listings.get(l.id) !== l) return { status: 404, body: { error: "unknown listing" } };
     await this.listings.save(l);
     return { status: 200, body: l.verified ? { verified: true } : { verified: false, error: l.error } };
   }
