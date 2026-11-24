@@ -1209,9 +1209,12 @@ mod tests {
     use super::*;
 
     fn program_of(script: &str) -> Program {
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!(
-            "omsi_gearbox_{}_{}",
+            "omsi_gearbox_{}_{}_{}",
             std::process::id(),
+            n,
             script.len()
         ));
         std::fs::create_dir_all(&dir).unwrap();
