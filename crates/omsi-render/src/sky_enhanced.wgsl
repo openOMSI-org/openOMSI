@@ -429,9 +429,10 @@ fn high_clouds(d: vec3<f32>, bg: vec3<f32>, pix: f32) -> vec4<f32> {
         let field = hc_fbm(ph / 22000.0 + vec2<f32>(3.1, 7.7), fp / 22000.0, 3);
         let patchy = smoothstep(0.62 - 0.3 * amount, 0.85 - 0.2 * amount, field);
         if (patchy > 0.001) {
-            // (the wind aloft lays the fibres out; it turns slowly across the sky)
-            let turn = 0.6 + 1.2 * (hc_fbm(ph / 60000.0, 0.0, 2) - 0.5);
-            let ax = vec2<f32>(cos(turn), sin(turn));
+            // Rotate the field once and bend it with the bounded offsets below. A
+            // position-dependent rotation of absolute coordinates magnifies the turn
+            // with distance and folds the fibres into rings.
+            let ax = vec2<f32>(cos(0.6), sin(0.6));
             let r = vec2<f32>(dot(ph, ax), dot(ph, vec2<f32>(-ax.y, ax.x)));
             // (the wisps: soft elongated tufts some kilometres long, their edges fading over
             // hundreds of metres - real cirrus has no hard rim)
