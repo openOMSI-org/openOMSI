@@ -440,15 +440,8 @@ impl VehicleInstance {
                 self.put(w[3], suspension);
             }
         }
-        let n_wheel = self
-            .physics
-            .wheels
-            .iter()
-            .find(|w| w[0].driven)
-            .or(self.physics.wheels.first())
-            .map(|w| w[0].rpm)
-            .unwrap_or(0.0);
-        self.put(self.v_n_wheel, n_wheel);
+        let first_diameter = self.ty.def.axles.first().map(|a| a.wheel_diameter);
+        self.put(self.v_n_wheel, ai_n_wheel(ai.speed, first_diameter));
         let a = self.physics.accel;
         self.physics.a_trans = a;
         self.put(self.v_accel[0], a.x);
@@ -778,6 +771,19 @@ impl OmsiFrames {
 /// The body-frame acceleration the scripts see as `A_Trans_*` (Omsi.exe 0x7d5124: the
 /// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
 /// an accelerometer would read, less gravity's share in the body frame.
+/// `n_Wheel` (rpm) of a vehicle the AI moves along its path: Omsi.exe (0x7debb0) takes it
+/// straight from the speed, 60·v / (π·d) with `d` the first axle's wheel size, the rpm a
+/// wheel of that size turns at rolling straight ahead - whichever axle drives and however
+/// the vehicle steers; 0 for a vehicle without axles. (Omsi.exe turns it round for a car
+/// turned round in its train, +0x4e0, as its speed there is the head car's; `speed` here is
+/// already the vehicle's own, backwards negative.)
+pub(super) fn ai_n_wheel(speed: f32, first_diameter: Option<f32>) -> f32 {
+    match first_diameter {
+        Some(d) if d > 0.0 => 60.0 * speed / (std::f32::consts::PI * d),
+        _ => 0.0,
+    }
+}
+
 pub(super) fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
     accel_body - orientation.inverse().mul_vec3(Vec3::new(0.0, 0.0, 9.81))
 }
