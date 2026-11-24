@@ -233,6 +233,8 @@ mod tests {
     /// and the panes' condensation laid in the bus's tilted frame (#3958),
     /// and the rain and the snow on the panes shared with the classic pictures, the cabin's
     /// reflection probe gone, the traffic's wet windows and the windows lit in a downpour.
+    /// And #2687: a cut-out standing level (a fence, a railing) lit by the sun on the side
+    /// it faces alone.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
@@ -244,7 +246,7 @@ mod tests {
         assert_eq!((scene.len(), fnv1a(&scene)), (152452, 430776714718153452));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (120896, 13494406483603996684)
+            (121877, 7583748624178780237)
         );
     }
 }
