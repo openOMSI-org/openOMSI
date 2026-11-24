@@ -539,6 +539,10 @@ pub(crate) fn weather_lighting(
     lighting.cloud_density = density;
     lighting.cloud_offset = offset;
     lighting.vanilla_sky = vanilla_sky(w, cloud_drift, &sky.clouds, sky.look.clouds);
+    // (the street lamps and Envir_Brightness follow Omsi.exe's daylight under this weather)
+    let named = |(k, _): &&(String, CloudType)| k.eq_ignore_ascii_case(w.clouds.0.trim());
+    let ovc = sky.clouds.as_ref().filter(named).map(|(_, t)| t.overcast);
+    omsi_sim::daylight::set_sky_weather(omsi_weather::conditions::sky_weather(w, ovc));
     let model_sky = sky.model.as_ref().map(|m| m.sky());
     let (kind, rate) = precip_of(w);
     lights::apply_weather(

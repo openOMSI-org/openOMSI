@@ -63,6 +63,20 @@ pub fn precip_of(w: &Weather) -> (i32, f32) {
     (kind, rate)
 }
 
+/// What of this weather Omsi.exe's daylight takes in (the street lamps, `Envir_Brightness`):
+/// its `[fog]`, what falls, and its clouds - `overcast` is whether the clouds.cfg type it
+/// names is an `ovc` deck, `None` when it names none (`-1`) or one clouds.cfg lacks.
+pub fn sky_weather(w: &Weather, overcast: Option<bool>) -> omsi_sim::daylight::SkyWeather {
+    let kind = w.precip.first().copied().unwrap_or(0.0) as i32;
+    omsi_sim::daylight::SkyWeather {
+        visibility: w.fog.0,
+        fog_density: w.fog.1,
+        precip_kind: kind,
+        precip_strength: w.precip.get(1).copied().unwrap_or(0.0).clamp(0.0, 255.0),
+        clouds: overcast.filter(|_| !w.clouds.0.trim().starts_with("-1")),
+    }
+}
+
 /// The road under the wheels as the scripts and the sound configurations read it
 /// (`StreetCond`): 0 dry, 1 wet, 2 covered in snow. A snowfall (or a weather with
 /// `[snowOnRoad]`) puts it into the upper half, everything else follows the water film.
