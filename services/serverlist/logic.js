@@ -115,10 +115,10 @@ export function sourceKey(ip) {
   return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":") + "::/64";
 }
 
-// The listings, in the Durable Object's storage as well as in memory. Cloudflare hibernates
-// an idle object about ten seconds after its last request, and its memory goes with it: kept
-// in memory alone, a server beating once a minute was unknown at every heartbeat and listed
-// only between its re-registration and the next beat (#4165). Every change is written; the
+// The listings, in the Durable Object's storage as well as in memory. Cloudflare may evict an
+// object from memory between requests (when idle, on a deploy, when it moves the object), and
+// its memory goes with it: kept in memory alone, a server's listing was forgotten between
+// two heartbeats and it was listed only from its re-registration to the next beat (#4165). Every change is written; the
 // memory is only the copy the object reads from.
 export const LISTING_PREFIX = "listing:";
 

@@ -1,7 +1,7 @@
 // The public server list of openOMSI (see README.md beside this file). A server with
 // `public_server = 1` registers here and says it is alive every minute; the launcher and the
-// game read the list. One Durable Object keeps the listings in its storage (an idle object is
-// hibernated within seconds and loses its memory: see `ListingStore`); a listing lives three
+// game read the list. One Durable Object keeps the listings in its storage (an object evicted
+// from memory loses what it held there: see `ListingStore`); a listing lives three
 // minutes past its last heartbeat. A listing is shown only after the service has read the
 // server's own status page and found the challenge it gave at registration there.
 //
