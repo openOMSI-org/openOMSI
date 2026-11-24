@@ -12,12 +12,24 @@ pub(super) fn script_speed(speed_kmh: f32) -> f32 {
     }
 }
 
+/// `Velocity` (m/s) from the driven wheels' speed (`driven_wheels_speed`, `None` without
+/// driven wheels): Omsi.exe (0x7e2574) works `Velocity` out of `n_Wheel`, the driven axles'
+/// turning, which is 0 when the vehicle has no driven axle (the count at +0x71c, 0x7cffb8) -
+/// so such a vehicle's `Velocity` stays 0 however it rolls. Only a vehicle without any axle
+/// shows the body's speed there (`body`).
+pub(super) fn speedometer_speed(driven: Option<f32>, has_axles: bool, body: f32) -> f32 {
+    match driven {
+        Some(v) => v,
+        None if has_axles => 0.0,
+        None => body,
+    }
+}
+
 /// The speed the driven wheels' turning gives (m/s): the mean of their rims' speed, each
 /// wheel's spin (rad/s) times its radius - Omsi.exe's `Velocity` (0x7e2574 sums each driven
 /// axle's two wheel speeds times its size, averages them over the driven wheels and turns
 /// that into km/h), while its `Velocity_Ground` is the body's speed. They part when a wheel
-/// spins or locks. `None` for a vehicle without driven wheels: then OMSI's `Velocity` is the
-/// body's speed too.
+/// spins or locks. `None` for a vehicle without driven wheels (see `speedometer_speed`).
 pub(super) fn driven_wheels_speed(wheels: impl Iterator<Item = (f32, f32, bool)>) -> Option<f32> {
     let (sum, n) = wheels
         .filter(|w| w.2)
@@ -731,7 +743,15 @@ impl VehicleInstance {
         // (a bus standing on its brakes: the wheels' rocking of a few hundredths of a metre a
         // second is no speed, scripts test `!Velocity` for a bus at rest)
         let ground = script_speed(speed * 3.6);
-        let wheels = driven_wheels_speed(wheels).unwrap_or(speed) * 3.6;
+        // a `[scriptshare]` rear section's driven axles are counted with this vehicle's
+        // (0x7cffb8 shares the count, 0x7e2574 adds their wheels' turning to `n_Wheel`):
+        // its wheels do not spin of their own here, the body's speed stands for them
+        let rear_drives = self
+            .trailers
+            .first()
+            .is_some_and(|t| t.ty.def.script_share && t.ty.def.axles.iter().any(|a| a.driven));
+        let driven = driven_wheels_speed(wheels).or(rear_drives.then_some(speed));
+        let wheels = speedometer_speed(driven, !rb.wheels.is_empty(), speed) * 3.6;
         let v = if ground == 0.0 && wheels.abs() < 0.5 {
             0.0
         } else {

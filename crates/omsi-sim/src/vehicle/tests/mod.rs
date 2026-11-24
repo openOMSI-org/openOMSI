@@ -13,6 +13,15 @@ mod scripts_props;
 mod trams;
 mod zweiachser;
 
+/// Without a driven axle `Velocity` is 0 however the vehicle rolls (Omsi.exe 0x7e2574 turns
+/// `n_Wheel`, then 0, into it); only a vehicle without axles shows the body's speed.
+#[test]
+fn velocity_without_driven_axles_is_zero() {
+    assert_eq!(speedometer_speed(Some(7.0), true, 10.0), 7.0);
+    assert_eq!(speedometer_speed(None, true, 10.0), 0.0);
+    assert_eq!(speedometer_speed(None, false, 10.0), 10.0);
+}
+
 #[test]
 fn velocity_is_the_driven_wheels_speed() {
     // a front axle rolling at 10 m/s, the driven rear axle spinning at twice that
