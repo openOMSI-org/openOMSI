@@ -33,8 +33,9 @@ const MIN_GAP: f64 = 0.2;
 /// to cover the stop.
 const RETRY_GAP: f64 = 1.0;
 /// How long the scripts have to step the IBIS on by themselves when a stop is left before the
-/// game does it (s): a stock IBIS does it in the frame the stop index changes.
-const SCRIPT_GRACE: f64 = 4.0;
+/// game does it (s): a stock IBIS does it in the frame the stop index changes. The press comes
+/// earlier - as the bus pulls out - where the bus reaches `departure`'s metres and speed first.
+const SCRIPT_GRACE: f64 = omsi_sim::timetable_run::departure::GRACE;
 /// How long an arrival recording is worth pressing for (s): the bus may stand at the stop with
 /// its electrics off, or another IBIS mode up, for a few seconds, and the press is tried again
 /// every [`RETRY_GAP`] until then.
@@ -75,9 +76,10 @@ pub(crate) struct AutoAnnounce {
     /// The press still to come (one at a time: the IBIS is a counter, and only one step can
     /// be taken at a time).
     want: Option<Want>,
-    /// A stop was left: when, and the entry the IBIS stood at then - after [`SCRIPT_GRACE`]
-    /// the scripts must have stepped it on.
-    watch: Option<(f64, f32)>,
+    /// A stop was left: when, the entry the IBIS stood at then and where the bus left it. The
+    /// scripts must step the counter on by themselves - as the bus pulls out of the stop
+    /// (`departure::due`), or within [`SCRIPT_GRACE`] where it does not.
+    watch: Option<(f64, f32, glam::DVec3)>,
     /// When a key was pressed last, and the entry the IBIS stood at then: a press that leaves
     /// the counter there is one the script did not take, and is given a second.
     pressed: Option<(f64, f32)>,
@@ -282,7 +284,8 @@ impl AutoAnnounce {
         if !layout.is_some_and(|l| l.pairs > 0) {
             return;
         }
-        self.watch = bus.var("IBIS_busstop").map(|entry| (now, entry));
+        // (where the bus left it: how far it has pulled out is what the press waits for, #1289)
+        self.watch = bus.var("IBIS_busstop").map(|entry| (now, entry, bus.position));
     }
 
     /// One step a frame towards the entry to play: silently while entries stand in between,
@@ -373,14 +376,17 @@ impl AutoAnnounce {
     /// index the scripts read did not change, the electrics are off, another IBIS mode - would
     /// stay silent for the rest of the duty, so the game presses the key once.
     fn watch_step(&mut self, bus: &mut impl Ibis, now: f64) {
-        let Some((since, entry)) = self.watch else {
+        let Some((since, entry, left_at)) = self.watch else {
             return;
         };
         if bus.var("IBIS_busstop") != Some(entry) {
             self.watch = None;
             return;
         }
-        if now - since < SCRIPT_GRACE {
+        // (the bus pulling out of the stop announces then, not four seconds later; a bus that
+        // creeps waits for the grace, #1289)
+        let (past_m, kmh) = bus.past_stop(left_at);
+        if !omsi_sim::timetable_run::departure::due(now - since, past_m, kmh) {
             return;
         }
         self.watch = None;
@@ -443,6 +449,12 @@ trait Ibis {
     fn trigger(&mut self, name: &str) -> bool;
     /// The recordings (`(T.F.…)` triggers) the scripts played so far.
     fn recordings(&self) -> u64;
+    /// How far the bus has moved from `from` (m) and how fast it goes (km/h): what the
+    /// departure announcement is timed by (#1289). None where the bus has no body to measure
+    /// (an ibox, a bus without a model): the grace decides then.
+    fn past_stop(&self, _from: glam::DVec3) -> (Option<f32>, f32) {
+        (None, 0.0)
+    }
 }
 
 impl Ibis for VehicleInstance {
@@ -456,6 +468,14 @@ impl Ibis for VehicleInstance {
 
     fn recordings(&self) -> u64 {
         self.host.file_triggers_fired
+    }
+
+    fn past_stop(&self, from: glam::DVec3) -> (Option<f32>, f32) {
+        let past = (self.position - from).truncate().length();
+        (
+            past.is_finite().then_some(past as f32),
+            self.physics.velocity_kmh().abs(),
+        )
     }
 }
 
