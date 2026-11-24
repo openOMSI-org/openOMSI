@@ -8878,3 +8878,46 @@ _version: 2
   en: "No saved situation of this map yet"
 "Saved as \"{}\"":
   en: "Saved as \"{}\""
+
+"Tag axle":
+  en: "Tag axle"
+"Tag axle (unavailable)":
+  en: "Tag axle (unavailable)"
+"Steering preset":
+  en: "Steering preset"
+"Choose a starting profile; moving an individual slider changes it to Custom":
+  en: "Choose a starting profile; moving an individual slider changes it to Custom"
+"Enable tag-axle override":
+  en: "Enable tag-axle override"
+"Change the rear axle's physical steering while driving; off follows the original bus physics":
+  en: "Change the rear axle's physical steering while driving; off follows the original bus physics"
+"Steered axle":
+  en: "Steered axle"
+"Axle number, counting the front axle as 1":
+  en: "Axle number, counting the front axle as 1"
+"Steering strength":
+  en: "Steering strength"
+"Multiplier of rear steering at low speed":
+  en: "Multiplier of rear steering at low speed"
+"Fade begins":
+  en: "Fade begins"
+"Start reducing rear steering above this speed":
+  en: "Start reducing rear steering above this speed"
+"Fully straight at":
+  en: "Fully straight at"
+"No rear steering at or above this speed":
+  en: "No rear steering at or above this speed"
+"Requires a vehicle with at least three physics axles":
+  en: "Requires a vehicle with at least three physics axles"
+"Original (off)":
+  en: "Original (off)"
+"Gentle · 0.5×":
+  en: "Gentle · 0.5×"
+"Standard · 1.0×":
+  en: "Standard · 1.0×"
+"Agile · 1.5×":
+  en: "Agile · 1.5×"
+"Tight turns · 2.0×":
+  en: "Tight turns · 2.0×"
+"Axle {n}":
+  en: "Axle {n}"

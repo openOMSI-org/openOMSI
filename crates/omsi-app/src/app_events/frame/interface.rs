@@ -19,7 +19,16 @@ impl App {
         // the interface over the picture
         // (the pages of an open settings window)
         let menu_tabs = match self.menus.list_kind.as_ref() {
-            Some(k) if self.menus.chooser.is_some() => crate::game_lists::page_titles(self, k),
+            Some(k) if self.menus.chooser.is_some() => crate::game_lists::page_titles(self, k)
+                .map(|(titles, selected)| {
+                    (
+                        titles
+                            .into_iter()
+                            .map(|title| omsi_ui::tr(&title).into_owned())
+                            .collect(),
+                        selected,
+                    )
+                }),
             _ => None,
         };
         if !(self.world.is_some() && self.renderer.is_some() && self.scene.is_some()) {
