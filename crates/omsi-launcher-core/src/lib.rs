@@ -246,6 +246,12 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     if let Some(d) = o.str("sound_doppler") {
         v["doppler"] = json!(!d.trim().eq_ignore_ascii_case("off"));
     }
+    // (Omsi.exe sets 100 before it reads the file, 0x82f4b4, and `StrToInt`s the line)
+    v["sound_maxcount"] = json!(
+        o.str("sound_maxcount")
+            .and_then(|x| x.trim().parse::<i64>().ok())
+            .unwrap_or(100)
+    );
     if let Some(l) = o.str("language").filter(|l| !l.trim().is_empty()) {
         v["language"] = json!(language_code(l));
     }
@@ -3614,6 +3620,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         ("ai_max_parked", json!(0)),
         ("ai_max_humans", json!(200)),
         ("parked_buses_drawn", json!(-1)),
+        ("sound_maxcount", json!(200)),
         ("use_real_time", json!(false)),
         ("use_real_date", json!(false)),
         ("use_real_year", json!(false)),
@@ -3916,6 +3923,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 ))
             }
             "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x as i64).unwrap_or(0)),
+            "sound_maxcount" => v[&k] = json!(val.trim().parse::<i64>().unwrap_or(200)),
             "max_obj_dist" => {
                 v[&k] = if val.eq_ignore_ascii_case("auto") {
                     json!("auto")
@@ -5213,6 +5221,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("mirror_particles", false)
     ));
     text.push_str(&format!("mirror_hud={}\n", n("mirror_hud", 0).clamp(0, 7)));
+    // OMSI's [sound_maxcount] (options.cfg; 200 in the one it comes with)
+    text.push_str(&format!("sound_maxcount={}\n", n("sound_maxcount", 200)));
     text.push_str(&format!(
         "standing_chance={}\n",
         n("standing_chance", 5).clamp(0, 100)

@@ -158,6 +158,8 @@ pub struct SoundSet {
     /// loops its revolutions and throttle), and every read was a lookup by name. Made at
     /// the first update.
     vars: Option<(Vec<String>, Vec<Option<f32>>)>,
+    /// This set as a sound pack, for `[sound_maxcount]` (see `crate::packs`).
+    pack: crate::packs::PackInfo,
 }
 
 /// The file a `(T.F.)` trigger names, as Omsi.exe opens it (0x74f2e8 through 0x7eed78): the
@@ -310,6 +312,7 @@ impl SoundSet {
             muffled: false,
             parts: Vec::new(),
             vars: None,
+            pack: crate::packs::PackInfo::of(&cfg.sounds),
         }
     }
 
@@ -469,6 +472,10 @@ impl SoundSet {
         var: &dyn Fn(&str) -> Option<f32>,
         object_to_world: &Mat4,
     ) {
+        // too far for `[sound_maxcount]`: 0x74f2e8 plays nothing
+        if engine.pack_too_far(self.pack.id) {
+            return;
+        }
         if !engine.enabled
             || file.trim().is_empty()
             || !self.sounds.iter().any(|s| {
@@ -644,6 +651,10 @@ impl SoundSet {
         at_fire: &dyn Fn(&str, &str) -> Option<f32>,
     ) {
         if !engine.enabled {
+            return;
+        }
+        // `[sound_maxcount]`: a pack too far is silent and not updated (0x74f224)
+        if !self.pack_heard(engine, object_to_world) {
             return;
         }
         let ctx = self.ctx(engine);
@@ -941,6 +952,35 @@ impl SoundSet {
         for (_, p) in &mut self.parts {
             p.stop_all(engine);
         }
+    }
+
+    /// `[sound_maxcount]`: say where this set is as a sound pack and whether it may be
+    /// heard (see `crate::packs`); the sounds of one too far are stopped ("Stopped Sound
+    /// ... too far", 0x750340). Its coupled parts are packs of their own.
+    fn pack_heard(&mut self, engine: &AudioEngine, object_to_world: &Mat4) -> bool {
+        // The user's vehicles go in at 0 (0x751398 with +0x26c): the sets made with `new`
+        // are the bus the player drives (and one ridden in, heard from inside - the
+        // nearest pack anyway). The others at their distance from the camera over their
+        // range (0x74f4fc).
+        let key = if !self.ai && !self.scenery {
+            0.0
+        } else {
+            let at = object_to_world.transform_point3(Vec3::ZERO);
+            (at - engine.listener_position()).length() / self.pack.range
+        };
+        let heard = engine.pack_heard(crate::packs::Pack {
+            id: self.pack.id,
+            key,
+            entries: self.pack.entries,
+        });
+        if !heard {
+            for s in self.sounds.iter_mut() {
+                if let Some(id) = s.voice.take() {
+                    engine.stop(id);
+                }
+            }
+        }
+        heard
     }
 }
 

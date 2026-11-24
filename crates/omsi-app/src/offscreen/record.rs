@@ -148,6 +148,7 @@ impl Offscreen<'_> {
         let a = &rec.audio;
         let (reverb_time, reverb_mix) = self.world.reverb_at(cam.position);
         omsi_audio::soundset::set_master_volume(self.settings.volume);
+        omsi_audio::packs::set_sound_maxcount(self.settings.sound_maxcount);
         a.set_listener(omsi_audio::Listener {
             position: cam.position.as_vec3(),
             forward: cam.forward(),
