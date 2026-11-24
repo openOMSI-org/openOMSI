@@ -2953,3 +2953,6 @@
 "to the right": "ke kanan"
 "Lights on in a downpour": "Lampu menyala ketika hujan lebat"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Pada waktu siang ketika hujan lebat, sesetengah tingkap rumah bercahaya kerana cukup gelap untuk memasang lampu"
+
+"Read the map's passenger numbers exactly": "Baca bilangan penumpang peta dengan tepat"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Penumpang: perhentian bernilai 0.7 mengekalkan 0.7 orang dan bukannya dibulatkan ke 1; mati: pembulatan OMSI 2"

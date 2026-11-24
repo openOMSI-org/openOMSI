@@ -3260,3 +3260,6 @@
 "to the right": "doprava"
 "Lights on in a downpour": "Světla při lijáku"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Za silného deště se ve dne rozsvítí některá okna domů, protože je dost tma na rozsvícení"
+
+"Read the map's passenger numbers exactly": "Číst přesný počet cestujících z mapy"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Cestující: zastávka s 0,7 si zachová 0,7 člověka místo zaokrouhlení na 1 před hustotou; vypnuto: zaokrouhlování OMSI 2"
