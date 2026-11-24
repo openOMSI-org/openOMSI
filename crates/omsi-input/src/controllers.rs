@@ -1625,7 +1625,7 @@ impl Controllers {
         }
         for (name, n, down) in &self.raw_buttons {
             if self.editing {
-                self.held.while_editing(name, *n, *down);
+                self.held.while_editing(&self.cfg, name, *n, *down);
             }
             if self.editing || !self.enabled || self.off(name) {
                 continue;
