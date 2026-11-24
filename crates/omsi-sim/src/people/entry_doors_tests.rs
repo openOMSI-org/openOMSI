@@ -24,7 +24,7 @@ fn bus_with_cabin_entries(tag: &str, cabin_entries: &str) -> (PeopleSim, BusNow)
     std::fs::write(dir.join("person.hum"), "[model]\nmodel.cfg\n").unwrap();
     std::fs::write(dir.join("model.cfg"), "").unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
-    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).unwrap());
+    let cabin = Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).unwrap());
     let ty = Arc::new(HumanType::load(&dir.join("person.hum")).unwrap());
     std::fs::remove_dir_all(&dir).ok();
 
@@ -51,6 +51,7 @@ fn bus_with_cabin_entries(tag: &str, cabin_entries: &str) -> (PeopleSim, BusNow)
         tilt: Mat4::IDENTITY,
         age: 40.0,
         stuck: 0.0,
+        stuck_total: 0.0,
         ghost: 0.0,
         car_wait: 0.0,
         detour: 0.0,
@@ -160,8 +161,8 @@ fn bus_with_hitched_trailer(tag: &str) -> (PeopleSim, BusNow) {
     let trail_def = def("cabin_trail.cfg", "paths_trail.cfg", Some(0.0));
     let cabin = Arc::new(
         Cabin::load_train(&[
-            (&bus_def, Vec3::ZERO, f32::INFINITY),
-            (&trail_def, Vec3::new(0.0, -10.0, 0.0), -5.0),
+            (&bus_def, Vec3::ZERO, f32::INFINITY, false),
+            (&trail_def, Vec3::new(0.0, -10.0, 0.0), -5.0, false),
         ])
         .unwrap(),
     );
@@ -191,6 +192,7 @@ fn bus_with_hitched_trailer(tag: &str) -> (PeopleSim, BusNow) {
         tilt: Mat4::IDENTITY,
         age: 40.0,
         stuck: 0.0,
+        stuck_total: 0.0,
         ghost: 0.0,
         car_wait: 0.0,
         detour: 0.0,
