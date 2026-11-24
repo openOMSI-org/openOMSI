@@ -42,7 +42,15 @@ impl Font {
                     // as a font of no height. Loading those as fonts only gives a lookup
                     // something wrong to land on.
                     if height > 0 && !name.starts_with('{') {
-                        out.push(Font { path: f.path.clone(), name, bitmap, alpha, height, gap, chars: Vec::new() });
+                        out.push(Font {
+                            path: f.path.clone(),
+                            name,
+                            bitmap,
+                            alpha,
+                            height,
+                            gap,
+                            chars: Vec::new(),
+                        });
                     }
                 }
                 "char" => {
@@ -89,8 +97,11 @@ impl Font {
                     .find_map(|v| self.chars.iter().find(|g| g.ch == v))
             });
         }
-        self.exact_glyph(c)
-            .or_else(|| c.is_ascii_lowercase().then(|| self.exact_glyph(c.to_ascii_uppercase())).flatten())
+        self.exact_glyph(c).or_else(|| {
+            c.is_ascii_lowercase()
+                .then(|| self.exact_glyph(c.to_ascii_uppercase()))
+                .flatten()
+        })
     }
 
     /// Whether the font has a glyph of its own for `c`.
@@ -116,7 +127,9 @@ impl Font {
                 if c.is_whitespace() {
                     self.space_width()
                 } else {
-                    self.glyph(c).map(|g| (g.x1 - g.x0).max(0)).unwrap_or(self.space_width())
+                    self.glyph(c)
+                        .map(|g| (g.x1 - g.x0).max(0))
+                        .unwrap_or(self.space_width())
                 }
             })
             .sum();
@@ -138,7 +151,10 @@ pub struct TextAlign {
 
 impl Default for TextAlign {
     fn default() -> Self {
-        TextAlign { orientation: 0, grid: 1 }
+        TextAlign {
+            orientation: 0,
+            grid: 1,
+        }
     }
 }
 
@@ -188,8 +204,20 @@ impl FontAtlas {
     }
 
     /// Fonts with different glyph metrics may use the same immutable bitmap pixels.
-    pub fn from_shared(font: Font, width: u32, height: u32, color: Arc<[u8]>, alpha: Arc<[u8]>) -> FontAtlas {
-        FontAtlas { font, width, height, color, alpha }
+    pub fn from_shared(
+        font: Font,
+        width: u32,
+        height: u32,
+        color: Arc<[u8]>,
+        alpha: Arc<[u8]>,
+    ) -> FontAtlas {
+        FontAtlas {
+            font,
+            width,
+            height,
+            color,
+            alpha,
+        }
     }
 
     /// Pixel width of `text` in this font (glyph advances including the gap after each).
@@ -199,7 +227,10 @@ impl FontAtlas {
                 let w = if ch.is_whitespace() {
                     self.font.space_width()
                 } else {
-                    self.font.glyph(ch).map(|g| (g.x1 - g.x0).max(0)).unwrap_or(self.font.space_width())
+                    self.font
+                        .glyph(ch)
+                        .map(|g| (g.x1 - g.x0).max(0))
+                        .unwrap_or(self.font.space_width())
                 };
                 w + self.font.gap
             })
@@ -215,7 +246,15 @@ impl FontAtlas {
     }
 
     /// `render` with the horizontal placement of `[texttexture_enh]`.
-    pub fn render_aligned(&self, text: &str, w: u32, h: u32, full_color: bool, rgb: [u8; 3], align: TextAlign) -> Vec<u8> {
+    pub fn render_aligned(
+        &self,
+        text: &str,
+        w: u32,
+        h: u32,
+        full_color: bool,
+        rgb: [u8; 3],
+        align: TextAlign,
+    ) -> Vec<u8> {
         // '@' breaks the text into lines, one glyph height each, from the top: the SD202's
         // matrix hands over "   NORDSPITZE   @   BAUERNHOF    @NORDSP.BAUERNH. " for a
         // 512x128 texture whose meshes map the lines separately. Drawn as one line and
@@ -259,7 +298,15 @@ impl FontAtlas {
         self.render_unscaled(text, w, h, full_color, rgb, align)
     }
 
-    fn render_unscaled(&self, text: &str, w: u32, h: u32, full_color: bool, rgb: [u8; 3], align: TextAlign) -> Vec<u8> {
+    fn render_unscaled(
+        &self,
+        text: &str,
+        w: u32,
+        h: u32,
+        full_color: bool,
+        rgb: [u8; 3],
+        align: TextAlign,
+    ) -> Vec<u8> {
         let mut out = vec![0u8; (w * h * 4) as usize];
         let glyph_h = self.font.height.max(1) as i32;
         let y0 = (h as i32 - glyph_h) / 2;
@@ -280,9 +327,8 @@ impl FontAtlas {
         out: &mut [u8],
     ) {
         let glyph_h = self.font.height.max(1) as i32;
-        let mut x = line_x.unwrap_or_else(|| {
-            align.offset(w as i32, self.text_width(text), self.font.gap)
-        });
+        let mut x =
+            line_x.unwrap_or_else(|| align.offset(w as i32, self.text_width(text), self.font.gap));
         for ch in text.chars() {
             // Explicit space glyphs can carry pixels in inverted bitmap fonts.
             let Some(g) = self.font.glyph(ch) else {
@@ -308,7 +354,11 @@ impl FontAtlas {
                         continue;
                     }
                     let di = ((dy as u32 * w + dx as u32) * 4) as usize;
-                    let (r, gcol, b) = if full_color { (self.color[si], self.color[si + 1], self.color[si + 2]) } else { (rgb[0], rgb[1], rgb[2]) };
+                    let (r, gcol, b) = if full_color {
+                        (self.color[si], self.color[si + 1], self.color[si + 2])
+                    } else {
+                        (rgb[0], rgb[1], rgb[2])
+                    };
                     // alpha-over compositing onto the transparent target
                     let af = a as f32 / 255.0;
                     let inv = 1.0 - af;
@@ -339,9 +389,24 @@ mod tests {
             height: 10,
             gap: 1,
             chars: vec![
-                FontChar { ch: '|', x0: 0, x1: 2, y: 0 },
-                FontChar { ch: '0', x0: 2, x1: 10, y: 0 },
-                FontChar { ch: '1', x0: 10, x1: 18, y: 0 },
+                FontChar {
+                    ch: '|',
+                    x0: 0,
+                    x1: 2,
+                    y: 0,
+                },
+                FontChar {
+                    ch: '0',
+                    x0: 2,
+                    x1: 10,
+                    y: 0,
+                },
+                FontChar {
+                    ch: '1',
+                    x0: 10,
+                    x1: 18,
+                    y: 0,
+                },
             ],
         };
         // Alpha bitmap where '|' has opaque pixels
@@ -355,12 +420,26 @@ mod tests {
         let atlas = FontAtlas::new(font.clone(), 18, 10, alpha.clone(), alpha);
 
         // Leading spaces (as used in odometer padding e.g. "  1") must not draw '|'
-        let rendered = atlas.render_aligned("  1", 40, 10, false, [255, 255, 255], TextAlign { orientation: 1, grid: 1 });
+        let rendered = atlas.render_aligned(
+            "  1",
+            40,
+            10,
+            false,
+            [255, 255, 255],
+            TextAlign {
+                orientation: 1,
+                grid: 1,
+            },
+        );
         // The first 10 pixels horizontally (where spaces sit) must have 0 alpha!
         for y in 0..10 {
             for x in 0..10 {
                 let idx = (y * 40 + x) * 4;
-                assert_eq!(rendered[idx + 3], 0, "space pixel at ({x}, {y}) must be transparent");
+                assert_eq!(
+                    rendered[idx + 3],
+                    0,
+                    "space pixel at ({x}, {y}) must be transparent"
+                );
             }
         }
 
@@ -376,8 +455,18 @@ mod tests {
             name: "inverted-test".into(),
             height: 2,
             chars: vec![
-                FontChar { ch: 'A', x0: 0, x1: 1, y: 0 },
-                FontChar { ch: ' ', x0: 1, x1: 3, y: 0 },
+                FontChar {
+                    ch: 'A',
+                    x0: 0,
+                    x1: 1,
+                    y: 0,
+                },
+                FontChar {
+                    ch: ' ',
+                    x0: 1,
+                    x1: 3,
+                    y: 0,
+                },
             ],
             ..Default::default()
         };
@@ -388,10 +477,27 @@ mod tests {
         assert_eq!(atlas.text_width("A A"), 4);
         for full_color in [false, true] {
             for (text, height) in [("A A", 2), ("A A@A A", 4)] {
-                let rendered = atlas.render_aligned(text, 4, height, full_color, [236, 250, 249], TextAlign { orientation: 1, grid: 1 });
-                let expected = if full_color { [20, 40, 60, 255] } else { [236, 250, 249, 255] };
+                let rendered = atlas.render_aligned(
+                    text,
+                    4,
+                    height,
+                    full_color,
+                    [236, 250, 249],
+                    TextAlign {
+                        orientation: 1,
+                        grid: 1,
+                    },
+                );
+                let expected = if full_color {
+                    [20, 40, 60, 255]
+                } else {
+                    [236, 250, 249, 255]
+                };
                 for pixel in rendered.chunks_exact(4) {
-                    assert_eq!(pixel, expected, "explicit spaces must render their atlas pixels");
+                    assert_eq!(
+                        pixel, expected,
+                        "explicit spaces must render their atlas pixels"
+                    );
                 }
             }
         }
@@ -404,8 +510,18 @@ mod tests {
             height: 2,
             gap: 0,
             chars: vec![
-                FontChar { ch: 'A', x0: 0, x1: 1, y: 0 },
-                FontChar { ch: 'B', x0: 1, x1: 3, y: 0 },
+                FontChar {
+                    ch: 'A',
+                    x0: 0,
+                    x1: 1,
+                    y: 0,
+                },
+                FontChar {
+                    ch: 'B',
+                    x0: 1,
+                    x1: 3,
+                    y: 0,
+                },
             ],
             ..Default::default()
         };
@@ -428,7 +544,12 @@ mod tests {
             name: "overflow-test".into(),
             height: 6,
             gap: 0,
-            chars: vec![FontChar { ch: 'A', x0: 0, x1: 1, y: 0 }],
+            chars: vec![FontChar {
+                ch: 'A',
+                x0: 0,
+                x1: 1,
+                y: 0,
+            }],
             ..Default::default()
         };
         let mut alpha = vec![0u8; 6 * 6 * 4];
@@ -437,7 +558,10 @@ mod tests {
         }
         let atlas = FontAtlas::new(font, 6, 6, alpha.clone(), alpha);
         let image = atlas.render("A@A@A", 1, 12, false, [255, 255, 255]);
-        assert!(image[(10 * 4) + 3] != 0, "last line must not be pushed below the texture");
+        assert!(
+            image[(10 * 4) + 3] != 0,
+            "last line must not be pushed below the texture"
+        );
         // as Omsi.exe: the block centred at -3, cut at both edges - the first line's top
         // rows are gone, the middle one stands at 3
         let lit = |img: &[u8], y: usize| img[y * 4 + 3] != 0;
@@ -458,10 +582,30 @@ mod tests {
             height: 10,
             gap: 1,
             chars: vec![
-                FontChar { ch: '|', x0: 0, x1: 2, y: 0 },
-                FontChar { ch: '0', x0: 2, x1: 10, y: 0 },
-                FontChar { ch: '1', x0: 10, x1: 18, y: 0 },
-                FontChar { ch: ' ', x0: 18, x1: 28, y: 0 },
+                FontChar {
+                    ch: '|',
+                    x0: 0,
+                    x1: 2,
+                    y: 0,
+                },
+                FontChar {
+                    ch: '0',
+                    x0: 2,
+                    x1: 10,
+                    y: 0,
+                },
+                FontChar {
+                    ch: '1',
+                    x0: 10,
+                    x1: 18,
+                    y: 0,
+                },
+                FontChar {
+                    ch: ' ',
+                    x0: 18,
+                    x1: 28,
+                    y: 0,
+                },
             ],
         };
         assert_eq!(font.text_width("0x1"), font.text_width("0 1"))

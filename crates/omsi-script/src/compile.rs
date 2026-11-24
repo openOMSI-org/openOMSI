@@ -1314,10 +1314,8 @@ mod tests {
 
     #[test]
     fn multiline_string_literals_compile_as_one_token() {
-        let dir = std::env::temp_dir().join(format!(
-            "omsi-script-multiline-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("omsi-script-multiline-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let osc = dir.join("display.osc");
         std::fs::write(
@@ -1333,17 +1331,22 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
 
         assert!(p.errors.is_empty(), "{:?}", p.errors);
-        assert!(p
-            .strings
-            .iter()
-            .any(|s| s == "Diagnostics 1/5@Fault Diagnostics@Cluster Selftest"));
+        assert!(
+            p.strings
+                .iter()
+                .any(|s| s == "Diagnostics 1/5@Fault Diagnostics@Cluster Selftest")
+        );
     }
 
     #[test]
     fn unterminated_multiline_string_reports_an_error_and_keeps_later_blocks() {
         let p = program_of("{init}\n\"unterminated\n{frame}\n1 (S.L.x)\n{end}\n");
 
-        assert!(p.errors.iter().any(|e| e.message.contains("unterminated string")));
+        assert!(
+            p.errors
+                .iter()
+                .any(|e| e.message.contains("unterminated string"))
+        );
         assert_eq!(p.frame.len(), 1);
     }
 
