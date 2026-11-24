@@ -207,7 +207,8 @@ impl Money {
             return self.exact_coins_for(price);
         }
 
-        let half_smallest = self.smallest_value() / 2.0;
+        // (what may be taken back again: Omsi.exe allows half the currency's unit, 0x7e8254)
+        let half_smallest = self.currency.as_ref().map_or(0.005, |c| c.tolerance());
         let mut out: Vec<(usize, f32)> = Vec::new();
         let mut sum = 0.0_f32;
 
