@@ -768,6 +768,7 @@ impl App {
                         paint: o.paint.clone(),
                         situation_vars: o.vars.clone(),
                         situation_strvars: o.strvars.clone(),
+                        situation_cars: o.cars.clone(),
                         situation_odometer_km: o.odometer_km,
                         situation_others: Vec::new(),
                         line: None,
@@ -1347,6 +1348,8 @@ pub(crate) struct CamBlend {
     /// (view, camera numbers) of the last frame: a change of the numbers inside the same
     /// view is a camera switch.
     pub key: Option<(String, (usize, usize))>,
+    /// The coupled part the camera hangs on (None: the front): the frame of `from` and `shown`.
+    pub part: Option<usize>,
     /// Where the glide has come to (in the bus's frame), while one is under way.
     pub from: Option<omsi_vehicle::Camera>,
     /// The cockpit camera as it was drawn last frame (in the bus's frame): where the next

@@ -214,12 +214,43 @@ pub(super) fn larger_glass(old: Option<MirrorGlass>, new: MirrorGlass) -> Option
     Some(old.filter(|o| o.uv_area >= new.uv_area).unwrap_or(new))
 }
 
+#[cfg(test)]
+mod own_mirror_tests {
+    /// Every car's mirrors show its own cameras, a number past them stays the train's.
+    #[test]
+    fn a_cars_mirror_is_its_own_camera_in_the_trains_numbering() {
+        assert_eq!(super::own_mirror(0, 0, 2), 0, "the head car");
+        assert_eq!(
+            super::own_mirror(1, 2, 2),
+            3,
+            "the second car's second mirror"
+        );
+        assert_eq!(
+            super::own_mirror(5, 2, 2),
+            5,
+            "a screen showing another car's camera"
+        );
+        assert_eq!(
+            super::own_mirror(0, 2, 0),
+            0,
+            "a car with no camera of its own"
+        );
+    }
+}
+
 /// `reflexionN.bmp`: the texture drawn by reflection camera N of the vehicle.
 pub(super) fn mirror_index(name: &str) -> Option<usize> {
     let n = name.trim().to_ascii_lowercase();
     let rest = n.strip_prefix("reflexion")?;
     let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
     digits.parse().ok()
+}
+
+/// The train's mirror picture a car's `reflexionN.bmp` shows. The train numbers its cameras
+/// on from car to car (`render_mirrors`); a number past the car's own is a screen showing
+/// another car's camera.
+pub(super) fn own_mirror(n: usize, base: usize, own: usize) -> usize {
+    if n < own { base + n } else { n }
 }
 
 /// A light map that is white all over (the LED panels' `vmatrix_leer_led_LM.png`, one white
@@ -811,6 +842,9 @@ pub(super) struct StagedSpline {
 /// terrain does not - a caster in one plane with what it falls on paints dark patches into
 /// it (the sun shadow's bias is 6 cm). Splines are surfaces and cast nothing otherwise.
 pub(super) const SPLINE_SHADOW_CLEARANCE: f32 = 0.75;
+/// A spline whose profiles rise this far (m) is a structure (a tunnel, a wall) and casts its
+/// shadow wherever it lies.
+pub(super) const SPLINE_STRUCTURE_HEIGHT: f32 = 2.0;
 /// A spline whose profiles all hang this far (m) over its line - wires, catenaries, a
 /// canopy - is no ground surface: it neither cuts the terrain nor carries anything.
 pub(super) const SPLINE_OVERHEAD: f32 = 2.0;
