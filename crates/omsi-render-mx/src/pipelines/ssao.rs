@@ -14,6 +14,11 @@ pub(crate) struct Ssao {
     pub plain_blur_pipeline: Option<mx::RenderPipeline>,
 }
 
+/// ssao.wgsl, its group read from the heap.
+pub(crate) static SSAO: HeapModule = HeapModule::new(|| {
+    crate::shaders::hot_wgsl(include_str!("../ssao.wgsl"), "ssao.wgsl").to_string()
+});
+
 pub(crate) fn ssao(device: &mx::Device, gl: bool) -> Ssao {
     // ambient occlusion: a depth prepass with the camera projection, then the AO and a blur
     log::info!("renderer: compiling the SSAO shaders");
@@ -21,7 +26,7 @@ pub(crate) fn ssao(device: &mx::Device, gl: bool) -> Ssao {
         device,
         mx::ShaderModuleDescriptor {
             label: Some("ssao"),
-            source: &*(crate::shaders::hot_wgsl(include_str!("../ssao.wgsl"), "ssao.wgsl")),
+            source: &SSAO.wgsl(),
         },
     );
     let ao_buf = uniform_buffer(
@@ -54,6 +59,8 @@ pub(crate) fn ssao(device: &mx::Device, gl: bool) -> Ssao {
 pub(crate) struct FogLamps {
     pub buf: mx::Buffer,
     pub pipeline: Option<[mx::RenderPipeline; 2]>,
+    /// the module's places in the heap (`groups_to_heap`)
+    pub layout: crate::shaders::HeapLayout,
 }
 
 pub(crate) fn fog_lamps(device: &mx::Device, hdr_format: mx::TextureFormat, gl: bool) -> FogLamps {
@@ -72,7 +79,7 @@ pub(crate) fn fog_lamps(device: &mx::Device, hdr_format: mx::TextureFormat, gl: 
                     device,
                     mx::ShaderModuleDescriptor {
                         label: Some("fog lamps"),
-                        source: &*(fog_lamps_shader_source()),
+                        source: &crate::shaders::groups_to_heap(&fog_lamps_shader_source()),
                     },
                 );
                 let make = |entry: &str, blend: Option<mx::BlendState>| {
@@ -103,5 +110,6 @@ pub(crate) fn fog_lamps(device: &mx::Device, hdr_format: mx::TextureFormat, gl: 
     FogLamps {
         buf: fog_lamps_buf,
         pipeline: fog_lamps_pipeline,
+        layout: crate::shaders::layout_of(&fog_lamps_shader_source()),
     }
 }

@@ -25,6 +25,11 @@ pub(crate) struct LampSight {
     seen: Vec<(DVec3, f32)>,
 }
 
+/// lamp_sight.wgsl, its group read from the heap.
+pub(crate) static LAMP_SIGHT: HeapModule = HeapModule::new(|| {
+    crate::shaders::hot_wgsl(include_str!("../lamp_sight.wgsl"), "lamp_sight.wgsl").to_string()
+});
+
 impl LampSight {
     pub(crate) fn new(device: &mx::Device, leave_out_enhanced: bool) -> Option<LampSight> {
         if leave_out_enhanced
@@ -42,10 +47,7 @@ impl LampSight {
             device,
             mx::ShaderModuleDescriptor {
                 label: Some("lamp sight"),
-                source: &*(crate::shaders::hot_wgsl(
-                    include_str!("../lamp_sight.wgsl"),
-                    "lamp_sight.wgsl",
-                )),
+                source: &LAMP_SIGHT.wgsl(),
             },
         );
         let targets = [target(mx::TextureFormat::Rgba8Unorm, None)];
@@ -147,7 +149,7 @@ impl LampSight {
 
     pub(crate) fn encode(
         &mut self,
-        device: &mx::Device,
+        _device: &mx::Device,
         queue: &mx::Queue,
         encoder: &mut mx::CommandEncoder,
         depth: &mx::TextureView,
@@ -170,19 +172,23 @@ impl LampSight {
         queue
             .write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u))
             .expect("mX: a queue write");
-        let bg = device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("lamp sight"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: self.uniform.as_entire_binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::TextureView(depth),
-                },
-            ],
-        });
+        let bg = HeapGroup::of(
+            LAMP_SIGHT.layout(),
+            0,
+            &mx::BindGroupDescriptor {
+                label: Some("lamp sight"),
+                entries: &[
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: self.uniform.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::TextureView(depth),
+                    },
+                ],
+            },
+        );
         {
             let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("lamp sight"),
@@ -199,7 +205,7 @@ impl LampSight {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &bg);
+            bg.set(&mut pass);
             pass.draw(0..3, 0..1);
         }
         encoder.copy_texture_to_buffer(
