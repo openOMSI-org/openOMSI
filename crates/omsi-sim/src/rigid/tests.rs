@@ -1612,8 +1612,29 @@ fn the_weather_changes_the_drag_the_scripts_give() {
     );
 }
 
+/// Omsi.exe's body knows no air drag (0x7e2574): the buses' brake scripts put it on their
+/// brakes themselves. A bus coasting on the flat without rolling resistance or brakes keeps
+/// its speed in the OMSI 2 model.
+#[test]
+fn omsi_s_body_adds_no_air_drag_of_its_own() {
+    let mut rb = RigidBody::from_definition(&bus(), &[]);
+    assert!(!rb.realistic);
+    rb.rolling_resistance = 0.0;
+    rb.place(DVec3::ZERO, 0.0);
+    let g = road(1e9, 0.0);
+    run(&mut rb, 2.0, 0.0, 0.0, &g);
+    rb.velocity = rb.orientation.mul_vec3(Vec3::Y) * 25.0;
+    for w in rb.wheels.iter_mut() {
+        w.spin = 25.0 / w.radius;
+    }
+    run(&mut rb, 10.0, 0.0, 0.0, &g);
+    // (a drag of 0.36 x area x v2 on top took a whole metre a second off in these 10 s)
+    let v = rb.forward_speed();
+    assert!(v > 24.7, "{v}");
+}
+
 /// The OMSI 2 model (the setting off) is as it was: a bus follows its wheels at any speed
-/// short of the grip, asphalt is smooth, and the old drag (the mass-guessed area) acts.
+/// short of the grip, asphalt is smooth, and no wind acts.
 #[test]
 fn without_the_setting_the_body_is_omsi_s() {
     let mut rb = RigidBody::from_definition(&bus(), &[]);
