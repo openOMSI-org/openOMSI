@@ -5,6 +5,10 @@ use hashbrown::HashMap;
 use omsi_cfg::CfgFile;
 use std::path::{Path, PathBuf};
 
+#[path = "script_lexer.rs"]
+mod lexer;
+use lexer::{Tok, has_unclosed_string, is_script_block_header, tokenize};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScriptError {
     pub file: PathBuf,
@@ -556,106 +560,6 @@ struct Compiler<'a> {
     file_frames: (usize, usize),
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum Tok {
-    Word(String),
-    Str(String),
-    Paren(String),
-    Brace(String),
-}
-
-/// Tokenize one script line. `'` starts a comment (outside a string literal).
-fn tokenize(line: &str) -> Vec<Tok> {
-    let mut out = Vec::new();
-    let chars: Vec<char> = line.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c.is_whitespace() {
-            i += 1;
-            continue;
-        }
-        if c == '\'' {
-            break;
-        }
-        if c == '"' {
-            let start = i + 1;
-            let mut j = start;
-            while j < chars.len() && chars[j] != '"' {
-                j += 1;
-            }
-            out.push(Tok::Str(chars[start..j.min(chars.len())].iter().collect()));
-            i = j + 1;
-            continue;
-        }
-        if c == '(' {
-            // The access ends at its matching bracket: mods name variables after fonts like
-            // `Font_(8-1)x3`, and `(L.L.Font_(8-1)x3)` is one access, not `(L.L.Font_(8-1)`
-            // followed by a stray `x3)`. Without a match the first `)` closes it.
-            let start = i + 1;
-            let mut depth = 1;
-            let mut j = start;
-            while j < chars.len() && !chars[j].is_whitespace() {
-                match chars[j] {
-                    '(' => depth += 1,
-                    ')' => {
-                        depth -= 1;
-                        if depth == 0 {
-                            break;
-                        }
-                    }
-                    _ => {}
-                }
-                j += 1;
-            }
-            if depth != 0 {
-                j = start;
-                while j < chars.len() && chars[j] != ')' {
-                    j += 1;
-                }
-            }
-            out.push(Tok::Paren(
-                chars[start..j.min(chars.len())]
-                    .iter()
-                    .collect::<String>()
-                    .trim()
-                    .to_string(),
-            ));
-            i = j + 1;
-            continue;
-        }
-        if c == '{' {
-            let start = i + 1;
-            let mut j = start;
-            while j < chars.len() && chars[j] != '}' {
-                j += 1;
-            }
-            out.push(Tok::Brace(
-                chars[start..j.min(chars.len())]
-                    .iter()
-                    .collect::<String>()
-                    .trim()
-                    .to_string(),
-            ));
-            i = j + 1;
-            continue;
-        }
-        let start = i;
-        let mut j = i;
-        while j < chars.len()
-            && !chars[j].is_whitespace()
-            && chars[j] != '('
-            && chars[j] != '{'
-            && chars[j] != '"'
-        {
-            j += 1;
-        }
-        out.push(Tok::Word(chars[start..j].iter().collect()));
-        i = j.max(start + 1);
-    }
-    out
-}
-
 #[derive(PartialEq)]
 enum BlockKind {
     Init,
@@ -690,9 +594,33 @@ impl<'a> Compiler<'a> {
         // does not cut the block short in OMSI: the code after it still exists, so it only
         // leaves the block when reached. These jumps go to the block's end.
         let mut early_ends: Vec<usize> = Vec::new();
-        for (ln, raw) in f.lines.iter().enumerate() {
+        let mut lines = f.lines.iter().enumerate().peekable();
+        while let Some((ln, raw)) = lines.next() {
             let line_no = ln + 1;
-            let toks = tokenize(raw);
+            let mut logical_line = raw.clone();
+            let mut unterminated = false;
+            while has_unclosed_string(&logical_line) {
+                let Some((_, next)) = lines.peek() else {
+                    unterminated = true;
+                    break;
+                };
+                // Keep the next block available for normal parsing if a quote never closed.
+                if is_script_block_header(next.as_str()) {
+                    unterminated = true;
+                    break;
+                }
+                let (_, next) = lines.next().unwrap();
+                logical_line.push_str(next.trim_start_matches('\t'));
+            }
+            if unterminated {
+                self.err(
+                    &f.path,
+                    line_no,
+                    "SC_ErrorInCommand: unterminated string literal".into(),
+                );
+                continue;
+            }
+            let toks = tokenize(&logical_line);
             for t in toks {
                 match t {
                     Tok::Brace(b) => {
@@ -1382,6 +1310,41 @@ mod tests {
                 Tok::Paren("L.L.c".into()),
             ]
         );
+    }
+
+    #[test]
+    fn multiline_string_literals_compile_as_one_token() {
+        let dir = std::env::temp_dir().join(format!(
+            "omsi-script-multiline-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let osc = dir.join("display.osc");
+        std::fs::write(
+            &osc,
+            "{init}\n\"Diagnostics 1/5\n\t@Fault Diagnostics\n\t@Cluster Selftest\n\" (S.$.screen)\n{end}\n",
+        )
+        .unwrap();
+        let p = compile(&CompileInput {
+            builtin_str_vars: vec!["screen".into()],
+            scripts: vec![osc],
+            ..Default::default()
+        });
+        let _ = std::fs::remove_dir_all(dir);
+
+        assert!(p.errors.is_empty(), "{:?}", p.errors);
+        assert!(p
+            .strings
+            .iter()
+            .any(|s| s == "Diagnostics 1/5@Fault Diagnostics@Cluster Selftest"));
+    }
+
+    #[test]
+    fn unterminated_multiline_string_reports_an_error_and_keeps_later_blocks() {
+        let p = program_of("{init}\n\"unterminated\n{frame}\n1 (S.L.x)\n{end}\n");
+
+        assert!(p.errors.iter().any(|e| e.message.contains("unterminated string")));
+        assert_eq!(p.frame.len(), 1);
     }
 
     #[test]
