@@ -540,9 +540,20 @@ mod hold_tests {
         assert!(player.ibis_busy());
 
         player.update_duty_ibis(&mut duty);
-        assert_eq!(player.ibis_shown, None, "deferred during transition while busy");
-        assert_eq!(player.vehicle.var("IBIS_busstop"), Some(1.0), "retains old stop while transition is busy");
-        assert_eq!(player.vehicle.var("IBIS_RouteIndex"), Some(0.0), "retains old route while transition is busy");
+        assert_eq!(
+            player.ibis_shown, None,
+            "deferred during transition while busy"
+        );
+        assert_eq!(
+            player.vehicle.var("IBIS_busstop"),
+            Some(1.0),
+            "retains old stop while transition is busy"
+        );
+        assert_eq!(
+            player.vehicle.var("IBIS_RouteIndex"),
+            Some(0.0),
+            "retains old route while transition is busy"
+        );
 
         for _ in 0..300 {
             if !player.tick_startup(0.5) && !player.ibis_busy() {
@@ -550,10 +561,18 @@ mod hold_tests {
             }
         }
         assert!(!player.ibis_busy());
-        assert_eq!(player.vehicle.var("IBIS_RouteIndex"), Some(1.0), "new route established by typing");
+        assert_eq!(
+            player.vehicle.var("IBIS_RouteIndex"),
+            Some(1.0),
+            "new route established by typing"
+        );
 
         player.update_duty_ibis(&mut duty);
-        assert_eq!(player.ibis_shown, Some(0), "shown stop updated after typing completes");
+        assert_eq!(
+            player.ibis_shown,
+            Some(0),
+            "shown stop updated after typing completes"
+        );
         assert_eq!(player.vehicle.var("IBIS_busstop"), Some(0.0));
     }
 }
