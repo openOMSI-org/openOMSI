@@ -73,6 +73,36 @@ fn switch_var_value(inst: &SceneryInstance) -> Option<f32> {
     None
 }
 
+/// Give the switch variables of points `o` the value `value`: whether one changed.
+fn set_switch_vars(o: &mut SceneryObject, value: f32) -> bool {
+    let vars = o.switch_vars.get_or_insert_with(|| {
+        SWITCH_VARS
+            .iter()
+            .filter_map(|&name| o.inst.program.var(name))
+            .collect()
+    });
+    let mut changed = false;
+    for &var_id in vars.iter() {
+        if let Some(val) = o.inst.state.vars.get_mut(var_id as usize) {
+            if *val != value {
+                *val = value;
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+/// The value points `o` are set to.
+fn switch_value(o: &SceneryObject) -> Option<f32> {
+    match &o.switch_vars {
+        Some(vars) => vars
+            .first()
+            .and_then(|&i| o.inst.state.vars.get(i as usize).copied()),
+        None => switch_var_value(&o.inst),
+    }
+}
+
 impl SceneryState {
     /// Take the changes `inbox` has (in order). A list that followed another inbox (another
     /// map) is emptied first.
@@ -103,12 +133,7 @@ impl SceneryState {
     pub fn switch_set_to(&self, id: i64, path: u16) -> Option<bool> {
         let o = self.get(self.find(id)?);
         let direction = *o.switch_dirs.get(path as usize)?;
-        let val = match &o.switch_vars {
-            Some(vars) => vars
-                .first()
-                .and_then(|&i| o.inst.state.vars.get(i as usize).copied()),
-            None => switch_var_value(&o.inst),
-        }?;
+        let val = switch_value(o)?;
         if let Some(d) = direction {
             Some((val - d as f32).abs() < 0.5)
         } else if o.switch_dirs.iter().any(|d| d.is_some()) {
@@ -141,23 +166,7 @@ impl SceneryState {
             } else {
                 path as f32
             };
-            let vars = o.switch_vars.get_or_insert_with(|| {
-                SWITCH_VARS
-                    .iter()
-                    .filter_map(|&name| o.inst.program.var(name))
-                    .collect()
-            });
-            let mut changed = false;
-            for &var_id in vars.iter() {
-                let idx = var_id as usize;
-                if let Some(val) = o.inst.state.vars.get_mut(idx) {
-                    if *val != target_d {
-                        *val = target_d;
-                        changed = true;
-                    }
-                }
-            }
-            if changed && omsi_cfg::flags::OMSI_DEBUG_SWITCHES.is_set() {
+            if set_switch_vars(o, target_d) && omsi_cfg::flags::OMSI_DEBUG_SWITCHES.is_set() {
                 let path = o
                     .sco_path
                     .as_deref()
@@ -171,6 +180,33 @@ impl SceneryState {
                     o.pos.y
                 );
             }
+        }
+    }
+
+    /// The points within `radius` of `at` and the value each is set to: (map id, the key it
+    /// was placed with, value). What a LAN host tells a player's game, whose points then lie
+    /// as the host's do (a key that changed: the tile came again, its points as the map has
+    /// them).
+    pub fn switch_values_near(&self, at: glam::DVec3, radius: f64) -> Vec<(i64, u64, f32)> {
+        let r2 = radius * radius;
+        self.objects()
+            .iter()
+            .filter(|o| !o.switch_dirs.is_empty() && (o.pos - at).truncate().length_squared() <= r2)
+            .filter_map(|o| Some((o.map_id, o.key, switch_value(o)?)))
+            .collect()
+    }
+
+    /// Set points `id` as another game has them (`switch_values_near` there); false where
+    /// there are no such points here.
+    pub fn set_switch_value(&mut self, id: i64, value: f32) -> bool {
+        match self.find_mut(id) {
+            Some(o) if !o.switch_dirs.is_empty() && value.is_finite() => {
+                if set_switch_vars(o, value) && omsi_cfg::flags::OMSI_DEBUG_SWITCHES.is_set() {
+                    log::info!("switch {id} set to {value} as another game has it");
+                }
+                true
+            }
+            _ => false,
         }
     }
 
@@ -338,6 +374,40 @@ mod tests {
         let other = SceneryInbox::default();
         s.take_inbox(&other);
         assert!(s.is_empty());
+    }
+
+    /// A LAN player's game takes the points as the host has them, by value, and reads back
+    /// only the points near it.
+    #[test]
+    fn points_go_by_value_to_another_game() {
+        let inbox = SceneryInbox::default();
+        let mut host = SceneryState::default();
+        let mut near = object(&inbox, 1, (0, 0));
+        near.pos = DVec3::new(10.0, 0.0, 0.0);
+        let mut far = object(&inbox, 2, (0, 0));
+        far.pos = DVec3::new(900.0, 0.0, 0.0);
+        inbox.push(SceneryChange::Add(near));
+        inbox.push(SceneryChange::Add(far));
+        host.take_inbox(&inbox);
+        host.set_switches(&[(1, 1), (2, 1)]);
+        let sent = host.switch_values_near(DVec3::ZERO, 500.0);
+        assert_eq!(sent.len(), 1);
+        assert_eq!((sent[0].0, sent[0].2), (1, 1.0));
+
+        let other = SceneryInbox::default();
+        let mut player = SceneryState::default();
+        other.push(SceneryChange::Add(object(&other, 1, (0, 0))));
+        player.take_inbox(&other);
+        assert_eq!(player.switch_set_to(1, 1), Some(false));
+        for (id, _, v) in sent {
+            assert!(player.set_switch_value(id, v));
+        }
+        assert_eq!(player.switch_set_to(1, 1), Some(true));
+        assert!(
+            !player.set_switch_value(2, 1.0),
+            "points this game has not loaded"
+        );
+        assert!(!player.set_switch_value(1, f32::NAN));
     }
 
     #[test]

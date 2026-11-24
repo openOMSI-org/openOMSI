@@ -2,7 +2,7 @@
 //! placements (their data and drawing transform are `omsi_xr::navigator`).
 
 use glam::Vec3;
-pub(crate) use omsi_xr::navigator::{bus_key, Display, Placement, Profiles};
+pub(crate) use omsi_xr::navigator::{Display, Placement, Profiles, bus_key};
 
 /// Where the placements are kept: beside the settings.
 pub(crate) fn profiles_path() -> Option<std::path::PathBuf> {
@@ -36,7 +36,12 @@ impl crate::App {
                 p.key(scan, 0, false);
             }
             p.axes.release_all();
-            for name in self.input.door_key_triggers.drain().flat_map(|(_, names)| names) {
+            for name in self
+                .input
+                .door_key_triggers
+                .drain()
+                .flat_map(|(_, names)| names)
+            {
                 let off = format!("{name}_off");
                 if p.vehicle.ty.program.trigger(&off).is_some() {
                     p.vehicle.trigger(&off);
@@ -80,7 +85,12 @@ impl crate::App {
         }
         if let Some(p) = self.player.as_ref() {
             let key = bus_key(&p.vehicle.ty.def.path, &self.args.root);
-            self.xr.vr_nav_profiles.buses.entry(key).or_default().enabled = true;
+            self.xr
+                .vr_nav_profiles
+                .buses
+                .entry(key)
+                .or_default()
+                .enabled = true;
         }
         if let Some(window) = self.window.as_ref() {
             let _ = window.set_cursor_grab(winit::window::CursorGrabMode::Confined);
@@ -165,7 +175,9 @@ impl crate::App {
         }
         if rotating {
             use winit::keyboard::KeyCode;
-            if self.input.keys.contains(&KeyCode::ShiftLeft) || self.input.keys.contains(&KeyCode::ShiftRight) {
+            if self.input.keys.contains(&KeyCode::ShiftLeft)
+                || self.input.keys.contains(&KeyCode::ShiftRight)
+            {
                 p.roll += dx * 0.25;
             } else {
                 p.yaw -= dx * 0.25;
@@ -188,8 +200,8 @@ impl crate::App {
         );
         let p = self.xr.vr_nav_profiles.buses.entry(key).or_default();
         use winit::keyboard::KeyCode;
-        let resize =
-            self.input.keys.contains(&KeyCode::ControlLeft) || self.input.keys.contains(&KeyCode::ControlRight);
+        let resize = self.input.keys.contains(&KeyCode::ControlLeft)
+            || self.input.keys.contains(&KeyCode::ControlRight);
         p.scroll(amount, resize, eye, driver);
     }
 
@@ -206,7 +218,8 @@ impl crate::App {
         self.player
             .as_ref()
             .map(|p| {
-                self.xr.vr_nav_profiles
+                self.xr
+                    .vr_nav_profiles
                     .get(&bus_key(&p.vehicle.ty.def.path, &self.args.root))
             })
             .unwrap_or_default()
@@ -281,7 +294,9 @@ mod tests {
             for key in keys {
                 let translated = crate::_rust_i18n_try_translate(language, key);
                 assert!(
-                    translated.as_ref().is_some_and(|text| !text.trim().is_empty() && text.as_ref() != key),
+                    translated
+                        .as_ref()
+                        .is_some_and(|text| !text.trim().is_empty() && text.as_ref() != key),
                     "Missing navigator translation: {language} / {key}"
                 );
             }
@@ -299,5 +314,4 @@ mod tests {
         };
         assert!(driver_origin(&camera).abs_diff_eq(Vec3::new(0.6, 2.0, 3.0), 0.0001));
     }
-
 }

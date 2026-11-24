@@ -76,6 +76,7 @@ pub(crate) struct CameraUniform {
     /// the smaller picture's (letters, gauges and signs came out soft); 0 otherwise.
     /// y: ground-prepass flag (set only while that pass is active).
     /// z: Enhanced road sunlight glare strength, default 1.
+    /// w: the air's temperature (degC, `Lighting::air_temp`): the wet panes' film.
     pub(crate) lod: [f32; 4],
     /// The classic picture's headlight, Omsi.exe's one Direct3D spot light (the player's
     /// `[spotlight]`, see the scene shader's `classic_spot`): [0] xyz where its light leaves
@@ -158,6 +159,20 @@ pub(crate) struct EnhancedUniform {
     pub(crate) cloud_f2: [f32; 4],
     /// `Lighting::pane_tilt`: sin and cos of the `inside` bus's pitch, then of its roll
     pub(crate) pane_tilt: [f32; 4],
+    /// The weather overhaul's slots (enhanced_common.wgsl): the volumetric clouds
+    pub(crate) clouds_ext: [f32; 4],
+    pub(crate) clouds_ext2: [f32; 4],
+    /// the volumetric fog
+    pub(crate) vol_fog: [f32; 4],
+    pub(crate) vol_fog2: [f32; 4],
+    /// the precipitation
+    pub(crate) precip_ext: [f32; 4],
+    /// the player's bus's panes
+    pub(crate) glass_ext: [f32; 4],
+    /// the surfaces' PBR
+    pub(crate) pbr_ext: [f32; 4],
+    /// the ray tracing
+    pub(crate) rt_ext: [f32; 4],
 }
 
 #[repr(C)]

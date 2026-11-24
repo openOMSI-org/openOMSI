@@ -15,7 +15,12 @@ use std::path::Path;
 /// The `.rs` files under `dir`, in path order, with their text.
 pub fn sources(dir: &Path) -> Vec<(String, String)> {
     fn walk(dir: &Path, out: &mut Vec<(String, String)>) {
-        let mut entries: Vec<_> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).collect();
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .collect();
         entries.sort();
         for p in entries {
             if p.is_dir() {
@@ -57,7 +62,9 @@ pub fn code_only(s: &str) -> String {
                 blank(&mut out, i, end);
                 i = end;
             }
-            b'r' if matches!(b.get(i + 1), Some(b'"' | b'#')) && (i == 0 || !is_ident_char(b[i - 1])) => {
+            b'r' if matches!(b.get(i + 1), Some(b'"' | b'#'))
+                && (i == 0 || !is_ident_char(b[i - 1])) =>
+            {
                 let hashes = b[i + 1..].iter().take_while(|c| **c == b'#').count();
                 if b.get(i + 1 + hashes) != Some(&b'"') {
                     i += 1;
@@ -65,7 +72,9 @@ pub fn code_only(s: &str) -> String {
                 }
                 let close = format!("\"{}", "#".repeat(hashes));
                 let start = i + 2 + hashes;
-                let end = s[start..].find(&close).map_or(b.len(), |k| start + k + close.len());
+                let end = s[start..]
+                    .find(&close)
+                    .map_or(b.len(), |k| start + k + close.len());
                 blank(&mut out, i, end);
                 i = end;
             }
@@ -82,7 +91,12 @@ pub fn code_only(s: &str) -> String {
                 let end = if b.get(i + 1) == Some(&b'\\') {
                     s[i + 2..].find('\'').map(|k| i + 2 + k + 1)
                 } else {
-                    s[i + 1..].chars().next().map(|c| i + 1 + c.len_utf8()).filter(|&e| b.get(e) == Some(&b'\'')).map(|e| e + 1)
+                    s[i + 1..]
+                        .chars()
+                        .next()
+                        .map(|c| i + 1 + c.len_utf8())
+                        .filter(|&e| b.get(e) == Some(&b'\''))
+                        .map(|e| e + 1)
                 };
                 match end {
                     Some(e) => {
@@ -118,7 +132,9 @@ pub fn block_end(s: &str, open: usize) -> usize {
 
 /// The identifier starting at `at` (empty when none does).
 pub fn ident_at(s: &str, at: usize) -> &str {
-    let end = s[at..].find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).map_or(s.len(), |k| at + k);
+    let end = s[at..]
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .map_or(s.len(), |k| at + k);
     &s[at..end]
 }
 
@@ -129,12 +145,18 @@ fn is_ident_char(c: u8) -> bool {
 /// The fields of `struct <ty>` in a source (`pub(crate) name: ..` lines).
 pub fn struct_fields(source: &str, ty: &str) -> Vec<String> {
     let s = code_only(source);
-    let Some(at) = s.find(&format!("struct {ty} {{")) else { return Vec::new() };
+    let Some(at) = s.find(&format!("struct {ty} {{")) else {
+        return Vec::new();
+    };
     let open = at + s[at..].find('{').unwrap_or(0);
     let body = &s[open + 1..block_end(&s, open) - 1];
     body.lines()
         .map(str::trim)
-        .map(|l| l.strip_prefix("pub(crate) ").or_else(|| l.strip_prefix("pub ")).unwrap_or(l))
+        .map(|l| {
+            l.strip_prefix("pub(crate) ")
+                .or_else(|| l.strip_prefix("pub "))
+                .unwrap_or(l)
+        })
         .filter(|l| l.contains(':') && !l.starts_with('#'))
         .map(|l| ident_at(l, 0).to_string())
         .filter(|f| !f.is_empty())
@@ -146,11 +168,18 @@ pub fn struct_fields(source: &str, ty: &str) -> Vec<String> {
 pub fn match_arms(source: &str, fn_name: &str, scrutinee: &str) -> BTreeMap<String, String> {
     let s = code_only(source);
     let mut out: BTreeMap<String, String> = BTreeMap::new();
-    let Some(start) = s.find(&format!("fn {fn_name}")) else { return out };
-    let Some(m) = s[start..].find(&format!("match {scrutinee} {{")) else { return out };
+    let Some(start) = s.find(&format!("fn {fn_name}")) else {
+        return out;
+    };
+    let Some(m) = s[start..].find(&format!("match {scrutinee} {{")) else {
+        return out;
+    };
     let open = start + m + "match ".len() + scrutinee.len() + 1;
     let arms = &s[open + 1..block_end(&s, open) - 1];
-    let indent = arms.lines().find(|l| !l.trim().is_empty()).map_or(0, |l| l.len() - l.trim_start().len());
+    let indent = arms
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .map_or(0, |l| l.len() - l.trim_start().len());
     let mut current = String::new();
     for line in arms.lines() {
         let t = line.trim_start();
@@ -176,13 +205,24 @@ pub fn contexts(source: &str) -> BTreeMap<String, Vec<String>> {
     while let Some(k) = s[from..].find("stage_ctx!(") {
         let at = from + k + "stage_ctx!(".len();
         from = at;
-        let Some(open) = s[at..].find('{').map(|o| at + o) else { break };
-        let name = s[at..open].split_whitespace().last().unwrap_or("").to_string();
+        let Some(open) = s[at..].find('{').map(|o| at + o) else {
+            break;
+        };
+        let name = s[at..open]
+            .split_whitespace()
+            .last()
+            .unwrap_or("")
+            .to_string();
         let body = &s[open + 1..block_end(&s, open) - 1];
         let parts = body
             .split(|c| c == '[' || c == ']' || c == ',')
             .map(str::trim)
-            .filter(|w| !w.is_empty() && w.chars().all(|c| c.is_ascii_lowercase() || c == '_') && *w != "reads" && *w != "writes")
+            .filter(|w| {
+                !w.is_empty()
+                    && w.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+                    && *w != "reads"
+                    && *w != "writes"
+            })
             .map(str::to_string)
             .collect();
         if !name.is_empty() {
@@ -205,7 +245,11 @@ impl Code {
     /// The functions of the sources that reach a `ty` (`App`).
     pub fn read(sources: &[(String, String)], ty: &str) -> Code {
         let mut code = Code::default();
-        let heads = [format!("impl {ty} {{"), format!("impl crate::{ty} {{"), format!("impl super::{ty} {{")];
+        let heads = [
+            format!("impl {ty} {{"),
+            format!("impl crate::{ty} {{"),
+            format!("impl super::{ty} {{"),
+        ];
         for (_, text) in sources {
             let s = code_only(text);
             for head in &heads {
@@ -231,19 +275,26 @@ impl Code {
                 continue;
             }
             let name = ident_at(s, at + 3).to_string();
-            let Some(open) = s[at..].find('{').map(|o| at + o) else { break };
+            let Some(open) = s[at..].find('{').map(|o| at + o) else {
+                break;
+            };
             // (`;` before the body's brace: a declaration)
             if name.is_empty() || s[at..open].contains(';') {
                 continue;
             }
-            let Some(who) = who(&s[at..open]) else { continue };
+            let Some(who) = who(&s[at..open]) else {
+                continue;
+            };
             let end = block_end(s, open);
             if methods {
                 self.methods.insert(name.clone());
                 // (a method's body is not scanned again for nested fns of its own)
                 f = end;
             }
-            self.fns.entry(name).or_default().push((who, s[open..end].to_string()));
+            self.fns
+                .entry(name)
+                .or_default()
+                .push((who, s[open..end].to_string()));
         }
     }
 
@@ -312,8 +363,16 @@ impl Code {
             let at = from + k;
             from = at + 5;
             let head = &body[..at];
-            let start = head.rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).map_or(0, |k| k + 1);
-            if start < at && body[from..].chars().take(40).collect::<String>().contains(who) {
+            let start = head
+                .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .map_or(0, |k| k + 1);
+            if start < at
+                && body[from..]
+                    .chars()
+                    .take(40)
+                    .collect::<String>()
+                    .contains(who)
+            {
                 fields.insert(format!("{}::of", &head[start..]));
             }
         }
@@ -333,12 +392,17 @@ impl Code {
         while let Some(k) = body[from..].find(who) {
             let at = from + k;
             from = at + who.len();
-            if (at > 0 && is_ident_char(b[at - 1])) || b.get(from).is_some_and(|c| is_ident_char(*c) || *c == b'.') {
+            if (at > 0 && is_ident_char(b[at - 1]))
+                || b.get(from).is_some_and(|c| is_ident_char(*c) || *c == b'.')
+            {
                 continue;
             }
             // (`&mut *self`, `&self`: what is before the borrow)
             let before = body[..at].trim_end_matches(['&', '*', ' ', '\n']);
-            let before = before.strip_suffix("mut").unwrap_or(before).trim_end_matches(['&', '*', ' ', '\n']);
+            let before = before
+                .strip_suffix("mut")
+                .unwrap_or(before)
+                .trim_end_matches(['&', '*', ' ', '\n']);
             if !(before.ends_with('(') || before.ends_with(',')) {
                 continue;
             }
@@ -359,7 +423,9 @@ impl Code {
             }
             let Some(open) = open else { continue };
             let head = body[..open].trim_end();
-            let start = head.rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).map_or(0, |k| k + 1);
+            let start = head
+                .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .map_or(0, |k| k + 1);
             if self.has(&head[start..]) {
                 calls.insert(head[start..].to_string());
             }
@@ -380,9 +446,13 @@ fn param_of(sig: &str, ty: &str) -> Option<String> {
                 if sig.as_bytes().get(from).is_some_and(|c| is_ident_char(*c)) {
                     continue;
                 }
-                let Some(before) = sig[..at].trim_end().strip_suffix(':') else { continue };
+                let Some(before) = sig[..at].trim_end().strip_suffix(':') else {
+                    continue;
+                };
                 let before = before.trim_end();
-                let start = before.rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).map_or(0, |k| k + 1);
+                let start = before
+                    .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                    .map_or(0, |k| k + 1);
                 let name = &before[start..];
                 if !name.is_empty() && name != "self" {
                     return Some(name.to_string());
@@ -418,7 +488,10 @@ fn other(x: &mut Other) { x.c = 1; }
     fn follows_methods_free_functions_and_the_value_handed_on() {
         let code = Code::read(&[("a.rs".into(), SRC.into())], "App");
         let reach = code.reach(&["one".to_string()].into_iter().collect());
-        assert_eq!(reach.into_iter().collect::<Vec<_>>(), ["a", "b", "b.x", "c"]);
+        assert_eq!(
+            reach.into_iter().collect::<Vec<_>>(),
+            ["a", "b", "b.x", "c"]
+        );
         assert!(!code.has("other"));
         assert_eq!(struct_fields(SRC, "App"), ["a", "b", "c"]);
     }
@@ -435,7 +508,10 @@ fn other(x: &mut Other) { x.c = 1; }
         let src = "stage_ctx!(\n    /// doc\n    ACx { reads: [world, clock], writes: [player] }\n);\nimpl App { fn f(&mut self) { g(ACx::of(&mut self.parts())); } }\n";
         assert_eq!(contexts(src)["ACx"], ["world", "clock", "player"]);
         let code = Code::read(&[("a.rs".into(), src.into())], "App");
-        assert!(code.reach(&["f".to_string()].into_iter().collect()).contains("ACx::of"));
+        assert!(
+            code.reach(&["f".to_string()].into_iter().collect())
+                .contains("ACx::of")
+        );
     }
 
     #[test]

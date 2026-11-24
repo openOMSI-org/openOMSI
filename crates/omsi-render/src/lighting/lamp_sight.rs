@@ -28,22 +28,36 @@ pub(crate) struct LampSight {
 
 impl LampSight {
     pub(crate) fn new(device: &wgpu::Device, leave_out_enhanced: bool) -> Option<LampSight> {
-        if leave_out_enhanced || basic_pipelines() || gl_backend() || omsi_cfg::flags::OMSI_NO_LAMP_SIGHT.is_set() {
+        if leave_out_enhanced
+            || basic_pipelines()
+            || gl_backend()
+            || omsi_cfg::flags::OMSI_NO_LAMP_SIGHT.is_set()
+        {
             return None;
         }
         optional_pipeline(device, "the lamp sight", || LampSight::build(device))
     }
 
     fn build(device: &wgpu::Device) -> LampSight {
-        let module = compile_shader(device, wgpu::ShaderModuleDescriptor {
-            label: Some("lamp sight"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../lamp_sight.wgsl").into()),
-        });
+        let module = compile_shader(
+            device,
+            wgpu::ShaderModuleDescriptor {
+                label: Some("lamp sight"),
+                source: wgpu::ShaderSource::Wgsl(
+                    crate::shaders::hot_wgsl(include_str!("../lamp_sight.wgsl"), "lamp_sight.wgsl")
+                        .into(),
+                ),
+            },
+        );
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("lamp sight"),
             entries: &[
                 uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
-                texture_entry(1, wgpu::TextureSampleType::Depth, wgpu::TextureViewDimension::D2),
+                texture_entry(
+                    1,
+                    wgpu::TextureSampleType::Depth,
+                    wgpu::TextureViewDimension::D2,
+                ),
             ],
         });
         let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -52,10 +66,15 @@ impl LampSight {
             immediate_size: 0,
         });
         let targets = [target(wgpu::TextureFormat::Rgba8Unorm, None)];
-        let pipeline = no_vertex_pipeline("lamp sight", &pl, &module, "fs_sight", &targets).create(device);
+        let pipeline =
+            no_vertex_pipeline("lamp sight", &pl, &module, "fs_sight", &targets).create(device);
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("lamp sight"),
-            size: wgpu::Extent3d { width: SIGHT_LAMPS as u32, height: 1, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width: SIGHT_LAMPS as u32,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -72,7 +91,11 @@ impl LampSight {
         LampSight {
             pipeline,
             layout,
-            uniform: uniform_buffer(device, "lamp sight", std::mem::size_of::<SightUniform>() as u64),
+            uniform: uniform_buffer(
+                device,
+                "lamp sight",
+                std::mem::size_of::<SightUniform>() as u64,
+            ),
             view: texture.create_view(&Default::default()),
             readback,
             state: Arc::new(AtomicU8::new(0)),
@@ -84,7 +107,10 @@ impl LampSight {
     }
 
     pub(crate) fn seen(&self, at: DVec3) -> f32 {
-        self.seen.iter().find(|(p, _)| p.distance_squared(at) < 1.0).map_or(1.0, |s| s.1)
+        self.seen
+            .iter()
+            .find(|(p, _)| p.distance_squared(at) < 1.0)
+            .map_or(1.0, |s| s.1)
     }
 
     pub(crate) fn idle(&self) -> bool {
@@ -97,7 +123,9 @@ impl LampSight {
             self.frames_waiting = 0;
             return;
         }
-        let Some(lamps) = self.waiting.as_ref() else { return };
+        let Some(lamps) = self.waiting.as_ref() else {
+            return;
+        };
         self.frames_waiting += 1;
         if self.frames_waiting > 240 {
             self.seen.clear();
@@ -106,7 +134,11 @@ impl LampSight {
             1 => {
                 {
                     let bytes = self.readback.slice(..).get_mapped_range();
-                    self.seen = lamps.iter().enumerate().map(|(i, p)| (*p, bytes[i * 4] as f32 / 255.0)).collect();
+                    self.seen = lamps
+                        .iter()
+                        .enumerate()
+                        .map(|(i, p)| (*p, bytes[i * 4] as f32 / 255.0))
+                        .collect();
                 }
                 self.readback.unmap();
                 self.waiting = None;
@@ -120,7 +152,16 @@ impl LampSight {
         }
     }
 
-    pub(crate) fn encode(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, depth: &wgpu::TextureView, view_proj: Mat4, ro: DVec3, eye: Vec3) {
+    pub(crate) fn encode(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        depth: &wgpu::TextureView,
+        view_proj: Mat4,
+        ro: DVec3,
+        eye: Vec3,
+    ) {
         if self.waiting.is_some() || self.candidates.is_empty() {
             return;
         }
@@ -138,8 +179,14 @@ impl LampSight {
             label: Some("lamp sight"),
             layout: &self.layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: self.uniform.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(depth) },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(depth),
+                },
             ],
         });
         {
@@ -149,7 +196,10 @@ impl LampSight {
                     view: &self.view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::WHITE), store: wgpu::StoreOp::Store },
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                        store: wgpu::StoreOp::Store,
+                    },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -161,12 +211,25 @@ impl LampSight {
             pass.draw(0..3, 0..1);
         }
         encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo { texture: self.view.texture(), mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            wgpu::TexelCopyTextureInfo {
+                texture: self.view.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
             wgpu::TexelCopyBufferInfo {
                 buffer: &self.readback,
-                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(SIGHT_LAMPS as u32 * 4), rows_per_image: Some(1) },
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(SIGHT_LAMPS as u32 * 4),
+                    rows_per_image: Some(1),
+                },
             },
-            wgpu::Extent3d { width: SIGHT_LAMPS as u32, height: 1, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width: SIGHT_LAMPS as u32,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
         );
         let state = self.state.clone();
         encoder.map_buffer_on_submit(&self.readback, wgpu::MapMode::Read, .., move |r| {
@@ -176,7 +239,13 @@ impl LampSight {
     }
 }
 
-pub(crate) fn brightest_glare(lights: &[PointLight], ro: DVec3, cam_rel: Vec3, forward: Vec3, view_proj: Mat4) -> Vec<DVec3> {
+pub(crate) fn brightest_glare(
+    lights: &[PointLight],
+    ro: DVec3,
+    cam_rel: Vec3,
+    forward: Vec3,
+    view_proj: Mat4,
+) -> Vec<DVec3> {
     let mut sources: Vec<(DVec3, f32)> = glare_sources(lights, ro, cam_rel, forward)
         .into_iter()
         .filter(|(at, _)| {
@@ -201,8 +270,11 @@ mod tests {
         descriptor.backends = wgpu::Backends::NOOP;
         descriptor.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
         let instance = wgpu::Instance::new(descriptor);
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
-        let (device, _) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+        let adapter =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+                .unwrap();
+        let (device, _) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
         let mut sight = LampSight::build(&device);
         sight.readback.destroy();
         sight.waiting = Some(vec![DVec3::ZERO]);

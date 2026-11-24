@@ -1,15 +1,17 @@
 //! The clouds' shadow over the land.
 //!
-//! The sun through the cumulus layer is not one number for the whole picture: a heap a
+//! The sun through the cloud layer is not one number for the whole picture: a heap a
 //! kilometre and a half up throws a shadow a few hundred metres across, and from a hill
 //! the land is a patchwork of lit and shaded ground that moves with the wind. The field
 //! here is that patchwork: the share of the sun that reaches the cloud layer's middle at
 //! every point of a square some nine kilometres wide, worked out with the sky shader's own
-//! heaps (`cloud_base_shape` in sky_enhanced.wgsl, without the billows) along the sun's
+//! clouds (`cloud_density` in sky_enhanced.wgsl: the weather map, the cloud type's height
+//! profile and the base volume, with the detail's erosion taken on average) along the sun's
 //! direction through the layer. It is indexed by *cloud space* - the world plus the clouds'
 //! drift - so the wind moves the shadows without the field being drawn again; only a sun
-//! that has moved on, another cover or layer, or a camera that has left the middle of the
-//! square makes a new one, which a helper thread works out.
+//! that has moved on, another cover or layer, the base volume having drifted on against the
+//! weather map (the clouds' slow change of shape), or a camera that has left the middle of
+//! the square makes a new one, which a helper thread works out.
 //!
 //! The field lives in the sky table's texture (right of the table, `FIELD_X0`): the
 //! enhanced shaders all have that texture, and the scene's camera group has no room left
@@ -31,90 +33,212 @@ pub(crate) const FIELD_X0: u32 = atmosphere::SKY_LUT_W + 1;
 pub(crate) const SKY_TEX_W: u32 = FIELD_X0 + FIELD_N;
 pub(crate) const SKY_TEX_H: u32 = FIELD_N;
 
-const SHAPE_PERIOD: f32 = 13000.0;
-const SIGMA: f32 = 0.035;
-/// How much of the cover the billows take off the heaps' edges in the sky shader (which the
-/// field leaves out): on average about this much.
-pub(crate) const EROSION: f32 = 0.15;
+// The cloud model's numbers, as sky_enhanced.wgsl has them.
+const WEATHER_PERIOD: f32 = 35000.0;
+const BASE_PERIOD: f32 = 5000.0;
+/// How much faster than the weather map the base volume drifts (the clouds change shape).
+pub(crate) const BASE_DRIFT: f32 = 1.12;
+const CLOUD_SIGMA: f32 = 0.05;
+const DETAIL_ERODE: f32 = 0.32;
+/// The detail volume's mean, which the field takes off every heap in place of the detail.
+const DETAIL_MEAN: f32 = 0.5;
+const COVER_SPREAD: f32 = 1.1;
 /// The steps through the layer for one texel of the field.
 const STEPS: usize = 16;
+
+/// The weather's clouds as a whole, as `cloud_sky` in sky_enhanced.wgsl works them out:
+/// the cover, how much of it is a closed deck, the storm, the cloud type (1 heaps, ~0.3 a
+/// sheet), how much the detail erodes and how dense they are.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct CloudParams {
+    pub(crate) cover: f32,
+    pub(crate) deck: f32,
+    pub(crate) storm: f32,
+    pub(crate) kind: f32,
+    pub(crate) erode: f32,
+    pub(crate) dens: f32,
+}
+
+impl CloudParams {
+    /// From the cover (`Lighting::cloud_density`), the sky's overcast (`SkyInput::overcast`,
+    /// enh.weather.w), the rain (enh.weather.z) and the storm (enh.layers.w).
+    pub(crate) fn new(cover: f32, overcast: f32, rain: f32, storm: f32) -> CloudParams {
+        let ss = atmosphere::smoothstep;
+        let cover = cover.clamp(0.0, 1.0);
+        let deck = ss(0.8, 1.0, cover).max(ss(0.55, 1.0, overcast));
+        let kind = (1.0 + (0.3 + 0.35 * rain - 1.0) * deck).max(storm);
+        CloudParams {
+            cover,
+            deck,
+            storm,
+            kind,
+            erode: DETAIL_ERODE * (1.0 - 0.3 * deck),
+            dens: 1.0 + 1.2 * (deck * (0.4 + 0.6 * rain)).max(storm),
+        }
+    }
+
+    /// The clouds of this light (the same numbers the shaders get).
+    pub(crate) fn of(lighting: &Lighting) -> CloudParams {
+        let wet_cover = (lighting.rain * 1.5).clamp(0.0, 1.0);
+        let storm = forced_storm()
+            .map_or(lighting.storm, |f| f.0)
+            .clamp(0.0, 1.0);
+        CloudParams::new(
+            lighting.cloud_density,
+            lighting.overcast.clamp(0.0, 1.0).max(wet_cover),
+            lighting.rain.clamp(0.0, 1.0),
+            storm,
+        )
+    }
+}
+
+/// The CPU's copy of the clouds' weather map (RGBA8, `clouds::WEATHER_SIZE / 2` a side) and
+/// base volume (R8, `clouds::BASE_SIZE / 2` a side): their second levels.
+#[derive(Clone, Default)]
+pub(crate) struct CloudCpu {
+    weather: std::sync::Arc<Vec<u8>>,
+    base: std::sync::Arc<Vec<u8>>,
+}
+
+impl CloudCpu {
+    pub(crate) fn new(weather: &[u8], base: &[u8]) -> CloudCpu {
+        CloudCpu {
+            weather: std::sync::Arc::new(weather.to_vec()),
+            base: std::sync::Arc::new(base.to_vec()),
+        }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.weather.len() < (clouds::WEATHER_SIZE as usize / 2).pow(2) * 4
+            || self.base.len() < (clouds::BASE_SIZE as usize / 2).pow(3)
+    }
+
+    /// The weather map bilinearly at `uv`, repeating.
+    fn weather(&self, u: f32, v: f32) -> [f32; 4] {
+        let n = (clouds::WEATHER_SIZE / 2) as i64;
+        let (x, y) = (u * n as f32 - 0.5, v * n as f32 - 0.5);
+        let (x0, y0) = (x.floor(), y.floor());
+        let (fx, fy) = (x - x0, y - y0);
+        let (x0, y0) = (x0 as i64, y0 as i64);
+        let texel = |x: i64, y: i64| {
+            let i = ((y.rem_euclid(n) * n + x.rem_euclid(n)) * 4) as usize;
+            [0, 1, 2, 3].map(|c| self.weather[i + c] as f32 / 255.0)
+        };
+        let (a, b, c, d) = (
+            texel(x0, y0),
+            texel(x0 + 1, y0),
+            texel(x0, y0 + 1),
+            texel(x0 + 1, y0 + 1),
+        );
+        [0, 1, 2, 3].map(|k| {
+            (a[k] * (1.0 - fx) + b[k] * fx) * (1.0 - fy) + (c[k] * (1.0 - fx) + d[k] * fx) * fy
+        })
+    }
+
+    /// The base volume trilinearly at `p` (in its periods), repeating.
+    fn base(&self, p: Vec3) -> f32 {
+        let n = (clouds::BASE_SIZE / 2) as i64;
+        let q = p * n as f32 - Vec3::splat(0.5);
+        let i = q.floor();
+        let f = q - i;
+        let (x0, y0, z0) = (i.x as i64, i.y as i64, i.z as i64);
+        let texel = |x: i64, y: i64, z: i64| {
+            self.base[((z.rem_euclid(n) * n + y.rem_euclid(n)) * n + x.rem_euclid(n)) as usize]
+                as f32
+                / 255.0
+        };
+        let mut sum = 0.0;
+        for k in 0..8 {
+            let (dx, dy, dz) = (k & 1, (k >> 1) & 1, k >> 2);
+            let w = if dx == 1 { f.x } else { 1.0 - f.x }
+                * if dy == 1 { f.y } else { 1.0 - f.y }
+                * if dz == 1 { f.z } else { 1.0 - f.z };
+            sum += w * texel(x0 + dx, y0 + dy, z0 + dz);
+        }
+        sum
+    }
+}
+
+fn linearstep(a: f32, b: f32, v: f32) -> f32 {
+    ((v - a) / (b - a)).clamp(0.0, 1.0)
+}
+
+/// How much of a cloud type's layer its clouds fill at height fraction `h` (sky_enhanced.wgsl
+/// `cloud_profile`): a sheet low in the layer with a flat top, heaps with a flat base and
+/// a rounded top, as tall as `tall` lets them grow.
+pub(crate) fn cloud_profile(h: f32, kind: f32, tall: f32) -> f32 {
+    let top = (0.16 + 0.84 * kind) * (0.6 + 0.4 * tall);
+    let bottom = linearstep(0.0, 0.05 + 0.05 * kind, h);
+    bottom * (1.0 - linearstep(top * (0.75 - 0.4 * kind), top, h))
+}
+
+/// The extinction (1/m) of the cloud layer at height fraction `h` over the cloud-space point
+/// `g` (m), `depth` the layer's depth (m) and `base_shift` how far the base volume has drifted
+/// against the weather map: the sky shader's clouds with the detail's erosion on average.
+pub(crate) fn layer_sigma(
+    cpu: &CloudCpu,
+    g: Vec2,
+    h: f32,
+    depth: f32,
+    base_shift: Vec2,
+    c: &CloudParams,
+) -> f32 {
+    if !(0.0..1.0).contains(&h) || c.cover <= 0.001 {
+        return 0.0;
+    }
+    let w = cpu.weather(g.x / WEATHER_PERIOD, g.y / WEATHER_PERIOD);
+    let f = w[0] * 0.7 + w[3] * 0.3;
+    let cov = (c.cover + (f - 0.5) * COVER_SPREAD).clamp(0.0, 1.0);
+    let cov = cov + (1.0 - cov) * c.deck;
+    if cov <= 0.001 {
+        return 0.0;
+    }
+    let kind = (c.kind + (w[1] - 0.5) * 0.5 * (1.0 - c.deck)).clamp(0.0, 1.0);
+    let prof = cloud_profile(h, kind, w[2].max(c.storm));
+    if prof <= 0.0 {
+        return 0.0;
+    }
+    let b = cpu.base(Vec3::new(g.x + base_shift.x, g.y + base_shift.y, h * depth) / BASE_PERIOD);
+    let base = b + (0.5 + 0.5 * b - b) * c.deck;
+    let m = ((base * prof - (1.0 - cov)) / cov.max(1e-3)).clamp(0.0, 1.0) * cov;
+    let e = DETAIL_MEAN * c.erode;
+    ((m - e) / (1.0 - e)).clamp(0.0, 1.0) * CLOUD_SIGMA * c.dens
+}
 
 /// What a field is made from; a new one is made when this has moved on.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FieldKey {
     pub(crate) sun: Vec3,
-    pub(crate) coverage: f32,
+    pub(crate) clouds: CloudParams,
     pub(crate) bottom: f32,
     pub(crate) top: f32,
+    pub(crate) base_shift: Vec2,
 }
 
 impl FieldKey {
     /// Whether a field made for `o` still serves: the sun's direction moves it on after about a
-    /// degree (a few minutes of the day), and the threads that make a new one are two at most.
+    /// degree (a few minutes of the day), the base volume after some 60 m of drift against
+    /// the weather map, and the threads that make a new one are two at most.
     pub(crate) fn near(&self, o: &FieldKey) -> bool {
+        let (a, b) = (&self.clouds, &o.clouds);
         self.sun.dot(o.sun) > 0.999_850
-            && (self.coverage - o.coverage).abs() < 0.015
+            && (a.cover - b.cover).abs() < 0.015
+            && (a.deck - b.deck).abs() < 0.02
+            && (a.storm - b.storm).abs() < 0.02
+            && (a.kind - b.kind).abs() < 0.02
             && (self.bottom - o.bottom).abs() < 40.0
             && (self.top - o.top).abs() < 80.0
+            && (self.base_shift - o.base_shift).abs().max_element() < 60.0
     }
-}
-
-/// The cover the shadows are worked out with: the cloud density, less the billows' share.
-pub(crate) fn shadow_coverage(cloud_density: f32) -> f32 {
-    (0.3 + cloud_density.clamp(0.0, 1.0) * 0.55 - EROSION).clamp(0.0, 1.0)
-}
-
-/// The shape map (RGBA8, `clouds::SHAPE_SIZE / 2` a side) bilinearly at `uv`, repeating.
-pub(crate) fn shape_sample(shape: &[u8], u: f32, v: f32) -> [f32; 3] {
-    let size = (clouds::SHAPE_SIZE / 2) as usize;
-    let texel = |x: i64, y: i64| {
-        let (x, y) = (
-            x.rem_euclid(size as i64) as usize,
-            y.rem_euclid(size as i64) as usize,
-        );
-        let i = (y * size + x) * 4;
-        [
-            shape[i] as f32 / 255.0,
-            shape[i + 1] as f32 / 255.0,
-            shape[i + 2] as f32 / 255.0,
-        ]
-    };
-    let (x, y) = (u * size as f32 - 0.5, v * size as f32 - 0.5);
-    let (x0, y0) = (x.floor(), y.floor());
-    let (fx, fy) = (x - x0, y - y0);
-    let (x0, y0) = (x0 as i64, y0 as i64);
-    let a = texel(x0, y0);
-    let b = texel(x0 + 1, y0);
-    let c = texel(x0, y0 + 1);
-    let d = texel(x0 + 1, y0 + 1);
-    let mut o = [0.0f32; 3];
-    for k in 0..3 {
-        o[k] = (a[k] * (1.0 - fx) + b[k] * fx) * (1.0 - fy) + (c[k] * (1.0 - fx) + d[k] * fx) * fy;
-    }
-    o
-}
-
-/// The extinction (1/m) of the cumulus layer at height fraction `h` over the cloud-space
-/// point `g` (m): the sky shader's heap without its billows.
-pub(crate) fn layer_sigma(shape: &[u8], g: Vec2, h: f32, coverage: f32) -> f32 {
-    if !(0.0..1.0).contains(&h) {
-        return 0.0;
-    }
-    let lin = |a: f32, b: f32, v: f32| ((v - a) / (b - a)).clamp(0.0, 1.0);
-    let m = shape_sample(shape, g.x / SHAPE_PERIOD, g.y / SHAPE_PERIOD);
-    let lo = m[1] - 1.0;
-    let n = h * h * (0.7 + m[2]) + (1.0 - h).powi(16);
-    let base = (m[0] - n - lo) / (1.0 - lo) * (lin(0.0, 0.1, h) - lin(0.6, 1.0, h));
-    let x = ((base + coverage - 1.0) / 0.12).clamp(0.0, 1.0);
-    x * x * (3.0 - 2.0 * x) * (h / 0.2).min(1.0) * SIGMA
 }
 
 /// How much of the sun gets through the layer to the point of its middle plane over the
 /// cloud-space point `c`, along the sun's way.
-pub(crate) fn column_transmittance(shape: &[u8], key: &FieldKey, c: Vec2) -> f32 {
+pub(crate) fn column_transmittance(cpu: &CloudCpu, key: &FieldKey, c: Vec2) -> f32 {
     let s = key.sun;
     // (the way through the layer, bottom to top: its height fraction runs 0..1 evenly)
-    let along = (key.top - key.bottom) / s.z;
+    let depth = key.top - key.bottom;
+    let along = depth / s.z;
     let ds = along / STEPS as f32;
     let mid = 0.5 * (key.top + key.bottom);
     let t_bottom = (key.bottom - mid) / s.z;
@@ -123,17 +247,17 @@ pub(crate) fn column_transmittance(shape: &[u8], key: &FieldKey, c: Vec2) -> f32
     for k in 0..STEPS {
         let h = (k as f32 + 0.5) / STEPS as f32;
         let g = c + dir * (t_bottom + h * along);
-        od += layer_sigma(shape, g, h, key.coverage) * ds;
+        od += layer_sigma(cpu, g, h, depth, key.base_shift, &key.clouds) * ds;
     }
     (-od).exp()
 }
 
 /// The field: `FIELD_N` rows of `FIELD_N` shares of the sun, centred on the cloud-space
 /// point `center`, row 0 the south edge.
-pub(crate) fn compute(shape: &[u8], key: &FieldKey, center: Vec2) -> Vec<f32> {
+pub(crate) fn compute(cpu: &CloudCpu, key: &FieldKey, center: Vec2) -> Vec<f32> {
     let n = FIELD_N as usize;
     let mut out = vec![1.0f32; n * n];
-    if shape.is_empty() || key.sun.z <= 0.02 {
+    if cpu.is_empty() || key.sun.z <= 0.02 {
         return out;
     }
     let threads = std::thread::available_parallelism()
@@ -152,7 +276,7 @@ pub(crate) fn compute(shape: &[u8], key: &FieldKey, center: Vec2) -> Vec<f32> {
                                 (x as f32 + 0.5) / n as f32 - 0.5,
                                 (y as f32 + 0.5) / n as f32 - 0.5,
                             ) * FIELD_EXTENT;
-                        *v = column_transmittance(shape, key, c);
+                        *v = column_transmittance(cpu, key, c);
                     }
                 }
             });
@@ -208,17 +332,18 @@ impl Renderer {
         }
         let [bottom, top] = super::enhanced::cloud_levels(lighting, cam_rel, ro);
         let mid = 0.5 * (bottom + top);
-        let key = FieldKey {
-            sun: s,
-            coverage: shadow_coverage(lighting.cloud_density),
-            bottom,
-            top,
-        };
         let origin = Vec2::new(
             ro.x.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32,
             ro.y.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32,
         );
         let drift = Vec2::new(lighting.cloud_offset[0], lighting.cloud_offset[1]) * 2500.0;
+        let key = FieldKey {
+            sun: s,
+            clouds: CloudParams::of(lighting),
+            bottom,
+            top,
+            base_shift: drift * (BASE_DRIFT - 1.0),
+        };
         // where the sun's way through the camera's own place meets the layer's middle, in
         // cloud space: what the field is to be centred on
         let here = Vec2::new(cam_rel.x, cam_rel.y)
@@ -246,11 +371,11 @@ impl Renderer {
             Some((k, c)) => !k.near(&key) || (here - *c).abs().max_element() > FIELD_EXTENT * 0.18,
         };
         if stale && self.sky.cloud_field.job.is_none() {
-            let shape = self.sky.cloud_shape_cpu.clone();
+            let cpu = self.sky.cloud_shape_cpu.clone();
             if self.instant_exposure {
                 // (a picture on its own waits for it; a window's first frame has the ground lit by the
                 // camera's own number until the helper thread's field is in)
-                let field = compute(&shape, &key, here);
+                let field = compute(&cpu, &key, here);
                 self.install_cloud_field(&field);
                 self.sky.cloud_field.installed = Some((key, here));
             } else {
@@ -258,7 +383,7 @@ impl Renderer {
                 std::thread::Builder::new()
                     .name("cloud shadows".into())
                     .spawn(move || {
-                        let _ = tx.send(compute(&shape, &key, here));
+                        let _ = tx.send(compute(&cpu, &key, here));
                     })
                     .ok();
                 self.sky.cloud_field.job = Some((key, here, rx));
@@ -306,16 +431,22 @@ impl Renderer {
 mod tests {
     use super::*;
 
+    fn cpu() -> CloudCpu {
+        let n = clouds::noise();
+        CloudCpu::new(&n.weather[1], &n.base[1])
+    }
+
     #[test]
     fn the_field_is_shadow_under_a_heap_and_sun_between_heaps() {
-        let shape = clouds::noise().shape[1].clone();
+        let cpu = cpu();
         let key = FieldKey {
             sun: Vec3::new(0.3, 0.2, 0.75).normalize(),
-            coverage: shadow_coverage(0.5),
+            clouds: CloudParams::new(0.5, 0.0, 0.0, 0.0),
             bottom: 1400.0,
             top: 2800.0,
+            base_shift: Vec2::ZERO,
         };
-        let field = compute(&shape, &key, Vec2::new(3000.0, 5000.0));
+        let field = compute(&cpu, &key, Vec2::new(3000.0, 5000.0));
         let (lo, hi) = field
             .iter()
             .fold((1.0f32, 0.0f32), |(l, h), v| (l.min(*v), h.max(*v)));
@@ -323,21 +454,25 @@ mod tests {
         assert!(hi > 0.95, "no sun anywhere: brightest {hi}");
         // a clear sky lets all of it through
         let clear = FieldKey {
-            coverage: 0.0,
+            clouds: CloudParams::new(0.0, 0.0, 0.0, 0.0),
             ..key
         };
-        assert!(
-            compute(&shape, &clear, Vec2::ZERO)
-                .iter()
-                .all(|v| *v > 0.99)
-        );
+        assert!(compute(&cpu, &clear, Vec2::ZERO).iter().all(|v| *v > 0.99));
+        // and a closed deck next to nothing
+        let deck = FieldKey {
+            clouds: CloudParams::new(1.0, 1.0, 0.5, 0.0),
+            ..key
+        };
+        let mean =
+            compute(&cpu, &deck, Vec2::ZERO).iter().sum::<f32>() / (FIELD_N * FIELD_N) as f32;
+        assert!(mean < 0.1, "a deck lets {mean} through");
     }
 
     #[test]
     fn the_field_agrees_with_the_one_point_it_replaces() {
         // the camera's own transmittance (five blurred rays) against the field's value
-        // there: the same heaps, so about the same share of the sun
-        let shape = clouds::noise().shape[1].clone();
+        // there: the same clouds, so about the same share of the sun
+        let cpu = cpu();
         let lighting = Lighting {
             sun_dir: Vec3::new(0.2, 0.4, 0.8).normalize(),
             cloud_density: 0.5,
@@ -348,21 +483,18 @@ mod tests {
         let mut n = 0.0;
         for i in 0..12 {
             let cam = Vec3::new(i as f32 * 530.0, i as f32 * 310.0, 2.0);
-            let one = super::super::enhanced::cloud_sun_transmittance(
-                &shape,
-                &lighting,
-                cam,
-                DVec3::ZERO,
-            );
+            let one =
+                super::super::enhanced::cloud_sun_transmittance(&cpu, &lighting, cam, DVec3::ZERO);
             let key = FieldKey {
                 sun: lighting.sun_dir,
-                coverage: shadow_coverage(0.5),
+                clouds: CloudParams::of(&lighting),
                 bottom: 1400.0,
                 top: 2800.0,
+                base_shift: Vec2::ZERO,
             };
             let s = key.sun;
             let g = Vec2::new(cam.x, cam.y) + Vec2::new(s.x, s.y) / s.z * (2100.0 - cam.z);
-            let here = column_transmittance(&shape, &key, g);
+            let here = column_transmittance(&cpu, &key, g);
             sum += (one - here).abs();
             n += 1.0;
         }

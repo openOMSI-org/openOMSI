@@ -53,5 +53,4 @@ mod grip_tests {
         assert!(road_grip(1.0, -3.0) < 0.2, "black ice");
         assert_eq!(road_grip(0.0, -10.0), 0.85, "a dry road does not freeze");
     }
-
 }

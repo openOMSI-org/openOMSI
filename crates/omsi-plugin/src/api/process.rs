@@ -1,11 +1,11 @@
-mod grants;
 mod content;
+mod grants;
 #[cfg(test)]
 mod lifetime_tests;
-mod worker;
 mod permissions;
-pub use permissions::{ProcessDecision, ProcessPermissions, ProcessPrompt};
+mod worker;
 pub use grants::{ProcessGrant, ProcessGrants};
+pub use permissions::{ProcessDecision, ProcessPermissions, ProcessPrompt};
 use std::collections::BTreeMap;
 #[cfg(not(windows))]
 use std::process::Child;

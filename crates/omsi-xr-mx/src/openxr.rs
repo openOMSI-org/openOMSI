@@ -68,7 +68,6 @@ impl Drop for Vr {
 struct Mirror {
     pipeline: mx::RenderPipeline,
     sampler: mx::Sampler,
-    params: mx::Buffer,
 }
 
 /// A flat UI surface fixed in the world after it is placed.
@@ -989,18 +988,7 @@ impl Mirror {
                 ..Default::default()
             })
             .expect("mX: a sampler");
-        let params = device
-            .create_buffer(&mx::BufferDescriptor {
-                label: Some("OpenXR desktop mirror crop"),
-                size: 16,
-                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
-            })
-            .expect("mX: a buffer");
-        Self {
-            pipeline,
-            sampler,
-            params,
-        }
+        Self { pipeline, sampler }
     }
 
     fn draw(
@@ -1018,30 +1006,12 @@ impl Mirror {
         } else {
             [desktop_aspect / source_aspect, 1.0]
         };
+        // the crop, the eye's picture and the sampler (their places in the heap)
         let mut params = [0u8; 16];
         params[0..4].copy_from_slice(&crop[0].to_ne_bytes());
         params[4..8].copy_from_slice(&crop[1].to_ne_bytes());
-        renderer
-            .queue
-            .write_buffer(&self.params, 0, &params)
-            .expect("mX: a queue write");
-        let bind_group = renderer.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("OpenXR desktop mirror"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: self.params.as_entire_binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::TextureView(eye),
-                },
-                mx::BindGroupEntry {
-                    binding: 2,
-                    resource: mx::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
+        params[8..12].copy_from_slice(&eye.index().to_ne_bytes());
+        params[12..16].copy_from_slice(&self.sampler.index().to_ne_bytes());
         let mut encoder = renderer
             .device
             .create_command_encoder(Some("OpenXR desktop mirror"));
@@ -1061,7 +1031,7 @@ impl Mirror {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &bind_group);
+            pass.set_immediates(0, &params);
             pass.draw(0..3, 0..1);
         }
         // Sampling changed the XR image to a shader resource. OpenXR requires

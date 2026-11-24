@@ -96,7 +96,9 @@ impl Lightning {
     pub(crate) fn seed_once(&mut self, day_seed: u32) {
         if self.seeded != Some(day_seed) {
             self.seeded = Some(day_seed);
-            self.rng = (u64::from(day_seed) ^ 0x9e37_79b9_7f4a_7c15).wrapping_mul(0x2545_F491_4F6C_DD1D) | 1;
+            self.rng = (u64::from(day_seed) ^ 0x9e37_79b9_7f4a_7c15)
+                .wrapping_mul(0x2545_F491_4F6C_DD1D)
+                | 1;
             self.wait = self.next_wait(0.5);
         }
     }
@@ -120,7 +122,11 @@ impl Lightning {
         self.stroke_count = 2 + (self.rand() * 3.0) as usize;
         let mut t = 0.0;
         for k in 0..self.stroke_count {
-            let a = if k == 0 { 1.0 } else { 0.35 + 0.5 * self.rand() };
+            let a = if k == 0 {
+                1.0
+            } else {
+                0.35 + 0.5 * self.rand()
+            };
             self.strokes[k] = (t, a);
             t += 0.04 + 0.04 * self.rand();
         }
@@ -135,7 +141,11 @@ impl Lightning {
         self.seed = self.rand() * 100.0;
         self.channel = self.rand() < 0.4;
         self.age = 0.0;
-        self.strikes.push(Strike { delay: self.distance / SOUND_SPEED, distance: self.distance, dir: self.dir });
+        self.strikes.push(Strike {
+            delay: self.distance / SOUND_SPEED,
+            distance: self.distance,
+            dir: self.dir,
+        });
     }
 
     /// A flash standing still at its first stroke, for checks (`OMSI_STORM=activity,azimuth`):
@@ -237,7 +247,10 @@ mod tests {
             assert!((s.dir[0].hypot(s.dir[1]) - 1.0).abs() < 1e-4);
         }
         // the nearest first stroke lights the ground well, the farthest hardly at all
-        assert!(peak > FLASH_E1KM / 16.0 && peak <= FLASH_E1KM / 0.7, "{peak}");
+        assert!(
+            peak > FLASH_E1KM / 16.0 && peak <= FLASH_E1KM / 0.7,
+            "{peak}"
+        );
     }
 
     #[test]

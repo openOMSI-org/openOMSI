@@ -66,7 +66,9 @@ impl PrecipMap {
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("precipitation roof camera"),
                 size: std::mem::size_of::<CameraUniform>() as u64,
-                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+                usage: mx::BufferUsages::UNIFORM
+                    | mx::BufferUsages::STORAGE
+                    | mx::BufferUsages::COPY_DST,
             })
             .expect("mX: a buffer");
         PrecipMap {
@@ -109,7 +111,7 @@ impl Renderer {
         shadow_batches: &[Vec<Batch>; SHADOW_LISTS],
         timers: &mut PassTimers,
     ) {
-        let (Some(m), Some(bg)) = (sh.precip, scene.precip_bind_group.as_ref()) else {
+        let Some(m) = sh.precip else {
             self.shadows.precip.matrix.set(None);
             return;
         };
@@ -131,10 +133,16 @@ impl Renderer {
             ),
             occlusion_query_set: None,
         });
-        pass.set_bind_group(0, bg);
-        encode_batches(&mut pass, scene, &shadow_batches[PRECIP_LIST], |pipe| {
-            &self.shadows.shadow_pipelines[4 + pipe as usize]
-        });
+        // (the roof map's camera in the heap: `Scene::precip_heap`)
+        encode_batches_in(
+            &mut pass,
+            scene,
+            &scene.precip_heap,
+            &shadow_batches[PRECIP_LIST],
+            |_| true,
+            |b| b.pipe as u16,
+            |pipe| &self.shadows.shadow_pipelines[4 + pipe as usize],
+        );
         drop(pass);
         self.shadows.precip.matrix.set(Some(m));
     }

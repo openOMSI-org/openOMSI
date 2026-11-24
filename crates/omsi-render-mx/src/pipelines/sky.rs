@@ -8,11 +8,20 @@ const SKY_ATTRIBUTES: [mx::VertexAttribute; 1] = mx::vertex_attr_array![0 => Flo
 pub(crate) struct SkyBase {
     pub cloud_shape_view: mx::TextureView,
     pub cloud_detail_view: mx::TextureView,
+    /// The clouds' base volume and curl map: read by the passes that march the clouds (the
+    /// sky cube and the screen's clouds, cloud_pass.rs), not by the dome.
+    pub cloud_base_view: mx::TextureView,
+    pub cloud_curl_view: mx::TextureView,
     pub cloud_sampler: mx::Sampler,
-    pub cloud_shape_cpu: Vec<u8>,
+    pub cloud_shape_cpu: crate::lighting::CloudCpu,
+    /// Where the screen's clouds were traced from (`CloudView`, binding 12).
+    pub cloud_view_buf: mx::Buffer,
     /// The classic sky's weather (`VanillaSkyUniform`, binding 10).
     pub vanilla_buf: mx::Buffer,
     pub shader: mx::ShaderModule,
+    /// the module's places in the heap (`groups_to_heap`): the dome's, the probe's and the
+    /// clouds' groups are made at them
+    pub layout: crate::shaders::HeapLayout,
 }
 
 impl SkyBase {
@@ -20,14 +29,13 @@ impl SkyBase {
     /// This includes ANGLE's texture-unit fallback, not only the launcher's preview.
     pub(crate) fn new(device: &mx::Device, queue: &mx::Queue, enhanced: bool) -> SkyBase {
         // sky dome
-        let (cloud_shape_view, cloud_detail_view, cloud_sampler, cloud_shape_cpu) =
-            cloud_noise_textures(device, queue, enhanced);
+        let clouds = cloud_noise_textures(device, queue, enhanced);
         log::info!("renderer: compiling the sky and clouds shaders");
         let sky_shader = compile_shader(
             device,
             mx::ShaderModuleDescriptor {
                 label: Some("sky"),
-                source: &*(shader_source(enhanced)),
+                source: &crate::shaders::groups_to_heap(&shader_source(enhanced)),
             },
         );
         let vanilla_buf = uniform_buffer(
@@ -35,13 +43,22 @@ impl SkyBase {
             "vanilla sky",
             std::mem::size_of::<VanillaSkyUniform>() as u64,
         );
+        let cloud_view_buf = uniform_buffer(
+            device,
+            "cloud view",
+            std::mem::size_of::<crate::cloud_pass::CloudView>() as u64,
+        );
         SkyBase {
-            cloud_shape_view,
-            cloud_detail_view,
-            cloud_sampler,
-            cloud_shape_cpu,
+            cloud_shape_view: clouds.weather,
+            cloud_detail_view: clouds.detail,
+            cloud_base_view: clouds.base,
+            cloud_curl_view: clouds.curl,
+            cloud_sampler: clouds.sampler,
+            cloud_shape_cpu: clouds.cpu,
+            cloud_view_buf,
             vanilla_buf,
             shader: sky_shader,
+            layout: crate::shaders::layout_of(&shader_source(enhanced)),
         }
     }
 
@@ -124,11 +141,15 @@ impl SkyPipelineBase {
     }
 }
 
-fn shader_source(enhanced: bool) -> String {
+pub(crate) fn shader_source(enhanced: bool) -> String {
     if enhanced {
         sky_shader_source()
     } else {
-        [include_str!("../colour.wgsl"), include_str!("../sky.wgsl")].join("\n")
+        [
+            crate::shaders::hot_wgsl(include_str!("../colour.wgsl"), "colour.wgsl"),
+            crate::shaders::hot_wgsl(include_str!("../sky.wgsl"), "sky.wgsl"),
+        ]
+        .join("\n")
     }
 }
 

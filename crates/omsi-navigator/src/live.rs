@@ -27,7 +27,10 @@ pub(super) struct TripPath {
 impl TripPath {
     fn at(&self, s: f64) -> (DVec3, f64) {
         let s = s.clamp(0.0, *self.along.last().unwrap_or(&0.0));
-        let k = self.along.partition_point(|&a| a < s).clamp(1, self.pts.len() - 1);
+        let k = self
+            .along
+            .partition_point(|&a| a < s)
+            .clamp(1, self.pts.len() - 1);
         let (a, b) = (self.pts[k - 1], self.pts[k]);
         let span = (self.along[k] - self.along[k - 1]).max(1e-6);
         let p = a.lerp(b, ((s - self.along[k - 1]) / span).clamp(0.0, 1.0));
@@ -49,7 +52,11 @@ fn trip_path(net: &Network, lanes: &[usize], stops: &[Option<DVec3>]) -> Option<
             }
         }
         for p in &lane.points {
-            if pts.last().map(|q: &DVec3| (*q - *p).truncate().length() > 0.3).unwrap_or(true) {
+            if pts
+                .last()
+                .map(|q: &DVec3| (*q - *p).truncate().length() > 0.3)
+                .unwrap_or(true)
+            {
                 pts.push(*p);
             }
         }
@@ -96,11 +103,22 @@ fn trip_path(net: &Network, lanes: &[usize], stops: &[Option<DVec3>]) -> Option<
         return None;
     }
     // (an aircraft's approach is no vehicle of the streets)
-    if lanes.iter().any(|&l| net.lanes.get(l).is_some_and(|l| l.kind == LaneKind::Air)) {
+    if lanes
+        .iter()
+        .any(|&l| net.lanes.get(l).is_some_and(|l| l.kind == LaneKind::Air))
+    {
         return None;
     }
-    let rail = lanes.first().and_then(|&l| net.lanes.get(l)).is_some_and(|l| l.kind == LaneKind::Rail);
-    Some(TripPath { pts, along, stops: out, rail })
+    let rail = lanes
+        .first()
+        .and_then(|&l| net.lanes.get(l))
+        .is_some_and(|l| l.kind == LaneKind::Rail);
+    Some(TripPath {
+        pts,
+        along,
+        stops: out,
+        rail,
+    })
 }
 
 impl Navigator {
@@ -110,11 +128,22 @@ impl Navigator {
         self.live_t - dt <= 0.0
     }
 
-    pub fn update_live(&mut self, sch: &ScheduleSim, now: f64, dt: f32, cars: &[(DVec3, String)], driven: &dyn Fn(DVec3) -> bool) {
+    pub fn update_live(
+        &mut self,
+        sch: &ScheduleSim,
+        now: f64,
+        dt: f32,
+        cars: &[(DVec3, String)],
+        driven: &dyn Fn(DVec3) -> bool,
+    ) {
         // (eased towards the last places in between)
         let k = ease(dt, 0.6);
         for v in self.live_drawn.iter_mut() {
-            if let Some(t) = self.live.iter().find(|t| t.line == v.line && (t.pos - v.pos).truncate().length() < 150.0) {
+            if let Some(t) = self
+                .live
+                .iter()
+                .find(|t| t.line == v.line && (t.pos - v.pos).truncate().length() < 150.0)
+            {
                 v.pos += (t.pos - v.pos) * k;
                 v.heading += angle_diff(v.heading, t.heading) * k;
             }
@@ -124,7 +153,9 @@ impl Navigator {
             return;
         }
         self.live_t = 0.5;
-        let Some(net) = self.global.clone() else { return };
+        let Some(net) = self.global.clone() else {
+            return;
+        };
         // the departures on the road, looked for every few seconds (a day has thousands)
         self.live_list_t -= 0.5;
         if self.live_list_t <= 0.0 {
@@ -137,8 +168,14 @@ impl Navigator {
         let mut made = 0;
         for i in self.live_list.clone() {
             let ti = sch.trip_index(i);
-            let tt = self.live_tt.entry(i).or_insert_with(|| std::sync::Arc::new(sch.ai_timetable(i))).clone();
-            let (Some(first), Some(last)) = (tt.stops.first(), tt.stops.last()) else { continue };
+            let tt = self
+                .live_tt
+                .entry(i)
+                .or_insert_with(|| std::sync::Arc::new(sch.ai_timetable(i)))
+                .clone();
+            let (Some(first), Some(last)) = (tt.stops.first(), tt.stops.last()) else {
+                continue;
+            };
             // (on the road from a minute before its first departure until it arrives)
             if now < first.3 as f64 - 60.0 || now > last.2 as f64 + 30.0 {
                 continue;
@@ -149,10 +186,17 @@ impl Navigator {
                 }
                 made += 1;
                 let lanes = sch.trip_route_in(&net, &sch.trip_of(i).name);
-                let stops: Vec<Option<DVec3>> = tt.stops.iter().map(|s| self.stop_pos.get(&s.0).copied()).collect();
-                self.trip_paths.insert(ti, trip_path(&net, &lanes, &stops).map(std::sync::Arc::new));
+                let stops: Vec<Option<DVec3>> = tt
+                    .stops
+                    .iter()
+                    .map(|s| self.stop_pos.get(&s.0).copied())
+                    .collect();
+                self.trip_paths
+                    .insert(ti, trip_path(&net, &lanes, &stops).map(std::sync::Arc::new));
             }
-            let Some(Some(path)) = self.trip_paths.get(&ti).cloned() else { continue };
+            let Some(Some(path)) = self.trip_paths.get(&ti).cloned() else {
+                continue;
+            };
             // the stretch it is on: standing at stop j until it leaves, then on to the next
             let mut s = path.stops.first().copied().unwrap_or(0.0);
             for (j, st) in tt.stops.iter().enumerate() {
@@ -176,15 +220,33 @@ impl Navigator {
             }
             let (pos, heading) = path.at(s);
             // (the traffic drives this one itself)
-            if driven(pos) || cars.iter().any(|(p, l)| (*p - pos).truncate().length() < if l.trim() == tt.line.trim() { 250.0 } else { 25.0 }) {
+            if driven(pos)
+                || cars.iter().any(|(p, l)| {
+                    (*p - pos).truncate().length()
+                        < if l.trim() == tt.line.trim() {
+                            250.0
+                        } else {
+                            25.0
+                        }
+                })
+            {
                 continue;
             }
-            out.push(LiveVehicle { pos, heading, line: tt.line.clone(), rail: path.rail });
+            out.push(LiveVehicle {
+                pos,
+                heading,
+                line: tt.line.clone(),
+                rail: path.rail,
+            });
         }
         // new ones appear where they are; the ones drawn take their new places gently
         let mut drawn = Vec::with_capacity(out.len());
         for v in &out {
-            match self.live_drawn.iter().find(|d| d.line == v.line && (d.pos - v.pos).truncate().length() < 150.0) {
+            match self
+                .live_drawn
+                .iter()
+                .find(|d| d.line == v.line && (d.pos - v.pos).truncate().length() < 150.0)
+            {
                 Some(d) => drawn.push(d.clone()),
                 None => drawn.push(v.clone()),
             }

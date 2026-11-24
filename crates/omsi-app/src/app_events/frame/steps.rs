@@ -658,6 +658,7 @@ pub(crate) fn picture_lighting(
         - weather.map(crate::rain::weather_wind).unwrap_or_default();
     lighting.animation_time = Some(animation_time);
     lighting.condensation = condensation;
+    lighting.cabin_light = inside.map(|v| v.interior_light()).unwrap_or(0.0);
     // an LED panel's dots burn this much above their own colour (16 levels,
     // see `Settings::led_glow`); the panel's picture and its mask are held at
     // this mip level at most (`Settings::led_mips`)
@@ -715,6 +716,9 @@ pub(crate) fn dress_lighting(
         .collect();
     lighting.detail = settings.detail_textures;
     lighting.windy_trees = settings.windy_trees();
+    if !settings.rain_lights {
+        lighting.rain_lights = 0.0;
+    }
     lighting.night_brightness = settings.night_brightness;
     lighting.reflection_strength = settings.reflections;
     lighting.road_glare = settings.road_glare;

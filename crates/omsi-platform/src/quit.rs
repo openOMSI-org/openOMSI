@@ -61,20 +61,27 @@ pub fn install(wake: impl FnOnce(i32) + Send + 'static) {
             unsafe {
                 let old = sys::signal(sig, on_signal as extern "C" fn(i32) as sys::Handler);
                 if old == sys::SIG_ERR {
-                    log::warn!("cannot handle {}: the game ends at once when it arrives", signal_name(sig));
+                    log::warn!(
+                        "cannot handle {}: the game ends at once when it arrives",
+                        signal_name(sig)
+                    );
                 } else if old == sys::SIG_IGN {
                     sys::signal(sig, sys::SIG_IGN);
                 }
             }
         }
-        let spawned = std::thread::Builder::new().name("quit signal".into()).spawn(move || loop {
-            let sig = REQUESTED.load(Ordering::SeqCst);
-            if sig != 0 {
-                wake(sig);
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        });
+        let spawned = std::thread::Builder::new()
+            .name("quit signal".into())
+            .spawn(move || {
+                loop {
+                    let sig = REQUESTED.load(Ordering::SeqCst);
+                    if sig != 0 {
+                        wake(sig);
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            });
         if let Err(e) = spawned {
             log::warn!("no quit signal watcher ({e}): SIGTERM ends the game without saving");
             // SAFETY: back to the default actions
@@ -112,10 +119,16 @@ mod tests {
         assert!(requested().is_none());
         // SAFETY: raising a handled signal in our own process
         unsafe { sys::raise(SIGTERM) };
-        assert_eq!(rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap(), SIGTERM);
+        assert_eq!(
+            rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap(),
+            SIGTERM
+        );
         assert_eq!(requested(), Some(SIGTERM));
         // woken once: the watcher is done (and has dropped its sender)
-        assert_eq!(rx.recv_timeout(std::time::Duration::from_millis(300)), Err(std::sync::mpsc::RecvTimeoutError::Disconnected));
+        assert_eq!(
+            rx.recv_timeout(std::time::Duration::from_millis(300)),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
+        );
         // (a second signal would end the test process: not raised here)
     }
 }

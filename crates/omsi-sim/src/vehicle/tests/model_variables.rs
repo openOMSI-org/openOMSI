@@ -259,6 +259,49 @@ fn a_schemes_setvar_is_what_is_drawn_after_the_scripts() {
     assert_eq!(v.var("v_drzwi"), Some(1.0));
 }
 
+/// The variables the player chose for the bus before it was made - the launcher's onboard
+/// computer, the IBIS unit the pack's repaints name (#4077) - are there for the scripts'
+/// `{init}`, which reads the unit's type to build its keys and its display, and they stay over
+/// the scheme's `[setvar]` of them every frame, as `--setvar` does after the spawn.
+#[test]
+fn a_variable_chosen_before_the_bus_is_made_is_there_for_init() {
+    let dir = std::env::temp_dir().join(format!("omsi_initial_vars_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("ibis.osc");
+    std::fs::write(&script, "{init}\n(L.L.vis_ibis_type) (S.L.at_init)\n{end}\n{frame}\n(L.L.vis_ibis_type) (S.L.drawn)\n0 (S.L.vis_ibis_type)\n{end}\n").unwrap();
+    let vars = dir.join("vars.txt");
+    std::fs::write(&vars, "vis_ibis_type\nat_init\ndrawn\n").unwrap();
+    let program = omsi_script::compile(&omsi_script::CompileInput {
+        scripts: vec![script],
+        varlists: vec![vars],
+        ..Default::default()
+    });
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(program.errors.is_empty(), "{:?}", program.errors);
+    let mut ty = diagnostic_type(false);
+    ty.program = Arc::new(program);
+    ty.paint_schemes = vec![PaintScheme {
+        set_vars: vec![("vis_ibis_type".into(), 0.0)],
+        ..Default::default()
+    }];
+    let mut host = VehicleHost::new(Default::default());
+    host.paint_scheme = Some(Some(0));
+    host.initial_vars = vec![("vis_ibis_type".into(), 2.0)];
+    let mut v = VehicleInstance::new(Arc::new(ty), host);
+    assert_eq!(
+        v.var("at_init"),
+        Some(2.0),
+        "the scripts started with the unit the player picked"
+    );
+    v.update(1.0 / 30.0);
+    assert_eq!(v.var("drawn"), Some(2.0));
+    assert_eq!(
+        v.var("vis_ibis_type"),
+        Some(2.0),
+        "and the paint's own value does not take it back"
+    );
+}
+
 /// A value asked for with `--setvar` stays over the scheme's `[setvar]` of the same variable,
 /// which is written every frame: the launcher's doors and mirrors chosen over a repaint's
 /// were the repaint's again a frame later, and only what the repaint does not set was the
@@ -536,4 +579,77 @@ fn a_coupled_car_lets_go_of_the_value_it_took_from_the_painted_bus() {
             "{scheme:?}"
         );
     }
+}
+
+#[test]
+fn animation_only_variable_binds_and_animates_without_script_declaration() {
+    let seed = crate::timetable_run::tests::script_test_vehicle("", "", "");
+    let mut ty = (*seed.ty).clone();
+    let cfg = "[mesh]\ntimetable.o3d\n[newanim]\norigin_rot_y\n90\nanim_trans\nsched\n0.1\n";
+    ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("test.cfg", cfg));
+    ty.meshes.push(VehicleMesh {
+        def_index: 0,
+        data: Default::default(),
+        file: "timetable.o3d".into(),
+        materials: vec![],
+        overrides: vec![],
+        pivot: glam::Mat4::IDENTITY,
+        viewpoint: 0,
+        skin: vec![],
+        keep_winding: false,
+    });
+    let mut v = VehicleInstance::new(Arc::new(ty), VehicleHost::new(Default::default()));
+    assert_eq!(v.var("sched"), None, "lazy before set");
+    assert_eq!(
+        v.animators[0].anims[0].2.var, None,
+        "animator var unbound before set"
+    );
+    v.update_visuals(0.0);
+    assert_eq!(v.mesh_transforms[0], glam::Mat4::IDENTITY);
+
+    assert!(v.set_var("sched", 1.0));
+    assert_eq!(v.var("sched"), Some(1.0));
+    assert_ne!(
+        v.animators[0].anims[0].2.var, None,
+        "animator bound to variable"
+    );
+    v.update_visuals(0.0);
+    assert_ne!(v.mesh_transforms[0], glam::Mat4::IDENTITY);
+}
+
+#[test]
+fn multiple_animation_only_variables_bind_and_animate_together() {
+    let seed = crate::timetable_run::tests::script_test_vehicle("", "", "");
+    let mut ty = (*seed.ty).clone();
+    let cfg = "[mesh]\ntimetable_bracket.o3d\n[newanim]\norigin_rot_y\n90\nanim_trans\nsched\n0.1\n\n[mesh]\ntimetable_sheet.o3d\n[newanim]\norigin_rot_x\n45\nanim_rot\nsched1\n90\n";
+    ty.model = Model::parse(&omsi_cfg::CfgFile::from_str("test.cfg", cfg));
+    for (i, name) in ["timetable_bracket.o3d", "timetable_sheet.o3d"]
+        .iter()
+        .enumerate()
+    {
+        ty.meshes.push(VehicleMesh {
+            def_index: i,
+            data: Default::default(),
+            file: (*name).into(),
+            materials: vec![],
+            overrides: vec![],
+            pivot: glam::Mat4::IDENTITY,
+            viewpoint: 0,
+            skin: vec![],
+            keep_winding: false,
+        });
+    }
+    let mut v = VehicleInstance::new(Arc::new(ty), VehicleHost::new(Default::default()));
+    assert_eq!(v.var("sched"), None);
+    assert_eq!(v.var("sched1"), None);
+    assert_eq!(v.animators[0].anims[0].2.var, None);
+    assert_eq!(v.animators[1].anims[0].2.var, None);
+
+    assert!(v.set_var("sched", 1.0));
+    assert!(v.set_var("sched1", 1.0));
+    assert_ne!(v.animators[0].anims[0].2.var, None);
+    assert_ne!(v.animators[1].anims[0].2.var, None);
+    v.update_visuals(0.0);
+    assert_ne!(v.mesh_transforms[0], glam::Mat4::IDENTITY);
+    assert_ne!(v.mesh_transforms[1], glam::Mat4::IDENTITY);
 }

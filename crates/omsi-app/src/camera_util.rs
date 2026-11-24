@@ -4,9 +4,6 @@
 use super::*;
 pub(crate) use omsi_scene::camera_util::*;
 
-
-
-
 /// `--look yaw,pitch`: how far the head is turned in an offscreen run.
 pub(crate) fn look_of(args: &Args) -> (f32, f32) {
     args.look
@@ -29,7 +26,6 @@ pub(crate) fn offscreen_orbit() -> f32 {
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(18.0)
 }
-
 
 /// The AI car to follow: an id, "auto" = the first overtaker, "moving" = the oldest car
 /// driving when first asked, "turn" = the first car entering a turning lane, "steer" = the
@@ -64,7 +60,12 @@ pub(crate) fn follow_id(args: &Args, traffic: Option<&traffic::Traffic>) -> Opti
             if let Some(id) = BUS.with(|c| c.get()).filter(|id| t.car_pose(*id).is_some()) {
                 return Some(id);
             }
-            let id = t.cars.iter().filter(|c| c.is_bus() && c.state.speed > 2.0).map(|c| c.id).min()?;
+            let id = t
+                .cars
+                .iter()
+                .filter(|c| c.is_bus() && c.state.speed > 2.0)
+                .map(|c| c.id)
+                .min()?;
             BUS.with(|c| c.set(Some(id)));
             Some(id)
         }
@@ -171,14 +172,11 @@ const MIRROR_NIGHT_DIM: f32 = 0.8;
 /// from the driver's seat - was never redrawn and stood frozen.
 const MIRROR_MIN_RADIUS: f32 = 0.3;
 
-
 /// A mirror's picture is drawn this wide over its height (Omsi.exe sub_6f6468 gives the
 /// reflection cameras' projection 1.6 on their square textures), and the mirror meshes show
 /// its middle: drawn square, a mirror showed a slice two thirds as wide as OMSI's - the
 /// strip of the bus at its edge and hardly any of the lane beside it.
 const MIRROR_ASPECT: f32 = 1.6;
-
-
 
 /// Where the driver's eye is (for a mirror drawn with no view to aim it by).
 pub(crate) fn driver_eye(p: &Player) -> DVec3 {
@@ -187,7 +185,13 @@ pub(crate) fn driver_eye(p: &Player) -> DVec3 {
     }
     let def = &p.vehicle.ty.def;
     match def.cameras_driver.get(p.driver_camera_slot()) {
-        Some(c) => p.vehicle.camera_world(c).0 + p.vehicle.body_rotation().transform_vector3(p.head_offset() + p.seat).as_dvec3(),
+        Some(c) => {
+            p.vehicle.camera_world(c).0
+                + p.vehicle
+                    .body_rotation()
+                    .transform_vector3(p.head_offset() + p.seat)
+                    .as_dvec3()
+        }
         None => p.vehicle.position + DVec3::Z * 2.0,
     }
 }
@@ -220,15 +224,28 @@ pub(crate) fn render_mirrors(
 ) -> usize {
     // (aimed from the eye of the view being drawn, as Omsi.exe aims them - from the
     // driver's without one)
-    let eye = view.as_ref().map(|v| v.0.position).unwrap_or_else(|| driver_eye(p));
+    let eye = view
+        .as_ref()
+        .map(|v| v.0.position)
+        .unwrap_or_else(|| driver_eye(p));
     // the leading vehicle's cameras, then its rear sections' (openOMSI: numbered on from the
     // last of the one in front, so a screen in the cab can show a camera on a rear door),
     // each aimed and placed in its own body
     let v = &p.vehicle;
     let mut cams: Vec<(omsi_vehicle::Camera, (DVec3, f32, f32, f32))> = Vec::new();
     let aim = |i: usize, c: &omsi_vehicle::Camera, position: DVec3, rot: glam::Mat4| {
-        let c = adjusted(c, p.mirror_shifts.get(i).copied().unwrap_or([0.0; 3]), p.mirror_fovs.get(i).copied().unwrap_or(0.0));
-        mirror_view_in(position, rot, &c, eye, p.mirror_offsets.get(i).copied().unwrap_or([0.0; 2]))
+        let c = adjusted(
+            c,
+            p.mirror_shifts.get(i).copied().unwrap_or([0.0; 3]),
+            p.mirror_fovs.get(i).copied().unwrap_or(0.0),
+        );
+        mirror_view_in(
+            position,
+            rot,
+            &c,
+            eye,
+            p.mirror_offsets.get(i).copied().unwrap_or([0.0; 2]),
+        )
     };
     for c in &v.ty.def.cameras_reflexion {
         let c = aim(cams.len(), c, v.position, v.body_rotation());
@@ -255,7 +272,9 @@ pub(crate) fn render_mirrors(
     lighting.min_obj_size = lighting.min_obj_size.max((12.0 / px).clamp(0.03, 0.09));
     // (no shadow pass of their own: the window's shadow maps are looked up, see
     // `Renderer::plan_shadow_cache`; the mirrors drawn as the Enhanced picture is show them)
-    lighting.shadows = (renderer.options.mirror_shadows || (lighting.enhanced && renderer.options.mirror_enhanced)) && lighting.shadows;
+    lighting.shadows = (renderer.options.mirror_shadows
+        || (lighting.enhanced && renderer.options.mirror_enhanced))
+        && lighting.shadows;
     // Enhanced graphics draw the mirrors with the plain shading unless they are asked to show the
     // picture's (see Renderer::render_inner), whose light is OMSI's: a night that stays a blue dusk. The window's enhanced night is
     // far darker, and the mirrors showed the street by daylight beside it. The plain light
@@ -263,7 +282,10 @@ pub(crate) fn render_mirrors(
     // (By the sun's darkness, Envir_Brightness's ramp from +6 to -6 degrees: `night` is
     // whole at sunset already, from +10 degrees on, and rain raises it by day, and the
     // mirrors were a fifth of the window's light through the whole dusk, #432.)
-    if lighting.enhanced && !omsi_cfg::flags::OMSI_MIRROR_ENHANCED.is_set() && !renderer.options.mirror_enhanced {
+    if lighting.enhanced
+        && !omsi_cfg::flags::OMSI_MIRROR_ENHANCED.is_set()
+        && !renderer.options.mirror_enhanced
+    {
         let alt = lighting.sun_dir.z.clamp(-1.0, 1.0).asin().to_degrees();
         let dark = 1.0 - ((alt + 6.0) / 12.0).clamp(0.0, 1.0);
         let k = 1.0 - MIRROR_NIGHT_DIM * dark;
@@ -289,7 +311,22 @@ pub(crate) fn render_mirrors(
             .filter(|&i| {
                 cams[i].0.fixed
                     || on_screen.contains(&i)
-                    || view.as_ref().map(|v| mirror_in_view(cams[i].1 .0, cams[i].0.extra.unwrap_or(0.0).max(MIRROR_MIN_RADIUS), v) || glass.get(i).copied().flatten().is_some_and(|g| mirror_in_view(v_pos + v_rot.transform_vector3(g.centre).as_dvec3(), MIRROR_MIN_RADIUS, v))).unwrap_or(true)
+                    || view
+                        .as_ref()
+                        .map(|v| {
+                            mirror_in_view(
+                                cams[i].1.0,
+                                cams[i].0.extra.unwrap_or(0.0).max(MIRROR_MIN_RADIUS),
+                                v,
+                            ) || glass.get(i).copied().flatten().is_some_and(|g| {
+                                mirror_in_view(
+                                    v_pos + v_rot.transform_vector3(g.centre).as_dvec3(),
+                                    MIRROR_MIN_RADIUS,
+                                    v,
+                                )
+                            })
+                        })
+                        .unwrap_or(true)
             })
             .collect(),
     };
@@ -310,7 +347,15 @@ pub(crate) fn render_mirrors(
         let (eye, yaw, pitch, roll) = *at;
         let pitch = pitch.clamp(-89.0, 89.0);
         if omsi_cfg::flags::OMSI_DEBUG_MIRRORS.is_set() {
-            log::info!("mirror {i}: eye {:.2},{:.2},{:.2} yaw {yaw:.1} pitch {pitch:.1} roll {roll:.2} fov {:.0} ({} of {} in view)", eye.x, eye.y, eye.z, c.fov, seen.len(), cams.len());
+            log::info!(
+                "mirror {i}: eye {:.2},{:.2},{:.2} yaw {yaw:.1} pitch {pitch:.1} roll {roll:.2} fov {:.0} ({} of {} in view)",
+                eye.x,
+                eye.y,
+                eye.z,
+                c.fov,
+                seen.len(),
+                cams.len()
+            );
         }
         let cam = Camera {
             position: eye,
@@ -323,10 +368,13 @@ pub(crate) fn render_mirrors(
             // driver's head - vanished, and the street behind ended at the next junction.
             // The far end is the objects' own reach here, as in the main view.)
             near: 0.1,
-            far: if renderer.options.max_obj_dist > 0.0 { renderer.options.max_obj_dist.clamp(450.0, 6000.0) } else { 3000.0 },
+            far: if renderer.options.max_obj_dist > 0.0 {
+                renderer.options.max_obj_dist.clamp(450.0, 6000.0)
+            } else {
+                3000.0
+            },
         };
         renderer.render_to_texture(scene, *tex, &cam, &lighting, MIRROR_ASPECT);
     }
     seen.len()
 }
-

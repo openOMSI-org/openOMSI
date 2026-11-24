@@ -46,8 +46,9 @@ pub(crate) struct CameraUniform {
     pub(crate) flags: [f32; 4],
     /// The close shadow cascade (right half of the near map).
     pub(crate) light_view_proj_close: [[f32; 4]; 4],
-    /// The player's vehicle's velocity (m/s, world) and 1: the airstream the rain on its
-    /// glass meets (see `Lighting::glass_wind`).
+    /// The player's vehicle's velocity (m/s, world) and 1 plus the share of the houses' windows
+    /// lit in a downpour (`Lighting::rain_lights`): the airstream the rain on its glass meets
+    /// (see `Lighting::glass_wind`).
     pub(crate) wind: [f32; 4],
     /// Enhanced: the lamps' shadow maps (`LAMP_SHADOWS` tiles under the far map, zero for a
     /// tile nothing is drawn in), and where the tiles lie (`LampAtlas::uniform`: a tile's
@@ -76,6 +77,7 @@ pub(crate) struct CameraUniform {
     /// the smaller picture's (letters, gauges and signs came out soft); 0 otherwise.
     /// y: ground-prepass flag (set only while that pass is active).
     /// z: Enhanced road sunlight glare strength, default 1.
+    /// w: the air's temperature (degC, `Lighting::air_temp`): the wet panes' film.
     pub(crate) lod: [f32; 4],
     /// The classic picture's headlight, Omsi.exe's one Direct3D spot light (the player's
     /// `[spotlight]`, see the scene shader's `classic_spot`): [0] xyz where its light leaves
@@ -158,6 +160,20 @@ pub(crate) struct EnhancedUniform {
     pub(crate) cloud_f2: [f32; 4],
     /// `Lighting::pane_tilt`: sin and cos of the `inside` bus's pitch, then of its roll
     pub(crate) pane_tilt: [f32; 4],
+    /// The weather overhaul's slots (enhanced_common.wgsl): the volumetric clouds
+    pub(crate) clouds_ext: [f32; 4],
+    pub(crate) clouds_ext2: [f32; 4],
+    /// the volumetric fog
+    pub(crate) vol_fog: [f32; 4],
+    pub(crate) vol_fog2: [f32; 4],
+    /// the precipitation
+    pub(crate) precip_ext: [f32; 4],
+    /// the player's bus's panes
+    pub(crate) glass_ext: [f32; 4],
+    /// the surfaces' PBR
+    pub(crate) pbr_ext: [f32; 4],
+    /// the ray tracing
+    pub(crate) rt_ext: [f32; 4],
 }
 
 #[repr(C)]

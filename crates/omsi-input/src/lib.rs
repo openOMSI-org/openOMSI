@@ -5,11 +5,12 @@
 //! the application reads these devices each frame and applies what they say.
 
 pub mod actions;
-pub mod auto_shift;
 pub mod auto_setup;
+pub mod auto_shift;
 pub mod background;
 pub mod controllers;
 pub mod describe;
+pub mod diagnostics;
 pub mod ffb_calibration;
 pub mod gamepad_profile;
 pub mod head_filter;
@@ -19,13 +20,10 @@ pub mod keys;
 pub mod launcher_pads;
 pub mod pedal;
 pub mod stock_keys;
-pub mod diagnostics;
 pub mod tobii;
 
 #[cfg(windows)]
 mod dinput;
-#[cfg(windows)]
-mod xinput;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod evdev_buttons;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
@@ -34,3 +32,5 @@ mod evdev_ff;
 mod mac_game_controller;
 #[cfg(target_os = "macos")]
 mod mac_hid;
+#[cfg(windows)]
+mod xinput;

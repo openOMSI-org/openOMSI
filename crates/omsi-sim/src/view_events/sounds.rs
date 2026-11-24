@@ -74,7 +74,14 @@ impl crate::ai_traffic::TrafficSim {
     /// (they wait in the car while it is not heard) and the road's state `street_cond` is
     /// given to them (`StreetCond`) before their variables are copied. The horns sounded since
     /// the last time are taken too.
-    pub fn snapshot_sounds(&mut self, out: &mut SoundFrame, listener: DVec3, within: f64, street_cond: f32, riding: Option<u64>) {
+    pub fn snapshot_sounds(
+        &mut self,
+        out: &mut SoundFrame,
+        listener: DVec3,
+        within: f64,
+        street_cond: f32,
+        riding: Option<u64>,
+    ) {
         out.cars.clear();
         out.vars.clear();
         out.parts.clear();
@@ -108,14 +115,19 @@ impl crate::ai_traffic::TrafficSim {
                 car.world = v.world_transform();
                 car.vars = Span::push(&mut out.vars, &v.state.vars);
                 let start = out.parts.len() as u32;
-                out.parts.extend(v.trailers.iter().map(|t| t.world_transform()));
-                car.parts = Span { start, len: out.parts.len() as u32 - start };
+                out.parts
+                    .extend(v.trailers.iter().map(|t| t.world_transform()));
+                car.parts = Span {
+                    start,
+                    len: out.parts.len() as u32 - start,
+                };
             }
             out.cars.push(car);
         }
         for (id, heavy) in std::mem::take(&mut self.honked) {
             if let Some(c) = self.cars.iter().find(|c| c.id == id) {
-                out.honks.push((heavy, c.vehicle.position, c.vehicle.ty.clone()));
+                out.honks
+                    .push((heavy, c.vehicle.position, c.vehicle.ty.clone()));
             }
         }
     }

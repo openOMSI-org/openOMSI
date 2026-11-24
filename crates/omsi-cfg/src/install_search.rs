@@ -9,10 +9,20 @@
 
 use std::path::{Path, PathBuf};
 
-pub const NAMES: &[&str] = &["OMSI 2", "OMSI 2 Original", "Omsi 2", "OMSI2", "omsi2", "OMSI 2 Steam Edition", "OMSI"];
+pub const NAMES: &[&str] = &[
+    "OMSI 2",
+    "OMSI 2 Original",
+    "Omsi 2",
+    "OMSI2",
+    "omsi2",
+    "OMSI 2 Steam Edition",
+    "OMSI",
+];
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from)
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 fn is_install(p: &Path) -> bool {
@@ -21,7 +31,9 @@ fn is_install(p: &Path) -> bool {
 
 /// Steam library folders named in a `libraryfolders.vdf` (`"path"  "D:\\SteamLibrary"`).
 fn steam_libraries(vdf: &Path) -> Vec<PathBuf> {
-    let Ok(text) = std::fs::read_to_string(vdf) else { return Vec::new() };
+    let Ok(text) = std::fs::read_to_string(vdf) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for line in text.lines() {
         let parts: Vec<&str> = line.split('"').filter(|s| !s.trim().is_empty()).collect();
@@ -55,7 +67,10 @@ fn windows_drives() -> Vec<PathBuf> {
     if !cfg!(windows) {
         return Vec::new();
     }
-    (b'C'..=b'Z').map(|c| PathBuf::from(format!("{}:/", c as char))).filter(|p| p.exists()).collect()
+    (b'C'..=b'Z')
+        .map(|c| PathBuf::from(format!("{}:/", c as char)))
+        .filter(|p| p.exists())
+        .collect()
 }
 
 /// Wine prefixes (plain Wine, CrossOver, Whisky, Heroic ...) whose `drive_c` may hold OMSI.
@@ -125,7 +140,13 @@ pub fn candidates() -> Vec<PathBuf> {
         }
     }
     for d in windows_drives().into_iter().chain(wine_drives()) {
-        for sub in ["Program Files (x86)", "Program Files", "Games", "Spiele", ""] {
+        for sub in [
+            "Program Files (x86)",
+            "Program Files",
+            "Games",
+            "Spiele",
+            "",
+        ] {
             for n in NAMES {
                 tried.push(d.join(sub).join(n));
             }
@@ -133,7 +154,16 @@ pub fn candidates() -> Vec<PathBuf> {
         }
     }
     if let Some(h) = home() {
-        for sub in ["", "Desktop", "Documents", "Downloads", "Games", "Spiele", "Applications", "Library/Application Support"] {
+        for sub in [
+            "",
+            "Desktop",
+            "Documents",
+            "Downloads",
+            "Games",
+            "Spiele",
+            "Applications",
+            "Library/Application Support",
+        ] {
             for n in NAMES {
                 tried.push(h.join(sub).join(n));
             }
@@ -148,16 +178,29 @@ pub fn candidates() -> Vec<PathBuf> {
 fn shallow_scan() -> Option<PathBuf> {
     let h = home()?;
     let mut dirs = vec![h.clone()];
-    for sub in ["Desktop", "Documents", "Downloads", "Games", "Spiele", "Applications"] {
+    for sub in [
+        "Desktop",
+        "Documents",
+        "Downloads",
+        "Games",
+        "Spiele",
+        "Applications",
+    ] {
         dirs.push(h.join(sub));
     }
     dirs.extend(windows_drives());
     let mut seen = 0usize;
     for d in dirs {
-        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
         for e in rd.flatten() {
             let p = e.path();
-            if !p.is_dir() || p.file_name().map(|n| n.to_string_lossy().starts_with('.')).unwrap_or(true) {
+            if !p.is_dir()
+                || p.file_name()
+                    .map(|n| n.to_string_lossy().starts_with('.'))
+                    .unwrap_or(true)
+            {
                 continue;
             }
             seen += 1;
@@ -187,12 +230,16 @@ fn shallow_scan() -> Option<PathBuf> {
 /// inside the one chosen.
 pub fn root_guesses(given: &Path) -> Vec<PathBuf> {
     let s = given.to_string_lossy();
-    let s = s.trim().trim_matches(|c| c == '"' || c == '\'' ).trim();
+    let s = s.trim().trim_matches(|c| c == '"' || c == '\'').trim();
     if s.is_empty() {
         return Vec::new();
     }
     let p = PathBuf::from(s);
-    let dir = if p.is_file() { p.parent().map(Path::to_path_buf).unwrap_or(p.clone()) } else { p.clone() };
+    let dir = if p.is_file() {
+        p.parent().map(Path::to_path_buf).unwrap_or(p.clone())
+    } else {
+        p.clone()
+    };
     let mut v = vec![dir.clone()];
     v.extend(dir.ancestors().skip(1).take(3).map(Path::to_path_buf));
     for n in NAMES {
@@ -242,7 +289,11 @@ mod tests {
         // a marker an older openOMSI left there does not make it "not the game"
         std::fs::write(dir.join(crate::CONTENT_MARKER), b"").unwrap();
         assert_eq!(crate::content_folder_of(&dir), dir.join("openOMSI"));
-        assert!(!crate::missing_original_essentials(&dir).iter().any(|m| m.contains("content folder")));
+        assert!(
+            !crate::missing_original_essentials(&dir)
+                .iter()
+                .any(|m| m.contains("content folder"))
+        );
         let other = std::env::temp_dir().join("openomsi-plain");
         let _ = std::fs::create_dir_all(&other);
         assert_eq!(crate::content_folder_of(&other), other);

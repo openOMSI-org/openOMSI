@@ -54,7 +54,15 @@ pub struct Horn {
 
 impl Default for Horn {
     fn default() -> Horn {
-        Horn { last: f32::MIN, honks: 0, stuck: 0.0, again: f32::MAX, sharp: false, reply_at: None, honked_at: 0 }
+        Horn {
+            last: f32::MIN,
+            honks: 0,
+            stuck: 0.0,
+            again: f32::MAX,
+            sharp: false,
+            reply_at: None,
+            honked_at: 0,
+        }
     }
 }
 
@@ -77,11 +85,7 @@ pub fn sharp_stop(v: f32, a: f32, acc: f32, gap: f32, lead_v: f32, lead_acc: f32
 /// Seconds a driver (`seed`) stands stuck before he honks the first time.
 pub fn patience(seed: u64, honk_factor: f32, bus: bool) -> f32 {
     let p = 20.0 + 25.0 * random::draw(seed, 1);
-    (if bus {
-        p * 1.5
-    } else {
-        p
-    }) * honk_factor
+    (if bus { p * 1.5 } else { p }) * honk_factor
 }
 
 /// Seconds until he honks again (his `n`-th honk).
@@ -114,7 +118,18 @@ impl TrafficSim {
                 || o.light_hold
                 || o.yielding
                 || o.at_stop()
-                || matches!(o.why.0, "light" | "yield" | "people" | "merge" | "service" | "end" | "park" | "pull_out" | "let_out");
+                || matches!(
+                    o.why.0,
+                    "light"
+                        | "yield"
+                        | "people"
+                        | "merge"
+                        | "service"
+                        | "end"
+                        | "park"
+                        | "pull_out"
+                        | "let_out"
+                );
             if lawful {
                 return None;
             }
@@ -141,13 +156,18 @@ impl TrafficSim {
             // the vehicle ahead, as the step saw it: (gap, its speed, its braking)
             let c = &self.cars[i];
             let ahead = match c.why.0 {
-                "lead" => c.lead_car.and_then(|id| self.index_of.get(&id)).and_then(|&k| self.cars.get(k)).map(|o| (c.why.1, o.state.speed, o.state.acc)),
+                "lead" => c
+                    .lead_car
+                    .and_then(|id| self.index_of.get(&id))
+                    .and_then(|&k| self.cars.get(k))
+                    .map(|o| (c.why.1, o.state.speed, o.state.acc)),
                 "player" => player.map(|p| (c.why.1, p.4.max(0.0), 0.0)),
                 _ => None,
             };
             let st = &c.state;
             let honk_factor: f32 = st.honk_factor;
-            let sharp = ahead.is_some_and(|(gap, v, acc)| sharp_stop(st.speed, st.decel, st.acc, gap, v, acc));
+            let sharp = ahead
+                .is_some_and(|(gap, v, acc)| sharp_stop(st.speed, st.decel, st.acc, gap, v, acc));
             let stuck = self.stuck_behind(i, player_standing);
             let (seed, bus) = (c.seed, c.is_bus());
             let mut honk = false;
@@ -162,7 +182,11 @@ impl TrafficSim {
                 if let Some(who) = stuck {
                     h.stuck += dt;
                     // (the first honk once his patience has run out, then the repeats)
-                    let due = if h.again == f32::MAX { h.stuck >= patience(seed, honk_factor, bus) } else { now >= h.again };
+                    let due = if h.again == f32::MAX {
+                        h.stuck >= patience(seed, honk_factor, bus)
+                    } else {
+                        now >= h.again
+                    };
                     if due && ready {
                         honk = true;
                         at_whom = Some(who);
@@ -189,17 +213,35 @@ impl TrafficSim {
                 continue;
             }
             let _ = self.cars[i].vehicle.trigger("ev_AI_Horn");
-            let heavy = self.cars[i].is_bus() || matches!(self.cars[i].state.veh_type, 2 | 3) || self.cars[i].state.length > 7.0;
+            let heavy = self.cars[i].is_bus()
+                || matches!(self.cars[i].state.veh_type, 2 | 3)
+                || self.cars[i].state.length > 7.0;
             self.honked.push((self.cars[i].id, heavy));
             // (nobody asks without sound: the oldest go)
             if self.honked.len() > 64 {
                 self.honked.remove(0);
             }
             if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-                log::info!("t={:.1}: car {} honks{}", now, self.cars[i].id, if sharp { " (a sharp stop ahead)" } else if at_whom.is_some() { " (stuck behind a vehicle that just stands)" } else { " back" });
+                log::info!(
+                    "t={:.1}: car {} honks{}",
+                    now,
+                    self.cars[i].id,
+                    if sharp {
+                        " (a sharp stop ahead)"
+                    } else if at_whom.is_some() {
+                        " (stuck behind a vehicle that just stands)"
+                    } else {
+                        " back"
+                    }
+                );
             }
             // the one honked at may answer, if something blocks him in turn
-            let Some(j) = at_whom.and_then(|id| self.index_of.get(&id).copied()).filter(|&j| j < self.cars.len() && self.cars[j].id == at_whom.unwrap_or(0)) else { continue };
+            let Some(j) = at_whom
+                .and_then(|id| self.index_of.get(&id).copied())
+                .filter(|&j| j < self.cars.len() && self.cars[j].id == at_whom.unwrap_or(0))
+            else {
+                continue;
+            };
             let o = &self.cars[j];
             let blocked = o.state.speed < 0.3 && !o.why.0.is_empty() && !o.is_rail();
             let n = o.horn.honked_at as u64;
@@ -241,11 +283,14 @@ mod tests {
         }
     }
 
-    use super::super::scenario_tests::{add_car, street, traffic, Fixture};
+    use super::super::scenario_tests::{Fixture, add_car, street, traffic};
     use crate::traffic::TrafficLightController;
 
     fn road(f: &Fixture) -> TrafficSim {
-        let mut net = Network { lanes: vec![street(DVec3::ZERO, 0.0, 600.0)], ..Default::default() };
+        let mut net = Network {
+            lanes: vec![street(DVec3::ZERO, 0.0, 600.0)],
+            ..Default::default()
+        };
         net.link(1.5);
         traffic(f, net)
     }
@@ -315,9 +360,19 @@ mod tests {
         let me = put(&mut t, &f, 80.0, 0x16, 5.0);
         let h = honks(&mut t, &[blocker], me, 110.0);
         let seed = t.cars.iter().find(|c| c.id == me).unwrap().seed;
-        let factor = t.cars.iter().find(|c| c.id == me).unwrap().state.honk_factor;
+        let factor = t
+            .cars
+            .iter()
+            .find(|c| c.id == me)
+            .unwrap()
+            .state
+            .honk_factor;
         assert!(h.len() >= 2, "honks at {h:?}");
-        assert!(h[0] >= patience(seed, factor, false) && h[0] < patience(seed, factor, false) + 10.0, "first honk at {:.1} s", h[0]);
+        assert!(
+            h[0] >= patience(seed, factor, false) && h[0] < patience(seed, factor, false) + 10.0,
+            "first honk at {:.1} s",
+            h[0]
+        );
         let gap = (h[1] - h[0]) / factor;
         assert!((15.0..=30.1).contains(&gap), "again after {gap:.1} s");
     }
@@ -325,16 +380,40 @@ mod tests {
     #[test]
     fn a_queue_at_a_red_light_does_not_honk() {
         let f = Fixture::new();
-        let mut lanes = vec![street(DVec3::ZERO, 0.0, 150.0), street(DVec3::new(0.0, 150.0, 0.0), 0.0, 300.0)];
+        let mut lanes = vec![
+            street(DVec3::ZERO, 0.0, 150.0),
+            street(DVec3::new(0.0, 150.0, 0.0), 0.0, 300.0),
+        ];
         lanes[1].traffic_light = Some((0, 0));
-        let mut net = Network { lanes, ..Default::default() };
+        let mut net = Network {
+            lanes,
+            ..Default::default()
+        };
         net.link(1.5);
         net.build_grid();
         net.compute_reach();
-        let random = super::super::setup::RandomTypes { types: Vec::new(), groups: Vec::new(), group_curves: false, group_uvg: Vec::new(), uvg_defaults: Vec::new() };
+        let random = super::super::setup::RandomTypes {
+            types: Vec::new(),
+            groups: Vec::new(),
+            group_curves: false,
+            group_uvg: Vec::new(),
+            uvg_defaults: Vec::new(),
+        };
         let red = TrafficLightController::new(vec![vec![(0, 1000.0)]], 0.0);
-        let mut t = TrafficSim::assemble(&f.dir, net, random, vec![red], HashMap::new(), (Vec::new(), Vec::new()), Vec::new(), (1.0, 0), 0);
-        let ids: Vec<u64> = (0..4).map(|k| put(&mut t, &f, 130.0 - 9.0 * k as f32, 0x20 + k, 6.0)).collect();
+        let mut t = TrafficSim::assemble(
+            &f.dir,
+            net,
+            random,
+            vec![red],
+            HashMap::new(),
+            (Vec::new(), Vec::new()),
+            Vec::new(),
+            (1.0, 0),
+            0,
+        );
+        let ids: Vec<u64> = (0..4)
+            .map(|k| put(&mut t, &f, 130.0 - 9.0 * k as f32, 0x20 + k, 6.0))
+            .collect();
         for _ in 0..(120.0 / super::super::fixed_step::SIM_DT) as usize {
             t.tick(super::super::fixed_step::SIM_DT, None);
         }
@@ -354,7 +433,10 @@ mod tests {
             honks(&mut t, &[blocker], me, 150.0);
             assert!(horn(&t, me).honks >= 3);
             let b = horn(&t, blocker);
-            assert!(b.honked_at >= 3 && b.honks == 0, "the blocker answered: {b:?}");
+            assert!(
+                b.honked_at >= 3 && b.honks == 0,
+                "the blocker answered: {b:?}"
+            );
         }
         // standing behind another that just stands: sometimes answers
         let mut answered = 0;

@@ -4,8 +4,17 @@ use winit::keyboard::KeyCode;
 
 /// Shift, Ctrl, Alt and the system key, either side: the keys `ModifiersChanged` keeps.
 pub fn is_modifier(code: KeyCode) -> bool {
-    matches!(code, KeyCode::ShiftLeft | KeyCode::ShiftRight | KeyCode::ControlLeft | KeyCode::ControlRight
-        | KeyCode::AltLeft | KeyCode::AltRight | KeyCode::SuperLeft | KeyCode::SuperRight)
+    matches!(
+        code,
+        KeyCode::ShiftLeft
+            | KeyCode::ShiftRight
+            | KeyCode::ControlLeft
+            | KeyCode::ControlRight
+            | KeyCode::AltLeft
+            | KeyCode::AltRight
+            | KeyCode::SuperLeft
+            | KeyCode::SuperRight
+    )
 }
 
 /// DIK_* scan code for a winit key, if known.
@@ -156,7 +165,15 @@ pub fn vk_twin(key: KeyCode) -> Option<KeyCode> {
         (Numpad9, PageUp),
         (NumpadEnter, Enter),
     ];
-    PAIRS.iter().find_map(|&(a, b)| if a == key { Some(b) } else if b == key { Some(a) } else { None })
+    PAIRS.iter().find_map(|&(a, b)| {
+        if a == key {
+            Some(b)
+        } else if b == key {
+            Some(a)
+        } else {
+            None
+        }
+    })
 }
 
 /// A press of `key` that came flagged as a repeat while `key` itself is not held (`held`)
@@ -172,7 +189,13 @@ pub fn twin_first_press(key: KeyCode, held: impl Fn(KeyCode) -> bool) -> bool {
 /// (its key was up already), and a release taken for a repeat went nowhere - with Num4 held
 /// and Left tapped, Num4's release was lost and the wheel stayed at full lock until Num4 was
 /// pressed again (#1830). On Windows (`windows`) a twin's first press is no repeat either.
-pub fn key_repeat(key: KeyCode, pressed: bool, repeat: bool, windows: bool, held: impl Fn(KeyCode) -> bool) -> bool {
+pub fn key_repeat(
+    key: KeyCode,
+    pressed: bool,
+    repeat: bool,
+    windows: bool,
+    held: impl Fn(KeyCode) -> bool,
+) -> bool {
     pressed && repeat && !(windows && twin_first_press(key, held))
 }
 
@@ -185,11 +208,24 @@ mod vk_twin_tests {
     /// reports the state first): the eight modifier keys, nothing else.
     #[test]
     fn only_the_modifier_keys_count_as_modifiers() {
-        for code in [KeyCode::ShiftLeft, KeyCode::ShiftRight, KeyCode::ControlLeft, KeyCode::ControlRight,
-            KeyCode::AltLeft, KeyCode::AltRight, KeyCode::SuperLeft, KeyCode::SuperRight] {
+        for code in [
+            KeyCode::ShiftLeft,
+            KeyCode::ShiftRight,
+            KeyCode::ControlLeft,
+            KeyCode::ControlRight,
+            KeyCode::AltLeft,
+            KeyCode::AltRight,
+            KeyCode::SuperLeft,
+            KeyCode::SuperRight,
+        ] {
             assert!(is_modifier(code), "{code:?}");
         }
-        for code in [KeyCode::KeyW, KeyCode::CapsLock, KeyCode::Escape, KeyCode::Digit1] {
+        for code in [
+            KeyCode::KeyW,
+            KeyCode::CapsLock,
+            KeyCode::Escape,
+            KeyCode::Digit1,
+        ] {
             assert!(!is_modifier(code), "{code:?}");
         }
     }
@@ -220,8 +256,10 @@ mod vk_twin_tests {
     fn a_release_is_never_a_repeat() {
         assert!(!key_repeat(Numpad4, true, false, true, |_| false));
         assert!(!key_repeat(ArrowLeft, true, true, true, |k| k == Numpad4));
-        assert!(key_repeat(ArrowLeft, true, true, true, |k| k == Numpad4 || k == ArrowLeft));
-        assert!(!key_repeat(ArrowLeft, false, false, true, |k| k == Numpad4 || k == ArrowLeft));
+        assert!(key_repeat(ArrowLeft, true, true, true, |k| k == Numpad4
+            || k == ArrowLeft));
+        assert!(!key_repeat(ArrowLeft, false, false, true, |k| k == Numpad4
+            || k == ArrowLeft));
         assert!(!key_repeat(Numpad4, false, true, true, |k| k == Numpad4));
         // elsewhere keys are told apart by themselves: a repeat stays one
         assert!(key_repeat(ArrowLeft, true, true, false, |k| k == Numpad4));
@@ -262,11 +300,123 @@ pub fn scan_name(scan: i32) -> Option<String> {
         _ => {}
     }
     const ALL: &[KeyCode] = &[
-        Escape, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9, Digit0, Minus, Equal, Backspace, Tab, KeyQ, KeyW, KeyE, KeyR, KeyT, KeyY, KeyU, KeyI, KeyO, KeyP, BracketLeft, BracketRight, Enter, ControlLeft, KeyA, KeyS, KeyD, KeyF, KeyG, KeyH, KeyJ, KeyK, KeyL, Semicolon, Quote, Backquote, ShiftLeft, Backslash, KeyZ, KeyX, KeyC, KeyV, KeyB, KeyN, KeyM, Comma, Period, Slash, ShiftRight, NumpadMultiply, AltLeft, Space, CapsLock, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, NumLock, ScrollLock, Numpad7, Numpad8, Numpad9, NumpadSubtract, Numpad4, Numpad5, Numpad6, NumpadAdd, Numpad1, Numpad2, Numpad3, Numpad0, NumpadDecimal, IntlBackslash, F11, F12, F13, F14, F15, NumpadEqual, NumpadEnter, ControlRight, NumpadDivide, PrintScreen, AltRight, Pause, Home, ArrowUp, PageUp, ArrowLeft, ArrowRight, End, ArrowDown, PageDown, Insert, Delete, SuperLeft, SuperRight, ContextMenu,
+        Escape,
+        Digit1,
+        Digit2,
+        Digit3,
+        Digit4,
+        Digit5,
+        Digit6,
+        Digit7,
+        Digit8,
+        Digit9,
+        Digit0,
+        Minus,
+        Equal,
+        Backspace,
+        Tab,
+        KeyQ,
+        KeyW,
+        KeyE,
+        KeyR,
+        KeyT,
+        KeyY,
+        KeyU,
+        KeyI,
+        KeyO,
+        KeyP,
+        BracketLeft,
+        BracketRight,
+        Enter,
+        ControlLeft,
+        KeyA,
+        KeyS,
+        KeyD,
+        KeyF,
+        KeyG,
+        KeyH,
+        KeyJ,
+        KeyK,
+        KeyL,
+        Semicolon,
+        Quote,
+        Backquote,
+        ShiftLeft,
+        Backslash,
+        KeyZ,
+        KeyX,
+        KeyC,
+        KeyV,
+        KeyB,
+        KeyN,
+        KeyM,
+        Comma,
+        Period,
+        Slash,
+        ShiftRight,
+        NumpadMultiply,
+        AltLeft,
+        Space,
+        CapsLock,
+        F1,
+        F2,
+        F3,
+        F4,
+        F5,
+        F6,
+        F7,
+        F8,
+        F9,
+        F10,
+        NumLock,
+        ScrollLock,
+        Numpad7,
+        Numpad8,
+        Numpad9,
+        NumpadSubtract,
+        Numpad4,
+        Numpad5,
+        Numpad6,
+        NumpadAdd,
+        Numpad1,
+        Numpad2,
+        Numpad3,
+        Numpad0,
+        NumpadDecimal,
+        IntlBackslash,
+        F11,
+        F12,
+        F13,
+        F14,
+        F15,
+        NumpadEqual,
+        NumpadEnter,
+        ControlRight,
+        NumpadDivide,
+        PrintScreen,
+        AltRight,
+        Pause,
+        Home,
+        ArrowUp,
+        PageUp,
+        ArrowLeft,
+        ArrowRight,
+        End,
+        ArrowDown,
+        PageDown,
+        Insert,
+        Delete,
+        SuperLeft,
+        SuperRight,
+        ContextMenu,
     ];
     let k = ALL.iter().find(|k| dik_code(**k) == Some(scan))?;
     let n = format!("{k:?}");
-    let n = n.strip_prefix("Key").or_else(|| n.strip_prefix("Digit")).map(String::from).unwrap_or(n.clone());
+    let n = n
+        .strip_prefix("Key")
+        .or_else(|| n.strip_prefix("Digit"))
+        .map(String::from)
+        .unwrap_or(n.clone());
     let n = n.replace("Numpad", "Num").replace("Arrow", "");
     Some(match n.as_str() {
         "Period" => ".".into(),
@@ -299,7 +449,10 @@ mod scan_name_tests {
         assert_eq!(super::both_code(ShiftRight), Some(90));
         assert_eq!(super::both_code(ControlLeft), Some(91));
         assert_eq!(super::both_code(KeyA), None);
-        assert_eq!(super::own_modifier_bit(ShiftLeft), omsi_content::input::KEY_SHIFT);
+        assert_eq!(
+            super::own_modifier_bit(ShiftLeft),
+            omsi_content::input::KEY_SHIFT
+        );
         assert_eq!(super::own_modifier_bit(KeyA), 0);
     }
 }

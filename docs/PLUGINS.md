@@ -77,6 +77,38 @@ ever; a vehicle can have both.
 Other `.lua` files are not started on their own, so a folder plugin's modules stay modules.
 `OMSI_NO_PLUGINS=1` leaves every plugin out, Lua ones included.
 
+### The launcher's plugin list
+
+The launcher's **Plugins** page lists every plugin of the `plugins` folders (Lua, `.oop` and
+`.opl`). Players switch each on or off there without moving its files, see what the last game
+made of it, and change the settings it declared with `plugin.settings`:
+
+* The plugins switched off are in `~/.openomsi/plugins-off.txt`, one a line, in lower case,
+  each by its path under `plugins`: `foo.lua`, a folder plugin's folder with a `/` after it
+  (`foo/` for `foo/main.lua`), `foo.oop`, and an `.opl`'s path (`pablo/mbas.opl`). So
+  `foo.lua` and `foo/main.lua` are two plugins, switched and set apart. A bare stem an older
+  launcher wrote (`foo`) still leaves out every Lua or `.oop` plugin of that stem.
+  The game reads it before it loads the plugins and leaves those out.
+* After loading, the game writes `~/.openomsi/plugins-status.json`: every plugin, by the same
+  name, with its `state` (`loaded`, `off`, `failed` with the load error, e.g. a syntax error)
+  and, when one is switched off during the game for its errors, `switched_off` with the error.
+* `plugin.settings(...)` also writes `settings.schema.json` into the plugin's data folder,
+  beside `settings.json`: `{title, settings: [{key, type, label, default, min, max, step,
+  choices}]}`. The launcher makes a form of it and writes the values into `settings.json`,
+  which the plugin gets back from `plugin.settings` the next time it starts. A plugin that has
+  not run yet has no settings to show.
+
+#### Publishing a plugin in the catalog
+
+The page's **Browse** tab lists the plugins of
+[openOMSI-org/openOMSI-Plugins](https://github.com/openOMSI-org/openOMSI-Plugins): a folder
+plugin (`main.lua` and its files) with a `plugin.json` (name, author, version, description,
+an open source licence), sent as a pull request and read by a maintainer before it is merged.
+The launcher installs it as `plugins/<id>/` only when each file's size and SHA-256 are the ones
+in the repository's `catalog.json`, offers an update when `version` goes up, and keeps
+`plugins/<id>/data/` (settings and saved data) on an update. The repository's CONTRIBUTING.md
+has the rules.
+
 ### How a plugin runs
 
 The file's top level runs once when the game starts. After that the plugin reacts to
@@ -636,13 +668,6 @@ only to ports from 1024 up. It holds at most 256 MB of memory.
 * `omsi.ui.update` changes one element of a panel; setting the whole panel every frame
   costs more.
 
-### Reference
-
-Every function and event, as the game's API registry describes them (also as JSON in
-[`plugin-api.json`](plugin-api.json), for tools and other plugin languages). `[x]` is an
-optional argument; a permission is what a plugin packed with a list of permissions must have
-declared to call the function (a plain `.lua` file has all except native process access, which always requires player opt-in).
-
 ### Native helper programs
 
 The interactive game asks for permission when a plugin first tries to start a native helper. The host-owned window initially shows the plugin name, the application's filename and the number of arguments, together with the safety warning and decision descriptions. **Details** reveals the full executable path, plugin entry path, individual arguments and working directory; **Hide details** collapses them again. Each new request starts collapsed, and opening details never approves execution. **Allow once** covers only that launch. **Always allow** stores a hash-bound approval in `~/.openomsi/plugin-process-permissions.json` (on Windows, `%USERPROFILE%\.openomsi\plugin-process-permissions.json`). It applies only to that entry, folder snapshot and helper; changed content asks again. **Deny** blocks all native helpers for that canonical plugin entry for the current game session, even if helper names, content or arguments change. Escape also denies; Enter never automatically approves. The game and other plugins keep running while a request waits. Unload/reload cancels it. Packages must still declare `process`. Dialog text and buttons are translated into every supported interface language; plugin names, file paths and arguments are displayed literally and are never sent to translation.
@@ -669,6 +694,13 @@ Load/reload only selects a manifest candidate by its absolute lexical entry/fold
 `process.start` returns a plugin-owned handle; `status` and `exit_code` poll without blocking. Lua `process.wait` suspends the top-level callback while the game and other plugins continue. Nested event callbacks and manual coroutines cannot wait. Stop, disable and reload cancel pending waits and terminate direct children. Windows assigns children atomically to a kill-on-close Job Object, including descendants, so abrupt game termination also cleans them up. Linux sets `PR_SET_PDEATHSIG` for direct children with a parent-race check; descendants are not covered. On macOS only normal plugin lifecycle cleanup is provided. Completed handles retain status until `forget`; the limit is 32 handles per plugin. Windows closes the job on forget, killing any remaining descendants. Plugins without consent keep direct callback dispatch; approved Lua plugins reuse completed callback coroutines.
 
 On macOS, helpers extracted from ZIP files may need their executable bit restored (`chmod +x /absolute/path/to/helper`) and may be blocked by Gatekeeper quarantine. Review the downloaded helper and use macOS's normal security approval flow before running it; the plugin host does not remove quarantine automatically.
+
+### Reference
+
+Every function and event, as the game's API registry describes them (also as JSON in
+[`plugin-api.json`](plugin-api.json), for tools and other plugin languages). `[x]` is an
+optional argument; a permission is what a plugin packed with a list of permissions must have
+declared to call the function (a plain `.lua` file has all except native process access, which always requires player opt-in).
 
 <!-- api:begin (written from the registry: OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest) -->
 
@@ -728,6 +760,7 @@ On macOS, helpers extracted from ZIP files may need their executable bit restore
 | `omsi.bus.tickets()` | list of tables | The tickets the map sells: `{name, price, day_ticket}`. | 0.2.22 |
 | `omsi.bus.toggle_door([n])` | boolean | Presses the key of doorway `n` (from 1; 0 or none: all doors), as the player would. *Permission: `vehicle_write`.* | 0.2.22 |
 | `omsi.bus.toggle_handbrake()` | boolean | Puts the parking brake on or off, as its key does. *Permission: `vehicle_write`.* | 0.2.22 |
+| `omsi.bus.track()` | table or nil | Where the player's rail vehicle (tram, metro, train) is on its track, as distances along it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (an index into the map's lanes), the metres from its start and its length, whether the vehicle faces the track's direction, and the net metres it has moved along the tracks since it was put on them (they go down, below zero too, while it backs up). `nil` for a road vehicle. A plugin can work out block sections, distances to a signal or a stop, or a train protection system from it. | 0.3.55 |
 | `omsi.bus.trailers()` | integer or nil | Parts coupled behind the bus (an articulated bus's rear counts). | 0.2.22 |
 | `omsi.bus.triggers()` | list of strings | The names of the bus's script triggers (for `trigger`, `press`). | 0.2.22 |
 | `omsi.bus.velocity()` | number or nil | The bus's speed in km/h, negative backwards. | 0.2.22 |

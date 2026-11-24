@@ -91,17 +91,40 @@ fn scenery_of(n: i64) -> SceneryState {
     use crate::scenery::{SceneryInstance, SceneryObject};
     let mut s = SceneryState::default();
     for i in 0..n {
-        let inst = SceneryInstance::new(std::sync::Arc::new(omsi_script::Program::default()), &[], crate::SimClock::default(), &[]);
-        let p = glam::DVec3::new((i * 37 % 1700) as f64 - 850.0, (i * 91 % 1300) as f64 - 650.0, 0.0);
-        s.push(SceneryObject::new(1000 + i as u64, i, p, ((p.x / 300.0).floor() as i32, 0), inst, 0));
+        let inst = SceneryInstance::new(
+            std::sync::Arc::new(omsi_script::Program::default()),
+            &[],
+            crate::SimClock::default(),
+            &[],
+        );
+        let p = glam::DVec3::new(
+            (i * 37 % 1700) as f64 - 850.0,
+            (i * 91 % 1300) as f64 - 650.0,
+            0.0,
+        );
+        s.push(SceneryObject::new(
+            1000 + i as u64,
+            i,
+            p,
+            ((p.x / 300.0).floor() as i32, 0),
+            inst,
+            0,
+        ));
     }
     s
 }
 
 /// One frame's scenery step as the scripted stage makes it, its inputs owned.
-fn scenery_step(dt: f32, center: glam::DVec3) -> impl FnOnce(&mut SceneryState, PhaseOf) + Send + 'static {
+fn scenery_step(
+    dt: f32,
+    center: glam::DVec3,
+) -> impl FnOnce(&mut SceneryState, PhaseOf) + Send + 'static {
     move |s: &mut SceneryState, phase_of: PhaseOf| {
-        let (controllers, by_stop, departures) = (hashbrown::HashMap::new(), hashbrown::HashMap::new(), Default::default());
+        let (controllers, by_stop, departures) = (
+            hashbrown::HashMap::new(),
+            hashbrown::HashMap::new(),
+            Default::default(),
+        );
         let inputs = crate::scenery::SceneryInputs {
             trolley_net: None,
             clock: None,
@@ -122,7 +145,10 @@ fn scenery_step(dt: f32, center: glam::DVec3) -> impl FnOnce(&mut SceneryState, 
 
 fn outputs_of(s: &mut SceneryState) -> String {
     let o = s.outputs();
-    format!("{:?} {:?} {:?} {:?} {}", o.cmds, o.vars, o.transforms, o.visible, o.ran)
+    format!(
+        "{:?} {:?} {:?} {:?} {}",
+        o.cmds, o.vars, o.transforms, o.visible, o.ran
+    )
 }
 
 /// The scenery stepped on the sim thread (with the traffic, after it) gives the commands the
@@ -135,7 +161,11 @@ fn pipelined_scenery_matches_inline_scenery() {
     let unlinked = |_: usize, _: usize| (crate::traffic::UNLINKED_PHASE as f32, 0.0);
     for k in 0..120 {
         let dt = 1.0 / 60.0 + (k % 7) as f32 * 0.003;
-        let center = glam::DVec3::new(-900.0 + k as f64 * 15.0, (k as f64 * 0.1).sin() * 300.0, 2.0);
+        let center = glam::DVec3::new(
+            -900.0 + k as f64 * 15.0,
+            (k as f64 * 0.1).sin() * 300.0,
+            2.0,
+        );
         inline_t.advance(dt, None);
         scenery_step(dt, center)(&mut inline, &unlinked);
         p.owe_traffic(dt, None);
@@ -155,20 +185,43 @@ fn bus_and_people() -> (crate::VehicleInstance, PeopleSim) {
     // (a folder of its own per test - its thread: two tests build this bus at once, and the one
     // that was done first took the other's files away; one test's two buses share it, the
     // people compare their bus by its files)
-    let thread = format!("{:?}", std::thread::current().id()).replace(|c: char| !c.is_ascii_alphanumeric(), "");
-    let dir = std::env::temp_dir().join(format!("omsi-sim-thread-people-{}-{thread}", std::process::id()));
+    let thread = format!("{:?}", std::thread::current().id())
+        .replace(|c: char| !c.is_ascii_alphanumeric(), "");
+    let dir = std::env::temp_dir().join(format!(
+        "omsi-sim-thread-people-{}-{thread}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
-    write("test.bus", "[model]\nmodel.cfg\n[passengercabin]\ncabin.cfg\n[paths]\npaths.cfg\n[boundingbox]\n2.5\n12\n3\n0\n0\n1.5\n[script]\n1\nmain.osc\n");
+    write(
+        "test.bus",
+        "[model]\nmodel.cfg\n[passengercabin]\ncabin.cfg\n[paths]\npaths.cfg\n[boundingbox]\n2.5\n12\n3\n0\n0\n1.5\n[script]\n1\nmain.osc\n",
+    );
     write("model.cfg", "");
     write("main.osc", "{init}\n{end}\n");
-    let pts: String = [5.0, 4.0, 0.0, -4.0].iter().map(|y| format!("[pathpnt]\n0\n{y}\n0.5\n\n")).collect();
-    write("paths.cfg", &format!("[pathpnt]\n1.1\n5\n0.4\n\n{pts}[pathlink]\n0\n1\n\n[pathlink]\n1\n2\n\n[pathlink]\n2\n3\n\n[pathlink]\n3\n4\n"));
-    let seats: String = (0..6).map(|k| format!("[passpos]\n-0.6\n{}\n0.9\n0.45\n0\n\n", 3.0 - k as f32 * 1.2)).collect();
+    let pts: String = [5.0, 4.0, 0.0, -4.0]
+        .iter()
+        .map(|y| format!("[pathpnt]\n0\n{y}\n0.5\n\n"))
+        .collect();
+    write(
+        "paths.cfg",
+        &format!(
+            "[pathpnt]\n1.1\n5\n0.4\n\n{pts}[pathlink]\n0\n1\n\n[pathlink]\n1\n2\n\n[pathlink]\n2\n3\n\n[pathlink]\n3\n4\n"
+        ),
+    );
+    let seats: String = (0..6)
+        .map(|k| {
+            format!(
+                "[passpos]\n-0.6\n{}\n0.9\n0.45\n0\n\n",
+                3.0 - k as f32 * 1.2
+            )
+        })
+        .collect();
     write("cabin.cfg", &format!("[entry]\n0\n\n[exit]\n0\n\n{seats}"));
     write("person.hum", "[model]\nmodel.cfg\n");
     let ty = std::sync::Arc::new(crate::VehicleType::load(&dir, &dir.join("test.bus")).unwrap());
-    let human = std::sync::Arc::new(crate::human::HumanType::load(&dir.join("person.hum")).unwrap());
+    let human =
+        std::sync::Arc::new(crate::human::HumanType::load(&dir.join("person.hum")).unwrap());
     let mut bus = crate::VehicleInstance::new(ty, crate::VehicleHost::new(Default::default()));
     let mut people = PeopleSim::new(std::path::Path::new("/nonexistent"), 50);
     people.types = vec![human];
@@ -181,7 +234,13 @@ fn bus_and_people() -> (crate::VehicleInstance, PeopleSim) {
 fn people_digest(p: &PeopleSim) -> String {
     let mut out = format!("t {} rng {} n {}", p.time.to_bits(), p.rng, p.people.len());
     for q in &p.people {
-        out.push_str(&format!(" | {} {:?} {} {:?}", q.id, q.position.to_array().map(f64::to_bits), q.heading.to_bits(), q.place));
+        out.push_str(&format!(
+            " | {} {:?} {} {:?}",
+            q.id,
+            q.position.to_array().map(f64::to_bits),
+            q.heading.to_bits(),
+            q.place
+        ));
     }
     out
 }
@@ -212,14 +271,24 @@ fn pipelined_people_match_inline_people() {
         p.owe_traffic(dt, None);
         let view = piped.as_ref().unwrap().player_bus_view(&bus);
         p.owe_people(dt, world.clone(), Some(view));
-        assert!(p.start(Some(&mut piped_t), None, piped.take()).is_none(), "the people went along");
+        assert!(
+            p.start(Some(&mut piped_t), None, piped.take()).is_none(),
+            "the people went along"
+        );
         let (_, back) = p.join(Some(&mut piped_t), None);
         piped = back;
         let stepped = p.take_people_stepped().expect("stepped");
         assert_eq!((stepped.took, stepped.dt), (took_inline, dt));
-        assert_eq!(people_digest(piped.as_ref().unwrap()), people_digest(&inline), "frame {k}");
+        assert_eq!(
+            people_digest(piped.as_ref().unwrap()),
+            people_digest(&inline),
+            "frame {k}"
+        );
     }
-    assert!((inline.people[0].position - sat_at).length() > 10.0, "the riders went along with the bus");
+    assert!(
+        (inline.people[0].position - sat_at).length() > 10.0,
+        "the riders went along with the bus"
+    );
 }
 
 /// A frame's ticks of the fixed step (`tick::FixedStep` at 120 Hz) stepped on the sim thread -
@@ -243,7 +312,8 @@ fn pipelined_ticks_match_inline_ticks() {
     let mut counts = std::collections::BTreeSet::new();
     for k in 0..240 {
         // 144, 60, 30 and uneven frames a second
-        let frame_dt = [1.0 / 144.0, 1.0 / 60.0, 1.0 / 30.0, 0.0113][k / 60] + (k % 3) as f32 * 0.0007;
+        let frame_dt =
+            [1.0 / 144.0, 1.0 / 60.0, 1.0 / 30.0, 0.0113][k / 60] + (k % 3) as f32 * 0.0007;
         let ticks = clock.advance(frame_dt);
         counts.insert(ticks.n);
         let mut took_inline = false;
@@ -268,26 +338,52 @@ fn pipelined_ticks_match_inline_ticks() {
             scenery_step(frame_dt, center)(&mut piped_s, &unlinked);
             assert!(!p.owes_people());
             piped = p.start(Some(&mut piped_t), Some(&mut piped_s), piped.take());
-            assert!(piped.is_some() && !p.busy(), "nothing owed, nothing goes out");
+            assert!(
+                piped.is_some() && !p.busy(),
+                "nothing owed, nothing goes out"
+            );
             continue;
         }
         p.owe_scenery(scenery_step(frame_dt, center));
-        assert!(p.start(Some(&mut piped_t), Some(&mut piped_s), piped.take()).is_none(), "the people went along");
+        assert!(
+            p.start(Some(&mut piped_t), Some(&mut piped_s), piped.take())
+                .is_none(),
+            "the people went along"
+        );
         let (_, back) = p.join(Some(&mut piped_t), Some(&mut piped_s));
         piped = back;
         assert!(p.take_scenery_stepped());
         let stepped = p.take_people_stepped().expect("stepped");
         assert_eq!(stepped.took, took_inline, "frame {k}");
-        assert!((stepped.dt - ticks.n as f32 * clock.dt()).abs() < 1e-6, "frame {k}: {} for {} ticks", stepped.dt, ticks.n);
-        assert_eq!(people_digest(piped.as_ref().unwrap()), people_digest(&inline), "frame {k}");
+        assert!(
+            (stepped.dt - ticks.n as f32 * clock.dt()).abs() < 1e-6,
+            "frame {k}: {} for {} ticks",
+            stepped.dt,
+            ticks.n
+        );
+        assert_eq!(
+            people_digest(piped.as_ref().unwrap()),
+            people_digest(&inline),
+            "frame {k}"
+        );
         assert_eq!(piped_t.time.to_bits(), inline_t.time.to_bits(), "frame {k}");
         assert_eq!(piped_t.rng, inline_t.rng, "frame {k}");
-        assert_eq!(outputs_of(&mut piped_s), outputs_of(&mut inline_s), "frame {k}");
+        assert_eq!(
+            outputs_of(&mut piped_s),
+            outputs_of(&mut inline_s),
+            "frame {k}"
+        );
     }
-    assert!(counts.contains(&0) && counts.contains(&1) && counts.iter().any(|n| *n >= 2), "ticks a frame: {counts:?}");
+    assert!(
+        counts.contains(&0) && counts.contains(&1) && counts.iter().any(|n| *n >= 2),
+        "ticks a frame: {counts:?}"
+    );
     assert_eq!(piped_t.sim_accum.to_bits(), inline_t.sim_accum.to_bits());
     assert_eq!(piped_t.day_time.to_bits(), inline_t.day_time.to_bits());
-    assert!((inline.people[0].position - glam::DVec3::ZERO).length() > 5.0, "the riders went along with the bus");
+    assert!(
+        (inline.people[0].position - glam::DVec3::ZERO).length() > 5.0,
+        "the riders went along with the bus"
+    );
 }
 
 /// The setting decides, `OMSI_SIM_THREAD` over it both ways (it used to turn the thread on
@@ -326,15 +422,28 @@ fn pipelined_traffic_is_drawn_a_steady_time_behind_at_any_frame_rate() {
         let gaps = drawn_gaps(&vec![1.0 / fps; fps as usize * 3]);
         let settled = &gaps[fps as usize..];
         for &(gap, b) in settled {
-            assert!(b <= crate::ai_traffic::fixed_step::MOST_BEHIND, "{fps} fps: {b}");
-            assert!((gap - settled[0].0).abs() < 1e-4, "{fps} fps: {gap} after {}", settled[0].0);
+            assert!(
+                b <= crate::ai_traffic::fixed_step::MOST_BEHIND,
+                "{fps} fps: {b}"
+            );
+            assert!(
+                (gap - settled[0].0).abs() < 1e-4,
+                "{fps} fps: {gap} after {}",
+                settled[0].0
+            );
         }
     }
 }
 
 #[test]
 fn after_a_hitch_the_traffic_eases_back_without_a_jump() {
-    for (fps, hitch) in [(144.0f32, 0.03f32), (144.0, 0.1), (60.0, 0.1), (160.0, 0.07), (75.0, 0.5)] {
+    for (fps, hitch) in [
+        (144.0f32, 0.03f32),
+        (144.0, 0.1),
+        (60.0, 0.1),
+        (160.0, 0.07),
+        (75.0, 0.5),
+    ] {
         let n = fps as usize * 4;
         let at = fps as usize * 2;
         let mut frames = vec![1.0 / fps; n];
@@ -342,10 +451,19 @@ fn after_a_hitch_the_traffic_eases_back_without_a_jump() {
         let gaps = drawn_gaps(&frames);
         for k in fps as usize + 1..n {
             let (gap, b) = gaps[k];
-            assert!(b <= crate::ai_traffic::fixed_step::MOST_BEHIND + 1e-6, "{fps} fps, hitch {hitch}: {b} at frame {k}");
+            assert!(
+                b <= crate::ai_traffic::fixed_step::MOST_BEHIND + 1e-6,
+                "{fps} fps, hitch {hitch}: {b} at frame {k}"
+            );
             let step = gap - gaps[k - 1].0;
-            assert!(k == at || step <= 1e-5, "{fps} fps, hitch {hitch}: the cars fell back {step} at frame {k}");
-            assert!(step >= -DrawnLag::EASE * frames[k] - 1e-5, "{fps} fps, hitch {hitch}: the cars jumped {step} at frame {k}");
+            assert!(
+                k == at || step <= 1e-5,
+                "{fps} fps, hitch {hitch}: the cars fell back {step} at frame {k}"
+            );
+            assert!(
+                step >= -DrawnLag::EASE * frames[k] - 1e-5,
+                "{fps} fps, hitch {hitch}: the cars jumped {step} at frame {k}"
+            );
         }
     }
 }

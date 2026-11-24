@@ -7,7 +7,7 @@
 //!
 //! No add-on script text and no path into a local OMSI install.
 
-use omsi_script::{compile, CompileInput, NullHost, Program, State, Vm};
+use omsi_script::{CompileInput, NullHost, Program, State, Vm, compile};
 use std::path::PathBuf;
 
 fn fixture_dir() -> PathBuf {
@@ -164,7 +164,10 @@ fn d11_digit_zero_appends_like_other_digits() {
     assert_eq!(st.get(d11), 1.0, "press must set ibox_taste_D11");
     vm.run_frame(&p, &mut st, &mut host);
     assert_eq!(st.get(e), 10.0, "digit 0 must turn 1 into 10");
-    assert_eq!(st.str_vars[z as usize], "10", "display must show the middle zero");
+    assert_eq!(
+        st.str_vars[z as usize], "10",
+        "display must show the middle zero"
+    );
 
     assert!(vm.run_trigger(&p, "ibox_taste_D11_drag", &mut st, &mut host));
     assert_eq!(st.get(d11), 0.0);
@@ -185,11 +188,25 @@ fn d11_after_d1_shows_ten_like_click_path() {
     st.set(modus, 7.0);
     st.set(e, 0.0);
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D1", "ibox_taste_D1_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D1",
+        "ibox_taste_D1_drag",
+    );
     assert_eq!(st.get(e), 1.0);
     assert_eq!(st.str_vars[z as usize], "1");
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D11", "ibox_taste_D11_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D11",
+        "ibox_taste_D11_drag",
+    );
     assert_eq!(st.get(e), 10.0);
     assert_eq!(st.str_vars[z as usize], "10");
 }
@@ -211,7 +228,14 @@ fn mode10_leading_zero_then_one_shows_route_01() {
     vm.run_frame(&p, &mut st, &mut host);
     assert_eq!(st.str_vars[z as usize], "", "no prefilled 00");
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D11", "ibox_taste_D11_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D11",
+        "ibox_taste_D11_drag",
+    );
     assert_eq!(st.get(e), 0.0);
     assert_eq!(st.str_vars[z as usize], "0");
     vm.run_frame(&p, &mut st, &mut host);
@@ -221,19 +245,43 @@ fn mode10_leading_zero_then_one_shows_route_01() {
         "leading zero must survive clickspots_reset (not only the press frame)"
     );
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D1", "ibox_taste_D1_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D1",
+        "ibox_taste_D1_drag",
+    );
     assert_eq!(st.get(e), 1.0);
     assert_eq!(st.str_vars[z as usize], "01");
     vm.run_frame(&p, &mut st, &mut host);
-    assert_eq!(st.str_vars[z as usize], "01", "01 must persist across frames");
-    assert_eq!(st.get(route), 1.0, "submitted route number is 1 (shown as 01)");
+    assert_eq!(
+        st.str_vars[z as usize], "01",
+        "01 must persist across frames"
+    );
+    assert_eq!(
+        st.get(route),
+        1.0,
+        "submitted route number is 1 (shown as 01)"
+    );
 
     st.set(e, 0.0);
     st.str_vars[z as usize].clear();
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D1", "ibox_taste_D1_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D1",
+        "ibox_taste_D1_drag",
+    );
     vm.run_frame(&p, &mut st, &mut host);
     assert_eq!(st.str_vars[z as usize], "1");
-    assert_ne!(st.str_vars[z as usize], "01", "must not auto-pad without typing 0");
+    assert_ne!(
+        st.str_vars[z as usize], "01",
+        "must not auto-pad without typing 0"
+    );
 }
 
 #[test]
@@ -251,7 +299,14 @@ fn mode7_leading_zero_then_one_shows_line_01() {
     vm.run_frame(&p, &mut st, &mut host);
     assert_eq!(st.str_vars[z as usize], "", "line entry starts empty");
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D11", "ibox_taste_D11_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D11",
+        "ibox_taste_D11_drag",
+    );
     assert_eq!(st.get(e), 0.0);
     assert_eq!(st.str_vars[z as usize], "0");
     vm.run_frame(&p, &mut st, &mut host);
@@ -260,7 +315,14 @@ fn mode7_leading_zero_then_one_shows_line_01() {
         "line leading zero must survive clickspots_reset"
     );
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D1", "ibox_taste_D1_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D1",
+        "ibox_taste_D1_drag",
+    );
     assert_eq!(st.get(e), 1.0);
     assert_eq!(st.str_vars[z as usize], "01");
     vm.run_frame(&p, &mut st, &mut host);
@@ -282,7 +344,14 @@ fn mode2_pin_leading_zero_appends_star() {
     vm.run_frame(&p, &mut st, &mut host);
     assert_eq!(st.str_vars[z as usize], "", "PIN entry starts empty");
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D11", "ibox_taste_D11_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D11",
+        "ibox_taste_D11_drag",
+    );
     assert_eq!(st.get(e), 0.0);
     assert_eq!(st.str_vars[z as usize], "*");
     vm.run_frame(&p, &mut st, &mut host);
@@ -291,7 +360,14 @@ fn mode2_pin_leading_zero_appends_star() {
         "PIN star must survive clickspots_reset"
     );
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D1", "ibox_taste_D1_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D1",
+        "ibox_taste_D1_drag",
+    );
     assert_eq!(st.get(e), 1.0);
     assert_eq!(st.str_vars[z as usize], "**");
     vm.run_frame(&p, &mut st, &mut host);
@@ -310,7 +386,14 @@ fn mode7_line_entry_starts_empty_after_route_display() {
 
     st.set(modus, 10.0);
     st.set(e, 0.0);
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D11", "ibox_taste_D11_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D11",
+        "ibox_taste_D11_drag",
+    );
     assert_eq!(st.str_vars[z as usize], "0");
 
     st.set(modus, 7.0);
@@ -332,10 +415,24 @@ fn mode10_route_02_and_mid_zero_ten() {
     st.set(modus, 10.0);
 
     st.set(e, 0.0);
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D11", "ibox_taste_D11_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D11",
+        "ibox_taste_D11_drag",
+    );
     assert_eq!(st.str_vars[z as usize], "0");
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D2", "ibox_taste_D2_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D2",
+        "ibox_taste_D2_drag",
+    );
     assert_eq!(st.get(e), 2.0);
     assert_eq!(st.str_vars[z as usize], "02");
 
@@ -375,8 +472,22 @@ fn mode7_line_033_then_mode10_route_01() {
     st.set(e, 0.0);
     st.str_vars[z as usize].clear();
     vm.run_frame(&p, &mut st, &mut host);
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D11", "ibox_taste_D11_drag");
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D1", "ibox_taste_D1_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D11",
+        "ibox_taste_D11_drag",
+    );
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D1",
+        "ibox_taste_D1_drag",
+    );
     assert_eq!(st.get(e), 1.0);
     assert_eq!(st.str_vars[z as usize], "01");
 }
@@ -404,7 +515,14 @@ fn stock_4_digit_cap_rejects_fifth_char_and_fifth_significant_digit() {
     assert_eq!(st.get(e), 3301.0);
     assert_eq!(st.str_vars[z as usize], "3301");
 
-    press(&mut vm, &p, &mut st, &mut host, "ibox_taste_D2", "ibox_taste_D2_drag");
+    press(
+        &mut vm,
+        &p,
+        &mut st,
+        &mut host,
+        "ibox_taste_D2",
+        "ibox_taste_D2_drag",
+    );
     assert_eq!(st.get(e), 3301.0, "stock 9999 cap must drop the 5th digit");
     assert_eq!(
         st.str_vars[z as usize], "3301",

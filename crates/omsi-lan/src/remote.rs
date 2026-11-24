@@ -252,12 +252,29 @@ mod tests {
     #[test]
     fn a_parked_bus_runs_its_scripts_until_they_have_settled_and_now_and_then_after() {
         let mut t = PoseTrack::default();
-        assert!((0..100).all(|_| !t.stands_still(7, 0.25)), "a player's bus runs them every frame");
+        assert!(
+            (0..100).all(|_| !t.stands_still(7, 0.25)),
+            "a player's bus runs them every frame"
+        );
         let bus = omsi_net::FIRST_PARKED_ID;
-        assert_eq!((0..20).filter(|_| !t.stands_still(bus, 0.25)).count(), 20, "five seconds, every frame");
+        assert_eq!(
+            (0..20).filter(|_| !t.stands_still(bus, 0.25)).count(),
+            20,
+            "five seconds, every frame"
+        );
         // then twice a second, whatever the frame rate: ten seconds at 32 and at 128 frames a second
-        assert_eq!((0..320).filter(|_| !t.stands_still(bus, 1.0 / 32.0)).count(), 20);
-        assert_eq!((0..1280).filter(|_| !t.stands_still(bus, 1.0 / 128.0)).count(), 20);
+        assert_eq!(
+            (0..320)
+                .filter(|_| !t.stands_still(bus, 1.0 / 32.0))
+                .count(),
+            20
+        );
+        assert_eq!(
+            (0..1280)
+                .filter(|_| !t.stands_still(bus, 1.0 / 128.0))
+                .count(),
+            20
+        );
     }
 
     #[test]

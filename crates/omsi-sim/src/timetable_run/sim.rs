@@ -18,14 +18,14 @@ pub mod transit;
 pub use tours::{TourPlan, TourPlanTrip};
 
 use super::*;
-use crate::ai_traffic::TrafficSim;
 use crate::VehicleType;
+use crate::ai_traffic::TrafficSim;
 use omsi_timetable::TimetableData;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub use choice::{depot_file, pool_depot};
-pub use dispatch::{tour_entry, TOUR_ENTRY_LANES};
+pub use dispatch::{TOUR_ENTRY_LANES, tour_entry};
 pub use place::Placing;
 
 /// What the timetable needs of the loaded map: its folders, the AI lists, the tiles, the
@@ -130,7 +130,11 @@ pub struct Choice {
 pub type TrainCars = Vec<(Arc<VehicleType>, bool)>;
 
 /// A depot's vehicle: its type, its fleet from the ailists, its depot file.
-pub type DepotVehicle = (Arc<VehicleType>, Vec<omsi_map::DepotEntry>, Option<Arc<omsi_vehicle::Hof>>);
+pub type DepotVehicle = (
+    Arc<VehicleType>,
+    Vec<omsi_map::DepotEntry>,
+    Option<Arc<omsi_vehicle::Hof>>,
+);
 
 pub struct ScheduleSim {
     pub data: TimetableData,

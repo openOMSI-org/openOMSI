@@ -49,8 +49,8 @@
 //! `omsi.setRoute(index)`, `omsi.setLine(text)` and `omsi.setDestination(index)`; with a
 //! timetable `omsi.setNextStop(index)` skips to that stop.
 
-use crate::vehicle::VehicleInstance;
 use crate::SimClock;
+use crate::vehicle::VehicleInstance;
 use omsi_vehicle::hof::Hof;
 use std::sync::RwLock;
 
@@ -64,7 +64,11 @@ pub fn set_locale(iso: &str) {
 /// The current `omsi.locale`.
 pub fn locale() -> String {
     let l = LOCALE.read().unwrap();
-    if l.is_empty() { "en".to_string() } else { l.clone() }
+    if l.is_empty() {
+        "en".to_string()
+    } else {
+        l.clone()
+    }
 }
 
 /// A time of day (seconds, `tod`) on the clock's date as a timestamp: seconds since 1970-01-01
@@ -72,19 +76,28 @@ pub fn locale() -> String {
 pub fn timestamp(clock: &SimClock, tod: f64) -> f64 {
     let leaps_before = |y: i64| (y - 1) / 4 - (y - 1) / 100 + (y - 1) / 400;
     let y = clock.year as i64;
-    let days = (y - 1970) * 365 + leaps_before(y) - leaps_before(1970) + (clock.day_of_year.max(1) - 1) as i64;
+    let days = (y - 1970) * 365 + leaps_before(y) - leaps_before(1970)
+        + (clock.day_of_year.max(1) - 1) as i64;
     (days * 86_400) as f64 + tod
 }
 
 /// `window.omsi.time`, `.date` and `.locale`: the simulation clock and the interface language.
 /// `asString` of the time is `HH:MM:SS`; of the date `DD.MM.YYYY` (`MM/DD/YYYY` for `en`).
 pub fn environment(clock: &SimClock, locale: &str) -> ApiValue {
-    let secs: i64 = if clock.time.is_finite() { clock.time.floor() as i64 } else { 0 };
+    let secs: i64 = if clock.time.is_finite() {
+        clock.time.floor() as i64
+    } else {
+        0
+    };
     let t = secs.rem_euclid(86_400);
     let (h, m, s) = (t / 3600, (t % 3600) / 60, t % 60);
     let (d, mo) = clock.day_month();
     let y = clock.year;
-    let date = if locale == "en" { format!("{mo:02}/{d:02}/{y:04}") } else { format!("{d:02}.{mo:02}.{y:04}") };
+    let date = if locale == "en" {
+        format!("{mo:02}/{d:02}/{y:04}")
+    } else {
+        format!("{d:02}.{mo:02}.{y:04}")
+    };
     map(vec![
         (
             "time",
@@ -105,8 +118,14 @@ pub fn environment(clock: &SimClock, locale: &str) -> ApiValue {
             ]),
         ),
         ("locale", ApiValue::Str(locale.to_string())),
-        ("timestamp", ApiValue::Num(timestamp(clock, secs.rem_euclid(86_400) as f64))),
-        ("weather", page_weather().map(|w| w.api()).unwrap_or(ApiValue::Null)),
+        (
+            "timestamp",
+            ApiValue::Num(timestamp(clock, secs.rem_euclid(86_400) as f64)),
+        ),
+        (
+            "weather",
+            page_weather().map(|w| w.api()).unwrap_or(ApiValue::Null),
+        ),
     ])
 }
 
@@ -132,18 +151,39 @@ impl PageWeather {
         let t = self.temperature;
         let es = 6.112 * ((17.62 * t) / (243.12 + t)).exp();
         let sat = 216.7 * es / (273.15 + t);
-        if sat > 0.0 { (self.abs_humidity / sat).clamp(0.0, 1.0) } else { 0.0 }
+        if sat > 0.0 {
+            (self.abs_humidity / sat).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
     }
 
     fn api(&self) -> ApiValue {
-        let kind = if self.precip.0 >= 0.5 && self.precip.1 > 0.0 { self.precip.0.round() } else { 0.0 };
+        let kind = if self.precip.0 >= 0.5 && self.precip.1 > 0.0 {
+            self.precip.0.round()
+        } else {
+            0.0
+        };
         map(vec![
-            ("temperature", ApiValue::Num((self.temperature as f64 * 10.0).round() / 10.0)),
-            ("humidity", ApiValue::Num((self.relative_humidity() as f64 * 100.0).round() / 100.0)),
+            (
+                "temperature",
+                ApiValue::Num((self.temperature as f64 * 10.0).round() / 10.0),
+            ),
+            (
+                "humidity",
+                ApiValue::Num((self.relative_humidity() as f64 * 100.0).round() / 100.0),
+            ),
             ("visibility", ApiValue::Num(self.visibility.round() as f64)),
             ("clouds", ApiValue::Str(self.clouds.trim().to_string())),
             ("precip", ApiValue::Num(kind as f64)),
-            ("precipRate", ApiValue::Num(if kind > 0.0 { ((self.precip.1 / 255.0).clamp(0.0, 1.0) as f64 * 100.0).round() / 100.0 } else { 0.0 })),
+            (
+                "precipRate",
+                ApiValue::Num(if kind > 0.0 {
+                    ((self.precip.1 / 255.0).clamp(0.0, 1.0) as f64 * 100.0).round() / 100.0
+                } else {
+                    0.0
+                }),
+            ),
         ])
     }
 }
@@ -179,7 +219,10 @@ pub fn departures(by_key: &std::collections::HashMap<String, Vec<Departure>>) ->
                             ("destination", ApiValue::Str(d.destination.clone())),
                             ("time", ApiValue::Num(d.time.round())),
                             ("stopsAway", opt(d.stops_away.map(|n| n as f64))),
-                            ("load", opt(d.load.map(|l| (l as f64 * 100.0).round() / 100.0))),
+                            (
+                                "load",
+                                opt(d.load.map(|l| (l as f64 * 100.0).round() / 100.0)),
+                            ),
                             ("delaySec", opt(d.delay.map(f64::round))),
                             ("lastTrip", ApiValue::Bool(d.last_trip)),
                         ])
@@ -291,7 +334,11 @@ const MAX_PAX_DOORS: usize = 8;
 
 /// `HH:MM` of a time in seconds since midnight (wraps at 24 h).
 fn hhmm(sec: f64) -> String {
-    let s = if sec.is_finite() { sec.round() as i64 } else { 0 };
+    let s = if sec.is_finite() {
+        sec.round() as i64
+    } else {
+        0
+    };
     let s = s.rem_euclid(86_400);
     format!("{:02}:{:02}", s / 3600, (s % 3600) / 60)
 }
@@ -322,7 +369,13 @@ pub struct RouteInputs<'a> {
     pub next: i32,
 }
 
-fn stop_value(k: usize, name: &str, times: Option<(f64, f64)>, served: bool, current: bool) -> ApiValue {
+fn stop_value(
+    k: usize,
+    name: &str,
+    times: Option<(f64, f64)>,
+    served: bool,
+    current: bool,
+) -> ApiValue {
     let (arr, dep) = match times {
         Some((a, d)) => (Some(a), Some(d)),
         None => (None, None),
@@ -348,21 +401,43 @@ pub fn route(i: &RouteInputs) -> ApiValue {
     let var = i.var;
     let n = i.stops.len();
     let active = n > 0;
-    let next = if active { i.next.clamp(0, n as i32 - 1) as usize } else { 0 };
+    let next = if active {
+        i.next.clamp(0, n as i32 - 1) as usize
+    } else {
+        0
+    };
     let ibis_line = var("IBIS_LinieKurs");
-    let route_index = var("IBIS_RouteIndex").filter(|r| *r >= 0.0).map(|r| r.round() as usize);
+    let route_index = var("IBIS_RouteIndex")
+        .filter(|r| *r >= 0.0)
+        .map(|r| r.round() as usize);
 
     let (stops, source): (Vec<ApiValue>, &str) = if active {
         let list = i
             .stops
             .iter()
             .enumerate()
-            .map(|(k, (name, arr, dep))| stop_value(k, name, Some((*arr as f64, *dep as f64)), k < next, k == next))
+            .map(|(k, (name, arr, dep))| {
+                stop_value(
+                    k,
+                    name,
+                    Some((*arr as f64, *dep as f64)),
+                    k < next,
+                    k == next,
+                )
+            })
             .collect();
         (list, "timetable")
     } else if let (Some(h), Some(r)) = (i.hof, route_index) {
-        let idents = h.info_busstop_lists.get(r).map(|l| l.as_slice()).unwrap_or(&[]);
-        let list = idents.iter().enumerate().map(|(k, id)| stop_value(k, &stop_name(h, id), None, false, false)).collect();
+        let idents = h
+            .info_busstop_lists
+            .get(r)
+            .map(|l| l.as_slice())
+            .unwrap_or(&[]);
+        let list = idents
+            .iter()
+            .enumerate()
+            .map(|(k, id)| stop_value(k, &stop_name(h, id), None, false, false))
+            .collect();
         (list, "ibis")
     } else {
         (Vec::new(), "none")
@@ -380,9 +455,16 @@ pub fn route(i: &RouteInputs) -> ApiValue {
     };
     let terminus = stops.last().cloned().unwrap_or(ApiValue::Null);
 
-    let line = if !i.line.trim().is_empty() { i.line.trim().to_string() } else { (i.text)("IBIS_Complex_Line").trim().to_string() };
+    let line = if !i.line.trim().is_empty() {
+        i.line.trim().to_string()
+    } else {
+        (i.text)("IBIS_Complex_Line").trim().to_string()
+    };
     let line = if line.is_empty() {
-        ibis_line.filter(|n| *n > 0.5).map(|n| format!("{}", n.round() as i64)).unwrap_or_default()
+        ibis_line
+            .filter(|n| *n > 0.5)
+            .map(|n| format!("{}", n.round() as i64))
+            .unwrap_or_default()
     } else {
         line
     };
@@ -391,9 +473,19 @@ pub fn route(i: &RouteInputs) -> ApiValue {
         ("active", ApiValue::Bool(active)),
         ("source", ApiValue::Str(source.to_string())),
         ("line", ApiValue::Str(line)),
-        ("destination", ApiValue::Str((i.text)("IBIS_terminus_name").trim().to_string())),
+        (
+            "destination",
+            ApiValue::Str((i.text)("IBIS_terminus_name").trim().to_string()),
+        ),
         ("delaySec", num(i.delay_s, 0)),
-        ("nextIndex", if active { ApiValue::Num(next as f64) } else { ApiValue::Null }),
+        (
+            "nextIndex",
+            if active {
+                ApiValue::Num(next as f64)
+            } else {
+                ApiValue::Null
+            },
+        ),
         ("current", current),
         ("terminus", terminus),
         ("stops", ApiValue::List(stops)),
@@ -419,32 +511,59 @@ pub fn route(i: &RouteInputs) -> ApiValue {
 /// * `lines[]`: `line` and its `routes[]` (the same objects), in the depot file's order.
 /// * `destinations[i]`: `index`, `code`, `id`, `name`.
 pub fn depot(h: &Hof) -> ApiValue {
-    let first_string = |ti: Option<usize>| ti.and_then(|t| h.termini.get(t)).map(|t| t.display_name()).unwrap_or_default();
+    let first_string = |ti: Option<usize>| {
+        ti.and_then(|t| h.termini.get(t))
+            .map(|t| t.display_name())
+            .unwrap_or_default()
+    };
     let mut routes: Vec<ApiValue> = Vec::new();
     let mut lines: Vec<(String, Vec<ApiValue>)> = Vec::new();
     for (i, t) in h.info_trips.iter().enumerate() {
         let terminus_code = omsi_cfg::parse_i32(&t.route);
         let ti = h.termini.iter().position(|x| x.code == terminus_code);
-        let names: Vec<String> = h.info_busstop_lists.get(i).map(|l| l.iter().map(|s| stop_name(h, s)).collect()).unwrap_or_default();
+        let names: Vec<String> = h
+            .info_busstop_lists
+            .get(i)
+            .map(|l| l.iter().map(|s| stop_name(h, s)).collect())
+            .unwrap_or_default();
         let code = omsi_cfg::parse_i32(&t.code);
         // `code` = line x 100 + route (the depot file's own rule); many depot files leave the
         // line column as a placeholder ("XXX"), so the line then comes from the code
         let raw_line = t.line.trim();
         let placeholder = raw_line.is_empty() || raw_line.chars().all(|c| c == 'x' || c == 'X');
-        let line = if placeholder && code >= 100 { (code / 100).to_string() } else { raw_line.to_string() };
+        let line = if placeholder && code >= 100 {
+            (code / 100).to_string()
+        } else {
+            raw_line.to_string()
+        };
         let r = map(vec![
             ("index", ApiValue::Num(i as f64)),
             ("code", ApiValue::Num(code as f64)),
             ("name", ApiValue::Str(t.name.trim().to_string())),
             ("line", ApiValue::Str(line.clone())),
             ("terminusCode", ApiValue::Num(terminus_code as f64)),
-            ("destinationIndex", ApiValue::Num(ti.map_or(-1.0, |x| x as f64))),
+            (
+                "destinationIndex",
+                ApiValue::Num(ti.map_or(-1.0, |x| x as f64)),
+            ),
             ("destination", ApiValue::Str(first_string(ti))),
-            ("first", ApiValue::Str(names.first().cloned().unwrap_or_default())),
-            ("last", ApiValue::Str(names.last().cloned().unwrap_or_default())),
-            ("stops", ApiValue::List(names.into_iter().map(ApiValue::Str).collect())),
+            (
+                "first",
+                ApiValue::Str(names.first().cloned().unwrap_or_default()),
+            ),
+            (
+                "last",
+                ApiValue::Str(names.last().cloned().unwrap_or_default()),
+            ),
+            (
+                "stops",
+                ApiValue::List(names.into_iter().map(ApiValue::Str).collect()),
+            ),
         ]);
-        match lines.iter_mut().find(|(l, _)| l.eq_ignore_ascii_case(&line)) {
+        match lines
+            .iter_mut()
+            .find(|(l, _)| l.eq_ignore_ascii_case(&line))
+        {
             Some((_, v)) => v.push(r.clone()),
             None => lines.push((line, vec![r.clone()])),
         }
@@ -463,7 +582,10 @@ pub fn depot(h: &Hof) -> ApiValue {
                 // the terminus strings as the depot file has them (`GetTerminusString`'s
                 // indices): a page that draws the destination sign itself finds the
                 // Krueger/K++ bitmap names (`{{folder\file.png*POLY}}`) here
-                ("strings", ApiValue::List(t.strings.iter().map(|s| ApiValue::Str(s.clone())).collect())),
+                (
+                    "strings",
+                    ApiValue::List(t.strings.iter().map(|s| ApiValue::Str(s.clone())).collect()),
+                ),
             ])
         })
         .collect();
@@ -477,10 +599,19 @@ pub fn depot(h: &Hof) -> ApiValue {
         h.info_busstop_lists.len()
     );
     if h.info_trips.is_empty() {
-        log::warn!("omsi.depot '{}': no [infosystem_trip] entries parsed, omsi.depot.routes stays empty", h.name.trim());
+        log::warn!(
+            "omsi.depot '{}': no [infosystem_trip] entries parsed, omsi.depot.routes stays empty",
+            h.name.trim()
+        );
     }
     for (i, t) in h.info_trips.iter().enumerate().take(40) {
-        log::info!("omsi.depot route #{i}: code={:?} name={:?} route={:?} line(file)={:?}", t.code, t.name, t.route, t.line);
+        log::info!(
+            "omsi.depot route #{i}: code={:?} name={:?} route={:?} line(file)={:?}",
+            t.code,
+            t.name,
+            t.route,
+            t.line
+        );
     }
     map(vec![
         ("name", ApiValue::Str(h.name.clone())),
@@ -489,7 +620,12 @@ pub fn depot(h: &Hof) -> ApiValue {
             ApiValue::List(
                 lines
                     .into_iter()
-                    .map(|(line, rs)| map(vec![("line", ApiValue::Str(line)), ("routes", ApiValue::List(rs))]))
+                    .map(|(line, rs)| {
+                        map(vec![
+                            ("line", ApiValue::Str(line)),
+                            ("routes", ApiValue::List(rs)),
+                        ])
+                    })
                     .collect(),
             ),
         ),
@@ -519,7 +655,8 @@ pub fn snapshot(i: &Inputs) -> ApiValue {
     ]);
 
     // ---- motion
-    let odometer = var("kmcounter_km").map(|km| km as f64 + var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0);
+    let odometer =
+        var("kmcounter_km").map(|km| km as f64 + var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0);
     let motion = map(vec![
         ("speedKmh", num(i.speed_kmh, 1)),
         ("heading", ApiValue::Num(round_dp(i.heading, 1))),
@@ -529,13 +666,22 @@ pub fn snapshot(i: &Inputs) -> ApiValue {
         ("x", ApiValue::Num(round_dp(i.position.0, 2))),
         ("y", ApiValue::Num(round_dp(i.position.1, 2))),
         ("z", ApiValue::Num(round_dp(i.position.2, 2))),
-        ("odometerKm", odometer.map_or(ApiValue::Null, |v| ApiValue::Num(round_dp(v, 3)))),
+        (
+            "odometerKm",
+            odometer.map_or(ApiValue::Null, |v| ApiValue::Num(round_dp(v, 3))),
+        ),
     ]);
 
     // ---- engine (`engine_n` is in rpm)
     let engine = map(vec![
         ("running", flag_val(i.engine_running)),
-        ("rpm", opt(first(&["engine_n", "engine_rpm", "motor_n", "motor_rpm"]), 0)),
+        (
+            "rpm",
+            opt(
+                first(&["engine_n", "engine_rpm", "motor_n", "motor_rpm"]),
+                0,
+            ),
+        ),
         ("throttle", opt(var("throttle"), 2)),
         ("brake", opt(var("brake"), 2)),
         ("clutch", opt(var("clutch"), 2)),
@@ -554,7 +700,8 @@ pub fn snapshot(i: &Inputs) -> ApiValue {
     ]);
     let battery = map(vec![(
         "on",
-        opt_flag(&["elec_battery_on", "battery_on", "batterie_on"]).map_or(ApiValue::Null, ApiValue::Bool),
+        opt_flag(&["elec_battery_on", "battery_on", "batterie_on"])
+            .map_or(ApiValue::Null, ApiValue::Bool),
     )]);
 
     // ---- doors: `door_0`, `door_1` ... as far as the bus has them (0 shut, 1 open)
@@ -589,7 +736,10 @@ pub fn snapshot(i: &Inputs) -> ApiValue {
     };
     let entries = pax("Entry");
     let exits = pax("Exit");
-    let pax_open = entries.iter().chain(exits.iter()).any(|d| d.get("open") == Some(&ApiValue::Bool(true)));
+    let pax_open = entries
+        .iter()
+        .chain(exits.iter())
+        .any(|d| d.get("open") == Some(&ApiValue::Bool(true)));
     // what the passengers are told is open, where the bus has that; else the door leaves
     // (the same rule the game's own hints use)
     let any_open = if entries.is_empty() && exits.is_empty() {
@@ -611,7 +761,8 @@ pub fn snapshot(i: &Inputs) -> ApiValue {
     // ---- lights
     let headlights = if on("lights_fern") {
         3
-    } else if on("lights_abbl") || on("lights_main") || var("Spot_Select").is_some_and(|s| s >= 0.0) {
+    } else if on("lights_abbl") || on("lights_main") || var("Spot_Select").is_some_and(|s| s >= 0.0)
+    {
         2
     } else if on("lights_stand") {
         1
@@ -648,11 +799,28 @@ pub fn snapshot(i: &Inputs) -> ApiValue {
 
     // ---- brakes, wipers, cabin, condition, train
     let brakes = map(vec![
-        ("parking", flag_val(flag(&["bremse_feststell", "parking_brake"]))),
-        ("stop", flag_val(flag(&["bremse_halte", "bremse_halte_sw", "bus_stop_brake"]))),
-        ("kneeling", flag_val(flag(&["bremse_kneeling", "vdv_kneel", "ecas_kneel", "kneeling"]))),
+        (
+            "parking",
+            flag_val(flag(&["bremse_feststell", "parking_brake"])),
+        ),
+        (
+            "stop",
+            flag_val(flag(&["bremse_halte", "bremse_halte_sw", "bus_stop_brake"])),
+        ),
+        (
+            "kneeling",
+            flag_val(flag(&[
+                "bremse_kneeling",
+                "vdv_kneel",
+                "ecas_kneel",
+                "kneeling",
+            ])),
+        ),
     ]);
-    let wipers = map(vec![("running", flag_val(flag(&["wiperrunning", "wiper_running"])))]);
+    let wipers = map(vec![(
+        "running",
+        flag_val(flag(&["wiperrunning", "wiper_running"])),
+    )]);
     let cabin = map(vec![("temperature", opt(var("Cabinair_Temp"), 1))]);
     let condition = map(vec![
         ("dirt", num(i.dirt, 2)),
@@ -728,8 +896,14 @@ mod tests {
     use std::collections::HashMap;
 
     fn snap(vars: &[(&str, f32)], texts: &[(&str, &str)]) -> ApiValue {
-        let v: HashMap<String, f32> = vars.iter().map(|(k, x)| (k.to_ascii_lowercase(), *x)).collect();
-        let t: HashMap<String, String> = texts.iter().map(|(k, x)| (k.to_string(), x.to_string())).collect();
+        let v: HashMap<String, f32> = vars
+            .iter()
+            .map(|(k, x)| (k.to_ascii_lowercase(), *x))
+            .collect();
+        let t: HashMap<String, String> = texts
+            .iter()
+            .map(|(k, x)| (k.to_string(), x.to_string()))
+            .collect();
         let var = move |n: &str| v.get(&n.to_ascii_lowercase()).copied();
         let text = move |n: &str| t.get(n).cloned().unwrap_or_default();
         snapshot(&Inputs {
@@ -751,10 +925,11 @@ mod tests {
     }
 
     fn at<'a>(v: &'a ApiValue, path: &str) -> &'a ApiValue {
-        path.split('.').fold(v, |cur, key| match (cur, key.parse::<usize>()) {
-            (ApiValue::List(l), Ok(n)) => &l[n],
-            _ => cur.get(key).unwrap_or_else(|| panic!("no {key} in {path}")),
-        })
+        path.split('.')
+            .fold(v, |cur, key| match (cur, key.parse::<usize>()) {
+                (ApiValue::List(l), Ok(n)) => &l[n],
+                _ => cur.get(key).unwrap_or_else(|| panic!("no {key} in {path}")),
+            })
     }
 
     #[test]
@@ -790,11 +965,21 @@ mod tests {
     #[test]
     fn what_the_passengers_are_told_decides_whether_a_door_is_open() {
         // a mod bus whose `door_0` is something else, but whose boarding doors are shut
-        let s = snap(&[("door_0", 1.0), ("PAX_Entry0_Open", 0.0), ("PAX_Exit0_Open", 0.0)], &[]);
+        let s = snap(
+            &[
+                ("door_0", 1.0),
+                ("PAX_Entry0_Open", 0.0),
+                ("PAX_Exit0_Open", 0.0),
+            ],
+            &[],
+        );
         assert_eq!(at(&s, "doors.anyOpen"), &ApiValue::Bool(false));
         let o = snap(&[("PAX_Entry0_Open", 1.0), ("PAX_Entry0_Req", 1.0)], &[]);
         assert_eq!(at(&o, "doors.anyOpen"), &ApiValue::Bool(true));
-        assert_eq!(at(&o, "passengers.entries.0.requested"), &ApiValue::Bool(true));
+        assert_eq!(
+            at(&o, "passengers.entries.0.requested"),
+            &ApiValue::Bool(true)
+        );
     }
 
     #[test]
@@ -817,15 +1002,36 @@ mod tests {
         assert_eq!(at(&s, "lights.indicator"), &ApiValue::Num(1.0));
         assert_eq!(at(&s, "brakes.parking"), &ApiValue::Bool(true));
         assert_eq!(at(&s, "info.number"), &ApiValue::Str("4711".into()));
-        assert_eq!(at(&s, "info.nextStop"), &ApiValue::Str("Hauptbahnhof".into()));
+        assert_eq!(
+            at(&s, "info.nextStop"),
+            &ApiValue::Str("Hauptbahnhof".into())
+        );
     }
 
     #[test]
     fn a_timetable_gives_the_route_with_its_stops() {
         let var = |_: &str| -> Option<f32> { None };
-        let text = |n: &str| if n == "IBIS_terminus_name" { " Hauptbahnhof ".to_string() } else { String::new() };
-        let stops = vec![("Depot".to_string(), 3600.0, 3660.0), ("Markt".to_string(), 3900.0, 3930.0), ("Bahnhof".to_string(), 4500.0, 4500.0)];
-        let r = route(&RouteInputs { var: &var, text: &text, hof: None, line: " 5E ", delay_s: 61.4, stops: &stops, next: 1 });
+        let text = |n: &str| {
+            if n == "IBIS_terminus_name" {
+                " Hauptbahnhof ".to_string()
+            } else {
+                String::new()
+            }
+        };
+        let stops = vec![
+            ("Depot".to_string(), 3600.0, 3660.0),
+            ("Markt".to_string(), 3900.0, 3930.0),
+            ("Bahnhof".to_string(), 4500.0, 4500.0),
+        ];
+        let r = route(&RouteInputs {
+            var: &var,
+            text: &text,
+            hof: None,
+            line: " 5E ",
+            delay_s: 61.4,
+            stops: &stops,
+            next: 1,
+        });
         assert_eq!(at(&r, "active"), &ApiValue::Bool(true));
         assert_eq!(at(&r, "line"), &ApiValue::Str("5E".into()));
         assert_eq!(at(&r, "destination"), &ApiValue::Str("Hauptbahnhof".into()));
@@ -843,7 +1049,15 @@ mod tests {
     fn without_a_timetable_the_route_is_quiet() {
         let var = |_: &str| -> Option<f32> { None };
         let text = |_: &str| String::new();
-        let r = route(&RouteInputs { var: &var, text: &text, hof: None, line: "", delay_s: 0.0, stops: &[], next: 0 });
+        let r = route(&RouteInputs {
+            var: &var,
+            text: &text,
+            hof: None,
+            line: "",
+            delay_s: 0.0,
+            stops: &[],
+            next: 0,
+        });
         assert_eq!(at(&r, "active"), &ApiValue::Bool(false));
         assert_eq!(at(&r, "current"), &ApiValue::Null);
         assert_eq!(at(&r, "terminus"), &ApiValue::Null);
@@ -852,7 +1066,10 @@ mod tests {
 
     #[test]
     fn the_indicator_switch_wins_over_the_lamps() {
-        let s = snap(&[("lights_sw_blinker", 2.0), ("lights_blinker_l", 1.0)], &[]);
+        let s = snap(
+            &[("lights_sw_blinker", 2.0), ("lights_blinker_l", 1.0)],
+            &[],
+        );
         assert_eq!(at(&s, "lights.indicator"), &ApiValue::Num(2.0));
         let h = snap(&[("lights_sw_warnblinker", 1.0)], &[]);
         assert_eq!(at(&h, "lights.hazard"), &ApiValue::Bool(true));
@@ -864,12 +1081,28 @@ mod tests {
         by.insert(
             "harbor a".to_string(),
             vec![
-                Departure { line: "221".into(), destination: "X".into(), time: 100.4, stops_away: Some(2), load: Some(0.456), delay: Some(95.6), last_trip: true },
-                Departure { line: "1".into(), destination: "Y".into(), time: 200.0, ..Default::default() },
+                Departure {
+                    line: "221".into(),
+                    destination: "X".into(),
+                    time: 100.4,
+                    stops_away: Some(2),
+                    load: Some(0.456),
+                    delay: Some(95.6),
+                    last_trip: true,
+                },
+                Departure {
+                    line: "1".into(),
+                    destination: "Y".into(),
+                    time: 200.0,
+                    ..Default::default()
+                },
             ],
         );
         let v = departures(&by);
-        let l = match v.get("harbor a") { Some(ApiValue::List(l)) => l.clone(), _ => panic!() };
+        let l = match v.get("harbor a") {
+            Some(ApiValue::List(l)) => l.clone(),
+            _ => panic!(),
+        };
         assert_eq!(l[0].get("stopsAway"), Some(&ApiValue::Num(2.0)));
         assert_eq!(l[0].get("load"), Some(&ApiValue::Num(0.46)));
         assert_eq!(l[0].get("delaySec"), Some(&ApiValue::Num(96.0)));
@@ -881,7 +1114,13 @@ mod tests {
 
     #[test]
     fn the_weather_reaches_the_environment() {
-        let w = PageWeather { temperature: 14.0, abs_humidity: 6.0, visibility: 49999.9, clouds: "AddOn - Cumulus 7".into(), precip: (1.0, 127.5) };
+        let w = PageWeather {
+            temperature: 14.0,
+            abs_humidity: 6.0,
+            visibility: 49999.9,
+            clouds: "AddOn - Cumulus 7".into(),
+            precip: (1.0, 127.5),
+        };
         // 14 °C holds about 12 g/m³: 6 g/m³ is half
         assert!((w.relative_humidity() - 0.5).abs() < 0.03);
         set_page_weather(w);
@@ -889,7 +1128,10 @@ mod tests {
         let x = env.get("weather").unwrap();
         assert_eq!(x.get("temperature"), Some(&ApiValue::Num(14.0)));
         assert_eq!(x.get("visibility"), Some(&ApiValue::Num(50000.0)));
-        assert_eq!(x.get("clouds"), Some(&ApiValue::Str("AddOn - Cumulus 7".into())));
+        assert_eq!(
+            x.get("clouds"),
+            Some(&ApiValue::Str("AddOn - Cumulus 7".into()))
+        );
         assert_eq!(x.get("precip"), Some(&ApiValue::Num(1.0)));
         assert_eq!(x.get("precipRate"), Some(&ApiValue::Num(0.5)));
     }

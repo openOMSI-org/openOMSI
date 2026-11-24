@@ -3,7 +3,15 @@
 use super::*;
 
 /// What `Pose::foot_targets` finds for the two feet (see there).
-type FootTargets = ([Vec3; 2], [Mat3A; 2], [f32; 2], [Vec3; 2], [f32; 2], [Option<(f32, f32, f32)>; 2], [f32; 2]);
+type FootTargets = (
+    [Vec3; 2],
+    [Mat3A; 2],
+    [f32; 2],
+    [Vec3; 2],
+    [f32; 2],
+    [Option<(f32, f32, f32)>; 2],
+    [f32; 2],
+);
 
 impl Pose {
     /// Bone transforms for the current state.
@@ -24,7 +32,8 @@ impl Pose {
         let still = 1.0 - walk;
 
         // --- feet targets (model frame): ankle positions, foot yaw and pitch ---
-        let (mut ankle_t, mut foot_rot, toe_bend, foot_fwd, foot_yaw, swing, swing_floor) = self.foot_targets(rig, walk, beta);
+        let (mut ankle_t, mut foot_rot, toe_bend, foot_fwd, foot_yaw, swing, swing_floor) =
+            self.foot_targets(rig, walk, beta);
 
         // --- pelvis ---
         let sway = rig.hip_sway.sqrt();
@@ -33,7 +42,12 @@ impl Pose {
         let lat_idle = self.shift * still * (1.0 - s_ease);
         let run = run_factor(self.speed);
         // (each person bounces, swings the arms and leans walking in a way of their own)
-        let bob = -0.018 * rig.scale * intensity * (1.0 + 1.8 * run) * (1.0 + 0.3 * self.style[1]) * (0.5 + 0.5 * (2.0 * ph - 0.35).cos());
+        let bob = -0.018
+            * rig.scale
+            * intensity
+            * (1.0 + 1.8 * run)
+            * (1.0 + 0.3 * self.style[1])
+            * (0.5 + 0.5 * (2.0 * ph - 0.35).cos());
         let lean_acc = (self.accel * 1.8).clamp(-6.0, 7.0) * walk;
         let pelvis_roll = d(3.5) * sway * intensity * (ph - 0.35).sin()
             - d(2.2) * (self.shift / (0.03 * rig.scale)) * still * (1.0 - s_ease);
@@ -47,7 +61,9 @@ impl Pose {
         // (The whole body turns with them: the trunk's counter-turn is the gait's alone.)
         // (half as much while walking, whose steps follow the heading by themselves; none
         // seated)
-        let body_lag = -d(((foot_yaw[0] + foot_yaw[1]) * 0.5).clamp(-80.0, 80.0)) * (1.0 - 0.5 * walk) * (1.0 - s_ease);
+        let body_lag = -d(((foot_yaw[0] + foot_yaw[1]) * 0.5).clamp(-80.0, 80.0))
+            * (1.0 - 0.5 * walk)
+            * (1.0 - s_ease);
         // reaching for something far: bend at the hips and bring the right shoulder round
         let (reach_lean, reach_twist) = if self.reach > 0.0 {
             let v = self.reach_at - rig.shoulder[1];
@@ -62,14 +78,17 @@ impl Pose {
             (0.0, 0.0)
         };
         // a driver sits up, leaning towards the wheel
-        let grip_lean = d(16.0 + self.grip_extra.clamp(0.0, 30.0)) * smoothstep(0.0, 1.0, self.grip);
+        let grip_lean =
+            d(16.0 + self.grip_extra.clamp(0.0, 30.0)) * smoothstep(0.0, 1.0, self.grip);
         // forward tilt walking, backwards on a seat
-        let pelvis_tilt = d(2.0) * walk + d(11.0) * run - d(12.0) * s_ease + reach_lean * 0.5 + grip_lean * 0.7;
+        let pelvis_tilt =
+            d(2.0) * walk + d(11.0) * run - d(12.0) * s_ease + reach_lean * 0.5 + grip_lean * 0.7;
         // swaying with the bus: the body goes with the pull (forwards when it brakes, outwards
         // in a bend), less when holding on or sitting
         let lean_bus = self.lean * (1.0 - 0.4 * self.hold) * (1.0 - 0.4 * s_ease);
         let bus_shift = Vec3::new(lean_bus.x * 0.012, lean_bus.y * 0.012, 0.0) * (1.0 - s_ease);
-        let stand_z = rig.pelvis.z - 0.004 * rig.scale - 0.012 * walk - 0.035 * rig.scale * run + 0.002 * breath * still;
+        let stand_z = rig.pelvis.z - 0.004 * rig.scale - 0.012 * walk - 0.035 * rig.scale * run
+            + 0.002 * breath * still;
         let stand_c = Vec3::new(
             lat_walk + lat_idle,
             rig.pelvis.y + 0.02 * walk,
@@ -126,7 +145,9 @@ impl Pose {
         // 60 degrees on still shoulders, made a twisted, broken neck of every passenger
         // who looked at the driver)
         let trunk_yaw = -pelvis_yaw * 1.7
-            - d((self.head.x.clamp(-90.0, 90.0) * 0.42).clamp(-30.0, 30.0)) * (1.0 - walk) * (1.0 - self.reach)
+            - d((self.head.x.clamp(-90.0, 90.0) * 0.42).clamp(-30.0, 30.0))
+                * (1.0 - walk)
+                * (1.0 - self.reach)
             + reach_twist;
         let trunk_lean = d((3.0 + 2.0 * self.style[3]) * walk + 1.5 * self.style[3] + lean_acc)
             + d(34.0) * bump
@@ -187,7 +208,11 @@ impl Pose {
                 // legs went straight down from the seat as if kneeling)
                 let blend = ((sit - 0.5) * 2.0).clamp(0.0, 1.0);
                 // (a floor within reach of a hanging shin is stood on: the knee bends a little more)
-                let floor_z = if ankle_t[side].z >= hang.z - 0.12 { ankle_t[side].z } else { hang.z };
+                let floor_z = if ankle_t[side].z >= hang.z - 0.12 {
+                    ankle_t[side].z
+                } else {
+                    hang.z
+                };
                 let target = Vec3::new(hang.x, hang.y, floor_z);
                 ankle_t[side] = ankle_t[side] + (target - ankle_t[side]) * blend;
             }
@@ -195,7 +220,17 @@ impl Pose {
                 two_bone(hip_at, rig.thigh, rig.shin, ankle_t[side], pole);
             let side_v = hinge;
             if let Some((t, from, land)) = swing[side] {
-                let pitch = Self::swing_pitch(rig, t, from, land, knee_at, ankle_at, side_v, swing_floor, side);
+                let pitch = Self::swing_pitch(
+                    rig,
+                    t,
+                    from,
+                    land,
+                    knee_at,
+                    ankle_at,
+                    side_v,
+                    swing_floor,
+                    side,
+                );
                 foot_rot[side] =
                     Mat3A::from_quat(yaw_quat(foot_yaw[side]) * Quat::from_rotation_x(d(pitch)));
             }
@@ -239,7 +274,11 @@ impl Pose {
 
         // --- arms ---
         let run = run_factor(self.speed);
-        let arm_amp = d(17.0) * rig.arm_swing.powf(0.7) * intensity * (1.0 + 1.1 * run) * (1.0 + 0.5 * self.style[0]);
+        let arm_amp = d(17.0)
+            * rig.arm_swing.powf(0.7)
+            * intensity
+            * (1.0 + 1.1 * run)
+            * (1.0 + 0.5 * self.style[0]);
         for side in 0..2 {
             let s = SIDE[side];
             let sh_at = trunk_m.transform_point3(rig.shoulder[side]);
@@ -266,7 +305,9 @@ impl Pose {
             let hang_wrist = sh_at + trunk_rot * wrist_l;
             let hang_elbow = sh_at + trunk_rot * elbow_l;
             let hang_pole = hang_elbow - (sh_at + hang_wrist) * 0.5;
-            let (target, pole) = self.arm_target(rig, &posed, side, s, sh_at, hang_wrist, hang_pole, pelvis_q, sit);
+            let (target, pole) = self.arm_target(
+                rig, &posed, side, s, sh_at, hang_wrist, hang_pole, pelvis_q, sit,
+            );
             let (el_at, wr_at, _) = two_bone(sh_at, rig.upper_arm, rig.forearm, target, pole);
             let a1 = (el_at - sh_at).normalize_or(-Vec3::Z);
             let c1 = (wr_at - el_at).normalize_or(-Vec3::Z);
@@ -349,7 +390,9 @@ impl Pose {
                 let rise = (land.z - f.from_ankle.z) as f32;
                 let up = smoothstep(0.0, 0.06, rise);
                 let down = smoothstep(0.0, 0.06, -rise);
-                let zt = t * (1.0 - up - down) + smoothstep(0.0, 0.55, t) * up + smoothstep(0.35, 1.0, t) * down;
+                let zt = t * (1.0 - up - down)
+                    + smoothstep(0.0, 0.55, t) * up
+                    + smoothstep(0.35, 1.0, t) * down;
                 let bumpf = (PI * t.powf(0.75)).sin().max(0.0);
                 a.z = f.from_ankle.z
                     + (land.z - f.from_ankle.z) * zt as f64
@@ -370,13 +413,31 @@ impl Pose {
             foot_fwd[side] = yaw_quat(yaw_l) * Vec3::Y;
             foot_yaw[side] = yaw_l;
         }
-        (ankle_t, foot_rot, toe_bend, foot_fwd, foot_yaw, swing, swing_floor)
+        (
+            ankle_t,
+            foot_rot,
+            toe_bend,
+            foot_fwd,
+            foot_yaw,
+            swing,
+            swing_floor,
+        )
     }
 
     /// The pitch of a foot in the air (degrees): from the push-off through neutral to the heel
     /// strike, against the shin, with toes and heel clear of the floor.
     #[allow(clippy::too_many_arguments)]
-    fn swing_pitch(rig: &Rig, t: f32, from: f32, land: f32, knee_at: Vec3, ankle_at: Vec3, side_v: Vec3, swing_floor: [f32; 2], side: usize) -> f32 {
+    fn swing_pitch(
+        rig: &Rig,
+        t: f32,
+        from: f32,
+        land: f32,
+        knee_at: Vec3,
+        ankle_at: Vec3,
+        side_v: Vec3,
+        swing_floor: [f32; 2],
+        side: usize,
+    ) -> f32 {
         // in the air the ankle goes from pointed (push-off) through neutral to a
         // little flexed; the pitch is that against the shin, blended from the
         // push-off and into the heel strike
@@ -410,12 +471,22 @@ impl Pose {
     /// Where a hand goes and how its elbow points: hanging, on the lap, reaching for the desk
     /// or on the steering wheel.
     #[allow(clippy::too_many_arguments)]
-    fn arm_target(&self, rig: &Rig, posed: &Posed, side: usize, s: f32, sh_at: Vec3, hang_wrist: Vec3, hang_pole: Vec3, pelvis_q: Quat, sit: f32) -> (Vec3, Vec3) {
+    fn arm_target(
+        &self,
+        rig: &Rig,
+        posed: &Posed,
+        side: usize,
+        s: f32,
+        sh_at: Vec3,
+        hang_wrist: Vec3,
+        hang_pole: Vec3,
+        pelvis_q: Quat,
+        sit: f32,
+    ) -> (Vec3, Vec3) {
         // seated: hands on the thighs
         let hip_at = posed.hip[side];
         let knee_at = posed.knee[side];
-        let lap =
-            hip_at + (knee_at - hip_at) * 0.55 + Vec3::new(-s * 0.02, 0.0, 0.11 * rig.scale);
+        let lap = hip_at + (knee_at - hip_at) * 0.55 + Vec3::new(-s * 0.02, 0.0, 0.11 * rig.scale);
         let lap_pole = pelvis_q * Vec3::new(s * 0.5, -1.0, -0.2);
         let sit_w = smoothstep(0.35, 1.0, sit);
         let mut target = hang_wrist.lerp(lap, sit_w);
@@ -429,20 +500,44 @@ impl Pose {
                 let sc = rig.scale;
                 let (at, pole) = match w {
                     Idle::Hang => return None,
-                    Idle::Clasped => (Vec3::new(s * 0.035, 0.17, -0.07) * sc, Vec3::new(s, -0.3, -0.6)),
-                    Idle::Behind => (Vec3::new(s * 0.04, -0.17, -0.02) * sc, Vec3::new(s, 0.3, -0.5)),
-                    Idle::Crossed => (Vec3::new(s * 0.05 * sc, 0.21 * sc, up - 0.24 * sc + if side == 1 { 0.035 } else { 0.0 }), Vec3::new(s, -0.25, -0.35)),
-                    Idle::HandOnHip if (side == 1) == (self.style[2] > 0.0) => (Vec3::new(s * (rig.hip[1].x.abs() + 0.13 * sc), -0.02 * sc, 0.07 * sc), Vec3::new(s, -0.6, 0.1)),
+                    Idle::Clasped => (
+                        Vec3::new(s * 0.035, 0.17, -0.07) * sc,
+                        Vec3::new(s, -0.3, -0.6),
+                    ),
+                    Idle::Behind => (
+                        Vec3::new(s * 0.04, -0.17, -0.02) * sc,
+                        Vec3::new(s, 0.3, -0.5),
+                    ),
+                    Idle::Crossed => (
+                        Vec3::new(
+                            s * 0.05 * sc,
+                            0.21 * sc,
+                            up - 0.24 * sc + if side == 1 { 0.035 } else { 0.0 },
+                        ),
+                        Vec3::new(s, -0.25, -0.35),
+                    ),
+                    Idle::HandOnHip if (side == 1) == (self.style[2] > 0.0) => (
+                        Vec3::new(s * (rig.hip[1].x.abs() + 0.13 * sc), -0.02 * sc, 0.07 * sc),
+                        Vec3::new(s, -0.6, 0.1),
+                    ),
                     Idle::HandOnHip => return None,
-                    Idle::Phone if side == 1 => (Vec3::new(0.06 * sc, 0.27 * sc, up - 0.31 * sc), Vec3::new(s, -0.5, -1.0)),
-                    Idle::Phone => (Vec3::new(0.0, 0.25 * sc, up - 0.36 * sc), Vec3::new(s, -0.5, -1.0)),
+                    Idle::Phone if side == 1 => (
+                        Vec3::new(0.06 * sc, 0.27 * sc, up - 0.31 * sc),
+                        Vec3::new(s, -0.5, -1.0),
+                    ),
+                    Idle::Phone => (
+                        Vec3::new(0.0, 0.25 * sc, up - 0.36 * sc),
+                        Vec3::new(s, -0.5, -1.0),
+                    ),
                 };
                 Some((mid + pelvis_q * at, pelvis_q * pole))
             };
             let blend = |w: Idle| way(w).unwrap_or((target, pole));
             let (fa, fp) = blend(self.idle_from);
             let (ta, tp) = blend(self.idle_to);
-            let through_body = (self.idle_from == Idle::Behind) != (self.idle_to == Idle::Behind) && way(self.idle_from).is_some() && way(self.idle_to).is_some();
+            let through_body = (self.idle_from == Idle::Behind) != (self.idle_to == Idle::Behind)
+                && way(self.idle_from).is_some()
+                && way(self.idle_to).is_some();
             let (it, ip) = if !through_body {
                 let m = smoothstep(0.0, 1.0, self.idle_mix);
                 (fa.lerp(ta, m), fp.lerp(tp, m))
@@ -462,8 +557,7 @@ impl Pose {
             // not further than the arm, and not through the body
             let v = reach_to - sh_at;
             let reach_to = sh_at
-                + v.normalize_or(Vec3::Y)
-                    * v.length().min((rig.upper_arm + rig.forearm) * 0.96);
+                + v.normalize_or(Vec3::Y) * v.length().min((rig.upper_arm + rig.forearm) * 0.96);
             target = target.lerp(reach_to, r);
             pole = pole.lerp(Vec3::new(0.6, -0.3, -1.0), r);
         }

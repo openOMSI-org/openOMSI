@@ -19,6 +19,9 @@ struct Lighting<'a> {
     enh_buf: &'a mx::Buffer,
     lin_sampler: &'a mx::Sampler,
     sky_lut_view: &'a mx::TextureView,
+    /// The clouds' base volume and curl map (the passes that march them).
+    cloud_base: &'a mx::TextureView,
+    cloud_curl: &'a mx::TextureView,
 }
 
 pub(crate) fn build(
@@ -30,7 +33,7 @@ pub(crate) fn build(
     with_probe: bool,
 ) -> Enhanced {
     // --- enhanced lighting: the uniform, the sky table, the reflection probe
-    let enh_buf = uniform_buffer(
+    let enh_buf = frame_buffer(
         device,
         "enhanced lighting",
         std::mem::size_of::<EnhancedUniform>() as u64,
@@ -70,6 +73,8 @@ pub(crate) fn build(
         enh_buf: &enh_buf,
         lin_sampler: &lin_sampler,
         sky_lut_view: &sky_lut_view,
+        cloud_base: &sky.cloud_base_view,
+        cloud_curl: &sky.cloud_curl_view,
     };
     let probe = with_probe.then(|| probe(device, queue, hdr_format, &lighting, sky));
     Enhanced {
@@ -83,41 +88,53 @@ pub(crate) fn build(
 
 /// A bind group of the probe's layout reading `src` with the pass parameters in `pass`.
 fn probe_bind_group(
-    device: &mx::Device,
+    layout: &crate::shaders::HeapLayout,
     label: &str,
     lighting: &Lighting,
     pass: &mx::Buffer,
     src: &mx::TextureView,
-) -> mx::BindGroup {
-    device.create_bind_group(&mx::BindGroupDescriptor {
-        label: Some(label),
-        entries: &[
-            mx::BindGroupEntry {
-                binding: 0,
-                resource: lighting.camera_buf.as_entire_binding(),
-            },
-            mx::BindGroupEntry {
-                binding: 11,
-                resource: lighting.enh_buf.as_entire_binding(),
-            },
-            mx::BindGroupEntry {
-                binding: 13,
-                resource: mx::BindingResource::Sampler(lighting.lin_sampler),
-            },
-            mx::BindGroupEntry {
-                binding: 14,
-                resource: mx::BindingResource::TextureView(lighting.sky_lut_view),
-            },
-            mx::BindGroupEntry {
-                binding: 15,
-                resource: pass.as_entire_binding(),
-            },
-            mx::BindGroupEntry {
-                binding: 16,
-                resource: mx::BindingResource::TextureView(src),
-            },
-        ],
-    })
+) -> HeapGroup {
+    HeapGroup::of(
+        layout,
+        0,
+        &mx::BindGroupDescriptor {
+            label: Some(label),
+            entries: &[
+                mx::BindGroupEntry {
+                    binding: 0,
+                    resource: lighting.camera_buf.as_entire_binding(),
+                },
+                mx::BindGroupEntry {
+                    binding: 11,
+                    resource: lighting.enh_buf.as_entire_binding(),
+                },
+                mx::BindGroupEntry {
+                    binding: 13,
+                    resource: mx::BindingResource::Sampler(lighting.lin_sampler),
+                },
+                mx::BindGroupEntry {
+                    binding: 14,
+                    resource: mx::BindingResource::TextureView(lighting.sky_lut_view),
+                },
+                mx::BindGroupEntry {
+                    binding: 15,
+                    resource: pass.as_entire_binding(),
+                },
+                mx::BindGroupEntry {
+                    binding: 16,
+                    resource: mx::BindingResource::TextureView(src),
+                },
+                mx::BindGroupEntry {
+                    binding: 20,
+                    resource: mx::BindingResource::TextureView(lighting.cloud_base),
+                },
+                mx::BindGroupEntry {
+                    binding: 21,
+                    resource: mx::BindingResource::TextureView(lighting.cloud_curl),
+                },
+            ],
+        },
+    )
 }
 
 fn probe(
@@ -209,10 +226,7 @@ fn probe(
             sample_count: 1,
             dimension: mx::TextureDimension::D2,
             format: hdr_format,
-            // (copied into: the cube for a new eye is filled beside it, see `SkySched`)
-            usage: mx::TextureUsages::RENDER_ATTACHMENT
-                | mx::TextureUsages::TEXTURE_BINDING
-                | mx::TextureUsages::COPY_DST,
+            usage: mx::TextureUsages::RENDER_ATTACHMENT | mx::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         })
         .expect("mX: a texture");
@@ -239,9 +253,9 @@ fn probe(
                     queue,
                     Some("probe pass"),
                     bytemuck::cast_slice(&[first as f32, rough, PROBE_SIZE as f32, m as f32]),
-                    mx::BufferUsages::UNIFORM,
+                    mx::BufferUsages::UNIFORM | mx::BufferUsages::STORAGE,
                 );
-                probe_bind_group(device, "probe", lighting, &buf, &src)
+                probe_bind_group(&sky.layout, "probe", lighting, &buf, &src)
             })
         })
         .collect();
@@ -268,7 +282,7 @@ fn probe(
         })
         .collect();
     // per face and redraw round: the round picks where the clouds' steps start
-    let cube_bind_groups: Vec<mx::BindGroup> = (0..6 * SKY_CUBE_ROUNDS)
+    let cube_bind_groups: Vec<HeapGroup> = (0..6 * SKY_CUBE_ROUNDS)
         .map(|k| {
             let (f, round) = (k / SKY_CUBE_ROUNDS, k % SKY_CUBE_ROUNDS);
             let buf = buffer_init(
@@ -276,9 +290,9 @@ fn probe(
                 queue,
                 Some("sky cube face"),
                 bytemuck::cast_slice(&[f as f32, round as f32, SKY_CUBE_SIZE as f32, 0.0]),
-                mx::BufferUsages::UNIFORM,
+                mx::BufferUsages::UNIFORM | mx::BufferUsages::STORAGE,
             );
-            probe_bind_group(device, "sky cube", lighting, &buf, &dummy_view)
+            probe_bind_group(&sky.layout, "sky cube", lighting, &buf, &dummy_view)
         })
         .collect();
     // a redraw is blended into what the face holds (the blend constant is
@@ -303,6 +317,14 @@ fn probe(
     )
     .vs("vs_probe")
     .create(device);
+    let clouds = crate::cloud_pass::CloudPass::new(
+        device,
+        queue,
+        &sky.shader,
+        &sky.layout,
+        lighting.lin_sampler,
+        &|round| probe_bind_group(&sky.layout, "cloud trace", lighting, round, &dummy_view),
+    );
     Probe {
         view,
         faces,
@@ -310,15 +332,13 @@ fn probe(
         sky_pipeline: probe_pipeline("fs_probe_sky"),
         filter_pipeline: probe_pipeline("fs_probe_filter"),
         scale: 1.0,
-        cube_view,
-        cube_tex,
         cube_faces,
         cube_bind_groups,
         cube_pipeline,
         cube_next: 0,
         cube_filled: false,
         cube_round: 0,
-        cube_eye: None,
         sched: SkySched::default(),
+        clouds,
     }
 }

@@ -1,8 +1,6 @@
 //! Reserve the host's state and content transports before announcing the session.
 
-use super::{
-    LanSession, PORT_RANGE, PROTOCOL, Role, WorldInfo, bridge, hostkey, local_addrs,
-};
+use super::{LanSession, PORT_RANGE, PROTOCOL, Role, WorldInfo, bridge, hostkey, local_addrs};
 use std::io::{self, Read};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::time::{Duration, Instant};

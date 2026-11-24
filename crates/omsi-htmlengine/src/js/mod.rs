@@ -123,12 +123,15 @@ pub(crate) enum Stmt {
     Continue,
 }
 
-
 pub(crate) fn fmt_num(n: f64) -> String {
     if n.is_nan() {
         "NaN".into()
     } else if n.is_infinite() {
-        if n > 0.0 { "Infinity".into() } else { "-Infinity".into() }
+        if n > 0.0 {
+            "Infinity".into()
+        } else {
+            "-Infinity".into()
+        }
     } else if n.fract() == 0.0 && n.abs() < 1e15 {
         format!("{}", n as i64)
     } else {
@@ -143,7 +146,13 @@ pub(crate) fn to_str(v: &Val) -> String {
         Val::Bool(b) => b.to_string(),
         Val::Num(n) => fmt_num(*n),
         Val::Str(s) => s.clone(),
-        Val::Arr(a) => a.lock().unwrap().iter().map(to_str).collect::<Vec<_>>().join(","),
+        Val::Arr(a) => a
+            .lock()
+            .unwrap()
+            .iter()
+            .map(to_str)
+            .collect::<Vec<_>>()
+            .join(","),
         Val::Obj(_) | Val::Elem(_) | Val::Style(_) | Val::ClassList(_) => "[object Object]".into(),
         Val::Func(_) | Val::Nat(_) => "function".into(),
     }
@@ -217,5 +226,10 @@ pub(crate) fn kebab(s: &str) -> String {
 }
 
 pub(crate) fn obj_of(props: &[(&str, Val)]) -> ObjRef {
-    Arc::new(Mutex::new(props.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()))
+    Arc::new(Mutex::new(
+        props
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect(),
+    ))
 }

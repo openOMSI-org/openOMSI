@@ -44,7 +44,12 @@ pub(crate) struct AttrSel {
 pub(crate) enum Pseudo {
     /// `:nth-child(an+b)` and its relatives (`:first-child` is 0n+1, `:last-child` counts from
     /// the end); `of_type` counts only siblings of the same tag.
-    Nth { a: i32, b: i32, from_last: bool, of_type: bool },
+    Nth {
+        a: i32,
+        b: i32,
+        from_last: bool,
+        of_type: bool,
+    },
     OnlyChild,
     Empty,
     Root,
@@ -107,7 +112,9 @@ pub(crate) struct Dom {
     pub(crate) generation: u64,
 }
 
-pub(crate) const VOID: &[&str] = &["br", "img", "hr", "meta", "link", "input", "area", "base", "col", "source", "wbr"];
+pub(crate) const VOID: &[&str] = &[
+    "br", "img", "hr", "meta", "link", "input", "area", "base", "col", "source", "wbr",
+];
 
 pub(crate) fn decode_entities(s: &str) -> String {
     if !s.contains('&') {
@@ -172,11 +179,7 @@ pub(crate) fn parse_style_attr(s: &str) -> Vec<(String, String)> {
         .filter_map(|d| {
             let (k, v) = d.split_once(':')?;
             let (k, v) = (k.trim().to_ascii_lowercase(), v.trim().to_string());
-            if k.is_empty() {
-                None
-            } else {
-                Some((k, v))
-            }
+            if k.is_empty() { None } else { Some((k, v)) }
         })
         .collect()
 }
@@ -184,7 +187,10 @@ pub(crate) fn parse_style_attr(s: &str) -> Vec<(String, String)> {
 impl Dom {
     pub(crate) fn parse(html: &str) -> Dom {
         let mut dom = Dom::default();
-        dom.nodes.push(Node { tag: "#root".into(), ..Node::default() });
+        dom.nodes.push(Node {
+            tag: "#root".into(),
+            ..Node::default()
+        });
         let mut stack: Vec<usize> = vec![0];
         let mut css = String::new();
         let b = html.as_bytes();
@@ -236,20 +242,33 @@ impl Dom {
                     None => (inner, ""),
                 };
                 let name = name.to_ascii_lowercase();
-                if name.is_empty() || !name.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+                if name.is_empty()
+                    || !name
+                        .chars()
+                        .next()
+                        .map_or(false, |c| c.is_ascii_alphabetic())
+                {
                     continue;
                 }
-                let mut node = Node { tag: name.clone(), parent: stack.last().copied(), ..Node::default() };
+                let mut node = Node {
+                    tag: name.clone(),
+                    parent: stack.last().copied(),
+                    ..Node::default()
+                };
                 for (k, v) in parse_attrs(attrs) {
                     node.attrs.push((k.clone(), v.clone()));
                     match k.as_str() {
                         "id" => node.id = v,
-                        "class" => node.classes = v.split_whitespace().map(str::to_string).collect(),
+                        "class" => {
+                            node.classes = v.split_whitespace().map(str::to_string).collect()
+                        }
                         "style" => node.inline = parse_style_attr(&v),
                         "src" => node.src = v,
                         "width" => node.attr_w = v,
                         "height" => node.attr_h = v,
-                        e if e.len() > 2 && e.starts_with("on") => node.on.push((e[2..].to_string(), v)),
+                        e if e.len() > 2 && e.starts_with("on") => {
+                            node.on.push((e[2..].to_string(), v))
+                        }
                         _ => {}
                     }
                 }
@@ -267,11 +286,23 @@ impl Dom {
                         css.push('\n');
                     } else {
                         let n = &dom.nodes[idx];
-                        let attr = |k: &str| n.attrs.iter().find(|(a, _)| a == k).map(|(_, v)| v.to_ascii_lowercase());
+                        let attr = |k: &str| {
+                            n.attrs
+                                .iter()
+                                .find(|(a, _)| a == k)
+                                .map(|(_, v)| v.to_ascii_lowercase())
+                        };
                         let ty = attr("type").unwrap_or_default();
                         let module = ty == "module";
-                        let run = ty.is_empty() || module || ty.contains("javascript") || ty.contains("ecmascript");
-                        let path = n.attrs.iter().find(|(a, _)| a == "data-omsi-src").map(|(_, v)| v.clone());
+                        let run = ty.is_empty()
+                            || module
+                            || ty.contains("javascript")
+                            || ty.contains("ecmascript");
+                        let path = n
+                            .attrs
+                            .iter()
+                            .find(|(a, _)| a == "data-omsi-src")
+                            .map(|(_, v)| v.clone());
                         dom.script_meta.push(ScriptMeta { run, module, path });
                         dom.scripts.push(body);
                     }
@@ -292,7 +323,12 @@ impl Dom {
                 }
                 let parent = *stack.last().unwrap();
                 let idx = dom.nodes.len();
-                dom.nodes.push(Node { tag: "#text".into(), text: Some(text), parent: Some(parent), ..Node::default() });
+                dom.nodes.push(Node {
+                    tag: "#text".into(),
+                    text: Some(text),
+                    parent: Some(parent),
+                    ..Node::default()
+                });
                 dom.nodes[parent].kids.push(idx);
             }
         }
@@ -306,7 +342,11 @@ impl Dom {
         if let Some(t) = &n.text {
             return t.clone();
         }
-        n.kids.iter().map(|&k| self.text_of(k)).collect::<Vec<_>>().join("")
+        n.kids
+            .iter()
+            .map(|&k| self.text_of(k))
+            .collect::<Vec<_>>()
+            .join("")
     }
 
     pub(crate) fn set_text(&mut self, idx: usize, s: String) {
@@ -320,14 +360,22 @@ impl Dom {
             }
         }
         let t = self.nodes.len();
-        self.nodes.push(Node { tag: "#text".into(), text: Some(s), parent: Some(idx), ..Node::default() });
+        self.nodes.push(Node {
+            tag: "#text".into(),
+            text: Some(s),
+            parent: Some(idx),
+            ..Node::default()
+        });
         self.nodes[idx].kids = vec![t];
         self.generation += 1;
     }
 
     /// A new element that hangs nowhere yet (`document.createElement`).
     pub(crate) fn create(&mut self, tag: &str) -> usize {
-        self.nodes.push(Node { tag: tag.to_string(), ..Node::default() });
+        self.nodes.push(Node {
+            tag: tag.to_string(),
+            ..Node::default()
+        });
         self.nodes.len() - 1
     }
 
@@ -379,11 +427,15 @@ impl Dom {
     }
 
     pub(crate) fn by_id(&self, id: &str) -> Option<usize> {
-        self.nodes.iter().position(|n| n.text.is_none() && !n.id.is_empty() && n.id == id)
+        self.nodes
+            .iter()
+            .position(|n| n.text.is_none() && !n.id.is_empty() && n.id == id)
     }
 
     pub(crate) fn matches(&self, idx: usize, chain: &Chain) -> bool {
-        let Some(((_, last), _)) = chain.split_last() else { return false };
+        let Some(((_, last), _)) = chain.split_last() else {
+            return false;
+        };
         self.matches_from(idx, chain, chain.len() - 1, last)
     }
 
@@ -408,8 +460,12 @@ impl Dom {
                 }
                 false
             }
-            Comb::Child => self.nodes[idx].parent.is_some_and(|p| self.matches_from(p, chain, at - 1, left)),
-            Comb::Adjacent => self.prev_element(idx).is_some_and(|p| self.matches_from(p, chain, at - 1, left)),
+            Comb::Child => self.nodes[idx]
+                .parent
+                .is_some_and(|p| self.matches_from(p, chain, at - 1, left)),
+            Comb::Adjacent => self
+                .prev_element(idx)
+                .is_some_and(|p| self.matches_from(p, chain, at - 1, left)),
             Comb::Sibling => {
                 let mut cur = self.prev_element(idx);
                 while let Some(p) = cur {
@@ -428,12 +484,20 @@ impl Dom {
         let p = self.nodes[idx].parent?;
         let kids = &self.nodes[p].kids;
         let at = kids.iter().position(|&k| k == idx)?;
-        kids[..at].iter().rev().copied().find(|&k| self.nodes[k].text.is_none())
+        kids[..at]
+            .iter()
+            .rev()
+            .copied()
+            .find(|&k| self.nodes[k].text.is_none())
     }
 
     /// The element children of `idx`.
     pub(crate) fn element_kids(&self, idx: usize) -> impl Iterator<Item = usize> + '_ {
-        self.nodes[idx].kids.iter().copied().filter(|&k| self.nodes[k].text.is_none())
+        self.nodes[idx]
+            .kids
+            .iter()
+            .copied()
+            .filter(|&k| self.nodes[k].text.is_none())
     }
 
     pub(crate) fn matches_simple(&self, idx: usize, s: &Simple) -> bool {
@@ -460,8 +524,16 @@ impl Dom {
             "src" => (!n.src.is_empty()).then(|| n.src.clone()),
             "width" => (!n.attr_w.is_empty()).then(|| n.attr_w.clone()),
             "height" => (!n.attr_h.is_empty()).then(|| n.attr_h.clone()),
-            on if on.len() > 2 && on.starts_with("on") => n.on.iter().find(|(k, _)| k == &on[2..]).map(|(_, v)| v.clone()),
-            _ => n.attrs.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()),
+            on if on.len() > 2 && on.starts_with("on") => {
+                n.on.iter()
+                    .find(|(k, _)| k == &on[2..])
+                    .map(|(_, v)| v.clone())
+            }
+            _ => n
+                .attrs
+                .iter()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.clone()),
         }
     }
 
@@ -512,7 +584,12 @@ impl Dom {
     pub(crate) fn attr_names(&self, idx: usize) -> Vec<String> {
         let n = &self.nodes[idx];
         let mut out: Vec<String> = n.attrs.iter().map(|(k, _)| k.clone()).collect();
-        for (k, present) in [("id", !n.id.is_empty()), ("class", !n.classes.is_empty()), ("style", !n.inline.is_empty()), ("src", !n.src.is_empty())] {
+        for (k, present) in [
+            ("id", !n.id.is_empty()),
+            ("class", !n.classes.is_empty()),
+            ("style", !n.inline.is_empty()),
+            ("src", !n.src.is_empty()),
+        ] {
             if present && !out.iter().any(|o| o == k) {
                 out.push(k.to_string());
             }
@@ -522,7 +599,11 @@ impl Dom {
     }
 
     pub(crate) fn create_text(&mut self, text: &str) -> usize {
-        self.nodes.push(Node { tag: "#text".into(), text: Some(text.to_string()), ..Node::default() });
+        self.nodes.push(Node {
+            tag: "#text".into(),
+            text: Some(text.to_string()),
+            ..Node::default()
+        });
         self.nodes.len() - 1
     }
 
@@ -559,14 +640,21 @@ impl Dom {
     fn write_html(&self, idx: usize, out: &mut String) {
         let n = &self.nodes[idx];
         if let Some(t) = &n.text {
-            out.push_str(&t.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;"));
+            out.push_str(
+                &t.replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;"),
+            );
             return;
         }
         out.push('<');
         out.push_str(&n.tag);
         for name in self.attr_names(idx) {
             if let Some(v) = self.attr(idx, &name) {
-                out.push_str(&format!(" {name}=\"{}\"", v.replace('&', "&amp;").replace('"', "&quot;")));
+                out.push_str(&format!(
+                    " {name}=\"{}\"",
+                    v.replace('&', "&amp;").replace('"', "&quot;")
+                ));
             }
         }
         out.push('>');
@@ -610,7 +698,9 @@ impl Dom {
     }
 
     fn matches_attr(&self, idx: usize, a: &AttrSel) -> bool {
-        let Some(v) = self.attr(idx, &a.name) else { return false };
+        let Some(v) = self.attr(idx, &a.name) else {
+            return false;
+        };
         match a.op {
             AttrOp::Exists => true,
             AttrOp::Eq => v == a.value,
@@ -627,14 +717,33 @@ impl Dom {
         match p {
             Pseudo::Never => false,
             Pseudo::Root => n.parent == Some(0) || n.parent.is_none(),
-            Pseudo::Empty => n.kids.iter().all(|&k| self.nodes[k].text.as_deref().is_some_and(|t| t.is_empty())),
+            Pseudo::Empty => n
+                .kids
+                .iter()
+                .all(|&k| self.nodes[k].text.as_deref().is_some_and(|t| t.is_empty())),
             Pseudo::Not(inner) => !self.matches_simple(idx, inner),
-            Pseudo::OnlyChild => n.parent.is_some_and(|par| self.element_kids(par).count() == 1),
-            Pseudo::Nth { a, b, from_last, of_type } => {
+            Pseudo::OnlyChild => n
+                .parent
+                .is_some_and(|par| self.element_kids(par).count() == 1),
+            Pseudo::Nth {
+                a,
+                b,
+                from_last,
+                of_type,
+            } => {
                 let Some(par) = n.parent else { return false };
-                let sibs: Vec<usize> = self.element_kids(par).filter(|&k| !of_type || self.nodes[k].tag == n.tag).collect();
-                let Some(pos) = sibs.iter().position(|&k| k == idx) else { return false };
-                let i = if *from_last { sibs.len() - pos } else { pos + 1 } as i32;
+                let sibs: Vec<usize> = self
+                    .element_kids(par)
+                    .filter(|&k| !of_type || self.nodes[k].tag == n.tag)
+                    .collect();
+                let Some(pos) = sibs.iter().position(|&k| k == idx) else {
+                    return false;
+                };
+                let i = if *from_last {
+                    sibs.len() - pos
+                } else {
+                    pos + 1
+                } as i32;
                 // i = a*k + b for some k >= 0
                 if *a == 0 {
                     i == *b
@@ -648,7 +757,11 @@ impl Dom {
 
 /// An inline style as the `style` attribute writes it.
 pub(crate) fn style_text(inline: &[(String, String)]) -> String {
-    inline.iter().map(|(k, v)| format!("{k}: {v};")).collect::<Vec<_>>().join(" ")
+    inline
+        .iter()
+        .map(|(k, v)| format!("{k}: {v};"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 pub(crate) fn parse_attrs(s: &str) -> Vec<(String, String)> {
@@ -667,7 +780,10 @@ pub(crate) fn parse_attrs(s: &str) -> Vec<(String, String)> {
             i += 1;
             continue;
         }
-        let key: String = chars[start..i].iter().collect::<String>().to_ascii_lowercase();
+        let key: String = chars[start..i]
+            .iter()
+            .collect::<String>()
+            .to_ascii_lowercase();
         while i < chars.len() && chars[i].is_whitespace() {
             i += 1;
         }
@@ -717,11 +833,18 @@ pub(crate) fn parse_selector_list(sel: &str) -> Vec<Chain> {
         }
     }
     out.push(&sel[start..]);
-    out.into_iter().map(parse_chain).filter(|c| !c.is_empty()).collect()
+    out.into_iter()
+        .map(parse_chain)
+        .filter(|c| !c.is_empty())
+        .collect()
 }
 
 fn parse_nth(arg: &str) -> Option<(i32, i32)> {
-    let t: String = arg.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_ascii_lowercase();
+    let t: String = arg
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
     match t.as_str() {
         "odd" => return Some((2, 1)),
         "even" => return Some((2, 0)),
@@ -733,7 +856,11 @@ fn parse_nth(arg: &str) -> Option<(i32, i32)> {
             "-" => -1,
             x => x.parse().ok()?,
         };
-        let b = if t[n + 1..].is_empty() { 0 } else { t[n + 1..].trim_start_matches('+').parse().ok()? };
+        let b = if t[n + 1..].is_empty() {
+            0
+        } else {
+            t[n + 1..].trim_start_matches('+').parse().ok()?
+        };
         Some((a, b))
     } else {
         Some((0, t.parse().ok()?))
@@ -769,18 +896,41 @@ fn parse_simple(text: &str) -> Simple {
                 s.classes.push(ident(&mut i));
             }
             '[' => {
-                let end = c[i..].iter().position(|&x| x == ']').map(|e| i + e).unwrap_or(c.len());
+                let end = c[i..]
+                    .iter()
+                    .position(|&x| x == ']')
+                    .map(|e| i + e)
+                    .unwrap_or(c.len());
                 let inner: String = c[i + 1..end].iter().collect();
                 i = (end + 1).min(c.len());
-                let ops = [("~=", AttrOp::Word), ("|=", AttrOp::Dash), ("^=", AttrOp::Prefix), ("$=", AttrOp::Suffix), ("*=", AttrOp::Contains), ("=", AttrOp::Eq)];
-                let found = ops.iter().filter_map(|(t, op)| inner.find(t).map(|p| (p, *t, *op))).min_by_key(|(p, ..)| *p);
+                let ops = [
+                    ("~=", AttrOp::Word),
+                    ("|=", AttrOp::Dash),
+                    ("^=", AttrOp::Prefix),
+                    ("$=", AttrOp::Suffix),
+                    ("*=", AttrOp::Contains),
+                    ("=", AttrOp::Eq),
+                ];
+                let found = ops
+                    .iter()
+                    .filter_map(|(t, op)| inner.find(t).map(|p| (p, *t, *op)))
+                    .min_by_key(|(p, ..)| *p);
                 let sel = match found {
                     Some((p, t, op)) => AttrSel {
                         name: inner[..p].trim().to_ascii_lowercase(),
                         op,
-                        value: inner[p + t.len()..].trim().trim_end_matches(" i").trim().trim_matches(|x| x == '"' || x == '\'').to_string(),
+                        value: inner[p + t.len()..]
+                            .trim()
+                            .trim_end_matches(" i")
+                            .trim()
+                            .trim_matches(|x| x == '"' || x == '\'')
+                            .to_string(),
                     },
-                    None => AttrSel { name: inner.trim().to_ascii_lowercase(), op: AttrOp::Exists, value: String::new() },
+                    None => AttrSel {
+                        name: inner.trim().to_ascii_lowercase(),
+                        op: AttrOp::Exists,
+                        value: String::new(),
+                    },
                 };
                 s.attrs.push(sel);
             }
@@ -813,12 +963,41 @@ fn parse_simple(text: &str) -> Simple {
                     s.pseudos.push(Pseudo::Never);
                     continue;
                 }
-                let nth = |of_type, from_last| parse_nth(&arg).map(|(a, b)| Pseudo::Nth { a, b, from_last, of_type }).unwrap_or(Pseudo::Never);
+                let nth = |of_type, from_last| {
+                    parse_nth(&arg)
+                        .map(|(a, b)| Pseudo::Nth {
+                            a,
+                            b,
+                            from_last,
+                            of_type,
+                        })
+                        .unwrap_or(Pseudo::Never)
+                };
                 s.pseudos.push(match name.as_str() {
-                    "first-child" => Pseudo::Nth { a: 0, b: 1, from_last: false, of_type: false },
-                    "last-child" => Pseudo::Nth { a: 0, b: 1, from_last: true, of_type: false },
-                    "first-of-type" => Pseudo::Nth { a: 0, b: 1, from_last: false, of_type: true },
-                    "last-of-type" => Pseudo::Nth { a: 0, b: 1, from_last: true, of_type: true },
+                    "first-child" => Pseudo::Nth {
+                        a: 0,
+                        b: 1,
+                        from_last: false,
+                        of_type: false,
+                    },
+                    "last-child" => Pseudo::Nth {
+                        a: 0,
+                        b: 1,
+                        from_last: true,
+                        of_type: false,
+                    },
+                    "first-of-type" => Pseudo::Nth {
+                        a: 0,
+                        b: 1,
+                        from_last: false,
+                        of_type: true,
+                    },
+                    "last-of-type" => Pseudo::Nth {
+                        a: 0,
+                        b: 1,
+                        from_last: true,
+                        of_type: true,
+                    },
                     "only-child" => Pseudo::OnlyChild,
                     "nth-child" => nth(false, false),
                     "nth-last-child" => nth(false, true),
@@ -829,7 +1008,12 @@ fn parse_simple(text: &str) -> Simple {
                     "not" => Pseudo::Not(Box::new(parse_simple(arg.trim()))),
                     "is" | "where" => {
                         // (only the first alternative; enough for the pages seen)
-                        let first = parse_selector_list(&arg).into_iter().next().and_then(|mut ch| ch.pop()).map(|(_, s)| s).unwrap_or_default();
+                        let first = parse_selector_list(&arg)
+                            .into_iter()
+                            .next()
+                            .and_then(|mut ch| ch.pop())
+                            .map(|(_, s)| s)
+                            .unwrap_or_default();
                         for cl in first.classes {
                             s.classes.push(cl);
                         }
@@ -890,7 +1074,9 @@ pub(crate) fn parse_chain(sel: &str) -> Chain {
                     _ => Comb::Sibling,
                 };
             }
-            (None, c) if depth == 0 && c.is_whitespace() => flush(&mut cur, &mut comb, &mut pending, &mut out),
+            (None, c) if depth == 0 && c.is_whitespace() => {
+                flush(&mut cur, &mut comb, &mut pending, &mut out)
+            }
             (None, _) => cur.push(ch),
         }
     }
@@ -902,11 +1088,17 @@ pub(crate) fn parse_chain(sel: &str) -> Chain {
 }
 
 fn simple_specificity(s: &Simple) -> u32 {
-    let mut n = (s.id.is_some() as u32) * 10_000 + (s.classes.len() as u32 + s.attrs.len() as u32) * 100 + s.tag.is_some() as u32;
+    let mut n = (s.id.is_some() as u32) * 10_000
+        + (s.classes.len() as u32 + s.attrs.len() as u32) * 100
+        + s.tag.is_some() as u32;
     for p in &s.pseudos {
         n += match p {
             Pseudo::Not(inner) => simple_specificity(inner),
-            Pseudo::Root | Pseudo::Empty | Pseudo::OnlyChild | Pseudo::Nth { .. } | Pseudo::Never => 100,
+            Pseudo::Root
+            | Pseudo::Empty
+            | Pseudo::OnlyChild
+            | Pseudo::Nth { .. }
+            | Pseudo::Never => 100,
         };
     }
     n
@@ -932,7 +1124,9 @@ pub(crate) fn parse_css(src: &str) -> Vec<Rule> {
     let mut s = clean.as_str();
     while let Some(open) = s.find('{') {
         let head = s[..open].trim();
-        let Some(close) = s[open..].find('}') else { break };
+        let Some(close) = s[open..].find('}') else {
+            break;
+        };
         let body = &s[open + 1..open + close];
         s = &s[open + close + 1..];
         if head.starts_with('@') {

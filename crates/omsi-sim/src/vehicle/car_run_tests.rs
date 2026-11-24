@@ -740,9 +740,17 @@ fn a_rear_cabs_switch_is_saved_and_taken_back() {
     let saved = v.car_states();
     assert_eq!(saved.len(), 1);
     assert_eq!(saved[0].car, 0);
-    assert!(saved[0].vars.iter().any(|(n, x)| n.eq_ignore_ascii_case("SLW_x") && *x == 5.0));
     assert!(
-        !saved[0].vars.iter().any(|(n, _)| n.eq_ignore_ascii_case("SLR_x")),
+        saved[0]
+            .vars
+            .iter()
+            .any(|(n, x)| n.eq_ignore_ascii_case("SLW_x") && *x == 5.0)
+    );
+    assert!(
+        !saved[0]
+            .vars
+            .iter()
+            .any(|(n, _)| n.eq_ignore_ascii_case("SLR_x")),
         "what the leading vehicle gives it is not its own"
     );
     for started in [false, true] {
@@ -752,10 +760,22 @@ fn a_rear_cabs_switch_is_saved_and_taken_back() {
             assert_eq!(again.trailers[0].run_var("SLW_x"), Some(0.0));
             assert!(again.restore_car_states(&saved) > 0);
         } else {
-            assert_eq!(again.restore_car_states(&saved), 0, "taken when its scripts start");
+            assert_eq!(
+                again.restore_car_states(&saved),
+                0,
+                "taken when its scripts start"
+            );
         }
         run_frames(&mut again, 3);
-        assert_eq!(again.trailers[0].run_var("SLW_x"), Some(5.0), "started first: {started}");
-        assert_eq!(again.var("SLW_x"), Some(0.0), "the head car's stays its own");
+        assert_eq!(
+            again.trailers[0].run_var("SLW_x"),
+            Some(5.0),
+            "started first: {started}"
+        );
+        assert_eq!(
+            again.var("SLW_x"),
+            Some(0.0),
+            "the head car's stays its own"
+        );
     }
 }

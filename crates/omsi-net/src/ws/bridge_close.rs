@@ -20,7 +20,9 @@ pub(super) fn close<S: Read + Write>(ws: &mut WebSocket<S>, udp: &UdpSocket, buf
     while Instant::now() < until {
         match ws.read() {
             Ok(_) => {}
-            Err(tungstenite::Error::Io(e)) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+            Err(tungstenite::Error::Io(e))
+                if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+            {
                 let _ = flush_ws(ws);
             }
             Err(_) => break,

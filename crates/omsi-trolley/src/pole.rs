@@ -78,13 +78,22 @@ pub enum Rope {
     /// Pulled down.
     Pull,
     /// Held and guided at this wire point (or not aimed at any); `auto` is the motor's.
-    Aim { goal: Option<Contact>, auto: bool },
+    Aim {
+        goal: Option<Contact>,
+        auto: bool,
+    },
     /// Held by its rope at this elevation and swing (radians, the bus's frame), with no help to
     /// the wire: the shoe takes a wire only when pushed up through it, or later rising on its spring.
-    Hold { theta: f64, psi: f64 },
+    Hold {
+        theta: f64,
+        psi: f64,
+    },
     /// The vehicle's script drives the lifting gear: its carriage at `at`, 0 on the hook, 1 just
     /// under the wire (`goal`), where it lets the boom go to rise on to it.
-    Gear { at: f64, goal: Option<Contact> },
+    Gear {
+        at: f64,
+        goal: Option<Contact>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -94,17 +103,29 @@ pub enum PoleEventKind {
     /// The shoe left the wire for a moment.
     ContactOpened,
     /// The shoe came back after `open_s` seconds, closing at `impact` m/s.
-    ContactClosed { open_s: f32, impact: f32 },
+    ContactClosed {
+        open_s: f32,
+        impact: f32,
+    },
     Latched,
     Released,
     GapEntered,
     GapLeft,
-    FrogPassed { switch: u32, branch: bool },
+    FrogPassed {
+        switch: u32,
+        branch: bool,
+    },
     /// The shoe passed a conductor intersection, including a frog's inner crossing.
-    CrossingPassed { crossing: u32 },
-    Plate { switch: u32 },
+    CrossingPassed {
+        crossing: u32,
+    },
+    Plate {
+        switch: u32,
+    },
     /// A loose boom rose as far as its rope lets it, at this speed (rad/s).
-    RopeTaut { speed: f32 },
+    RopeTaut {
+        speed: f32,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -128,13 +149,22 @@ pub struct PoseSpan {
 
 impl PoseSpan {
     pub fn still(pos: DVec3, rot: DMat3) -> PoseSpan {
-        PoseSpan { pos0: pos, rot0: rot, pos1: pos, rot1: rot, accel: glam::Vec3::ZERO }
+        PoseSpan {
+            pos0: pos,
+            rot0: rot,
+            pos1: pos,
+            rot1: rot,
+            accel: glam::Vec3::ZERO,
+        }
     }
 
     fn at(&self, t: f64) -> (DVec3, DMat3) {
         let q0 = glam::DQuat::from_mat3(&self.rot0);
         let q1 = glam::DQuat::from_mat3(&self.rot1);
-        (self.pos0.lerp(self.pos1, t), DMat3::from_quat(q0.slerp(q1, t)))
+        (
+            self.pos0.lerp(self.pos1, t),
+            DMat3::from_quat(q0.slerp(q1, t)),
+        )
     }
 }
 
@@ -224,15 +254,28 @@ pub fn rotate_tip_pub(theta: f64, psi: f64, len: f64) -> DVec3 {
 }
 
 fn rotate_tip(theta: f64, psi: f64, len: f64) -> DVec3 {
-    DVec3::new(psi.sin() * theta.cos(), -psi.cos() * theta.cos(), theta.sin()) * len
+    DVec3::new(
+        psi.sin() * theta.cos(),
+        -psi.cos() * theta.cos(),
+        theta.sin(),
+    ) * len
 }
 
-fn passed_crossings(net: &WireNet, mut from: Contact, to: Contact, info: &crate::wire::WalkInfo) -> Vec<u32> {
+fn passed_crossings(
+    net: &WireNet,
+    mut from: Contact,
+    to: Contact,
+    info: &crate::wire::WalkInfo,
+) -> Vec<u32> {
     let mut passed = Vec::new();
     let mut interval = |contact: Contact, end: f64| {
         for &(ci, s) in net.crossings_of(contact.span) {
             let crossing = &net.crossings[ci as usize];
-            let side = if crossing.a == contact.span { crossing.side_a } else { crossing.side_b };
+            let side = if crossing.a == contact.span {
+                crossing.side_a
+            } else {
+                crossing.side_b
+            };
             if side == contact.side
                 && ((contact.s < s && s <= end) || (end <= s && s < contact.s))
                 && !passed.contains(&ci)
@@ -242,12 +285,23 @@ fn passed_crossings(net: &WireNet, mut from: Contact, to: Contact, info: &crate:
         }
     };
     for node in &info.nodes {
-        interval(from, if node.from.1 == 0 { 0.0 } else { net.spans[from.span as usize].len() });
+        interval(
+            from,
+            if node.from.1 == 0 {
+                0.0
+            } else {
+                net.spans[from.span as usize].len()
+            },
+        );
         if node.from.1 == node.to.1 {
             from.side ^= 1;
         }
         from.span = node.to.0;
-        from.s = if node.to.1 == 0 { 0.0 } else { net.spans[from.span as usize].len() };
+        from.s = if node.to.1 == 0 {
+            0.0
+        } else {
+            net.spans[from.span as usize].len()
+        };
     }
     interval(from, to.s);
     passed
@@ -305,7 +359,9 @@ impl Pole {
 
     /// How hard the boom bounces on the lifting gear, 0..1 (for a sound's loop).
     pub fn bounce_level(&self) -> f32 {
-        let Some((ct, _)) = self.carriage else { return 0.0 };
+        let Some((ct, _)) = self.carriage else {
+            return 0.0;
+        };
         ((self.theta - ct).abs() / 0.05).min(1.0) as f32
     }
 
@@ -317,7 +373,11 @@ impl Pole {
             self.gear_on = false;
             return None;
         };
-        if self.gear_seen.replace(v).is_some_and(|s| (s - v).abs() > 1e-4) {
+        if self
+            .gear_seen
+            .replace(v)
+            .is_some_and(|s| (s - v).abs() > 1e-4)
+        {
             self.gear_on = true;
         }
         self.gear_on.then_some(v.clamp(0.0, 1.0))
@@ -366,7 +426,9 @@ impl Pole {
 
     /// The highest the boom goes: there its rope is taut.
     pub fn top(&self) -> f64 {
-        (self.def.max_angle as f64).to_radians().max(self.rest() + 0.05)
+        (self.def.max_angle as f64)
+            .to_radians()
+            .max(self.rest() + 0.05)
     }
 
     /// The torque (N m) the spring, the weight and the roof's vertical acceleration `az` make
@@ -413,7 +475,12 @@ impl Pole {
     }
 
     fn dewire(&mut self, cause: DewireCause, amps: f32, out: &mut Vec<PoleEvent>, pole: usize) {
-        out.push(PoleEvent { pole, kind: PoleEventKind::Dewired(cause), pos: self.tip, amps: if self.closed { amps } else { 0.0 } });
+        out.push(PoleEvent {
+            pole,
+            kind: PoleEventKind::Dewired(cause),
+            pos: self.tip,
+            amps: if self.closed { amps } else { 0.0 },
+        });
         self.contact = None;
         self.closed = false;
         self.gap = 0.0;
@@ -434,7 +501,16 @@ impl Pole {
     }
 
     /// Advance the pole over a bus step `dt` with its motion `span`.
-    pub fn step(&mut self, net: &WireNet, span: &PoseSpan, dt: f64, rope: Rope, amps: f32, pole: usize, out: &mut Vec<PoleEvent>) {
+    pub fn step(
+        &mut self,
+        net: &WireNet,
+        span: &PoseSpan,
+        dt: f64,
+        rope: Rope,
+        amps: f32,
+        pole: usize,
+        out: &mut Vec<PoleEvent>,
+    ) {
         let n = (dt / SUBSTEP).ceil().max(1.0) as usize;
         let h = dt / n as f64;
         for i in 0..n {
@@ -450,8 +526,17 @@ impl Pole {
     fn swivel_shoe(&mut self, net: &WireNet, rot: &DMat3, dt: f64) {
         let target = match self.contact.filter(|_| self.mode == PoleMode::OnWire) {
             Some(c) => {
-                let (st, ct, sp, cp) = (self.theta.sin(), self.theta.cos(), self.psi.sin(), self.psi.cos());
-                let (f, s, u) = (DVec3::new(sp * ct, -cp * ct, st), DVec3::new(cp, sp, 0.0), DVec3::new(-sp * st, cp * st, ct));
+                let (st, ct, sp, cp) = (
+                    self.theta.sin(),
+                    self.theta.cos(),
+                    self.psi.sin(),
+                    self.psi.cos(),
+                );
+                let (f, s, u) = (
+                    DVec3::new(sp * ct, -cp * ct, st),
+                    DVec3::new(cp, sp, 0.0),
+                    DVec3::new(-sp * st, cp * st, ct),
+                );
                 let mut t = rot.transpose() * net.wire_point(&c).1;
                 if t.dot(f) < 0.0 {
                     t = -t;
@@ -476,7 +561,18 @@ impl Pole {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn sub(&mut self, net: &WireNet, base: DVec3, rot: &DMat3, accel: glam::Vec3, dt: f64, rope: Rope, amps: f32, pole: usize, out: &mut Vec<PoleEvent>) {
+    fn sub(
+        &mut self,
+        net: &WireNet,
+        base: DVec3,
+        rot: &DMat3,
+        accel: glam::Vec3,
+        dt: f64,
+        rope: Rope,
+        amps: f32,
+        pole: usize,
+        out: &mut Vec<PoleEvent>,
+    ) {
         self.engage_block = (self.engage_block - dt).max(0.0);
         // the rope first
         if !matches!(rope, Rope::Aim { auto: true, .. }) {
@@ -488,7 +584,11 @@ impl Pole {
             self.hold_engaged = false;
         }
         let rope = match rope {
-            Rope::Aim { auto: true, .. } if self.auto_released && matches!(self.mode, PoleMode::Free | PoleMode::OnWire) => Rope::Idle,
+            Rope::Aim { auto: true, .. }
+                if self.auto_released && matches!(self.mode, PoleMode::Free | PoleMode::OnWire) =>
+            {
+                Rope::Idle
+            }
             r => r,
         };
         match rope {
@@ -508,17 +608,46 @@ impl Pole {
                 PoleMode::OnWire if !auto => {
                     self.dewire(DewireCause::Rope, amps, out, pole);
                     self.mode = PoleMode::Hand;
-                    self.hand = Hand { held: 0.0, phase: [self.rand() * 6.28, self.rand() * 6.28, self.rand() * 6.28, self.rand() * 6.28] };
+                    self.hand = Hand {
+                        held: 0.0,
+                        phase: [
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                        ],
+                    };
                 }
                 PoleMode::Down => {
                     self.mode = PoleMode::Hand;
-                    self.hand = Hand { held: 0.0, phase: [self.rand() * 6.28, self.rand() * 6.28, self.rand() * 6.28, self.rand() * 6.28] };
-                    out.push(PoleEvent { pole, kind: PoleEventKind::Released, pos: self.tip, amps: 0.0 });
+                    self.hand = Hand {
+                        held: 0.0,
+                        phase: [
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                        ],
+                    };
+                    out.push(PoleEvent {
+                        pole,
+                        kind: PoleEventKind::Released,
+                        pos: self.tip,
+                        amps: 0.0,
+                    });
                     let _ = auto;
                 }
                 PoleMode::Lowering | PoleMode::Free => {
                     self.mode = PoleMode::Hand;
-                    self.hand = Hand { held: 0.0, phase: [self.rand() * 6.28, self.rand() * 6.28, self.rand() * 6.28, self.rand() * 6.28] };
+                    self.hand = Hand {
+                        held: 0.0,
+                        phase: [
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                            self.rand() * 6.28,
+                        ],
+                    };
                 }
                 _ => {}
             },
@@ -526,16 +655,30 @@ impl Pole {
                 PoleMode::OnWire if !self.hold_engaged => {
                     self.dewire(DewireCause::Rope, amps, out, pole);
                     self.mode = PoleMode::Hand;
-                    self.hand = Hand { held: 0.0, phase: [0.0; 4] };
+                    self.hand = Hand {
+                        held: 0.0,
+                        phase: [0.0; 4],
+                    };
                 }
                 PoleMode::Down => {
                     self.mode = PoleMode::Hand;
-                    self.hand = Hand { held: 0.0, phase: [0.0; 4] };
-                    out.push(PoleEvent { pole, kind: PoleEventKind::Released, pos: self.tip, amps: 0.0 });
+                    self.hand = Hand {
+                        held: 0.0,
+                        phase: [0.0; 4],
+                    };
+                    out.push(PoleEvent {
+                        pole,
+                        kind: PoleEventKind::Released,
+                        pos: self.tip,
+                        amps: 0.0,
+                    });
                 }
                 PoleMode::Lowering | PoleMode::Free => {
                     self.mode = PoleMode::Hand;
-                    self.hand = Hand { held: 0.0, phase: [0.0; 4] };
+                    self.hand = Hand {
+                        held: 0.0,
+                        phase: [0.0; 4],
+                    };
                 }
                 _ => {}
             },
@@ -548,7 +691,12 @@ impl Pole {
                 PoleMode::Down if at > 0.0 => {
                     self.gear_top = None;
                     self.mode = PoleMode::Hand;
-                    out.push(PoleEvent { pole, kind: PoleEventKind::Released, pos: self.tip, amps: 0.0 });
+                    out.push(PoleEvent {
+                        pole,
+                        kind: PoleEventKind::Released,
+                        pos: self.tip,
+                        amps: 0.0,
+                    });
                 }
                 PoleMode::Lowering | PoleMode::Free if at < 1.0 => {
                     self.mode = PoleMode::Hand;
@@ -556,11 +704,20 @@ impl Pole {
                 _ => {}
             },
             Rope::Idle => match self.mode {
-                PoleMode::Hand if let_go && self.theta - self.rest() < HOOK_CATCH.0 && self.psi.abs() < HOOK_CATCH.1 => {
+                PoleMode::Hand
+                    if let_go
+                        && self.theta - self.rest() < HOOK_CATCH.0
+                        && self.psi.abs() < HOOK_CATCH.1 =>
+                {
                     self.mode = PoleMode::Down;
                     self.w_theta = 0.0;
                     self.w_psi = 0.0;
-                    out.push(PoleEvent { pole, kind: PoleEventKind::Latched, pos: self.tip, amps: 0.0 });
+                    out.push(PoleEvent {
+                        pole,
+                        kind: PoleEventKind::Latched,
+                        pos: self.tip,
+                        amps: 0.0,
+                    });
                 }
                 PoleMode::Hand => {
                     self.mode = PoleMode::Free;
@@ -585,7 +742,11 @@ impl Pole {
                 self.place(base, rot);
             }
             PoleMode::Lowering => {
-                let rate = if self.lower_auto { (self.def.retriever.max(20.0) as f64).to_radians() } else { 35f64.to_radians() };
+                let rate = if self.lower_auto {
+                    (self.def.retriever.max(20.0) as f64).to_radians()
+                } else {
+                    35f64.to_radians()
+                };
                 self.theta -= rate * dt;
                 self.psi -= self.psi.signum() * (0.9 * dt).min(self.psi.abs());
                 self.w_theta = -rate;
@@ -594,7 +755,12 @@ impl Pole {
                     if self.psi.abs() < 0.2 {
                         self.mode = PoleMode::Down;
                         self.w_theta = 0.0;
-                        out.push(PoleEvent { pole, kind: PoleEventKind::Latched, pos: self.tip, amps: 0.0 });
+                        out.push(PoleEvent {
+                            pole,
+                            kind: PoleEventKind::Latched,
+                            pos: self.tip,
+                            amps: 0.0,
+                        });
                     }
                 }
                 self.place(base, rot);
@@ -615,12 +781,21 @@ impl Pole {
                 let t = self.hand.held;
                 let p = self.hand.phase;
                 // the hand's unsteadiness grows with the arm's length
-                let amp = if matches!(rope, Rope::Aim { auto: true, .. }) { 0.004 } else { 0.03 } / self.len();
-                let jit = |a: f64, b: f64| amp * ((std::f64::consts::TAU * 0.9 * t + a).sin() + 0.6 * (std::f64::consts::TAU * 2.3 * t + b).sin());
+                let amp = if matches!(rope, Rope::Aim { auto: true, .. }) {
+                    0.004
+                } else {
+                    0.03
+                } / self.len();
+                let jit = |a: f64, b: f64| {
+                    amp * ((std::f64::consts::TAU * 0.9 * t + a).sin()
+                        + 0.6 * (std::f64::consts::TAU * 2.3 * t + b).sin())
+                };
                 let fwd = *rot * DVec3::Y;
                 let goal_pt = goal.and_then(|mut c| {
                     net.place_behind(&mut c, base, fwd, self.len());
-                    net.solve_tip(&mut c, base, self.len()).ok().map(|_| net.wire_point(&c).0)
+                    net.solve_tip(&mut c, base, self.len())
+                        .ok()
+                        .map(|_| net.wire_point(&c).0)
                 });
                 let (tg, pg) = match goal_pt {
                     Some(g) => {
@@ -638,7 +813,8 @@ impl Pole {
                     },
                 };
                 let held = matches!(rope, Rope::Hold { .. });
-                let manual = held || (matches!(rope, Rope::Aim { auto: false, .. }) && self.free_aim.is_some());
+                let manual = held
+                    || (matches!(rope, Rope::Aim { auto: false, .. }) && self.free_aim.is_some());
                 if manual {
                     // the mouse's hand: the tip goes where the cursor points, smoothly (a time
                     // constant of a twentieth of a second, at most three radians a second), with
@@ -648,7 +824,10 @@ impl Pole {
                     let (tm, pm) = match rope {
                         Rope::Hold { theta, psi } => (theta, psi),
                         _ => {
-                            let target = goal_pt.map(|g| g - DVec3::Z * 0.35).or(self.free_aim).unwrap();
+                            let target = goal_pt
+                                .map(|g| g - DVec3::Z * 0.35)
+                                .or(self.free_aim)
+                                .unwrap();
                             let (tm, pm, _) = self.angles_to(base, rot, target);
                             (tm, pm)
                         }
@@ -665,9 +844,12 @@ impl Pole {
                 } else if let Rope::Gear { at, .. } = rope {
                     let (top, top_psi) = match goal_pt {
                         Some(_) => (tg, pg),
-                        None => self.gear_top.unwrap_or(((self.def.work_angle as f64).to_radians(), 0.0)),
+                        None => self
+                            .gear_top
+                            .unwrap_or(((self.def.work_angle as f64).to_radians(), 0.0)),
                     };
-                    let (top, top_psi) = (top.clamp(self.rest(), self.top()), top_psi.clamp(-1.7, 1.7));
+                    let (top, top_psi) =
+                        (top.clamp(self.rest(), self.top()), top_psi.clamp(-1.7, 1.7));
                     self.ride(dt, self.rest() + (top - self.rest()) * at, top_psi * at);
                     if at >= 1.0 {
                         self.gear_on = false;
@@ -676,13 +858,19 @@ impl Pole {
                         self.retrieve_wait = 0.0;
                         return;
                     }
-                    if at <= 0.0 && self.theta - self.rest() < 0.01 && self.psi.abs() < HOOK_CATCH.1 {
+                    if at <= 0.0 && self.theta - self.rest() < 0.01 && self.psi.abs() < HOOK_CATCH.1
+                    {
                         self.gear_on = false;
                         self.carriage = None;
                         self.mode = PoleMode::Down;
                         self.w_theta = 0.0;
                         self.w_psi = 0.0;
-                        out.push(PoleEvent { pole, kind: PoleEventKind::Latched, pos: self.tip, amps: 0.0 });
+                        out.push(PoleEvent {
+                            pole,
+                            kind: PoleEventKind::Latched,
+                            pos: self.tip,
+                            amps: 0.0,
+                        });
                         self.place(base, rot);
                         return;
                     }
@@ -713,7 +901,14 @@ impl Pole {
                 if self.theta > self.top() {
                     self.theta = self.top();
                     if self.w_theta > 0.05 {
-                        out.push(PoleEvent { pole, kind: PoleEventKind::RopeTaut { speed: self.w_theta as f32 }, pos: self.tip, amps: 0.0 });
+                        out.push(PoleEvent {
+                            pole,
+                            kind: PoleEventKind::RopeTaut {
+                                speed: self.w_theta as f32,
+                            },
+                            pos: self.tip,
+                            amps: 0.0,
+                        });
                     }
                     if self.w_theta > 0.0 {
                         self.w_theta *= -0.25;
@@ -740,7 +935,9 @@ impl Pole {
                 self.place(base, rot);
                 if self.def.retriever > 0.0 {
                     self.retrieve_wait -= dt;
-                    if self.retrieve_wait <= 0.0 && (self.theta > 55f64.to_radians() || self.retrieve_wait < -0.6) {
+                    if self.retrieve_wait <= 0.0
+                        && (self.theta > 55f64.to_radians() || self.retrieve_wait < -0.6)
+                    {
                         self.mode = PoleMode::Lowering;
                         self.lower_auto = true;
                     }
@@ -754,7 +951,16 @@ impl Pole {
     /// Does the shoe, moving from where it was, take a wire into its groove? (`through_only`: only
     /// a wire the shoe is pushed up through, as a hand on the rope does.)
     #[allow(clippy::too_many_arguments)]
-    fn try_engage(&mut self, net: &WireNet, base: DVec3, rot: &DMat3, amps: f32, pole: usize, out: &mut Vec<PoleEvent>, through_only: bool) {
+    fn try_engage(
+        &mut self,
+        net: &WireNet,
+        base: DVec3,
+        rot: &DMat3,
+        amps: f32,
+        pole: usize,
+        out: &mut Vec<PoleEvent>,
+        through_only: bool,
+    ) {
         if net.is_empty() || self.engage_block > 0.0 {
             return;
         }
@@ -773,12 +979,21 @@ impl Pole {
             // (a wire the boom could not stay on is not taken)
             let h = DVec3::new(w.x - base.x, w.y - base.y, 0.0);
             let th = DVec3::new(t.x, t.y, 0.0);
-            let aligned = h.length() < 0.3 || th.length() < 0.05 || h.normalize().dot(th.normalize()).abs().clamp(0.0, 1.0).acos() < (self.def.max_wire_angle as f64).to_radians() * 0.8;
+            let aligned = h.length() < 0.3
+                || th.length() < 0.05
+                || h.normalize()
+                    .dot(th.normalize())
+                    .abs()
+                    .clamp(0.0, 1.0)
+                    .acos()
+                    < (self.def.max_wire_angle as f64).to_radians() * 0.8;
             // (a shoe lifted by its spring crosses the wire's height in a step or two: the wire passed
             // between the horns counts as well as one the shoe is sitting in)
             // (a hand pushes it up slowly: any crossing counts)
-            let through = pperp.z <= 0.0 && perp.z > if through_only { 0.0 } else { 0.02 } && perp.z <= 0.3;
-            let groove = !through_only && perp.z >= -depth && perp.z <= 0.02 && perp.z >= pperp.z - 1e-9;
+            let through =
+                pperp.z <= 0.0 && perp.z > if through_only { 0.0 } else { 0.02 } && perp.z <= 0.3;
+            let groove =
+                !through_only && perp.z >= -depth && perp.z <= 0.02 && perp.z >= pperp.z - 1e-9;
             if aligned && lat.abs() <= funnel && (groove || through) {
                 if best.is_none_or(|b| lat.abs() < b.1) {
                     best = Some((c, lat.abs()));
@@ -796,14 +1011,29 @@ impl Pole {
                 self.last_pos = Some((c.span, c.s));
                 self.open_time = 0.0;
                 self.in_gap = net.in_gap(&c);
-                out.push(PoleEvent { pole, kind: PoleEventKind::Engaged, pos: self.tip, amps });
+                out.push(PoleEvent {
+                    pole,
+                    kind: PoleEventKind::Engaged,
+                    pos: self.tip,
+                    amps,
+                });
                 let _ = rot;
             }
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn wire_sub(&mut self, net: &WireNet, base: DVec3, rot: &DMat3, accel: glam::Vec3, dt: f64, amps: f32, pole: usize, out: &mut Vec<PoleEvent>) {
+    fn wire_sub(
+        &mut self,
+        net: &WireNet,
+        base: DVec3,
+        rot: &DMat3,
+        accel: glam::Vec3,
+        dt: f64,
+        amps: f32,
+        pole: usize,
+        out: &mut Vec<PoleEvent>,
+    ) {
         let Some(mut c) = self.contact else {
             self.mode = PoleMode::Free;
             return;
@@ -834,20 +1064,45 @@ impl Pole {
         // and the step there lifted every shoe off at every joint and frog)
         let edge = (c.s.min(net.spans[c.span as usize].len() - c.s)).clamp(0.0, 1.0);
         let edge = edge * edge * (3.0 - 2.0 * edge);
-        w.z += edge * (self.roughness * ((std::f64::consts::TAU * sg / 2.6).sin() + 0.5 * (std::f64::consts::TAU * sg / 0.95 + 1.3).sin()) + hanger);
+        w.z += edge
+            * (self.roughness
+                * ((std::f64::consts::TAU * sg / 2.6).sin()
+                    + 0.5 * (std::f64::consts::TAU * sg / 0.95 + 1.3).sin())
+                + hanger);
         let (th_w, ps_w, _) = self.angles_to(base, rot, w);
         // how fast the shoe slides along the wire
-        let u = if self.have_prev { (w - self.prev_wire_pt).length() / dt } else { 0.0 };
+        let u = if self.have_prev {
+            (w - self.prev_wire_pt).length() / dt
+        } else {
+            0.0
+        };
         self.slide = u;
         // events at joints, the insulator and the plates before a frog
         for np in &info.nodes {
             if let Some(si) = net.nodes[np.node as usize].switch {
-                out.push(PoleEvent { pole, kind: PoleEventKind::FrogPassed { switch: si, branch: net.switch_branch(si as usize) }, pos: w, amps });
+                out.push(PoleEvent {
+                    pole,
+                    kind: PoleEventKind::FrogPassed {
+                        switch: si,
+                        branch: net.switch_branch(si as usize),
+                    },
+                    pos: w,
+                    amps,
+                });
             }
         }
         let gap_now = net.in_gap(&c);
         if gap_now != self.in_gap {
-            out.push(PoleEvent { pole, kind: if gap_now { PoleEventKind::GapEntered } else { PoleEventKind::GapLeft }, pos: w, amps });
+            out.push(PoleEvent {
+                pole,
+                kind: if gap_now {
+                    PoleEventKind::GapEntered
+                } else {
+                    PoleEventKind::GapLeft
+                },
+                pos: w,
+                amps,
+            });
             self.in_gap = gap_now;
         }
         for (si, sw) in net.switches.iter().enumerate() {
@@ -856,14 +1111,28 @@ impl Pole {
                 continue;
             }
             if let Some((ps, pss)) = self.last_pos {
-                let crossed = if towards == 0 { pss > plate_s && c.s <= plate_s } else { pss < plate_s && c.s >= plate_s };
+                let crossed = if towards == 0 {
+                    pss > plate_s && c.s <= plate_s
+                } else {
+                    pss < plate_s && c.s >= plate_s
+                };
                 if ps == c.span && crossed {
-                    out.push(PoleEvent { pole, kind: PoleEventKind::Plate { switch: si as u32 }, pos: w, amps });
+                    out.push(PoleEvent {
+                        pole,
+                        kind: PoleEventKind::Plate { switch: si as u32 },
+                        pos: w,
+                        amps,
+                    });
                 }
             }
         }
         for ci in passed_crossings(net, old, c, &info) {
-            out.push(PoleEvent { pole, kind: PoleEventKind::CrossingPassed { crossing: ci }, pos: w, amps });
+            out.push(PoleEvent {
+                pole,
+                kind: PoleEventKind::CrossingPassed { crossing: ci },
+                pos: w,
+                amps,
+            });
         }
         self.last_pos = Some((c.span, c.s));
         // the boom against the wire's direction, seen from above
@@ -887,8 +1156,16 @@ impl Pole {
             }
         }
         // elevation: one-sided contact
-        let dth_w = if self.have_prev { (th_w - self.theta_w_prev) / dt } else { 0.0 };
-        let ddth_w = if self.have_prev { (dth_w - self.dtheta_w_prev) / dt } else { 0.0 };
+        let dth_w = if self.have_prev {
+            (th_w - self.theta_w_prev) / dt
+        } else {
+            0.0
+        };
+        let ddth_w = if self.have_prev {
+            (dth_w - self.dtheta_w_prev) / dt
+        } else {
+            0.0
+        };
         if !self.have_prev {
             self.theta = th_w;
             self.w_theta = 0.0;
@@ -903,7 +1180,15 @@ impl Pole {
         if self.theta >= th_w - 3e-5 {
             if !self.closed {
                 let impact = ((self.w_theta - dth_w) * len * self.theta.cos()).max(0.0);
-                out.push(PoleEvent { pole, kind: PoleEventKind::ContactClosed { open_s: self.open_time as f32, impact: impact as f32 }, pos: w, amps });
+                out.push(PoleEvent {
+                    pole,
+                    kind: PoleEventKind::ContactClosed {
+                        open_s: self.open_time as f32,
+                        impact: impact as f32,
+                    },
+                    pos: w,
+                    amps,
+                });
                 self.closed = true;
             }
             self.theta = self.theta.max(th_w);
@@ -913,10 +1198,17 @@ impl Pole {
             self.open_time = 0.0;
             // what the shoe presses with: the spring's torque less what the arm's own
             // acceleration along the wire takes
-            self.force = ((self.torque(th_w, accel.z as f64) - i * ddth_w) / (len * th_w.cos().max(0.1))).max(0.0);
+            self.force = ((self.torque(th_w, accel.z as f64) - i * ddth_w)
+                / (len * th_w.cos().max(0.1)))
+            .max(0.0);
         } else {
             if self.closed {
-                out.push(PoleEvent { pole, kind: PoleEventKind::ContactOpened, pos: w, amps });
+                out.push(PoleEvent {
+                    pole,
+                    kind: PoleEventKind::ContactOpened,
+                    pos: w,
+                    amps,
+                });
                 self.closed = false;
             }
             self.open_time += dt;
@@ -939,7 +1231,11 @@ impl Pole {
         self.have_prev = true;
         self.prev_wire_pt = w;
         self.prev_tip = self.tip;
-        self.tip = if self.closed { w } else { w - DVec3::Z * self.gap };
+        self.tip = if self.closed {
+            w
+        } else {
+            w - DVec3::Z * self.gap
+        };
         self.section = net.section_of(&c);
         self.on_live = self.closed && net.is_live(&c);
     }
@@ -972,30 +1268,55 @@ mod tests {
         assert_eq!(net.crossings.len(), 12, "{:?}", net.spans);
         for side in 0..=1 {
             for reverse in [false, true] {
-                let start = Contact { span: if reverse { 2 } else { 0 }, s: if reverse { 3.9 } else { 0.1 }, side };
+                let start = Contact {
+                    span: if reverse { 2 } else { 0 },
+                    s: if reverse { 3.9 } else { 0.1 },
+                    side,
+                };
                 let mut end = start;
                 let mut dir = if reverse { -1 } else { 1 };
                 let mut info = crate::wire::WalkInfo::default();
                 net.walk(&mut end, &mut dir, 11.8, &mut info).unwrap();
                 let passed = passed_crossings(&net, start, end, &info);
-                assert_eq!(passed.len(), 6, "side={side}, reverse={reverse}: {passed:?}");
-                assert!(passed_crossings(&net, end, end, &crate::wire::WalkInfo::default()).is_empty());
+                assert_eq!(
+                    passed.len(),
+                    6,
+                    "side={side}, reverse={reverse}: {passed:?}"
+                );
+                assert!(
+                    passed_crossings(&net, end, end, &crate::wire::WalkInfo::default()).is_empty()
+                );
             }
         }
     }
 
     fn straight() -> WireNet {
-        WireNet::parse("[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 0 0 5.5\np 50 0 5.5\np 100 0 5.5\n")
+        WireNet::parse(
+            "[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 0 0 5.5\np 50 0 5.5\np 100 0 5.5\n",
+        )
     }
 
     fn pole() -> Pole {
-        let def = PoleDef { side: 1, base: glam::Vec3::new(0.3, 0.0, 3.0), length: 6.5, ..Default::default() };
+        let def = PoleDef {
+            side: 1,
+            base: glam::Vec3::new(0.3, 0.0, 3.0),
+            length: 6.5,
+            ..Default::default()
+        };
         let mut p = Pole::new(def, 7);
         p.roughness = 0.0;
         p
     }
 
-    fn run(p: &mut Pole, net: &WireNet, pos: DVec3, secs: f64, rope: Rope, amps: f32, ev: &mut Vec<PoleEvent>) {
+    fn run(
+        p: &mut Pole,
+        net: &WireNet,
+        pos: DVec3,
+        secs: f64,
+        rope: Rope,
+        amps: f32,
+        ev: &mut Vec<PoleEvent>,
+    ) {
         // the bus stands: heading north (+y), the wire runs east-west: rotate so that the
         // bus's back is -x... the tests put the wire along the bus: heading east
         let rot = DMat3::from_rotation_z(-std::f64::consts::FRAC_PI_2);
@@ -1011,7 +1332,15 @@ mod tests {
         let net = straight();
         let mut p = pole();
         let mut ev = Vec::new();
-        run(&mut p, &net, DVec3::new(20.0, 0.0, 0.0), 2.0, Rope::Idle, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            DVec3::new(20.0, 0.0, 0.0),
+            2.0,
+            Rope::Idle,
+            0.0,
+            &mut ev,
+        );
         assert_eq!(p.mode, PoleMode::Down);
         assert!(ev.is_empty());
     }
@@ -1023,8 +1352,23 @@ mod tests {
         let mut ev = Vec::new();
         let pos = DVec3::new(20.0, 0.0, 0.0);
         // the bus heads east: its pole trails to the west; the wire straight above the axis
-        let goal = Contact { span: 0, s: 65.0, side: 0 };
-        run(&mut p, &net, pos, 4.0, Rope::Aim { goal: Some(goal), auto: false }, 0.0, &mut ev);
+        let goal = Contact {
+            span: 0,
+            s: 65.0,
+            side: 0,
+        };
+        run(
+            &mut p,
+            &net,
+            pos,
+            4.0,
+            Rope::Aim {
+                goal: Some(goal),
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         assert_eq!(p.mode, PoleMode::Hand);
         // let go: the spring lifts the shoe into the wire
         run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
@@ -1042,15 +1386,44 @@ mod tests {
         let mut p = pole();
         let mut ev = Vec::new();
         let pos = DVec3::new(20.0, 0.0, 0.0);
-        let goal = Contact { span: 0, s: 65.0, side: 0 };
-        run(&mut p, &net, pos, 4.0, Rope::Aim { goal: Some(goal), auto: false }, 0.0, &mut ev);
+        let goal = Contact {
+            span: 0,
+            s: 65.0,
+            side: 0,
+        };
+        run(
+            &mut p,
+            &net,
+            pos,
+            4.0,
+            Rope::Aim {
+                goal: Some(goal),
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::OnWire);
         // the mouse takes it: it leaves the wire and is in the hand
-        run(&mut p, &net, pos, 0.5, Rope::Aim { goal: None, auto: false }, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            pos,
+            0.5,
+            Rope::Aim {
+                goal: None,
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         assert_eq!(p.mode, PoleMode::Hand, "{:?}", p.mode);
         assert!(!p.closed);
-        assert!(ev.iter().any(|e| matches!(e.kind, PoleEventKind::Dewired(DewireCause::Rope))));
+        assert!(
+            ev.iter()
+                .any(|e| matches!(e.kind, PoleEventKind::Dewired(DewireCause::Rope)))
+        );
     }
 
     #[test]
@@ -1064,7 +1437,18 @@ mod tests {
         let base = p.base_at(pos, &rot);
         let aim = base + (rot * DVec3::new(2.5, -3.0, 4.0)).normalize() * p.def.length as f64;
         p.free_aim = Some(aim);
-        run(&mut p, &net, pos, 6.0, Rope::Aim { goal: None, auto: false }, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            pos,
+            6.0,
+            Rope::Aim {
+                goal: None,
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         assert_eq!(p.mode, PoleMode::Hand);
         let tip = p.tip_at(pos, &rot);
         assert!((tip - aim).length() < 0.7, "{tip:?} vs {aim:?}");
@@ -1082,20 +1466,53 @@ mod tests {
         // right of the axis), a few centimetres to the side of it, a boom's length off
         let aim = DVec3::new(base.x - 6.0, -0.3 + 0.08, 5.0);
         p.free_aim = Some(base + (aim - base).normalize() * p.def.length as f64);
-        run(&mut p, &net, pos, 3.0, Rope::Aim { goal: None, auto: false }, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            pos,
+            3.0,
+            Rope::Aim {
+                goal: None,
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         assert_eq!(p.mode, PoleMode::Hand, "{:?}", p.mode);
         // (the hand follows without shaking: the angles hold still)
         let (th, ps) = (p.theta, p.psi);
-        run(&mut p, &net, pos, 0.5, Rope::Aim { goal: None, auto: false }, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            pos,
+            0.5,
+            Rope::Aim {
+                goal: None,
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         assert!((p.theta - th).abs() < 1e-3 && (p.psi - ps).abs() < 1e-3);
         // let go, the spring lifts it and the nudge swings it on to the wire
         p.free_aim = None;
         for _ in 0..180 {
             // (the rig points the nudge at the wire above the tip each step)
-            p.steer_to = net.candidates(p.tip, 2.5).into_iter().filter(|(c, _)| net.wire_point(c).0.y < 0.0).min_by(|a, b| a.1.total_cmp(&b.1)).map(|x| net.wire_point(&x.0).0);
+            p.steer_to = net
+                .candidates(p.tip, 2.5)
+                .into_iter()
+                .filter(|(c, _)| net.wire_point(c).0.y < 0.0)
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .map(|x| net.wire_point(&x.0).0);
             run(&mut p, &net, pos, 1.0 / 60.0, Rope::Idle, 0.0, &mut ev);
         }
-        assert_eq!(p.mode, PoleMode::OnWire, "{:?} {:?}", p.mode, ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        assert_eq!(
+            p.mode,
+            PoleMode::OnWire,
+            "{:?} {:?}",
+            p.mode,
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
     }
 
     /// The rope's hold that puts the shoe `under` the wire and `side` metres beside it.
@@ -1127,7 +1544,12 @@ mod tests {
         let (_, tip) = hold_at(&p, pos, 0.3, 0.05);
         assert!((p.tip - tip).length() < 0.02, "{:?}", p.tip);
         run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
-        assert_eq!(p.mode, PoleMode::OnWire, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        assert_eq!(
+            p.mode,
+            PoleMode::OnWire,
+            "{:?}",
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -1136,14 +1558,31 @@ mod tests {
         run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::Free);
         run(&mut p, &net, pos, 3.0, Rope::Idle, 0.0, &mut ev);
-        assert!(p.theta <= (p.def.max_angle as f64).to_radians() + 1e-9 && p.theta > 0.6, "{}", p.theta.to_degrees());
+        assert!(
+            p.theta <= (p.def.max_angle as f64).to_radians() + 1e-9 && p.theta > 0.6,
+            "{}",
+            p.theta.to_degrees()
+        );
     }
 
     /// Pole `p` driven by its script's gear from `from` to `to` over `secs`, then held there for
     /// `hold` s (a run's leg and its stop).
     #[allow(clippy::too_many_arguments)]
-    fn gear_leg(p: &mut Pole, net: &WireNet, pos: DVec3, from: f64, to: f64, secs: f64, hold: f64, ev: &mut Vec<PoleEvent>) -> Vec<f64> {
-        let goal = Some(Contact { span: 0, s: 65.0, side: 0 });
+    fn gear_leg(
+        p: &mut Pole,
+        net: &WireNet,
+        pos: DVec3,
+        from: f64,
+        to: f64,
+        secs: f64,
+        hold: f64,
+        ev: &mut Vec<PoleEvent>,
+    ) -> Vec<f64> {
+        let goal = Some(Contact {
+            span: 0,
+            s: 65.0,
+            side: 0,
+        });
         let dt = 1.0 / 60.0;
         let mut seen = Vec::new();
         let n = (secs / dt).round().max(1.0) as usize;
@@ -1173,16 +1612,47 @@ mod tests {
         assert_eq!(p.mode, PoleMode::Hand);
         assert!(p.lifting());
         let mid = p.carriage.unwrap().0;
-        let seen: Vec<f64> = gear_leg(&mut p, &net, pos, 0.5, 0.5, 0.0, 3.0, &mut ev).iter().map(|t| t - mid).collect();
-        assert!(seen.iter().any(|d| *d > 0.0) && seen.iter().any(|d| *d < 0.0), "no bounce about halfway: {seen:?}");
+        let seen: Vec<f64> = gear_leg(&mut p, &net, pos, 0.5, 0.5, 0.0, 3.0, &mut ev)
+            .iter()
+            .map(|t| t - mid)
+            .collect();
+        assert!(
+            seen.iter().any(|d| *d > 0.0) && seen.iter().any(|d| *d < 0.0),
+            "no bounce about halfway: {seen:?}"
+        );
         assert!(seen.last().unwrap().abs() < 0.01);
         gear_leg(&mut p, &net, pos, 0.5, 1.0, 2.0, 2.0, &mut ev);
-        assert_eq!(p.mode, PoleMode::OnWire, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        assert_eq!(
+            p.mode,
+            PoleMode::OnWire,
+            "{:?}",
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
         assert!(!p.lifting());
         gear_leg(&mut p, &net, pos, 1.0, 0.0, 4.0, 2.0, &mut ev);
         assert_eq!(p.mode, PoleMode::Down);
-        let steps: Vec<_> = ev.iter().map(|e| e.kind).filter(|k| matches!(k, PoleEventKind::Released | PoleEventKind::Engaged | PoleEventKind::Dewired(_) | PoleEventKind::Latched)).collect();
-        assert_eq!(steps, [PoleEventKind::Released, PoleEventKind::Engaged, PoleEventKind::Dewired(DewireCause::Rope), PoleEventKind::Latched]);
+        let steps: Vec<_> = ev
+            .iter()
+            .map(|e| e.kind)
+            .filter(|k| {
+                matches!(
+                    k,
+                    PoleEventKind::Released
+                        | PoleEventKind::Engaged
+                        | PoleEventKind::Dewired(_)
+                        | PoleEventKind::Latched
+                )
+            })
+            .collect();
+        assert_eq!(
+            steps,
+            [
+                PoleEventKind::Released,
+                PoleEventKind::Engaged,
+                PoleEventKind::Dewired(DewireCause::Rope),
+                PoleEventKind::Latched
+            ]
+        );
         // (and the variable left at 0 does not take the pole down again once put up by hand)
         assert_eq!(p.gear_order(), None);
     }
@@ -1191,7 +1661,18 @@ mod tests {
     fn a_rope_brought_down_to_the_roof_hooks_the_pole_on() {
         let (mut p, net, pos, mut ev) = held_under_the_wire(0.3, 0.05);
         let rest = p.rest();
-        run(&mut p, &net, pos, 3.0, Rope::Hold { theta: rest, psi: 0.05 }, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            pos,
+            3.0,
+            Rope::Hold {
+                theta: rest,
+                psi: 0.05,
+            },
+            0.0,
+            &mut ev,
+        );
         run(&mut p, &net, pos, 1.0, Rope::Idle, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::Down);
         assert!(ev.iter().any(|e| matches!(e.kind, PoleEventKind::Latched)));
@@ -1214,18 +1695,44 @@ mod tests {
         let mut p = pole();
         let mut ev = Vec::new();
         let pos = DVec3::new(20.0, 0.0, 0.0);
-        run(&mut p, &net, pos, 4.0, Rope::Aim { goal: Some(Contact { span: 0, s: 65.0, side: 0 }), auto: false }, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            pos,
+            4.0,
+            Rope::Aim {
+                goal: Some(Contact {
+                    span: 0,
+                    s: 65.0,
+                    side: 0,
+                }),
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::OnWire);
         // drive east at 8 m/s for 10 s
         let rot = DMat3::from_rotation_z(-std::f64::consts::FRAC_PI_2);
         let mut x = 20.0;
         for _ in 0..600 {
-            let span = PoseSpan { pos0: DVec3::new(x, 0.0, 0.0), rot0: rot, pos1: DVec3::new(x + 8.0 / 60.0, 0.0, 0.0), rot1: rot, accel: glam::Vec3::ZERO };
+            let span = PoseSpan {
+                pos0: DVec3::new(x, 0.0, 0.0),
+                rot0: rot,
+                pos1: DVec3::new(x + 8.0 / 60.0, 0.0, 0.0),
+                rot1: rot,
+                accel: glam::Vec3::ZERO,
+            };
             x += 8.0 / 60.0;
             p.step(&net, &span, 1.0 / 60.0, Rope::Idle, 100.0, 0, &mut ev);
         }
-        assert_eq!(p.mode, PoleMode::OnWire, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        assert_eq!(
+            p.mode,
+            PoleMode::OnWire,
+            "{:?}",
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
         // the shoe presses the wire with about the spring's rated force
         assert!((p.force - 120.0).abs() < 40.0, "force {}", p.force);
         assert!((p.slide - 8.0).abs() < 1.0);
@@ -1239,20 +1746,53 @@ mod tests {
             let mut p = pole();
             let mut ev = Vec::new();
             let pos = DVec3::new(20.0, side, 0.0);
-            run(&mut p, &net, pos, 4.0, Rope::Aim { goal: Some(Contact { span: 0, s: 65.0, side: 0 }), auto: false }, 0.0, &mut ev);
+            run(
+                &mut p,
+                &net,
+                pos,
+                4.0,
+                Rope::Aim {
+                    goal: Some(Contact {
+                        span: 0,
+                        s: 65.0,
+                        side: 0,
+                    }),
+                    auto: false,
+                },
+                0.0,
+                &mut ev,
+            );
             run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
             assert_eq!(p.mode, PoleMode::OnWire);
             let (st, ct, sp, cp) = (p.theta.sin(), p.theta.cos(), p.psi.sin(), p.psi.cos());
-            let (f, s, u) = (DVec3::new(sp * ct, -cp * ct, st), DVec3::new(cp, sp, 0.0), DVec3::new(-sp * st, cp * st, ct));
-            let shoe = p.shoe_pitch.cos() * (p.shoe_yaw.cos() * f + p.shoe_yaw.sin() * s) + p.shoe_pitch.sin() * u;
+            let (f, s, u) = (
+                DVec3::new(sp * ct, -cp * ct, st),
+                DVec3::new(cp, sp, 0.0),
+                DVec3::new(-sp * st, cp * st, ct),
+            );
+            let shoe = p.shoe_pitch.cos() * (p.shoe_yaw.cos() * f + p.shoe_yaw.sin() * s)
+                + p.shoe_pitch.sin() * u;
             // (the wire runs along the bus: the bus's -y)
-            assert!(shoe.dot(DVec3::NEG_Y) > 0.9999, "side {side}: shoe {shoe:?}");
-            assert!((p.shoe_pitch + p.theta).abs() < 0.02, "{} {}", p.shoe_pitch, p.theta);
+            assert!(
+                shoe.dot(DVec3::NEG_Y) > 0.9999,
+                "side {side}: shoe {shoe:?}"
+            );
+            assert!(
+                (p.shoe_pitch + p.theta).abs() < 0.02,
+                "{} {}",
+                p.shoe_pitch,
+                p.theta
+            );
             assert_eq!(p.shoe_yaw.abs() > 0.05, side > 0.0, "{}", p.shoe_yaw);
             let turned = (p.shoe_yaw, p.shoe_pitch);
             run(&mut p, &net, pos, 4.0, Rope::Pull, 0.0, &mut ev);
             assert_eq!(p.mode, PoleMode::Down);
-            assert!(p.shoe_yaw.abs() < 0.01 && p.shoe_pitch.abs() < 0.01, "{turned:?} -> {} {}", p.shoe_yaw, p.shoe_pitch);
+            assert!(
+                p.shoe_yaw.abs() < 0.01 && p.shoe_pitch.abs() < 0.01,
+                "{turned:?} -> {} {}",
+                p.shoe_yaw,
+                p.shoe_pitch
+            );
         }
     }
 
@@ -1262,7 +1802,22 @@ mod tests {
         let mut p = pole();
         let mut ev = Vec::new();
         let pos = DVec3::new(20.0, 0.0, 0.0);
-        run(&mut p, &net, pos, 4.0, Rope::Aim { goal: Some(Contact { span: 0, s: 65.0, side: 0 }), auto: false }, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            pos,
+            4.0,
+            Rope::Aim {
+                goal: Some(Contact {
+                    span: 0,
+                    s: 65.0,
+                    side: 0,
+                }),
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::OnWire);
         // the bus slides 5 m to the side: further than the boom can stand off the wire
@@ -1276,7 +1831,15 @@ mod tests {
             }
         }
         assert_ne!(p.mode, PoleMode::OnWire);
-        assert!(ev.iter().any(|e| matches!(e.kind, PoleEventKind::Dewired(DewireCause::Lateral) | PoleEventKind::Dewired(DewireCause::OutOfReach))), "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        assert!(
+            ev.iter().any(|e| matches!(
+                e.kind,
+                PoleEventKind::Dewired(DewireCause::Lateral)
+                    | PoleEventKind::Dewired(DewireCause::OutOfReach)
+            )),
+            "{:?}",
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -1285,16 +1848,38 @@ mod tests {
         let mut p = pole();
         let mut ev = Vec::new();
         let pos = DVec3::new(20.0, 0.0, 0.0);
-        run(&mut p, &net, pos, 4.0, Rope::Aim { goal: Some(Contact { span: 0, s: 65.0, side: 0 }), auto: false }, 0.0, &mut ev);
+        run(
+            &mut p,
+            &net,
+            pos,
+            4.0,
+            Rope::Aim {
+                goal: Some(Contact {
+                    span: 0,
+                    s: 65.0,
+                    side: 0,
+                }),
+                auto: false,
+            },
+            0.0,
+            &mut ev,
+        );
         run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
         assert_eq!(p.mode, PoleMode::OnWire);
         run(&mut p, &net, pos, 3.0, Rope::Pull, 200.0, &mut ev);
         assert_eq!(p.mode, PoleMode::Down);
         let kinds: Vec<_> = ev.iter().map(|e| e.kind).collect();
-        assert!(kinds.iter().any(|k| matches!(k, PoleEventKind::Dewired(DewireCause::Rope))));
+        assert!(
+            kinds
+                .iter()
+                .any(|k| matches!(k, PoleEventKind::Dewired(DewireCause::Rope)))
+        );
         assert!(kinds.iter().any(|k| matches!(k, PoleEventKind::Latched)));
         // pulling it off under 200 A struck an arc
-        assert!(ev.iter().any(|e| matches!(e.kind, PoleEventKind::Dewired(_)) && e.amps > 100.0));
+        assert!(
+            ev.iter()
+                .any(|e| matches!(e.kind, PoleEventKind::Dewired(_)) && e.amps > 100.0)
+        );
     }
 
     #[test]
@@ -1302,14 +1887,33 @@ mod tests {
         // a rope's tug pulls it off, the retriever takes it the rest of the way to its hook:
         // the next time a hand lets it go under the wire it still gets there (#3473)
         let net = straight();
-        let def = PoleDef { side: 1, base: glam::Vec3::new(0.3, 0.0, 3.0), length: 6.5, retriever: 35.0, motor: true, ..Default::default() };
+        let def = PoleDef {
+            side: 1,
+            base: glam::Vec3::new(0.3, 0.0, 3.0),
+            length: 6.5,
+            retriever: 35.0,
+            motor: true,
+            ..Default::default()
+        };
         let mut p = Pole::new(def, 7);
         p.roughness = 0.0;
         let mut ev = Vec::new();
         let pos = DVec3::new(20.0, 0.0, 0.0);
-        let goal = Some(Contact { span: 0, s: 65.0, side: 0 });
+        let goal = Some(Contact {
+            span: 0,
+            s: 65.0,
+            side: 0,
+        });
         for _ in 0..3 {
-            run(&mut p, &net, pos, 4.0, Rope::Aim { goal, auto: false }, 0.0, &mut ev);
+            run(
+                &mut p,
+                &net,
+                pos,
+                4.0,
+                Rope::Aim { goal, auto: false },
+                0.0,
+                &mut ev,
+            );
             run(&mut p, &net, pos, 2.0, Rope::Idle, 0.0, &mut ev);
             assert_eq!(p.mode, PoleMode::OnWire);
             run(&mut p, &net, pos, 0.1, Rope::Pull, 0.0, &mut ev);
@@ -1321,24 +1925,62 @@ mod tests {
     #[test]
     fn a_sharp_kink_taken_fast_dewires_but_slowly_does_not() {
         // a wire bending 25 degrees to the left at x = 60
-        let net = WireNet::parse("[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 60 0 5.5\np 100 18.65 5.5\n");
+        let net = WireNet::parse(
+            "[trolley_section]\nid 1\nlive 1\n[trolley_span]\nsection 1\np -50 0 5.5\np 60 0 5.5\np 100 18.65 5.5\n",
+        );
         let rot = DMat3::from_rotation_z(-std::f64::consts::FRAC_PI_2);
         for (speed, should_dewire) in [(11.0, true), (3.0, false)] {
             let mut p = pole();
             let mut ev = Vec::new();
             let mut x = 20.0;
-            run(&mut p, &net, DVec3::new(x, 0.0, 0.0), 4.0, Rope::Aim { goal: Some(Contact { span: 0, s: 65.0, side: 0 }), auto: false }, 0.0, &mut ev);
-            run(&mut p, &net, DVec3::new(x, 0.0, 0.0), 2.0, Rope::Idle, 0.0, &mut ev);
+            run(
+                &mut p,
+                &net,
+                DVec3::new(x, 0.0, 0.0),
+                4.0,
+                Rope::Aim {
+                    goal: Some(Contact {
+                        span: 0,
+                        s: 65.0,
+                        side: 0,
+                    }),
+                    auto: false,
+                },
+                0.0,
+                &mut ev,
+            );
+            run(
+                &mut p,
+                &net,
+                DVec3::new(x, 0.0, 0.0),
+                2.0,
+                Rope::Idle,
+                0.0,
+                &mut ev,
+            );
             assert_eq!(p.mode, PoleMode::OnWire);
             // drive straight on past the bend
             let steps = ((60.0 - x + 12.0) / speed * 60.0) as usize;
             for _ in 0..steps {
-                let span = PoseSpan { pos0: DVec3::new(x, 0.0, 0.0), rot0: rot, pos1: DVec3::new(x + speed / 60.0, 0.0, 0.0), rot1: rot, accel: glam::Vec3::ZERO };
+                let span = PoseSpan {
+                    pos0: DVec3::new(x, 0.0, 0.0),
+                    rot0: rot,
+                    pos1: DVec3::new(x + speed / 60.0, 0.0, 0.0),
+                    rot1: rot,
+                    accel: glam::Vec3::ZERO,
+                };
                 x += speed / 60.0;
                 p.step(&net, &span, 1.0 / 60.0, Rope::Idle, 0.0, 0, &mut ev);
             }
-            let kinked = ev.iter().any(|e| matches!(e.kind, PoleEventKind::Dewired(DewireCause::Kink)));
-            assert_eq!(kinked, should_dewire, "speed {speed}: {:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+            let kinked = ev
+                .iter()
+                .any(|e| matches!(e.kind, PoleEventKind::Dewired(DewireCause::Kink)));
+            assert_eq!(
+                kinked,
+                should_dewire,
+                "speed {speed}: {:?}",
+                ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+            );
         }
     }
 
@@ -1352,15 +1994,48 @@ mod tests {
             p.roughness = 0.006;
             let mut ev = Vec::new();
             let mut x = 0.0;
-            run(&mut p, &net, DVec3::new(x, 0.0, 0.0), 4.0, Rope::Aim { goal: Some(Contact { span: 0, s: 45.0, side: 0 }), auto: false }, 0.0, &mut ev);
-            run(&mut p, &net, DVec3::new(x, 0.0, 0.0), 2.0, Rope::Idle, 0.0, &mut ev);
+            run(
+                &mut p,
+                &net,
+                DVec3::new(x, 0.0, 0.0),
+                4.0,
+                Rope::Aim {
+                    goal: Some(Contact {
+                        span: 0,
+                        s: 45.0,
+                        side: 0,
+                    }),
+                    auto: false,
+                },
+                0.0,
+                &mut ev,
+            );
+            run(
+                &mut p,
+                &net,
+                DVec3::new(x, 0.0, 0.0),
+                2.0,
+                Rope::Idle,
+                0.0,
+                &mut ev,
+            );
             ev.clear();
             for _ in 0..300 {
-                let span = PoseSpan { pos0: DVec3::new(x, 0.0, 0.0), rot0: rot, pos1: DVec3::new(x + speed / 60.0, 0.0, 0.0), rot1: rot, accel: glam::Vec3::ZERO };
+                let span = PoseSpan {
+                    pos0: DVec3::new(x, 0.0, 0.0),
+                    rot0: rot,
+                    pos1: DVec3::new(x + speed / 60.0, 0.0, 0.0),
+                    rot1: rot,
+                    accel: glam::Vec3::ZERO,
+                };
                 x += speed / 60.0;
                 p.step(&net, &span, 1.0 / 60.0, Rope::Idle, 150.0, 0, &mut ev);
             }
-            results.push(ev.iter().filter(|e| matches!(e.kind, PoleEventKind::ContactOpened)).count());
+            results.push(
+                ev.iter()
+                    .filter(|e| matches!(e.kind, PoleEventKind::ContactOpened))
+                    .count(),
+            );
         }
         assert_eq!(results[0], 0, "{results:?}");
         assert!(results[1] > 0, "{results:?}");
@@ -1382,23 +2057,57 @@ mod switch_tests {
         );
         net.set_switch(0, branch);
         let rot = DMat3::from_rotation_z(-std::f64::consts::FRAC_PI_2);
-        let def = PoleDef { side: 1, base: glam::Vec3::new(0.3, 0.0, 3.0), length: 6.5, ..Default::default() };
+        let def = PoleDef {
+            side: 1,
+            base: glam::Vec3::new(0.3, 0.0, 3.0),
+            length: 6.5,
+            ..Default::default()
+        };
         let mut p = Pole::new(def, 7);
         p.roughness = 0.0;
         let mut ev = Vec::new();
         let pos = DVec3::new(-20.0, 0.0, 0.0);
-        let goal = Contact { span: 0, s: 30.0, side: 0 };
+        let goal = Contact {
+            span: 0,
+            s: 30.0,
+            side: 0,
+        };
         for _ in 0..240 {
-            p.step(&net, &PoseSpan::still(pos, rot), 1.0 / 60.0, Rope::Aim { goal: Some(goal), auto: false }, 0.0, 0, &mut ev);
+            p.step(
+                &net,
+                &PoseSpan::still(pos, rot),
+                1.0 / 60.0,
+                Rope::Aim {
+                    goal: Some(goal),
+                    auto: false,
+                },
+                0.0,
+                0,
+                &mut ev,
+            );
         }
         for _ in 0..120 {
-            p.step(&net, &PoseSpan::still(pos, rot), 1.0 / 60.0, Rope::Idle, 0.0, 0, &mut ev);
+            p.step(
+                &net,
+                &PoseSpan::still(pos, rot),
+                1.0 / 60.0,
+                Rope::Idle,
+                0.0,
+                0,
+                &mut ev,
+            );
         }
         assert_eq!(p.mode, PoleMode::OnWire);
         ev.clear();
         let mut x = -20.0;
         for _ in 0..secs * 60 {
-            let span = PoseSpan { pos0: DVec3::new(x, 0.0, 0.0), rot0: rot, pos1: DVec3::new(x + 3.0 / 60.0, 0.0, 0.0), rot1: rot, accel: glam::Vec3::ZERO };
+            let span = PoseSpan {
+                pos0: DVec3::new(x, 0.0, 0.0),
+                rot0: rot,
+                pos1: DVec3::new(x + 3.0 / 60.0, 0.0, 0.0),
+                rot1: rot,
+                accel: glam::Vec3::ZERO,
+            };
             x += 3.0 / 60.0;
             p.step(&net, &span, 1.0 / 60.0, Rope::Idle, 0.0, 0, &mut ev);
         }
@@ -1409,19 +2118,43 @@ mod switch_tests {
     fn a_shoe_goes_the_way_the_frog_is_set_without_chatter() {
         // straight: the shoe passes the frog once and stays on the wire the bus follows
         let (p, ev) = run(false, 16);
-        let frogs = ev.iter().filter(|e| matches!(e.kind, PoleEventKind::FrogPassed { branch: false, .. })).count();
-        assert_eq!(frogs, 1, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        let frogs = ev
+            .iter()
+            .filter(|e| matches!(e.kind, PoleEventKind::FrogPassed { branch: false, .. }))
+            .count();
+        assert_eq!(
+            frogs,
+            1,
+            "{:?}",
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
         assert_eq!(p.mode, PoleMode::OnWire);
         assert_eq!(p.contact.unwrap().span, 1);
         // the branch: the shoe takes it, once ...
         let (p, ev) = run(true, 10);
-        let frogs = ev.iter().filter(|e| matches!(e.kind, PoleEventKind::FrogPassed { branch: true, .. })).count();
-        assert_eq!(frogs, 1, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        let frogs = ev
+            .iter()
+            .filter(|e| matches!(e.kind, PoleEventKind::FrogPassed { branch: true, .. }))
+            .count();
+        assert_eq!(
+            frogs,
+            1,
+            "{:?}",
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
         assert_eq!(p.contact.unwrap().span, 2);
         // ... and the bus going straight on pulls the pole off the diverging wire
         let (p, ev) = run(true, 30);
         assert_ne!(p.mode, PoleMode::OnWire);
-        assert!(ev.iter().any(|e| matches!(e.kind, PoleEventKind::Dewired(DewireCause::Lateral) | PoleEventKind::Dewired(DewireCause::OutOfReach))), "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        assert!(
+            ev.iter().any(|e| matches!(
+                e.kind,
+                PoleEventKind::Dewired(DewireCause::Lateral)
+                    | PoleEventKind::Dewired(DewireCause::OutOfReach)
+            )),
+            "{:?}",
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
     }
 
     /// A toe cut into short spans (a map's junction by a crossover): the plate lies 9 m before
@@ -1442,27 +2175,69 @@ mod switch_tests {
         // (46 m of toe span, 4.6 m of the span after it: the plate is 4.4 m from the first one's end)
         assert!((s - 41.6).abs() < 1.0, "{s}");
         let rot = DMat3::from_rotation_z(-std::f64::consts::FRAC_PI_2);
-        let def = PoleDef { side: 1, base: glam::Vec3::new(0.3, 0.0, 3.0), length: 6.5, ..Default::default() };
+        let def = PoleDef {
+            side: 1,
+            base: glam::Vec3::new(0.3, 0.0, 3.0),
+            length: 6.5,
+            ..Default::default()
+        };
         let mut p = Pole::new(def, 7);
         p.roughness = 0.0;
         let mut ev = Vec::new();
         let pos = DVec3::new(-20.0, 0.0, 0.0);
-        let goal = Contact { span: 0, s: 30.0, side: 0 };
+        let goal = Contact {
+            span: 0,
+            s: 30.0,
+            side: 0,
+        };
         for _ in 0..240 {
-            p.step(&net, &PoseSpan::still(pos, rot), 1.0 / 60.0, Rope::Aim { goal: Some(goal), auto: false }, 0.0, 0, &mut ev);
+            p.step(
+                &net,
+                &PoseSpan::still(pos, rot),
+                1.0 / 60.0,
+                Rope::Aim {
+                    goal: Some(goal),
+                    auto: false,
+                },
+                0.0,
+                0,
+                &mut ev,
+            );
         }
         for _ in 0..120 {
-            p.step(&net, &PoseSpan::still(pos, rot), 1.0 / 60.0, Rope::Idle, 0.0, 0, &mut ev);
+            p.step(
+                &net,
+                &PoseSpan::still(pos, rot),
+                1.0 / 60.0,
+                Rope::Idle,
+                0.0,
+                0,
+                &mut ev,
+            );
         }
         assert_eq!(p.mode, PoleMode::OnWire);
         ev.clear();
         let mut x = -20.0;
         for _ in 0..8 * 60 {
-            let span = PoseSpan { pos0: DVec3::new(x, 0.0, 0.0), rot0: rot, pos1: DVec3::new(x + 3.0 / 60.0, 0.0, 0.0), rot1: rot, accel: glam::Vec3::ZERO };
+            let span = PoseSpan {
+                pos0: DVec3::new(x, 0.0, 0.0),
+                rot0: rot,
+                pos1: DVec3::new(x + 3.0 / 60.0, 0.0, 0.0),
+                rot1: rot,
+                accel: glam::Vec3::ZERO,
+            };
             x += 3.0 / 60.0;
             p.step(&net, &span, 1.0 / 60.0, Rope::Idle, 0.0, 0, &mut ev);
         }
-        let plates = ev.iter().filter(|e| matches!(e.kind, PoleEventKind::Plate { .. })).count();
-        assert_eq!(plates, 1, "{:?}", ev.iter().map(|e| e.kind).collect::<Vec<_>>());
+        let plates = ev
+            .iter()
+            .filter(|e| matches!(e.kind, PoleEventKind::Plate { .. }))
+            .count();
+        assert_eq!(
+            plates,
+            1,
+            "{:?}",
+            ev.iter().map(|e| e.kind).collect::<Vec<_>>()
+        );
     }
 }

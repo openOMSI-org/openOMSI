@@ -1164,7 +1164,7 @@ fn terrain_paint_fast_path_preserves_composition() {
                     scene
                         .material_table
                         .write(&renderer.device, &renderer.queue, row, &uniform);
-                    scene.camera_bind_group = None;
+                    scene.camera_heaps = None;
                 }
             }
             let lighting = Lighting {

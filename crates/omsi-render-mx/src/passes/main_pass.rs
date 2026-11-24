@@ -19,7 +19,11 @@ struct MainTargets<'t> {
     /// the ordinary scenery's depth, laid into the multisampled buffer at the start of
     /// the pass (of its first part) before the colour draws (see `encode_prefill`)
     prefill: Option<(&'t [Batch], &'t [mx::RenderPipeline; 6])>,
-    masked: Option<(&'t [Batch], &'t [mx::RenderPipeline; 2], &'t mx::BindGroup)>,
+    masked: Option<(
+        &'t [Batch],
+        &'t [mx::RenderPipeline; 2],
+        &'t mx::TextureView,
+    )>,
     /// the bundles of the last part (all of them when the pass is not split)
     bundles: &'t [mx::RenderBundle],
 }
@@ -103,7 +107,7 @@ impl Renderer {
         let masked = prefill.filter(|_| want_mask).and_then(|_| {
             let (panes, cut) = plan.masked.as_ref()?;
             let mask = self.pane_mask.as_ref()?;
-            let (_, view, bg) = self.pane_depth.as_ref()?;
+            let (_, view) = self.pane_depth.as_ref()?;
             let pass_encoder = lead.as_mut().unwrap_or(&mut *encoder);
             let mut pass = pass_encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("pane depth"),
@@ -119,9 +123,8 @@ impl Renderer {
                 timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "pane depth"),
                 occlusion_query_set: None,
             });
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             encode_batches(&mut pass, scene, panes, |pipe| &mask.panes[pipe as usize]);
-            Some((&cut[..], &mask.prefill, bg))
+            Some((&cut[..], &mask.prefill, view))
         });
         let mut main_parts: Vec<mx::CommandEncoder> = Vec::new();
         {
@@ -270,7 +273,6 @@ impl Renderer {
         batches: &[Batch],
         pipes: &'p [mx::RenderPipeline; 6],
     ) {
-        pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         // Alpha-tested colour draws use alpha-to-coverage, which covers a cut-out's
         // edge in part: those samples must keep the depth of what lies behind (or the
         // sky shows through the houses behind the foliage), so a cut-out lays only the
@@ -319,14 +321,7 @@ impl Renderer {
         let view = texture
             .create_view(&Default::default())
             .expect("mX: a texture view");
-        let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("pane depth"),
-            entries: &[mx::BindGroupEntry {
-                binding: 0,
-                resource: mx::BindingResource::TextureView(&view),
-            }],
-        });
-        self.pane_depth = Some(((width, height), view, bg));
+        self.pane_depth = Some(((width, height), view));
     }
 
     /// The sky dome (see sky.wgsl `vs_main`: it lies on the far plane and is tested against
@@ -339,7 +334,8 @@ impl Renderer {
     ) {
         if let Some(sky) = &scene.sky_bind_group {
             pass.set_pipeline(sky_pipe);
-            pass.set_bind_group(1, sky);
+            scene.camera_heaps.as_ref().unwrap().sky.set(pass);
+            sky.set(pass);
             pass.set_vertex_buffer(0, &self.sky.sky_mesh.0, 0);
             pass.set_index_buffer(&self.sky.sky_mesh.1, 0, mx::IndexFormat::Uint32);
             pass.draw_indexed(0..self.sky.sky_mesh.2, 0, 0..1);
@@ -441,7 +437,6 @@ impl Renderer {
             timestamp_writes: stamp,
             occlusion_query_set: None,
         });
-        pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         if first {
             let sky_late = prefill.is_some() && f.exclude_texture.is_none();
             if !sky_late {
@@ -449,11 +444,12 @@ impl Renderer {
             }
             // (an excavation coloured and sealed first, as `encode_main` does for an unsplit pass)
             if presurface_prefill {
-                encode_batches(
+                encode_main_batches(
                     &mut pass,
                     scene,
                     &plan.main_batches[..plan.presurface_batch_end],
-                    |pipe| main_pipeline(pp, pipe),
+                    pp,
+                    f.lean,
                 );
                 self.encode_prefill(
                     &mut pass,
@@ -593,7 +589,6 @@ impl Renderer {
             ),
             occlusion_query_set: None,
         });
-        pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         // The sky after the prefill: over the laid depth it shades only the pixels no
         // scenery covers (an excavation's floor is coloured before its prefill, so there it
         // goes first, over the cleared depth, as it always did; and where a texture is left
@@ -606,11 +601,12 @@ impl Renderer {
         if presurface_prefill && parts == 1 {
             // Colour and seal the excavation first; prefill ordinary scenery without
             // storing and reloading the colour attachments in a separate pass.
-            encode_batches(
+            encode_main_batches(
                 &mut pass,
                 scene,
                 &plan.main_batches[..plan.presurface_batch_end],
-                |pipe| main_pipeline(pp, pipe),
+                pp,
+                f.lean,
             );
             // At 1x an excavation still prevents sharing the earlier prepass depth.
             // Refill ordinary scenery here, after its floor and cover have been coloured.
@@ -624,8 +620,7 @@ impl Renderer {
             }
         }
         if bundles.is_empty() {
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-            encode_batches(
+            encode_main_batches(
                 &mut pass,
                 scene,
                 if presurface_prefill {
@@ -633,13 +628,12 @@ impl Renderer {
                 } else {
                     &plan.main_batches
                 },
-                |pipe| main_pipeline(pp, pipe),
+                pp,
+                f.lean,
             );
         } else {
             // the batches, recorded as bundles on several threads (see `record_bundles`)
             pass.execute_bundles(bundles.iter());
-            // a bundle leaves the pass without bind groups
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         }
         self.encode_main_late(&mut pass, scene, f, plan, pp);
     }
@@ -668,7 +662,8 @@ impl Renderer {
         if smoke && scene.smoke_count > 0 && !f.env.no_smoke {
             if let Some(sb) = &scene.smoke_buf {
                 pass.set_pipeline(&pp.smoke_pipeline);
-                pass.set_bind_group(1, &self.lights.smoke_bind_group);
+                scene.camera_heaps.as_ref().unwrap().corona.set(pass);
+                self.lights.smoke_bind_group.set(pass);
                 pass.set_vertex_buffer(0, &sb, 0);
                 pass.draw(0..6, 0..scene.smoke_count);
             }
@@ -680,7 +675,17 @@ impl Renderer {
             .as_ref()
             .filter(|_| particles && lighting.snowfall > 0.01 && !f.env.no_snowfall)
         {
-            let (counts, mean) = snowfall_flakes(lighting.snowfall);
+            let (mut counts, mean) = snowfall_flakes(lighting.snowfall);
+            // (the enhanced snowfall's flakes are drawn as their shapes, and as many as the
+            // `rain_quality` setting asks for; beyond them its veil)
+            let veil = if f.enhanced {
+                let k = [0.5, 0.75, 1.0][scene.rainfall.quality.min(2) as usize];
+                counts = counts.map(|n| (n as f32 * k) as u32);
+                veil_panels(scene.rainfall.quality)
+            } else {
+                0
+            };
+            let flakes = counts.iter().sum::<u32>();
             let u = SnowUniform {
                 wind: lighting
                     .wind
@@ -689,14 +694,15 @@ impl Renderer {
                 fall: [lighting.snowfall, mean, counts[0] as f32, counts[1] as f32],
                 roof: self.shadows.precip.uniform().0,
                 roof_on: [self.shadows.precip.uniform().1, 0.0, 0.0, 0.0],
+                ext: [flakes as f32, veil as f32, 0.7, f.height as f32],
             };
             self.queue
                 .write_buffer(&self.lights.snow_buf, 0, bytemuck::bytes_of(&u))
                 .expect("mX: a queue write");
             pass.set_pipeline(snow);
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-            pass.set_bind_group(1, &self.lights.snow_bind_group);
-            pass.draw(0..6, 0..counts.iter().sum::<u32>());
+            scene.camera_heaps.as_ref().unwrap().snow.set(pass);
+            self.lights.snow_bind_group.set(pass);
+            pass.draw(0..6, 0..flakes + veil);
         }
         // the rainfall, as the snowfall (rain.wgsl)
         let rf = scene.rainfall;
@@ -706,6 +712,11 @@ impl Renderer {
             .filter(|_| particles && rf.rate > 0.001 && lighting.snowfall <= 0.01 && !f.env.no_rain)
         {
             let counts = rainfall_drops(rf.rate, rf.quality);
+            let veil = if f.enhanced {
+                veil_panels(rf.quality)
+            } else {
+                0
+            };
             let u = RainUniform {
                 wind: rf
                     .wind
@@ -728,26 +739,32 @@ impl Renderer {
                 ],
                 roof: self.shadows.precip.uniform().0,
                 roof_on: [self.shadows.precip.uniform().1, 0.0, 0.0, 0.0],
+                // (the enhanced rain's far veil after the drops and the splashes)
+                ext: [
+                    counts.iter().sum::<u32>() as f32,
+                    veil as f32,
+                    0.7,
+                    rf.quality.min(2) as f32,
+                ],
             };
             self.queue
                 .write_buffer(&self.lights.rain_buf, 0, bytemuck::bytes_of(&u))
                 .expect("mX: a queue write");
             pass.set_pipeline(rain);
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-            pass.set_bind_group(1, &self.lights.rain_bind_group);
-            pass.draw(0..4, 0..counts.iter().sum::<u32>());
+            scene.camera_heaps.as_ref().unwrap().rain.set(pass);
+            self.lights.rain_bind_group.set(pass);
+            pass.draw(0..4, 0..counts.iter().sum::<u32>() + veil);
         }
         // light coronas, additive: the world's, then the vehicle the camera is in -
         // drawn over them as Omsi.exe draws it last (see `cab_items`) - then its own
         let coronas_on = scene.corona_count > 0 && !f.env.no_coronas;
         for late in [false, true] {
             if late && !cab_batches.is_empty() {
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-                encode_batches(pass, scene, cab_batches, |pipe| main_pipeline(pp, pipe));
+                encode_main_batches(pass, scene, cab_batches, pp, f.lean);
             }
             if let Some(cb) = scene.corona_buf.as_ref().filter(|_| coronas_on) {
                 pass.set_pipeline(&pp.corona_pipeline);
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
+                scene.camera_heaps.as_ref().unwrap().corona.set(pass);
                 pass.set_vertex_buffer(0, &cb, 0);
                 // in runs by picture (the standard glow, the lights' own bitmaps, the cone)
                 for &(tex, first, count, _) in scene.corona_runs.iter().filter(|r| r.3 == late) {
@@ -757,7 +774,7 @@ impl Renderer {
                         .get(tex as usize)
                         .and_then(|b| b.as_ref())
                         .unwrap_or(&self.lights.corona_bind_group);
-                    pass.set_bind_group(1, bg);
+                    bg.set(pass);
                     pass.draw(0..6, first..first + count);
                 }
             }
@@ -768,7 +785,7 @@ impl Renderer {
             pass.set_pipeline(&self.overlay_pipeline);
             for (k, _) in overlays.iter().enumerate() {
                 if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                    pass.set_bind_group(0, bg);
+                    bg.set(pass);
                     pass.draw(0..6, 0..1);
                 }
             }
@@ -779,10 +796,23 @@ impl Renderer {
 fn encode_masked<'p>(
     pass: &mut mx::RenderPass<'p>,
     scene: &'p Scene,
-    masked: Option<(&[Batch], &'p [mx::RenderPipeline; 2], &'p mx::BindGroup)>,
+    masked: Option<(&[Batch], &'p [mx::RenderPipeline; 2], &'p mx::TextureView)>,
 ) {
-    if let Some((batches, pipes, bg)) = masked {
-        pass.set_bind_group(3, bg);
-        encode_batches(pass, scene, batches, |pipe| &pipes[pipe as usize]);
+    if let Some((batches, pipes, pane_depth)) = masked {
+        // (the panes' multisampled depth at the frame's `ground` place: the cut prefill
+        // reads no ground picture)
+        let heap = FrameHeap {
+            ground: pane_depth.index(),
+            ..scene.frame_heap
+        };
+        encode_batches_in(
+            pass,
+            scene,
+            &heap,
+            batches,
+            |_| true,
+            |b| b.pipe as u16,
+            |pipe| &pipes[pipe as usize],
+        );
     }
 }

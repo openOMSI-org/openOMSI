@@ -17,9 +17,11 @@
 
 pub mod angle;
 pub mod atmosphere;
+mod cloud_pass;
 pub mod clouds;
 mod cookies;
 pub use cookies::{COOKIE_LAYERS, Cookie};
+mod glass_mips;
 mod gpu_memory;
 pub use gpu_memory::{Ceiling, GpuMemory, card_vram_mb, set_system_memory_mb};
 mod device_selection;
@@ -30,6 +32,7 @@ mod frame_plan;
 mod gpu;
 mod lighting;
 mod pipelines;
+mod precip;
 mod puddles;
 mod render;
 mod resources;
@@ -45,6 +48,7 @@ pub mod temporal;
 mod triple;
 mod uniforms;
 mod view;
+mod vol_fog;
 pub(crate) use frame_plan::*;
 pub use gpu::*;
 pub use lighting::*;
@@ -116,13 +120,15 @@ struct PassPipelines {
     rain_pipelines: Vec<mx::RenderPipeline>,
     /// Indexed by `pipe_code`: 4 depth/blend kinds x culled x depth-biased.
     pipelines: Vec<mx::RenderPipeline>,
+    /// The same with `override LEAN` (the enhanced passes only; see `main_key`).
+    lean: Option<Arc<LeanPipelines>>,
     corona_pipeline: mx::RenderPipeline,
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
     smoke_pipeline: mx::RenderPipeline,
-    /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); none with
-    /// `basic_pipelines`.
+    /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); with
+    /// `basic_pipelines` on a phone only (`snowfall_pipeline`).
     snow_pipeline: Option<mx::RenderPipeline>,
-    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` on computers too.
+    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` too (`rainfall_pipeline`).
     rain_fall_pipeline: Option<mx::RenderPipeline>,
     sky_pipeline: mx::RenderPipeline,
 }
@@ -170,13 +176,10 @@ pub struct Renderer {
     prepass_msaa_pipelines: Option<[mx::RenderPipeline; 6]>,
     prepass_eye_pipelines: Option<[mx::RenderPipeline; 6]>,
     pane_mask: Option<pipelines::scene::PaneMaskPipelines>,
-    pane_depth: Option<((u32, u32), mx::TextureView, mx::BindGroup)>,
+    pane_depth: Option<((u32, u32), mx::TextureView)>,
     /// The ground albedo pass's pipelines (see `SceneBase::ground_pipeline_at`); none where
     /// the enhanced path is left out or on OpenGL.
     ground_pipelines: Option<[mx::RenderPipeline; 8]>,
-    /// Whether the camera group's slot 8 (the AO's picture) holds the ground albedo picture
-    /// instead - while the ambient occlusion is off, see `ground_should_bind`.
-    ground_bound: std::cell::Cell<bool>,
     /// Ambient occlusion and its blur; none on OpenGL (GLES), whose shading language cannot
     /// read a depth texture texel by texel - the pipelines failed there, AO off or not (#422).
     ssao_pipeline: Option<mx::RenderPipeline>,
@@ -376,6 +379,10 @@ pub struct RenderOptions {
     /// The glare round bright lights and the lamps' halo in the night air (the settings'
     /// `light_glow`).
     pub light_glow: bool,
+    /// The Enhanced picture's volumetric fog (the settings' `volumetric_fog`): the air
+    /// marched through, with the sun's shafts, the clouds' shadows and drifting banks of
+    /// fog (volumetric_fog.wgsl). Off, the analytic fog of the main pass as before.
+    pub volumetric_fog: bool,
     pub puddle_reflections: bool,
     pub max_scene: Option<(u32, u32)>,
     pub detailed_trees: bool,
@@ -412,6 +419,7 @@ impl Default for RenderOptions {
             light_shadows: 1,
             cloud_shadows: false,
             light_glow: false,
+            volumetric_fog: true,
             puddle_reflections: true,
             max_scene: None,
             detailed_trees: false,

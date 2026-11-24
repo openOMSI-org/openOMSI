@@ -11,8 +11,24 @@ use std::sync::Arc;
 /// `version` is the game's version as the status page shows it. The returned handle takes
 /// the server off the list when dropped.
 pub fn start(cfg: &ServerCfg, version: &str) -> Result<Handle, String> {
-    let base = Listing { name: cfg.name.clone(), motd: cfg.motd.clone(), map: cfg.map.clone(), max_players: cfg.max_players, version: version.to_string(), protocol: omsi_net::PROTOCOL, web_port: cfg.web_port, ..Default::default() };
-    let (name, motd, map, max, version, web_port) = (cfg.name.clone(), cfg.motd.clone(), cfg.map.clone(), cfg.max_players, version.to_string(), cfg.web_port);
+    let base = Listing {
+        name: cfg.name.clone(),
+        motd: cfg.motd.clone(),
+        map: cfg.map.clone(),
+        max_players: cfg.max_players,
+        version: version.to_string(),
+        protocol: omsi_net::PROTOCOL,
+        web_port: cfg.web_port,
+        ..Default::default()
+    };
+    let (name, motd, map, max, version, web_port) = (
+        cfg.name.clone(),
+        cfg.motd.clone(),
+        cfg.map.clone(),
+        cfg.max_players,
+        version.to_string(),
+        cfg.web_port,
+    );
     let now = move || {
         let info = crate::gateway::server_info_now();
         Listing {
@@ -30,5 +46,12 @@ pub fn start(cfg: &ServerCfg, version: &str) -> Result<Handle, String> {
         }
     };
     let icon = Some(cfg.icon.clone()).filter(|i| !i.is_empty());
-    publish::start(&omsi_serverlist::service_url(&cfg.public_list_url), base, icon, Arc::new(omsi_serverlist::BuiltinModerator), Arc::new(now), Arc::new(crate::gateway::set_list_challenge))
+    publish::start(
+        &omsi_serverlist::service_url(&cfg.public_list_url),
+        base,
+        icon,
+        Arc::new(omsi_serverlist::BuiltinModerator),
+        Arc::new(now),
+        Arc::new(crate::gateway::set_list_challenge),
+    )
 }
