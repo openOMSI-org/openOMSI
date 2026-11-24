@@ -115,6 +115,11 @@ pub fn lerp(a: &Weather, b: &Weather, k: f32) -> Weather {
         ],
         snow: if late { b.snow } else { a.snow },
         snow_on_road: if late { b.snow_on_road } else { a.snow_on_road },
+        decorative_clouds: if late {
+            b.decorative_clouds
+        } else {
+            a.decorative_clouds
+        },
     }
 }
 

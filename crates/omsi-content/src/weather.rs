@@ -24,6 +24,10 @@ pub struct Weather {
     pub ground_wet: [f32; 3],
     pub snow: bool,
     pub snow_on_road: bool,
+    /// The clouds are only drawn, no part of the weather: openOMSI's few fair-weather
+    /// cumulus in a sky that no weather was chosen for. Omsi.exe's daylight (the street
+    /// lamps, `Envir_Brightness`) sees the clear sky the weather is.
+    pub decorative_clouds: bool,
 }
 
 impl Weather {

@@ -309,6 +309,8 @@ impl CustomWeather {
             ground_wet: [c.road_wetness * 255.0, 0.0, 0.0],
             snow: c.snow_cover,
             snow_on_road: c.snow_on_road,
+
+            decorative_clouds: false,
         }
     }
 }

@@ -16,12 +16,17 @@ pub struct Daylight {
     pub sky: Vec3,
     /// 0 by day, 1 by night (nightmaps, coronas).
     pub night: f32,
-    /// Street lights on (the `NightlightA` scenery variable): Omsi.exe's daylight sum under
-    /// the weather below 0.6, see [`SkyWeather::daylight_sum`].
+    /// Street lights on (the `NightlightA` scenery variable): [`Daylight::daylight_sum`]
+    /// below 0.6 (0x6ff1bc).
     pub lamps_on: bool,
-    /// The daylight by the sun's altitude (1 day … 0 night, a ramp from +6 to -6 degrees):
-    /// what the lit windows switch by.
+    /// The daylight by the sun's altitude alone (1 day … 0 night, a ramp from +6 to -6
+    /// degrees). Nothing Omsi.exe switches goes by it: see [`Daylight::daylight_sum`].
     pub brightness: f32,
+    /// Omsi.exe's daylight sum under the weather (0..1, weather +0xb0, see
+    /// [`SkyWeather::daylight_sum`]): what it switches its lights by - the street lamps
+    /// below 0.6 (0x6ff1bc), a scenery object's `NightlightA` and night textures below its
+    /// `[NightMapMode]` threshold (0x6119d8), the AI's lights below 0.75 (0x7d9128).
+    pub daylight_sum: f32,
     /// Omsi.exe's daylight sum with the sun's own share (0..1, weather +0xac): the day's
     /// part of the `Envir_Brightness` vehicle variable, see [`Daylight::envir_brightness`].
     pub sky_light: f32,
@@ -275,12 +280,12 @@ impl Daylight {
             ),
         ];
         let brightness = ((alt + 6.0) / 12.0).clamp(0.0, 1.0);
-        // the street lamps come on below a daylight sum of 0.6, as Omsi.exe switches them
-        // (0x6ff1bc on weather +0xb0), the same value at which a scenery object's
-        // NightlightA does: under clouds by the clouds' share, else by the sun's
+        // Omsi.exe's daylight under the weather (+0xb0), which its lamps, night textures and
+        // AI lights switch by (see `daylight_sum`): under clouds by the clouds' share of the
+        // sun, else by the sun's own
         let weather = sky_weather();
         let sun = omsi_sun_share(alt);
-        let lamps_on = weather.daylight_sum(a, b, c, weather.cloud_share().unwrap_or(sun)) < 0.6;
+        let daylight_sum = weather.daylight_sum(a, b, c, weather.cloud_share().unwrap_or(sun));
         let sky_light = weather.daylight_sum(a, b, c, sun);
         let here = place();
         let (m_alt, m_az, moon_illum) = moon_position(clock, &here);
@@ -301,8 +306,9 @@ impl Daylight {
             ambient,
             sky,
             night,
-            lamps_on,
+            lamps_on: daylight_sum < 0.6,
             brightness,
+            daylight_sum,
             sky_light,
             azimuth_rad: az.to_radians() as f32,
             sky_weights,
@@ -360,7 +366,9 @@ impl Default for SkyWeather {
 
 static SKY_WEATHER: std::sync::RwLock<Option<SkyWeather>> = std::sync::RwLock::new(None);
 
-/// The weather the daylight is reckoned under from now on (see [`SkyWeather`]).
+/// The weather the daylight is reckoned under from now on (see [`SkyWeather`]): the
+/// session's (the window's, an offscreen run's), `SkyWeather::default()` without one. A
+/// look at a vehicle outside the session (the showroom) leaves it alone.
 pub fn set_sky_weather(w: SkyWeather) {
     *SKY_WEATHER.write().unwrap_or_else(|e| e.into_inner()) = Some(w);
 }
@@ -574,13 +582,14 @@ mod tests {
             },
             None,
         );
-        assert!(night.lamps_on);
+        assert!(night.lamps_on && night.daylight_sum < 0.6);
         let dark = night.envir_brightness(None);
         assert!(dark > 0.0 && dark < 0.06, "{dark}");
         let lit = night.envir_brightness(Some(Vec3::new(0.6, 0.5, 0.4)));
         assert!((lit - 0.5 - dark).abs() < 1e-5, "{lit}");
         // noon: the daylight is 1, and the light map is off by day
         let noon = Daylight::compute(&clock_at(12.0), None);
+        assert!(!noon.lamps_on && noon.daylight_sum > 0.95);
         assert!(noon.envir_brightness(None) > 0.95);
         assert_eq!(
             noon.envir_brightness(Some(Vec3::ONE)),

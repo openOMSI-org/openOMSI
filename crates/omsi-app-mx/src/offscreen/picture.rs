@@ -193,7 +193,7 @@ impl Offscreen<'_> {
                     scene,
                     dt,
                     camera.position,
-                    daylight.brightness,
+                    daylight.daylight_sum,
                     &phase,
                     None,
                     false,
