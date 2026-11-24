@@ -93,6 +93,17 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   has moved on the rails (less after backing up) - the first piece of a rail simulation with blocks and train
   protection; `docs/RAIL.md` lays out the rest (#3969).
 - **Take control of an AI bus, as in OMSI 2**: in the map camera (F4), click a bus of the AI traffic and answer *Yes*: you drive it at once, even while it moves, with its passengers, its switches and displays as the AI left them, and its line and tour from the stop it was driving to. The bus you drove before stays where it is. As in OMSI 2, the bus is not changed while a timetable is active; not for a LAN client (#3974).
+- **Plugin catalog in the launcher**: Content → Plugins → Browse lists the plugins of the new
+  [openOMSI-Plugins](https://github.com/openOMSI-org/openOMSI-Plugins) repository: open source,
+  read by a maintainer before they are added. One click installs a plugin into the plugins
+  folder (only when every file is the one the catalog names, by its SHA-256), an update is
+  offered when its version goes up and keeps its settings, and *Read the code* opens its source
+  (#3920).
+- **Plugins page in the launcher**: Content → Plugins lists the Lua, `.oop` and OMSI
+  plugins of the game's plugins folders. Each has a switch (a plugin switched off is left out
+  of the next game, its files and settings stay where they are), shows whether it ran, did not
+  load (with the error, e.g. a syntax error) or was stopped after errors in the last game, and
+  a plugin that declares settings with `plugin.settings` gets a settings form there too (#3919).
 - **"Place a vehicle..." names and pictures as in the launcher**: a maker's buses are grouped into models as the launcher's bus picker groups them (*Citaro* with *C2*, *C2 G*, *C2 K* under it) instead of type names with folder and file beside them; the picture's second line is the bus's description, not its file's path; a maker's line shows its first bus; and the standard paint is called by the name the bus gives it, as in the launcher.
 - **Controls profiles**: the launcher's Controls page has profiles, each with every key and
   every controller setting: *Duplicate* makes a new one of the current settings, the list
