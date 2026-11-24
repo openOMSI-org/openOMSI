@@ -37,6 +37,36 @@ fn velocity_is_the_driven_wheels_speed() {
     assert_eq!(driven_wheels_speed([(20.0, 0.5, false)].into_iter()), None);
 }
 
+/// `n_Wheel` is the mean of every driven wheel, each scaled by its axle's size to the first
+/// axle's wheel (Omsi.exe 0x7e2574), not the first driven wheel alone.
+#[test]
+fn n_wheel_is_the_mean_of_the_driven_wheels() {
+    // in a bend the outer rear wheel turns faster than the inner one: the mean of the two
+    let bend = [
+        (100.0, 0.5, false),
+        (100.0, 0.5, false),
+        (90.0, 0.5, true),
+        (110.0, 0.5, true),
+    ];
+    assert_eq!(driven_wheels_rpm(bend.into_iter(), 0.5), Some(100.0));
+    // a driven axle on wheels half the first axle's size turns twice as fast for the speed
+    // the first axle's wheel would have
+    let small = [
+        (50.0, 0.5, false),
+        (50.0, 0.5, false),
+        (100.0, 0.25, true),
+        (100.0, 0.25, true),
+    ];
+    assert_eq!(driven_wheels_rpm(small.into_iter(), 0.5), Some(50.0));
+    // one wheel spinning on ice is half the reading, not all of it
+    let spin = [(0.0, 0.5, true), (200.0, 0.5, true)];
+    assert_eq!(driven_wheels_rpm(spin.into_iter(), 0.5), Some(100.0));
+    assert_eq!(
+        driven_wheels_rpm([(80.0, 0.5, false)].into_iter(), 0.5),
+        None
+    );
+}
+
 pub(super) fn coupling_test_type(boogies: Option<f32>) -> Arc<VehicleType> {
     Arc::new(VehicleType {
         def: Vehicle {
