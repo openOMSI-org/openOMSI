@@ -208,7 +208,7 @@ impl Money {
         }
 
         // (what may be taken back again: Omsi.exe allows half the currency's unit, 0x7e8254)
-        let half_smallest = self.currency.as_ref().map_or(0.005, |c| c.tolerance());
+        let tolerance = self.currency.as_ref().map_or(0.005, |c| c.tolerance());
         let mut out: Vec<(usize, f32)> = Vec::new();
         let mut sum = 0.0_f32;
 
@@ -227,7 +227,7 @@ impl Money {
         while again {
             again = false;
             for j in 0..out.len() {
-                if price - half_smallest <= sum - out[j].1 {
+                if price - tolerance <= sum - out[j].1 {
                     sum -= out[j].1;
                     out.remove(j);
                     again = true;
@@ -238,7 +238,7 @@ impl Money {
         out.into_iter().map(|(id, _)| id).collect()
     }
 
-    /// The value of the smallest coin (the tolerance of the change is half of it).
+    /// The value of the smallest coin.
     pub fn smallest_value(&self) -> f32 {
         self.currency
             .as_ref()
@@ -302,7 +302,11 @@ impl Money {
 
     pub fn change_left_coins(&mut self, owed: f32) -> Vec<usize> {
         let left = owed - self.change_value();
-        if left > self.smallest_value() / 2.0 {
+        // (what the passenger still waits for: more than the tolerance the change is
+        // counted to, half the currency's unit - not half the smallest coin, or a few cents
+        // short of a 5-cent coin were never handed out while the passenger waited for them)
+        let tolerance = self.currency.as_ref().map_or(0.005, |c| c.tolerance());
+        if left > tolerance {
             self.exact_coins_for(left)
         } else {
             Vec::new()
@@ -395,6 +399,17 @@ mod tests {
             hidden: Vec::new(),
             rng: 0x5151_7777,
         }
+    }
+
+    /// The rest of the change is handed out down to the tolerance the passenger counts it
+    /// to, half the currency's unit: 2 cents still owed with 5 cents the smallest coin are
+    /// owed, not forgiven.
+    #[test]
+    fn the_rest_of_the_change_is_counted_to_half_the_currency_unit() {
+        let mut money = money_with_currency(&[1.0, 0.05], &[]);
+        money.currency.as_mut().unwrap().decimals = 2;
+        assert!(!money.change_left_coins(0.02).is_empty());
+        assert!(money.change_left_coins(0.004).is_empty());
     }
 
     /// Repeatedly checks that no passenger payment contains a banknote
