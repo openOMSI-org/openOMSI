@@ -8805,3 +8805,8 @@ _version: 2
   en: "Lights on in a downpour"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on":
   en: "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on"
+
+"Read the map's passenger numbers exactly":
+  en: "Read the map's passenger numbers exactly"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding":
+  en: "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding"

@@ -2948,3 +2948,6 @@
 "to the right": "ไปทางขวา"
 "Lights on in a downpour": "ไฟเปิดเมื่อฝนตกหนัก"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "ในเวลากลางวันที่ฝนตกหนัก หน้าต่างบ้านบางหลังจะเปิดไฟ เพราะมืดพอที่จะต้องเปิดไฟ"
+
+"Read the map's passenger numbers exactly": "อ่านจำนวนผู้โดยสารของแผนที่อย่างแม่นยำ"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "ผู้โดยสาร: ป้ายที่มี 0.7 จะคงค่า 0.7 คนแทนที่จะปัดเศษขึ้นเป็น 1 ก่อนคูณความหนาแน่น; ปิด: การปัดเศษของ OMSI 2"

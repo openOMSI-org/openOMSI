@@ -4094,3 +4094,6 @@
 "to the right": "a la dreta"
 "Lights on in a downpour": "Llums enceses en un xàfec"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "De dia, amb pluja forta, algunes finestres de les cases s'il·luminen, perquè es fa prou fosc per encendre el llum"
+
+"Read the map's passenger numbers exactly": "Llegir exactament el nombre de passatgers del mapa"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passatgers: una parada amb 0,7 manté 0,7 persones en lloc d'arrodonir a 1 abans de la densitat; desactivat: arrodoniment d'OMSI 2"

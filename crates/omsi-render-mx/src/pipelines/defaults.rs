@@ -20,7 +20,7 @@ pub(crate) fn build(device: &mx::Device, queue: &mx::Queue, anisotropy: u16) -> 
     // repeat beyond its edge - repeated, the plate text tiled the whole rear of the bus
     let clamp_sampler = texture_sampler(device, mx::AddressMode::ClampToEdge, anisotropy);
     let mirror_sampler = texture_sampler(device, mx::AddressMode::MirrorRepeat, anisotropy);
-    let camera_buf = uniform_buffer(
+    let camera_buf = frame_buffer(
         device,
         "camera",
         std::mem::size_of::<CameraUniform>() as u64,

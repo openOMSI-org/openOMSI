@@ -54,28 +54,10 @@ fn albedo_only(u: &MaterialUniform, paint: bool) -> bool {
 }
 
 impl Renderer {
-    /// Whether the camera group's slot 8 holds the ground albedo picture: while nothing reads
-    /// the AO's there (the ambient occlusion is off, no traced lighting). The camera group is
-    /// made again when this changes.
-    pub(crate) fn ground_should_bind(&self) -> bool {
-        self.ground_eligible()
-            && self
-                .targets
-                .ground
-                .as_ref()
-                .zip(self.targets.ao.as_ref())
-                .is_some_and(|(g, a)| g.0 == a.size)
-    }
-
     /// Whether the ground picture can be drawn at all with these settings (it is made, and
-    /// takes its memory, only then): the Enhanced path's pipelines, the ambient occlusion
-    /// off, no traced lighting, one sample.
+    /// takes its memory, only then): the Enhanced path's pipelines.
     pub(crate) fn ground_eligible(&self) -> bool {
-        self.ground_pipelines.is_some()
-            && !self.options.ssao
-            && self.rt.is_none()
-            && self.options.msaa <= 1
-            && !omsi_cfg::flags::OMSI_NO_GROUND_PASS.is_set()
+        self.ground_pipelines.is_some() && !omsi_cfg::flags::OMSI_NO_GROUND_PASS.is_set()
     }
 
     /// The ground picture's draws out of the frame's main batches, or none when the frame
@@ -89,7 +71,7 @@ impl Renderer {
         main_batches: &mut Vec<Batch>,
         terrain_blends: std::ops::Range<usize>,
     ) -> GroundPlan {
-        if !f.ground_ok || !self.ground_bound.get() {
+        if !f.ground_ok || self.targets.ground.is_none() {
             return GroundPlan::default();
         }
         let mat = |b: &Batch| &scene.materials[b.material as usize].uniform;
@@ -128,11 +110,9 @@ impl Renderer {
         plan: &GroundPlan,
         timers: &mut PassTimers,
     ) {
-        let (Some(pipes), Some(ao), Some((_, ground))) = (
-            self.ground_pipelines.as_ref(),
-            self.targets.ao.as_ref(),
-            self.targets.ground.as_ref(),
-        ) else {
+        let (Some(pipes), Some((_, ground, depth))) =
+            (self.ground_pipelines.as_ref(), self.targets.ground.as_ref())
+        else {
             return;
         };
         let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
@@ -145,20 +125,22 @@ impl Renderer {
                     store: mx::StoreOp::Store,
                 },
             })],
-            // (the prepass's depth, only tested against: what the base and its layers
-            // show is what the main pass would have drawn there)
+            // (the terrain's own depth: the base writes it, its layers are tested against it.
+            // Not the prepass's: the picture then holds the ground behind everything that
+            // stands on it, which a multisampled main pass reads where an edge leaves the
+            // ground some of a pixel's samples - with the prepass's depth that pixel was
+            // the pole's or the kerb's, and the ground came out black round them.)
             depth_stencil_attachment: Some(mx::RenderPassDepthStencilAttachment {
-                view: &ao.depth_view,
-                depth_ops: None,
+                view: depth,
+                depth_ops: Some(mx::Operations {
+                    load: mx::LoadOp::Clear(0.0),
+                    store: mx::StoreOp::Discard,
+                }),
                 stencil_ops: None,
             }),
             timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "ground albedo"),
             occlusion_query_set: None,
         });
-        let Some(camera) = scene.ground_camera_bind_group.as_ref() else {
-            return;
-        };
-        pass.set_bind_group(0, camera);
         encode_batches(&mut pass, scene, &plan.base, |pipe| {
             &pipes[(pipe % 4) as usize]
         });

@@ -2947,3 +2947,6 @@
 "to the right": "pakanan"
 "Lights on in a downpour": "Ilaw sa malakas na ulan"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Sa araw kapag malakas ang ulan, may mga bintana ng bahay na may ilaw, dahil sapat na ang dilim para magbukas ng ilaw"
+
+"Read the map's passenger numbers exactly": "Basahin nang eksakto ang bilang ng pasahero sa mapa"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Mga pasahero: ang hintuan na may 0.7 ay nagpapanatili ng 0.7 tao sa halip na i-round up sa 1; naka-off: pag-round ng OMSI 2"

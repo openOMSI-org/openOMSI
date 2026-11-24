@@ -4401,3 +4401,6 @@
 "to the right": "para a direita"
 "Lights on in a downpour": "Luzes acesas no temporal"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "De dia, com chuva forte, algumas janelas das casas acendem, porque fica escuro o bastante para acender a luz"
+
+"Read the map's passenger numbers exactly": "Ler exatamente o número de passageiros do mapa"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passageiros: uma paragem com 0,7 mantém 0,7 pessoas em vez de arredondar para 1 antes da densidade; desativado: arredondamento do OMSI 2"
