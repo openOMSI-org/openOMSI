@@ -77,6 +77,38 @@ ever; a vehicle can have both.
 Other `.lua` files are not started on their own, so a folder plugin's modules stay modules.
 `OMSI_NO_PLUGINS=1` leaves every plugin out, Lua ones included.
 
+### The launcher's plugin list
+
+The launcher's **Plugins** page lists every plugin of the `plugins` folders (Lua, `.oop` and
+`.opl`). Players switch each on or off there without moving its files, see what the last game
+made of it, and change the settings it declared with `plugin.settings`:
+
+* The plugins switched off are in `~/.openomsi/plugins-off.txt`, one a line, in lower case,
+  each by its path under `plugins`: `foo.lua`, a folder plugin's folder with a `/` after it
+  (`foo/` for `foo/main.lua`), `foo.oop`, and an `.opl`'s path (`pablo/mbas.opl`). So
+  `foo.lua` and `foo/main.lua` are two plugins, switched and set apart. A bare stem an older
+  launcher wrote (`foo`) still leaves out every Lua or `.oop` plugin of that stem.
+  The game reads it before it loads the plugins and leaves those out.
+* After loading, the game writes `~/.openomsi/plugins-status.json`: every plugin, by the same
+  name, with its `state` (`loaded`, `off`, `failed` with the load error, e.g. a syntax error)
+  and, when one is switched off during the game for its errors, `switched_off` with the error.
+* `plugin.settings(...)` also writes `settings.schema.json` into the plugin's data folder,
+  beside `settings.json`: `{title, settings: [{key, type, label, default, min, max, step,
+  choices}]}`. The launcher makes a form of it and writes the values into `settings.json`,
+  which the plugin gets back from `plugin.settings` the next time it starts. A plugin that has
+  not run yet has no settings to show.
+
+#### Publishing a plugin in the catalog
+
+The page's **Browse** tab lists the plugins of
+[openOMSI-org/openOMSI-Plugins](https://github.com/openOMSI-org/openOMSI-Plugins): a folder
+plugin (`main.lua` and its files) with a `plugin.json` (name, author, version, description,
+an open source licence), sent as a pull request and read by a maintainer before it is merged.
+The launcher installs it as `plugins/<id>/` only when each file's size and SHA-256 are the ones
+in the repository's `catalog.json`, offers an update when `version` goes up, and keeps
+`plugins/<id>/data/` (settings and saved data) on an update. The repository's CONTRIBUTING.md
+has the rules.
+
 ### How a plugin runs
 
 The file's top level runs once when the game starts. After that the plugin reacts to
@@ -728,6 +760,7 @@ declared to call the function (a plain `.lua` file has all except native process
 | `omsi.bus.tickets()` | list of tables | The tickets the map sells: `{name, price, day_ticket}`. | 0.2.22 |
 | `omsi.bus.toggle_door([n])` | boolean | Presses the key of doorway `n` (from 1; 0 or none: all doors), as the player would. *Permission: `vehicle_write`.* | 0.2.22 |
 | `omsi.bus.toggle_handbrake()` | boolean | Puts the parking brake on or off, as its key does. *Permission: `vehicle_write`.* | 0.2.22 |
+| `omsi.bus.track()` | table or nil | Where the player's rail vehicle (tram, metro, train) is on its track, as distances along it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (an index into the map's lanes), the metres from its start and its length, whether the vehicle faces the track's direction, and the net metres it has moved along the tracks since it was put on them (they go down, below zero too, while it backs up). `nil` for a road vehicle. A plugin can work out block sections, distances to a signal or a stop, or a train protection system from it. | 0.3.55 |
 | `omsi.bus.trailers()` | integer or nil | Parts coupled behind the bus (an articulated bus's rear counts). | 0.2.22 |
 | `omsi.bus.triggers()` | list of strings | The names of the bus's script triggers (for `trigger`, `press`). | 0.2.22 |
 | `omsi.bus.velocity()` | number or nil | The bus's speed in km/h, negative backwards. | 0.2.22 |

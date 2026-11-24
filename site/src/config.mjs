@@ -73,6 +73,7 @@ export const DOC_GROUPS = [
       { file: "HTMLTEXTURE", title: "HTML textures", summary: "Draw a texture from an HTML page." },
       { file: "HTMLTEXTURE_MODERN", title: "HTML textures: modern engine", summary: "The opt-in engine with flexbox, positioning and modern CSS." },
       { file: "NAVIGATORTEXTURE", title: "Navigator textures", summary: "A GPS screen of its own in the cab." },
+      { file: "PUBLISHER_PACKS", title: "Publisher packs", summary: "Opt-in provenance, dependency references and protected playback for published content." },
     ],
   },
   {

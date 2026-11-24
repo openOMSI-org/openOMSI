@@ -320,6 +320,7 @@ effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set bef
 | `OMSI_NO_LAMP_SIGHT` | bool | off | use | render, render-mx | Enhanced by night: every lamp near the line of sight dazzles, hidden or not. |
 | `OMSI_NO_LAN_MODS` | bool | off | use | app, app-mx, lan, net | LAN: do not exchange mods. |
 | `OMSI_NO_LAN_UPLOADS` | bool | off | use | lan | LAN: a game hosting a session takes no buses from the players who join. |
+| `OMSI_NO_LEAN` | bool | off | frame | render-mx | Enhanced main pass: draw every material with the full scene pipelines, not the lean ones of plain materials on a dry frame. |
 | `OMSI_NO_LIGHT_MAP` | bool | off | use | scene, scene-mx | No night light maps on the tiles (A/B). |
 | `OMSI_NO_MATERIAL_SPLINE_BATCHING` | bool | off | use | scene, scene-mx | No batching of splines by material. |
 | `OMSI_NO_MODEL_ORDER` | bool | off | use | scene, scene-mx | Draw the opaque parts of ordered models first again (A/B). |

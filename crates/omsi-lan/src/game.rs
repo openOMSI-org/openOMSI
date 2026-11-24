@@ -25,6 +25,7 @@ use crate::script_texture::{script_texture_subscription_table, script_texture_ta
 use crate::variable_schema;
 mod buses;
 mod car_sync;
+pub mod points;
 mod sound_sync;
 use crate::animation_sync;
 use crate::config::LanConfig;

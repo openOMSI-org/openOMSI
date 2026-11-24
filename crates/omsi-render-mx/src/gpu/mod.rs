@@ -235,6 +235,21 @@ impl GpuArray {
         }
     }
 
+    /// Its place in the heap (`frame_from_heap`): a buffer's view, kept in `views`, or the
+    /// texture's own.
+    pub(crate) fn heap_index(&self, views: &mut Vec<mx::BufferView>) -> u32 {
+        match self {
+            GpuArray::Buffer(b) => {
+                let view = crate::pipelines::common::heap_view(b);
+                let index = view.index();
+                views.push(view);
+                index
+            }
+            GpuArray::Texture { view, .. } => view.index(),
+            GpuArray::Unused => 0,
+        }
+    }
+
     pub(crate) fn binding(&self) -> mx::BindingResource<'_> {
         match self {
             GpuArray::Buffer(b) => b.as_entire_binding(),
