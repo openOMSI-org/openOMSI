@@ -3510,3 +3510,6 @@
 "to the right": "w prawo"
 "Lights on in a downpour": "Światła w ulewie"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "W dzień podczas ulewy w niektórych oknach domów pali się światło, bo robi się wystarczająco ciemno, by je włączyć"
+
+"Read the map's passenger numbers exactly": "Dokładny odczyt liczby pasażerów z mapy"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Pasażerowie: przystanek z wartością 0,7 zachowuje 0,7 osoby zamiast zaokrąglenia do 1 przed mnożeniem przez gęstość; wyłączone: zaokrąglanie z OMSI 2"

@@ -3352,3 +3352,6 @@
 "to the right": "праворуч"
 "Lights on in a downpour": "Світло у вікнах під час зливи"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Удень у сильний дощ у частині вікон будинків горить світло - стає досить темно, щоб його ввімкнути"
+
+"Read the map's passenger numbers exactly": "Точне читання кількості пасажирів з карти"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Пасажири: зупинка з 0,7 зберігає 0,7 людини замість округлення до 1 перед множенням на щільність; вимк: округлення OMSI 2"
