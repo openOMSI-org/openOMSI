@@ -285,8 +285,9 @@ mod tests {
         held.event(&cfg, "Wheel", 0, false, &mut actions);
         // let go, then the latch's way back: each action once more
         assert_eq!(actions.len(), 3 + 3 * 2);
-        assert_eq!(actions[3], ("bus_doorfront0".to_string(), false));
-        assert_eq!(actions[4], ("bus_doorfront0".to_string(), true));
+        assert_eq!(actions[0], ("bus_doorfront0".to_string(), false));
+        assert_eq!(actions[3], ("bus_doorfront0".to_string(), true));
+        assert_eq!(actions[4], ("bus_doorfront0".to_string(), false));
     }
 
     /// In and out again during the pause, or a button that is no latch: nothing at all.
