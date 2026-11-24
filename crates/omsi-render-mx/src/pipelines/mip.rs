@@ -12,6 +12,11 @@ pub(crate) enum MipAverage {
     Independent,
 }
 
+/// mip.wgsl, its group read from the heap.
+pub(crate) static MIP: HeapModule = HeapModule::new(|| {
+    crate::shaders::hot_wgsl(include_str!("../mip.wgsl"), "mip.wgsl").to_string()
+});
+
 pub(crate) struct Mip {
     pub pipeline: mx::RenderPipeline,
     pub text_pipeline: mx::RenderPipeline,
@@ -25,7 +30,7 @@ pub(crate) fn build(device: &mx::Device) -> Mip {
         device,
         mx::ShaderModuleDescriptor {
             label: Some("mip"),
-            source: &*(crate::shaders::hot_wgsl(include_str!("../mip.wgsl"), "mip.wgsl")),
+            source: &MIP.wgsl(),
         },
     );
     let mip_pipeline = no_vertex_pipeline(
@@ -277,19 +282,23 @@ mod tests {
                     .expect("mX: a texture view")
             };
             let (src_view, dst_view) = (view(0), view(1));
-            let bg = device.create_bind_group(&mx::BindGroupDescriptor {
-                label: None,
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: mx::BindingResource::TextureView(&src_view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::Sampler(&mip.sampler),
-                    },
-                ],
-            });
+            let bg = HeapGroup::of(
+                MIP.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: None,
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: mx::BindingResource::TextureView(&src_view),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::Sampler(&mip.sampler),
+                        },
+                    ],
+                },
+            );
             let (dw, dh) = (w / 2, h / 2);
             let buf = device
                 .create_buffer(&mx::BufferDescriptor {
@@ -319,7 +328,7 @@ mod tests {
                 } else {
                     &mip.pipeline
                 });
-                pass.set_bind_group(0, &bg);
+                bg.set(&mut pass);
                 pass.draw(0..3, 0..1);
             }
             enc.copy_texture_to_buffer(

@@ -31,6 +31,10 @@ impl<T: Clone> OnceByKey<T> {
 
 impl World {
     pub fn open(root: &Path, global_cfg: &Path, date: i32) -> Result<World> {
+        let publisher_mounts =
+            omsi_cfg::publisher::validate_map(global_cfg.parent().unwrap_or(root))
+                .context("resolving publisher dependencies")?;
+        let publisher_texture_dirs = publisher_mounts.texture_dirs();
         let mut global = GlobalCfg::load(global_cfg)
             .with_context(|| format!("loading {}", global_cfg.display()))?;
         let map_dir = global.dir().to_path_buf();
@@ -42,7 +46,10 @@ impl World {
             let added = global.add_object_entry_points();
             log::info!("entry points: {added} from the tiles' entry objects");
         }
-        omsi_sim::people::LEFT_HAND.store(global.left_hand_traffic, std::sync::atomic::Ordering::Relaxed);
+        omsi_sim::people::LEFT_HAND.store(
+            global.left_hand_traffic,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         log::info!(
             "tile size {:.1} m ({})",
             omsi_map::tile_size(),
@@ -57,15 +64,34 @@ impl World {
         let mut place = omsi_sim::daylight::SunPlace::default();
         if let Ok(tz) = omsi_map::TimeZone::load(&tz_path) {
             place.locate(tz.offset_hours as f64, tz.lat_lon());
-            place.dst = tz.dst.iter().map(|d| (d.start, d.end, d.params[0], d.params[1], d.params[2])).collect();
-            log::info!("sun: {:.3} N {:.3} E, UTC{:+}, {} summer time periods", place.latitude, place.longitude, place.timezone, place.dst.len());
+            place.dst = tz
+                .dst
+                .iter()
+                .map(|d| (d.start, d.end, d.params[0], d.params[1], d.params[2]))
+                .collect();
+            log::info!(
+                "sun: {:.3} N {:.3} E, UTC{:+}, {} summer time periods",
+                place.latitude,
+                place.longitude,
+                place.timezone,
+                place.dst.len()
+            );
         }
         omsi_sim::daylight::set_place(place);
-        let mut signal_routes = omsi_cfg::CfgFile::read(&omsi_cfg::resolve_path(&map_dir, "signalroutes.cfg"))
-            .map(|f| omsi_map::ailists::parse_signalroutes(&f))
-            .unwrap_or_default();
+        let mut signal_routes =
+            omsi_cfg::CfgFile::read(&omsi_cfg::resolve_path(&map_dir, "signalroutes.cfg"))
+                .map(|f| omsi_map::ailists::parse_signalroutes(&f))
+                .unwrap_or_default();
         if !signal_routes.is_empty() {
-            log::info!("signal routes: {} for {} signals", signal_routes.len(), signal_routes.iter().map(|r| r.signal.0).collect::<hashbrown::HashSet<_>>().len());
+            log::info!(
+                "signal routes: {} for {} signals",
+                signal_routes.len(),
+                signal_routes
+                    .iter()
+                    .map(|r| r.signal.0)
+                    .collect::<hashbrown::HashSet<_>>()
+                    .len()
+            );
         }
         let chrono_dirs = omsi_map::active_chrono_dirs(&map_dir, date);
         // AI lists: the map's plus the chrono updates; depot entries filtered by validity date
@@ -106,24 +132,36 @@ impl World {
                     .collect::<Vec<_>>()
             );
         }
-        let data = Arc::new(omsi_sim::world_data::WorldCell::new(omsi_sim::world_data::WorldData {
-            map: Arc::new(omsi_sim::world_data::MapFacts {
-                root: root.to_path_buf(),
-                map_dir: map_dir.clone(),
-                raw_tiles: global.raw_tiles.clone(),
-                tiles: global.tiles.iter().map(|t| ((t.x, t.y), t.file.clone())).collect(),
-                ailists,
-                date,
-                chrono_dirs,
-            }),
-            ..Default::default()
-        }));
+        let data = Arc::new(omsi_sim::world_data::WorldCell::new(
+            omsi_sim::world_data::WorldData {
+                map: Arc::new(omsi_sim::world_data::MapFacts {
+                    root: root.to_path_buf(),
+                    map_dir: map_dir.clone(),
+                    raw_tiles: global.raw_tiles.clone(),
+                    tiles: global
+                        .tiles
+                        .iter()
+                        .map(|t| ((t.x, t.y), t.file.clone()))
+                        .collect(),
+                    ailists,
+                    date,
+                    chrono_dirs,
+                }),
+                ..Default::default()
+            },
+        ));
         let transit = {
             let mut issues = Vec::new();
             let t = omsi_transit::TransitData::load(&map_dir, &mut issues);
             t.check(global.transport, &mut issues);
             if !t.is_empty() {
-                log::info!("transport folder: {} ({} stations, {} routes, {} depots)", t.files.join(", "), t.stations.list.len(), t.routes.list.len(), t.depots.list.len());
+                log::info!(
+                    "transport folder: {} ({} stations, {} routes, {} depots)",
+                    t.files.join(", "),
+                    t.stations.list.len(),
+                    t.routes.list.len(),
+                    t.depots.list.len()
+                );
             }
             for i in &issues {
                 if i.error {
@@ -139,12 +177,17 @@ impl World {
         for sig in &transit.signals.signals {
             if let (Some(object), Some(_)) = (sig.object, sig.block.as_ref()) {
                 if !signal_routes.iter().any(|r| r.signal.0 == object) {
-                    signal_routes.push(omsi_map::ailists::SignalRoute { signal: (object, 0), ..Default::default() });
+                    signal_routes.push(omsi_map::ailists::SignalRoute {
+                        signal: (object, 0),
+                        ..Default::default()
+                    });
                 }
             }
         }
         Ok(World {
             root: root.to_path_buf(),
+            _publisher_mounts: publisher_mounts,
+            publisher_texture_dirs,
             transit,
             trolley_net: Mutex::new(None),
             global,
@@ -198,7 +241,10 @@ impl World {
             light_map_atlas: Mutex::new(None),
             parked_live: std::sync::atomic::AtomicUsize::new(0),
             parked_max: super::host::open_settings().max_parked,
-            signal_ids: signal_routes.iter().flat_map(|r| std::iter::once(r.signal.0).chain(r.dist_signal)).collect(),
+            signal_ids: signal_routes
+                .iter()
+                .flat_map(|r| std::iter::once(r.signal.0).chain(r.dist_signal))
+                .collect(),
             signal_routes,
             particle_objects: Mutex::new(HashMap::new()),
             fonts: {
@@ -242,26 +288,39 @@ impl World {
     /// An object type (with a paint scheme), and with `look` its textures as they are in
     /// that season (`Some(None)`: summer's) - a plant of a season's phase that looks unlike
     /// the map's season (see `season_looks`). None for a look no texture of it has.
-    pub(super) fn object_type_look(&self, rel: &str, scheme: Option<usize>, look: Option<&Option<String>>) -> Option<Arc<ObjectType>> {
+    pub(super) fn object_type_look(
+        &self,
+        rel: &str,
+        scheme: Option<usize>,
+        look: Option<&Option<String>>,
+    ) -> Option<Arc<ObjectType>> {
         let key = format!(
             "{}{}{}",
             rel.to_ascii_lowercase().replace('\\', "/"),
             scheme.map(|i| format!("#{i}")).unwrap_or_default(),
-            look.map(|l| format!("@{}", l.as_deref().unwrap_or("summer").to_ascii_lowercase())).unwrap_or_default()
+            look.map(|l| format!("@{}", l.as_deref().unwrap_or("summer").to_ascii_lowercase()))
+                .unwrap_or_default()
         );
         if let Some(t) = self.object_types.lock().get(&key) {
             return t.clone();
         }
-        self.object_type_loads.once(&key, || self.read_object_type(&key, rel, scheme, look))
+        self.object_type_loads
+            .once(&key, || self.read_object_type(&key, rel, scheme, look))
     }
 
     /// `object_type_look`'s read of a type not read yet, kept under `key`.
-    fn read_object_type(&self, key: &str, rel: &str, scheme: Option<usize>, look: Option<&Option<String>>) -> Option<Arc<ObjectType>> {
+    fn read_object_type(
+        &self,
+        key: &str,
+        rel: &str,
+        scheme: Option<usize>,
+        look: Option<&Option<String>>,
+    ) -> Option<Arc<ObjectType>> {
         if let Some(t) = self.object_types.lock().get(key) {
             // (read by another meanwhile)
             return t.clone();
         }
-        let path = omsi_cfg::resolve_path(&self.root, rel);
+        let path = self.resolve_map_asset(rel);
         let loaded = (|| -> Option<Arc<ObjectType>> {
             let mut sco = SceneryObject::load(&path)
                 .map_err(|e| log::warn!("{e}"))
@@ -287,7 +346,10 @@ impl World {
             if !model.lods.is_empty() {
                 let start = model.lods[0].first_mesh;
                 for (i, md) in model.lod_meshes(0).iter().enumerate() {
-                    let mesh_path = omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&model_dir, "model"), &md.file);
+                    let mesh_path = omsi_cfg::resolve_path(
+                        &omsi_cfg::resolve_path(&model_dir, "model"),
+                        &md.file,
+                    );
                     let mesh_path = if omsi_cfg::vfs::is_file(&mesh_path) {
                         mesh_path
                     } else {
@@ -313,7 +375,10 @@ impl World {
             for l in 1..model.lods.len() {
                 let mut list = Vec::new();
                 for md in model.lod_meshes(l) {
-                    let mesh_path = omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&model_dir, "model"), &md.file);
+                    let mesh_path = omsi_cfg::resolve_path(
+                        &omsi_cfg::resolve_path(&model_dir, "model"),
+                        &md.file,
+                    );
                     let mesh_path = if omsi_cfg::vfs::is_file(&mesh_path) {
                         mesh_path
                     } else {
@@ -396,7 +461,11 @@ impl World {
                     // taken as a bare name it was looked for among the model's textures, not
                     // found, and the parked car stood there white)
                     let in_scheme = omsi_cfg::resolve_path(&ps.dir, file);
-                    let file = if omsi_cfg::vfs::is_file(&in_scheme) { in_scheme.to_string_lossy().into_owned() } else { file.clone() };
+                    let file = if omsi_cfg::vfs::is_file(&in_scheme) {
+                        in_scheme.to_string_lossy().into_owned()
+                    } else {
+                        file.clone()
+                    };
                     for (name, default) in &model.ctc_textures {
                         if name.eq_ignore_ascii_case(ctc_name) {
                             map.insert(default.to_ascii_lowercase(), file.clone());
@@ -418,14 +487,22 @@ impl World {
             }
             let paint_scheme_count = paint_schemes.len();
             let has_mouse_events = mesh_def_index.iter().any(|d| {
-                model.meshes.get(*d).and_then(|m| m.mouse_event.as_ref()).is_some()
+                model
+                    .meshes
+                    .get(*d)
+                    .and_then(|m| m.mouse_event.as_ref())
+                    .is_some()
             });
-            let program = object_program(&self.root, &sco, &model, &mesh_def_index, has_mouse_events);
+            let program =
+                object_program(&self.root, &sco, &model, &mesh_def_index, has_mouse_events);
             let mesh_shadow = mesh_def_index
                 .iter()
                 .map(|d| model.meshes[*d].is_shadow)
                 .collect();
-            let mesh_casts = mesh_def_index.iter().map(|d| model.meshes[*d].shadow).collect();
+            let mesh_casts = mesh_def_index
+                .iter()
+                .map(|d| model.meshes[*d].shadow)
+                .collect();
             let deform = sco.crossing_height_deformation.as_ref().and_then(|f| {
                 let mp = omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&model_dir, "model"), f);
                 let mp = if omsi_cfg::vfs::is_file(&mp) {
@@ -479,7 +556,8 @@ impl World {
                 .as_ref()
                 .filter(|_| !sco.no_collision)
                 .and_then(|f| {
-                    let mp = omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&model_dir, "model"), f);
+                    let mp =
+                        omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&model_dir, "model"), f);
                     let mp = if omsi_cfg::vfs::is_file(&mp) {
                         mp
                     } else {
@@ -518,13 +596,17 @@ impl World {
                 collision,
                 paint,
                 // (worked out on first use)
-                camera: Default::default(), collision_shape: Default::default(), embedded_lights: Default::default(),
+                camera: Default::default(),
+                collision_shape: Default::default(),
+                embedded_lights: Default::default(),
             }))
         })();
         // the other season's look: its own copy of the type (its own textures on the GPU),
         // kept only when a texture of it differs
         let loaded = match (loaded, look) {
-            (Some(mut t), Some(l)) => Arc::get_mut(&mut t).and_then(|ot| self.retexture_for_look(ot, l.as_deref())).map(|_| t),
+            (Some(mut t), Some(l)) => Arc::get_mut(&mut t)
+                .and_then(|ot| self.retexture_for_look(ot, l.as_deref()))
+                .map(|_| t),
             (t, _) => t,
         };
         // two loaders may have read the same type at once: all of them get the first copy,
@@ -541,7 +623,8 @@ impl World {
         if let Some(t) = self.spline_types.lock().get(&key) {
             return t.clone();
         }
-        self.spline_type_loads.once(&key, || self.read_spline_type(&key, rel))
+        self.spline_type_loads
+            .once(&key, || self.read_spline_type(&key, rel))
     }
 
     /// `spline_type`'s read of a type not read yet, kept under `key`.
@@ -549,18 +632,31 @@ impl World {
         if let Some(t) = self.spline_types.lock().get(key) {
             return t.clone();
         }
-        let path = omsi_cfg::resolve_path(&self.root, rel);
+        let path = self.resolve_map_asset(rel);
         let loaded = Spline::load(&path)
             .map_err(|e| log::warn!("{e}"))
             .ok()
             .map(|def| {
                 omsi_geometry::register_half_cant_width(rel, &def);
                 let dir = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-                let dirs = texture_dirs(&self.root, &dir);
+                let dirs = self.texture_dirs(&self.root, &dir);
                 let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                let surf = def.textures.iter().map(|t| surf_map(&t.file, &dirs)).collect();
-                let surface = def.textures.iter().map(|t| surface_id(&t.file, &dirs)).collect();
-                Arc::new(SplineType { dir, def, surf, surface })
+                let surf = def
+                    .textures
+                    .iter()
+                    .map(|t| surf_map(&t.file, &dirs))
+                    .collect();
+                let surface = def
+                    .textures
+                    .iter()
+                    .map(|t| surface_id(&t.file, &dirs))
+                    .collect();
+                Arc::new(SplineType {
+                    dir,
+                    def,
+                    surf,
+                    surface,
+                })
             });
         self.spline_types
             .lock()
@@ -575,8 +671,18 @@ impl World {
     /// take the tile's terrain height; editor-only splines and objects count (some maps put
     /// all their traffic paths on invisible splines).
     pub fn navigation_map(&self) -> NavigationMap {
-        let tiles: Vec<(i32, i32, PathBuf)> = self.map_tiles().into_iter().map(|(_, x, y, p)| (x, y, p)).collect();
-        navigation_map_of(&self.root, &tiles, &self.chrono_dirs())
+        let tiles: Vec<(i32, i32, PathBuf)> = self
+            .map_tiles()
+            .into_iter()
+            .map(|(_, x, y, p)| (x, y, p))
+            .collect();
+        navigation_map_scoped(
+            &self.root,
+            &self.map_dir,
+            &self._publisher_mounts,
+            &tiles,
+            &self.chrono_dirs(),
+        )
     }
 }
 
@@ -586,7 +692,52 @@ impl World {
 /// and the model beside it - is resolved against it, so a mod's own copy wins over the
 /// original's and a map that lacks one borrows the other installation's (`omsi_cfg::
 /// resolve_path`).
-pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs: &[PathBuf]) -> NavigationMap {
+pub fn navigation_map_of(
+    root: &Path,
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> NavigationMap {
+    let map_dir = map_dir_from_tiles(root, tiles);
+    let mounts = match omsi_cfg::publisher::validate_map(&map_dir) {
+        Ok(mounts) => mounts,
+        Err(error) => {
+            log::warn!("navigation publisher dependencies: {error}");
+            return NavigationMap {
+                lanes: Vec::new(),
+                road_surfaces: Vec::new(),
+                places: HashMap::new(),
+                signs: Vec::new(),
+                names: Vec::new(),
+            };
+        }
+    };
+    navigation_map_scoped(root, &map_dir, &mounts, tiles, chrono_dirs)
+}
+
+fn map_dir_from_tiles(root: &Path, tiles: &[(i32, i32, PathBuf)]) -> PathBuf {
+    let Some(parent) = tiles.first().and_then(|tile| tile.2.parent()) else {
+        return root.to_path_buf();
+    };
+    let mut candidate = parent.to_path_buf();
+    // shortcut: map roots are within eight tile-path parents; widen if packaging adds deeper nesting.
+    for _ in 0..8 {
+        if omsi_cfg::vfs::is_file(&candidate.join("global.cfg")) {
+            return candidate;
+        }
+        if !candidate.pop() {
+            break;
+        }
+    }
+    parent.to_path_buf()
+}
+
+fn navigation_map_scoped(
+    root: &Path,
+    map_dir: &Path,
+    mounts: &omsi_cfg::publisher::DependencyMounts,
+    tiles: &[(i32, i32, PathBuf)],
+    chrono_dirs: &[PathBuf],
+) -> NavigationMap {
     use rayon::prelude::*;
     let t0 = std::time::Instant::now();
     // (each file read once: a tile that wants one being read waits for it, rather than
@@ -596,7 +747,12 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
     let sco_of = |file: &str| -> Option<Arc<SceneryObject>> {
         let key = file.trim().to_ascii_lowercase().replace('\\', "/");
         let cell = scos.lock().entry(key).or_default().clone();
-        cell.get_or_init(|| SceneryObject::load(&omsi_cfg::resolve_path(root, file)).ok().map(Arc::new)).clone()
+        cell.get_or_init(|| {
+            SceneryObject::load(&super::world::map_asset_path(root, map_dir, mounts, file))
+                .ok()
+                .map(Arc::new)
+        })
+        .clone()
     };
     let slis: Mutex<HashMap<String, Once<Spline>>> = Mutex::new(HashMap::new());
     let sli_of = |file: &str| -> Option<Arc<Spline>> {
@@ -604,15 +760,23 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
         let key = file.trim().to_ascii_lowercase().replace('\\', "/");
         let cell = slis.lock().entry(key).or_default().clone();
         cell.get_or_init(|| {
-            Spline::load(&omsi_cfg::resolve_path(root, file)).ok().map(|def| {
-                omsi_geometry::register_half_cant_width(file, &def);
-                Arc::new(def)
-            })
+            Spline::load(&super::world::map_asset_path(root, map_dir, mounts, file))
+                .ok()
+                .map(|def| {
+                    omsi_geometry::register_half_cant_width(file, &def);
+                    Arc::new(def)
+                })
         })
         .clone()
     };
     #[allow(clippy::type_complexity)]
-    let parts: Vec<(Vec<Lane>, Vec<(i64, DVec3)>, Vec<(DVec3, f64, String)>, Vec<(Vec<DVec3>, f32)>, Vec<(DVec3, String)>)> = tiles
+    let parts: Vec<(
+        Vec<Lane>,
+        Vec<(i64, DVec3)>,
+        Vec<(DVec3, f64, String)>,
+        Vec<(Vec<DVec3>, f32)>,
+        Vec<(DVec3, String)>,
+    )> = tiles
         .par_iter()
         .map(|(tx, ty, path)| {
             let (tx, ty) = (*tx, *ty);
@@ -625,9 +789,16 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
                 return (lanes, positions, signs, roads, names);
             };
             let origin2 = DVec2::new(tx as f64 * tile_size(), ty as f64 * tile_size());
-            let terrain = Terrain::load(&tile_companion(&path, ".terrain")).unwrap_or_else(|_| Terrain::flat());
-            for sp in tile.splines.iter().filter(|s| !s.deleted && !s.file.trim().is_empty()) {
-                let Some(def) = sli_of(&sp.file) else { continue };
+            let terrain = Terrain::load(&tile_companion(&path, ".terrain"))
+                .unwrap_or_else(|_| Terrain::flat());
+            for sp in tile
+                .splines
+                .iter()
+                .filter(|s| !s.deleted && !s.file.trim().is_empty())
+            {
+                let Some(def) = sli_of(&sp.file) else {
+                    continue;
+                };
                 if !def.paths.iter().any(|p| p.kind == 0) {
                     // Short surfaces also corroborate editor-only traffic paths at
                     // junctions; the navigator filters decorative patches for display.
@@ -637,7 +808,15 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
                         let side = if sp.mirror { -1.0 } else { 1.0 };
                         for (lo, hi, z) in road_sections(&sp.file, &def) {
                             let offset = side * ((lo + hi) * 0.5) as f64;
-                            let pts: Vec<DVec3> = (0..=n).map(|k| curve.offset_point(curve.length * k as f64 / n as f64, offset, z as f64)).collect();
+                            let pts: Vec<DVec3> = (0..=n)
+                                .map(|k| {
+                                    curve.offset_point(
+                                        curve.length * k as f64 / n as f64,
+                                        offset,
+                                        z as f64,
+                                    )
+                                })
+                                .collect();
                             roads.push((pts, hi - lo));
                         }
                     }
@@ -658,12 +837,20 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
                 }
                 let (x, y) = (origin2.x + o.pos[0], origin2.y + o.pos[1]);
                 let ground = || {
-                    let (lx, ly) = ((x - origin2.x).clamp(0.0, tile_size()) as f32, (y - origin2.y).clamp(0.0, tile_size()) as f32);
+                    let (lx, ly) = (
+                        (x - origin2.x).clamp(0.0, tile_size()) as f32,
+                        (y - origin2.y).clamp(0.0, tile_size()) as f32,
+                    );
                     terrain.sample(lx, ly) as f64
                 };
                 // street name signs carry the street's name as their text
                 if is_street_sign(&o.file) {
-                    if let Some(name) = o.extra.first().map(|t| clean_sign_text(t)).filter(|t| t.chars().filter(|c| c.is_alphabetic()).count() >= 3) {
+                    if let Some(name) = o
+                        .extra
+                        .first()
+                        .map(|t| clean_sign_text(t))
+                        .filter(|t| t.chars().filter(|c| c.is_alphabetic()).count() >= 3)
+                    {
                         signs.push((DVec3::new(x, y, o.pos[2] + ground()), o.rot[0], name));
                     }
                 }
@@ -677,13 +864,19 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
                 if !is_street_sign(&o.file) {
                     let plate = {
                         let f = o.file.to_ascii_lowercase();
-                        ["schild", "sign", "name", "plate", "tafel"].iter().any(|k| f.contains(k))
+                        ["schild", "sign", "name", "plate", "tafel"]
+                            .iter()
+                            .any(|k| f.contains(k))
                     };
                     if plate || sco.is_bus_stop {
                         for t in o.extra.iter().take(3) {
                             if let Some(n) = street_name_of(t) {
                                 if plate {
-                                    signs.push((DVec3::new(x, y, o.pos[2] + ground()), o.rot[0], n));
+                                    signs.push((
+                                        DVec3::new(x, y, o.pos[2] + ground()),
+                                        o.rot[0],
+                                        n,
+                                    ));
                                 } else {
                                     names.push((DVec3::new(x, y, o.pos[2] + ground()), n));
                                 }
@@ -693,10 +886,26 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
                     }
                 }
                 let absolute = sco.absolute_height();
-                let pos = DVec3::new(x, y, if absolute { o.pos[2] } else { o.pos[2] + ground() });
+                let pos = DVec3::new(
+                    x,
+                    y,
+                    if absolute {
+                        o.pos[2]
+                    } else {
+                        o.pos[2] + ground()
+                    },
+                );
                 positions.push((o.id, pos));
                 if !sco.paths.is_empty() {
-                    lanes.extend(object_lanes(&sco, pos, [o.rot[0], 0.0, 0.0], None, (tx, ty), o.id, &o.rules));
+                    lanes.extend(object_lanes(
+                        &sco,
+                        pos,
+                        [o.rot[0], 0.0, 0.0],
+                        None,
+                        (tx, ty),
+                        o.id,
+                        &o.rules,
+                    ));
                 }
             }
             (lanes, positions, signs, roads, names)
@@ -714,7 +923,10 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
         roads.extend(r);
         names.extend(n);
     }
-    log::info!("navigation map: {} roads without a path for cars", roads.len());
+    log::info!(
+        "navigation map: {} roads without a path for cars",
+        roads.len()
+    );
     log::info!(
         "navigation map: {} tiles, {} lanes, {} objects placed, {} street name signs, {} object types, {} spline types, {:.1} s",
         tiles.len(),
@@ -725,7 +937,13 @@ pub fn navigation_map_of(root: &Path, tiles: &[(i32, i32, PathBuf)], chrono_dirs
         slis.lock().len(),
         t0.elapsed().as_secs_f64()
     );
-    NavigationMap { lanes, road_surfaces: roads, places: positions, signs, names }
+    NavigationMap {
+        lanes,
+        road_surfaces: roads,
+        places: positions,
+        signs,
+        names,
+    }
 }
 
 /// The whole map for the navigator (see [`World::navigation_map`]).
@@ -751,7 +969,10 @@ pub fn clean_sign_text(text: &str) -> String {
         (Some(a), Some('_')) if a.is_ascii_alphabetic() => &t[2..],
         _ => t,
     };
-    t.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ")
+    t.replace('_', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// A text that reads as a street's name, cleaned (a stop's "U Rathaus Spandau" is no street,
@@ -760,26 +981,141 @@ pub fn clean_sign_text(text: &str) -> String {
 pub fn street_name_of(text: &str) -> Option<String> {
     let cleaned = clean_sign_text(text);
     let t = cleaned.trim_matches(|c: char| c == '"' || c == '\'');
-    if t.contains('/') || t.contains('|') || t.chars().filter(|c| c.is_alphabetic()).count() < 4 || t.chars().count() > 48 {
+    if t.contains('/')
+        || t.contains('|')
+        || t.chars().filter(|c| c.is_alphabetic()).count() < 4
+        || t.chars().count() > 48
+    {
         return None;
     }
     let lower = t.to_lowercase();
-    let words: Vec<&str> = lower.split(|c: char| c.is_whitespace() || c == '-' || c == ',').filter(|w| !w.is_empty()).collect();
+    let words: Vec<&str> = lower
+        .split(|c: char| c.is_whitespace() || c == '-' || c == ',')
+        .filter(|w| !w.is_empty())
+        .collect();
     let first = *words.first()?;
     let ends = [
         // German, Dutch, Scandinavian
-        "straße", "strasse", "str.", "str", "weg", "allee", "platz", "damm", "ring", "chaussee", "gasse", "ufer", "steig", "pfad", "zeile", "promenade", "markt", "brücke", "bruecke", "steinweg", "straat", "laan", "plein", "gracht", "gatan", "gata", "vägen", "vej", "gade", "veien",
+        "straße",
+        "strasse",
+        "str.",
+        "str",
+        "weg",
+        "allee",
+        "platz",
+        "damm",
+        "ring",
+        "chaussee",
+        "gasse",
+        "ufer",
+        "steig",
+        "pfad",
+        "zeile",
+        "promenade",
+        "markt",
+        "brücke",
+        "bruecke",
+        "steinweg",
+        "straat",
+        "laan",
+        "plein",
+        "gracht",
+        "gatan",
+        "gata",
+        "vägen",
+        "vej",
+        "gade",
+        "veien",
         // English
-        "road", "rd", "rd.", "street", "st", "st.", "lane", "avenue", "ave", "drive", "way", "close", "crescent", "hill", "place", "square", "terrace", "grove", "gardens", "row", "walk", "parade", "broadway", "boulevard", "highway", "bypass", "mews", "court",
+        "road",
+        "rd",
+        "rd.",
+        "street",
+        "st",
+        "st.",
+        "lane",
+        "avenue",
+        "ave",
+        "drive",
+        "way",
+        "close",
+        "crescent",
+        "hill",
+        "place",
+        "square",
+        "terrace",
+        "grove",
+        "gardens",
+        "row",
+        "walk",
+        "parade",
+        "broadway",
+        "boulevard",
+        "highway",
+        "bypass",
+        "mews",
+        "court",
         // Romance
-        "rue", "via", "viale", "piazza", "calle", "avenida", "rua", "strada", "bulevar",
+        "rue",
+        "via",
+        "viale",
+        "piazza",
+        "calle",
+        "avenida",
+        "rua",
+        "strada",
+        "bulevar",
     ];
-    let starts = ["rue", "avenue", "boulevard", "chemin", "via", "viale", "piazza", "calle", "avenida", "rua", "ul.", "ul", "ulica", "aleja", "al.", "plac", "ulice", "náměstí", "třída", "улица", "ул.", "проспект", "пр.", "шоссе", "переулок", "бульвар", "площадь", "вулиця", "вул."];
+    let starts = [
+        "rue",
+        "avenue",
+        "boulevard",
+        "chemin",
+        "via",
+        "viale",
+        "piazza",
+        "calle",
+        "avenida",
+        "rua",
+        "ul.",
+        "ul",
+        "ulica",
+        "aleja",
+        "al.",
+        "plac",
+        "ulice",
+        "náměstí",
+        "třída",
+        "улица",
+        "ул.",
+        "проспект",
+        "пр.",
+        "шоссе",
+        "переулок",
+        "бульвар",
+        "площадь",
+        "вулиця",
+        "вул.",
+    ];
     let last = *words.last()?;
     let ok = words.len() >= 2 && (ends.contains(&last) || starts.contains(&first))
-        || ends.iter().any(|e| e.len() >= 4 && last.len() > e.len() + 2 && last.ends_with(e))
+        || ends
+            .iter()
+            .any(|e| e.len() >= 4 && last.len() > e.len() + 2 && last.ends_with(e))
         || (last.len() > 5 && (last.ends_with("str") || last.ends_with("str.")))
-        || words.iter().any(|w| ["utca", "út", "útja", "ulica", "улица", "проспект", "шоссе", "переулок"].contains(w));
+        || words.iter().any(|w| {
+            [
+                "utca",
+                "út",
+                "útja",
+                "ulica",
+                "улица",
+                "проспект",
+                "шоссе",
+                "переулок",
+            ]
+            .contains(w)
+        });
     // (a station named after its street is still a station: "U Rathaus", "S Spandau")
     let station = ["u", "s", "s+u", "u+s", "bf", "bf.", "bhf", "bhf.", "hbf"].contains(&first);
     (ok && !station).then(|| t.to_string())
@@ -788,16 +1124,73 @@ pub fn street_name_of(text: &str) -> Option<String> {
 /// Whether an asset name describes a road surface. Match whole filename tokens so objects
 /// such as `StreetLight.sli` do not become roads just because their name contains "street".
 pub(super) fn road_surface_name(file: &str) -> bool {
-    let base = file.replace('\\', "/").rsplit('/').next().unwrap_or("").to_ascii_lowercase();
+    let base = file
+        .replace('\\', "/")
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(&base);
-    let tokens: Vec<&str> = stem.split(|c: char| !c.is_ascii_alphanumeric() && c != 'ß').filter(|t| !t.is_empty()).collect();
-    let excludes = ["light", "lamp", "sign", "schild", "rail", "track", "gleis", "tram", "strab", "wire", "mast", "wall", "fence", "leitplanke", "gehweg", "side", "bord", "pavement", "fahrrad", "radweg", "cycle", "parking", "parkplatz", "gruen", "gras", "trottoir", "pieton"];
-    if tokens.iter().any(|t| excludes.iter().any(|x| t.contains(x))) {
+    let tokens: Vec<&str> = stem
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != 'ß')
+        .filter(|t| !t.is_empty())
+        .collect();
+    let excludes = [
+        "light",
+        "lamp",
+        "sign",
+        "schild",
+        "rail",
+        "track",
+        "gleis",
+        "tram",
+        "strab",
+        "wire",
+        "mast",
+        "wall",
+        "fence",
+        "leitplanke",
+        "gehweg",
+        "side",
+        "bord",
+        "pavement",
+        "fahrrad",
+        "radweg",
+        "cycle",
+        "parking",
+        "parkplatz",
+        "gruen",
+        "gras",
+        "trottoir",
+        "pieton",
+    ];
+    if tokens
+        .iter()
+        .any(|t| excludes.iter().any(|x| t.contains(x)))
+    {
         return false;
     }
     stem.starts_with("str_")
         || tokens.iter().any(|t| {
-            ["str", "strasse", "straße", "road", "roads", "street", "streets", "fahrbahn", "pflaster", "kopfstein", "cobble", "route", "routes", "rue", "chaussee", "bitume"].contains(t)
+            [
+                "str",
+                "strasse",
+                "straße",
+                "road",
+                "roads",
+                "street",
+                "streets",
+                "fahrbahn",
+                "pflaster",
+                "kopfstein",
+                "cobble",
+                "route",
+                "routes",
+                "rue",
+                "chaussee",
+                "bitume",
+            ]
+            .contains(t)
                 || t.starts_with("asph")
         })
 }
@@ -807,17 +1200,36 @@ pub(super) fn road_surface_name(file: &str) -> bool {
 /// need not be in the middle of the surface. Keep medians and pavements out of its width.
 pub(super) fn road_sections(file: &str, def: &omsi_scenery::sli::Spline) -> Vec<(f32, f32, f32)> {
     let name = file.to_ascii_lowercase();
-    if def.only_editor || ["gehweg", "radweg", "fahrrad", "tram", "strab", "gleis", "rail", "parking"].iter().any(|s| name.contains(s)) || def.paths.iter().any(|p| p.kind == 2) {
+    if def.only_editor
+        || [
+            "gehweg", "radweg", "fahrrad", "tram", "strab", "gleis", "rail", "parking",
+        ]
+        .iter()
+        .any(|s| name.contains(s))
+        || def.paths.iter().any(|p| p.kind == 2)
+    {
         return Vec::new();
     }
     let mut sections = Vec::new();
     for profile in &def.profiles {
-        let road = def.textures.get(profile.texture).map(|t| road_surface_name(&t.file)).unwrap_or_else(|| def.textures.is_empty() && road_surface_name(file));
-        if !road { continue; }
+        let road = def
+            .textures
+            .get(profile.texture)
+            .map(|t| road_surface_name(&t.file))
+            .unwrap_or_else(|| def.textures.is_empty() && road_surface_name(file));
+        if !road {
+            continue;
+        }
         for pair in profile.points.windows(2) {
             let (a, b) = (&pair[0], &pair[1]);
             let (lo, hi) = (a.x.min(b.x), a.x.max(b.x));
-            if lo.is_finite() && hi.is_finite() && a.z.is_finite() && b.z.is_finite() && hi - lo > 0.1 && (a.z - b.z).abs() <= (hi - lo) * 0.15 {
+            if lo.is_finite()
+                && hi.is_finite()
+                && a.z.is_finite()
+                && b.z.is_finite()
+                && hi - lo > 0.1
+                && (a.z - b.z).abs() <= (hi - lo) * 0.15
+            {
                 sections.push((lo, hi, (a.z + b.z) * 0.5));
             }
         }
@@ -825,7 +1237,10 @@ pub(super) fn road_sections(file: &str, def: &omsi_scenery::sli::Spline) -> Vec<
     sections.sort_by(|a, b| a.0.total_cmp(&b.0));
     let mut merged: Vec<(f32, f32, f32)> = Vec::new();
     for (lo, hi, z) in sections {
-        if let Some(last) = merged.last_mut().filter(|s| lo <= s.1 + 0.2 && (z - s.2).abs() < 0.2) {
+        if let Some(last) = merged
+            .last_mut()
+            .filter(|s| lo <= s.1 + 0.2 && (z - s.2).abs() < 0.2)
+        {
             last.1 = last.1.max(hi);
         } else {
             merged.push((lo, hi, z));
@@ -840,7 +1255,18 @@ pub(super) fn road_sections(file: &str, def: &omsi_scenery::sli::Spline) -> Vec<
 pub(super) fn is_street_sign(file: &str) -> bool {
     let f = file.to_ascii_lowercase().replace(['\\', '_', ' ', '-'], "");
     let name = f.rsplit('/').next().unwrap_or(&f);
-    ["streetsign", "streetname", "strschild", "strassenschild", "straßenschild", "strassenname", "roadsignname", "roadname"].iter().any(|k| name.contains(k))
+    [
+        "streetsign",
+        "streetname",
+        "strschild",
+        "strassenschild",
+        "straßenschild",
+        "strassenname",
+        "roadsignname",
+        "roadname",
+    ]
+    .iter()
+    .any(|k| name.contains(k))
 }
 
 fn object_program(
@@ -851,10 +1277,14 @@ fn object_program(
     has_mouse_events: bool,
 ) -> Option<Arc<omsi_script::Program>> {
     let animated = mesh_def_index.iter().any(|d| {
-        !model.meshes[*d].animations.is_empty() || model.meshes[*d].visible_groups().next().is_some()
+        !model.meshes[*d].animations.is_empty()
+            || model.meshes[*d].visible_groups().next().is_some()
     });
     let has_freetex = mesh_def_index.iter().any(|d| {
-        model.meshes[*d].materials.iter().any(|o| !o.item && o.freetex.is_some())
+        model.meshes[*d]
+            .materials
+            .iter()
+            .any(|o| !o.item && o.freetex.is_some())
     });
     if !sco.scripts.scripts.is_empty()
         || !sco.scripts.stringvarlists.is_empty()

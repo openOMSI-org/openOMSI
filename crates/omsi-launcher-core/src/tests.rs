@@ -1163,6 +1163,41 @@ fn how_late_the_bus_may_be_is_kept_in_the_settings_file() {
 }
 
 #[test]
+fn the_dead_zone_of_each_axis_is_kept_as_the_settings_file_wrote_it() {
+    let fresh = super::settings_from_text(None);
+    assert_eq!(
+        fresh["ctrl_deadzone_axes"],
+        serde_json::json!(""),
+        "no axis until one is given one"
+    );
+    let own = super::settings_from_text(Some(
+        "ctrl_deadzone=0.03\nctrl_deadzone_axes=throttle=0.12;brake=0.08\n",
+    ));
+    assert_eq!(
+        own["ctrl_deadzone_axes"],
+        serde_json::json!("throttle=0.12;brake=0.08")
+    );
+    let text = super::settings_to_text(&own, None);
+    assert!(
+        text.lines()
+            .any(|l| l.trim() == "ctrl_deadzone_axes=throttle=0.12;brake=0.08"),
+        "{text}"
+    );
+    assert!(
+        text.lines().any(|l| l.trim() == "ctrl_deadzone=0.03"),
+        "the general one is kept beside them: {text}"
+    );
+    let odd =
+        super::settings_from_text(Some("ctrl_deadzone_axes= throttle=0.12 ; leftover=zzz \n"));
+    assert!(
+        super::settings_to_text(&odd, None)
+            .lines()
+            .any(|l| l.trim() == "ctrl_deadzone_axes=throttle=0.12 ; leftover=zzz"),
+        "trimmed, not parsed"
+    );
+}
+
+#[test]
 fn whether_the_stops_fill_in_free_drive_is_kept_in_the_settings_file() {
     // (#2712) `auto` by default - the stops fill while the player has no duty, as OMSI's own
     // passengers turned up whatever was being driven - and the other two spellings kept.

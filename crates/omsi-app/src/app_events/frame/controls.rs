@@ -30,6 +30,7 @@ impl App {
         ctl.set_background(self.settings.ctrl_background);
         ctl.set_focus(self.input.window_focused || self.settings.ctrl_background);
         ctl.deadzone = self.settings.ctrl_deadzone;
+        ctl.set_zones(&self.settings.ctrl_deadzone_axes);
         ctl.right_stick_look = self.settings.right_stick_look;
         ctl.pad_deadzone = self.settings.pad_deadzone;
         ctl.pad_presets = self.settings.pad_buttons;
