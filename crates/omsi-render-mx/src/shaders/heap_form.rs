@@ -2,8 +2,8 @@
 //! of groups 0 to 6 goes; its texture or sampler is read from the heap array of its kind,
 //! its buffer through a typed view of the heap (`@group(7)`, a binding a type), all at places
 //! the draw's immediates carry (`mx_g`, one `u32` a declaration, in the order of their
-//! group and binding: `HeapLayout`). What the heap cannot hold stays a root binding:
-//! multisampled and storage textures, acceleration structures, writable buffers.
+//! group and binding: `HeapLayout`): sampled, multisampled-depth and storage textures,
+//! samplers, buffers read or written, and acceleration structures.
 //! On the Rust side a `HeapGroup` holds the places of a bind group's resources (made from the
 //! same entries) and writes them into a pass's immediates for the layout of the module the
 //! pass draws with.
@@ -17,6 +17,7 @@ pub(crate) fn picture_layout() -> &'static HeapLayout {
     static L: std::sync::OnceLock<HeapLayout> = std::sync::OnceLock::new();
     L.get_or_init(|| HeapLayout {
         slots: vec![(0, 0), (0, 1), (0, 2)],
+        writable: Vec::new(),
     })
 }
 
@@ -58,6 +59,8 @@ impl HeapModule {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct HeapLayout {
     pub(crate) slots: Vec<(u32, u32)>,
+    /// the slots a shader writes (`var<storage, read_write>`): their buffers get writable views
+    pub(crate) writable: Vec<(u32, u32)>,
 }
 
 /// One root declaration of a module: (group, binding, space, name, type).
@@ -109,6 +112,7 @@ fn heap_array(ty: &str) -> Option<&'static str> {
         "texture_cube<f32>" => "mx_texcube",
         "texture_3d<f32>" => "mx_tex3d",
         "texture_depth_2d" => "mx_texdepth",
+        "texture_depth_multisampled_2d" => "mx_texdepth_ms",
         "sampler" => "mx_samplers",
         "sampler_comparison" => "mx_samplers_cmp",
         _ => return None,
@@ -119,22 +123,30 @@ fn heap_array(ty: &str) -> Option<&'static str> {
 fn in_heap(d: &Decl) -> bool {
     if d.space.is_empty() {
         heap_array(&d.ty).is_some()
+            || d.ty == "acceleration_structure"
+            || d.ty.starts_with("texture_storage_2d<")
     } else {
-        d.space == "uniform" || d.space == "storage" || d.space == "storage, read"
+        matches!(
+            d.space.as_str(),
+            "uniform" | "storage" | "storage, read" | "storage, read_write"
+        )
     }
 }
 
 /// `src`'s layout (what `groups_to_heap` makes of it).
 pub(crate) fn layout_of(src: &str) -> HeapLayout {
-    let mut slots: Vec<(u32, u32)> = src
-        .lines()
-        .filter_map(parse_decl)
-        .filter(in_heap)
-        .map(|d| (d.group, d.binding))
-        .collect();
+    let decls: Vec<Decl> = src.lines().filter_map(parse_decl).filter(in_heap).collect();
+    let mut slots: Vec<(u32, u32)> = decls.iter().map(|d| (d.group, d.binding)).collect();
     slots.sort_unstable();
     slots.dedup();
-    HeapLayout { slots }
+    let mut writable: Vec<(u32, u32)> = decls
+        .iter()
+        .filter(|d| d.space == "storage, read_write")
+        .map(|d| (d.group, d.binding))
+        .collect();
+    writable.sort_unstable();
+    writable.dedup();
+    HeapLayout { slots, writable }
 }
 
 /// `src` with its root groups read from the heap (see the module's comment).
@@ -149,6 +161,7 @@ pub(crate) fn groups_to_heap(src: &str) -> String {
         "a module with immediates of its own keeps its bind groups"
     );
     let mut views: Vec<String> = Vec::new();
+    let (mut storage, mut tlas): (Vec<String>, bool) = (Vec::new(), false);
     let mut decls = String::new();
     let mut swaps: Vec<(String, String)> = Vec::new();
     let mut kept = Vec::new();
@@ -160,16 +173,48 @@ pub(crate) fn groups_to_heap(src: &str) -> String {
         let place = format!("mx_g.g{}_{}", d.group, d.binding);
         let read = match heap_array(&d.ty).filter(|_| d.space.is_empty()) {
             Some(array) => format!("{array}[{place}]"),
+            // (the heap's acceleration structures: mX's binding 11, declared by the shader)
+            None if d.ty == "acceleration_structure" => {
+                if !tlas {
+                    decls.push_str(
+                        "@group(7) @binding(11) var mx_tlas: binding_array<acceleration_structure>;\n",
+                    );
+                    tlas = true;
+                }
+                format!("mx_tlas[{place}]")
+            }
+            // (storage textures: one array a format, mX's bindings 12 to 15)
+            None if d.ty.starts_with("texture_storage_2d<") => {
+                let k = storage.iter().position(|t| *t == d.ty).unwrap_or_else(|| {
+                    let k = storage.len();
+                    assert!(k < 4, "more than four storage texture formats in a module");
+                    decls.push_str(&format!(
+                        "@group(7) @binding({}) var mx_storage{k}: binding_array<{}>;\n",
+                        12 + k,
+                        d.ty
+                    ));
+                    storage.push(d.ty.clone());
+                    k
+                });
+                format!("mx_storage{k}[{place}]")
+            }
             None => {
-                // (a typed view of the buffer's type: a struct, as views must be)
+                // (a typed view of the buffer's type: a struct, as views must be; read-write
+                // where the shader writes it)
                 let wrapped = !d.ty.starts_with(char::is_uppercase);
-                let k = views.iter().position(|v| *v == d.ty).unwrap_or_else(|| {
+                let access = if d.space == "storage, read_write" {
+                    "read_write"
+                } else {
+                    "read"
+                };
+                let key = format!("{access} {}", d.ty);
+                let k = views.iter().position(|v| *v == key).unwrap_or_else(|| {
                     let k = views.len();
                     if wrapped {
                         decls.push_str(&format!("struct MxView{k} {{ v: {} }};\n", d.ty));
                     }
                     decls.push_str(&format!(
-                        "@group(7) @binding({}) var<storage, read> mx_view{k}: binding_array<{}>;\n",
+                        "@group(7) @binding({}) var<storage, {access}> mx_view{k}: binding_array<{}>;\n",
                         16 + k,
                         if wrapped {
                             format!("MxView{k}")
@@ -177,7 +222,7 @@ pub(crate) fn groups_to_heap(src: &str) -> String {
                             d.ty.clone()
                         }
                     ));
-                    views.push(d.ty.clone());
+                    views.push(key);
                     k
                 });
                 format!("mx_view{k}[{place}]{}", if wrapped { ".v" } else { "" })
@@ -185,6 +230,16 @@ pub(crate) fn groups_to_heap(src: &str) -> String {
         };
         swaps.push((d.name, read));
     }
+    // (WGSL's `enable` directives come before every declaration)
+    let enables: Vec<&str> = kept
+        .iter()
+        .copied()
+        .filter(|l| l.trim_start().starts_with("enable "))
+        .collect();
+    let kept: Vec<&str> = kept
+        .into_iter()
+        .filter(|l| !l.trim_start().starts_with("enable "))
+        .collect();
     let out = replace_globals(&kept.join("\n"), &swaps);
     let fields: Vec<String> = layout
         .slots
@@ -192,7 +247,9 @@ pub(crate) fn groups_to_heap(src: &str) -> String {
         .map(|(g, b)| format!("g{g}_{b}: u32"))
         .collect();
     format!(
-        "struct MxGroups {{ {} }};\nvar<immediate> mx_g: MxGroups;\n{decls}{out}",
+        "{}{}struct MxGroups {{ {} }};\nvar<immediate> mx_g: MxGroups;\n{decls}{out}",
+        enables.join("\n"),
+        if enables.is_empty() { "" } else { "\n" },
         fields.join(", ")
     )
 }
@@ -232,7 +289,7 @@ impl HeapGroup {
         entries: &[mx::BindGroupEntry<'_>],
     ) -> HeapGroup {
         let mut keep = Vec::new();
-        let mut place = |r: &mx::BindingResource<'_>| -> u32 {
+        let mut place = |r: &mx::BindingResource<'_>, writable: bool| -> u32 {
             match r {
                 mx::BindingResource::TextureView(v) => {
                     keep.push(Keep::Texture((*v).clone()));
@@ -242,6 +299,8 @@ impl HeapGroup {
                     keep.push(Keep::Sampler((*s).clone()));
                     s.index()
                 }
+                // (the renderer keeps its structure as long as it draws with it)
+                mx::BindingResource::AccelerationStructure(t) => t.index(),
                 mx::BindingResource::Buffer(b) => {
                     assert!(
                         b.buffer.usage().contains(mx::BufferUsages::STORAGE),
@@ -252,6 +311,7 @@ impl HeapGroup {
                         .create_view(&mx::BufferViewDescriptor {
                             offset: b.offset,
                             size: b.size,
+                            writable,
                             ..Default::default()
                         })
                         .expect("mX: a buffer view");
@@ -270,7 +330,7 @@ impl HeapGroup {
             let Some(e) = entries.iter().find(|e| e.binding == b) else {
                 continue;
             };
-            let index = place(&e.resource);
+            let index = place(&e.resource, layout.writable.contains(&(g, b)));
             let at = k as u32 * 4;
             match runs.last_mut() {
                 Some((start, places)) if *start + places.len() as u32 * 4 == at => {
@@ -517,6 +577,11 @@ fn g(x: vec2<f32>) -> vec4<f32> { let q = p.a * p.p; { let p = 2.0; return q * p
                 "volumetric fog",
                 groups_to_heap(&crate::vol_fog::shader_source()),
             ),
+            ("rt lighting", crate::rt::RT_LIGHTING.wgsl()),
+            ("rt denoise", crate::rt::RT_DENOISE.wgsl()),
+            ("rt reflect", crate::rt::RT_REFLECT.wgsl()),
+            ("rt avg", crate::rt::RT_AVG.wgsl()),
+            ("scene", crate::shaders::scene_shader_source(false)),
             ("upscale", picture_wgsl(include_str!("../upscale.wgsl"))),
             ("overlay", picture_wgsl(include_str!("../overlay.wgsl"))),
             ("xr ui", picture_wgsl(include_str!("../xr_ui.wgsl"))),

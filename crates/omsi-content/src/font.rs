@@ -269,6 +269,15 @@ impl FontAtlas {
             let mut out = vec![0u8; (w * h * 4) as usize];
             let lines: Vec<&str> = text.split('@').collect();
             let top = (h as i32 - glyph_h * lines.len() as i32) / 2;
+            // Center multiline rows as a unit so shorter lines preserve their indentation.
+            let line_x = (align.orientation != 2).then(|| {
+                let width = lines
+                    .iter()
+                    .map(|line| self.text_width(line))
+                    .max()
+                    .unwrap_or(0);
+                align.offset(w as i32, width, self.font.gap)
+            });
             for (i, line) in lines.iter().enumerate() {
                 self.render_unscaled_at(
                     line,
@@ -278,6 +287,7 @@ impl FontAtlas {
                     rgb,
                     align,
                     top + i as i32 * glyph_h,
+                    line_x,
                     &mut out,
                 );
             }
@@ -300,7 +310,7 @@ impl FontAtlas {
         let mut out = vec![0u8; (w * h * 4) as usize];
         let glyph_h = self.font.height.max(1) as i32;
         let y0 = (h as i32 - glyph_h) / 2;
-        self.render_unscaled_at(text, w, h, full_color, rgb, align, y0, &mut out);
+        self.render_unscaled_at(text, w, h, full_color, rgb, align, y0, None, &mut out);
         out
     }
 
@@ -313,10 +323,12 @@ impl FontAtlas {
         rgb: [u8; 3],
         align: TextAlign,
         y0: i32,
+        line_x: Option<i32>,
         out: &mut [u8],
     ) {
         let glyph_h = self.font.height.max(1) as i32;
-        let mut x = align.offset(w as i32, self.text_width(text), self.font.gap);
+        let mut x =
+            line_x.unwrap_or_else(|| align.offset(w as i32, self.text_width(text), self.font.gap));
         for ch in text.chars() {
             // Explicit space glyphs can carry pixels in inverted bitmap fonts.
             let Some(g) = self.font.glyph(ch) else {
@@ -489,6 +501,40 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn centered_multiline_text_uses_a_shared_horizontal_origin() {
+        let font = Font {
+            name: "multiline-origin-test".into(),
+            height: 2,
+            gap: 0,
+            chars: vec![
+                FontChar {
+                    ch: 'A',
+                    x0: 0,
+                    x1: 1,
+                    y: 0,
+                },
+                FontChar {
+                    ch: 'B',
+                    x0: 1,
+                    x1: 3,
+                    y: 0,
+                },
+            ],
+            ..Default::default()
+        };
+        let alpha = vec![255; 3 * 2 * 4];
+        let atlas = FontAtlas::new(font, 3, 2, alpha.clone(), alpha);
+        let image = atlas.render("AB@A", 10, 4, false, [255, 255, 255]);
+        let left = |row: usize| {
+            (0..10)
+                .find(|&x| image[(row * 10 + x) * 4 + 3] != 0)
+                .unwrap()
+        };
+
+        assert_eq!(left(0), left(2));
     }
 
     #[test]

@@ -23,7 +23,7 @@ impl Renderer {
         let (Some(d), Some(ao)) = (self.temporal.as_ref(), self.targets.ao.as_ref()) else {
             return;
         };
-        let (Some(p), Some(t), Some((_, bg))) = (
+        let (Some(p), Some(t), Some((_, motion))) = (
             self.temporal_pipes.as_ref(),
             d.targets.as_ref(),
             d.prev_models.as_ref(),
@@ -51,15 +51,16 @@ impl Renderer {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        pass.set_bind_group(3, bg);
         // (plain opaque parts only, prepass codes 0 and 1: a cut-out or transmap layer, the dirt
         // on a windscreen, left its depth in scattered texels, and the motion through the glass
         // would come out speckled)
-        encode_batches_filtered(
+        encode_batches_in(
             &mut pass,
             scene,
+            &motion.heap(&scene.frame_heap),
             cut_batches,
             |b: &Batch| b.pipe < 2,
+            |b| b.pipe as u16,
             |pipe| &p.late_motion[pipe as usize],
         );
     }
