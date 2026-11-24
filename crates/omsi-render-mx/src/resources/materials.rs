@@ -110,10 +110,30 @@ impl PartialEq for MaterialBinding {
 /// immediates (`mx_mat` in the scene shader): set once at the start of every pass and
 /// bundle that draws with it (`encode_batches_keyed`).
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct FrameHeap {
-    /// the ground albedo picture (`fs_ground`), the white texture without one
+    /// the ground albedo picture (`fs_ground`), the white texture without one; in the
+    /// puddles' vehicle pass the vehicle reflection's uniform (`vehicle_reflection`)
     pub(crate) ground: u32,
+    pub(crate) shadow: u32,
+    pub(crate) shadow_far: u32,
+    pub(crate) ao: u32,
+    pub(crate) probe: u32,
+    pub(crate) sky_lut: u32,
+    pub(crate) lmap_tex: u32,
+    pub(crate) s_shadow: u32,
+    pub(crate) s_ao: u32,
+    pub(crate) s_lin: u32,
+    pub(crate) camera: u32,
+    pub(crate) models: u32,
+    pub(crate) inst_params: u32,
+    pub(crate) draw_list: u32,
+    pub(crate) lights: u32,
+    pub(crate) grid: u32,
+    pub(crate) enh: u32,
+    pub(crate) lmap: u32,
+    pub(crate) snow_px: u32,
+    pub(crate) snow: u32,
 }
 
 impl FrameHeap {
@@ -177,7 +197,8 @@ impl MaterialRows {
 /// table when it grows.
 pub(crate) struct MaterialTable {
     pub(crate) buffer: mx::Buffer,
-    pub(crate) group: mx::BindGroup,
+    /// a view of each row in the heap: the scene shader reads its material there (`row`)
+    views: Vec<mx::BufferView>,
     pub(crate) rows: Arc<std::sync::Mutex<MaterialRows>>,
     data: Vec<u8>,
 }
@@ -188,35 +209,47 @@ pub(crate) const MATERIAL_ROW_BYTES: u64 = 256;
 impl MaterialTable {
     pub(crate) fn new(device: &mx::Device, rows: u64) -> MaterialTable {
         assert!(std::mem::size_of::<MaterialUniform>() as u64 <= MATERIAL_ROW_BYTES);
-        let (buffer, group) = Self::make(device, rows * MATERIAL_ROW_BYTES);
+        let (buffer, views) = Self::make(device, rows * MATERIAL_ROW_BYTES);
         MaterialTable {
             buffer,
-            group,
+            views,
             rows: Default::default(),
             data: Vec::new(),
         }
     }
 
-    fn make(device: &mx::Device, size: u64) -> (mx::Buffer, mx::BindGroup) {
+    fn make(device: &mx::Device, size: u64) -> (mx::Buffer, Vec<mx::BufferView>) {
         let buffer = device
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("material table"),
                 size,
-                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+                usage: mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
             })
             .expect("mX: a buffer");
-        let group = device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("materials"),
-            entries: &[mx::BindGroupEntry {
-                binding: 2,
-                resource: mx::BindingResource::Buffer(mx::BufferBinding {
-                    buffer: &buffer,
-                    offset: 0,
-                    size: Some(std::mem::size_of::<MaterialUniform>() as u64),
-                }),
-            }],
-        });
-        (buffer, group)
+        let views = (0..size / MATERIAL_ROW_BYTES)
+            .map(|row| {
+                buffer
+                    .create_view(&mx::BufferViewDescriptor {
+                        offset: Self::offset(row as u32),
+                        size: Some(std::mem::size_of::<MaterialUniform>() as u64),
+                        ..Default::default()
+                    })
+                    .expect("mX: a buffer view")
+            })
+            .collect();
+        (buffer, views)
+    }
+
+    /// Where row `row` lies in the heap (the draw's `row` in its immediates).
+    pub(crate) fn view_index(&self, row: u32) -> u32 {
+        self.views[row as usize].index()
+    }
+
+    /// A draw's immediates with `binding`: the material's slots, its row's place in the heap first.
+    pub(crate) fn immediates(&self, binding: &MaterialBinding) -> [u32; MATERIAL_SLOTS] {
+        let mut slots = binding.slots;
+        slots[0] = self.view_index(binding.row.index);
+        slots
     }
 
     /// A row for a new material.
@@ -248,7 +281,7 @@ impl MaterialTable {
         }
         self.data[at..at + bytes.len()].copy_from_slice(bytes);
         if self.data.len() as u64 > self.buffer.size() {
-            (self.buffer, self.group) =
+            (self.buffer, self.views) =
                 Self::make(device, (self.data.len() as u64 * 2).max(1 << 18));
             queue
                 .write_buffer(&self.buffer, 0, &self.data)
@@ -746,7 +779,7 @@ impl Renderer {
                 {
                     // (a larger table is a new bind group: the kept render bundles hold the old
                     // one, and are recorded again with the camera group made anew)
-                    scene.camera_bind_group = None;
+                    scene.camera_heaps = None;
                 }
                 let binding = self.material_binding(
                     &scene.textures,
@@ -1151,7 +1184,7 @@ impl Renderer {
                 {
                     // (a larger table is a new bind group: the kept render bundles hold the old
                     // one, and are recorded again with the camera group made anew)
-                    scene.camera_bind_group = None;
+                    scene.camera_heaps = None;
                 }
                 let binding = self.material_binding(
                     &scene.textures,

@@ -220,10 +220,32 @@ pub(crate) fn encode_batches_keyed<'a, E: mx::RenderEncoder>(
     key: impl Fn(&Batch) -> u16,
     pipeline: impl Fn(u16) -> &'a mx::RenderPipeline,
 ) {
+    encode_batches_in(
+        pass,
+        scene,
+        &scene.frame_heap,
+        batches,
+        include,
+        key,
+        pipeline,
+    );
+}
+
+/// Record the batches drawing with the frame's places `heap` (a pass with a camera of its
+/// own: the precipitation roof's; the puddles' vehicle pass).
+pub(crate) fn encode_batches_in<'a, E: mx::RenderEncoder>(
+    pass: &mut E,
+    scene: &'a Scene,
+    heap: &FrameHeap,
+    batches: &[Batch],
+    include: impl Fn(&Batch) -> bool,
+    key: impl Fn(&Batch) -> u16,
+    pipeline: impl Fn(u16) -> &'a mx::RenderPipeline,
+) {
     let (mut pipe, mut mesh, mut material) = (u16::MAX, u32::MAX, u32::MAX);
-    pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(&scene.frame_heap));
-    // (the materials' values: the scene's table, its rows at each draw's offset)
-    pass.set_bind_group(1, &scene.material_table.group);
+    // (the frame's textures, samplers and buffers: their places in the heap, after the
+    // material's in the immediates; no bind group)
+    pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(heap));
     let mut page: Option<(&mx::Buffer, &mx::Buffer)> = None;
     let (mut base_vertex, mut first_index) = (0i32, 0u32);
     for b in batches {
@@ -246,10 +268,10 @@ pub(crate) fn encode_batches_keyed<'a, E: mx::RenderEncoder>(
             mesh = b.mesh;
         }
         if b.material != material {
-            // (the material by its table row and heap places: no bind group per material)
+            // (the material by its table row's and textures' places in the heap)
             let binding = &scene.materials[b.material as usize].binding;
-            pass.set_buffer_offset(1, 2, MaterialTable::offset(binding.row.index));
-            pass.set_immediates(0, binding.immediates());
+            let slots = scene.material_table.immediates(binding);
+            pass.set_immediates(0, bytemuck::cast_slice(&slots));
             material = b.material;
         }
         pass.draw_indexed(
@@ -626,7 +648,6 @@ pub(crate) fn record_bundles(
     chunks: &[&[Batch]],
     reuse: &[Option<mx::RenderBundle>],
     pp: &PassPipelines,
-    camera: &mx::BindGroup,
     format: mx::TextureFormat,
     samples: u32,
     surfaces: bool,
@@ -655,7 +676,6 @@ pub(crate) fn record_bundles(
             }),
             sample_count: samples,
         });
-        bundle.set_bind_group(0, camera);
         encode_main_batches(&mut bundle, scene, chunk, pp, lean);
         bundle.finish(Some("main pass part"))
     };

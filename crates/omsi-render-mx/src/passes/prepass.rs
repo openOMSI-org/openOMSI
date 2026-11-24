@@ -95,7 +95,6 @@ impl Renderer {
                     ),
                     occlusion_query_set: None,
                 });
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
                 if let Some((p, _, bg)) = motion {
                     // (the sky's motion first, where nothing covers it)
                     pass.set_bind_group(3, bg);
@@ -151,7 +150,7 @@ impl Renderer {
                     occlusion_query_set: None,
                 });
                 pass.set_pipeline(pipe);
-                pass.set_bind_group(0, bg);
+                bg.set(&mut pass);
                 pass.draw(0..3, 0..1);
             }
         }
@@ -254,11 +253,8 @@ impl Renderer {
             if !whole {
                 pass.set_scissor_rect(0, y0, SKY_CUBE_SIZE, rows);
             }
-            pass.set_bind_group(
-                0,
-                &probe.cube_bind_groups[(f * SKY_CUBE_ROUNDS + round) as usize],
-            );
-            pass.set_bind_group(1, sky_bg);
+            probe.cube_bind_groups[(f * SKY_CUBE_ROUNDS + round) as usize].set(&mut pass);
+            sky_bg.set(&mut pass);
             pass.draw(0..3, 0..1);
         }
     }
@@ -309,8 +305,8 @@ impl Renderer {
                         } else {
                             &probe.filter_pipeline
                         });
-                        pass.set_bind_group(0, bg);
-                        pass.set_bind_group(1, sky_bg);
+                        bg.set(&mut pass);
+                        sky_bg.set(&mut pass);
                         pass.draw(0..3, 0..1);
                     }
                 }

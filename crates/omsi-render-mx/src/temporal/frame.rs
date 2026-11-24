@@ -51,13 +51,13 @@ pub(crate) struct TemporalTargets {
     output: (u32, u32),
     color: mx::Texture,
     pub(crate) color_view: mx::TextureView,
-    pub(crate) color_bg: mx::BindGroup,
+    pub(crate) color_bg: HeapGroup,
     motion: mx::Texture,
     pub(crate) motion_view: mx::TextureView,
     mask: mx::Texture,
     pub(crate) mask_view: mx::TextureView,
     output_tex: mx::Texture,
-    output_bg: mx::BindGroup,
+    output_bg: HeapGroup,
 }
 
 #[derive(Clone, Copy)]
@@ -379,23 +379,27 @@ impl Renderer {
             .create_view(&Default::default())
             .expect("mX: a texture view");
         let color_bg = self.picture_group(&color_view);
-        let output_bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("temporal output"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: blit_buf.as_entire_binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::TextureView(&output_view),
-                },
-                mx::BindGroupEntry {
-                    binding: 2,
-                    resource: mx::BindingResource::Sampler(&self.tone.post_sampler),
-                },
-            ],
-        });
+        let output_bg = HeapGroup::of(
+            picture_layout(),
+            0,
+            &mx::BindGroupDescriptor {
+                label: Some("temporal output"),
+                entries: &[
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: blit_buf.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::TextureView(&output_view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 2,
+                        resource: mx::BindingResource::Sampler(&self.tone.post_sampler),
+                    },
+                ],
+            },
+        );
         let d = self.temporal.as_mut().expect("temporal state");
         if let Some(old) = d.targets.take() {
             d.keep
@@ -688,7 +692,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.scale.upscale_pipeline);
-            pass.set_bind_group(0, bg);
+            bg.set(&mut pass);
             pass.draw(0..3, 0..1);
         }
         {
@@ -707,13 +711,13 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.scale.upscale_pipeline);
-            pass.set_bind_group(0, bg);
+            bg.set(&mut pass);
             pass.draw(0..3, 0..1);
             if overlays > 0 {
                 pass.set_pipeline(&self.overlay_pipeline_1x);
                 for k in 0..overlays {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg);
+                        bg.set(&mut pass);
                         pass.draw(0..6, 0..1);
                     }
                 }

@@ -159,7 +159,7 @@ pub(crate) struct FrameCtx<'a> {
     pub vanilla_fxaa: bool,
     pub glass_on: bool,
     pub scaled: bool,
-    pub scene_target: Option<(mx::TextureView, mx::BindGroup)>,
+    pub scene_target: Option<(mx::TextureView, HeapGroup)>,
     pub aspect: f32,
     pub cam_rel: Vec3,
     pub xr_view: bool,

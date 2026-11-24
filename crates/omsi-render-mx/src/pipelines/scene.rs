@@ -56,7 +56,7 @@ impl SceneBase {
                 view_formats: &[],
             })
             .expect("mX: a texture");
-        let lm_uniform = uniform_buffer(device, "light map atlas place", 16);
+        let lm_uniform = frame_buffer(device, "light map atlas place", 16);
         let snow_track = device
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("snow track field"),
@@ -67,7 +67,7 @@ impl SceneBase {
                 usage: mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
             })
             .expect("mX: a buffer");
-        let snow_track_uniform = uniform_buffer(device, "snow track field place", 32);
+        let snow_track_uniform = frame_buffer(device, "snow track field place", 32);
         // coronas: camera group + a corona texture group
         let vertex_layout = mx::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,

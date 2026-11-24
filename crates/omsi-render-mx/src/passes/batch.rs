@@ -1007,7 +1007,7 @@ impl Renderer {
             } else {
                 &plan.main_batches
             };
-            let camera = scene.camera_bind_group.as_ref().expect("camera bind group");
+            let camera = scene.camera_epoch;
             // The window's bundles of the last frame are drawn again where this frame's
             // batches are the same and name the same buffers and bind groups: a bundle holds
             // only which draws to make, and what the draws read (the instances' places, the
@@ -1043,7 +1043,7 @@ impl Renderer {
             };
             {
                 if let Some(c) = last {
-                    if c.mode == mode && c.camera == *camera {
+                    if c.mode == mode && c.camera == camera {
                         for (k, chunk) in chunks.iter().enumerate() {
                             if let Some((_, r, bundle)) =
                                 c.parts.get(k).filter(|(b, ..)| *b == **chunk)
@@ -1076,7 +1076,6 @@ impl Renderer {
                 &chunks,
                 &reuse,
                 pp,
-                camera,
                 format,
                 self.options.msaa,
                 rt_gbuf() && !f.eye_color,
@@ -1089,7 +1088,7 @@ impl Renderer {
             let whole = bundles.iter().all(Option::is_some);
             let made = || MainBundles {
                 mode,
-                camera: camera.clone(),
+                camera,
                 parts: chunks
                     .iter()
                     .zip(&bundles)
@@ -1127,7 +1126,7 @@ impl Renderer {
 /// The window's main-pass bundles as last recorded and what they were recorded from.
 pub(crate) struct MainBundles {
     mode: (bool, bool, mx::TextureFormat, u32, bool, FrameLean, u32),
-    camera: mx::BindGroup,
+    camera: u64,
     /// each bundle with the batches it was recorded from and what they bound (once they repeat)
     parts: Vec<(Vec<Batch>, Option<Vec<BatchResources>>, mx::RenderBundle)>,
 }

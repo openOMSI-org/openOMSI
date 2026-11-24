@@ -789,6 +789,7 @@ impl Renderer {
                 dynamic_scale: std::cell::Cell::new(1.0),
             },
             sky: SkyRes {
+                layout: sky.layout.clone(),
                 sky_lut: enhanced.sky_lut,
                 cloud_field: FieldState::default(),
                 sky_lut_view: enhanced.sky_lut_view,
@@ -819,10 +820,14 @@ impl Renderer {
                 snow_track_uniform: scene.snow_track_uniform,
                 fog_lamps_pipeline: fog_lamps.pipeline,
                 fog_lamps_buf: fog_lamps.buf,
+                fog_lamps_layout: fog_lamps.layout,
                 vol_fog: (!leave_out_enhanced)
                     .then(|| crate::vol_fog::VolFog::new(&device, &queue, hdr_format, gl))
                     .flatten(),
                 corona_bind_group: coronas.bind_group,
+                corona_layout: coronas.layout,
+                snow_layout: snow.layout,
+                rain_layout: rain.layout,
                 snow_buf: snow.buf,
                 snow_bind_group: snow.bind_group,
                 rain_buf: rain.buf,

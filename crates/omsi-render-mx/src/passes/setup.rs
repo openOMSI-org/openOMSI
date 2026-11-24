@@ -170,7 +170,7 @@ impl Renderer {
             || vanilla_fxaa
             || (glass_on && !enhanced_view)
             || temporal_frame;
-        let scene_target: Option<(mx::TextureView, mx::BindGroup)> = if temporal_frame {
+        let scene_target: Option<(mx::TextureView, HeapGroup)> = if temporal_frame {
             // (the picture goes into the upscaler's input, not into the render scale's target)
             self.temporal
                 .as_ref()
@@ -303,12 +303,12 @@ impl Renderer {
             )
         {
             // a new AO texture: the camera bind group must point at it
-            scene.camera_bind_group = None;
+            scene.camera_heaps = None;
             self.targets.hdr_targets.clear();
         }
         // (the window's clouds at its size: the camera group reads them)
         if enhanced && lead_view && self.ensure_cloud_targets(width, height) {
-            scene.camera_bind_group = None;
+            scene.camera_heaps = None;
         }
         // (the ground albedo picture only while that pass can run; read through the heap)
         if prepass_on {
@@ -326,7 +326,7 @@ impl Renderer {
                 .is_some_and(|rt| rt.ensure_targets(&self.device, width, height))
         {
             // the camera bind group must point at the new lighting texture
-            scene.camera_bind_group = None;
+            scene.camera_heaps = None;
         }
         if masked_frame {
             self.hdr_targets(width, height, rt_gbuf() && !eye_color);

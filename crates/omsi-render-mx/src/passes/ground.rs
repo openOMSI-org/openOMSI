@@ -110,11 +110,9 @@ impl Renderer {
         plan: &GroundPlan,
         timers: &mut PassTimers,
     ) {
-        let (Some(pipes), Some((_, ground, depth)), Some(camera)) = (
-            self.ground_pipelines.as_ref(),
-            self.targets.ground.as_ref(),
-            scene.camera_bind_group.as_ref(),
-        ) else {
+        let (Some(pipes), Some((_, ground, depth))) =
+            (self.ground_pipelines.as_ref(), self.targets.ground.as_ref())
+        else {
             return;
         };
         let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
@@ -143,7 +141,6 @@ impl Renderer {
             timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "ground albedo"),
             occlusion_query_set: None,
         });
-        pass.set_bind_group(0, camera);
         encode_batches(&mut pass, scene, &plan.base, |pipe| {
             &pipes[(pipe % 4) as usize]
         });

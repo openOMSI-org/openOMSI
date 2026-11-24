@@ -49,6 +49,9 @@ pub(super) struct Uniform {
     quality: [f32; 4],
 }
 
+/// puddle_reflection.wgsl and its parts, its groups read from the heap.
+pub(super) static PUDDLES: HeapModule = HeapModule::new(shader_source);
+
 pub(super) fn shader_source() -> String {
     [
         crate::shaders::hot_wgsl(include_str!("colour.wgsl"), "colour.wgsl"),
@@ -71,7 +74,7 @@ pub(super) struct Pipelines {
     vehicle: Vec<mx::RenderPipeline>,
     chassis: mx::RenderPipeline,
     vehicle_params: mx::Buffer,
-    vehicle_bg: mx::BindGroup,
+    vehicle_view: mx::BufferView,
 }
 
 impl Pipelines {
@@ -80,13 +83,15 @@ impl Pipelines {
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("puddle reflection params"),
                 size: std::mem::size_of::<Uniform>() as u64,
-                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+                usage: mx::BufferUsages::UNIFORM
+                    | mx::BufferUsages::STORAGE
+                    | mx::BufferUsages::COPY_DST,
             })
             .expect("mX: a buffer");
         let shader = device
             .create_shader_module(&mx::ShaderModuleDescriptor {
                 label: Some("puddle reflections"),
-                source: &*(shader_source()),
+                source: &PUDDLES.wgsl(),
             })
             .expect("mX: a shader");
         let pipeline = |entry| {
@@ -150,16 +155,13 @@ impl Pipelines {
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("puddle vehicle plane"),
                 size: std::mem::size_of::<VehicleUniform>() as u64,
-                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
+                usage: mx::BufferUsages::UNIFORM
+                    | mx::BufferUsages::STORAGE
+                    | mx::BufferUsages::COPY_DST,
             })
             .expect("mX: a buffer");
-        let vehicle_bg = device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("puddle vehicle plane"),
-            entries: &[mx::BindGroupEntry {
-                binding: 0,
-                resource: vehicle_params.as_entire_binding(),
-            }],
-        });
+        // (read by the scene shader through the heap, at the frame's `ground`: `FrameHeap`)
+        let vehicle_view = crate::pipelines::common::heap_view(&vehicle_params);
         let mut vehicle = Vec::new();
         for kind in 0..PIPE_KINDS {
             for cull in [false, true] {
@@ -242,7 +244,7 @@ impl Pipelines {
             vehicle,
             chassis,
             vehicle_params,
-            vehicle_bg,
+            vehicle_view,
             params,
         }
     }
@@ -261,13 +263,13 @@ pub(super) struct Targets {
     blur: mx::TextureView,
     filtered: mx::TextureView,
     pub(super) view: mx::TextureView,
-    trace_bg: mx::BindGroup,
-    blur_x_bg: mx::BindGroup,
-    blur_y_bg: mx::BindGroup,
-    resolve_bg: mx::BindGroup,
-    pub(super) down_bg: mx::BindGroup,
-    pub(super) tonemap_bg: [mx::BindGroup; 2],
-    pub(super) classic_bg: mx::BindGroup,
+    trace_bg: HeapGroup,
+    blur_x_bg: HeapGroup,
+    blur_y_bg: HeapGroup,
+    resolve_bg: HeapGroup,
+    pub(super) down_bg: HeapGroup,
+    pub(super) tonemap_bg: [HeapGroup; 2],
+    pub(super) classic_bg: HeapGroup,
 }
 
 /// How many picture pixels one ray stands for, each way (2 at half size; 4 on Low, or on
@@ -372,26 +374,30 @@ impl Targets {
             resource: mx::BindingResource::TextureView(view),
         };
         let group = |ray_view| {
-            r.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("puddle reflections"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: pipelines.params.as_entire_binding(),
-                    },
-                    binding(1, &hdr.view),
-                    binding(2, &hdr.mask),
-                    binding(3, &r.targets.ao.as_ref().unwrap().depth_view),
-                    binding(4, ray_view),
-                    mx::BindGroupEntry {
-                        binding: 5,
-                        resource: mx::BindingResource::Sampler(&r.tone.post_sampler),
-                    },
-                    binding(6, &r.tone.probe.as_ref().unwrap().view),
-                    binding(7, &hit_depth_view),
-                    binding(8, &vehicle_view),
-                ],
-            })
+            HeapGroup::of(
+                PUDDLES.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("puddle reflections"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: pipelines.params.as_entire_binding(),
+                        },
+                        binding(1, &hdr.view),
+                        binding(2, &hdr.mask),
+                        binding(3, &r.targets.ao.as_ref().unwrap().depth_view),
+                        binding(4, ray_view),
+                        mx::BindGroupEntry {
+                            binding: 5,
+                            resource: mx::BindingResource::Sampler(&r.tone.post_sampler),
+                        },
+                        binding(6, &r.tone.probe.as_ref().unwrap().view),
+                        binding(7, &hit_depth_view),
+                        binding(8, &vehicle_view),
+                    ],
+                },
+            )
         };
         // The trace target must never appear in its own bind group, including unused slots.
         let trace_bg = group(&r.black_texture.view);
@@ -399,23 +405,27 @@ impl Targets {
         let blur_y_bg = group(&blur);
         let resolve_bg = group(&filtered);
         let post_group = |base, adapt, screen_mask| {
-            r.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("post with puddle reflections"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: r.tone.post_buf.as_entire_binding(),
-                    },
-                    binding(1, &view),
-                    mx::BindGroupEntry {
-                        binding: 2,
-                        resource: mx::BindingResource::Sampler(&r.tone.post_sampler),
-                    },
-                    binding(3, base),
-                    binding(4, adapt),
-                    binding(5, screen_mask),
-                ],
-            })
+            HeapGroup::of(
+                crate::pipelines::post::POST.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("post with puddle reflections"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: r.tone.post_buf.as_entire_binding(),
+                        },
+                        binding(1, &view),
+                        mx::BindGroupEntry {
+                            binding: 2,
+                            resource: mx::BindingResource::Sampler(&r.tone.post_sampler),
+                        },
+                        binding(3, base),
+                        binding(4, adapt),
+                        binding(5, screen_mask),
+                    ],
+                },
+            )
         };
         let down_bg = post_group(&hdr.mask, &r.white_texture.view, &r.black_texture.view);
         let tonemap_bg = [
@@ -640,20 +650,30 @@ impl Renderer {
                 timestamp_writes: pass_timer(queries, timed, "puddle vehicle"),
                 occlusion_query_set: None,
             });
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-            pass.set_bind_group(2, &pipelines.vehicle_bg);
+            // (the vehicle plane's uniform at the frame's `ground` place: this pass reads no
+            // ground picture)
+            let heap = FrameHeap {
+                ground: pipelines.vehicle_view.index(),
+                ..scene.frame_heap
+            };
             if !omsi_cfg::flags::OMSI_NO_PUDDLE_VEHICLE.is_set() {
                 if let Some(first) = vehicle_batches.first() {
                     let binding = &scene.materials[first.material as usize].binding;
-                    pass.set_bind_group(1, &scene.material_table.group);
-                    pass.set_buffer_offset(1, 2, MaterialTable::offset(binding.row.index));
-                    pass.set_immediates(0, binding.immediates());
+                    let slots = scene.material_table.immediates(binding);
+                    pass.set_immediates(0, bytemuck::cast_slice(&slots));
+                    pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(&heap));
                     pass.set_pipeline(&pipelines.chassis);
                     pass.draw(0..6, 0..origins.len() as u32);
                 }
-                encode_batches(&mut pass, scene, &vehicle_batches, |pipe| {
-                    &pipelines.vehicle[pipe as usize]
-                });
+                encode_batches_in(
+                    &mut pass,
+                    scene,
+                    &heap,
+                    &vehicle_batches,
+                    |_| true,
+                    |b| b.pipe as u16,
+                    |pipe| &pipelines.vehicle[pipe as usize],
+                );
             }
         }
         let copy = |texture| mx::TexelCopyTextureInfo {
@@ -690,7 +710,6 @@ impl Renderer {
                 timestamp_writes: pass_timer(queries, timed, "puddle glass"),
                 occlusion_query_set: None,
             });
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             encode_batches_filtered(
                 &mut pass,
                 scene,

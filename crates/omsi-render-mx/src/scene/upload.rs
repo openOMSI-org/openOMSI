@@ -315,11 +315,9 @@ impl Renderer {
         scene.cpu_params = params;
         let bytes: &[u8] = bytemuck::cast_slice(&scene.cpu_models);
         let pbytes: &[u8] = bytemuck::cast_slice(&scene.cpu_params);
-        if let (Some(buf), Some(pbuf), Some(_)) = (
-            &scene.model_buf,
-            &scene.params_buf,
-            &scene.camera_bind_group,
-        ) {
+        if let (Some(buf), Some(pbuf), Some(_)) =
+            (&scene.model_buf, &scene.params_buf, &scene.camera_heaps)
+        {
             if buf.size() >= bytes.len() as u64 && pbuf.size() >= pbytes.len() as u64 {
                 buf.write(&self.queue, 0, bytes);
                 pbuf.write(&self.queue, 0, pbytes);
@@ -467,54 +465,81 @@ impl Renderer {
                 },
             ]);
         }
-        let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("camera"),
-            entries: &entries,
+        // the same for the scene shader, through the heap (`frame_from_heap`): no bind group
+        let mut views = Vec::new();
+        let mut view = |b: &mx::Buffer| {
+            let v = crate::pipelines::common::heap_view(b);
+            let index = v.index();
+            views.push(v);
+            index
+        };
+        let probe = self.tone.probe.as_ref();
+        let heap = FrameHeap {
+            ground: scene.frame_heap.ground,
+            shadow: self.shadows.shadow_view.index(),
+            shadow_far: self.shadows.shadow_view_far.index(),
+            ao: self
+                .rt
+                .as_ref()
+                .and_then(|r| r.targets.as_ref())
+                .map(|t| &t.out)
+                .or(self.targets.ao.as_ref().map(|a| &a.blur_view))
+                .unwrap_or(&self.white_texture.view)
+                .index(),
+            probe: probe.map_or(0, |p| p.view.index()),
+            sky_lut: self.sky.sky_lut_view.index(),
+            lmap_tex: self.lights.lm_atlas_view.index(),
+            s_shadow: self.shadows.shadow_sampler.index(),
+            s_ao: self.ao_sampler.index(),
+            s_lin: self.tone.lin_sampler.index(),
+            camera: view(&self.camera_buf),
+            models: 0,
+            inst_params: 0,
+            draw_list: 0,
+            lights: 0,
+            grid: 0,
+            enh: view(&self.tone.enh_buf),
+            lmap: view(&self.lights.lm_uniform),
+            snow_px: view(&snow_field),
+            snow: view(&self.lights.snow_track_uniform),
+        };
+        let precip_camera = view(&self.shadows.precip.camera_buf);
+        let mut heap = FrameHeap {
+            models: model_buf.heap_index(&mut views),
+            inst_params: params_buf.heap_index(&mut views),
+            draw_list: draw_buf.heap_index(&mut views),
+            lights: if array_path() != ArrayPath::NoStorage {
+                light_buf.heap_index(&mut views)
+            } else {
+                0
+            },
+            grid: if array_path() != ArrayPath::NoStorage {
+                grid_buf.heap_index(&mut views)
+            } else {
+                0
+            },
+            ..heap
+        };
+        scene.precip_heap = FrameHeap {
+            camera: precip_camera,
+            ..heap
+        };
+        std::mem::swap(&mut scene.frame_heap, &mut heap);
+        scene.frame_views = views;
+        scene.camera_heaps = Some(CameraHeaps {
+            corona: HeapGroup::new(&self.lights.corona_layout, 0, &entries),
+            snow: HeapGroup::new(&self.lights.snow_layout, 0, &entries),
+            rain: HeapGroup::new(&self.lights.rain_layout, 0, &entries),
+            sky: HeapGroup::new(&self.sky.layout, 0, &entries),
+            fog: HeapGroup::new(&self.lights.fog_lamps_layout, 0, &entries),
+            vol: self
+                .lights
+                .vol_fog
+                .as_ref()
+                .map(|v| HeapGroup::new(&v.layout, 0, &entries)),
         });
-        scene.camera_bind_group = Some(bg);
-        let sbg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("shadow camera"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: self.camera_buf.as_entire_binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: model_buf.binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buf.binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 10,
-                    resource: draw_buf.binding(),
-                },
-            ],
-        });
-        scene.shadow_bind_group = Some(sbg);
-        scene.precip_bind_group = Some(self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("precipitation roof camera"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: self.shadows.precip.camera_buf.as_entire_binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: model_buf.binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buf.binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 10,
-                    resource: draw_buf.binding(),
-                },
-            ],
-        }));
+        // (the main pass's kept bundles were recorded with the places before: see `MainBundles`)
+        scene.camera_epoch += 1;
     }
 
     /// Upload the frame's draw list, growing its buffer (and the bind groups that hold it)
@@ -537,8 +562,7 @@ impl Renderer {
             let cap = (bytes.len() as u64 * 3 / 2).max(1 << 16).div_ceil(4) * 4;
             scene.draw_buf = Some(GpuArray::new(&self.device, "draw list", cap, 4, true));
             self.rebuild_camera_bind_group(scene);
-        } else if scene.camera_bind_group.is_none()
-            || scene.shadow_bind_group.is_none()
+        } else if scene.camera_heaps.is_none()
             || scene.snow_track_seen != self.lights.snow_track_made.get()
         {
             // (made again too when the snow track field has been made in place of its token)

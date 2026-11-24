@@ -148,6 +148,33 @@ benchmark's log has no "drawing with 1x MSAA".
 
 `OMSI_NO_LEAN=1` draws with the full pipelines, for comparison.
 
+## The rest in the heap (2026-11-24)
+
+The renderer draws without bind groups but where mX's heap cannot hold what a shader reads.
+
+- **The scene shader** (`frame_from_heap`, `FrameHeap`): the camera group's textures,
+  samplers and buffers (the camera, the instances' places and parameters, the draw list, the
+  lights and their grid, the enhanced uniform, the light maps, the snow track), the material
+  table's row (a buffer view a row: `MaterialTable::immediates`) and the puddles' vehicle plane
+  are read from the heap at places the draw's immediates carry after the material's: 32
+  `u32`, 128 bytes, the most Vulkan and mX's Direct3D 12 promise. On Metal mX binds those views
+  directly and keeps the frame's constants in the constant address space (mX 650b244); OpenGL
+  without storage buffers in a stage reads them as uniform blocks.
+- **Every other module** (`groups_to_heap`, `HeapGroup`): its root declarations become heap
+  reads at places in its own immediates, in the order of their group and binding
+  (`HeapLayout`, worked out from the same source the module is compiled from); a `HeapGroup`
+  is made from the entries a bind group was made from and writes the places into a pass.
+  A module-scope name is replaced only where no parameter or local shadows it
+  (`replace_globals`). The camera group is a `HeapGroup` per module that reads it
+  (`CameraHeaps`); the bind group itself is gone.
+- **Left as bind groups**: the ray tracing's passes (storage textures, acceleration
+  structures, writable buffers), the multisampled pane depth (the heap has no multisampled
+  textures) and the temporal upscaling's motion group (the scene shader's 128 bytes of
+  immediates are taken).
+
+The picture and the GPU time are as before (Grundorf cab, the same 12.4 ms with and without
+the heap); the renderer's tests pass as before.
+
 ## Older GPUs (2026-11-18)
 
 - **Direct3D 11** is a graphics API choice on Windows (`graphics_api=dx11`, "DirectX 11" in the

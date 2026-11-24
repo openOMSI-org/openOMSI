@@ -119,7 +119,6 @@ impl Renderer {
                 timestamp_writes: pass_timer(timers.set.as_ref(), &mut timers.timed, "pane depth"),
                 occlusion_query_set: None,
             });
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             encode_batches(&mut pass, scene, panes, |pipe| &mask.panes[pipe as usize]);
             Some((&cut[..], &mask.prefill, bg))
         });
@@ -270,7 +269,6 @@ impl Renderer {
         batches: &[Batch],
         pipes: &'p [mx::RenderPipeline; 6],
     ) {
-        pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         // Alpha-tested colour draws use alpha-to-coverage, which covers a cut-out's
         // edge in part: those samples must keep the depth of what lies behind (or the
         // sky shows through the houses behind the foliage), so a cut-out lays only the
@@ -339,7 +337,8 @@ impl Renderer {
     ) {
         if let Some(sky) = &scene.sky_bind_group {
             pass.set_pipeline(sky_pipe);
-            pass.set_bind_group(1, sky);
+            scene.camera_heaps.as_ref().unwrap().sky.set(pass);
+            sky.set(pass);
             pass.set_vertex_buffer(0, &self.sky.sky_mesh.0, 0);
             pass.set_index_buffer(&self.sky.sky_mesh.1, 0, mx::IndexFormat::Uint32);
             pass.draw_indexed(0..self.sky.sky_mesh.2, 0, 0..1);
@@ -441,7 +440,6 @@ impl Renderer {
             timestamp_writes: stamp,
             occlusion_query_set: None,
         });
-        pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         if first {
             let sky_late = prefill.is_some() && f.exclude_texture.is_none();
             if !sky_late {
@@ -594,7 +592,6 @@ impl Renderer {
             ),
             occlusion_query_set: None,
         });
-        pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         // The sky after the prefill: over the laid depth it shades only the pixels no
         // scenery covers (an excavation's floor is coloured before its prefill, so there it
         // goes first, over the cleared depth, as it always did; and where a texture is left
@@ -626,7 +623,6 @@ impl Renderer {
             }
         }
         if bundles.is_empty() {
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             encode_main_batches(
                 &mut pass,
                 scene,
@@ -641,8 +637,6 @@ impl Renderer {
         } else {
             // the batches, recorded as bundles on several threads (see `record_bundles`)
             pass.execute_bundles(bundles.iter());
-            // a bundle leaves the pass without bind groups
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
         }
         self.encode_main_late(&mut pass, scene, f, plan, pp);
     }
@@ -671,7 +665,8 @@ impl Renderer {
         if smoke && scene.smoke_count > 0 && !f.env.no_smoke {
             if let Some(sb) = &scene.smoke_buf {
                 pass.set_pipeline(&pp.smoke_pipeline);
-                pass.set_bind_group(1, &self.lights.smoke_bind_group);
+                scene.camera_heaps.as_ref().unwrap().corona.set(pass);
+                self.lights.smoke_bind_group.set(pass);
                 pass.set_vertex_buffer(0, &sb, 0);
                 pass.draw(0..6, 0..scene.smoke_count);
             }
@@ -708,8 +703,8 @@ impl Renderer {
                 .write_buffer(&self.lights.snow_buf, 0, bytemuck::bytes_of(&u))
                 .expect("mX: a queue write");
             pass.set_pipeline(snow);
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-            pass.set_bind_group(1, &self.lights.snow_bind_group);
+            scene.camera_heaps.as_ref().unwrap().snow.set(pass);
+            self.lights.snow_bind_group.set(pass);
             pass.draw(0..6, 0..flakes + veil);
         }
         // the rainfall, as the snowfall (rain.wgsl)
@@ -759,8 +754,8 @@ impl Renderer {
                 .write_buffer(&self.lights.rain_buf, 0, bytemuck::bytes_of(&u))
                 .expect("mX: a queue write");
             pass.set_pipeline(rain);
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-            pass.set_bind_group(1, &self.lights.rain_bind_group);
+            scene.camera_heaps.as_ref().unwrap().rain.set(pass);
+            self.lights.rain_bind_group.set(pass);
             pass.draw(0..4, 0..counts.iter().sum::<u32>() + veil);
         }
         // light coronas, additive: the world's, then the vehicle the camera is in -
@@ -768,12 +763,11 @@ impl Renderer {
         let coronas_on = scene.corona_count > 0 && !f.env.no_coronas;
         for late in [false, true] {
             if late && !cab_batches.is_empty() {
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
                 encode_main_batches(pass, scene, cab_batches, pp, f.lean);
             }
             if let Some(cb) = scene.corona_buf.as_ref().filter(|_| coronas_on) {
                 pass.set_pipeline(&pp.corona_pipeline);
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
+                scene.camera_heaps.as_ref().unwrap().corona.set(pass);
                 pass.set_vertex_buffer(0, &cb, 0);
                 // in runs by picture (the standard glow, the lights' own bitmaps, the cone)
                 for &(tex, first, count, _) in scene.corona_runs.iter().filter(|r| r.3 == late) {
@@ -783,7 +777,7 @@ impl Renderer {
                         .get(tex as usize)
                         .and_then(|b| b.as_ref())
                         .unwrap_or(&self.lights.corona_bind_group);
-                    pass.set_bind_group(1, bg);
+                    bg.set(pass);
                     pass.draw(0..6, first..first + count);
                 }
             }
@@ -794,7 +788,7 @@ impl Renderer {
             pass.set_pipeline(&self.overlay_pipeline);
             for (k, _) in overlays.iter().enumerate() {
                 if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                    pass.set_bind_group(0, bg);
+                    bg.set(pass);
                     pass.draw(0..6, 0..1);
                 }
             }

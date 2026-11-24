@@ -8,8 +8,10 @@
 //! however harmless it looks, has to be tried there. The tests below hold the assembled text
 //! to the old files' size and hash; a deliberate edit of a part updates them.
 
+mod heap_form;
 mod sources;
 
+pub(crate) use heap_form::*;
 pub(crate) use sources::*;
 
 /// The scene module's own part: the vanilla path, the shadow passes, the rain on the glass
