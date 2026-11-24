@@ -227,13 +227,6 @@ impl VehicleInstance {
         self.engine_ids = std::sync::OnceLock::new();
     }
 
-    pub fn has_trigger(&self, name: &str) -> bool {
-        self.ty
-            .program
-            .triggers
-            .contains_key(&name.to_ascii_lowercase())
-    }
-
     pub fn trigger(&mut self, name: &str) -> bool {
         if let Some(part) = self.active_cab {
             if self.trigger_part(part, name) {
