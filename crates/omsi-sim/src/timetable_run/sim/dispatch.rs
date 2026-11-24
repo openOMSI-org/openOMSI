@@ -159,13 +159,14 @@ impl ScheduleSim {
     /// termini (0x61c33c); the names compare exactly.
     /// Per bus stop, the destinations of the trips due there from [`PAX_LATE_WAIT`] ago to
     /// [`PAX_SPAWN_AHEAD`] ahead (today's departures, the stations they stop at after it): what
-    /// the people turning up there now draw their destination from. Omsi.exe spawns
-    /// people for a trip up to a quarter of an hour before it is due at their stop (pionsix's
+    /// the people turning up there now draw their destination from, and how many of the
+    /// stop's people those trips ask for (the sum of their [`pax_share`]s, 0x61a068). Omsi.exe
+    /// spawns people for a trip up to a quarter of an hour before it is due at their stop (pionsix's
     /// tests, #1436); the destinations of every trip of the map, whatever its hour or day,
     /// had people waiting at 2 a.m. for the six o'clock bus and at a school's stop for hours
     /// before its run (#1415). Which buses they then take is still the stop's line records
     /// (`stop_targets`), from every trip.
-    pub fn due_destinations(&self, day_time: f64) -> HashMap<i64, HashSet<String>> {
+    pub fn due_destinations(&self, day_time: f64) -> DueTrips {
         let names = self.stop_names();
         let name_of = |id: i64| names.get(&id).cloned().unwrap_or_else(|| id.to_string());
         let tod = day_time - self.day_base;
@@ -178,7 +179,7 @@ impl ScheduleSim {
         let from = self
             .departures
             .partition_point(|d| d.time < tod - longest - PAX_LATE_WAIT);
-        let mut out: HashMap<i64, HashSet<String>> = HashMap::new();
+        let mut out = DueTrips::default();
         for i in from..self.departures.len() {
             let d = &self.departures[i];
             if d.time > tod + PAX_SPAWN_AHEAD {
@@ -195,7 +196,8 @@ impl ScheduleSim {
                     continue;
                 }
                 let here = name_of(*sid);
-                let set = out.entry(*sid).or_default();
+                let set = out.dests.entry(*sid).or_default();
+                let mut goes_on = false;
                 for (j, to) in stations.iter().enumerate().skip(k + 1) {
                     if !tt.stops.get(j).copied().unwrap_or(true) {
                         continue;
@@ -203,7 +205,12 @@ impl ScheduleSim {
                     let to = name_of(*to);
                     if to != here {
                         set.insert(to);
+                        goes_on = true;
                     }
+                }
+                // (a trip that ends here takes nobody on)
+                if goes_on {
+                    *out.share.entry(*sid).or_default() += pax_share(due - tod);
                 }
             }
         }
