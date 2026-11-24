@@ -3,19 +3,32 @@
 //! pace while it is open, and its answers shown as they come - the line picked kept by what it
 //! does, not by where it was (a player's line follows the player, whatever the list does).
 
-use crate::game_lists::ListKind;
 use crate::App;
+use crate::game_lists::ListKind;
 use omsi_lan::admin::panel::{AdminMenu, Panel};
 use omsi_lan::commands::Command;
 use std::time::Instant;
 
 /// This game administers a dedicated server (not its own session): the server's menu.
 pub(crate) fn remote(app: &App) -> bool {
-    app.net.is_admin && app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+    app.net.is_admin
+        && app
+            .net
+            .lan
+            .as_ref()
+            .is_some_and(|l| l.role == omsi_net::Role::Client)
 }
 
 fn admin_kind(k: Option<&ListKind>) -> bool {
-    matches!(k, Some(ListKind::Admin | ListKind::AdminPlayers | ListKind::AdminPlayer(_) | ListKind::AdminConfirm(..))) || crate::player_list::is_page(k)
+    matches!(
+        k,
+        Some(
+            ListKind::Admin
+                | ListKind::AdminPlayers
+                | ListKind::AdminPlayer(_)
+                | ListKind::AdminConfirm(..)
+        )
+    ) || crate::player_list::is_page(k)
 }
 
 /// The lines of a page of the server's menu.
@@ -41,7 +54,11 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
             app.net.admin_panel.soon();
             app.service_msg = Some((crate::admin::sent_to_server(app, action), 2.0));
             // (after sending a player away: back to the players, where the answer shows)
-            Some(if matches!(kind, ListKind::AdminConfirm(..)) { ListKind::AdminPlayers } else { kind.clone() })
+            Some(if matches!(kind, ListKind::AdminConfirm(..)) {
+                ListKind::AdminPlayers
+            } else {
+                kind.clone()
+            })
         }
         AdminMenu::Players => Some(ListKind::AdminPlayers),
         AdminMenu::Player(t) => Some(ListKind::AdminPlayer(t)),
@@ -62,7 +79,11 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
 /// Each frame: while one of the server menu's pages is open, ask what it shows (the panel
 /// keeps the pace: every 3 s at most, one question at a time).
 pub(crate) fn tick(app: &mut App) {
-    if !remote(app) || !(admin_kind(app.menus.list_kind.as_ref()) || (app.menus.game_menu.is_some() && app.shell.pause_category == crate::shell::pause::navigation::Category::Online)) {
+    if !remote(app)
+        || !(admin_kind(app.menus.list_kind.as_ref())
+            || (app.menus.game_menu.is_some()
+                && app.shell.pause_category == crate::shell::pause::navigation::Category::Online))
+    {
         return;
     }
     let now = Instant::now();
@@ -82,9 +103,18 @@ pub(crate) fn tick(app: &mut App) {
 /// A server's answer for its admin: kept for the menu, the open page shown again with it, and
 /// what became of an operation said at once wherever the player is.
 pub(crate) fn take(app: &mut App, c: &Command) {
-    if let Command::AdminResult { status, message, .. } = c {
+    if let Command::AdminResult {
+        status, message, ..
+    } = c
+    {
         log::info!("LAN: the server: {} {message}", status.name());
-        app.service_msg = Some((omsi_ui::i18n::said(format!("{}: {}", omsi_ui::tr(status.label()), omsi_ui::tr(message)), format!("{}: {message}", status.label())), 4.0));
+        app.service_msg = Some((
+            omsi_ui::i18n::said(
+                format!("{}: {}", omsi_ui::tr(status.label()), omsi_ui::tr(message)),
+                format!("{}: {message}", status.label()),
+            ),
+            4.0,
+        ));
     }
     if app.net.admin_panel.take(c) && admin_kind(app.menus.list_kind.as_ref()) {
         refresh_keeping(app);
@@ -93,7 +123,10 @@ pub(crate) fn take(app: &mut App, c: &Command) {
 
 /// The open page made again, on the line that does what the chosen one did.
 fn refresh_keeping(app: &mut App) {
-    let chosen = app.menus.chooser.and_then(|k| app.menus.admin_list.as_ref()?.get(k).map(|l| l.1.clone()));
+    let chosen = app
+        .menus
+        .chooser
+        .and_then(|k| app.menus.admin_list.as_ref()?.get(k).map(|l| l.1.clone()));
     app.refresh_list();
     if let (Some(action), Some(list)) = (chosen, app.menus.admin_list.as_ref()) {
         match list.iter().position(|l| l.1 == action) {

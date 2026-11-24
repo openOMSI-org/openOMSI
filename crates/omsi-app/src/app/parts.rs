@@ -55,7 +55,8 @@ pub(crate) struct WeatherPart<'p> {
     pub(crate) cloud_drift: &'p mut [f64; 4],
     pub(crate) weather_blend: &'p mut Option<crate::weather_cycle::Blend>,
     pub(crate) weather_cycle: &'p mut Option<crate::weather_cycle::Cycle>,
-    pub(crate) metar_rx: &'p mut Option<std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>>,
+    pub(crate) metar_rx:
+        &'p mut Option<std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>>,
     pub(crate) metar_once: &'p mut bool,
     pub(crate) metar_next: &'p mut f64,
     pub(crate) tomorrow: &'p mut crate::weather_tomorrow::Tomorrow,
@@ -168,38 +169,165 @@ impl App {
     /// The `App` taken apart by group (see the module's notes).
     pub(crate) fn parts(&mut self) -> Parts<'_> {
         let App {
-            args, gfx, window, renderer, xr, scene, camera, player, session, menus, world, cam, ui,
-            perf, sound, clock, started, view, input, last, paused, integrations, net, service_msg,
-            settings, exiting, shell, photo, photo_settings, devtools, pipeline, fixed_tick,
+            args,
+            gfx,
+            window,
+            renderer,
+            xr,
+            scene,
+            camera,
+            player,
+            session,
+            menus,
+            world,
+            cam,
+            ui,
+            perf,
+            sound,
+            clock,
+            started,
+            view,
+            input,
+            last,
+            paused,
+            integrations,
+            net,
+            service_msg,
+            settings,
+            exiting,
+            shell,
+            photo,
+            photo_settings,
+            devtools,
+            pipeline,
+            fixed_tick,
         } = self;
         let SessionState {
-            placed, world_day, traffic, schedule, timetable_book, humans, duty, duty_places, rain,
-            cabin_air, spray, lamps_on, populate_t, humans_populate_t, traffic_heavy_frame,
-            first_populate, envir, weather, clock_jump, seat_bus, on_foot, safe_pose, safe_age,
-            pending_time, autosave_t, pumping, career, journey, wetness, cloud_drift, weather_blend,
-            weather_cycle, metar_rx, metar_once, metar_next, sky, scenery, tomorrow, depot_base,
+            placed,
+            world_day,
+            traffic,
+            schedule,
+            timetable_book,
+            humans,
+            duty,
+            duty_places,
+            rain,
+            cabin_air,
+            spray,
+            lamps_on,
+            populate_t,
+            humans_populate_t,
+            traffic_heavy_frame,
+            first_populate,
+            envir,
+            weather,
+            clock_jump,
+            seat_bus,
+            on_foot,
+            safe_pose,
+            safe_age,
+            pending_time,
+            autosave_t,
+            pumping,
+            career,
+            journey,
+            wetness,
+            cloud_drift,
+            weather_blend,
+            weather_cycle,
+            metar_rx,
+            metar_once,
+            metar_next,
+            sky,
+            scenery,
+            tomorrow,
+            depot_base,
             depot_prev: _,
         } = session;
         Parts {
-            common: Common { args, settings, started: *started, last: *last, exiting: *exiting },
+            common: Common {
+                args,
+                settings,
+                started: *started,
+                last: *last,
+                exiting: *exiting,
+            },
             input,
             menus: MenusPart { menus, shell },
-            clock: ClockPart { clock, paused, world_day, clock_jump, pending_time, autosave_t, fixed_tick },
+            clock: ClockPart {
+                clock,
+                paused,
+                world_day,
+                clock_jump,
+                pending_time,
+                autosave_t,
+                fixed_tick,
+            },
             weather: WeatherPart {
-                rain, cabin_air, spray, lamps_on, envir, weather, wetness, cloud_drift,
-                weather_blend, weather_cycle, metar_rx, metar_once, metar_next, sky, tomorrow,
+                rain,
+                cabin_air,
+                spray,
+                lamps_on,
+                envir,
+                weather,
+                wetness,
+                cloud_drift,
+                weather_blend,
+                weather_cycle,
+                metar_rx,
+                metar_once,
+                metar_next,
+                sky,
+                tomorrow,
             },
             world: WorldPart { world, scenery },
-            traffic: TrafficPart { traffic, schedule, timetable_book, populate_t, traffic_heavy_frame, first_populate, pipeline },
-            player: PlayerPart { player, placed, seat_bus, safe_pose, safe_age, pumping },
-            people: PeoplePart { humans, humans_populate_t, on_foot },
-            duty: DutyPart { duty, duty_places, career, journey, depot_base },
+            traffic: TrafficPart {
+                traffic,
+                schedule,
+                timetable_book,
+                populate_t,
+                traffic_heavy_frame,
+                first_populate,
+                pipeline,
+            },
+            player: PlayerPart {
+                player,
+                placed,
+                seat_bus,
+                safe_pose,
+                safe_age,
+                pumping,
+            },
+            people: PeoplePart {
+                humans,
+                humans_populate_t,
+                on_foot,
+            },
+            duty: DutyPart {
+                duty,
+                duty_places,
+                career,
+                journey,
+                depot_base,
+            },
             net,
             integrations,
             sound,
             view: ViewPart { camera, cam, view },
-            ui: UiPart { ui, photo, photo_settings, devtools, service_msg },
-            gfx: GfxPart { gfx, window, renderer, scene, xr },
+            ui: UiPart {
+                ui,
+                photo,
+                photo_settings,
+                devtools,
+                service_msg,
+            },
+            gfx: GfxPart {
+                gfx,
+                window,
+                renderer,
+                scene,
+                xr,
+            },
             perf,
         }
     }
@@ -227,22 +355,54 @@ macro_rules! part_ty {
 
 /// The group of a part's name (`stage_ctx!`).
 macro_rules! part_group {
-    (input) => { $crate::frame_stages::Group::Input };
-    (menus) => { $crate::frame_stages::Group::Menus };
-    (clock) => { $crate::frame_stages::Group::Clock };
-    (weather) => { $crate::frame_stages::Group::Weather };
-    (world) => { $crate::frame_stages::Group::World };
-    (traffic) => { $crate::frame_stages::Group::Traffic };
-    (player) => { $crate::frame_stages::Group::Player };
-    (people) => { $crate::frame_stages::Group::People };
-    (duty) => { $crate::frame_stages::Group::Duty };
-    (net) => { $crate::frame_stages::Group::Net };
-    (integrations) => { $crate::frame_stages::Group::Integrations };
-    (sound) => { $crate::frame_stages::Group::Sound };
-    (view) => { $crate::frame_stages::Group::View };
-    (ui) => { $crate::frame_stages::Group::Ui };
-    (gfx) => { $crate::frame_stages::Group::Gfx };
-    (perf) => { $crate::frame_stages::Group::Perf };
+    (input) => {
+        $crate::frame_stages::Group::Input
+    };
+    (menus) => {
+        $crate::frame_stages::Group::Menus
+    };
+    (clock) => {
+        $crate::frame_stages::Group::Clock
+    };
+    (weather) => {
+        $crate::frame_stages::Group::Weather
+    };
+    (world) => {
+        $crate::frame_stages::Group::World
+    };
+    (traffic) => {
+        $crate::frame_stages::Group::Traffic
+    };
+    (player) => {
+        $crate::frame_stages::Group::Player
+    };
+    (people) => {
+        $crate::frame_stages::Group::People
+    };
+    (duty) => {
+        $crate::frame_stages::Group::Duty
+    };
+    (net) => {
+        $crate::frame_stages::Group::Net
+    };
+    (integrations) => {
+        $crate::frame_stages::Group::Integrations
+    };
+    (sound) => {
+        $crate::frame_stages::Group::Sound
+    };
+    (view) => {
+        $crate::frame_stages::Group::View
+    };
+    (ui) => {
+        $crate::frame_stages::Group::Ui
+    };
+    (gfx) => {
+        $crate::frame_stages::Group::Gfx
+    };
+    (perf) => {
+        $crate::frame_stages::Group::Perf
+    };
 }
 
 /// A stage's context: the groups it reads (shared borrows) and writes (mutable borrows) of
@@ -295,10 +455,44 @@ pub(crate) use {narrow, part_group, part_ty, stage_ctx};
 #[test]
 fn every_group_has_a_part() {
     use crate::frame_stages::Group::*;
-    let all = [Input, Menus, Clock, Weather, World, Traffic, Player, People, Duty, Net, Integrations, Sound, View, Ui, Gfx, Perf];
+    let all = [
+        Input,
+        Menus,
+        Clock,
+        Weather,
+        World,
+        Traffic,
+        Player,
+        People,
+        Duty,
+        Net,
+        Integrations,
+        Sound,
+        View,
+        Ui,
+        Gfx,
+        Perf,
+    ];
     stage_ctx!(Everything {
         reads: [],
-        writes: [input, menus, clock, weather, world, traffic, player, people, duty, net, integrations, sound, view, ui, gfx, perf]
+        writes: [
+            input,
+            menus,
+            clock,
+            weather,
+            world,
+            traffic,
+            player,
+            people,
+            duty,
+            net,
+            integrations,
+            sound,
+            view,
+            ui,
+            gfx,
+            perf
+        ]
     });
     assert_eq!(Everything::WRITES, all);
     assert!(Everything::READS.is_empty());

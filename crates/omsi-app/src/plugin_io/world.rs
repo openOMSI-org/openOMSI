@@ -5,13 +5,24 @@ use omsi_plugin as op;
 use op::InfoValue::{Bool, Num, Text};
 
 fn lan_client(app: &App) -> bool {
-    app.net.lan.as_ref().is_some_and(|l| l.role == omsi_net::Role::Client)
+    app.net
+        .lan
+        .as_ref()
+        .is_some_and(|l| l.role == omsi_net::Role::Client)
 }
 
 pub(crate) fn clock(app: &App) -> op::Clock {
     let c = &app.clock;
     let (day, month) = c.day_month();
-    op::Clock { time: c.time, year: c.year, month: month as u32, day: day as u32, day_of_year: c.day_of_year, weekday: c.weekday() as i32, run_time: c.run_time }
+    op::Clock {
+        time: c.time,
+        year: c.year,
+        month: month as u32,
+        day: day as u32,
+        day_of_year: c.day_of_year,
+        weekday: c.weekday() as i32,
+        run_time: c.run_time,
+    }
 }
 
 pub(crate) fn set_time(app: &mut App, t: f64) -> bool {
@@ -68,7 +79,17 @@ pub(crate) fn set_weather(app: &mut App, c: &op::WeatherChange) -> Result<(), St
         return Err("the weather follows a weather station (METAR sync)".into());
     }
     let c = c.clone();
-    let any = c.visibility_m.is_some() || c.wind_dir.is_some() || c.wind_ms.is_some() || c.temperature.is_some() || c.pressure.is_some() || c.clouds.is_some() || c.cloud_base_m.is_some() || c.precip_kind.is_some() || c.precip_rate.is_some() || c.snow_cover.is_some() || c.snow_on_road.is_some();
+    let any = c.visibility_m.is_some()
+        || c.wind_dir.is_some()
+        || c.wind_ms.is_some()
+        || c.temperature.is_some()
+        || c.pressure.is_some()
+        || c.clouds.is_some()
+        || c.cloud_base_m.is_some()
+        || c.precip_kind.is_some()
+        || c.precip_rate.is_some()
+        || c.snow_cover.is_some()
+        || c.snow_on_road.is_some();
     if any {
         app.edit_weather(|w| {
             if let Some(v) = c.visibility_m {
@@ -120,7 +141,15 @@ pub(crate) fn presets() -> Vec<(String, String)> {
     crate::weather_cycle::installed()
         .into_iter()
         .map(|(file, w)| {
-            let name = if w.name.trim().is_empty() { file.rsplit('/').next().unwrap_or(&file).trim_end_matches(".owt").to_string() } else { w.name.trim().to_string() };
+            let name = if w.name.trim().is_empty() {
+                file.rsplit('/')
+                    .next()
+                    .unwrap_or(&file)
+                    .trim_end_matches(".owt")
+                    .to_string()
+            } else {
+                w.name.trim().to_string()
+            };
             (file, name)
         })
         .collect()
@@ -146,7 +175,18 @@ pub(crate) fn set_preset(app: &mut App, file: Option<&str>, secs: f32) -> Result
 
 pub(crate) fn camera(app: &App) -> Option<op::Camera> {
     let c = app.camera.as_ref()?;
-    let (width, height) = app.gfx.surface.as_ref().map(|s| (s.config.width, s.config.height)).or_else(|| app.window.as_ref().map(|w| { let s = crate::platform::surface_size(w); (s.width, s.height) })).unwrap_or((0, 0));
+    let (width, height) = app
+        .gfx
+        .surface
+        .as_ref()
+        .map(|s| (s.config.width, s.config.height))
+        .or_else(|| {
+            app.window.as_ref().map(|w| {
+                let s = crate::platform::surface_size(w);
+                (s.width, s.height)
+            })
+        })
+        .unwrap_or((0, 0));
     Some(op::Camera {
         view: app.view.clone(),
         pos: [c.position.x, c.position.y, c.position.z],
@@ -202,7 +242,9 @@ pub(crate) fn keys_held(app: &App) -> Vec<String> {
 }
 
 pub(crate) fn controllers(app: &App) -> Vec<op::Controller> {
-    let Some(c) = app.input.controllers.as_ref() else { return Vec::new() };
+    let Some(c) = app.input.controllers.as_ref() else {
+        return Vec::new();
+    };
     c.connected()
         .into_iter()
         .map(|d| {
@@ -211,21 +253,53 @@ pub(crate) fn controllers(app: &App) -> Vec<op::Controller> {
             for (i, v) in d.axes {
                 axes[i] = v;
             }
-            op::Controller { name: d.name, gamepad: d.gamepad, axes, buttons: d.buttons }
+            op::Controller {
+                name: d.name,
+                gamepad: d.gamepad,
+                axes,
+                buttons: d.buttons,
+            }
         })
         .collect()
 }
 
 pub(crate) fn bindings(app: &App, vehicle: bool) -> Vec<(String, String)> {
-    let list: &[omsi_content::KeyBinding] = if vehicle { app.player.as_ref().map(|p| p.bindings.as_slice()).unwrap_or(&[]) } else { &app.input.game_keys };
-    list.iter().map(|b| (b.action.clone(), crate::keys::key_name(b.scan_code as i64, b.modifier as i64))).collect()
+    let list: &[omsi_content::KeyBinding] = if vehicle {
+        app.player
+            .as_ref()
+            .map(|p| p.bindings.as_slice())
+            .unwrap_or(&[])
+    } else {
+        &app.input.game_keys
+    };
+    list.iter()
+        .map(|b| {
+            (
+                b.action.clone(),
+                crate::keys::key_name(b.scan_code as i64, b.modifier as i64),
+            )
+        })
+        .collect()
 }
 
 // --- sound -------------------------------------------------------------------------------
 
 fn params(app: &App, s: &op::Sound) -> omsi_audio::VoiceParams {
-    let at = if s.on_bus { app.player.as_ref().map(|p| p.vehicle.position + glam::DVec3::Z * 1.5) } else { s.at.map(|a| glam::DVec3::new(a[0], a[1], a[2])) };
-    omsi_audio::VoiceParams { gain: s.volume, pitch: s.pitch, looping: s.looping, position: at.map(|p| p.as_vec3()), range: s.range, ..Default::default() }
+    let at = if s.on_bus {
+        app.player
+            .as_ref()
+            .map(|p| p.vehicle.position + glam::DVec3::Z * 1.5)
+    } else {
+        s.at.map(|a| glam::DVec3::new(a[0], a[1], a[2]))
+    };
+    omsi_audio::VoiceParams {
+        gain: s.volume,
+        pitch: s.pitch,
+        looping: s.looping,
+        position: at.map(|p| p.as_vec3()),
+        range: s.range,
+        ..Default::default()
+    }
 }
 
 pub(crate) fn sound_play(app: &mut App, file: &std::path::Path, s: &op::Sound) -> Option<u64> {
@@ -237,12 +311,19 @@ pub(crate) fn sound_play(app: &mut App, file: &std::path::Path, s: &op::Sound) -
 }
 
 pub(crate) fn sound_set(app: &mut App, id: u64, s: &op::Sound) -> bool {
-    let Some(a) = app.sound.audio.as_ref() else { return false };
+    let Some(a) = app.sound.audio.as_ref() else {
+        return false;
+    };
     if !a.is_playing(id) {
         return false;
     }
     a.set_params(id, params(app, s));
-    if let Some(v) = app.integrations.plugin_voices.iter_mut().find(|v| v.0 == id) {
+    if let Some(v) = app
+        .integrations
+        .plugin_voices
+        .iter_mut()
+        .find(|v| v.0 == id)
+    {
         v.1 = s.on_bus;
     }
     true
@@ -253,8 +334,13 @@ pub(crate) fn follow_sounds(app: &mut App) {
     if app.integrations.plugin_voices.is_empty() {
         return;
     }
-    let Some(a) = app.sound.audio.as_ref() else { return };
-    let bus = app.player.as_ref().map(|p| (p.vehicle.position + glam::DVec3::Z * 1.5).as_vec3());
+    let Some(a) = app.sound.audio.as_ref() else {
+        return;
+    };
+    let bus = app
+        .player
+        .as_ref()
+        .map(|p| (p.vehicle.position + glam::DVec3::Z * 1.5).as_vec3());
     app.integrations.plugin_voices.retain(|(id, on_bus)| {
         if !a.is_playing(*id) {
             return false;
@@ -321,7 +407,15 @@ pub(crate) fn notify(app: &mut App, text: &str, kind: u8, secs: f32) -> bool {
         _ => crate::ui::NoticeKind::Info,
     };
     let text: String = text.chars().take(300).collect();
-    crate::ui::push_notice(&mut app.menus.notices, crate::ui::Notice { kind, text, left: secs, total: secs });
+    crate::ui::push_notice(
+        &mut app.menus.notices,
+        crate::ui::Notice {
+            kind,
+            text,
+            left: secs,
+            total: secs,
+        },
+    );
     true
 }
 
@@ -333,7 +427,9 @@ pub(crate) fn lan(app: &App) -> Option<(bool, u32, String)> {
 }
 
 pub(crate) fn lan_players(app: &App) -> Vec<op::LanPlayer> {
-    let Some(l) = app.net.lan.as_ref() else { return Vec::new() };
+    let Some(l) = app.net.lan.as_ref() else {
+        return Vec::new();
+    };
     l.peers()
         .filter(|p| p.has_info && !omsi_net::is_parked(p.pose.id))
         .map(|p| {
@@ -342,7 +438,18 @@ pub(crate) fn lan_players(app: &App) -> Vec<op::LanPlayer> {
                 (Some(w), false) => ([w.x, w.y, w.z, w.heading as f64], true),
                 _ => ([s.x, s.y, s.z, s.heading as f64], false),
             };
-            op::LanPlayer { id: s.id, name: s.name.clone(), host: s.id == 1, bus: s.bus.clone(), line: s.line.clone(), tour: s.tour.clone(), pos, speed_kmh: s.speed_kmh, on_foot, passengers: s.passengers as u32 }
+            op::LanPlayer {
+                id: s.id,
+                name: s.name.clone(),
+                host: s.id == 1,
+                bus: s.bus.clone(),
+                line: s.line.clone(),
+                tour: s.tour.clone(),
+                pos,
+                speed_kmh: s.speed_kmh,
+                on_foot,
+                passengers: s.passengers as u32,
+            }
         })
         .collect()
 }

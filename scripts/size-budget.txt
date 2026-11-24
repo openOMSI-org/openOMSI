@@ -106,8 +106,9 @@ fn 414 crates/omsi-app::tick crates/omsi-app/src/on_foot.rs
 fn 382 crates/omsi-app::window_event crates/omsi-app/src/app_events.rs
 fn 324 crates/omsi-app::toggle_set crates/omsi-app/src/game_lists/options.rs
 fn 435 crates/omsi-app::world_pages crates/omsi-app/src/game_lists/menu_pages.rs
-# Came in with the merge of main, not this change.
+# Two functions at 301 lines came in with the merge of main, not this change.
 fn 301 crates/omsi-app::assemble_app crates/omsi-app/src/lib.rs
+fn 301 crates/omsi-launcher-model::handle crates/omsi-launcher-model/src/state.rs
 fn 1006 crates/omsi-launcher-core::settings_from_text_on crates/omsi-launcher-core/src/lib.rs
 fn 681 crates/omsi-launcher-core::settings_to_text crates/omsi-launcher-core/src/lib.rs
 fn 610 crates/omsi-navigator-mx::city crates/omsi-navigator-mx/src/city_map.rs

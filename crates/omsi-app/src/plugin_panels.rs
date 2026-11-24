@@ -2,7 +2,10 @@
 //! have the mouse, and the clicks, drags and typing handed to them (what a press is on and
 //! how a drag moves is `omsi_plugin_ui`'s).
 
-use crate::plugin_ui::{input::{Drag, Press}, HitKind};
+use crate::plugin_ui::{
+    HitKind,
+    input::{Drag, Press},
+};
 use glam::Vec2;
 use omsi_plugin::ui::UiState;
 
@@ -18,13 +21,19 @@ impl crate::App {
             self.plugin_click(false);
             return true;
         }
-        let Some(p) = self.integrations.plugins.as_ref() else { return false };
+        let Some(p) = self.integrations.plugins.as_ref() else {
+            return false;
+        };
         // (not while the mouse turns the head: there is no cursor to click with)
         if self.input.mouse_look {
             return false;
         }
         let (x, y) = self.input.cursor;
-        if !self.integrations.plugin_panels.grabs_at(&p.ui.borrow(), x, y) {
+        if !self
+            .integrations
+            .plugin_panels
+            .grabs_at(&p.ui.borrow(), x, y)
+        {
             return false;
         }
         self.integrations.plugin_panels.grabbed = true;
@@ -51,7 +60,10 @@ impl crate::App {
             return;
         }
         let (x, y) = self.input.cursor;
-        let press = self.integrations.plugin_panels.press_at(&p.ui.borrow(), x, y);
+        let press = self
+            .integrations
+            .plugin_panels
+            .press_at(&p.ui.borrow(), x, y);
         let mut ui = p.ui.borrow_mut();
         // (a press anywhere but on the field typed into ends the typing)
         let on_field = |pr: &Option<Press>, ui: &UiState| matches!((pr, ui.typing()), (Some(pr), Some(t)) if pr.owner == t.owner && pr.panel == t.panel && pr.element.as_deref() == Some(t.element.as_str()));
@@ -59,17 +71,31 @@ impl crate::App {
             ui.stop_typing(false);
         }
         let Some(pr) = press else { return };
-        if grab && pr.element.as_deref().is_some_and(|el| ui.is_field(pr.owner, &pr.panel, el)) {
+        if grab
+            && pr
+                .element
+                .as_deref()
+                .is_some_and(|el| ui.is_field(pr.owner, &pr.panel, el))
+        {
             return;
         }
         match (pr.kind, pr.element.as_deref()) {
             (HitKind::Slider, Some(el)) => {
                 ui.set_control(pr.owner, &pr.panel, el, pr.fraction);
-                self.integrations.plugin_panels.drag = Some(Drag::Slider { owner: pr.owner, panel: pr.panel.clone(), element: el.to_string(), track: pr.span });
+                self.integrations.plugin_panels.drag = Some(Drag::Slider {
+                    owner: pr.owner,
+                    panel: pr.panel.clone(),
+                    element: el.to_string(),
+                    track: pr.span,
+                });
             }
             (HitKind::Tabs, Some(el)) => ui.set_control(pr.owner, &pr.panel, el, pr.fraction),
             _ if pr.drag && !grab => {
-                self.integrations.plugin_panels.drag = Some(Drag::Panel { owner: pr.owner, panel: pr.panel.clone(), last: Vec2::new(x, y) });
+                self.integrations.plugin_panels.drag = Some(Drag::Panel {
+                    owner: pr.owner,
+                    panel: pr.panel.clone(),
+                    last: Vec2::new(x, y),
+                });
             }
             _ if pr.hit => ui.click(pr.owner, &pr.panel, pr.element.as_deref()),
             _ => {}
@@ -81,9 +107,15 @@ impl crate::app::Integrations {
     /// A key while the player types into a plugin's text field: the text goes to the field,
     /// Backspace rubs out, Enter hands it to the plugin and Esc leaves it. True when the
     /// key was the field's (the bus does not get it).
-    pub(crate) fn plugin_typing_key(&mut self, code: winit::keyboard::KeyCode, text: Option<&str>) -> bool {
+    pub(crate) fn plugin_typing_key(
+        &mut self,
+        code: winit::keyboard::KeyCode,
+        text: Option<&str>,
+    ) -> bool {
         use winit::keyboard::KeyCode;
-        let Some(p) = self.plugins.as_ref() else { return false };
+        let Some(p) = self.plugins.as_ref() else {
+            return false;
+        };
         let mut ui = p.ui.borrow_mut();
         if ui.typing().is_none() {
             return false;
@@ -104,22 +136,35 @@ impl crate::app::Integrations {
     /// The cursor moved while a slider or a panel is dragged: it follows. True when it did
     /// (the cursor's other work is left out then).
     pub(crate) fn plugin_drag_move(&mut self, x: f32, y: f32) -> bool {
-        let Some(drag) = self.plugin_panels.drag.clone() else { return false };
-        let Some(p) = self.plugins.as_ref() else { return false };
+        let Some(drag) = self.plugin_panels.drag.clone() else {
+            return false;
+        };
+        let Some(p) = self.plugins.as_ref() else {
+            return false;
+        };
         let mut ui = p.ui.borrow_mut();
         if !ui.focused() {
             self.plugin_panels.drag = None;
             return false;
         }
         match drag {
-            Drag::Slider { owner, panel, element, track } => {
+            Drag::Slider {
+                owner,
+                panel,
+                element,
+                track,
+            } => {
                 let f = ((x - track[0]) / (track[1] - track[0]).max(1.0)).clamp(0.0, 1.0);
                 ui.set_control(owner, &panel, &element, f);
             }
             Drag::Panel { owner, panel, last } => {
                 let k = self.plugin_panels.scale.max(0.25);
                 ui.drag(owner, &panel, (x - last.x) / k, (y - last.y) / k);
-                self.plugin_panels.drag = Some(Drag::Panel { owner, panel, last: Vec2::new(x, y) });
+                self.plugin_panels.drag = Some(Drag::Panel {
+                    owner,
+                    panel,
+                    last: Vec2::new(x, y),
+                });
             }
         }
         true
