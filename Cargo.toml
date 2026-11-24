@@ -97,9 +97,9 @@ wgpu = { version = "29", default-features = false, features = ["std", "parking_l
 wgpu-hal = "29"
 naga = "29"
 # mX, openOMSI's own graphics library: the game with mX Graphics on (the *-mx crates)
-mx = { git = "https://github.com/openOMSI-org/mX", rev = "650b244ca3224411a87ed8e84640bd873c6f5589" }
+mx = { git = "https://github.com/openOMSI-org/mX", rev = "aca1cb9ecd65fd412d1ca57c27d404196db3e34c" }
 # (the vendors' upscalers and frame generators on mX: DLSS, FSR 3, XeSS, MetalFX)
-mx-upscale = { git = "https://github.com/openOMSI-org/mX", rev = "650b244ca3224411a87ed8e84640bd873c6f5589" }
+mx-upscale = { git = "https://github.com/openOMSI-org/mX", rev = "aca1cb9ecd65fd412d1ca57c27d404196db3e34c" }
 winit = "0.30"
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 memmap2 = "0.9"
@@ -162,4 +162,4 @@ naga = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06
 # mX's own naga (v30, under the *-mx crates) with its fixes: the buffer heap in HLSL for
 # Direct3D 12 and Shader Model 5 for Direct3D 11 (mX's vendor/naga/MX_PATCHES.md); a
 # dependency's patches do not reach this workspace, so it is repeated here
-naga-mx = { git = "https://github.com/openOMSI-org/mX", rev = "650b244ca3224411a87ed8e84640bd873c6f5589", package = "naga" }
+naga-mx = { git = "https://github.com/openOMSI-org/mX", rev = "aca1cb9ecd65fd412d1ca57c27d404196db3e34c", package = "naga" }
