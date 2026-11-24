@@ -2928,7 +2928,11 @@
 "At most 5": "Maksimum 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Folder objek dan spline yang tidak digunakan oleh peta lain turut dipadam: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Folder objek dan spline yang masih digunakan oleh peta lain kekal: {n}."
-<<<<<<< HEAD
+"Yes": "Ya"
+"Take control of this bus?": "Ambil alih kawalan bas ini?"
+"The bus cannot be changed while a timetable is active": "Bas tidak boleh ditukar semasa jadual waktu aktif"
+"The bus could not be taken over": "Bas tidak dapat diambil alih"
+"You have control of the bus": "Anda mengawal bas"
 "Plugins": "Pemalam"
 "Lua and OMSI plugins in the game's plugins folders. One switched off here is left out of the next game; its files and settings stay.": "Pemalam Lua dan OMSI dalam folder plugins permainan. Pemalam yang dimatikan di sini tidak dimuatkan dalam permainan seterusnya; fail dan tetapannya kekal."
 "No plugin yet. Put a .lua file, a plugin folder or a .oop file into the plugins folder.": "Belum ada pemalam. Letakkan fail .lua, folder pemalam atau fail .oop ke dalam folder plugins."
@@ -2948,13 +2952,6 @@
 "Its files, settings and saved data are deleted.": "Fail, tetapan dan data tersimpannya akan dipadam."
 "Reviewed, open source plugins of the openOMSI plugin catalog.": "Pemalam sumber terbuka yang telah disemak daripada katalog pemalam openOMSI."
 "Plugins run code in your game. The catalog's plugins are open source and read by the openOMSI maintainers before they are added; you can read the code first.": "Pemalam menjalankan kod dalam permainan anda. Pemalam katalog adalah sumber terbuka dan dibaca oleh penyelenggara openOMSI sebelum ditambah; anda boleh membaca kodnya dahulu."
-=======
-"Yes": "Ya"
-"Take control of this bus?": "Ambil alih kawalan bas ini?"
-"The bus cannot be changed while a timetable is active": "Bas tidak boleh ditukar semasa jadual waktu aktif"
-"The bus could not be taken over": "Bas tidak dapat diambil alih"
-"You have control of the bus": "Anda mengawal bas"
->>>>>>> origin/main
 "Onboard computer": "Komputer kenderaan"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil menyimpan setiap kekunci dan setiap tetapan pengawal. Sebelum setiap pemanduan, pelancar bertukar kepada profil bas itu sendiri atau profil lalai."
 "Rename the profile": "Namakan semula profil"
