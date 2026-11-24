@@ -4380,6 +4380,11 @@
 "At most 5": "Najviše 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Fascikle objekata i splajnova koje ne koristi nijedna druga mapa brišu se zajedno s njim: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Fascikle objekata i splajnova koje druga mapa još koristi ostaju: {n}."
+"Yes": "Da"
+"Take control of this bus?": "Preuzeti upravljanje ovim autobusom?"
+"The bus cannot be changed while a timetable is active": "Autobus se ne može promeniti dok je red vožnje aktivan"
+"The bus could not be taken over": "Autobus nije mogao biti preuzet"
+"You have control of the bus": "Upravljate autobusom"
 "Onboard computer": "Рачунар у возилу"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Profil čuva sve tastere i sva podešavanja kontrolera. Pre svake vožnje pokretač prelazi na sopstveni profil autobusa ili na podrazumevani."
 "Rename the profile": "Preimenuj profil"
@@ -4400,3 +4405,6 @@
 "to the right": "desno"
 "Lights on in a downpour": "Svetla tokom pljuska"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Danju, po jakoj kiši, u nekim prozorima kuća gori svetlo, jer postane dovoljno mračno da se upali"
+
+"Read the map's passenger numbers exactly": "Тачно очитавање броја путника са мапе"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Путници: стајалиште са 0,7 задржава 0,7 људи уместо заокруживања на 1 пре густине; искључено: заокруживање из OMSI 2"

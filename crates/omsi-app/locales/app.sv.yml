@@ -3826,6 +3826,11 @@
 "At most 5": "Högst 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappar med objekt och splines som ingen annan karta använder tas bort samtidigt: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mappar med objekt och splines som en annan karta fortfarande använder blir kvar: {n}."
+"Yes": "Ja"
+"Take control of this bus?": "Ta kontroll över den här bussen?"
+"The bus cannot be changed while a timetable is active": "Bussen kan inte bytas medan en tidtabell är aktiv"
+"The bus could not be taken over": "Bussen kunde inte tas över"
+"You have control of the bus": "Du har kontroll över bussen"
 "Onboard computer": "Fordonsdator"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "En profil sparar alla tangenter och alla handkontrollsinställningar. Före varje körning byter startprogrammet till bussens egen profil eller till standardprofilen."
 "Rename the profile": "Byt namn på profilen"
@@ -3846,3 +3851,6 @@
 "to the right": "åt höger"
 "Lights on in a downpour": "Ljus tänds vid skyfall"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "På dagen vid kraftigt regn lyser några av husens fönster, eftersom det blir mörkt nog att tända ljuset"
+
+"Read the map's passenger numbers exactly": "Läs kartans passagerarantal exakt"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passagerare: en hållplats med 0,7 behåller 0,7 personer istället för avrundning till 1 före tätheten; av: OMSI 2-avrundning"

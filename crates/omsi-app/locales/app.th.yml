@@ -2928,6 +2928,11 @@
 "At most 5": "สูงสุด 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "โฟลเดอร์วัตถุและสไปลน์ที่ไม่มีแผนที่อื่นใช้จะถูกลบไปด้วย: {n} โฟลเดอร์, {size}"
 "Folders of objects and splines that another map still uses stay: {n}.": "โฟลเดอร์วัตถุและสไปลน์ที่แผนที่อื่นยังใช้อยู่จะยังคงอยู่: {n} โฟลเดอร์"
+"Yes": "ใช่"
+"Take control of this bus?": "รับควบคุมรถบัสคันนี้หรือไม่"
+"The bus cannot be changed while a timetable is active": "ไม่สามารถเปลี่ยนรถบัสได้ขณะที่ตารางเวลายังทำงานอยู่"
+"The bus could not be taken over": "ไม่สามารถรับช่วงรถบัสได้"
+"You have control of the bus": "คุณควบคุมรถบัสแล้ว"
 "Onboard computer": "คอมพิวเตอร์ประจำรถ"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "โปรไฟล์จะเก็บทุกปุ่มและทุกการตั้งค่าคอนโทรลเลอร์ ก่อนขับทุกครั้ง ตัวเปิดเกมจะสลับไปใช้โปรไฟล์ของรถบัสคันนั้นหรือโปรไฟล์เริ่มต้น"
 "Rename the profile": "เปลี่ยนชื่อโปรไฟล์"
@@ -2948,3 +2953,6 @@
 "to the right": "ไปทางขวา"
 "Lights on in a downpour": "ไฟเปิดเมื่อฝนตกหนัก"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "ในเวลากลางวันที่ฝนตกหนัก หน้าต่างบ้านบางหลังจะเปิดไฟ เพราะมืดพอที่จะต้องเปิดไฟ"
+
+"Read the map's passenger numbers exactly": "อ่านจำนวนผู้โดยสารของแผนที่อย่างแม่นยำ"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "ผู้โดยสาร: ป้ายที่มี 0.7 จะคงค่า 0.7 คนแทนที่จะปัดเศษขึ้นเป็น 1 ก่อนคูณความหนาแน่น; ปิด: การปัดเศษของ OMSI 2"

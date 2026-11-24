@@ -15,6 +15,9 @@ use crate::pipelines::common::*;
 /// of it - some 70 pixels a side at 1080p, more than a downpour's blur needs.
 pub(crate) const GLASS_MIP_LEVELS: u32 = 5;
 
+/// `SHADER`, its group read from the heap.
+pub(crate) static GLASS_MIP: HeapModule = HeapModule::new(|| SHADER.to_string());
+
 const SHADER: &str = r#"
 @group(0) @binding(0) var t_src: texture_2d<f32>;
 @group(0) @binding(1) var s_src: sampler;
@@ -46,7 +49,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 pub(crate) struct GlassMips {
     pipeline: mx::RenderPipeline,
     /// For each level from the second on: where it is drawn, and the level above it to read.
-    levels: Vec<(mx::TextureView, mx::BindGroup)>,
+    levels: Vec<(mx::TextureView, HeapGroup)>,
 }
 
 impl GlassMips {
@@ -57,7 +60,7 @@ impl GlassMips {
             device,
             mx::ShaderModuleDescriptor {
                 label: Some("glass mips"),
-                source: SHADER,
+                source: &GLASS_MIP.wgsl(),
             },
         );
         let pipeline = no_vertex_pipeline(
@@ -80,19 +83,23 @@ impl GlassMips {
         let levels = (1..texture.mip_level_count())
             .map(|mip| {
                 let src = level(mip - 1);
-                let group = device.create_bind_group(&mx::BindGroupDescriptor {
-                    label: Some("glass mip"),
-                    entries: &[
-                        mx::BindGroupEntry {
-                            binding: 0,
-                            resource: mx::BindingResource::TextureView(&src),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 1,
-                            resource: mx::BindingResource::Sampler(&sampler),
-                        },
-                    ],
-                });
+                let group = HeapGroup::of(
+                    GLASS_MIP.layout(),
+                    0,
+                    &mx::BindGroupDescriptor {
+                        label: Some("glass mip"),
+                        entries: &[
+                            mx::BindGroupEntry {
+                                binding: 0,
+                                resource: mx::BindingResource::TextureView(&src),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 1,
+                                resource: mx::BindingResource::Sampler(&sampler),
+                            },
+                        ],
+                    },
+                );
                 (level(mip), group)
             })
             .collect();
@@ -117,7 +124,7 @@ impl GlassMips {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, group);
+            group.set(&mut pass);
             pass.draw(0..3, 0..1);
         }
     }

@@ -4074,6 +4074,11 @@
 "At most 5": "Com a màxim 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les carpetes d'objectes i splines que cap altre mapa no fa servir se suprimeixen amb ell: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les carpetes d'objectes i splines que un altre mapa encara fa servir es conserven: {n}."
+"Yes": "Sí"
+"Take control of this bus?": "Vols prendre el control d'aquest autobús?"
+"The bus cannot be changed while a timetable is active": "No es pot canviar d'autobús mentre hi ha un horari actiu"
+"The bus could not be taken over": "No s'ha pogut prendre el control de l'autobús"
+"You have control of the bus": "Ara condueixes l'autobús"
 "Onboard computer": "Ordinador de bord"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Un perfil desa totes les tecles i tots els ajustos dels controladors. Abans de cada sortida, el llançador canvia al perfil propi de l'autobús o al perfil per defecte."
 "Rename the profile": "Canvia el nom del perfil"
@@ -4094,3 +4099,6 @@
 "to the right": "a la dreta"
 "Lights on in a downpour": "Llums enceses en un xàfec"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "De dia, amb pluja forta, algunes finestres de les cases s'il·luminen, perquè es fa prou fosc per encendre el llum"
+
+"Read the map's passenger numbers exactly": "Llegir exactament el nombre de passatgers del mapa"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passatgers: una parada amb 0,7 manté 0,7 persones en lloc d'arrodonir a 1 abans de la densitat; desactivat: arrodoniment d'OMSI 2"

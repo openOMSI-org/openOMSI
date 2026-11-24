@@ -3274,6 +3274,11 @@
 "At most 5": "最大5台"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "他のどのマップも使っていないオブジェクトとスプラインのフォルダも一緒に削除されます：{n} 個、{size}。"
 "Folders of objects and splines that another map still uses stay: {n}.": "他のマップがまだ使っているオブジェクトとスプラインのフォルダは残ります：{n} 個。"
+"Yes": "はい"
+"Take control of this bus?": "このバスの運転を引き継ぎますか?"
+"The bus cannot be changed while a timetable is active": "時刻表が有効な間はバスを変更できません"
+"The bus could not be taken over": "バスを引き継げませんでした"
+"You have control of the bus": "バスの運転を引き継ぎました"
 "Onboard computer": "車載コンピューター"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "プロファイルにはすべてのキーとすべてのコントローラー設定が入ります。運転のたびに、ランチャーはそのバス専用のプロファイルか既定のプロファイルに切り替えます。"
 "Rename the profile": "プロファイル名を変更"
@@ -3294,3 +3299,6 @@
 "to the right": "右へ"
 "Lights on in a downpour": "豪雨時の窓明かり"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "日中の激しい雨では、明かりをつけるほど暗くなるため、家々の窓の一部に明かりがともります"
+
+"Read the map's passenger numbers exactly": "マップの乗客数を正確に読み取る"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "乗客：0.7と設定された停留所は密度を掛ける前に1へ切り上げられず0.7人のまま保持されます。オフ：OMSI 2の丸め処理"

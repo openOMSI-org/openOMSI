@@ -4380,6 +4380,11 @@
 "At most 5": "Au plus 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les dossiers d'objets et de splines qu'aucune autre carte n'utilise sont supprimés avec lui : {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les dossiers d'objets et de splines qu'une autre carte utilise encore restent : {n}."
+"Yes": "Oui"
+"Take control of this bus?": "Prendre le contrôle de ce bus ?"
+"The bus cannot be changed while a timetable is active": "Impossible de changer de bus tant qu'un horaire est actif"
+"The bus could not be taken over": "Impossible de reprendre le bus"
+"You have control of the bus": "Vous avez le contrôle du bus"
 "Onboard computer": "Ordinateur de bord"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Un profil garde toutes les touches et tous les réglages des contrôleurs. Avant chaque conduite, le lanceur passe au profil propre du bus ou au profil par défaut."
 "Rename the profile": "Renommer le profil"
@@ -4400,3 +4405,6 @@
 "to the right": "vers la droite"
 "Lights on in a downpour": "Lumières allumées sous l'averse"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "De jour, sous une forte pluie, certaines fenêtres des maisons s'allument, car il fait assez sombre pour allumer la lumière"
+
+"Read the map's passenger numbers exactly": "Lire exactement le nombre de passagers de la carte"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passagers: un arrêt défini à 0,7 conserve 0,7 passager au lieu d'être arrondi à 1 avant la densité; désactivé: arrondi d'OMSI 2"

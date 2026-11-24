@@ -109,6 +109,8 @@ use omsi_lan::mirror::{Track, fnv, lerp_angle, local_file, net_activity, quant, 
 /// A client's copy of the host's world.
 #[derive(Default)]
 struct Mirror {
+    /// The host's rail points that came with its world frames.
+    points: Vec<(i64, f32)>,
     on: bool,
     people: HashMap<u32, Track<PersonState>>,
     descs: HashMap<Key, Desc>,
@@ -187,6 +189,8 @@ pub struct LanWorld {
     departed: Vec<i64>,
     /// Host: bytes of the traffic table sent so far.
     traffic_bytes: u64,
+    /// The rail points, as the host's game has them.
+    pub points: omsi_lan::game::points::PointsSync,
 }
 
 /// The line a timetable bus shows and the depot terminus it is set to, `#<index>` (host;
@@ -379,6 +383,7 @@ impl LanWorld {
             self.ups.entry(id).or_default().files.insert(pid, file);
         }
         for (id, at, f) in lan.take_world_up() {
+            self.points.came_up(&f.points);
             let up = self.ups.entry(id).or_default();
             let arrived = at
                 .checked_duration_since(epoch)
@@ -692,6 +697,7 @@ impl LanWorld {
                         .map(|(object, time, held)| LightState { object, time, held })
                         .collect();
                 }
+                frame.points = self.points.around(id);
             }
             // what went out of sight (or away) since the last frame
             let gone: Vec<Key> = view
@@ -836,6 +842,7 @@ impl LanWorld {
         }
         let now = m.now_ms();
         m.take_frames(lan, dt, world, renderer, scene, traffic.as_deref_mut());
+        self.points.came_down(&std::mem::take(&mut m.points));
         let render_ms = m
             .play
             .step(now, now + m.offset.unwrap_or(0.0) - INTERP_DELAY, 500.0);
@@ -1021,6 +1028,7 @@ impl Mirror {
             }
         }
         for (at, f) in lan.take_world() {
+            m.points.extend_from_slice(&f.points);
             // the host's clock against ours: the frame that took the shortest way sets it
             let arrived = at
                 .checked_duration_since(*m.epoch.get_or_insert(at))

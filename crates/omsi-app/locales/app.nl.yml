@@ -3592,6 +3592,11 @@
 "At most 5": "Maximaal 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappen met objecten en splines die geen andere kaart gebruikt, worden mee verwijderd: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mappen met objecten en splines die een andere kaart nog gebruikt, blijven staan: {n}."
+"Yes": "Ja"
+"Take control of this bus?": "De besturing van deze bus overnemen?"
+"The bus cannot be changed while a timetable is active": "De bus kan niet worden gewisseld zolang een dienstregeling actief is"
+"The bus could not be taken over": "De bus kon niet worden overgenomen"
+"You have control of the bus": "U bestuurt de bus"
 "Onboard computer": "Boordcomputer"
 "A profile keeps every key and every controller setting. Before each drive the launcher switches to the bus's own profile, or to the default one.": "Een profiel bewaart alle toetsen en alle controllerinstellingen. Voor elke rit schakelt de launcher naar het eigen profiel van de bus, of naar het standaardprofiel."
 "Rename the profile": "Profiel hernoemen"
@@ -3612,3 +3617,6 @@
 "to the right": "naar rechts"
 "Lights on in a downpour": "Licht aan bij een wolkbreuk"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Overdag zijn bij zware regen sommige ramen van huizen verlicht, omdat het donker genoeg wordt om het licht aan te doen"
+
+"Read the map's passenger numbers exactly": "Lees passagiersaantallen van de kaart exact"
+"Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding": "Passagiers: een halte met 0,7 behoudt 0,7 personen in plaats van afronding naar 1 vóór de dichtheid; uit: afronding van OMSI 2"

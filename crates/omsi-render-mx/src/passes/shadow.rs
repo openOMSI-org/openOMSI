@@ -261,7 +261,6 @@ impl Renderer {
                 ),
                 occlusion_query_set: None,
             });
-            pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap());
             if cascade == 0 {
                 // the atlas: near cascade on the left half, close cascade on the right
                 let sz = self.options.shadow_size as f32;
@@ -275,7 +274,6 @@ impl Renderer {
                     // (the near half is last frame's: only the close part is cleared)
                     pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
                     pass.draw(0..3, 0..1);
-                    pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap());
                 }
                 encode_batches(&mut pass, scene, &shadow_batches[2], |pipe| {
                     &self.shadows.shadow_pipelines[4 + pipe as usize]
@@ -286,7 +284,6 @@ impl Renderer {
                 if keep_lamps {
                     pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
                     pass.draw(0..3, 0..1);
-                    pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap());
                 }
                 encode_batches(&mut pass, scene, &shadow_batches[cascade], |pipe| {
                     &self.shadows.shadow_pipelines[cascade * 2 + pipe as usize]
@@ -393,7 +390,6 @@ impl Renderer {
                 pass.set_viewport(x as f32, y as f32, tile, tile, 0.0, 1.0);
                 pass.set_pipeline(&self.shadows.shadow_clear_pipeline);
                 pass.draw(0..3, 0..1);
-                pass.set_bind_group(0, scene.shadow_bind_group.as_ref().unwrap());
                 encode_batches(&mut pass, scene, &shadow_batches[3 + k], |pipe| {
                     &self.shadows.shadow_pipelines[6 + pipe as usize]
                 });
