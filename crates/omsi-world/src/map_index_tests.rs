@@ -75,7 +75,9 @@ fn cold_child_stop_keeps_its_spline_attached_parent_and_metadata() {
     let contents = synthetic_spline_stop(14, 100, 600.0, 625.0, 0)
         + "\n[attachObj]\n0\nsynthetic-child.sco\n200\n100\n0\n0\n30\n0\n0\n6\nChild stop\n7\n2\n11\n22.5\n1\n";
     std::fs::write(&path, contents).unwrap();
-    let index = MapIndex::build(&[(0, 3, -2, path)], &[], &dir);
+    let index = MapIndex::build(&[(0, 3, -2, path)], &[], &|f: &str| {
+        omsi_cfg::resolve_path(&dir, f)
+    });
     let expected = DVec3::new(3.0 * tile_size(), -2.0 * tile_size() + 25.0, 0.0);
     for id in [100, 200] {
         let (tile, pos, _) = index
@@ -108,7 +110,7 @@ fn authored_offsets_keep_stops_on_tiles_with_duplicate_spline_ids() {
         let index = MapIndex::build(
             &[(0, 0, 0, first.clone()), (1, 2, -1, second.clone())],
             &[],
-            &dir,
+            &|f: &str| omsi_cfg::resolve_path(&dir, f),
         );
         assert_eq!(index.splines[&10].map_chain_offset, Some(600.0));
         for (tile_index, stop, x, y, path) in [(0, 100, 0, 0, &first), (1, 200, 2, -1, &second)] {
@@ -149,7 +151,9 @@ fn legacy_stops_survive_modern_chrono_with_reused_spline_id() {
         synthetic_spline_stop(14, 200, 600.0, 625.0, 1),
     )
     .unwrap();
-    let index = MapIndex::build(&[(0, 0, 0, path.clone())], &[chrono.clone()], &dir);
+    let index = MapIndex::build(&[(0, 0, 0, path.clone())], &[chrono.clone()], &|f: &str| {
+        omsi_cfg::resolve_path(&dir, f)
+    });
     let tile = read_tile(&path, &[chrono]).unwrap();
     assert_eq!(tile.splines[0].map_chain_offset, None);
     assert_eq!(tile.splines[1].map_chain_offset, Some(600.0));
@@ -202,7 +206,9 @@ fn cold_index_resolves_chained_spline_stops() {
         );
         let path = dir.join(format!("tile_3_-2_v{version}.map"));
         std::fs::write(&path, contents).unwrap();
-        let index = MapIndex::build(&[(0, 3, -2, path.clone())], &[], &dir);
+        let index = MapIndex::build(&[(0, 3, -2, path.clone())], &[], &|f: &str| {
+            omsi_cfg::resolve_path(&dir, f)
+        });
         let (_, pos, rot) = index
             .objects
             .get(&100)
@@ -348,7 +354,7 @@ fn grundorf_traffic_light_parents_exclude_gaussdorf() {
         .iter()
         .map(|t| (t.index, t.x, t.y, map_dir.join(&t.file)))
         .collect::<Vec<_>>();
-    let index = MapIndex::build(&tiles, &[], &root);
+    let index = MapIndex::build(&tiles, &[], &|f: &str| omsi_cfg::resolve_path(&root, f));
     assert_eq!(index.tiles_failed, 0);
     assert!(
         index.traffic_light_parents.contains(&4174),

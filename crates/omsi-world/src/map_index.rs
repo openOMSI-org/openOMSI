@@ -368,8 +368,10 @@ impl MapIndex {
                         ),
                     );
                     if o.extra.len() >= 2 {
-                        part.stop_weights.insert(o.id, stop_exit_weight_with(&o.extra, numbers));
-                        part.stop_enter.insert(o.id, stop_enter_with(&o.extra, numbers));
+                        part.stop_weights
+                            .insert(o.id, stop_exit_weight_with(&o.extra, numbers));
+                        part.stop_enter
+                            .insert(o.id, stop_enter_with(&o.extra, numbers));
                         part.stop_side.insert(o.id, stop_side(&o.extra));
                         part.stop_length.insert(o.id, stop_length(&o.extra));
                     }
@@ -379,8 +381,10 @@ impl MapIndex {
                     .iter()
                     .filter(|a| a.repeater.is_none() && a.strings.len() >= 2)
                 {
-                    part.stop_weights.insert(a.id, stop_exit_weight_with(&a.strings, numbers));
-                    part.stop_enter.insert(a.id, stop_enter_with(&a.strings, numbers));
+                    part.stop_weights
+                        .insert(a.id, stop_exit_weight_with(&a.strings, numbers));
+                    part.stop_enter
+                        .insert(a.id, stop_enter_with(&a.strings, numbers));
                     part.stop_side.insert(a.id, stop_side(&a.strings));
                     part.stop_length.insert(a.id, stop_length(&a.strings));
                 }
@@ -429,8 +433,10 @@ impl MapIndex {
                     [parent.2[0] + o.rot[0], 0.0, 0.0],
                 ));
                 if o.extra.len() >= 2 {
-                    part.stop_weights.insert(o.id, stop_exit_weight_with(&o.extra, numbers));
-                    part.stop_enter.insert(o.id, stop_enter_with(&o.extra, numbers));
+                    part.stop_weights
+                        .insert(o.id, stop_exit_weight_with(&o.extra, numbers));
+                    part.stop_enter
+                        .insert(o.id, stop_enter_with(&o.extra, numbers));
                     part.stop_side.insert(o.id, stop_side(&o.extra));
                     part.stop_length.insert(o.id, stop_length(&o.extra));
                 }
