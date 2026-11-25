@@ -10,6 +10,8 @@ use super::{def, multi, nums, o, p, rec};
 use crate::api::{ApiError, ApiFn, Ctx, Value};
 
 const NEW: &str = crate::api::VERSION;
+/// The cruise control (#3976).
+const CRUISE: &str = "0.3.55";
 const TRACK: &str = "0.3.55";
 
 fn has(c: &mut Ctx<'_>) -> bool {
@@ -452,6 +454,31 @@ pub static FNS: &[ApiFn] = &[
         None,
         true,
         |c, a| nums(c.io().bus_controls().map(|v| v.map(|x| x as f64)))
+    ),
+    def!(
+        "bus.cruise",
+        "vehicle",
+        [],
+        "number or nil",
+        "The speed the cruise control holds, km/h (`nil` while it is off). The player switches it with Num0.",
+        CRUISE,
+        None,
+        false,
+        |c, a| c.io().bus_cruise().map(Value::from)
+    ),
+    def!(
+        "bus.set_cruise",
+        "vehicle",
+        [o("kmh", "number")],
+        "boolean",
+        "Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). Like Num0, it is refused (false) while the bus goes slower than 5 km/h. It works the throttle and the brake the bus's scripts read, which a plugin's `set_var(\"Throttle\")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held.",
+        CRUISE,
+        VehicleWrite,
+        false,
+        |c, a| {
+            let kmh = a.opt_num(0)?;
+            Ok::<_, ApiError>(c.io().bus_set_cruise(kmh.map(|k| k as f32)))
+        }
     ),
     def!(
         "bus.track",

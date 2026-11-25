@@ -36,8 +36,8 @@ pub use lane::{
     pool_density, wrap_deg,
 };
 pub use lights::{
-    Aspect, DEFAULT_APPROACH, LightStop, RAIL_ASK_DISTANCE, TrafficLightController, UNLINKED_PHASE,
-    WAITING_AT_LINE,
+    Aspect, DEFAULT_APPROACH, LightStop, PLAYER_SEARCH_RANGE, TrafficLightController,
+    UNLINKED_PHASE, WAITING_AT_LINE,
 };
 pub use walk_path::PathFooting;
 

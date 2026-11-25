@@ -97,6 +97,7 @@ fn load_chosen_weather(args: &Args) -> omsi_content::weather::Weather {
                 && w.clouds.0.trim().starts_with("-1")
             {
                 w.clouds = ("Cumulus 1".into(), 100.0);
+                w.decorative_clouds = true;
             }
             // the vehicles' {init} reads the temperature
             omsi_sim::host::set_ambient_weather(w.temp.0, w.temp.1);
@@ -183,14 +184,8 @@ pub(crate) fn setup_sky(
     renderer.set_sky_textures_vanilla(scene, [ids[0], ids[1], ids[2]], clouds, vanilla, sun);
 }
 
-/// A `[cloudtype]` of `Weather/clouds.cfg`: its texture (under `Texture\`), the metres of
-/// ground a tile of it covers, and whether it is an `ovc` deck (else `sct`).
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct CloudType {
-    pub texture: String,
-    pub size: f32,
-    pub overcast: bool,
-}
+// (a `[cloudtype]` of Weather/clouds.cfg: omsi_weather::conditions)
+pub(crate) use omsi_weather::conditions::{CloudType, cloud_type};
 
 /// The cloud type the sky was last set up with (its name and entry): the classic sky's
 /// cloud layer is drawn by it while the weather names it.
@@ -206,40 +201,6 @@ pub(crate) struct SkyState {
     pub(crate) model: Option<crate::weather_model::ModelRun>,
     /// The graphics' kind and whether clouds are wanted (see `startup::SessionSettings`).
     pub(crate) look: crate::startup::SessionSettings,
-}
-
-/// The `[cloudtype]` entry named `kind` (`-1` or empty: none), read as Omsi.exe reads it
-/// (0x754664): name, texture, size, then `ovc` or `sct`.
-pub(crate) fn cloud_type(root: &Path, kind: &str) -> Option<CloudType> {
-    if kind.is_empty() || kind.starts_with("-1") {
-        return None;
-    }
-    let cfg = omsi_cfg::vfs::read(&root.join("Weather").join("clouds.cfg")).ok()?;
-    cloud_type_in(&omsi_cfg::codepage::decode(&cfg), kind)
-}
-
-fn cloud_type_in(text: &str, kind: &str) -> Option<CloudType> {
-    let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
-    (0..lines.len()).find_map(|i| {
-        if !lines[i].eq_ignore_ascii_case("[cloudtype]")
-            || !lines
-                .get(i + 1)
-                .is_some_and(|n| n.eq_ignore_ascii_case(kind))
-        {
-            return None;
-        }
-        Some(CloudType {
-            texture: lines.get(i + 2)?.to_string(),
-            size: lines
-                .get(i + 3)
-                .and_then(|v| v.parse::<f32>().ok())
-                .filter(|v| *v > 0.0)
-                .unwrap_or(2000.0),
-            overcast: lines
-                .get(i + 4)
-                .is_some_and(|v| v.eq_ignore_ascii_case("ovc")),
-        })
-    })
 }
 
 /// Edge of the cloud field texture (texels); it tiles.
@@ -585,12 +546,9 @@ pub(crate) fn weather_lighting(
     }
     lighting.wetness = wetness;
     lighting.air_temp = w.temp.0;
-    // [wind] direction (deg) and speed (m/s): the snowfall drifts with it
-    lighting.wind = glam::Vec3::new(
-        w.wind.0.to_radians().sin() * w.wind.1,
-        w.wind.0.to_radians().cos() * w.wind.1,
-        0.0,
-    );
+    // [wind]: the air the snowfall, the smoke, the fog and the trees move with, blowing
+    // from its direction as Omsi.exe's (0x753428)
+    lighting.wind = crate::rain::weather_wind(w);
     omsi_sim::particles::set_wind(lighting.wind);
     // Omsi.exe hides the sun under an 'ovc' cloud type (the Overcast ones in clouds.cfg) and
     // draws no sun shadows below 350 m visibility
@@ -643,7 +601,8 @@ pub(crate) fn apply_weather(
 ) {
     let (kind, rate) = precip_of(w);
     v.host.precip_type = kind as f32;
-    v.host.precip_rate = rate;
+    // (the strength whatever falls, as Omsi.exe's `PrecipRate`)
+    v.host.precip_rate = omsi_weather::conditions::precip_strength(w);
     v.host.wind = crate::rain::weather_wind(w);
     v.host.street_cond = street_condition(w, wetness);
     v.set_var("PrecipType", kind as f32);
@@ -763,28 +722,6 @@ mod tests {
             omsi_weather::conditions::CLOUD_PERIOD,
             omsi_render::VANILLA_CLOUD_PERIOD
         );
-    }
-
-    #[test]
-    fn cloud_types_are_read_as_omsi_reads_them() {
-        let cfg = "\tHier werden alle Wolkentypen definiert:\n\n\t[cloudtype]\n\tname\n\ttexture\n\n[cloudtype]\nCumulus 2\nCumulus_2.tga\n2000\nsct\n\n[cloudtype]\nOvercast 1\nOVC_1.bmp\n1000\novc\n";
-        assert_eq!(
-            cloud_type_in(cfg, "cumulus 2"),
-            Some(CloudType {
-                texture: "Cumulus_2.tga".into(),
-                size: 2000.0,
-                overcast: false
-            })
-        );
-        assert_eq!(
-            cloud_type_in(cfg, "Overcast 1"),
-            Some(CloudType {
-                texture: "OVC_1.bmp".into(),
-                size: 1000.0,
-                overcast: true
-            })
-        );
-        assert_eq!(cloud_type_in(cfg, "Cumulus 9"), None);
     }
 
     #[test]

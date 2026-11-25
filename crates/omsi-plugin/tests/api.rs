@@ -75,37 +75,51 @@ fn every_entry_is_well_formed() {
     );
 }
 
-/// docs/plugin-api.json is the registry's manifest, and docs/PLUGINS.md's reference its
-/// tables (`OMSI_API_BLESS=1` writes both).
+/// docs/plugin-api.json is the registry's manifest (`OMSI_API_BLESS=1` writes it), and
+/// docs/PLUGIN_API.md documents every function and event in it.
 #[test]
 fn api_manifest() {
     let manifest = json::encode_pretty(&api::manifest()) + "\n";
     let path = repo().join("docs/plugin-api.json");
-    let doc_path = repo().join("docs/PLUGINS.md");
-    let doc = std::fs::read_to_string(&doc_path).unwrap();
-    let spliced =
-        api::docs::splice(&doc).expect("docs/PLUGINS.md has the api:begin / api:end markers");
     if std::env::var_os("OMSI_API_BLESS").is_some() {
         std::fs::write(&path, &manifest).unwrap();
-        std::fs::write(&doc_path, &spliced).unwrap();
         return;
     }
     // (a Windows checkout may have turned the files' line ends into CRLF)
     let have = std::fs::read_to_string(&path)
         .unwrap_or_default()
         .replace("\r\n", "\n");
-    let doc = doc.replace("\r\n", "\n");
-    let spliced = spliced.replace("\r\n", "\n");
     assert!(
         have == manifest,
         "docs/plugin-api.json is not the registry's: run OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest"
     );
+    let doc = std::fs::read_to_string(repo().join("docs/PLUGIN_API.md")).unwrap();
+    let back = json::decode(&manifest, true).unwrap();
+    let name = |v: &Value| match v.get("name") {
+        Some(Value::Str(s)) => s.to_string(),
+        other => panic!("an entry without a name: {other:?}"),
+    };
+    let missing_fns: Vec<String> = back
+        .get("functions")
+        .unwrap()
+        .items()
+        .iter()
+        .map(name)
+        .filter(|n| !doc.contains(&format!("### omsi.{n}\n")))
+        .collect();
+    let missing_events: Vec<String> = back
+        .get("events")
+        .unwrap()
+        .items()
+        .iter()
+        .map(name)
+        .filter(|n| !doc.contains(&format!("**`{n}`**")))
+        .collect();
     assert!(
-        doc == spliced,
-        "docs/PLUGINS.md's function tables are not the registry's: run OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest"
+        missing_fns.is_empty() && missing_events.is_empty(),
+        "docs/PLUGIN_API.md does not document functions {missing_fns:?} / events {missing_events:?}"
     );
     // (the manifest reads back)
-    let back = json::decode(&manifest, true).unwrap();
     assert_eq!(back.get("abi"), Some(&Value::Int(api::ABI)));
     assert!(back.get("functions").unwrap().items().len() >= 200);
     assert!(back.get("events").unwrap().items().len() >= 40);

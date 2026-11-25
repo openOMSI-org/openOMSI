@@ -379,8 +379,12 @@ impl SceneryObject {
                         t.approach_dist = Some(d);
                     }
                 }
-                "traffic_light_stop" => o.traffic_light_stop.push(r.f32s::<3>()),
-                "traffic_light_jump" => o.traffic_light_jump.push(r.f32s::<4>()),
+                "traffic_light_stop" => o.traffic_light_stop.push(light_point(&mut r)),
+                "traffic_light_jump" => {
+                    let [light, time, if_request] = light_point(&mut r);
+                    o.traffic_light_jump
+                        .push([light, time, if_request, r.f32()]);
+                }
                 "splinehelper" => {
                     let spline = r.str().to_string();
                     let v = r.f32s::<6>();
@@ -554,9 +558,38 @@ pub const ATTACH_TOKENS: &[&str] = &[
     "attach_rot_z",
 ];
 
+/// The `if_request` line of a `[traffic_light_stop]` / `[traffic_light_jump]` as 1.0 or
+/// 0.0. Omsi.exe compares the raw line with "0" (0x7b8485, 0x7b85d7): anything else - `1`,
+/// `-1`, `0.0`, a word - sets the flag.
+fn request_flag(line: &str) -> f32 {
+    if line == "0" { 0.0 } else { 1.0 }
+}
+
+/// The light, the time and the `if_request` flag a `[traffic_light_stop]` or
+/// `[traffic_light_jump]` starts with.
+fn light_point(r: &mut omsi_cfg::CfgReader<'_>) -> [f32; 3] {
+    let light = r.f32();
+    let time = r.f32();
+    [light, time, request_flag(r.line())]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_light_stop_asks_for_a_request_unless_its_line_is_exactly_0() {
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[traffic_light_stop]\n0\n12\n-1\n[traffic_light_stop]\n1\n20\n0\n\
+             [traffic_light_jump]\n0\n30\n0.0\n5\n[traffic_light_jump]\n1\n40\n0\n7\n",
+        ));
+        assert_eq!(o.traffic_light_stop, [[0.0, 12.0, 1.0], [1.0, 20.0, 0.0]]);
+        assert_eq!(
+            o.traffic_light_jump,
+            [[0.0, 30.0, 1.0, 5.0], [1.0, 40.0, 0.0, 7.0]]
+        );
+    }
 
     #[test]
     fn lua_scripts_of_an_object_are_read_with_range_and_rate() {

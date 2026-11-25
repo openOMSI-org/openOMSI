@@ -71,8 +71,10 @@ impl InUse {
         }
     }
 
-    pub fn lit(&self, time: f64, day: DayKind, brightness: f32) -> bool {
-        self.in_use(time, day) && brightness < self.threshold
+    /// Lit (`NightlightA`, the night textures): in use and Omsi.exe's daylight sum under
+    /// the weather (`Daylight::daylight_sum`, weather +0xb0) below the threshold (0x6119d8).
+    pub fn lit(&self, time: f64, day: DayKind, daylight_sum: f32) -> bool {
+        self.in_use(time, day) && daylight_sum < self.threshold
     }
 }
 

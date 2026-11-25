@@ -1,4 +1,4 @@
-//! Junction scenes run headless: lights (the amber memory, the lights of one crossing
+//! Junction scenes run headless: lights (yellow and red, the lights of one crossing
 //! object), the room on a junction's exit, priority signs against early claims,
 //! roundabouts, the waits-for graph.
 
@@ -144,14 +144,16 @@ fn a_car_that_crept_up_to_the_line_stops_at_red() {
     assert!(get(&t, id).state.speed < 0.1);
 }
 
+/// Too close to stop as the light turns yellow (14 m/s, a metre short of the line): it
+/// brakes, its front gets over the line, and the light holds it no longer (Omsi.exe
+/// 0x716970: only a path still ahead of the front is held).
 #[test]
-fn a_moving_car_clears_the_junction_on_amber() {
+fn a_car_too_close_to_stop_goes_on_once_its_front_is_over_the_line() {
     let f = Fixture::new();
     let mut t = with_lights(&f, signalled(false, false), 1);
-    // 12 m/s, 10 m before the line as the light goes yellow, red a second later
-    let id = car(&mut t, &f, 0, 130.0, 0x32, 12.0);
+    let id = car(&mut t, &f, 0, 130.0, 0x32, 14.0);
     let front = get(&t, id).state.front;
-    t.cars.iter_mut().find(|c| c.id == id).unwrap().state.s = 140.0 - front;
+    t.cars.iter_mut().find(|c| c.id == id).unwrap().state.s = 149.0 - front;
     show(&mut t, 0, 9);
     ticks(&mut t, 1.0);
     show(&mut t, 0, 0);
@@ -163,8 +165,9 @@ fn a_moving_car_clears_the_junction_on_amber() {
     );
 }
 
+/// A car whose front is over the line is not held by that light, red or not (0x716970).
 #[test]
-fn a_car_standing_with_its_nose_over_the_line_does_not_set_off_at_red() {
+fn a_car_with_its_front_over_the_line_is_not_held_by_that_light() {
     let f = Fixture::new();
     let mut t = with_lights(&f, signalled(false, false), 1);
     show(&mut t, 0, 0);
@@ -173,18 +176,16 @@ fn a_car_standing_with_its_nose_over_the_line_does_not_set_off_at_red() {
     t.cars.iter_mut().find(|c| c.id == id).unwrap().state.s = 150.0 + 0.6 - front;
     ticks(&mut t, 8.0);
     assert!(
-        over_line(&t, id) < 0.7,
-        "it moved off at red: {:.2} m over",
+        over_line(&t, id) > 5.0,
+        "the red held it: {:.2} m over",
         over_line(&t, id)
     );
-    // and it goes on green
-    show(&mut t, 0, 6);
-    ticks(&mut t, 6.0);
-    assert!(over_line(&t, id) > 5.0);
 }
 
+/// The first car at the line, still short of it when a short green ends, stops at the
+/// yellow like any other: Omsi.exe keeps no memory of the green.
 #[test]
-fn the_first_car_at_the_line_gets_through_a_short_green() {
+fn a_car_still_short_of_the_line_stops_when_a_short_green_ends() {
     let f = Fixture::new();
     let mut t = with_lights(&f, signalled(false, false), 1);
     show(&mut t, 0, 0);
@@ -195,14 +196,15 @@ fn the_first_car_at_the_line_gets_through_a_short_green() {
         "it waits at red"
     );
     show(&mut t, 0, 6);
-    ticks(&mut t, 2.0);
+    ticks(&mut t, 0.2);
+    assert!(over_line(&t, id) < 0.0, "it was over the line in 0.2 s");
     show(&mut t, 0, 9);
     ticks(&mut t, 1.0);
     show(&mut t, 0, 0);
     ticks(&mut t, 8.0);
     assert!(
-        over_line(&t, id) > 10.0,
-        "the first car stopped again: {:.1} m",
+        over_line(&t, id) < 0.3 && get(&t, id).state.speed < 0.1,
+        "it went on: {:.1} m over",
         over_line(&t, id)
     );
 }
@@ -239,45 +241,35 @@ fn a_light_passed_does_not_hold_again_further_in() {
     assert_eq!(get(&t, id).state.lane, 2);
 }
 
+/// Red, red-and-yellow and yellow hold a car short of the line, nothing holds one over it.
 #[test]
-fn amber_decision_holds() {
+fn which_aspects_hold_a_car() {
+    use super::lights::light_holds;
+    use crate::traffic::Aspect;
+    for a in [Aspect::Red, Aspect::RedYellow, Aspect::Yellow] {
+        assert!(light_holds(a, 4.0), "{a:?} short of the line");
+        assert!(!light_holds(a, -0.1), "{a:?} over the line");
+    }
+    for a in [Aspect::Green, Aspect::GreenYellow, Aspect::Dark] {
+        assert!(!light_holds(a, 4.0), "{a:?}");
+    }
+}
+
+/// Every driver that can stop stops at yellow: Omsi.exe holds an AI vehicle for yellow as
+/// for red (0x716970), with no random few going on.
+#[test]
+fn every_driver_that_can_stop_stops_at_yellow() {
     let f = Fixture::new();
-    let mut t = with_lights(&f, signalled(false, false), 1);
-    show(&mut t, 0, 9);
-    let first = car(&mut t, &f, 0, 100.0, 0x37, 15.0);
-    let second = car(&mut t, &f, 0, 50.0, 0x38, 15.0);
-    ticks(&mut t, 1.0);
-    t.cars
-        .iter_mut()
-        .find(|c| c.id == first)
-        .unwrap()
-        .amber_decision = 0.0;
-    t.cars
-        .iter_mut()
-        .find(|c| c.id == second)
-        .unwrap()
-        .amber_decision = 1.0;
-    ticks(&mut t, 15.0);
-    let c1 = get(&t, first);
-    let c2 = get(&t, second);
-    assert_eq!(
-        c1.amber_decision, 0.0,
-        "amber decision of car 1 was not overridden, {} != 0",
-        c1.amber_decision
-    );
-    assert_eq!(
-        c2.amber_decision, 1.0,
-        "amber decision of car 2 was not overridden, {} != 1",
-        c2.amber_decision
-    );
-    assert!(
-        over_line(&t, first) > 10.0,
-        "car 1 did not pass the yellow light"
-    );
-    assert!(
-        over_line(&t, second) < 0.0,
-        "car 2 did pass the yellow light"
-    );
+    for seed in 0x37..0x3f {
+        let mut t = with_lights(&f, signalled(false, false), 1);
+        show(&mut t, 0, 9);
+        let id = car(&mut t, &f, 0, 100.0, seed, 15.0);
+        ticks(&mut t, 15.0);
+        let c = get(&t, id);
+        assert_eq!(c.state.lane, 0, "car {seed:#x} went on yellow");
+        assert!(c.state.speed < 0.1);
+        assert!(over_line(&t, id) < 0.3);
+    }
 }
 
 #[test]
@@ -287,15 +279,8 @@ fn an_ai_driver_that_can_stop_respects_red() {
         let mut t = with_lights(&f, signalled(false, false), 1);
         show(&mut t, 0, phase);
         let id = car(&mut t, &f, 0, 100.0, 0x39, 15.0);
-        ticks(&mut t, 1.0);
-        t.cars
-            .iter_mut()
-            .find(|c| c.id == id)
-            .unwrap()
-            .amber_decision = 0.0;
-        ticks(&mut t, 15.0);
+        ticks(&mut t, 16.0);
         let c = get(&t, id);
-        assert_eq!(c.amber_decision, 0.0);
         assert_eq!(c.state.lane, 0, "car crossed on phase {phase}");
         assert!(c.state.speed < 0.1);
         assert!(over_line(&t, id) < 0.3);
@@ -303,25 +288,13 @@ fn an_ai_driver_that_can_stop_respects_red() {
 }
 
 #[test]
-fn amber_decision_holds_with_multiple_lights() {
+fn the_second_red_of_a_crossing_holds_a_car_through_the_first_green() {
     let f = Fixture::new();
     let mut t = with_lights(&f, signalled(true, false), 2);
     show(&mut t, 1, 0);
     let id = car(&mut t, &f, 0, 100.0, 0x3a, 15.0);
-    ticks(&mut t, 1.0);
-    t.cars
-        .iter_mut()
-        .find(|c| c.id == id)
-        .unwrap()
-        .amber_decision = 0.0;
-    ticks(&mut t, 15.0);
+    ticks(&mut t, 16.0);
     let c = get(&t, id);
-    assert_eq!(
-        c.current_light,
-        Some((1, 0)),
-        "car's current light was not updated to (1, 0): {:?}",
-        c.current_light
-    );
     assert_eq!(
         c.state.lane, 1,
         "car did pass the crossing to lane {} (must have stopped on line 1)",
@@ -339,13 +312,7 @@ fn stopped_car_does_not_sets_off_on_red() {
     let front = get(&t, id).state.front;
     // stopped at 2 m before the line
     t.cars.iter_mut().find(|c| c.id == id).unwrap().state.s = 150.0 - 2.0 - front;
-    ticks(&mut t, 0.1);
-    t.cars
-        .iter_mut()
-        .find(|c| c.id == id)
-        .unwrap()
-        .amber_decision = 0.0;
-    ticks(&mut t, 15.0);
+    ticks(&mut t, 15.1);
     let c = get(&t, id);
     assert!(
         over_line(&t, id) < 0.3,
@@ -369,13 +336,7 @@ fn slow_moving_car_does_not_run_the_red() {
     let front = get(&t, id).state.front;
     // at 5 m before the line
     t.cars.iter_mut().find(|c| c.id == id).unwrap().state.s = 150.0 - 5.0 - front;
-    ticks(&mut t, 0.1);
-    t.cars
-        .iter_mut()
-        .find(|c| c.id == id)
-        .unwrap()
-        .amber_decision = 0.0;
-    ticks(&mut t, 15.0);
+    ticks(&mut t, 15.1);
     let c = get(&t, id);
     assert!(
         over_line(&t, id) < 0.3,

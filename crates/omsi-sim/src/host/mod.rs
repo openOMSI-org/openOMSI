@@ -41,6 +41,9 @@ pub struct VehicleHost {
     pub external_ai_clock: bool,
     pub mouse: (f32, f32),
     pub precip_type: f32,
+    /// The weather's precipitation strength (0..1) whatever its type, as the scripts'
+    /// `PrecipRate` system variable reads it (Omsi.exe 0x6ff020: strength / 255, also
+    /// while nothing falls); what does fall is [`VehicleHost::falling_precip`].
     pub precip_rate: f32,
     /// World-space weather air velocity (m/s), used by water on the glass.
     pub wind: glam::Vec3,
@@ -93,6 +96,10 @@ pub struct VehicleHost {
     /// Enabled by LAN for vehicles this machine owns. Independent of local audio drains.
     pub capture_sound_triggers: bool,
     pub network_sound_triggers: Vec<(String, Option<String>, Option<Vec<f32>>)>,
+    /// `(T.F.x)` triggers (lower case) whose last file sent to the other players was blank:
+    /// a blank frees the entry, so another one changes nothing there, and the MB_C2 gearbox
+    /// says `" "` in every frame in neutral - sent each time, it filled the LAN sound queue.
+    blank_file_sent: hashbrown::HashSet<String>,
     /// Triggers (lower case) whose sounds read variables in their volume curves: when one
     /// fires, the variables of that moment are kept in `fired_trigger_vars` (the door's
     /// hit sound reads `doorSpeed_<n>`, which the script turns round right after it).
@@ -122,9 +129,9 @@ pub struct VehicleHost {
     pub hof: Option<Arc<Hof>>,
     /// The map's ticket pack for `GetTicketName/Value`.
     pub tickets: Option<Arc<omsi_content::tickets::TicketPack>>,
-    /// Coins the driver handed out with `GiveChangeCoin` (currency coin index, the value the
-    /// cash desk's key names for it or 0), taken by the passenger system.
-    pub change_coins: Vec<(usize, f32)>,
+    /// Coins the driver handed out with `GiveChangeCoin` (the money system's coin index, as
+    /// the script gives it), taken by the passenger system.
+    pub change_coins: Vec<usize>,
     /// The script's `number` string variable (the fleet number): `NrSpecRandom` is
     /// specific to it.
     pub number_var: Option<u32>,
@@ -271,6 +278,17 @@ pub fn ambient_weather() -> Option<(f32, f32)> {
 }
 
 impl VehicleHost {
+    /// How hard it rains or snows (0..1): the strength while something falls (a
+    /// `PrecipType` other than 0), else nothing - Omsi.exe wets the glass only then
+    /// (0x7d22d8).
+    pub fn falling_precip(&self) -> f32 {
+        if self.precip_type as i32 == 0 {
+            0.0
+        } else {
+            self.precip_rate
+        }
+    }
+
     pub fn trigger_mark(&self) -> (usize, usize, usize, usize) {
         (
             self.fired_triggers.len(),
@@ -700,12 +718,25 @@ impl Host for VehicleHost {
     }
 
     fn sound_trigger_file(&mut self, name: &str, file: &str) {
-        // `" " (T.F.ev_nbs_on)` is how the MB_C2 gearbox script says "no sound" (every
-        // frame in neutral, 80 times a minute per bus at Ahlheim): nothing to play
-        if self.remote_sound_triggers || file.trim().is_empty() {
+        // Every name is passed on, `""` and `" "` too: Omsi.exe (0x74f2e8) plays the entry's
+        // sound again with the file it has for `""`, and `" "` (the MB_C2 gearbox script's
+        // "no sound" in neutral) frees the entry's buffer, stopping what it plays, see
+        // `SoundSet::play_file_trigger`.
+        if self.remote_sound_triggers {
             return;
         }
-        self.record_network_sound(name, Some(file));
+        let blank = !file.is_empty() && file.trim().is_empty();
+        let repeat = if blank {
+            !self.blank_file_sent.insert(name.to_ascii_lowercase())
+        } else {
+            if !file.is_empty() {
+                self.blank_file_sent.remove(&name.to_ascii_lowercase());
+            }
+            false
+        };
+        if !repeat {
+            self.record_network_sound(name, Some(file));
+        }
         self.fired_file_triggers
             .push((name.to_string(), file.to_string()));
         self.file_triggers_fired += 1;
@@ -840,6 +871,7 @@ mod tests {
                     Some("../Announcements/stop.wav".into()),
                     None
                 ),
+                ("announcement".into(), Some(" ".into()), None),
             ]
         );
         h.network_sound_triggers.clear();
@@ -851,6 +883,60 @@ mod tests {
         assert!(h.fired_file_triggers.is_empty());
         assert!(h.fired_trigger_vars.is_empty());
         assert!(h.network_sound_triggers.is_empty());
+    }
+
+    /// `PrecipRate` reads the strength while nothing falls (Omsi.exe 0x6ff020); the glass
+    /// and the dirt go by what falls.
+    #[test]
+    fn precip_rate_reads_the_strength_and_only_what_falls_wets() {
+        let mut h = VehicleHost::new(Default::default());
+        h.precip_type = 0.0;
+        h.precip_rate = 0.125;
+        assert_eq!(h.read_sys_var(SysVar::PrecipRate), 0.125);
+        assert_eq!(h.falling_precip(), 0.0);
+        h.precip_type = 2.0;
+        assert_eq!(h.falling_precip(), 0.125);
+    }
+
+    /// `"" (T.F.x)` fires the entry again with the file it has and `" " (T.F.x)` stops and
+    /// frees it (0x74f2e8, 0x74fb3c): both reach the sound set, and another player's copy.
+    #[test]
+    fn empty_and_blank_file_triggers_are_passed_on() {
+        let mut h = VehicleHost::default();
+        h.capture_sound_triggers = true;
+        h.sound_trigger_file("ann", "");
+        h.sound_trigger_file("ann", " ");
+        h.sound_trigger_file("ann", "  ");
+        let want: Vec<(String, String)> = ["", " ", "  "]
+            .map(|f| ("ann".to_string(), f.to_string()))
+            .to_vec();
+        assert_eq!(h.fired_file_triggers, want);
+        assert_eq!(h.file_triggers_fired, 3);
+        // (the second blank in a row changes nothing for the other players' copy)
+        assert_eq!(h.network_sound_triggers.len(), 2);
+    }
+
+    /// A blank file said again (the MB_C2 gearbox in every frame in neutral) is sent to the
+    /// other players once, until a file names a sound again; the local entry hears each.
+    #[test]
+    fn a_repeated_blank_file_trigger_is_sent_once() {
+        let mut h = VehicleHost::default();
+        h.capture_sound_triggers = true;
+        for _ in 0..10 {
+            h.sound_trigger_file("ev_nbs_on", " ");
+        }
+        h.sound_trigger_file("EV_NBS_ON", "");
+        h.sound_trigger_file("ev_nbs_on", " ");
+        h.sound_trigger_file("ev_nbs_on", "gear.wav");
+        h.sound_trigger_file("ev_nbs_on", " ");
+        let sent: Vec<Option<String>> = h
+            .network_sound_triggers
+            .iter()
+            .map(|(_, f, _)| f.clone())
+            .collect();
+        let want = [" ", "", "gear.wav", " "].map(|f| Some(f.to_string()));
+        assert_eq!(sent, want);
+        assert_eq!(h.fired_file_triggers.len(), 14);
     }
 
     #[test]

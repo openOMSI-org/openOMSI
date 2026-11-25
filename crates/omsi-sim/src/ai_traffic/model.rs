@@ -90,14 +90,10 @@ pub struct AiCar {
     pub since_player_at_light: f32,
     /// Junction lanes this car has claimed to drive through (`TPathInfo::reservePaths`).
     pub reserved: Vec<usize>,
-    /// The light (controller, lamp) the driver decided to pass on yellow.
+    /// The light (controller, lamp) whose line its front went over while it showed
+    /// yellow, until that light is behind it.
     pub amber: Option<(usize, usize)>,
-    /// That decision was taken standing first at the light's line as it went green.
-    pub amber_start: bool,
     pub passing: Option<Passing>,
-    /// The current light and the car's random choice for approaching it on yellow.
-    pub current_light: Option<(usize, usize)>,
-    pub amber_decision: f32,
     /// Finished (a dead end, the end of a timetable trip, given up): taken off the road as
     /// soon as nobody can see it.
     pub gone: bool,
@@ -340,9 +336,24 @@ impl Footprint {
 pub type PlayerBox = (DVec3, f64, f32, f32, f32);
 
 /// A train: a `.ovh` of `[type] 2` (the A3 underground, the OHE railcar, the regional
-/// trains). A tram is rail-bound too but no train: it asks its lights as a car does.
+/// trains). A tram is rail-bound too but no train: it plans its way as a car does, and asks
+/// the lights on its rails within its own search range (`ai_search_range`).
 pub fn is_train(def: &omsi_vehicle::Vehicle) -> bool {
     matches!(def.kind, omsi_vehicle::VehicleKind::Other(2))
+}
+
+/// How far ahead (m) an AI vehicle's path search runs, by its `[type]`: Omsi.exe's AI
+/// driver (0x7d9128) hands the search (0x716970) 500 m for type 0 (a bus, a car), 20 m for
+/// type 1, 1500 m for type 2 (a train), 5000 m for type 3 (an aircraft) and 1000 m for any
+/// other. The lights on the rails it finds are asked whatever their `[approachdist]`.
+pub fn ai_search_range(def: &omsi_vehicle::Vehicle) -> f32 {
+    match def.kind {
+        omsi_vehicle::VehicleKind::Bus | omsi_vehicle::VehicleKind::Other(0) => 500.0,
+        omsi_vehicle::VehicleKind::Other(1) => 20.0,
+        omsi_vehicle::VehicleKind::Other(2) => 1500.0,
+        omsi_vehicle::VehicleKind::Other(3) => 5000.0,
+        omsi_vehicle::VehicleKind::Other(_) => 1000.0,
+    }
 }
 
 /// The player's rail vehicle on the track, set before each `tick`: the rail lane, the
@@ -643,7 +654,6 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Op
 
     state.honk_factor =
         (1.0 - 0.25 * r_bias + 0.2 * rg(8)).max(if rowdy.is_some() { 0.1 } else { 0.2 });
-    state.amber_factor = (0.03 + 0.02 * r_bias + 0.01 * rg(9)).clamp(0.0, 0.2);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's
     let r2 = (((seed >> 7) ^ (seed >> 41)) & 0xff) as f32 / 255.0;
@@ -1020,10 +1030,7 @@ impl TrafficSim {
             since_player_at_light: f32::MAX,
             reserved: Vec::new(),
             amber: None,
-            amber_start: false,
             passing: None,
-            current_light: None,
-            amber_decision: 0.0,
             gone: false,
             fresh: 1.5,
             merge_after: None,

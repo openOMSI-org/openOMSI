@@ -211,6 +211,18 @@ impl PlayerDuty {
     /// Service/depot legs have no public line and use the HOF's
     /// `Betriebsfahrt` destination. They remain part of the duty, but the
     /// player's IBIS should use the next public leg while the bus is waiting.
+    /// Whether the IBIS's stop has to be typed again (#2267): `shown` is the stop it was last
+    /// given (None - never), `wanted` the duty's own; only for a player who lets the game type
+    /// the IBIS (`auto_ibis`) and asked it to follow the stops (`ibis_auto_stop`).
+    pub fn ibis_stop_stale(
+        shown: Option<usize>,
+        wanted: usize,
+        auto_ibis: bool,
+        set: bool,
+    ) -> bool {
+        auto_ibis && set && shown != Some(wanted)
+    }
+
     pub fn trip_for_ibis(&self) -> (&PlannedTrip, usize) {
         let current = self.trip();
         let public = |t: &PlannedTrip| {

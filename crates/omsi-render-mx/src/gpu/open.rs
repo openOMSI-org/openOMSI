@@ -78,9 +78,40 @@ impl Renderer {
             .await
     }
 
+    /// [`Renderer::new_on`] again on the adapter whose device was just lost, keeping what the
+    /// loss took off (the basic pipelines, the rainfall, the MSAA retry): `open_on` starts a
+    /// new adapter or interface without them.
+    async fn reopen_on(
+        adapter: mx::Adapter,
+        format: mx::TextureFormat,
+        options: RenderOptions,
+    ) -> Result<Renderer> {
+        Self::open_device(adapter, None, Some(format), options)
+            .await?
+            .finish()
+            .await
+    }
+
     /// The graphics device for a renderer on this adapter, its pipelines not built yet: see
     /// [`Opened`].
     pub async fn open_on(
+        adapter: mx::Adapter,
+        surface: Option<&mx::Surface<'_>>,
+        format: Option<mx::TextureFormat>,
+        options: RenderOptions,
+    ) -> Result<Opened> {
+        // What one device had to do without is that device's: the flags are process-wide, and
+        // Direct3D 12 losing its device to ray tracing set the basic pipelines for the Vulkan
+        // device the game went on with - drawn at 1x MSAA, without the snowfall, the lamps in
+        // the fog and the street lamps' shadows, and remembered so for Vulkan as well.
+        // (What worked on this adapter before comes back from `fallback_load`.)
+        BASIC_PIPELINES.store(false, std::sync::atomic::Ordering::Relaxed);
+        RAINFALL_LEFT_OUT.store(false, std::sync::atomic::Ordering::Relaxed);
+        MSAA_RETRY.store(false, std::sync::atomic::Ordering::Relaxed);
+        Self::open_device(adapter, surface, format, options).await
+    }
+
+    async fn open_device(
         adapter: mx::Adapter,
         surface: Option<&mx::Surface<'_>>,
         format: Option<mx::TextureFormat>,
@@ -129,30 +160,7 @@ impl Renderer {
                 mb(m.budget_bytes)
             );
         }
-        // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
-        // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
-        // violation, so wgpu cannot turn it into a recoverable error. Start those adapters
-        // with the conservative feature set instead. OMSI_INTEL_FULL_GPU=1 is useful for
-        // retesting after a driver update without rebuilding the game.
-        let intel_vulkan_safe = cfg!(windows)
-            && info.backend == mx::Backend::Vulkan
-            && info.vendor == 0x8086
-            && !omsi_cfg::flags::OMSI_INTEL_FULL_GPU.is_set();
-        let options = if intel_vulkan_safe {
-            log::warn!(
-                "Intel Vulkan adapter detected ({}): using the stable driver profile (1x MSAA, 1x anisotropy, SSAO and runtime texture compression off); set OMSI_INTEL_FULL_GPU=1 after updating the Intel driver to retry the requested settings",
-                info.name
-            );
-            RenderOptions {
-                msaa: 1,
-                anisotropy: 1,
-                ssao: false,
-                compress_textures: false,
-                ..options
-            }
-        } else {
-            options
-        };
+        let (options, intel_vulkan_safe) = intel_vulkan_profile(&info, options);
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(
             info.backend == mx::Backend::Gl,
@@ -487,8 +495,7 @@ impl Opened {
                     "{}: the graphics device was lost while the chosen MSAA was tried again ({why}); keeping to what worked before",
                     info.name
                 );
-                return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options))
-                    .await;
+                return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
             }
             if basic_pipelines() && rainfall_pipeline() {
                 log::warn!(
@@ -497,8 +504,7 @@ impl Opened {
                 );
                 RAINFALL_LEFT_OUT.store(true, std::sync::atomic::Ordering::Relaxed);
                 fallback_store(&name, Some((1, true)));
-                return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options))
-                    .await;
+                return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
             }
             if basic_pipelines() {
                 return Err(anyhow!(
@@ -513,7 +519,7 @@ impl Opened {
             // (and so from the start next time, see `fallback_load`)
             fallback_store(&name, Some((1, true)));
             // (the format chosen for the window before: the same the surface would give)
-            return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options)).await;
+            return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
         }
         // (the retry is over; a device lost later in the run takes the usual way)
         MSAA_RETRY.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -655,6 +661,16 @@ impl Renderer {
                         if basic { ", basic pipelines" } else { "" }
                     );
                     made = Err(anyhow!("renderer pipelines: {e}"));
+                    // (a removed device fails every build after it the same way: the next
+                    // graphics interface is tried at once, rather than the basic pipelines on
+                    // the dead device - which took the reduction to that interface too)
+                    if device.is_lost() {
+                        log::error!(
+                            "{}: the graphics device was lost while the pipelines were made",
+                            info.name
+                        );
+                        break;
+                    }
                 }
             }
         }
@@ -802,6 +818,7 @@ impl Renderer {
                 cloud_shape_view: sky.cloud_shape_view,
                 cloud_detail_view: sky.cloud_detail_view,
                 cloud_sampler: sky.cloud_sampler,
+                moon_view: sky.moon_view,
                 cloud_shape_cpu: sky.cloud_shape_cpu,
                 cloud_view_buf: sky.cloud_view_buf,
                 cloud_sun: None,
@@ -997,5 +1014,36 @@ impl Renderer {
             rt,
             mesh_pages: false,
         }
+    }
+}
+
+/// The options an adapter opens with: an Intel one on Vulkan under Windows gets the
+/// conservative profile (see the comment inside), any other the options as they are; and
+/// whether it got the profile.
+fn intel_vulkan_profile(info: &mx::AdapterInfo, options: RenderOptions) -> (RenderOptions, bool) {
+    // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
+    // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
+    // violation, so wgpu cannot turn it into a recoverable error. Start those adapters
+    // with the conservative feature set instead. OMSI_INTEL_FULL_GPU=1 is useful for
+    // retesting after a driver update without rebuilding the game.
+    let intel_vulkan_safe = cfg!(windows)
+        && info.backend == mx::Backend::Vulkan
+        && info.vendor == 0x8086
+        && !omsi_cfg::flags::OMSI_INTEL_FULL_GPU.is_set();
+    if intel_vulkan_safe {
+        log::warn!(
+            "Intel Vulkan adapter detected ({}): using the stable driver profile (1x MSAA, 1x anisotropy, SSAO and runtime texture compression off); set OMSI_INTEL_FULL_GPU=1 after updating the Intel driver to retry the requested settings",
+            info.name
+        );
+        let options = RenderOptions {
+            msaa: 1,
+            anisotropy: 1,
+            ssao: false,
+            compress_textures: false,
+            ..options
+        };
+        (options, true)
+    } else {
+        (options, false)
     }
 }

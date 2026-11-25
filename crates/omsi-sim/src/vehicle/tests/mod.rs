@@ -13,6 +13,15 @@ mod scripts_props;
 mod trams;
 mod zweiachser;
 
+/// Without a driven axle `Velocity` is 0 however the vehicle rolls (Omsi.exe 0x7e2574 turns
+/// `n_Wheel`, then 0, into it); only a vehicle without axles shows the body's speed.
+#[test]
+fn velocity_without_driven_axles_is_zero() {
+    assert_eq!(speedometer_speed(Some(7.0), true, 10.0), 7.0);
+    assert_eq!(speedometer_speed(None, true, 10.0), 0.0);
+    assert_eq!(speedometer_speed(None, false, 10.0), 10.0);
+}
+
 #[test]
 fn velocity_is_the_driven_wheels_speed() {
     // a front axle rolling at 10 m/s, the driven rear axle spinning at twice that
@@ -35,6 +44,36 @@ fn velocity_is_the_driven_wheels_speed() {
     );
     // a trailer without driven wheels: the body's speed is used
     assert_eq!(driven_wheels_speed([(20.0, 0.5, false)].into_iter()), None);
+}
+
+/// `n_Wheel` is the mean of every driven wheel, each scaled by its axle's size to the first
+/// axle's wheel (Omsi.exe 0x7e2574), not the first driven wheel alone.
+#[test]
+fn n_wheel_is_the_mean_of_the_driven_wheels() {
+    // in a bend the outer rear wheel turns faster than the inner one: the mean of the two
+    let bend = [
+        (100.0, 0.5, false),
+        (100.0, 0.5, false),
+        (90.0, 0.5, true),
+        (110.0, 0.5, true),
+    ];
+    assert_eq!(driven_wheels_rpm(bend.into_iter(), 0.5), Some(100.0));
+    // a driven axle on wheels half the first axle's size turns twice as fast for the speed
+    // the first axle's wheel would have
+    let small = [
+        (50.0, 0.5, false),
+        (50.0, 0.5, false),
+        (100.0, 0.25, true),
+        (100.0, 0.25, true),
+    ];
+    assert_eq!(driven_wheels_rpm(small.into_iter(), 0.5), Some(50.0));
+    // one wheel spinning on ice is half the reading, not all of it
+    let spin = [(0.0, 0.5, true), (200.0, 0.5, true)];
+    assert_eq!(driven_wheels_rpm(spin.into_iter(), 0.5), Some(100.0));
+    assert_eq!(
+        driven_wheels_rpm([(80.0, 0.5, false)].into_iter(), 0.5),
+        None
+    );
 }
 
 pub(super) fn coupling_test_type(boogies: Option<f32>) -> Arc<VehicleType> {
@@ -1220,4 +1259,65 @@ fn a_trolleybus_moves_only_on_current() {
     };
     assert!(at(0.0));
     assert!(!at(30.0));
+}
+
+/// An AI vehicle's wheels turn at its speed over their own axle's size, the inner and the
+/// outer wheel of a bend alike (Omsi.exe 0x7debb0: 2·v/d rad/s for both wheels of an axle).
+#[test]
+fn ai_wheels_turn_at_the_speed_over_their_axle_size() {
+    let base = crate::timetable_run::tests::script_test_vehicle(
+        "{frame}\n{end}\n",
+        "Wheel_RotationSpeed_0_L\nWheel_RotationSpeed_0_R\nWheel_RotationSpeed_1_L\nWheel_RotationSpeed_1_R\n",
+        "",
+    );
+    let mut ty = (*base.ty).clone();
+    ty.def.axles = vec![
+        omsi_vehicle::Axle {
+            long: 2.5,
+            wheel_diameter: 1.0,
+            ..Default::default()
+        },
+        omsi_vehicle::Axle {
+            long: -3.0,
+            wheel_diameter: 0.8,
+            ..Default::default()
+        },
+    ];
+    let mut v = VehicleInstance::new(Arc::new(ty), VehicleHost::new(Default::default()));
+    // 10 m/s through a tight bend
+    v.update_ai(
+        0.1,
+        &AiFrame {
+            speed: 10.0,
+            odometer: 1.0,
+            steer_deg: 25.0,
+            ..Default::default()
+        },
+    );
+    let pi = std::f32::consts::PI;
+    for (axle, d) in [(0, 1.0f32), (1, 0.8)] {
+        for side in ["L", "R"] {
+            let rpm = v
+                .var(&format!("Wheel_RotationSpeed_{axle}_{side}"))
+                .unwrap();
+            let want = 600.0 / (pi * d);
+            assert!(
+                (rpm - want).abs() < 1e-2,
+                "{axle}_{side}: {rpm}, want {want}"
+            );
+        }
+    }
+}
+
+/// An AI vehicle's `n_Wheel` is its speed over the first axle's wheel (Omsi.exe 0x7debb0),
+/// not a driven wheel's own turning through the bend.
+#[test]
+fn ai_n_wheel_is_the_speed_over_the_first_wheel() {
+    let pi = std::f32::consts::PI;
+    // 10 m/s on wheels of 1 m: 600/π rpm, backwards the same turned round
+    assert!((ai_n_wheel(10.0, Some(1.0)) - 600.0 / pi).abs() < 1e-3);
+    assert!((ai_n_wheel(-10.0, Some(1.0)) + 600.0 / pi).abs() < 1e-3);
+    // wheels half the size turn twice as fast
+    assert!((ai_n_wheel(10.0, Some(0.5)) - 1200.0 / pi).abs() < 1e-3);
+    assert_eq!(ai_n_wheel(10.0, None), 0.0);
 }

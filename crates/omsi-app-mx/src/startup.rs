@@ -885,8 +885,25 @@ impl RendererStart {
 }
 
 /// A picture of `color` alone into `surface`, shown (no pipeline needed: a clear). False when
-/// the window gave no picture to draw into (hidden, covered, being resized).
+/// the window gave no picture to draw into (hidden, covered, being resized); None when the
+/// device failed on it. While the pipelines are built on their thread, the device may be lost
+/// there (Direct3D 12 removed it): the main thread's next command list on it panicked outside
+/// any guard and ended the game, where the build's own failure went on to the next interface.
 pub(crate) fn present_clear(
+    surface: &mut SurfaceState<'_>,
+    device: &mx::Device,
+    queue: &mx::Queue,
+    window: &winit::window::Window,
+    color: mx::Color,
+) -> Option<bool> {
+    if device.is_lost() {
+        return None;
+    }
+    // (lost between the look and the command list: caught all the same)
+    omsi_render::catch(|| present_clear_on(surface, device, queue, window, color))
+}
+
+fn present_clear_on(
     surface: &mut SurfaceState<'_>,
     device: &mx::Device,
     queue: &mx::Queue,

@@ -242,6 +242,10 @@ pub struct Corona {
     /// towards the viewer, seen from in front of the light; the angles and the visibility
     /// travel as for a cone.
     pub halo: bool,
+    /// A vehicle's own outside lamp (headlamp, tail, brake, indicator...): the Enhanced
+    /// picture draws its glow at a lamp's size, not at the sprite size Omsi.exe's dim
+    /// sprites were made for (corona.wgsl `VEHICLE_LAMP`).
+    pub vehicle_lamp: bool,
 }
 
 impl Default for Corona {
@@ -262,6 +266,7 @@ impl Default for Corona {
             beam: false,
             beam_width: 0.0,
             halo: false,
+            vehicle_lamp: false,
         }
     }
 }
@@ -602,7 +607,7 @@ impl Renderer {
         // (the player's headlamps, which share a map of their own: see `passes::headlamp_shadow`)
         let own = eye
             .vehicle
-            .filter(|_| lamp_shadows && enhanced)
+            .filter(|_| lamp_shadows && enhanced && eye.level > 0)
             .map(|(b, _)| passes::VehicleBox::new(b, ro));
         self.lights.cookies.begin_frame();
         // The grid is made in a room kept all unused but for the cells the last one filled,
@@ -1144,7 +1149,7 @@ impl Renderer {
                         } else {
                             c.z_offset
                         },
-                        c.flags as f32,
+                        (c.flags | if c.vehicle_lamp { 16 } else { 0 }) as f32,
                         if c.beam {
                             1.0
                         } else if c.halo {

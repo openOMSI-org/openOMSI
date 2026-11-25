@@ -220,6 +220,20 @@ pub(crate) fn clamped_linear_sampler(device: &wgpu::Device) -> wgpu::Sampler {
     })
 }
 
+/// A linear sampler clamped to the edge that also blends between mip levels, without
+/// anisotropy: for reads at an explicit level (`textureSampleLevel`), which an anisotropic
+/// sampler has no derivatives to filter by.
+pub(crate) fn clamped_trilinear_sampler(device: &wgpu::Device) -> wgpu::Sampler {
+    device.create_sampler(&wgpu::SamplerDescriptor {
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
+        ..Default::default()
+    })
+}
+
 /// A uniform buffer the CPU writes.
 pub(crate) fn uniform_buffer(device: &wgpu::Device, label: &str, size: u64) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {

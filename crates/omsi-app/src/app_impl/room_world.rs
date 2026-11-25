@@ -130,6 +130,9 @@ impl App {
             humans.visual_hailing =
                 self.settings.passenger_hailing && self.settings.passenger_animation == "enhanced";
             humans.bad_driving = self.settings.pax_bad_driving;
+            humans.entry_doors = omsi_sim::people::entry_doors::EntryDoors::from_setting(
+                &self.settings.pax_entry_doors,
+            );
             humans.no_ticket = self.settings.pax_no_ticket;
             humans.late_tolerance = (self.settings.pax_late_tolerance_min as f64 * 60.0).max(0.0);
             humans.free_drive_fill = omsi_sim::people::free_drive::FreeDriveFill::from_setting(
@@ -137,6 +140,7 @@ impl App {
             );
             humans.board_when_stopped = self.settings.pax_board_when_stopped;
             humans.boarding = self.settings.boarding.clone();
+            humans.rear_door_boarding = self.settings.rear_door_boarding;
             humans.stand_chance = self.settings.standing_chance;
             humans.short_rides_stand = self.settings.pax_short_rides_stand;
             humans.voices = match self.settings.pax_voices.as_str() {

@@ -140,6 +140,9 @@ pub(super) fn player_step(cx: PlayerStepCx, dt: f32) {
             !matches!(cx.view.view.as_str(), "free" | "foot"),
         );
         crate::devtools::apply_holds(cx.ui.devtools.as_deref(), &mut p.vehicle);
+        if let Some(n) = p.cruise_note.take() {
+            *cx.ui.service_msg = Some((omsi_ui::tr(&n).into_owned(), 2.5));
+        }
         if let Some(g) = p.vehicle.trolley.as_deref_mut() {
             if let Some(n) = g.rig.take_notes().pop() {
                 *cx.ui.service_msg = Some((n, 3.0));
@@ -384,6 +387,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
             .map(|w| w.reverb_at(cam.position))
             .unwrap_or((0.0, 0.0));
         omsi_audio::soundset::set_master_volume(cx.common.settings.volume);
+        omsi_audio::packs::set_sound_maxcount(cx.common.settings.sound_maxcount);
         a.set_listener(omsi_audio::Listener {
             position: cam.position.as_vec3(),
             forward: cam.forward(),

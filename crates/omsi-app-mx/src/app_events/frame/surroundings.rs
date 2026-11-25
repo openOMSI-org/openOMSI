@@ -466,7 +466,7 @@ pub(super) fn scripted(cx: ScriptedCx, dt: f32, daylight: omsi_sim::Daylight) {
             let inputs = w.scenery_prepare(
                 &mut *cx.world.scenery,
                 cam.position,
-                daylight.brightness,
+                daylight.daylight_sum,
                 &mut times,
             );
             cx.traffic.pipeline.owe_scenery(move |s, phase_of| {
@@ -491,7 +491,7 @@ pub(super) fn scripted(cx: ScriptedCx, dt: f32, daylight: omsi_sim::Daylight) {
                 scene,
                 dt,
                 cam.position,
-                daylight.brightness,
+                daylight.daylight_sum,
                 &phase,
                 cx.sound.audio.as_ref(),
                 cx.view.cam.heard_inside,

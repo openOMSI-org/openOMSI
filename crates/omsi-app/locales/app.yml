@@ -561,6 +561,10 @@ _version: 2
   en: "The driver sells the ticket"
 "Just walk in":
   en: "Just walk in"
+"Rear door boarding":
+  en: "Rear door boarding"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)":
+  en: "Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)"
 "Passengers pay the exact fare":
   en: "Passengers pay the exact fare"
 "Passengers react to bad driving":
@@ -7789,8 +7793,8 @@ _version: 2
   en: "Its log is in the openOMSI data folder (launcher.log); Microsoft Edge WebView2 {version} is installed."
 "The launcher's window needs Microsoft Edge WebView2 (part of Windows 10 and 11; for older systems: https://developer.microsoft.com/microsoft-edge/webview2/).":
   en: "The launcher's window needs Microsoft Edge WebView2 (part of Windows 10 and 11; for older systems: https://developer.microsoft.com/microsoft-edge/webview2/)."
-"SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/USER_GUIDE.md.":
-  en: "SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/USER_GUIDE.md."
+"SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/TROUBLESHOOTING.md.":
+  en: "SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/TROUBLESHOOTING.md."
 "this code was made by a game with LAN protocol {}, this one speaks {PROTOCOL} - both players need the same version":
   en: "this code was made by a game with LAN protocol {}, this one speaks {PROTOCOL} - both players need the same version"
 "the number {t} is not a port (1 to 65535)":
@@ -8429,6 +8433,12 @@ _version: 2
   en: "Projects made for openOMSI by others. Their own websites say what they do and how to get them."
 "No add-on yet":
   en: "No add-on yet"
+"The add-on list could not be loaded. Check the internet connection and try again.":
+  en: "The add-on list could not be loaded. Check the internet connection and try again."
+"No longer in the catalog":
+  en: "No longer in the catalog"
+"This plugin was taken out of the catalog. It stays in your game until you remove it.":
+  en: "This plugin was taken out of the catalog. It stays in your game until you remove it."
 "by {author}":
   en: "by {author}"
 "Open website":
@@ -8767,6 +8777,61 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
+"Cruise control: {} km/h":
+  en: "Cruise control: {} km/h"
+"Cruise control off":
+  en: "Cruise control off"
+"Cruise control works above {} km/h":
+  en: "Cruise control works above {} km/h"
+"Lighting":
+  en: "Lighting"
+"Weather & effects":
+  en: "Weather & effects"
+"Mouse":
+  en: "Mouse"
+"Information on screen":
+  en: "Information on screen"
+"Support & reset":
+  en: "Support & reset"
+"Favourite settings":
+  en: "Favourite settings"
+"Game preferences":
+  en: "Game preferences"
+"Search all settings":
+  en: "Search all settings"
+"{n} options":
+  en: "{n} options"
+"Search results":
+  en: "Search results"
+"Remove from favourites: {name}":
+  en: "Remove from favourites: {name}"
+"Add to favourites: {name}":
+  en: "Add to favourites: {name}"
+"Remove from favourite settings":
+  en: "Remove from favourite settings"
+"Add to favourite settings":
+  en: "Add to favourite settings"
+"No favourite settings yet":
+  en: "No favourite settings yet"
+"Try a setting name or its English key.":
+  en: "Try a setting name or its English key."
+"Use the star beside a setting to keep it here.":
+  en: "Use the star beside a setting to keep it here."
+"About this setting":
+  en: "About this setting"
+"Save current graphics settings":
+  en: "Save current graphics settings"
+"Profiles only store graphics settings; window size and fullscreen are kept.":
+  en: "Profiles only store graphics settings; window size and fullscreen are kept."
+"Setting help":
+  en: "Setting help"
+"View help for {name}":
+  en: "View help for {name}"
+"Select Help beside a setting to see what it does.":
+  en: "Select Help beside a setting to see what it does."
+"No additional description is available for this setting.":
+  en: "No additional description is available for this setting."
+
 "Yes":
   en: "Yes"
 "Take control of this bus?":
@@ -8921,3 +8986,23 @@ _version: 2
   en: "Tight turns · 2.0×"
 "Axle {n}":
   en: "Axle {n}"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.":
+  en: "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.":
+  en: "Automatic announcements are off."
+
+"Draw other players' buses in less detail when far away":
+  en: "Draw other players' buses in less detail when far away"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps":
+  en: "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps"
+
+"sent to the plugins":
+  en: "sent to the plugins"
+"no plugin is listening for commands":
+  en: "no plugin is listening for commands"
+"plugin command queue is full":
+  en: "plugin command queue is full"

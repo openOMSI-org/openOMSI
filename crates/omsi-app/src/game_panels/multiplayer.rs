@@ -1,9 +1,9 @@
 //! Multiplayer controls use the same fields and cards as the other in-game forms.
 
 use super::{button, card, divider, el, grow_row, input, note, row, text, theme_color};
-use omsi_ui::theme::Palette;
 use omsi_plugin::api::Value;
 use omsi_plugin::ui::{Anchor, Element, Kind, Panel, RowAlign, Weight};
+use omsi_ui::theme::Palette;
 
 #[derive(Default)]
 pub(crate) struct Multiplayer {
@@ -49,7 +49,11 @@ impl Multiplayer {
         let tr = omsi_ui::tr;
         let mut heading = text(&tr("Room settings"), 21.0, Weight::Bold);
         heading.color = Some(theme_color(pal.text));
-        let description = if role.is_some() { "Manage your current room connection." } else { "Manage your current room or join a multiplayer game." };
+        let description = if role.is_some() {
+            "Manage your current room connection."
+        } else {
+            "Manage your current room or join a multiplayer game."
+        };
         let mut children = vec![heading, note(&tr(description), pal), divider()];
         if role == Some(omsi_net::Role::Host) && (busy || map.is_some()) {
             children.push(note(
@@ -83,23 +87,52 @@ impl Multiplayer {
             if role.is_none() {
                 children.push(section_heading(&tr("Join room"), pal));
                 #[cfg_attr(any(target_os = "android", target_os = "ios"), allow(unused_mut))]
-                let mut entry = vec![input("code", &self.target, &tr("Connection code or server address"), 2048)];
+                let mut entry = vec![input(
+                    "code",
+                    &self.target,
+                    &tr("Connection code or server address"),
+                    2048,
+                )];
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-                entry.push(button("paste", &tr("Paste connection code"), Some("content_paste")));
+                entry.push(button(
+                    "paste",
+                    &tr("Paste connection code"),
+                    Some("content_paste"),
+                ));
                 children.push(row(entry, RowAlign::Start));
-                children.push(row(vec![button("join", &tr("Join room"), Some("login"))], RowAlign::End));
+                children.push(row(
+                    vec![button("join", &tr("Join room"), Some("login"))],
+                    RowAlign::End,
+                ));
             } else {
                 children.push(section_heading(&tr("Current room"), pal));
                 if role == Some(omsi_net::Role::Host) {
-                    children.push(note(&tr("Leaving closes your hosted room for all other players."), pal));
+                    children.push(note(
+                        &tr("Leaving closes your hosted room for all other players."),
+                        pal,
+                    ));
                 }
                 let mut actions = Vec::new();
                 if role == Some(omsi_net::Role::Client) {
-                    actions.push(button("reconnect", &tr("Reconnect to current room"), Some("refresh")));
+                    actions.push(button(
+                        "reconnect",
+                        &tr("Reconnect to current room"),
+                        Some("refresh"),
+                    ));
                 }
-                actions.push(button("offline", &tr("Leave room and play offline"), Some("logout")));
-                let mut actions = if role == Some(omsi_net::Role::Client) { grow_row(actions) } else { row(actions, RowAlign::End) };
-                if let Kind::Row { gap, .. } = &mut actions.kind { *gap = 16.0; }
+                actions.push(button(
+                    "offline",
+                    &tr("Leave room and play offline"),
+                    Some("logout"),
+                ));
+                let mut actions = if role == Some(omsi_net::Role::Client) {
+                    grow_row(actions)
+                } else {
+                    row(actions, RowAlign::End)
+                };
+                if let Kind::Row { gap, .. } = &mut actions.kind {
+                    *gap = 16.0;
+                }
                 children.push(actions);
             }
             if let Some(said) = &self.said {
@@ -108,10 +141,17 @@ impl Multiplayer {
         }
         children.push(el(None, Kind::Space { size: 6.0 }));
         children.push(divider());
-        let hint_text = if role.is_some() { tr("Closing this window keeps your current room connected.") } else { "".into() };
+        let hint_text = if role.is_some() {
+            tr("Closing this window keeps your current room connected.")
+        } else {
+            "".into()
+        };
         let mut hint = note(&hint_text, pal);
         hint.grow = true;
-        children.push(row(vec![hint, button("close", &tr("Close"), Some("close"))], RowAlign::Between));
+        children.push(row(
+            vec![hint, button("close", &tr("Close"), Some("close"))],
+            RowAlign::Between,
+        ));
         style_buttons(&mut children, pal);
         let mut panel = card(Anchor::Center, 0.0, 0.0, 620.0, 255, pal, children);
         panel.background = Some(theme_color(pal.panel));
@@ -123,7 +163,10 @@ impl Multiplayer {
 }
 
 fn section_heading(label: &str, pal: Palette) -> Element {
-    Element { color: Some(theme_color(pal.text_soft)), ..text(label, 14.0, Weight::Bold) }
+    Element {
+        color: Some(theme_color(pal.text_soft)),
+        ..text(label, 14.0, Weight::Bold)
+    }
 }
 
 fn style_buttons(children: &mut [Element], pal: Palette) {
@@ -131,7 +174,9 @@ fn style_buttons(children: &mut [Element], pal: Palette) {
         if let Kind::Row { children, .. } = &mut child.kind {
             style_buttons(children, pal);
         } else if matches!(child.kind, Kind::Button { .. }) {
-            if child.id.is_none() { continue; }
+            if child.id.is_none() {
+                continue;
+            }
             child.color = Some(theme_color(match child.id.as_deref() {
                 Some("offline") => pal.danger,
                 Some("join" | "confirm" | "reconnect") => pal.accent,
@@ -142,7 +187,8 @@ fn style_buttons(children: &mut [Element], pal: Palette) {
 }
 
 pub(super) fn change(app: &mut crate::App, id: &str, value: &Value) {
-    if id == "code" && app.net.lan.is_none() && !app.net.room.busy() && app.net.room.ready.is_none() {
+    if id == "code" && app.net.lan.is_none() && !app.net.room.busy() && app.net.room.ready.is_none()
+    {
         if let (Some(form), Value::Str(value)) = (app.menus.game_panels.multiplayer.as_mut(), value)
         {
             form.target = value.clone();
@@ -254,16 +300,32 @@ mod tests {
     fn connected_room_hides_join_controls_and_restores_them_after_leaving() {
         let fonts = omsi_ui::Fonts::new();
         for role in [omsi_net::Role::Host, omsi_net::Role::Client] {
-            let panel = Multiplayer::default().panel_of(false, None, Some(role), None, Palette::LIGHT);
+            let panel =
+                Multiplayer::default().panel_of(false, None, Some(role), None, Palette::LIGHT);
             let laid = crate::plugin_ui::layout_typing(&panel, &fonts, 1.0, None);
-            let shown: Vec<_> = laid.items.iter().filter_map(|item| match item {
-                crate::plugin_ui::Item::Text { text, .. } => Some(text.as_str()), _ => None,
-            }).collect();
-            for label in ["Join room", "Paste connection code", "Connection code or server address"] {
+            let shown: Vec<_> = laid
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    crate::plugin_ui::Item::Text { text, .. } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect();
+            for label in [
+                "Join room",
+                "Paste connection code",
+                "Connection code or server address",
+            ] {
                 assert!(!shown.contains(&omsi_ui::tr(label).as_ref()), "{label}");
             }
-            let ids: Vec<_> = laid.hits.iter().filter_map(|hit| hit.element.as_deref()).collect();
-            for id in ["paste", "code", "join"] { assert!(!ids.contains(&id), "{id}"); }
+            let ids: Vec<_> = laid
+                .hits
+                .iter()
+                .filter_map(|hit| hit.element.as_deref())
+                .collect();
+            for id in ["paste", "code", "join"] {
+                assert!(!ids.contains(&id), "{id}");
+            }
             assert!(ids.contains(&"offline"));
             assert!(ids.contains(&"close"));
             assert_eq!(ids.contains(&"reconnect"), role == omsi_net::Role::Client);
@@ -271,24 +333,92 @@ mod tests {
         let panel = Multiplayer::default().panel_of(false, None, None, None, Palette::LIGHT);
         let laid = crate::plugin_ui::layout_typing(&panel, &fonts, 1.0, None);
         for id in ["paste", "code", "join"] {
-            assert!(laid.hits.iter().any(|hit| hit.element.as_deref() == Some(id)), "{id}");
+            assert!(
+                laid.hits
+                    .iter()
+                    .any(|hit| hit.element.as_deref() == Some(id)),
+                "{id}"
+            );
         }
     }
 
     #[test]
     fn connected_room_rejects_stale_input_and_join_events() {
         let mut app = app();
-        app.net.lan = Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
+        app.net.lan =
+            Some(omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap());
         app.open_multiplayer();
         app.menus.game_panels.multiplayer.as_mut().unwrap().target = "original".into();
         change(&mut app, "code", &Value::Str("replacement".into()));
-        for id in ["paste", "join", "code"] { click(&mut app, id); }
-        assert_eq!(app.menus.game_panels.multiplayer.as_ref().unwrap().target, "original");
-        assert!(app.menus.game_panels.multiplayer.as_ref().unwrap().said.is_none());
+        for id in ["paste", "join", "code"] {
+            click(&mut app, id);
+        }
+        assert_eq!(
+            app.menus.game_panels.multiplayer.as_ref().unwrap().target,
+            "original"
+        );
+        assert!(
+            app.menus
+                .game_panels
+                .multiplayer
+                .as_ref()
+                .unwrap()
+                .said
+                .is_none()
+        );
         assert!(!app.net.room.busy());
         assert!(!app.net.room.accept);
         click(&mut app, "offline");
         assert!(app.net.room.leave);
+    }
+
+    /// #3769: on a phone the join code field brings up the on-screen keyboard while it takes
+    /// the keys, and the keyboard goes when typing ends.
+    #[test]
+    fn the_code_field_asks_for_the_phone_keyboard_while_typed_into() {
+        let hud = [0.0, 0.0, 1280.0, 720.0];
+        let mut app = app();
+        app.open_multiplayer();
+        app.frame_game_panels(0.0, hud, false);
+        crate::platform::PHONE_KEYBOARD_ON.with(|t| t.set(false));
+        app.menus
+            .game_panels
+            .ui
+            .click(super::super::GAME, "multiplayer", Some("code"));
+        assert!(app.menus.game_panels.ui.typing().is_some());
+        app.frame_game_panels(0.0, hud, false);
+        assert!(crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+        app.menus.game_panels.ui.stop_typing(false);
+        app.frame_game_panels(0.0, hud, false);
+        assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+        // the LAN chat line as well
+        app.net.remotes.chat.open();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+        app.net.remotes.chat.blur();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(!crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get()));
+    }
+
+    /// #3769: the keyboard is shared with the lists' search line. The LAN chat closing while
+    /// that search is still typed into leaves it up; the search ending puts it away.
+    #[test]
+    fn closing_the_chat_keeps_the_keyboard_for_a_search_still_typed_into() {
+        let on = || crate::platform::PHONE_KEYBOARD_ON.with(|t| t.get());
+        let hud = [0.0, 0.0, 1280.0, 720.0];
+        let mut app = app();
+        app.open_multiplayer();
+        app.net.remotes.chat.open();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(on());
+        app.menus.menu_edit = Some(String::new());
+        app.menus.menu_edit_search = true;
+        app.net.remotes.chat.blur();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(on());
+        app.stop_search_typing();
+        app.frame_game_panels(0.0, hud, false);
+        assert!(!on());
     }
 
     #[test]

@@ -389,3 +389,82 @@ fn a_cut_tile_still_asks_for_its_painted_ground_textures() {
     assert!(names.iter().any(|n| n == "paint.png"), "{names:?}");
     assert!(names.iter().any(|n| n == "wall.png"), "{names:?}");
 }
+
+#[test]
+fn ground_dirs_searches_root_then_map_dir() {
+    let fixture = Fixture::new();
+    let map_dir = fixture.0.join("map");
+    std::fs::create_dir_all(&map_dir).unwrap();
+    std::fs::write(map_dir.join("global.cfg"), "[name]\nGround dirs\n").unwrap();
+    let root = fixture.0.join("fake_root");
+    std::fs::create_dir_all(&root).unwrap();
+    let name = "shared_ground.png";
+    for dir in [&root, &map_dir] {
+        image::save_buffer(
+            dir.join(name),
+            &[0, 255, 0, 255],
+            1,
+            1,
+            image::ColorType::Rgba8,
+        )
+        .unwrap();
+    }
+    let world = World::open(&root, &map_dir.join("global.cfg"), 20261001).unwrap();
+    let dirs = world.ground_dirs();
+    assert_eq!(dirs.len(), 2);
+    assert_eq!(dirs[0], world.root);
+    assert_eq!(dirs[1], world.map_dir);
+    let dirs: Vec<&Path> = dirs.iter().map(|dir| dir.as_path()).collect();
+    let found = omsi_texture::find_texture(name, &dirs).unwrap();
+    assert_eq!(found, root.join(name));
+}
+
+#[test]
+fn ground_texture_under_map_folder_only_is_wanted_and_found() {
+    let fixture = Fixture::new();
+    fixture.write("global.cfg", "[name]\nMap only ground texture\n");
+    let map_tex = "local_grass.png";
+    image::save_buffer(
+        fixture.0.join(map_tex),
+        &[34, 139, 34, 255],
+        1,
+        1,
+        image::ColorType::Rgba8,
+    )
+    .unwrap();
+    let root = fixture.0.join("fake_root");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut world = World::open(&root, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    world.global.ground_textures = vec![omsi_map::global::GroundTex {
+        texture: map_tex.into(),
+        ..Default::default()
+    }];
+    let prepared = Prepared {
+        tx: 0,
+        ty: 0,
+        terrain: None,
+        hole_walls: MeshData::default(),
+        paint_masks: Vec::new(),
+        paint: vec![(0, TextureData::from_image(Image::solid([255; 4])), 1.0)],
+        wall_paint: Vec::new(),
+        water: None,
+        ground_splines: batch_ground_splines(Vec::new()),
+        splines: Vec::new(),
+        objects: Vec::new(),
+        trees: Vec::new(),
+        origin: DVec3::ZERO,
+        light_map: None,
+        cut: None,
+        images: Arc::new(HashMap::new()),
+    };
+    let names: Vec<String> = world
+        .wanted_textures(&prepared)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+    assert!(
+        names.contains(&map_tex.to_string()),
+        "texture in map folder must be wanted: {names:?}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

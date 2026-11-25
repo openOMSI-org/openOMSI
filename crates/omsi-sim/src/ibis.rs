@@ -134,7 +134,7 @@ fn each_op(p: &Program, block: BlockId, f: &mut dyn FnMut(&[Op], usize)) {
             continue;
         };
         for (i, op) in blk.ops.iter().enumerate() {
-            if let Op::Macro(m) = op {
+            if let Op::Macro(m) | Op::FallThrough(m) = op {
                 todo.push(*m);
             }
             f(&blk.ops, i);

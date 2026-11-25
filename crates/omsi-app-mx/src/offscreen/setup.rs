@@ -129,6 +129,8 @@ impl<'a> Offscreen<'a> {
         }
         // the workshop's waiting time moves the clock on, so the sky has to follow it
         let mut service_seconds = 0.0f64;
+        // (the run's weather for Omsi.exe's daylight from the first step on)
+        omsi_sim::daylight::set_sky_weather(omsi_weather::conditions::daylight_weather(&weather));
         let daylight0 = omsi_sim::Daylight::compute(&start_clock(args), envir.as_ref());
         if let Some(p) = player.as_mut() {
             p.vehicle.set_var(
@@ -221,7 +223,7 @@ impl<'a> Offscreen<'a> {
                     .ok()
                     .as_ref(),
             );
-            steps::set_ai_daylight(t, daylight, steps::gloomy_weather(Some(&weather)));
+            steps::set_ai_daylight(t, daylight);
             t.populate(&world, center);
             crate::view_sync::apply_traffic(
                 t,

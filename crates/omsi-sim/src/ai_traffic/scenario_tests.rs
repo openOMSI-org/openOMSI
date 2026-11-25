@@ -22,7 +22,7 @@ impl Fixture {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("car.bus"), "[model]\nmodel.cfg\n").unwrap();
+        std::fs::write(dir.join("car.bus"), "[model]\nmodel.cfg\n[mass]\n7\n").unwrap();
         std::fs::write(dir.join("model.cfg"), "").unwrap();
         let ty = Arc::new(VehicleType::load_ai(&dir, &dir.join("car.bus")).unwrap());
         Fixture { dir, ty }

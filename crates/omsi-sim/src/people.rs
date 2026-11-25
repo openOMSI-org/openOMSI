@@ -103,6 +103,8 @@ pub mod ticket_hook;
 #[rustfmt::skip]
 pub mod bodies;
 #[rustfmt::skip]
+pub mod entry_doors;
+#[rustfmt::skip]
 pub mod pose_facts;
 #[rustfmt::skip]
 pub mod money;
@@ -128,6 +130,11 @@ mod desk_ticket_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod destination_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod entry_doors_tests;
+#[cfg(test)]
+mod button_door_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod no_ticket_tests;

@@ -478,7 +478,7 @@ fn stored_by(p: &Program, mut pending: Vec<usize>) -> Vec<bool> {
                 if let Some(flag) = stored.get_mut(*var as usize) {
                     *flag = true;
                 }
-            } else if let Op::Macro(m) = op {
+            } else if let Op::Macro(m) | Op::FallThrough(m) = op {
                 pending.push(*m as usize);
             }
         }
@@ -527,10 +527,9 @@ impl omsi_script::Host for SilentHost<'_> {
         self.1.triggers.push(name.to_string());
     }
     fn sound_trigger_file(&mut self, name: &str, file: &str) {
-        // (as the leading vehicle's host: `" " (T.F.x)` plays nothing)
-        if !file.trim().is_empty() {
-            self.1.files.push((name.to_string(), file.to_string()));
-        }
+        // (as the leading vehicle's host: all of them, `" "` frees the entry, `""` plays its
+        // file again - 0x74f2e8)
+        self.1.files.push((name.to_string(), file.to_string()));
     }
     fn message(&mut self, _text: &str) {}
 }
