@@ -52,6 +52,8 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Far sounds no longer stutter**: with more sounds around than `[sound_maxcount]` allows,
+  distant cars started their loops over several times a second, a mush of repeats.
 - **mX Graphics on OpenGL (ANGLE on macOS)**: blending works again - the interface's text and
   icons drew as transparent boxes, smoke and LED layers were wrong - and textures with mip maps
   made on the GPU are no longer black at a distance.
