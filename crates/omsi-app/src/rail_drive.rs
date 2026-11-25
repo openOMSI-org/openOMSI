@@ -693,6 +693,15 @@ impl RailDrive {
         _facing: bool,
     ) -> Option<usize> {
         let here = &net.lanes[self.lane];
+        if std::env::var_os("OMSI_SWITCH_DEBUG").is_some() {
+            let key = |i: usize| net.lanes.get(i).and_then(|l| l.key).map(|k| (k.id, k.path));
+            eprintln!(
+                "pick: from lane {} {:?} forward={forward} next={:?}",
+                self.lane,
+                key(self.lane),
+                candidates.iter().map(|&i| (i, key(i))).collect::<Vec<_>>()
+            );
+        }
         let h0 = if forward {
             here.at(here.length()).1
         } else {

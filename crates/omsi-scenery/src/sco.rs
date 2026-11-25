@@ -540,6 +540,58 @@ impl SceneryObject {
         o.model.tidy_visible();
         o
     }
+/// A path without [switchdir] that starts where a path with one ends takes that path's
+/// value, so the continuation of a branch is active whenever the branch is.
+    pub fn inherit_switch_dirs(&self) -> Vec<Option<i32>> {
+        let paths = &self.paths;
+        let mut out = self.path_switch_dir.clone();
+        for _ in 0..paths.len() {
+            let mut changed = false;
+            for i in 0..paths.len() {
+                if out[i].is_some() {
+                    continue;
+                }
+                for j in 0..paths.len() {
+                    if i == j || out[j].is_none() {
+                        continue;
+                    }
+                    let (e, h) = path_end(&paths[j]);
+                    let close = (e[0] - paths[i].start[0]).hypot(e[1] - paths[i].start[1]) < 0.05
+                        && (paths[i].start[2] - paths[j].start[2]).abs() < 0.05
+                        && (h - paths[i].end[0].to_radians()).abs() < 0.05;
+                    if close {
+                        out[i] = out[j];
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        out
+    }
+}
+
+fn path_end(p: &PathDef) -> ([f32; 2], f32) {
+    let th0 = p.end[0].to_radians();
+    let (r, len) = (p.end[1], p.end[2]);
+    if r == 0.0 {
+        (
+            [p.start[0] + len * th0.sin(), p.start[1] + len * th0.cos()],
+            th0,
+        )
+    } else {
+        let th1 = th0 + len / r;
+        (
+            [
+                p.start[0] + r * (th0.cos() - th1.cos()),
+                p.start[1] + r * (th1.sin() - th0.sin()),
+            ],
+            th1,
+        )
+    }
 }
 
 /// The `[new_attachment]` sub-commands (`attach_trans x y z`, `attach_rot_x a` …). The

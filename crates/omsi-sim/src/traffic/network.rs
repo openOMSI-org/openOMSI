@@ -675,6 +675,13 @@ impl Network {
                     }
                 }
             }
+            if kind == LaneKind::Rail && found.len() > 1 {
+                // Rails meet end to start (a fork's branches all start at one point): a
+                // start clearly farther off than the nearest one is another track's.
+                let gap = |j: usize| (self.lanes[j].start() - e).truncate().length();
+                let nearest = found.iter().map(|&j| gap(j)).fold(f64::INFINITY, f64::min);
+                found.retain(|&j| gap(j) <= nearest + 0.3);
+            }
             links += found.len();
             self.lanes[i].next = found;
         }
