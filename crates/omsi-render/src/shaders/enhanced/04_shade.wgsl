@@ -953,6 +953,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // `add_material_extra`).
         emit = emit + matl_glow_light(buv, tex.rgb);
     }
+    if (material.emission.w > 0.5) {
+        // [matl_emissive] (see `emission_light`); the classic picture does not draw it
+        emit = emit + emission_light(buv, tex.rgb, in.params2.x, pre);
+    }
     rgb = rgb + emit;
     if (enh.debug.x > 0.5) {
         // OMSI_DEBUG_ENHANCED: one term alone, as it lands on the screen

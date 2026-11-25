@@ -7,6 +7,8 @@
 use omsi_cfg::{CfgFile, CfgReader, Entry};
 use std::path::{Path, PathBuf};
 
+mod emission;
+pub use emission::{Emission, blackbody_rgb, filament_kelvin, slot_value};
 mod extensions;
 pub use extensions::SpotlightCookie;
 #[cfg(test)]
@@ -139,6 +141,9 @@ pub struct MaterialDef {
     pub normal_strength: Option<f32>,
     /// `[matl_occlusion_strength] <0..1>`: how much of an occlusion map counts (0 none).
     pub occlusion_strength: Option<f32>,
+    /// `[matl_emissive]` and its companions (openOMSI, see [`Emission`]): the slot gives off
+    /// light of its own. The classic picture ignores them.
+    pub emission: Option<Emission>,
 }
 
 impl MaterialDef {
@@ -177,7 +182,8 @@ impl MaterialDef {
             metallic,
             roughness,
             normal_strength,
-            occlusion_strength
+            occlusion_strength,
+            emission
         );
         self.envmap_realtime |= base.envmap_realtime;
         if self.tex_address == TexAddress::Wrap {
@@ -1420,6 +1426,7 @@ impl Model {
                     m.glow = Some((t, v));
                 }
             }
+            k if k.starts_with("matl_emissive") && self.read_emission(k, r) => {}
             "led_glow_effect" => {
                 // (a value out of 0..1 is taken to the nearer end; a line that is no number
                 // reads as 0, as any number of the format does)

@@ -56,6 +56,7 @@ Each keyword is described in a section below or on its own page.
 | `[matl_glow]` | A material that is its own light source | [Glowing materials](#glowing-materials) |
 | `[light_emitter_interior]` | A light-mapped mesh lights the saloon | [Light-emitting meshes](#light-emitting-meshes) |
 | `[led_glow_effect]` | How strongly an LED panel's dots glow | [Glowing materials](#glowing-materials) |
+| `[matl_emissive]`, `[matl_emissive_nits]`, `[matl_emissive_kelvin]`, `[matl_emissive_texture]`, `[matl_emissive_fade]` | A material's own light: colour, HDR strength or cd/m², temperature, script control and fading | [Emissive materials](PBR.md#emissive-materials) |
 | `[matl_basecolor]`, `[matl_metallic]`, `[matl_roughness]`, `[matl_normal_strength]`, `[matl_occlusion_strength]` | PBR values of a material without texture maps | [PBR materials](PBR.md#factors-without-textures) |
 | `[htmltexture]`, `[useHtmlTexture]` | A display drawn from an HTML page | [HTML textures](HTMLTEXTURE.md) |
 | `[navigatortexture]`, `[useNavigatorTexture]` | A GPS screen showing the navigator | [Navigator textures](NAVIGATORTEXTURE.md) |

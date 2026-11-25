@@ -30,6 +30,7 @@ mod car_state;
 mod contact;
 mod coupling;
 mod drive;
+mod emission;
 mod instance;
 mod light_emitters;
 mod panto;

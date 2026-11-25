@@ -607,3 +607,56 @@ fn pbr_factors_of_a_slot() {
     assert!((c[1] - 0.214).abs() < 0.001, "{c:?}");
     assert_eq!(c[2], 0.0);
 }
+
+/// `[matl_emissive]` (openOMSI) reaches the renderer's material: none without it; the colour
+/// linear, the temperature's colour where one is given, the luminance in radiance units, the
+/// texture in the light map's slot unless that holds a light map, driven only without one.
+#[test]
+fn emission_of_a_slot() {
+    assert_eq!(
+        material_extra(&[&MaterialDef::default()], None, None, [0.0; 4]).emission,
+        None
+    );
+    let lamp = MaterialDef {
+        emission: Some(omsi_model::Emission {
+            color: [1.0, 0.5, 0.0],
+            strength: 8.0,
+            variable: Some("lights_main".into()),
+            texture: Some("lamp_e.png".into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let e = material_extra(&[&lamp], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert_eq!(e.scale, 8.0);
+    assert!(!e.physical && e.textured && e.dimmed && !e.tinted);
+    assert!((e.color[1] - 0.214).abs() < 0.001);
+    assert_eq!(glow_mask(&[&lamp]), Some("lamp_e.png"));
+    let bulb = MaterialDef {
+        emission: Some(omsi_model::Emission {
+            kelvin: Some(3200.0),
+            filament: true,
+            nits: Some(2.0e7),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let e = material_extra(&[&bulb], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert!(e.physical && e.tinted && e.dimmed && !e.textured);
+    assert_eq!(e.scale, 2000.0);
+    assert!(e.color[0] > e.color[2]);
+    let lit = MaterialDef {
+        lightmaps: vec![("l.bmp".into(), "lights".into())],
+        lightmap: Some(("l.bmp".into(), "lights".into())),
+        ..lamp.clone()
+    };
+    let e = material_extra(&[&lit], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert!(!e.textured && !e.dimmed);
+    assert_eq!(glow_mask(&[&lit]), None);
+}
