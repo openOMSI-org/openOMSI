@@ -319,6 +319,16 @@ impl ScheduleSim {
         let added: Vec<(String, String)> = tours.difference(&self.lan_tours).cloned().collect();
         let removed: Vec<(String, String)> = self.lan_tours.difference(&tours).cloned().collect();
         self.lan_tours = tours;
+        // (a tour given up and taken again starts over)
+        let mut kept = std::mem::take(&mut self.lan_progress);
+        kept.0.retain(|_, (departure, _)| {
+            self.departures.get(*departure).is_some_and(|d| {
+                self.lan_tours
+                    .iter()
+                    .any(|t| d.line.eq_ignore_ascii_case(&t.0) && d.tour.eq_ignore_ascii_case(&t.1))
+            })
+        });
+        self.lan_progress = kept;
         let of = |d: &Departure, t: &(String, String)| {
             d.line.eq_ignore_ascii_case(&t.0) && d.tour.eq_ignore_ascii_case(&t.1)
         };

@@ -494,3 +494,35 @@ impl Renderer {
         pass.dispatch_workgroups(half.0.div_ceil(8), half.1.div_ceil(8), 1);
     }
 }
+/// The lamps' grid for the rays: only where the lamps are a buffer the rays can read.
+pub(super) fn light_grid(scene: &Scene, grid: [f32; 4]) -> [f32; 4] {
+    if matches!(scene.light_buf, Some(crate::gpu::GpuArray::Buffer(_)))
+        && matches!(scene.grid_buf, Some(crate::gpu::GpuArray::Buffer(_)))
+    {
+        grid
+    } else {
+        [0.0; 4]
+    }
+}
+
+/// The global illumination's parameters of frame `frame`: what of the last one's it may
+/// go on from (`history`: the picture's history holds at all).
+pub(super) fn frame_params(rt: &RayTracer, history: bool, frame: u64) -> [f32; 4] {
+    gi_params(
+        rt.gi_on,
+        history && rt.gi.as_ref().is_some_and(|g| g.last + 1 == frame),
+        history && rt.gi.as_ref().is_some_and(|g| g.captured + 1 == frame),
+    )
+}
+
+impl Renderer {
+    /// Experimental: the traced global illumination's textures, made when it is first asked
+    /// for; true when they were made now (the camera's binds name its result).
+    pub(crate) fn ensure_rt_gi(&mut self, width: u32, height: u32) -> bool {
+        self.options.rt_gi
+            && self
+                .rt
+                .as_mut()
+                .is_some_and(|rt| rt.ensure_gi(&self.device, width, height))
+    }
+}

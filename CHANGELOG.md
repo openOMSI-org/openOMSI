@@ -106,6 +106,14 @@ What Omsi.exe does, read from the game itself, where openOMSI did something of i
 
 ### Fixes
 
+- **Online play: the host knows what the others have served**: a stop another player's bus
+  has stood at and left no longer fills again for that player's trip, and the timetable's buses
+  near the other players are read ahead as the host's own are.
+- **Online play: emissive materials, rail points and taking over a bus**: the variables of
+  `[matl_emissive]` reach the other games, the host takes a thrown point only from a player
+  whose vehicle is near it, and a host can no longer take over an AI bus its session does not
+  allow (it was removed at once).
+- **Road dirt**: the vehicles you placed and left keep their dirt.
 - **mX Graphics have cruise control, named saves, taking over an AI bus and
   `omsi.bus.track()` too**: they came only to the standard graphics
   ([#4043](https://github.com/openOMSI-org/openOMSI/pull/4043), [#4045](https://github.com/openOMSI-org/openOMSI/pull/4045), [#4047](https://github.com/openOMSI-org/openOMSI/pull/4047), [#4051](https://github.com/openOMSI-org/openOMSI/pull/4051)).

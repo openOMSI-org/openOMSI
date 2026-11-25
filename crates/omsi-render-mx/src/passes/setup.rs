@@ -336,15 +336,7 @@ impl Renderer {
             // the camera bind group must point at the new lighting texture
             scene.camera_heaps = None;
         }
-        // (experimental: the traced global illumination's textures, made when it is first
-        // asked for; the main pass reads its result through the heap)
-        if rt_frame
-            && self.options.rt_gi
-            && self
-                .rt
-                .as_mut()
-                .is_some_and(|rt| rt.ensure_gi(&self.device, width, height))
-        {
+        if rt_frame && self.ensure_rt_gi(width, height) {
             scene.camera_heaps = None;
         }
         if masked_frame {

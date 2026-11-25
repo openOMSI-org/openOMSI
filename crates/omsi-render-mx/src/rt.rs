@@ -628,12 +628,11 @@ impl Renderer {
         dt: f32,
         grid: [f32; 4],
     ) -> bool {
-        let gi_wanted = self.options.rt_gi;
         let Some(rt) = self.rt.as_mut() else {
             return false;
         };
         rt.frame += 1;
-        rt.gi_on = gi_wanted && rt.gi.is_some();
+        rt.gi_on = self.options.rt_gi && rt.gi.is_some();
         let frame = rt.frame;
         let ro = scene.render_origin;
         let cam = (camera.position - ro).as_vec3();
@@ -991,19 +990,8 @@ impl Renderer {
             vehicle_centre,
             sky: [0.0; 4],
             sun_light: [0.0; 4],
-            // (the lamps' grid only where the lamps are a buffer the rays can read)
-            light_grid: if matches!(scene.light_buf, Some(crate::gpu::GpuArray::Buffer(_)))
-                && matches!(scene.grid_buf, Some(crate::gpu::GpuArray::Buffer(_)))
-            {
-                grid
-            } else {
-                [0.0; 4]
-            },
-            gi: gi::gi_params(
-                rt.gi_on,
-                history && rt.gi.as_ref().is_some_and(|g| g.last + 1 == frame),
-                history && rt.gi.as_ref().is_some_and(|g| g.captured + 1 == frame),
-            ),
+            light_grid: gi::light_grid(scene, grid),
+            gi: gi::frame_params(rt, history, frame),
         };
         self.queue
             .write_buffer(&rt.params, 0, bytemuck::bytes_of(&p))
