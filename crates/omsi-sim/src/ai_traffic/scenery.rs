@@ -653,7 +653,7 @@ impl TrafficSim {
     /// The scenery along car `i`'s way within its reach and beside it by what a body can
     /// swing out, less what the traffic drives through and the parked cars (which it
     /// passes as parked cars).
-    fn scenery_near_way(&self, i: usize, world: &CollisionWorld) -> Vec<Obb> {
+    pub(super) fn scenery_near_way(&self, i: usize, world: &CollisionWorld) -> Vec<Obb> {
         let car = &self.cars[i];
         let st = &car.state;
         let reach = scenery_reach(st);
@@ -703,6 +703,10 @@ impl TrafficSim {
             for o in world.obstacles_near(&chunk) {
                 if out.iter().any(|x| same(x, &o))
                     || self.scenery_through.iter().any(|x| same(x, &o))
+                    // its own stop's object: the bus pulls up with its flank past the
+                    // middle of that box (Omsi.exe 0x7dac5e), where the pole stands - it
+                    // stood there for `PATIENCE` and then drove through it
+                    || car.bus.as_ref().is_some_and(|b| b.at_own_stop(o.id))
                     || parked
                         .iter()
                         .any(|p| (*p - o.center).length() < PARKED_NEAR)

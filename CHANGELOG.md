@@ -52,6 +52,21 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **AI buses no longer stand at their own stop's pole** and then drive through it.
+- **AI traffic amount**: the cars asked for are now the ones driving round you. Cars far
+  off no longer count towards the number, so the road near you is no longer half empty
+  (#1963, #2085); a limit keeps jams from piling up. More places are open for new cars
+  to appear out of sight, pedestrians grow with *People at once*, passenger density goes
+  up to 300 %, and the server and admin traffic limit is 300 instead of 120.
+- **Stuck AI cars are deleted** after 200 seconds standing, watched or not, as in OMSI 2
+  (not at a red light, and no timetable bus).
+- **AI driving**: turn indicators come on later, and not while an earlier turning to the
+  same side lies ahead; small swerves are not indicated; cars move over for a bus at its
+  stop while still rolling; a car behind makes room when you indicate and move into its
+  lane.
+- **Multiplayer traffic**: players on foot or riding get traffic and people around them; a
+  dedicated server builds its traffic where its players are; far cars are updated more
+  often and smoothed longer against jitter; the nearest traffic lights are sent first.
 - **mX Graphics on OpenGL (ANGLE on macOS)**: blending works again - the interface's text and
   icons drew as transparent boxes, smoke and LED layers were wrong - and textures with mip maps
   made on the GPU are no longer black at a distance.

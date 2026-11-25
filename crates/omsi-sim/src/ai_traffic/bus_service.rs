@@ -409,6 +409,12 @@ impl BusService {
         vehicle.set_var("schedule_active", vehicle.host.schedule_active);
     }
 
+    /// Is the map object `id` a stop this bus still has to serve, or the one it holds the
+    /// berth of (until its rear has left it)?
+    pub fn at_own_stop(&self, id: i64) -> bool {
+        self.stops.iter().any(|s| s.id == id) || self.held.is_some_and(|h| h.0.stop == id)
+    }
+
     pub fn new(stops: Vec<Stop>) -> BusService {
         BusService {
             stops: stops.into(),

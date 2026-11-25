@@ -155,7 +155,9 @@ impl PeopleSim {
             dialog: None,
             duty: None,
             stamped: Vec::new(),
-            pedestrians: 14,
+            // 14 on the pavements with the default pool of 200 people; a bigger pool brings
+            // them along (they stayed 14 however high "People at once" was set)
+            pedestrians: (14 * people_limit / 200).max(14),
             max_people: people_limit,
             stroll_timer: 0.0,
             defer_populate: false,

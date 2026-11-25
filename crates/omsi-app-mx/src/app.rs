@@ -1453,6 +1453,16 @@ pub(crate) fn streaming(cx: StreamingCx) {
                 .values()
                 .map(|r| r.vehicle().position),
         );
+        // (and around those on foot, who may be far from any bus)
+        centers.extend(
+            cx.net
+                .lan
+                .iter()
+                .flat_map(|l| l.peers())
+                .filter(|p| p.has_pose && p.pose.walker.is_some())
+                .filter_map(|p| p.pose.whereabouts())
+                .map(|(at, _)| DVec3::from_array(at)),
+        );
     }
     let (Some(streamer), Some(w), Some(r), Some(scene)) = (
         cx.gfx.gfx.streamer.as_mut(),

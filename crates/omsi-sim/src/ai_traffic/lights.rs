@@ -412,30 +412,34 @@ impl TrafficSim {
     }
 
     /// The light programs of the crossings within `radius` of `near` (host): (crossing
-    /// object, position in the cycle, clock held at a stop point).
+    /// object, position in the cycle, clock held at a stop point), the nearest first: a
+    /// datagram carries only so many, and those left out must be the far ones.
     pub fn light_states(&self, near: DVec3, radius: f64) -> Vec<(i64, f64, bool)> {
-        let mut ctls: Vec<usize> = self
-            .net
-            .lanes
+        // each controller in range, with how far off its nearest lane is
+        let mut ctls: HashMap<usize, f64> = HashMap::new();
+        for l in &self.net.lanes {
+            let (Some(light), Some(p)) = (l.traffic_light, l.points.first()) else {
+                continue;
+            };
+            let d = (*p - near).truncate().length();
+            if d < radius {
+                let nearest = ctls.entry(light.0).or_insert(d);
+                *nearest = nearest.min(d);
+            }
+        }
+        let mut states: Vec<(f64, i64, f64, bool)> = self
+            .controller_of_object
             .iter()
-            .filter(|l| {
-                l.traffic_light.is_some()
-                    && l.points
-                        .first()
-                        .map(|p| (*p - near).truncate().length() < radius)
-                        .unwrap_or(false)
-            })
-            .filter_map(|l| l.traffic_light.map(|t| t.0))
-            .collect();
-        ctls.sort_unstable();
-        ctls.dedup();
-        self.controller_of_object
-            .iter()
-            .filter(|(_, c)| ctls.binary_search(c).is_ok())
             .filter_map(|(obj, c)| {
+                let d = *ctls.get(c)?;
                 let ctl = self.lights.get(*c)?;
-                Some((*obj, ctl.time, ctl.held))
+                Some((d, *obj, ctl.time, ctl.held))
             })
+            .collect();
+        states.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        states
+            .into_iter()
+            .map(|(_, obj, time, held)| (obj, time, held))
             .collect()
     }
 

@@ -52,7 +52,7 @@ pub const PERSON_RADIUS: f64 = 260.0;
 pub const LIGHT_RADIUS: f64 = 450.0;
 /// How far in the past a client draws the host's world (ms): two frames of moving things
 /// to glide between, and room for a late datagram.
-const INTERP_DELAY: f64 = 160.0;
+const INTERP_DELAY: f64 = 220.0;
 /// A description asked for is asked again after this long (s).
 const WANT_AGAIN: f32 = 0.8;
 const MOVING_EVERY_S: f32 = nw::MOVING_EVERY;
@@ -67,12 +67,22 @@ struct ContextSent {
     page: usize,
     sent: u32,
     age: f32,
+    /// The trip's hash last sent and the pages it takes: a new trip goes out quickly again,
+    /// every page of it (#3957).
+    version: u64,
+    pages: u32,
 }
 
 impl ContextSent {
-    fn due(&mut self, dt: f32, bus: bool) -> bool {
+    fn due(&mut self, dt: f32, bus: bool, (version, pages): (u64, usize)) -> bool {
+        if version != self.version {
+            self.version = version;
+            self.pages = pages as u32;
+            self.sent = 0;
+        }
         self.age += dt;
-        let every = if self.sent < 4 {
+        let burst = self.pages.max(1).saturating_mul(2).max(4);
+        let every = if self.sent < burst {
             0.15
         } else if bus {
             1.0
@@ -478,11 +488,15 @@ impl LanWorld {
         me: Option<DVec3>,
     ) {
         // where the players are: the world is kept around them too
-        let players: Vec<(u32, DVec3)> = lan
+        let places: Vec<(u32, DVec3, f32)> = lan
             .peers()
-            .filter(|p| p.has_pose && p.pose.has_vehicle())
-            .map(|p| (p.pose.id, DVec3::new(p.pose.x, p.pose.y, p.pose.z)))
+            .filter(|p| p.has_pose)
+            .filter_map(|p| {
+                let (at, heading) = p.pose.whereabouts()?;
+                Some((p.pose.id, DVec3::from_array(at), heading))
+            })
             .collect();
+        let players: Vec<(u32, DVec3)> = places.iter().map(|p| (p.0, p.1)).collect();
         let centers: Vec<DVec3> = players.iter().map(|p| p.1).collect();
         if let Some(t) = traffic.as_deref_mut() {
             t.lan_centers = centers.clone();
@@ -490,12 +504,9 @@ impl LanWorld {
             // (the list is kept: no allocation a frame)
             t.lan_eyes.clear();
             t.lan_eyes.extend(
-                lan.peers()
-                    .filter(|p| p.has_pose && p.pose.has_vehicle())
-                    .map(|p| {
-                        let at = DVec3::new(p.pose.x, p.pose.y, p.pose.z);
-                        crate::traffic::Viewer::lan_player(at, p.pose.heading as f64)
-                    }),
+                places.iter().map(|&(_, at, heading)| {
+                    crate::traffic::Viewer::lan_player(at, heading as f64)
+                }),
             );
         }
         if let Some(h) = humans.as_deref_mut() {
@@ -571,10 +582,14 @@ impl LanWorld {
                     };
                     cars.insert(tid.raw());
                     let sent = view.context_pages.entry(tid.raw()).or_default();
-                    if !sent.due(MOVING_EVERY_S, c.is_bus()) {
+                    let context = ai_context(&c.vehicle.host);
+                    let Some(pages) = context.pages() else {
+                        continue;
+                    };
+                    if !sent.due(MOVING_EVERY_S, c.is_bus(), pages) {
                         continue;
                     }
-                    if let Some(packet) = ai_context(&c.vehicle.host).packet(
+                    if let Some(packet) = context.packet(
                         omsi_net::PROTOCOL as u8,
                         tid.raw(),
                         lan.stamp_ms(),

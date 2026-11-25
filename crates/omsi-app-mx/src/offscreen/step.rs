@@ -5,6 +5,16 @@
 use super::*;
 use crate::view_sync::{self, ViewSync};
 
+/// Where the players of the session this run hosts are (none without one).
+fn lan_places(lan: Option<&omsi_net::LanSession>) -> impl Iterator<Item = glam::DVec3> + '_ {
+    lan.filter(|l| l.role == omsi_net::Role::Host)
+        .into_iter()
+        .flat_map(|l| l.peers())
+        .filter(|p| p.has_pose)
+        .filter_map(|p| p.pose.whereabouts())
+        .map(|(at, _)| glam::DVec3::from_array(at))
+}
+
 impl Offscreen<'_> {
     /// One step, the `i`-th (false: a server was told to stop).
     pub(super) fn step(&mut self, i: usize) -> Result<bool> {
@@ -329,8 +339,12 @@ impl Offscreen<'_> {
             );
             if i.is_multiple_of(super::steps_in(2.0)) {
                 // (following a car, the population goes with the camera)
+                // (a dedicated server has no player of its own: its world goes where its
+                // players are, not round the place its camera started at)
                 let pc = if args.follow.is_some() {
                     view_cam.position
+                } else if player.is_none() {
+                    lan_places(self.lan_off.as_ref()).next().unwrap_or(center)
                 } else {
                     center
                 };
@@ -969,6 +983,7 @@ impl Offscreen<'_> {
                     .values()
                     .map(|r| r.vehicle().position)
                     .chain(player.as_ref().map(|p| p.vehicle.position))
+                    .chain(lan_places(self.lan_off.as_ref()))
                     .collect();
                 for c in &player_centers {
                     h.populate(world, *c);

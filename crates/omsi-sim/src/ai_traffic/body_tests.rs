@@ -478,3 +478,28 @@ fn a_stop_request_fires_the_trigger_on_the_timetable_bus_only() {
         "another car's script does not"
     );
 }
+
+/// The bus pulls up with its flank past the middle of its stop's box, where the stop's pole
+/// stands: its own stop is no wall to it. Another stop's pole still is.
+#[test]
+fn a_bus_does_not_stop_for_the_pole_of_its_own_stop() {
+    let f = Fixture::new();
+    let mut t = traffic(&f, turn(15.0));
+    let pole = |y: f64, id: i64| crate::collision::Obb {
+        id,
+        ..block(DVec2::new(0.5, y), DVec2::new(0.25, 0.05), 0.0)
+    };
+    with_scenery(&mut t, &[pole(60.0, 77), pole(70.0, 78)]);
+    let id = add_car(&mut t, &f, 0, 30.0, 0x77, Some(8.0));
+    let i = t.cars.iter().position(|c| c.id == id).unwrap();
+    let seen = |t: &TrafficSim| -> Vec<i64> {
+        let world = t.occluders.clone().unwrap();
+        let mut ids: Vec<i64> = t.scenery_near_way(i, &world).iter().map(|o| o.id).collect();
+        ids.sort_unstable();
+        ids
+    };
+    assert_eq!(seen(&t), [77, 78]);
+    let stop = bus_service::Stop::from_tuple((0, 60.0, 0.0, 0.0, 77, 0.0));
+    t.cars[i].bus = Some(Box::new(bus_service::BusService::new(vec![stop])));
+    assert_eq!(seen(&t), [78]);
+}

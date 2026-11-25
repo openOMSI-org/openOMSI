@@ -109,9 +109,7 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "speed" => SPEEDS.iter().map(|&v| v as f32).collect(),
         "traffic" => TRAFFIC
             .iter()
-            .filter(|&&v| {
-                !cfg!(any(target_os = "android", target_os = "ios")) || v <= super::TRAFFIC_MAX
-            })
+            .filter(|&&v| !cfg!(any(target_os = "android", target_os = "ios")) || v <= 120)
             .map(|&v| v as f32)
             .collect(),
         "pax" => PAX.to_vec(),

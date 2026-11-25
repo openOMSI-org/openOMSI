@@ -546,9 +546,9 @@ impl ClientSync {
             let interval = if d < 200.0 {
                 0.1
             } else if d < 400.0 {
-                0.2
+                0.15
             } else {
-                0.3
+                0.2
             };
             // (a little early is on time: snapshots come at 0.1 s, give or take)
             if since + 0.02 < interval {

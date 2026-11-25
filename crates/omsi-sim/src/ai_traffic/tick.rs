@@ -3,8 +3,16 @@
 
 use super::*;
 
-/// Seconds a random car stands before it gives up and leaves out of sight (Omsi.exe: 200).
+/// Seconds a random car stands before it is deleted, in sight or not (Omsi.exe: 200).
 pub const GIVE_UP_STOOD: f32 = 200.0;
+
+impl AiCar {
+    /// Has this random car been stuck for so long that it is deleted where it stands? Not
+    /// the car a red light holds, and no timetable bus.
+    pub fn stuck_for_good(&self) -> bool {
+        !self.is_bus() && !self.light_hold && self.stopped.max(self.progress.1) > GIVE_UP_STOOD
+    }
+}
 
 /// Seconds a timetable bus waits where the route it has ends for the rest of its route
 /// (tiles bring it as they load) before it gives the trip up (see `Traffic::tick`).
@@ -681,6 +689,12 @@ impl TrafficSim {
                 if lead.map(|x| l.gap < x.0.gap).unwrap_or(true) {
                     lead = Some((l, Some(usize::MAX)));
                 }
+            }
+        }
+        // (or about to move over into it, signalling)
+        if let Some(l) = player.as_ref().and_then(|p| self.merging_player(i, p)) {
+            if lead.map(|x| l.gap < x.0.gap).unwrap_or(true) {
+                lead = Some((l, Some(usize::MAX)));
             }
         }
         // (or coming to the joint where this car's lane runs into its own)
@@ -1388,23 +1402,22 @@ impl TrafficSim {
         } else {
             car.progress.1 += dt;
         }
-        let stood = car.stopped.max(car.progress.1);
-        // a random car that has stood for long has given up: it leaves as soon as nobody
-        // sees it. Omsi.exe deletes random traffic after 200 s standing (FUN_007d9128,
+        // a random car that has stood for long has given up, and the population takes it off
+        // the road. Omsi.exe deletes random traffic after 200 s standing (FUN_007d9128,
         // inst+0x870 > 200); taken off after a minute, the cars waiting at a side road's
         // line for a gap in a busy main road were taken away one after the other (their
         // giving way flickers off for a step as the gap is weighed again), Grundorf.
-        if stood > GIVE_UP_STOOD && !car.is_bus() && !car.light_hold && !car.gone {
+        if car.stuck_for_good() && !car.gone {
             car.gone = true;
             if let Some(s) = self.stats.as_mut() {
                 s.window.gave_up += 1;
             }
             if debug {
                 log::info!(
-                    "t={:.1}: car {} stood for {:.0} s: taken off once out of sight",
+                    "t={:.1}: car {} stood for {:.0} s: deleted",
                     self.time,
                     car.id,
-                    stood
+                    car.stopped.max(car.progress.1)
                 );
             }
         }
