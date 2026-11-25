@@ -3089,3 +3089,5 @@
 "For passengers whose file gives no weight; default 75 kg": "파일에 무게가 없는 승객에게 적용; 기본값 75 kg"
 "Road dirt on the vehicles": "차량에 묻는 도로 오물"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: 차량은 오물이 닿는 곳에 도로 오물이 쌓입니다. 젖은 도로에서는 바퀴 뒤와 아래쪽 옆면에 튄 자국, 뒤쪽에 막, 건조할 때는 먼지, 겨울에는 진눈깨비. 비가 씻어냅니다. 끄면 OMSI 2처럼 버스 고유의 오물"
+"Draw the mouse cursor in the game": "게임에서 마우스 커서 그리기"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "마우스를 움직일 때 끊기는 G-SYNC 화면용: 게임이 자체 화살표를 그리고 Windows는 하드웨어 커서를 이동하지 않습니다"

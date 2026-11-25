@@ -38,6 +38,9 @@ const CROSS_H: &[[f32; 2]] = &[[0.00, 0.42], [1.00, 0.42], [1.00, 0.58], [0.00, 
 const MOVE_TOP: &[[f32; 2]] = &[[0.50, 0.00], [0.80, 0.30], [0.20, 0.30]];
 const MOVE_BOTTOM: &[[f32; 2]] = &[[0.50, 1.00], [0.20, 0.70], [0.80, 0.70]];
 const MOVE_SHAFT: &[[f32; 2]] = &[[0.42, 0.28], [0.58, 0.28], [0.58, 0.72], [0.42, 0.72]];
+const MOVE_LEFT: &[[f32; 2]] = &[[0.00, 0.50], [0.30, 0.20], [0.30, 0.80]];
+const MOVE_RIGHT: &[[f32; 2]] = &[[1.00, 0.50], [0.70, 0.20], [0.70, 0.80]];
+const MOVE_HSHAFT: &[[f32; 2]] = &[[0.28, 0.42], [0.72, 0.42], [0.72, 0.58], [0.28, 0.58]];
 /// A closed hand: a fist.
 const GRAB: &[[f32; 2]] = &[
     [0.50, 0.06],
@@ -56,8 +59,16 @@ pub fn outline(kind: u8) -> &'static [&'static [[f32; 2]]] {
     match kind {
         1 => &[HAND],
         2 => &[CROSS_V, CROSS_H],
-        3 => &[MOVE_TOP, MOVE_BOTTOM, MOVE_SHAFT],
-        4 => &[GRAB],
+        3 => &[
+            MOVE_TOP,
+            MOVE_BOTTOM,
+            MOVE_LEFT,
+            MOVE_RIGHT,
+            MOVE_SHAFT,
+            MOVE_HSHAFT,
+        ],
+        4 => &[MOVE_TOP, MOVE_BOTTOM, MOVE_SHAFT],
+        5 => &[GRAB],
         _ => &[ARROW_HEAD, ARROW_TAIL],
     }
 }
@@ -115,7 +126,7 @@ mod tests {
 
     #[test]
     fn every_kind_is_made_of_polygons_that_fit_their_box() {
-        for kind in 0..=4u8 {
+        for kind in 0..=5u8 {
             let shape = outline(kind);
             assert!(!shape.is_empty(), "kind {kind} has parts");
             for part in shape {
@@ -136,7 +147,7 @@ mod tests {
         fn cross(o: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
             (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
         }
-        for kind in 0..=4u8 {
+        for kind in 0..=5u8 {
             for part in outline(kind) {
                 let mut sign = 0.0f32;
                 for i in 0..part.len() {
@@ -165,7 +176,7 @@ mod tests {
 
     #[test]
     fn the_shapes_differ_from_one_another() {
-        for a in 0..=4u8 {
+        for a in 0..=5u8 {
             for b in (a + 1)..=4u8 {
                 assert_ne!(outline(a), outline(b), "kinds {a} and {b}");
             }
@@ -178,7 +189,7 @@ mod tests {
         // (the arrow's tip is the hotspot)
         assert!(points(0, at, 1.0, 1.0)[0].distance(at) < 1e-3);
         // (every shape is drawn within a cursor's size of it)
-        for kind in 0..=4u8 {
+        for kind in 0..=5u8 {
             for p in points(kind, at, 1.0, 1.0) {
                 assert!(
                     p.distance(at) <= size(1.0) * 1.5,

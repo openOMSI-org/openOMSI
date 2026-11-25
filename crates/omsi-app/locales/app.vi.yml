@@ -3038,3 +3038,5 @@
 "For passengers whose file gives no weight; default 75 kg": "Cho hành khách mà tệp không ghi cân nặng; mặc định 75 kg"
 "Road dirt on the vehicles": "Bụi bẩn đường trên xe"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: xe bám bụi bẩn đường ở chỗ nó văng tới - nước bắn sau bánh và hông dưới khi đường ướt, lớp bẩn ở đuôi, bụi khi khô, tuyết lẫn bùn vào mùa đông - và mưa rửa trôi; khi tắt: bụi bẩn riêng của xe, như trong OMSI 2"
+"Draw the mouse cursor in the game": "Vẽ con trỏ chuột trong trò chơi"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "Cho màn hình G-SYNC bị giật khi di chuột: trò chơi tự vẽ mũi tên của nó và Windows không bao giờ di chuyển con trỏ phần cứng"

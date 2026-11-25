@@ -4184,3 +4184,5 @@
 "For passengers whose file gives no weight; default 75 kg": "Per als passatgers el fitxer dels quals no indica cap pes; per defecte 75 kg"
 "Road dirt on the vehicles": "Brutícia de la carretera als vehicles"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: els vehicles acumulen brutícia on cau - esquitxades darrere les rodes i als laterals baixos amb la carretera mullada, una capa al darrere, pols en sec, neu fosa a l'hivern - i la pluja la renta; desactivat: la brutícia pròpia de l'autobús, com a OMSI 2"
+"Draw the mouse cursor in the game": "Dibuixa el cursor del ratolí al joc"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "Per a una pantalla G-SYNC que s'enganxa en moure el ratolí: el joc dibuixa la seva pròpia fletxa i Windows mai no mou el cursor de maquinari"
