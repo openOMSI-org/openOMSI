@@ -166,10 +166,13 @@ for name, g, got in rows:
         rel = f"{(rf / f - 1) * 100:+.0f} %" if rf and label != ref else "-"
         print(f"| {name} | {g} | {label} | {med(vs, 0):.2f} | {med(vs, 1):.2f} | {f:.2f} | {med(vs, 3):.1f} | {f'{mem:.0f}' if mem else '-'} | {rel} |")
 if a.out:
-    with open(a.out, "w") as f:
-        f.write("scene,graphics,build,run,cpu_ms,gpu_wait_ms,frame_mean_ms,worst_ms,peak_mb\n")
+    import csv
+    # (quoted where needed: the scenes' names have commas in them)
+    with open(a.out, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["scene", "graphics", "build", "run", "cpu_ms", "gpu_wait_ms", "frame_mean_ms", "worst_ms", "peak_mb"])
         for name, g, got in rows:
             for label, vs in got.items():
                 for i, v in enumerate(vs):
-                    f.write(f"{name},{g},{label},{i},{','.join('' if x is None else str(x) for x in v)}\n")
+                    w.writerow([name, g, label, i, *("" if x is None else x for x in v)])
 shutil.rmtree(work, ignore_errors=True)
