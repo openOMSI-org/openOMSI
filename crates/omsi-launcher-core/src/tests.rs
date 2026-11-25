@@ -1137,6 +1137,27 @@ upscale_quality=native
 }
 
 #[test]
+#[test]
+fn whether_the_ibis_follows_the_stops_is_kept_in_the_settings_file() {
+    // (#2267) off by default - the driver presses the IBIS's "next stop" key, as in OMSI.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["ibis_auto_stop"], serde_json::json!(false));
+    let on = super::settings_from_text(Some("ibis_auto_stop=1\n"));
+    assert_eq!(on["ibis_auto_stop"], serde_json::json!(true));
+    assert!(
+        super::settings_to_text(&on, None)
+            .lines()
+            .any(|l| l.trim() == "ibis_auto_stop=1")
+    );
+    let off = super::settings_from_text(Some("ibis_auto_stop=0\n"));
+    assert!(
+        super::settings_to_text(&off, None)
+            .lines()
+            .any(|l| l.trim() == "ibis_auto_stop=0")
+    );
+}
+
+#[test]
 fn how_late_the_bus_may_be_is_kept_in_the_settings_file() {
     let fresh = super::settings_from_text(None);
     assert_eq!(fresh["pax_late_tolerance_min"], serde_json::json!(5.0));

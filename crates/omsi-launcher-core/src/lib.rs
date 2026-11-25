@@ -3578,6 +3578,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // an early timetable bus waits only at the stops the timetable times (off: at every
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
+    v["ibis_auto_stop"] = json!(false);
     v["pax_bad_driving"] = json!(true);
     v["pax_late_tolerance_min"] = json!(5.0);
     v["pax_free_drive"] = json!("auto");
@@ -4435,6 +4436,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "mirror_shadows"
             | "mirror_particles"
             | "ai_wait_timed_stops_only"
+            | "ibis_auto_stop"
             | "pax_bad_driving"
             | "pax_no_ticket"
             | "pax_board_when_stopped"
@@ -5216,6 +5218,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("trip_summary", true),
         b("full_tank", true)
     ));
+    text.push_str(&format!("ibis_auto_stop={}\n", b("ibis_auto_stop", false)));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
     text.push_str(&format!(
         "pax_late_tolerance_min={}\n",
