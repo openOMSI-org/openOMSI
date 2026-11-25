@@ -17,7 +17,6 @@ pub const DEFAULT_CAP: u64 = if cfg!(any(target_os = "ios", target_os = "android
     700_000_000
 };
 const MAX_ENTRY: u64 = 1 << 30;
-const TOUCH_AFTER: Duration = Duration::from_secs(3600);
 const STALE_TEMP: Duration = Duration::from_secs(600);
 const ENTRY_EXT: &str = "tex";
 const TEMP_EXT: &str = "tmp";
@@ -108,12 +107,11 @@ impl DiskCache {
         let mut buf = Vec::with_capacity(md.len() as usize);
         file.take(MAX_ENTRY).read_to_end(&mut buf).ok()?;
         let entry = parse(&buf, key)?;
-        if md
-            .modified()
-            .ok()
-            .and_then(|m| m.elapsed().ok())
-            .is_none_or(|age| age > TOUCH_AFTER)
-        {
+        // (an entry read by this start is marked used by it, once: the trim takes only what
+        // no start since has read. Marked only after an hour, a map larger than the cap,
+        // started again within the hour, lost at every second start all the entries the
+        // start before had read, and that start read none from the cache)
+        if md.modified().ok().is_none_or(|m| m < self.started) {
             let _ = File::options()
                 .write(true)
                 .open(&path)
@@ -1058,5 +1056,59 @@ mod tests {
                 .iter()
                 .all(|p| p.extension().is_some_and(|x| x == ENTRY_EXT))
         );
+    }
+
+    /// A map whose textures outgrow the cap, started again and again: the textures a start
+    /// reads first (the first tiles round the player, the timetable's vehicles) are read from
+    /// the cache at every start after the first, and the cache does not throw out at every
+    /// start what that start reads again (L2 of the optimization plan: a 700 MB cap against
+    /// several GB of a large map's textures).
+    #[test]
+    fn a_map_larger_than_the_cap_keeps_its_first_textures_from_start_to_start() {
+        let s = Scratch::new("churn");
+        let (_, bytes) = pictures().into_iter().next().unwrap();
+        let probe = s.cache(DEFAULT_CAP);
+        let path = write(&s.0, "p0.tga", &bytes);
+        load_gpu_cached(&bytes, &path, ON, Some(&probe)).unwrap();
+        let one = s
+            .entries()
+            .iter()
+            .map(|p| std::fs::metadata(p).unwrap().len())
+            .sum::<u64>();
+        std::fs::remove_dir_all(s.0.join("cache")).unwrap();
+        let paths: Vec<PathBuf> = (0..10)
+            .map(|i| write(&s.0, &format!("t{i}.tga"), &bytes))
+            .collect();
+        let cap = one * 4 + one / 2;
+        let mut hits_by_start = Vec::new();
+        for start in 0..5u64 {
+            // (ten minutes between the starts: what the last start wrote is older than this
+            // one, and younger than the hour after which a hit marks an entry used)
+            for e in s.entries() {
+                let m = std::fs::metadata(&e).unwrap().modified().unwrap();
+                File::options()
+                    .write(true)
+                    .open(&e)
+                    .unwrap()
+                    .set_modified(m - Duration::from_secs(600))
+                    .unwrap();
+            }
+            let cache = s.cache(cap);
+            let mut hits = Vec::new();
+            for (i, p) in paths.iter().enumerate() {
+                let key = Key::new(&bytes, p, ON).unwrap();
+                if cache.dir().join(key.name()).exists() {
+                    hits.push(i);
+                }
+                load_gpu_cached(&bytes, p, ON, Some(&cache)).unwrap();
+            }
+            hits_by_start.push((start, hits));
+        }
+        for (start, hits) in &hits_by_start[1..] {
+            assert!(
+                hits.starts_with(&[0, 1, 2, 3]),
+                "start {start} read {hits:?} from the cache (every start: {hits_by_start:?})"
+            );
+        }
     }
 }
