@@ -100,9 +100,18 @@ impl TrafficLightController {
             cycle.unwrap_or(0.0),
         );
         c.approach = approach;
+        // A point names its light by number. Omsi.exe (0x687ffc, building the crossing's
+        // program) takes light 0 for a number below 0 or past the last light: a point on a
+        // light the crossing does not have waits for that light's requests, which never came,
+        // and a stop "until somebody asks" held its crossing for good.
+        let count = c.lights.len();
+        let light = |n: f32| {
+            let i = n.max(0.0) as usize;
+            if i < count { i } else { 0 }
+        };
         for s in stops {
             c.stops.push(LightStop {
-                light: s[0].max(0.0) as usize,
+                light: light(s[0]),
                 time: s[1],
                 if_request: s[2] > 0.5,
                 jump_to: None,
@@ -110,7 +119,7 @@ impl TrafficLightController {
         }
         for j in jumps {
             c.stops.push(LightStop {
-                light: j[0].max(0.0) as usize,
+                light: light(j[0]),
                 time: j[1],
                 if_request: j[2] > 0.5,
                 jump_to: Some(j[3]),
