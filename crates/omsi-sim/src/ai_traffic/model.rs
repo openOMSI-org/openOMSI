@@ -895,6 +895,12 @@ impl TrafficSim {
                 .map(|pool| (pool, self.uvg_defaults.clone()));
         }
         state.plan_next(&self.net);
+        if bus.is_none() {
+            // (counted at once: the cars put on the road together spread over the forks)
+            let group = crate::traffic::load_group(state.traffic_pool.as_ref().map(|p| p.0));
+            let plan: Vec<usize> = state.upcoming().collect();
+            self.net.add_load(lane, group, plan);
+        }
         // heavy vehicles (trucks, vans) cruise slower, which is what gets them overtaken
         let heavy = ty.def.mass > 6.0 || bus.is_some();
         personality(&mut state, seed, heavy, ty.def.rowdy_factor);
