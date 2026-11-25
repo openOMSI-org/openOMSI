@@ -3686,3 +3686,7 @@
 "Draw other players' buses in less detail when far away": "Bussen van andere spelers in de verte met minder details tekenen"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multiplayer: voorbij 120 m en onder 20 FPS behouden bussen van anderen hun carrosserie maar verliezen chauffeurs en lijnfilms; boven 26 FPS keren ze volledig terug"
 
+"sent to the plugins": "verzonden naar de plug-ins"
+"no plugin is listening for commands": "geen plug-in luistert naar opdrachten"
+"plugin command queue is full": "opdrachtwachtrij van plug-ins is vol"
+

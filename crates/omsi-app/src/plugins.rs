@@ -53,7 +53,7 @@ pub(crate) struct Io<'a> {
     /// `omsi.command`: game menu lines to run after the frame.
     pub commands: Vec<String>,
     /// Keys pressed and let go since the last frame.
-    pub keys: Vec<(String, bool)>,
+    pub keys: Vec<op::KeyEvent>,
     /// What happened since the last frame (see [`queue_event`]).
     pub events: Vec<GameEvent>,
     pub events_ex: Vec<(&'static str, Vec<omsi_plugin::api::Value>)>,
@@ -65,7 +65,7 @@ impl<'a> Io<'a> {
     pub(crate) fn new(
         app: &'a mut crate::App,
         dt: f32,
-        keys: Vec<(String, bool)>,
+        keys: Vec<op::KeyEvent>,
         events: Vec<GameEvent>,
         events_ex: Vec<(&'static str, Vec<omsi_plugin::api::Value>)>,
     ) -> Io<'a> {
@@ -882,7 +882,7 @@ impl PluginIo for Io<'_> {
         }
     }
 
-    fn keys(&self) -> Vec<(String, bool)> {
+    fn key_events(&self) -> Vec<op::KeyEvent> {
         self.keys.clone()
     }
 

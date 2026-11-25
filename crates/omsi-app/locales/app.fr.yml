@@ -4473,3 +4473,7 @@
 "Draw other players' buses in less detail when far away": "Afficher les bus des autres joueurs avec moins de détails au loin"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multijoueur : au-delà de 120 m et sous 20 FPS, les bus des autres joueurs conservent leur carrosserie mais masquent le conducteur et les girouettes ; ils reviennent en détail au-delà de 26 FPS"
 
+"sent to the plugins": "envoyé aux plugins"
+"no plugin is listening for commands": "aucun plugin n'écoute les commandes"
+"plugin command queue is full": "la file de commandes des plugins est pleine"
+

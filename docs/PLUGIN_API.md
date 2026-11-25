@@ -3582,7 +3582,7 @@ end)
 
 ### Input, camera and game
 
-- **`key`**`(key, down)`: A key went down (`true`) or came up: winit's name of it (`"KeyH"`, `"F5"`, `"Numpad8"`). *Since 0.1.10.*
+- **`key`**`(key, down, combo)`: A key went down (`true`) or came up: winit's name of it (`"KeyH"`, `"F5"`, `"Numpad8"`), and the combination it made with the modifiers held, spelled as `input.hotkey` takes them (`"Ctrl+KeyH"`, `"F5"`). *Since 0.1.10.*
 - **`controller_button`**`(device, button, down)`: A button of a steering wheel, joystick or gamepad went down (`true`) or up: the device's name and the button's number. *Since 0.2.22.*
 - **`view`**`(new, old)`: The view changed (`"driver"`, `"pax"`, `"outside"`, `"free"`, `"foot"`). *Since 0.1.10.*
 - **`menu_open`**`()`: The game menu opened. *Since 0.2.22.*
@@ -3604,6 +3604,7 @@ end)
 - **`lan_leave`**`(id, name)`: A player left the LAN session. *Since 0.2.22.*
 - **`lan_message`**`(from, data)`: The same plugin on another player's game sent this one a message (`lan.send`): the player's id and the text. *Since 0.2.22.*
 - **`lan_chat`**`(name, text)`: A line was said in the LAN session's chat (by another player or this one). *Since 0.2.22.*
+- **`chat_command`**`(text)`: The player typed a `/`-line into the chat (`"/login name pass"`): while a plugin hears this, such a line is not said to the session at all (a password never reaches the other players). Say something back with `lan.chat`. *Since 0.2.22.*
 
 ### Scenery object scripts
 

@@ -19,6 +19,7 @@ pub struct Game {
     pub events_ex: Vec<(&'static str, Vec<api::Value>)>,
     pub info: Vec<(&'static str, InfoValue)>,
     pub keys: Vec<(String, bool)>,
+    pub key_events: Vec<KeyEvent>,
     pub held: Vec<String>,
     pub pos: [f64; 4],
     pub doors: Vec<f32>,
@@ -217,6 +218,25 @@ impl PluginIo for Game {
     }
     fn keys(&self) -> Vec<(String, bool)> {
         self.keys.clone()
+    }
+    fn key_events(&self) -> Vec<KeyEvent> {
+        if !self.key_events.is_empty() {
+            return self.key_events.clone();
+        }
+        let ctrl = self.key_held("ControlLeft") || self.key_held("ControlRight");
+        let shift = self.key_held("ShiftLeft") || self.key_held("ShiftRight");
+        let alt = self.key_held("AltLeft") || self.key_held("AltRight");
+        self.keys
+            .clone()
+            .into_iter()
+            .map(|(key, down)| KeyEvent {
+                key,
+                down,
+                ctrl,
+                shift,
+                alt,
+            })
+            .collect()
     }
     fn events(&self) -> Vec<GameEvent> {
         self.events.clone()

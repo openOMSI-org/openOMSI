@@ -3021,3 +3021,7 @@
 "Draw other players' buses in less detail when far away": "I-render ang mga bus ng ibang manlalaro nang may mas kaunting detalye kapag malayo"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multiplayer: lagpas 120 m at kapag mas mababa sa 20 FPS, mananatili ang katawan ng ibang bus ngunit mawawala ang tsuper at mga display ng destinasyon; babalik nang buo lampas 26 FPS"
 
+"sent to the plugins": "ipinadala sa mga plugin"
+"no plugin is listening for commands": "walang plugin na nakikinig para sa mga utos"
+"plugin command queue is full": "puno na ang command queue ng mga plugin"
+

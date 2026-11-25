@@ -3327,3 +3327,7 @@
 "Draw other players' buses in less detail when far away": "Uzaktaki diğer oyuncuların otobüslerini daha az ayrıntıyla çiz"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Çok oyunculu: 120 m ötesinde ve kare hızı 20'nin altındayken diğer otobüsler gövdelerini korur ancak sürücü ve tabelaları gizlenir; 26 FPS üzerinde tamamen geri gelir"
 
+"sent to the plugins": "eklentilere gönderildi"
+"no plugin is listening for commands": "komutları dinleyen eklenti yok"
+"plugin command queue is full": "eklenti komut kuyruğu dolu"
+

@@ -4910,9 +4910,10 @@
       "name": "key",
       "args": [
         "key",
-        "down"
+        "down",
+        "combo"
       ],
-      "doc": "A key went down (`true`) or came up: winit's name of it (`\"KeyH\"`, `\"F5\"`, `\"Numpad8\"`).",
+      "doc": "A key went down (`true`) or came up: winit's name of it (`\"KeyH\"`, `\"F5\"`, `\"Numpad8\"`), and the combination it made with the modifiers held, spelled as `input.hotkey` takes them (`\"Ctrl+KeyH\"`, `\"F5\"`).",
       "since": "0.1.10"
     },
     {
@@ -5404,6 +5405,14 @@
         "text"
       ],
       "doc": "A line was said in the LAN session's chat (by another player or this one).",
+      "since": "0.2.22"
+    },
+    {
+      "name": "chat_command",
+      "args": [
+        "text"
+      ],
+      "doc": "The player typed a `/`-line into the chat (`\"/login name pass\"`): while a plugin hears this, such a line is not said to the session at all (a password never reaches the other players). Say something back with `lan.chat`.",
       "since": "0.2.22"
     },
     {

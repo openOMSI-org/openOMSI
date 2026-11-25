@@ -4472,3 +4472,7 @@
 "Draw other players' buses in less detail when far away": "Меньше деталей у автобусов других игроков издалека"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Сетевая игра: дальше 120 м и при частоте ниже 20 кадров/с автобусы других игроков сохраняют кузов, но скрывают водителей и маршрутоуказатели; при FPS выше 26 они возвращаются полностью"
 
+"sent to the plugins": "отправлено плагинам"
+"no plugin is listening for commands": "ни один плагин не слушает команды"
+"plugin command queue is full": "очередь команд плагинов заполнена"
+
