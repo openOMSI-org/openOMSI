@@ -16,15 +16,20 @@ pub struct Daylight {
     pub sky: Vec3,
     /// 0 by day, 1 by night (nightmaps, coronas).
     pub night: f32,
-    /// Street lights on (the `NightlightA` scenery variable).
+    /// Street lights on (the `NightlightA` scenery variable): [`Daylight::daylight_sum`]
+    /// below 0.6 (0x6ff1bc).
     pub lamps_on: bool,
-    /// The daylight by the sun's altitude (1 day … 0 night, a ramp from +6 to -6 degrees):
-    /// what the street lamps and the lit windows switch by.
+    /// The daylight by the sun's altitude alone (1 day … 0 night, a ramp from +6 to -6
+    /// degrees). Nothing Omsi.exe switches goes by it: see [`Daylight::daylight_sum`].
     pub brightness: f32,
-    /// The mean of envir.cfg's light A at this altitude (0..1, as Omsi.exe keeps it at
-    /// weather +0xac): the day's part of the `Envir_Brightness` vehicle variable, see
-    /// [`Daylight::envir_brightness`].
-    pub light_a: f32,
+    /// Omsi.exe's daylight sum under the weather (0..1, weather +0xb0, see
+    /// [`SkyWeather::daylight_sum`]): what it switches its lights by - the street lamps
+    /// below 0.6 (0x6ff1bc), a scenery object's `NightlightA` and night textures below its
+    /// `[NightMapMode]` threshold (0x6119d8), the AI's lights below 0.75 (0x7d9128).
+    pub daylight_sum: f32,
+    /// Omsi.exe's daylight sum with the sun's own share (0..1, weather +0xac): the day's
+    /// part of the `Envir_Brightness` vehicle variable, see [`Daylight::envir_brightness`].
+    pub sky_light: f32,
     /// Sun azimuth in radians, clockwise from north.
     pub azimuth_rad: f32,
     /// Blend of the envir sky textures: day, twilight (peaks at sunrise), night.
@@ -293,10 +298,14 @@ impl Daylight {
                 stops(&stock.light_color_c, stock.twilight_start_end, alt),
             ),
         ];
-        // the street lamps come on below a light value of 0.6, as Omsi.exe switches them
-        // (FUN_006ff1bc), the same value at which a scenery object's NightlightA does
         let brightness = ((alt + 6.0) / 12.0).clamp(0.0, 1.0);
-        let light_a = ((a.x + a.y + a.z) / 3.0).clamp(0.0, 1.0);
+        // Omsi.exe's daylight under the weather (+0xb0), which its lamps, night textures and
+        // AI lights switch by (see `daylight_sum`): under clouds by the clouds' share of the
+        // sun, else by the sun's own
+        let weather = sky_weather();
+        let sun = omsi_sun_share(alt);
+        let daylight_sum = weather.daylight_sum(a, b, c, weather.cloud_share().unwrap_or(sun));
+        let sky_light = weather.daylight_sum(a, b, c, sun);
         let here = place();
         let (m_alt, m_az, moon_illum) = moon_position(clock, &here);
         let (ma, mz) = (m_alt.to_radians(), m_az.to_radians());
@@ -316,9 +325,10 @@ impl Daylight {
             ambient,
             sky,
             night,
-            lamps_on: brightness < 0.6,
+            lamps_on: daylight_sum < 0.6,
             brightness,
-            light_a,
+            daylight_sum,
+            sky_light,
             azimuth_rad: az.to_radians() as f32,
             sky_weights,
             envir_tint,
@@ -343,7 +353,107 @@ impl Daylight {
             .filter(|_| self.lamps_on)
             .map(|c| (c.x + c.y + c.z) / 3.0)
             .unwrap_or(0.0);
-        (self.light_a + lm.max(0.0)).clamp(0.0, 1.0)
+        (self.sky_light + lm.max(0.0)).clamp(0.0, 1.0)
+    }
+}
+
+/// What of the weather Omsi.exe's daylight takes in (TWeather 0x753120): the `[fog]`
+/// visibility (m) and density, what falls (`[precip]` kind 0 none, 1 rain, 2 snow, and its
+/// strength 0..255), and the clouds: `None` for none (`-1`), else whether the clouds.cfg
+/// type is an `ovc` deck.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SkyWeather {
+    pub visibility: f32,
+    pub fog_density: f32,
+    pub precip_kind: i32,
+    pub precip_strength: f32,
+    pub clouds: Option<bool>,
+}
+
+impl Default for SkyWeather {
+    /// Omsi.exe's starting weather: 50 km, density 1, nothing falling, no clouds.
+    fn default() -> Self {
+        SkyWeather {
+            visibility: 50_000.0,
+            fog_density: 1.0,
+            precip_kind: 0,
+            precip_strength: 0.0,
+            clouds: None,
+        }
+    }
+}
+
+static SKY_WEATHER: std::sync::RwLock<Option<SkyWeather>> = std::sync::RwLock::new(None);
+
+/// The weather the daylight is reckoned under from now on (see [`SkyWeather`]): the
+/// session's (the window's, an offscreen run's), `SkyWeather::default()` without one. A
+/// look at a vehicle outside the session (the showroom) leaves it alone.
+pub fn set_sky_weather(w: SkyWeather) {
+    *SKY_WEATHER.write().unwrap_or_else(|e| e.into_inner()) = Some(w);
+}
+
+pub fn sky_weather() -> SkyWeather {
+    SKY_WEATHER
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_default()
+}
+
+/// The sun's share of Omsi.exe's daylight at an altitude of `alt` degrees (weather +0xcc,
+/// set where the clouds are drawn, 0x754e44): 0 below -0.02 rad, 1 above +0.02 rad, linear
+/// between. (Under drawn clouds Omsi.exe takes it down further by the cloud texture's cover
+/// at the sun, which only the renderer knows.)
+pub fn omsi_sun_share(alt: f32) -> f32 {
+    ((alt.to_radians() + 0.02) / 0.04).clamp(0.0, 1.0)
+}
+
+impl SkyWeather {
+    /// The visibility and the fog density Omsi.exe lights by (0x753120): rain shortens the
+    /// visibility to 100 km / strength, snow to 20 km / strength; snow makes the fog at
+    /// least 0.8 dense, an `ovc` deck at most 0.7.
+    pub fn effective_fog(&self) -> (f32, f32) {
+        let s = self.precip_strength;
+        let falling = s > 0.0;
+        let visibility = match self.precip_kind {
+            1 if falling => self.visibility.min(100_000.0 / s),
+            2 if falling => self.visibility.min(20_000.0 / s),
+            _ => self.visibility,
+        };
+        let density = if self.precip_kind == 2 && falling {
+            self.fog_density.max(0.8)
+        } else if self.clouds == Some(true) {
+            self.fog_density.min(0.7)
+        } else {
+            self.fog_density
+        };
+        (visibility, density)
+    }
+
+    /// The share Omsi.exe gives the sun under these clouds (0x753120): none under an `ovc`
+    /// deck, half under other clouds; `None` without clouds (the sun's own share counts).
+    pub fn cloud_share(&self) -> Option<f32> {
+        self.clouds.map(|ovc| if ovc { 0.0 } else { 0.5 })
+    }
+
+    /// Omsi.exe's daylight sum (0x752c34), with the sun's share `k` (0..1) and envir.cfg's
+    /// three lights `a`, `b`, `c` (0..1) at the sun's altitude: the visibility lets through
+    /// 2^(-1000 m / visibility) of the light; the sun's light A gets (1 - s) of it and the
+    /// sky's light B s, where s runs from 0.2 in the sun to 1 without it (where the light
+    /// also falls to 0.3); the ambient light C takes 1 - 0.45 of A's weight; and without
+    /// the sun all of it is dimmed to 0.9 x the fog density. The mean over red, green and
+    /// blue of (A / 2 + B / 2 + C), each at most 1.
+    pub fn daylight_sum(&self, a: Vec3, b: Vec3, c: Vec3, k: f32) -> f32 {
+        let k = k.clamp(0.0, 1.0);
+        let (visibility, density) = self.effective_fog();
+        let clear = (-1000.0 * std::f32::consts::LN_2 / visibility.max(1.0)).exp();
+        let dim = k + (1.0 - k) * 0.9 * density;
+        let through = clear * (k + (1.0 - k) * 0.3);
+        let s = 0.2 + 0.8 * (1.0 - k);
+        let wa = ((1.0 - s) * through).min(1.0);
+        let wb = (s * through).min(1.0);
+        let wc = (1.0 - 0.45 * wa).clamp(0.0, 1.0);
+        let sum = (a * wa * dim / 2.0 + b * wb * dim / 2.0 + c * wc * dim).min(Vec3::ONE);
+        (sum.x + sum.y + sum.z) / 3.0
     }
 }
 
@@ -515,8 +625,9 @@ mod tests {
     }
 
     #[test]
-    fn envir_brightness_is_light_a_plus_the_light_map_under_the_lamps() {
-        // a December midnight: no light A, so only the light map's light counts
+    fn envir_brightness_is_the_daylight_plus_the_light_map_under_the_lamps() {
+        // a December midnight: only the faint night sky (lights B and C), so the light
+        // map's light is nearly all of it
         let night = Daylight::compute(
             &SimClock {
                 day_of_year: 355,
@@ -525,17 +636,77 @@ mod tests {
             },
             None,
         );
-        assert!(night.lamps_on);
-        assert_eq!(night.envir_brightness(None), 0.0);
+        assert!(night.lamps_on && night.daylight_sum < 0.6);
+        let dark = night.envir_brightness(None);
+        assert!(dark > 0.0 && dark < 0.06, "{dark}");
         let lit = night.envir_brightness(Some(Vec3::new(0.6, 0.5, 0.4)));
-        assert!((lit - 0.5).abs() < 1e-5, "{lit}");
-        // noon: light A alone is (nearly) 1, and the light map is off by day
+        assert!((lit - 0.5 - dark).abs() < 1e-5, "{lit}");
+        // noon: the daylight is 1, and the light map is off by day
         let noon = Daylight::compute(&clock_at(12.0), None);
+        assert!(!noon.lamps_on && noon.daylight_sum > 0.95);
         assert!(noon.envir_brightness(None) > 0.95);
         assert_eq!(
             noon.envir_brightness(Some(Vec3::ONE)),
             noon.envir_brightness(None)
         );
+    }
+
+    #[test]
+    fn the_lamps_follow_omsis_daylight_sum_under_the_weather() {
+        // stock envir.cfg lights at a sun altitude (as `Daylight::compute` takes them)
+        let envir = default_envir_values();
+        let lights = |alt: f32| {
+            let tw = envir.twilight_start_end;
+            (
+                stops(&envir.light_color_a, tw, alt),
+                stops(&envir.light_color_b, tw, alt),
+                stops(&envir.light_color_c, tw, alt),
+            )
+        };
+        let lamps = |w: &SkyWeather, alt: f32| {
+            let (a, b, c) = lights(alt);
+            w.daylight_sum(a, b, c, w.cloud_share().unwrap_or(omsi_sun_share(alt))) < 0.6
+        };
+        // a clear sky: on below about 4.5 degrees of sun, not at the horizon as by the
+        // sun's height alone
+        let clear = SkyWeather::default();
+        assert!(lamps(&clear, 4.0) && !lamps(&clear, 5.0));
+        assert!(!lamps(&clear, 30.0) && lamps(&clear, -3.0));
+        // the noon sun and the night sky by hand: (A/2 x 0.8 + B/2 x 0.2 + C x 0.645) at
+        // 50 km (x 0.986), each colour at most 1
+        let (a, b, c) = lights(90.0);
+        assert_eq!(clear.daylight_sum(a, b, c, 1.0), 1.0);
+        let (a, b, c) = (Vec3::splat(0.2), Vec3::splat(0.1), Vec3::splat(0.3));
+        let v = (-std::f32::consts::LN_2 / 50.0).exp();
+        let by_hand = 0.2 * 0.8 * v / 2.0 + 0.1 * 0.2 * v / 2.0 + 0.3 * (1.0 - 0.45 * 0.8 * v);
+        assert!((clear.daylight_sum(a, b, c, 1.0) - by_hand).abs() < 1e-5);
+        // an overcast deck: no sun's share, the fog held to 0.7 - the lamps stay on through
+        // a winter's day and only go out round a summer noon
+        let ovc = SkyWeather {
+            clouds: Some(true),
+            ..SkyWeather::default()
+        };
+        assert!(lamps(&ovc, 15.0) && lamps(&ovc, 40.0));
+        assert!(!lamps(&ovc, 75.0));
+        // rain and snow shorten the visibility, snow thickens the fog (the lamps only come
+        // on in it by day under the clouds such weather brings)
+        let rain = SkyWeather {
+            precip_kind: 1,
+            precip_strength: 200.0,
+            ..SkyWeather::default()
+        };
+        assert_eq!(rain.effective_fog(), (500.0, 1.0));
+        let snow = SkyWeather {
+            precip_kind: 2,
+            precip_strength: 100.0,
+            fog_density: 0.5,
+            ..SkyWeather::default()
+        };
+        assert_eq!(snow.effective_fog(), (200.0, 0.8));
+        // the sun's share rises over +-0.02 rad round the horizon
+        assert_eq!(omsi_sun_share(-2.0), 0.0);
+        assert_eq!(omsi_sun_share(2.0), 1.0);
+        assert!((omsi_sun_share(0.0) - 0.5).abs() < 1e-6);
     }
 
     #[test]

@@ -411,9 +411,9 @@ impl Offscreen<'_> {
                     );
                 }
             }
-            // the AI's lights by the time of day, and by day in gloomy weather
+            // the AI's lights by Omsi.exe's daylight under the weather
             let daylight = omsi_sim::Daylight::compute(run_clock, envir.as_ref());
-            steps::set_ai_daylight(t, daylight, steps::gloomy_weather(Some(weather)));
+            steps::set_ai_daylight(t, daylight);
             let rail = player
                 .as_ref()
                 .and_then(|p| p.rail.as_ref())
