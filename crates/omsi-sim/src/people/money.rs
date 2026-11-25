@@ -130,12 +130,15 @@ impl Money {
                     .enumerate()
                     .map(|(i, (_, v))| (i, *v))
                     .chain(c.bills.iter().enumerate().map(|(k, (_, v))| (n + k, *v)))
+                    // (a piece worth nothing or a damaged value never covers a fare: left out
+                    // of the draw, the others keep their indices)
+                    .filter(|(_, v)| v.is_finite() && *v > 0.0)
                     .collect()
             }
             None => return Vec::new(),
         };
         // (a money system without a piece worth anything: Omsi.exe never covered the fare)
-        if !pieces.iter().any(|(_, v)| v.is_finite() && *v > 0.0) {
+        if pieces.is_empty() {
             return Vec::new();
         }
         let tolerance = self.currency.as_ref().map_or(0.005, |c| c.tolerance());
@@ -372,6 +375,25 @@ mod tests {
         // in coins alone about once in 10)
         assert!((260..=380).contains(&small_with_bill), "{small_with_bill}");
         assert!((15..=80).contains(&large_coins_only), "{large_coins_only}");
+    }
+
+    /// A piece worth nothing, less than nothing or a damaged value is never drawn: the fare
+    /// is still covered, with the pieces' own indices.
+    #[test]
+    fn worthless_and_broken_pieces_are_not_drawn() {
+        let mut money = money_with_currency(&[0.0, -1.0, f32::NAN, 0.5], &[f32::INFINITY, 5.0]);
+        money.currency.as_mut().unwrap().decimals = 2;
+        for _ in 0..200 {
+            let paid = money.omsi_coins_for(1.20);
+            assert!(paid.iter().all(|&id| id == 3 || id == 5), "{paid:?}");
+            let value = money.value_of(&paid);
+            assert!(
+                value.is_finite() && value >= 1.20 - 0.005,
+                "{paid:?}: {value}"
+            );
+        }
+        let mut broke = money_with_currency(&[0.0, f32::NAN], &[-5.0]);
+        assert!(broke.omsi_coins_for(1.0).is_empty());
     }
 
     /// The pieces not needed are taken back as Omsi.exe shortens its list: the last piece
