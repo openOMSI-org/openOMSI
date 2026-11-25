@@ -244,7 +244,9 @@ fn shade_vanilla(in: FsIn, puddle_weight: ptr<function, f32>, eye: vec3<f32>) ->
         if (material.bump.y > 0.5) {
             env_uv = env_uv + bump_offset(duv);
         }
-        let env = textureSample(t_env, s_diffuse, env_uv);
+        // (through `s_ao`, as `glass_blur` reads this texture: OpenGL takes one sampler
+        // for a texture in a shader)
+        let env = textureSample(t_env, s_ao, env_uv);
         let diffuse_a = diffuse_border(textureSampleBias(t_diffuse, s_diffuse, duv, camera.lod.x), duv).a;
         if (material.params.x < 1.5) {
             // rain: a painted body goes darker and glossier when it is wet, so the bus
