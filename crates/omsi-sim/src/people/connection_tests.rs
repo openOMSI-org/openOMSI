@@ -19,7 +19,8 @@ impl World for FlatWorld {
         Some(0.0)
     }
     fn walk_height_near(&self, x: f64, y: f64, _: f64) -> Option<f64> {
-        self.ground_samples.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.ground_samples
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.walk_height(x, y)
     }
     fn has_ground(&self, _: f64, _: f64) -> bool {
@@ -141,8 +142,13 @@ fn connections_need_a_service_and_disabled_path_does_not_draw_randomness() {
     )];
     assert!(!h.try_connection(0, at, 0.0, Some(42), buses[0].id, &buses, &ix, &world));
     assert_eq!(h.pax(0).unwrap().transfer_count, 0);
-    assert_eq!(world.ground_samples.load(std::sync::atomic::Ordering::Relaxed), 0,
-        "stops without valid onward service must not trigger terrain sampling");
+    assert_eq!(
+        world
+            .ground_samples
+            .load(std::sync::atomic::Ordering::Relaxed),
+        0,
+        "stops without valid onward service must not trigger terrain sampling"
+    );
 }
 
 #[test]
@@ -154,7 +160,10 @@ fn chance_zero_twenty_and_hundred_respect_draw_and_service() {
     other.entry_open.fill(true);
     let stop = h.stops.get_mut(&42).unwrap();
     stop.dests = vec![("Elsewhere".into(), 1.0)];
-    stop.lines = vec![("Elsewhere".into(), ["Elsewhere".into()].into_iter().collect())];
+    stop.lines = vec![(
+        "Elsewhere".into(),
+        ["Elsewhere".into()].into_iter().collect(),
+    )];
     stop.buses = vec![(other.id, true), (bus.id, true)];
     let buses = [bus, other];
     let ix = buses.iter().enumerate().map(|(i, b)| (b.id, i)).collect();
@@ -165,23 +174,39 @@ fn chance_zero_twenty_and_hundred_respect_draw_and_service() {
     let before = h.rng;
     assert!(!h.try_connection(0, at, 0.0, Some(42), buses[0].id, &buses, &ix, &world));
     assert_eq!(h.rng, before);
-    assert_eq!(world.ground_samples.load(std::sync::atomic::Ordering::Relaxed), 0);
+    assert_eq!(
+        world
+            .ground_samples
+            .load(std::sync::atomic::Ordering::Relaxed),
+        0
+    );
 
     h.transfer_percent = 20.0;
     let mut success_seed = None;
     let mut failure_seed = None;
     for seed in 1..=10000u64 {
         h.rng = seed;
-        if h.rand_f() < 0.2 { success_seed.get_or_insert(seed); }
-        else { failure_seed.get_or_insert(seed); }
-        if success_seed.is_some() && failure_seed.is_some() { break; }
+        if h.rand_f() < 0.2 {
+            success_seed.get_or_insert(seed);
+        } else {
+            failure_seed.get_or_insert(seed);
+        }
+        if success_seed.is_some() && failure_seed.is_some() {
+            break;
+        }
     }
     let fail = failure_seed.expect("20% should have a non-selected deterministic seed");
     h.rng = fail;
-    let expected_next = { let _ = h.rand_f(); h.rng };
+    let expected_next = {
+        let _ = h.rand_f();
+        h.rng
+    };
     h.rng = fail;
     assert!(!h.try_connection(0, at, 0.0, Some(42), buses[0].id, &buses, &ix, &world));
-    assert_eq!(h.rng, expected_next, "rejected draw must consume exactly one RNG sample");
+    assert_eq!(
+        h.rng, expected_next,
+        "rejected draw must consume exactly one RNG sample"
+    );
 
     h.rng = success_seed.expect("20% should have a selected deterministic seed");
     assert!(h.try_connection(0, at, 0.0, Some(42), buses[0].id, &buses, &ix, &world));
@@ -200,14 +225,25 @@ fn a_stop_in_range_fills_up_a_person_a_frame_once_its_clock_runs_out() {
     h.map_humans_done = true;
     let stop = h.stops.get_mut(&42).unwrap();
     h.center = stop.pos;
-    stop.spots = (0..6).map(|k| WaitSpot { pos: stop.pos + DVec3::X * k as f64, face: 0.0, height: 0.0 }).collect();
+    stop.spots = (0..6)
+        .map(|k| WaitSpot {
+            pos: stop.pos + DVec3::X * k as f64,
+            face: 0.0,
+            height: 0.0,
+        })
+        .collect();
     stop.taken = vec![false; 6];
     stop.enter_max = 5.0;
     stop.enter_min = 5.0;
     stop.near = true;
     stop.clock_ms = 15_001.0;
     let world = FlatWorld::default();
-    let waiting = |h: &PeopleSim| h.people.iter().filter(|p| matches!(&p.state, State::Pax(x) if x.stop == Some(42))).count();
+    let waiting = |h: &PeopleSim| {
+        h.people
+            .iter()
+            .filter(|p| matches!(&p.state, State::Pax(x) if x.stop == Some(42)))
+            .count()
+    };
     assert_eq!(waiting(&h), 1);
     // (0x61bf94 / 0x61bd44: its clock run out, a stop short of its number gets one more each
     // frame until it has it, and only then starts the clock again)
