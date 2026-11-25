@@ -913,8 +913,12 @@ impl App {
                                 lan::population_seed(lan) ^ 0x746f_7572_5f62_7573,
                             );
                         }
-                        let centers: Vec<glam::DVec3> =
-                            self.player.as_ref().map(|p| p.vehicle.position).into_iter().collect();
+                        let centers: Vec<glam::DVec3> = self
+                            .player
+                            .as_ref()
+                            .map(|p| p.vehicle.position)
+                            .into_iter()
+                            .collect();
                         sch.precache(
                             &w,
                             &renderer,
