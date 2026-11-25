@@ -227,6 +227,22 @@ pub(crate) fn clamped_linear_sampler(device: &mx::Device) -> mx::Sampler {
         .expect("mX: a sampler")
 }
 
+/// A linear sampler clamped to the edge that also blends between mip levels, without
+/// anisotropy: for reads at an explicit level (`textureSampleLevel`), which an anisotropic
+/// sampler has no derivatives to filter by.
+pub(crate) fn clamped_trilinear_sampler(device: &mx::Device) -> mx::Sampler {
+    device
+        .create_sampler(&mx::SamplerDescriptor {
+            address_mode_u: mx::AddressMode::ClampToEdge,
+            address_mode_v: mx::AddressMode::ClampToEdge,
+            mag_filter: mx::FilterMode::Linear,
+            min_filter: mx::FilterMode::Linear,
+            mipmap_filter: mx::MipmapFilterMode::Linear,
+            ..Default::default()
+        })
+        .expect("mX: a sampler")
+}
+
 /// A uniform buffer the CPU writes.
 /// A uniform buffer the scene shader reads through the heap too (`frame_from_heap`).
 pub(crate) fn frame_buffer(device: &mx::Device, label: &str, size: u64) -> mx::Buffer {
