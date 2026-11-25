@@ -338,7 +338,13 @@ impl PeopleSim {
                     !s.lines.is_empty(),
                     !none_due,
                 );
-                let w = (self.density.max(0.0) * mean * s.factor * served)
+                // (0x61bf94 times the share its trips ask for now, 0x61a068: rising as the
+                // next bus draws near, #3506; free drive fills by the stop's own numbers)
+                let share = match &self.due_dests {
+                    Some(d) if self.stop_targets.is_some() && !free => d.share_of(id),
+                    _ => 1.0,
+                };
+                let w = (self.density.max(0.0) * mean * s.factor * served * share)
                     .round()
                     .max(0.0) as usize;
                 forced.unwrap_or(w).min(s.spots.len())
