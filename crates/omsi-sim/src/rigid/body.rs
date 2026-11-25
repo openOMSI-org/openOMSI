@@ -645,19 +645,18 @@ impl RigidBody {
             // The coupled parts, each a tyre at the joint that pushes and brakes along the
             // body's axis and takes no side force.
             let fwd_flat = Vec3::new(body_fwd.x, body_fwd.y, 0.0).normalize_or(Vec3::Y);
-            for d in &self.coupled {
-                let share = Vec3::new(d.dir.x, d.dir.y, 0.0)
-                    .normalize_or(fwd_flat)
-                    .dot(fwd_flat)
-                    .max(0.0);
-                let r_world = rot.mul_vec3(d.point - self.cog);
-                let cap = self.friction * d.driven_load;
-                let drive = if d.driven_wheels > 0 {
-                    (drive_torque / d.radius.max(0.1) / driven * d.driven_wheels as f32)
-                        .clamp(-cap, cap)
-                } else {
-                    0.0
-                };
+            let (cog, friction, velocity) = (self.cog, self.friction, self.velocity);
+            for d in &mut self.coupled {
+                let part_fwd = Vec3::new(d.dir.x, d.dir.y, 0.0).normalize_or(fwd_flat);
+                let share = part_fwd.dot(fwd_flat).max(0.0);
+                let r_world = rot.mul_vec3(d.point - cog);
+                // (the part's driven wheels turn, and may spin, at its own speed over the road)
+                let drive = d.drive_step(
+                    drive_torque / d.radius.max(0.1) / driven,
+                    friction,
+                    (velocity + omega_world.cross(r_world)).dot(part_fwd),
+                    h,
+                );
                 contacts.push(Contact {
                     r: r_world,
                     fwd: body_fwd,
@@ -666,8 +665,8 @@ impl RigidBody {
                     drive: drive * share,
                     brake: d.brake.max(0.0) * share,
                     grip: d.load,
-                    mu: self.friction,
-                    v_long: (self.velocity + omega_world.cross(r_world)).dot(body_fwd),
+                    mu: friction,
+                    v_long: (velocity + omega_world.cross(r_world)).dot(body_fwd),
                     lateral: false,
                     wheel: None,
                 });

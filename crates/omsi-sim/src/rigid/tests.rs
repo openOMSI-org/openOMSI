@@ -361,6 +361,9 @@ fn pusher_front_section_is_pushed_through_the_joint() {
         brake: 0.0,
         load: 70_000.0,
         joint_load: 0.0,
+        spin: 0.0,
+        slipping: false,
+        inertia_inv: DEFAULT_INERTIA_INV,
     };
     let g = road(1e9, 0.0);
     let start = |def: &Vehicle, parts: Vec<CoupledPart>| {
@@ -453,6 +456,54 @@ fn pusher_front_section_is_pushed_through_the_joint() {
     );
 }
 
+/// #1083: the driven axle of a pusher's rear section spins on ice as the bus's own driven
+/// wheels do (Omsi.exe runs the section as a vehicle of its own wheels): asked for more than
+/// the road gives, its wheels turn faster than the bus goes and push it with the sliding
+/// friction; let off, they grip again.
+#[test]
+fn a_pushers_driven_rear_axle_spins_on_ice() {
+    let mut def = bus();
+    def.axles.iter_mut().for_each(|a| a.driven = false);
+    let rear = CoupledPart {
+        point: Vec3::new(0.0, -4.456, 0.503),
+        dir: Vec3::Y,
+        mass: 0.0,
+        driven_wheels: 2,
+        radius: 0.47,
+        driven_load: 70_000.0,
+        brake: 0.0,
+        load: 70_000.0,
+        joint_load: 0.0,
+        spin: 0.0,
+        slipping: false,
+        inertia_inv: DEFAULT_INERTIA_INV,
+    };
+    let g = road(1e9, 0.0);
+    let mut rb = RigidBody::from_definition(&def, &[]);
+    rb.coupled = vec![rear];
+    rb.place(DVec3::ZERO, 0.0);
+    run(&mut rb, 1.0, 0.0, 5000.0, &g);
+    // ice: a tenth of the grip; 9 kN m at the wheels asks 9.6 kN of each tyre, which
+    // carries 35 kN
+    rb.friction = 0.1;
+    run(&mut rb, 1.0, 9000.0, 0.0, &g);
+    let part = rb.coupled[0];
+    let v = rb.forward_speed();
+    assert!(part.slipping, "{part:?}");
+    assert!(
+        part.spin * part.radius > v + 2.0,
+        "wheels at {} m/s, the bus at {v} m/s",
+        part.spin * part.radius
+    );
+    // pushed by what the ice gives: 0.1 x 70 kN on 12 t, about 0.6 m/s²
+    assert!(v > 0.2 && v < 1.2, "{v}");
+    // let off, the wheels come back to the road's speed
+    run(&mut rb, 2.0, 0.0, 0.0, &g);
+    let part = rb.coupled[0];
+    assert!(!part.slipping, "{part:?}");
+    assert!((part.spin * part.radius - rb.forward_speed()).abs() < 0.05);
+}
+
 /// A towed part on a grade pulls the body down it, and its brakes hold it there.
 #[test]
 fn towed_weight_on_a_grade() {
@@ -469,6 +520,9 @@ fn towed_weight_on_a_grade() {
         brake: 0.0,
         load: 70_000.0,
         joint_load: 0.0,
+        spin: 0.0,
+        slipping: false,
+        inertia_inv: DEFAULT_INERTIA_INV,
     };
     let mut rb = RigidBody::from_definition(&def, &[]);
     rb.coupled = vec![CoupledPart {

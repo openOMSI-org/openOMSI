@@ -110,6 +110,10 @@ pub struct TrailerPart {
     pub(super) axle_z: Option<f64>,
     /// How fast the axle's height moves (m/s), for the road part's springs (see `follow`).
     pub(super) axle_vz: f64,
+    /// The turning of the part's driven wheels (rad/s) and whether they spin against the
+    /// road, as the leading body's step left them (see `CoupledPart::drive_step`).
+    pub(super) drive_spin: f32,
+    pub(super) drive_slipping: bool,
     /// The track under its turning axle, when it runs on rails (`VehicleInstance::retrail`):
     /// it stands at the track's height, not on whatever the ground probe finds there.
     pub(super) track: Option<DVec3>,
@@ -398,6 +402,8 @@ impl TrailerPart {
             bank: 0.0,
             axle_z: None,
             axle_vz: 0.0,
+            drive_spin: 0.0,
+            drive_slipping: false,
             rail_bogies: None,
             sway: None,
             track: None,
@@ -599,6 +605,7 @@ impl TrailerPart {
         self.axle_z = None;
         self.track = None;
         self.kappa = 0.0;
+        (self.drive_spin, self.drive_slipping) = (0.0, false);
     }
 
     /// Where this part couples to the part in front of it, in the world, with the leading
@@ -994,7 +1001,15 @@ impl TrailerPart {
         let turned = self.odometer / self.wheel_radius;
         let step = turned - self.turned_put;
         self.turned_put = turned;
+        // the driven wheels spinning on the road turn as fast as they spin
+        let spinning = self.drive_slipping.then_some(self.drive_spin);
         for a in 0..self.axle_count {
+            let (step, rpm) = match spinning {
+                Some(w) if self.ty.def.axles.get(a).is_some_and(|x| x.driven) => {
+                    (w * dt, w * 60.0 / std::f32::consts::TAU)
+                }
+                _ => (step, rpm),
+            };
             let steer = self.axle_steer(a);
             for side in 0..2 {
                 if let (Some(Some(id)), Some(s)) =

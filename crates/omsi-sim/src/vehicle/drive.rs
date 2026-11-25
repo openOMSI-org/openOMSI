@@ -556,6 +556,13 @@ impl VehicleInstance {
                         + def.rolling_resistance.max(0.0),
                     load: (0..def.axles.len()).map(wheel_load).sum(),
                     joint_load: t.joint_load,
+                    spin: t.drive_spin,
+                    slipping: t.drive_slipping,
+                    inertia_inv: driven
+                        .first()
+                        .map(|&a| def.axles[a].inertia_inv)
+                        .filter(|i| *i > 0.0)
+                        .unwrap_or(crate::rigid::DEFAULT_INERTIA_INV),
                 }
             })
             .collect()
@@ -617,6 +624,10 @@ impl VehicleInstance {
                     .collect()
             });
             rb.step(dt, m_wheel, brakes, steer, probe);
+            // (the turning of the rear sections' driven wheels goes on in the next step)
+            for (t, d) in self.trailers.iter_mut().zip(&rb.coupled) {
+                (t.drive_spin, t.drive_slipping) = (d.spin, d.slipping);
+            }
             for (w, (r, t)) in rb.wheels.iter_mut().zip(rail_turns.into_iter().flatten()) {
                 (w.rotation_deg, w.turned) = (r, t);
             }
@@ -755,18 +766,36 @@ impl VehicleInstance {
         // `Velocity` is what the driven wheels' turning makes of the speed, `Velocity_Ground`
         // the body's own (see `driven_wheels_speed`): a wheel spinning on ice or locked by
         // the brake shows on the speedometer as in OMSI.
-        let wheels = rb.wheels.iter().map(|w| (w.spin, w.radius, w.driven));
+        // a `[scriptshare]` rear section's driven axles are counted with this vehicle's
+        // (0x7cffb8 shares the count, 0x7e2574 adds their wheels' turning to `n_Wheel`),
+        // two wheels an axle turning as the leading body's step turned them (#1083; on the
+        // rails, with the train's speed)
+        let rails = self.on_rails();
+        let rear: Vec<(f32, f32, bool)> = self
+            .trailers
+            .iter()
+            .filter(|t| t.ty.def.script_share)
+            .flat_map(|t| {
+                t.ty.def
+                    .axles
+                    .iter()
+                    .filter(|a| a.driven)
+                    .flat_map(move |a| {
+                        let r = (a.wheel_diameter / 2.0).max(0.15);
+                        let spin = if rails { speed / r } else { t.drive_spin };
+                        [(spin, r, true); 2]
+                    })
+            })
+            .collect();
+        let wheels = rb
+            .wheels
+            .iter()
+            .map(|w| (w.spin, w.radius, w.driven))
+            .chain(rear.iter().copied());
         // (a bus standing on its brakes: the wheels' rocking of a few hundredths of a metre a
         // second is no speed, scripts test `!Velocity` for a bus at rest)
         let ground = script_speed(speed * 3.6);
-        // a `[scriptshare]` rear section's driven axles are counted with this vehicle's
-        // (0x7cffb8 shares the count, 0x7e2574 adds their wheels' turning to `n_Wheel`):
-        // its wheels do not spin of their own here, the body's speed stands for them
-        let rear_drives = self
-            .trailers
-            .first()
-            .is_some_and(|t| t.ty.def.script_share && t.ty.def.axles.iter().any(|a| a.driven));
-        let driven = driven_wheels_speed(wheels).or(rear_drives.then_some(speed));
+        let driven = driven_wheels_speed(wheels);
         let wheels = speedometer_speed(driven, !rb.wheels.is_empty(), speed) * 3.6;
         let v = if ground == 0.0 && wheels.abs() < 0.5 {
             0.0
@@ -776,7 +805,10 @@ impl VehicleInstance {
         self.put(self.v_velocity, v);
         self.put(self.v_velocity_ground, ground);
         let n_wheel = driven_wheels_rpm(
-            rb.wheels.iter().map(|w| (w.rpm, w.radius, w.driven)),
+            rb.wheels.iter().map(|w| (w.rpm, w.radius, w.driven)).chain(
+                rear.iter()
+                    .map(|&(spin, r, d)| (spin * 60.0 / std::f32::consts::TAU, r, d)),
+            ),
             rb.wheels.first().map_or(0.0, |w| w.radius),
         )
         .or_else(|| rb.wheels.first().map(|w| w.rpm))
