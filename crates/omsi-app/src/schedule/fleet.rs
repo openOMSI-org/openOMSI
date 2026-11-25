@@ -29,6 +29,11 @@ impl Schedule {
     /// Every type of the fleet is started once, which reads the files its scripts and
     /// displays need: done on the first bus of a type that comes along, those were frames of
     /// 60 to 170 ms in the middle of a drive.
+    ///
+    /// The texture budget is kept between the sets (`centers`: where the player starts): the
+    /// whole fleet went up in one stage of the loading with no look at it, and 131 sets took
+    /// an 8 GB card past its memory before the first frame, every texture after that one
+    /// refused (1451 of them).
     pub fn precache(
         &mut self,
         world: &World,
@@ -36,17 +41,25 @@ impl Schedule {
         scene: &mut Scene,
         traffic: Option<&mut crate::traffic::Traffic>,
         day_time: f64,
+        centers: &[glam::DVec3],
     ) {
         let t0 = std::time::Instant::now();
         let Some(t) = traffic else { return };
         let sets = self.upcoming_sets(world, t, day_time);
         // a few sets at a time: read on the workers, uploaded, and the copies let go
         let mut most_held = 0usize;
+        let mut shrunk = 0usize;
         for chunk in sets.chunks(3) {
             most_held = most_held.max(world.prefetch_vehicle_sets(renderer, chunk));
             for (ty, scheme) in chunk {
                 world.precache_vehicle(renderer, scene, ty, *scheme);
             }
+            shrunk += world.update_texture_budget(renderer, scene, centers, true);
+        }
+        if shrunk > 0 {
+            log::info!(
+                "timetable fleet: {shrunk} textures made smaller or sent to be read again on the way to keep the texture budget"
+            );
         }
         let t1 = std::time::Instant::now();
         let mut seen = std::collections::HashSet::new();

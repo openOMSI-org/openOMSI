@@ -63,6 +63,8 @@ impl<'a> Offscreen<'a> {
                     &mut scene,
                     traffic.as_mut(),
                     parse_time(&args.time),
+                    // (the player is not there yet: no budget kept on the way)
+                    &[],
                 )
             });
             if let (Some(t), true) = (traffic.as_mut(), omsi_cfg::flags::OMSI_CHECK_TRIPS.is_set())
