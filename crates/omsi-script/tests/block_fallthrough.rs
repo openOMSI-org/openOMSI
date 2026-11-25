@@ -127,3 +127,21 @@ fn block_words_are_case_sensitive() {
     vm.run_frame(&p, &mut st, &mut NullHost);
     assert_eq!(count(&p, &st), [1.0, 1.0, 0.0, 0.0]);
 }
+
+/// Omsi.exe sub_5d1db8 keeps the first `{init}` / `{frame}` of the whole set (the words of
+/// all files in `[script]` order): a second one in a later file, as the SKM6126's hidden AI
+/// script adds, never runs, so its timers run once a frame (issue #1101).
+#[test]
+fn only_the_sets_first_init_and_frame_run() {
+    let p = program(&[
+        "{init}\n(L.L.f) 1 + (S.L.f)\n{end}\n{frame}\n(M.L.tick)\n{end}\n",
+        "{init}\n(L.L.f) 10 + (S.L.f)\n{end}\n{frame}\n(M.L.tick) (L.L.b) 1 + (S.L.b)\n{end}\n{frame}\n(M.L.tick) (L.L.c) 1 + (S.L.c)\n{end}\n",
+        "{macro:tick}\n(L.L.a) 1 + (S.L.a)\n{end}\n",
+    ]);
+    assert_eq!((p.init.len(), p.frame.len()), (1, 1));
+    let mut vm = Vm::new();
+    let mut st = State::new(&p);
+    vm.run_init(&p, &mut st, &mut NullHost);
+    vm.run_frame(&p, &mut st, &mut NullHost);
+    assert_eq!(count(&p, &st), [1.0, 0.0, 0.0, 1.0]);
+}

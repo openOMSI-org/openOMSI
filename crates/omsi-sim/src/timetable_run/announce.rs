@@ -18,6 +18,22 @@ pub struct TwoRecordings {
     pub pairs: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayoutStatus {
+    Two(TwoRecordings),
+    Single,
+    Unsupported,
+}
+
+impl LayoutStatus {
+    pub fn two(self) -> Option<TwoRecordings> {
+        match self {
+            Self::Two(l) => Some(l),
+            Self::Single | Self::Unsupported => None,
+        }
+    }
+}
+
 /// An ident without what only tells two recordings of one stop apart: the line number in
 /// front of it (`102-FuNiuLuLongHaiLu`, as GreenCity writes them) and the digits at its end
 /// that number them (`Anzhenli1`, `Anzhenli2`), in lower case.
@@ -51,15 +67,28 @@ pub fn first_preview(list: &[String]) -> Option<usize> {
         .find(|&j| is_pair(&list[j], &list[j + 1]) && !is_pair(&list[j - 1], &list[j]))
 }
 
+pub fn layout_status(hof: &Hof, route: usize) -> Option<LayoutStatus> {
+    let list = hof.info_busstop_lists.get(route)?;
+    let pairs = list.windows(2).filter(|w| is_pair(&w[0], &w[1])).count();
+    if pairs == 0 {
+        return Some(LayoutStatus::Single);
+    }
+    let first = first_preview(list);
+    let two = first
+        .filter(|f| pairs >= 3 && *f <= 4)
+        .map(|first| TwoRecordings { first, pairs });
+    Some(match two {
+        Some(l) => LayoutStatus::Two(l),
+        None => LayoutStatus::Unsupported,
+    })
+}
+
 /// The two-recordings layout of `route`, when it has one: at least three pairs, and its first
 /// one near the start. A depot file that keeps one recording per stop has no pair at all
 /// (Spandau, Grundorf and the other German maps), and one whose start holds more than two
 /// entries before its first pair is not built the way the Chinese maps are.
 pub fn layout(hof: &Hof, route: usize) -> Option<TwoRecordings> {
-    let list = hof.info_busstop_lists.get(route)?;
-    let pairs = list.windows(2).filter(|w| is_pair(&w[0], &w[1])).count();
-    let first = first_preview(list)?;
-    (pairs >= 3 && first <= 4).then_some(TwoRecordings { first, pairs })
+    layout_status(hof, route)?.two()
 }
 
 /// The entry that holds the arrival recording of the `k`th stop of a trip (0-based; the first
@@ -184,6 +213,65 @@ fn one_letter_apart(a: &str, b: &str) -> bool {
     wrong + (a.len() - i) + (b.len() - j) <= 1
 }
 
+/// The keys a vehicle offers the game to step its IBIS on with (#3281): `IBIS_vor` plays the
+/// next recording and steps the counter on, `IBIS_vor_stumm` steps it over silently.
+///
+/// Most vehicle folders never mount a script that defines either - out of 382 folders in a
+/// common install, 18 mount one - so on most buses there is nothing the game can press, and
+/// the automatic announcements stay the bus's own. That is worth saying to the player once,
+/// which is what [`quiet`] spells out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Keys {
+    /// Both keys: a press plays, and an entry it would pass over is stepped over silently.
+    Both,
+    /// Only `IBIS_vor`: a press plays whatever entry it lands on, so one is made only where it
+    /// lands on the recording wanted.
+    Play,
+    /// Only `IBIS_vor_stumm`: entries can be passed over, but nothing is played by it.
+    Step,
+    /// Neither: an ibox or an Atron unit, whose announcements are its own.
+    Neither,
+}
+
+/// The keys a vehicle has, from whether each of the two exists on it.
+pub fn keys(vor: bool, stumm: bool) -> Keys {
+    match (vor, stumm) {
+        (true, true) => Keys::Both,
+        (true, false) => Keys::Play,
+        (false, true) => Keys::Step,
+        (false, false) => Keys::Neither,
+    }
+}
+
+/// Whether the game can announce a depot file of `pairs` pairs of recordings on this bus: it
+/// needs a way into the counter and a second recording per stop to miss.
+pub fn usable(keys: Keys, pairs: usize) -> bool {
+    pairs > 0 && keys != Keys::Neither
+}
+
+/// Why the game leaves the announcements to the bus, in one line for the player (#3281) -
+/// None where it does not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuietReason {
+    SingleRecordingHof,
+    NoIbisKey,
+    NoBusstopCounter,
+    Off,
+}
+
+pub fn quiet(keys: Keys, pairs: usize) -> Option<QuietReason> {
+    if usable(keys, pairs) {
+        return None;
+    }
+    Some(if pairs == 0 {
+        QuietReason::SingleRecordingHof
+    } else if keys == Keys::Neither {
+        QuietReason::NoIbisKey
+    } else {
+        QuietReason::Off
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,11 +316,12 @@ mod tests {
     }
 
     #[test]
-    fn a_depot_file_of_one_recording_per_stop_has_no_layout() {
+    fn a_depot_file_of_one_recording_per_stop_is_distinct_from_an_unsupported_layout() {
         let mut hof = Hof::default();
         hof.info_busstop_lists = vec![list(&[
             "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta",
         ])];
+        assert_eq!(layout_status(&hof, 0), Some(LayoutStatus::Single));
         assert_eq!(layout(&hof, 0), None);
         hof.info_busstop_lists = vec![list(&[
             "Start",
@@ -244,9 +333,39 @@ mod tests {
             "DRoad",
             "DRoad1",
         ])];
+        assert_eq!(
+            layout_status(&hof, 0),
+            Some(LayoutStatus::Two(TwoRecordings { first: 2, pairs: 3 }))
+        );
         assert_eq!(layout(&hof, 0), Some(TwoRecordings { first: 2, pairs: 3 }));
         // (a route the depot file has no list for)
+        assert_eq!(layout_status(&hof, 1), None);
         assert_eq!(layout(&hof, 1), None);
+        // (a few pairs, and a first pair too far into the list: not a single-recording file)
+        hof.info_busstop_lists = vec![list(&[
+            "Start",
+            "welcome19",
+            "FRoad",
+            "FRoad1",
+            "GRoad",
+            "GRoad1",
+        ])];
+        assert_eq!(layout_status(&hof, 0), Some(LayoutStatus::Unsupported));
+        hof.info_busstop_lists = vec![list(&[
+            "Start",
+            "welcome19",
+            "Extra",
+            "More",
+            "Else",
+            "FRoad",
+            "FRoad1",
+            "GRoad",
+            "GRoad1",
+            "HRoad",
+            "HRoad1",
+        ])];
+        assert_eq!(layout_status(&hof, 0), Some(LayoutStatus::Unsupported));
+        assert_eq!(layout(&hof, 0), None);
     }
 
     #[test]
@@ -293,5 +412,24 @@ mod tests {
         // (the third stop of the trip is `deltaroad`, which the count would put on
         // `charlieroad1` (entry 7); the stop after `deltaroad` stands at entry 9)
         assert_eq!(arrival_entry(&hof, 0, "deltaroad", 2), Some(9));
+    }
+
+    /// #3281: most buses mount no script with the IBIS keys, and the game says so once instead
+    /// of staying quiet for a whole duty.
+    #[test]
+    fn a_bus_with_no_ibis_keys_says_so_instead_of_staying_quiet() {
+        assert_eq!(keys(true, true), Keys::Both);
+        assert_eq!(keys(true, false), Keys::Play);
+        assert_eq!(keys(false, true), Keys::Step);
+        assert_eq!(keys(false, false), Keys::Neither);
+        assert!(usable(Keys::Both, 22) && usable(Keys::Play, 1) && usable(Keys::Step, 1));
+        assert!(!usable(Keys::Neither, 22), "an ibox announces on its own");
+        assert!(
+            !usable(Keys::Both, 0),
+            "one recording per stop: nothing to miss"
+        );
+        assert!(quiet(Keys::Both, 22).is_none(), "works: say nothing");
+        assert_eq!(quiet(Keys::Neither, 22), Some(QuietReason::NoIbisKey));
+        assert_eq!(quiet(Keys::Both, 0), Some(QuietReason::SingleRecordingHof));
     }
 }

@@ -29,6 +29,7 @@ suffix, as Substance, Blender, Materialize and similar tools export them.
 | Packed ORM | `_orm`, `_arm` | Red occlusion, green roughness, blue metalness |
 | Packed MRA | `_mra` | Red metalness, green roughness, blue occlusion |
 | Packed RMA | `_rma` | Red roughness, green metalness, blue occlusion |
+| Height (parallax) | `_hh`, `_height`, `_heightmap`, `_disp`, `_displacement`, `_parallax` | White = high; a grey picture |
 
 - File types: `.png`, `.tga`, `.dds`, `.bmp`, `.jpg`, `.jpeg`.
 - Case does not matter. The suffix may also start with `-` instead of `_` (`bus-normal`).
@@ -61,6 +62,11 @@ suffix, as Substance, Blender, Materialize and similar tools export them.
 - **Roughness** sharpens or blurs the reflections of the environment and the sun's highlight.
 - **Metalness** tints the reflection with the diffuse colour and darkens the diffuse part.
 - **Occlusion** darkens the ambient light only.
+- The **height map** gives the surface relief by parallax occlusion mapping: the texture is
+  looked up where the view ray meets the relief, so cobbles, brick joints and tread plates
+  hide what lies behind them as the view moves. The relief is 2.5 cm deep, whatever the
+  texture's scale. It is stored in the alpha of the occlusion/roughness/metalness map (made
+  for it when there is none).
 - A `[matl_envmap]` strength still scales the reflection.
 - Without a roughness map, the diffuse texture's alpha still works as OMSI's reflection mask.
 

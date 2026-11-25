@@ -144,7 +144,7 @@ Changes are saved as the line's `.ttl` and the trip's `.ttp` files in the conten
 
 ## Add-ons
 
-Projects made for openOMSI by others, with a link to each website. See [Add-ons](ADDONS.md).
+Projects made for openOMSI by others, with a link to each website. The list is read from [openOMSI-org/add-ons-list](https://github.com/openOMSI-org/add-ons-list) each time the page opens. See [Add-ons](ADDONS.md).
 
 ## Controls
 

@@ -175,6 +175,16 @@
       "permission": null
     },
     {
+      "name": "bus.cruise",
+      "group": "vehicle",
+      "since": "0.3.55",
+      "doc": "The speed the cruise control holds, km/h (`nil` while it is off). The player switches it with Num0.",
+      "params": [],
+      "returns": "number or nil",
+      "multi": false,
+      "permission": null
+    },
+    {
       "name": "bus.damage",
       "group": "vehicle",
       "since": "0.2.22",
@@ -517,6 +527,22 @@
       "returns": "tickets, money",
       "multi": true,
       "permission": null
+    },
+    {
+      "name": "bus.set_cruise",
+      "group": "vehicle",
+      "since": "0.3.55",
+      "doc": "Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). Like Num0, it is refused (false) while the bus goes slower than 5 km/h. It works the throttle and the brake the bus's scripts read, which a plugin's `set_var(\"Throttle\")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held.",
+      "params": [
+        {
+          "name": "kmh",
+          "type": "number",
+          "optional": true
+        }
+      ],
+      "returns": "boolean",
+      "multi": false,
+      "permission": "vehicle_write"
     },
     {
       "name": "bus.set_destination",
@@ -4910,9 +4936,10 @@
       "name": "key",
       "args": [
         "key",
-        "down"
+        "down",
+        "combo"
       ],
-      "doc": "A key went down (`true`) or came up: winit's name of it (`\"KeyH\"`, `\"F5\"`, `\"Numpad8\"`).",
+      "doc": "A key went down (`true`) or came up: winit's name of it (`\"KeyH\"`, `\"F5\"`, `\"Numpad8\"`), and the combination it made with the modifiers held, spelled as `input.hotkey` takes them (`\"Ctrl+KeyH\"`, `\"F5\"`).",
       "since": "0.1.10"
     },
     {
@@ -5404,6 +5431,14 @@
         "text"
       ],
       "doc": "A line was said in the LAN session's chat (by another player or this one).",
+      "since": "0.2.22"
+    },
+    {
+      "name": "chat_command",
+      "args": [
+        "text"
+      ],
+      "doc": "The player typed a `/`-line into the chat (`\"/login name pass\"`): while a plugin hears this, such a line is not said to the session at all (a password never reaches the other players). Say something back with `lan.chat`.",
       "since": "0.2.22"
     },
     {

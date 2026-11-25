@@ -465,6 +465,10 @@ pub struct PeopleSim {
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to
     /// sell it (and show a pass after `PAY_PATIENCE`); `walk` - no cash desk at all.
     pub boarding: String,
+    /// Rear door boarding (`rear_door_boarding` in the settings, #4055): the passengers may
+    /// get in at any door of the bus on their side of it, not only the front one - each walks
+    /// to the nearest and asks for it there.
+    pub rear_door_boarding: bool,
     /// The chance a boarding passenger takes a standing place although a seat is free
     /// (`standing_chance` in the settings).
     pub stand_chance: f32,

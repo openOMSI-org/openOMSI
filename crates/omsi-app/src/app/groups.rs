@@ -89,7 +89,7 @@ pub(crate) struct NetState {
 /// website's "playing now" and the look for a newer release.
 pub(crate) struct Integrations {
     /// Keys pressed (true) and let go since the Lua plugins' last frame.
-    pub(crate) plugin_keys: Vec<(String, bool)>,
+    pub(crate) plugin_keys: Vec<omsi_plugin::KeyEvent>,
     /// What happened since the Lua plugins' last frame: crashes, people knocked down,
     /// stops skipped, services and moves of the bus, trips ended, jolts, tickets sold (see
     /// `plugins::queue_event`).

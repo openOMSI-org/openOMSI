@@ -980,15 +980,6 @@ fn dates_are_fitted_to_the_maps_year_span() {
     assert_eq!(span((1972, 1989)), Some((1972, 1989)));
 }
 
-/// A date the player chose keeps its year; only the machine's calendar is fitted to the
-/// map's `[years]`.
-#[test]
-fn a_chosen_duty_date_keeps_its_year() {
-    let span = Some((1986, 2000));
-    assert_eq!(date_for_game("2025-06-01", false, span), "2025-06-01");
-    assert_eq!(date_for_game("2025-06-01", true, span), "2000-06-01");
-}
-
 #[test]
 fn todays_year_is_kept_when_the_player_asks_for_it() {
     let dir = std::env::temp_dir().join(format!("openomsi-real-year-{}", std::process::id()));
@@ -1007,6 +998,17 @@ fn todays_year_is_kept_when_the_player_asks_for_it() {
     };
     let (y, ..) = local_now().unwrap();
     assert_eq!(year(serde_json::json!({"use_real_date": true})), "1995");
+    // a year after the map's [years] is kept with today's date too: Omsi.exe's [useActDate]
+    // leaves the year alone (0x708780), and a chrono scenario of a later year is reached
+    // (#3283)
+    let mut later = d.clone();
+    later.date = Some("2021-01-01".into());
+    let a =
+        duty_args_with_settings(&later, &dir, &serde_json::json!({"use_real_date": true})).unwrap();
+    assert_eq!(
+        &a[a.iter().position(|x| x == "--date").unwrap() + 1][..4],
+        "2021"
+    );
     assert_eq!(
         year(serde_json::json!({"use_real_date": true, "use_real_year": true})),
         format!("{y:04}")

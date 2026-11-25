@@ -23,10 +23,9 @@ pub struct LightStop {
 /// a car four seconds before it came to the line.
 pub const DEFAULT_APPROACH: f32 = 10.0;
 
-/// From how far before the stop line (m) a rail vehicle asks a light whose program gives
-/// no distance (unset or 0, as level crossings mostly do): about its braking distance from
-/// 100 km/h, so the barriers are down when it comes.
-pub const RAIL_ASK_DISTANCE: f32 = 600.0;
+/// How far ahead (m) the path search of a vehicle the player drives runs (Omsi.exe 0x7e2574
+/// calls the search 0x716970 with 500 m): the lights on the rails it finds are asked.
+pub const PLAYER_SEARCH_RANGE: f32 = 500.0;
 
 /// A vehicle waiting with its front within this of the stop line (m) asks its light, the
 /// `[approachdist]` notwithstanding (with 0 a car half a metre short never asked).
@@ -162,21 +161,17 @@ impl TrafficLightController {
     }
 
     /// Whether light `i` is asked by a vehicle `gap` m before its stop line (below 0: over
-    /// it) going `speed` m/s. The program's own distance holds for every vehicle; where it
-    /// gives none (unset or 0) a rail vehicle asks from [`RAIL_ASK_DISTANCE`], a road one
-    /// from the default when unset and only at the line when 0. Whoever waits at the line
-    /// asks.
+    /// it) going `speed` m/s, the light's path found by the vehicle's path search. Omsi.exe's
+    /// search (0x716970) marks a path's light asked when the path starts nearer than the
+    /// light's `[approachdist]`, or whatever the distance when the path is a rail one
+    /// (`[path]` type 2, `rail`): a level crossing's or a signal's track light is asked as
+    /// far ahead as the search runs (`ai_search_range`, 1500 m for a train), its own
+    /// distance notwithstanding. Whoever waits at the line asks.
     pub fn is_asked_by(&self, i: usize, gap: f32, speed: f32, rail: bool) -> bool {
         if speed.abs() < 0.5 && gap <= WAITING_AT_LINE {
             return true;
         }
-        let set = self.approach.get(i).copied().flatten();
-        let distance = match (set.filter(|&d| d > 0.0), rail) {
-            (Some(d), _) => d,
-            (None, true) => RAIL_ASK_DISTANCE,
-            (None, false) => set.unwrap_or(DEFAULT_APPROACH),
-        };
-        gap <= distance
+        rail || gap < self.approach_dist(i)
     }
 
     /// Whether a stop or jump point's condition holds for this frame's requests.

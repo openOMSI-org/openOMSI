@@ -240,6 +240,8 @@
 "High (512)": "Yüksek (512)"
 "Very high (1024)": "Çok yüksek (1024)"
 "Boarding": "Biniş"
+"Rear door boarding": "Arka kapıdan biniş"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "Yolcular arka ve orta kapılardan da biner: her biri otobüsün kendi tarafındaki en yakın kapıya gidip onu ister, ön kapıda sıraya girmez. O kapıyı her zamanki gibi açın (kendi tuşu, tüm kapılar ya da kapı serbest bırakma)"
 "Pay and take the ticket": "Öde ve bileti al"
 "The driver sells the ticket": "Bileti sürücü satar"
 "Just walk in": "Sadece bin"
@@ -3233,6 +3235,9 @@
 "At most 5": "En fazla 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Başka hiçbir haritanın kullanmadığı nesne ve spline klasörleri de onunla birlikte silinir: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Başka bir haritanın hâlâ kullandığı nesne ve spline klasörleri kalır: {n}."
+"Cruise control: {} km/h": "Hız sabitleyici: {} km/s"
+"Cruise control off": "Hız sabitleyici kapalı"
+"Cruise control works above {} km/h": "Hız sabitleyici {} km/s üzerinde çalışır"
 "Lighting": "Aydınlatma"
 "Weather & effects": "Hava durumu ve efektler"
 "Mouse": "Fare"
@@ -3315,3 +3320,17 @@
 "Save under a name...": "Bir adla kaydet..."
 "No saved situation of this map yet": "Bu haritanın henüz kayıtlı durumu yok"
 "Saved as \"{}\"": "\"{}\" olarak kaydedildi"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Otomatik anonslar: bu hattın HOF dosyasında durak başına bir kayıt var, basılacak bir şey yok."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Otomatik anonslar: bu otobüste IBIS \"sonraki durak\" tuşu yok, bu yüzden anonslar kendi kontrolünde kalır."
+"Automatic announcements are off.": "Otomatik anonslar kapalı."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+
+"Draw other players' buses in less detail when far away": "Uzaktaki diğer oyuncuların otobüslerini daha az ayrıntıyla çiz"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Çok oyunculu: 120 m ötesinde ve kare hızı 20'nin altındayken diğer otobüsler gövdelerini korur ancak sürücü ve tabelaları gizlenir; 26 FPS üzerinde tamamen geri gelir"
+
+"sent to the plugins": "eklentilere gönderildi"
+"no plugin is listening for commands": "komutları dinleyen eklenti yok"
+"plugin command queue is full": "eklenti komut kuyruğu dolu"
+

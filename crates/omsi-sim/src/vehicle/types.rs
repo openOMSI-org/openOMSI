@@ -516,6 +516,21 @@ impl VehicleType {
                 }
             }
         }
+        // `[light_emitter_interior]`: lamps made from the light-mapped meshes' textures
+        if model
+            .meshes
+            .iter()
+            .any(|m| m.light_emitter_interior.is_some())
+        {
+            let dirs = [
+                omsi_cfg::resolve_path(def.dir(), "Texture"),
+                omsi_cfg::resolve_path(&model_dir, "Texture"),
+                model_dir.clone(),
+                omsi_cfg::resolve_path(root, "Texture"),
+            ];
+            let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
+            super::light_emitters::add(&mut model, &meshes, &dirs);
+        }
         // The lower levels of detail (`[LOD]` 2 and on): the meshes a vehicle is drawn with
         // from farther away, as Omsi.exe picks them by the vehicle's size on the screen. They
         // are small (a few thousand triangles against tens of thousands) and kept whole, and

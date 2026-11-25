@@ -239,6 +239,8 @@
 "High (512)": "สูง (512)"
 "Very high (1024)": "สูงมาก (1024)"
 "Boarding": "การขึ้นรถ"
+"Rear door boarding": "ขึ้นรถทางประตูหลัง"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "ผู้โดยสารขึ้นทางประตูหลังและประตูกลางได้ด้วย แต่ละคนจะเดินไปยังประตูที่ใกล้ที่สุดฝั่งของตนแล้วขอยืนยัน แทนที่จะต่อแถวที่ประตูหน้า เปิดประตูนั้นตามปกติ (ปุ่มของประตูนั้น ทั้งหมด หรือปลดล็อกประตู)"
 "Pay and take the ticket": "จ่ายเงินและรับตั๋วเอง"
 "The driver sells the ticket": "คนขับขายตั๋ว"
 "Just walk in": "ขึ้นรถได้เลย"
@@ -2928,6 +2930,9 @@
 "At most 5": "สูงสุด 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "โฟลเดอร์วัตถุและสไปลน์ที่ไม่มีแผนที่อื่นใช้จะถูกลบไปด้วย: {n} โฟลเดอร์, {size}"
 "Folders of objects and splines that another map still uses stay: {n}.": "โฟลเดอร์วัตถุและสไปลน์ที่แผนที่อื่นยังใช้อยู่จะยังคงอยู่: {n} โฟลเดอร์"
+"Cruise control: {} km/h": "ระบบควบคุมความเร็ว: {} กม./ชม."
+"Cruise control off": "ปิดระบบควบคุมความเร็ว"
+"Cruise control works above {} km/h": "ระบบควบคุมความเร็วทำงานที่ความเร็วเกิน {} กม./ชม."
 "Lighting": "แสง"
 "Weather & effects": "สภาพอากาศและเอฟเฟกต์"
 "Mouse": "เมาส์"
@@ -3010,3 +3015,17 @@
 "Save under a name...": "บันทึกโดยตั้งชื่อ..."
 "No saved situation of this map yet": "ยังไม่มีสถานการณ์ที่บันทึกไว้ของแผนที่นี้"
 "Saved as \"{}\"": "บันทึกเป็น \"{}\" แล้ว"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "การประกาศอัตโนมัติ: ไฟล์ HOF ของสายนี้มีเสียงบันทึกเดียวต่อป้าย จึงไม่ต้องกดอะไร"
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "การประกาศอัตโนมัติ: รถคันนี้ไม่มีปุ่ม IBIS \"ป้ายถัดไป\" เสียงประกาศจึงยังคงเป็นของรถเอง"
+"Automatic announcements are off.": "การประกาศอัตโนมัติปิดอยู่"
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+
+"Draw other players' buses in less detail when far away": "วาดรถบัสของผู้เล่นคนอื่นโดยมีรายละเอียดน้อยลงเมื่ออยู่ไกล"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "ผู้เล่นหลายคน: เกิน 120 ม. และเมื่ออัตราเฟรมต่ำกว่า 20 รถบัสของผู้เล่นคนอื่นจะยังคงตัวถังไว้ แต่จะไม่แสดงคนขับและป้ายแสดงจุดหมายปลายทาง โดยจะกลับมาแสดงเต็มรูปแบบเมื่อเกิน 26 fps"
+
+"sent to the plugins": "ส่งไปยังปลั๊กอินแล้ว"
+"no plugin is listening for commands": "ไม่มีปลั๊กอินใดที่รอรับคำสั่ง"
+"plugin command queue is full": "คิวคำสั่งของปลั๊กอินเต็ม"
+

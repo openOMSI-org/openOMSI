@@ -102,6 +102,14 @@ What the bus drives with now: the pedals (0 to 1) and the steering (-1 left to 1
 
 *Since 0.2.22.*
 
+### omsi.bus.cruise
+
+`omsi.bus.cruise()` → number or nil
+
+The speed the cruise control holds, km/h (`nil` while it is off). The player switches it with Num0.
+
+*Since 0.3.55.*
+
 ### omsi.bus.damage
 
 `omsi.bus.damage()` → table or nil
@@ -380,6 +388,14 @@ The engine's revolutions per minute.
 Tickets sold this session and the money taken (the game knows no currency).
 
 *Since 0.2.22.*
+
+### omsi.bus.set_cruise
+
+`omsi.bus.set_cruise([kmh])` → boolean
+
+Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). Like Num0, it is refused (false) while the bus goes slower than 5 km/h. It works the throttle and the brake the bus's scripts read, which a plugin's `set_var("Throttle")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held.
+
+*Since 0.3.55. Permission: `vehicle_write`.*
 
 ### omsi.bus.set_destination
 
@@ -3582,7 +3598,7 @@ end)
 
 ### Input, camera and game
 
-- **`key`**`(key, down)`: A key went down (`true`) or came up: winit's name of it (`"KeyH"`, `"F5"`, `"Numpad8"`). *Since 0.1.10.*
+- **`key`**`(key, down, combo)`: A key went down (`true`) or came up: winit's name of it (`"KeyH"`, `"F5"`, `"Numpad8"`), and the combination it made with the modifiers held, spelled as `input.hotkey` takes them (`"Ctrl+KeyH"`, `"F5"`). *Since 0.1.10.*
 - **`controller_button`**`(device, button, down)`: A button of a steering wheel, joystick or gamepad went down (`true`) or up: the device's name and the button's number. *Since 0.2.22.*
 - **`view`**`(new, old)`: The view changed (`"driver"`, `"pax"`, `"outside"`, `"free"`, `"foot"`). *Since 0.1.10.*
 - **`menu_open`**`()`: The game menu opened. *Since 0.2.22.*
@@ -3604,6 +3620,7 @@ end)
 - **`lan_leave`**`(id, name)`: A player left the LAN session. *Since 0.2.22.*
 - **`lan_message`**`(from, data)`: The same plugin on another player's game sent this one a message (`lan.send`): the player's id and the text. *Since 0.2.22.*
 - **`lan_chat`**`(name, text)`: A line was said in the LAN session's chat (by another player or this one). *Since 0.2.22.*
+- **`chat_command`**`(text)`: The player typed a `/`-line into the chat (`"/login name pass"`): while a plugin hears this, such a line is not said to the session at all (a password never reaches the other players). Say something back with `lan.chat`. *Since 0.2.22.*
 
 ### Scenery object scripts
 
