@@ -81,6 +81,26 @@ impl VehicleInstance {
         self.set_engine_ev(Ev::PrecipRate, glass_precip_rate(rain));
         // the state of the road, for the tyre sounds and the wheel spray
         self.set_engine_ev(Ev::StreetCond, self.host.street_cond);
+        // While it rains or snows, the glass wets as Omsi.exe has it (0x7d22d8): by how hard
+        // the fall, carried by the wind, meets the windscreen of the moving body - this takes
+        // over from the flat rate above, which stays the dry one.
+        if rain > 0.0 {
+            let velocity = self.rigid.as_ref().map_or_else(
+                || {
+                    let h = self.heading.to_radians();
+                    Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * self.physics.speed
+                },
+                |rb| rb.velocity,
+            );
+            let wetting = glass_wetting(
+                self.host.precip_type as i32,
+                rain,
+                self.host.wind,
+                velocity,
+                self.body_rotation(),
+            );
+            self.set_engine_ev(Ev::PrecipRate, wetting);
+        }
         // what is coupled to this vehicle (the train scripts light their ends by it: a head
         // lamp only where nothing is coupled, the tail lamps at the last car)
         self.set_coupling_evs();
