@@ -711,4 +711,8 @@ pub(crate) struct GpuErrors {
     pub(crate) out_of_memory: Arc<std::sync::atomic::AtomicBool>,
     /// Why the graphics device was lost (a driver reset, the card removed), once it was.
     pub(crate) device_lost: Arc<std::sync::Mutex<Option<String>>>,
+    /// Errors from `Queue::submit` since the last frame: its work was refused.
+    pub(crate) refused_submits: Arc<std::sync::atomic::AtomicU64>,
+    /// The frames refused in a row (kept through a rebuild, see `Renderer::rebuild_in_place`).
+    pub(crate) rejected: std::cell::Cell<crate::pipelines::errors::RejectedRun>,
 }
