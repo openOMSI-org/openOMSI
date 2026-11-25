@@ -335,7 +335,8 @@ pub(super) fn winding_pack(p: &Path) -> String {
     }
 }
 
-/// What a file was when it was read: its size and the time it was last written, together.
+/// What a file was when it was read: its size and the time it was last written, or a hash of
+/// its bytes when VFS serves it from an archive with no filesystem timestamp.
 /// A mesh rebuilt by a modder has another stamp, which is how the world tells the mesh it
 /// already has on the GPU from the new one - the vehicle reads its files again on "Reload
 /// this vehicle", but the GPU kept what it uploaded the first time (#2618). 0 for a file of a

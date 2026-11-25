@@ -55,6 +55,8 @@ fn a_mesh_file_that_changed_has_another_stamp() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// An archived mesh has no file timestamp, and a rebuilt one can have exactly the same byte
+/// count: the stamp has to follow the content, or the GPU keeps the mesh it uploaded first.
 #[test]
 fn an_archived_mesh_rebuilt_at_the_same_size_has_another_stamp() {
     let dir = temp_dir("stamp_zip");
