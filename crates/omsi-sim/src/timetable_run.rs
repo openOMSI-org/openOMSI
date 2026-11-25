@@ -5,6 +5,7 @@
 //! puts the buses on the road with them.
 
 pub mod announce;
+pub mod departure;
 mod duty;
 mod ibis;
 mod route;
