@@ -62,6 +62,22 @@ fn points_a_player_throws_reach_the_host_and_stay() {
     assert!(sync.own_changes(&player, DVec3::ZERO, 0.25).is_empty());
 }
 
+/// The host takes a throw from a player whose vehicle is near the points, and not from one
+/// the other side of the map, or one it does not know.
+#[test]
+fn only_points_near_the_player_who_threw_them_are_set() {
+    let (_, mut host) = map_with_points();
+    let mut sync = PointsSync::default();
+    let far = DVec3::new(RADIUS * 3.0, 0.0, 0.0);
+    sync.came_up(2, &[(7, 1.0)]);
+    sync.came_up(3, &[(7, 1.0)]);
+    sync.set_thrown(&mut host, |id| (id == 2).then_some(far));
+    assert_eq!(host.switch_set_to(7, 0), Some(true));
+    sync.came_up(2, &[(7, 1.0)]);
+    sync.set_thrown(&mut host, |_| Some(DVec3::new(100.0, 0.0, 0.0)));
+    assert_eq!(host.switch_set_to(7, 1), Some(true));
+}
+
 /// Points that come again with their tile stand as the map has them: that is not a throw
 /// of the player's, and the host's setting is not overwritten with it.
 #[test]

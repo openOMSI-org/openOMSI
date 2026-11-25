@@ -3495,6 +3495,17 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["vehicle_smoke"] = json!("all");
 }
 
+/// `passenger_weight_kg` or `passenger_weight_spread` as the settings text has it.
+fn weight_value(key: &str, val: &str) -> Value {
+    let (def, lo, hi) = if key == "passenger_weight_kg" {
+        (75.0, 20.0, 200.0)
+    } else {
+        (0.0, 0.0, 50.0)
+    };
+    let n = val.parse::<f64>().ok().filter(|x| x.is_finite());
+    json!(n.unwrap_or(def).clamp(lo, hi))
+}
+
 // (one setting a line, as the settings file has them: rustfmt would triple it)
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
@@ -4012,20 +4023,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     "simple"
                 })
             }
-            "passenger_weight_kg" | "passenger_weight_spread" => {
-                let (def, lo, hi) = if k == "passenger_weight_kg" {
-                    (75.0, 20.0, 200.0)
-                } else {
-                    (0.0, 0.0, 50.0)
-                };
-                v[&k] = json!(
-                    val.parse::<f64>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .unwrap_or(def)
-                        .clamp(lo, hi)
-                )
-            }
+            "passenger_weight_kg" | "passenger_weight_spread" => v[&k] = weight_value(&k, val),
             "passenger_transfer_percent" => {
                 v[&k] = json!(
                     val.parse::<f64>()

@@ -23,8 +23,8 @@ const MAX_UP: usize = 32;
 #[derive(Default)]
 pub struct PointsSync {
     acc: f32,
-    /// Host: what the players' games threw, to set here.
-    up: Vec<(i64, f32)>,
+    /// Host: what the players' games threw (player, points, value), to set here.
+    up: Vec<(u32, i64, f32)>,
     /// Host: the points around each player, for its next world frame.
     around: HashMap<u32, Vec<(i64, f32)>>,
     /// Player: the host's points as they came.
@@ -37,10 +37,32 @@ pub struct PointsSync {
 }
 
 impl PointsSync {
-    /// Host: points a player's world frame carried.
-    pub fn came_up(&mut self, points: &[(i64, f32)]) {
+    /// Host: points player `from`'s world frame carried.
+    pub fn came_up(&mut self, from: u32, points: &[(i64, f32)]) {
         let room = (MAX_POINTS * 4).saturating_sub(self.up.len());
-        self.up.extend(points.iter().take(room).copied());
+        self.up
+            .extend(points.iter().take(room).map(|&(id, v)| (from, id, v)));
+    }
+
+    /// Host: set what the players threw, `at` saying where each player's vehicle is. A
+    /// player's game tells of the points around its own vehicle only (`own_changes`): one
+    /// further off is not taken, so that no game throws the points all over the map.
+    fn set_thrown(&mut self, scenery: &mut SceneryState, at: impl Fn(u32) -> Option<DVec3>) {
+        let mut around: HashMap<u32, Vec<(i64, f32)>> = HashMap::new();
+        for (from, id, value) in std::mem::take(&mut self.up) {
+            let Some(pos) = at(from) else { continue };
+            // (twice the radius: the vehicle has moved on since the frame left)
+            let near = around.entry(from).or_insert_with(|| {
+                scenery
+                    .switch_values_near(pos, RADIUS * 2.0)
+                    .into_iter()
+                    .map(|(id, _, value)| (id, value))
+                    .collect()
+            });
+            if near.iter().any(|p| p.0 == id) {
+                scenery.set_switch_value(id, value);
+            }
+        }
     }
 
     /// Player: points the host's world frame carried.
@@ -63,11 +85,11 @@ impl PointsSync {
         dt: f32,
     ) {
         match lan.role {
-            Role::Host => {
-                for (id, value) in self.up.drain(..) {
-                    scenery.set_switch_value(id, value);
-                }
-            }
+            Role::Host => self.set_thrown(scenery, |from| {
+                lan.peers()
+                    .find(|p| p.pose.id == from && p.has_pose && p.pose.has_vehicle())
+                    .map(|p| DVec3::new(p.pose.x, p.pose.y, p.pose.z))
+            }),
             Role::Client => self.take_host(scenery),
         }
         self.acc += dt;
