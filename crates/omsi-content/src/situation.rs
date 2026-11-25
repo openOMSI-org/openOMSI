@@ -64,15 +64,23 @@ impl Situation {
         if self.name_chosen {
             t.push_str(&format!("{NAME_CHOSEN}\r\n"));
         }
-        t.push_str(&format!("[description]\r\n{}\r\n[end]\r\n\r\n", self.description));
+        t.push_str(&format!(
+            "[description]\r\n{}\r\n[end]\r\n\r\n",
+            self.description
+        ));
         t.push_str(&format!("[map]\r\n{}\r\n\r\n", self.map));
         if let Some(w) = &self.weather {
             // (`[actuWeather]` as OMSI writes and reads it; `[weather]` was never read back)
             t.push_str(&format!("[actuWeather]\r\n{w}\r\n\r\n"));
         }
         let (y, doy, hh, mm, ss) = self.time;
-        t.push_str(&format!("[time]\r\n{y}\r\n{doy}\r\n{hh}\r\n{mm}\r\n{ss:.6}\r\n\r\n"));
-        t.push_str(&format!("[centerkachel]\r\n{}\r\n{}\r\n\r\n", self.center_tile.0, self.center_tile.1));
+        t.push_str(&format!(
+            "[time]\r\n{y}\r\n{doy}\r\n{hh}\r\n{mm}\r\n{ss:.6}\r\n\r\n"
+        ));
+        t.push_str(&format!(
+            "[centerkachel]\r\n{}\r\n{}\r\n\r\n",
+            self.center_tile.0, self.center_tile.1
+        ));
         if self.map_cam.len() == 6 {
             t.push_str("[mapcam]\r\n");
             for v in &self.map_cam {
@@ -96,7 +104,10 @@ impl Situation {
             for k in 0..7 {
                 t.push_str(&format!("{:.3}\r\n", v.orientation[k]));
             }
-            t.push_str(&format!("{}\r\n{}\r\n{:.3}\r\n{}\r\n", v.tile.0, v.tile.1, v.odometer_km, v.paint));
+            t.push_str(&format!(
+                "{}\r\n{}\r\n{:.3}\r\n{}\r\n",
+                v.tile.0, v.tile.1, v.odometer_km, v.paint
+            ));
             if let Some(c) = v.coupled_with {
                 t.push_str(&format!("\r\n[coupledWith]\r\n{c}\r\n"));
             }
@@ -115,7 +126,11 @@ impl Situation {
                 t.push_str(&format!("{n}\r\n{x}\r\n"));
             }
             for c in &v.cars {
-                t.push_str(&format!("\r\n[openOMSI_car]\r\n{}\r\n{}\r\n", c.car, c.vars.len()));
+                t.push_str(&format!(
+                    "\r\n[openOMSI_car]\r\n{}\r\n{}\r\n",
+                    c.car,
+                    c.vars.len()
+                ));
                 for (n, x) in &c.vars {
                     t.push_str(&format!("{n}\r\n{x:.6}\r\n"));
                 }
@@ -131,7 +146,10 @@ impl Situation {
                 }
             }
         }
-        t.push_str(&format!("\r\n[myvehicle]\r\n{}\r\n\r\n[view]\r\n{}\r\n", self.my_vehicle, self.view));
+        t.push_str(&format!(
+            "\r\n[myvehicle]\r\n{}\r\n\r\n[view]\r\n{}\r\n",
+            self.my_vehicle, self.view
+        ));
         let mut bytes = vec![0xFF, 0xFE];
         for u in t.encode_utf16() {
             bytes.extend_from_slice(&u.to_le_bytes());
@@ -141,7 +159,11 @@ impl Situation {
 
     pub fn load(path: &Path) -> Result<Situation, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
-        let mut s = Situation { path: f.path.clone(), my_vehicle: -1, ..Default::default() };
+        let mut s = Situation {
+            path: f.path.clone(),
+            my_vehicle: -1,
+            ..Default::default()
+        };
         let mut r = f.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
@@ -169,7 +191,15 @@ impl Situation {
                     let tile = (r.i32(), r.i32());
                     let odometer_km = r.f64();
                     let paint = r.str().to_string();
-                    s.vehicles.push(SituationVehicle { file, pos, orientation, tile, odometer_km, paint, ..Default::default() });
+                    s.vehicles.push(SituationVehicle {
+                        file,
+                        pos,
+                        orientation,
+                        tile,
+                        odometer_km,
+                        paint,
+                        ..Default::default()
+                    });
                 }
                 "coupledwith" => {
                     let v = r.i32();
@@ -214,11 +244,18 @@ impl Situation {
                 }
                 "openomsi_car" => {
                     let car = r.usize();
-                    let vars = (0..r.count()).map(|_| (r.str().to_string(), r.f64())).collect();
-                    let string_vars =
-                        (0..r.count()).map(|_| (r.str().to_string(), r.line().to_string())).collect();
+                    let vars = (0..r.count())
+                        .map(|_| (r.str().to_string(), r.f64()))
+                        .collect();
+                    let string_vars = (0..r.count())
+                        .map(|_| (r.str().to_string(), r.line().to_string()))
+                        .collect();
                     if let Some(veh) = s.vehicles.last_mut() {
-                        veh.cars.push(SituationCar { car, vars, string_vars });
+                        veh.cars.push(SituationCar {
+                            car,
+                            vars,
+                            string_vars,
+                        });
                     }
                 }
                 "settimetable" => {
@@ -271,6 +308,9 @@ mod tests {
         let loaded = Situation::load(&path).unwrap();
         std::fs::remove_file(path).unwrap();
         assert_eq!(loaded.vehicles, sit.vehicles);
-        assert_eq!((loaded.name.as_str(), loaded.name_chosen), ("Slot 3: Depot run, 09:00", true));
+        assert_eq!(
+            (loaded.name.as_str(), loaded.name_chosen),
+            ("Slot 3: Depot run, 09:00", true)
+        );
     }
 }

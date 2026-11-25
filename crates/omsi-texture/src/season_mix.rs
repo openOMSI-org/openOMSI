@@ -53,7 +53,11 @@ pub fn look_of(mix: &SeasonMix, now: &Option<String>, key: u64) -> Option<Option
     if !same(now, &mix.from) && !same(now, &mix.to) {
         return None;
     }
-    let look = if unit_hash(key) < mix.share { &mix.to } else { &mix.from };
+    let look = if unit_hash(key) < mix.share {
+        &mix.to
+    } else {
+        &mix.from
+    };
     (!same(look, now)).then(|| look.clone())
 }
 
@@ -74,7 +78,11 @@ mod tests {
     use super::*;
 
     fn mix(from: Option<&str>, to: Option<&str>, share: f32) -> SeasonMix {
-        SeasonMix { from: from.map(String::from), to: to.map(String::from), share }
+        SeasonMix {
+            from: from.map(String::from),
+            to: to.map(String::from),
+            share,
+        }
     }
 
     #[test]
@@ -86,7 +94,10 @@ mod tests {
         assert!((turned - 0.25).abs() < 0.02, "{turned}");
         // seen from the other look (the map in Fall): the rest are the summer ones
         let now = Some("Fall".to_string());
-        let green = (0..n).filter(|k| look_of(&m, &now, *k) == Some(None)).count() as f32 / n as f32;
+        let green = (0..n)
+            .filter(|k| look_of(&m, &now, *k) == Some(None))
+            .count() as f32
+            / n as f32;
         assert!((green - 0.75).abs() < 0.02, "{green}");
     }
 
@@ -111,6 +122,10 @@ mod tests {
 
     #[test]
     fn unit_hash_stays_in_range() {
-        assert!((0..10_000u64).map(|k| unit_hash(k.wrapping_mul(7919))).all(|u| (0.0..1.0).contains(&u)));
+        assert!(
+            (0..10_000u64)
+                .map(|k| unit_hash(k.wrapping_mul(7919)))
+                .all(|u| (0.0..1.0).contains(&u))
+        );
     }
 }

@@ -2,7 +2,7 @@
 //! and the named streets with their speed limits, to tell which street and which municipality one is in.
 //! Read from `markers.cfg`, `regions.cfg` and the lines and labels of `surface.oms`.
 
-use super::{Package, Rd, LINE_STREET, LINE_STREET_LIMITS};
+use super::{LINE_STREET, LINE_STREET_LIMITS, Package, Rd};
 
 /// A name on the map: where, what kind (0 district, 1 terminal, 2 town, 3 landmark, 4 water), how important
 /// (the author's number, high shows from far away) and the text.
@@ -50,20 +50,34 @@ pub struct Street {
 /// a package that works only on its author's computer is no package.
 pub fn is_inside(rel: &str) -> bool {
     let rel = rel.replace('\\', "/");
-    !rel.is_empty() && !rel.contains(':') && !rel.starts_with('/') && rel.split('/').all(|c| !c.is_empty() && c != "." && c != "..")
+    !rel.is_empty()
+        && !rel.contains(':')
+        && !rel.starts_with('/')
+        && rel
+            .split('/')
+            .all(|c| !c.is_empty() && c != "." && c != "..")
 }
 
 impl Package {
     /// Reads `regions.cfg` and finds out whether the surface has named streets (called once, by `open`).
     pub(super) fn load_places(&mut self) {
         self.regions = self.read_regions();
-        self.has_streets = self.index.iter().any(|e| self.data.get(e.at..e.at + e.len).is_some_and(chunk_has_streets));
+        self.has_streets = self.index.iter().any(|e| {
+            self.data
+                .get(e.at..e.at + e.len)
+                .is_some_and(chunk_has_streets)
+        });
     }
 
     /// A place of the author's grid (metres, as `markers.cfg` and `regions.cfg` write them) as world metres.
     pub fn author_to_world(&self, ax: f64, ay: f64) -> (f64, f64) {
         let (tx, ty) = ((ax / self.grid).floor(), (ay / self.grid).floor());
-        crate::tile_local_to_world(tx as i32, ty as i32, ax - tx * self.grid, ay - ty * self.grid)
+        crate::tile_local_to_world(
+            tx as i32,
+            ty as i32,
+            ax - tx * self.grid,
+            ay - ty * self.grid,
+        )
     }
 
     /// World metres as metres of the author's grid (the inverse of `author_to_world`).
@@ -106,7 +120,12 @@ impl Package {
         for _ in 0..r.u32()? {
             let (kind, rank, name) = (r.u8()?, r.u8()?, r.u32()?);
             let at = self.to_world(r.f32()?, r.f32()?);
-            out.push(Label { at, kind, rank, name: self.name(name) });
+            out.push(Label {
+                at,
+                kind,
+                rank,
+                name: self.name(name),
+            });
         }
         Some(())
     }
@@ -131,13 +150,22 @@ impl Package {
             if f.len() < 4 || !is_inside(f[0]) {
                 continue;
             }
-            let (Ok(width), Ok(x), Ok(y)) = (f[1].parse::<f32>(), f[2].parse::<f64>(), f[3].parse::<f64>()) else {
+            let (Ok(width), Ok(x), Ok(y)) = (
+                f[1].parse::<f32>(),
+                f[2].parse::<f64>(),
+                f[3].parse::<f64>(),
+            ) else {
                 continue;
             };
             if !(width > 0.0 && width < 512.0) || !x.is_finite() || !y.is_finite() {
                 continue;
             }
-            out.push(Marker { at: self.author_to_world(x, y), icon: f[0].to_string(), width_px: width, name: f.get(4).copied().unwrap_or("").to_string() });
+            out.push(Marker {
+                at: self.author_to_world(x, y),
+                icon: f[0].to_string(),
+                width_px: width,
+                name: f.get(4).copied().unwrap_or("").to_string(),
+            });
         }
         out
     }
@@ -184,7 +212,13 @@ impl Package {
             if outline.len() < 3 {
                 continue;
             }
-            out.push(Region { name: f[0].to_string(), label: self.author_to_world(x, y), box_w: w.max(0.0), box_h: h.max(0.0), outline });
+            out.push(Region {
+                name: f[0].to_string(),
+                label: self.author_to_world(x, y),
+                box_w: w.max(0.0),
+                box_h: h.max(0.0),
+                outline,
+            });
         }
         out
     }
@@ -201,7 +235,11 @@ impl Package {
     /// The municipality and the street at a world position: the region whose outline holds it, and the named
     /// street within 30 m (read from the chunks around, nothing kept).
     pub fn locate(&self, pos: (f64, f64)) -> (Option<String>, Option<String>) {
-        let region = self.regions.iter().find(|r| point_in_poly(&r.outline, pos)).map(|r| r.name.clone());
+        let region = self
+            .regions
+            .iter()
+            .find(|r| point_in_poly(&r.outline, pos))
+            .map(|r| r.name.clone());
         (region, self.street_info(pos, 30.0).map(|s| s.name))
     }
 
@@ -213,7 +251,10 @@ impl Package {
         }
         let a = self.world_to_author(pos);
         let a = (a.0 - self.origin.0, a.1 - self.origin.1);
-        let (cx, cy) = ((a.0 / self.chunk).floor() as i32, (a.1 / self.chunk).floor() as i32);
+        let (cx, cy) = (
+            (a.0 / self.chunk).floor() as i32,
+            (a.1 / self.chunk).floor() as i32,
+        );
         let mut best: Option<(f64, u32, u32, u32)> = None;
         for dx in -1..=1 {
             for dy in -1..=1 {
@@ -227,7 +268,11 @@ impl Package {
             }
         }
         best.filter(|b| b.0 <= reach)
-            .map(|b| Street { name: self.name(b.1), speed: b.2, heavy: if b.3 == b.2 { 0 } else { b.3 } })
+            .map(|b| Street {
+                name: self.name(b.1),
+                speed: b.2,
+                heavy: if b.3 == b.2 { 0 } else { b.3 },
+            })
             .filter(|s| !s.name.is_empty())
     }
 }
@@ -251,7 +296,11 @@ fn point_in_poly(poly: &[(f64, f64)], p: (f64, f64)) -> bool {
 fn dist_to_segment(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
     let ab = (b.0 - a.0, b.1 - a.1);
     let l2 = ab.0 * ab.0 + ab.1 * ab.1;
-    let t = if l2 > 1e-9 { (((p.0 - a.0) * ab.0 + (p.1 - a.1) * ab.1) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    let t = if l2 > 1e-9 {
+        (((p.0 - a.0) * ab.0 + (p.1 - a.1) * ab.1) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let (dx, dy) = (a.0 + ab.0 * t - p.0, a.1 + ab.1 * t - p.1);
     (dx * dx + dy * dy).sqrt()
 }
@@ -283,7 +332,11 @@ fn chunk_has_streets(body: &[u8]) -> bool {
 
 /// The nearest street piece of a chunk to `p` (metres of the author's grid from the file's origin): `best` is
 /// (distance, name index, limit, heavy limit), kept when nearer than what it holds.
-fn street_in_chunk(body: &[u8], p: (f64, f64), best: &mut Option<(f64, u32, u32, u32)>) -> Option<()> {
+fn street_in_chunk(
+    body: &[u8],
+    p: (f64, f64),
+    best: &mut Option<(f64, u32, u32, u32)>,
+) -> Option<()> {
     let mut r = Rd { b: body, i: 0 };
     for _ in 0..r.u32()? {
         r.u8()?;
@@ -296,7 +349,11 @@ fn street_in_chunk(body: &[u8], p: (f64, f64), best: &mut Option<(f64, u32, u32,
         let width = r.f32()?;
         let name = r.u32()?;
         let n = r.u32()? as usize;
-        let (speed, heavy) = if class == LINE_STREET_LIMITS { (width.max(0.0).round() as u32, flags as u32) } else { (0, 0) };
+        let (speed, heavy) = if class == LINE_STREET_LIMITS {
+            (width.max(0.0).round() as u32, flags as u32)
+        } else {
+            (0, 0)
+        };
         if class != LINE_STREET && class != LINE_STREET_LIMITS {
             r.take(n.checked_mul(8)?)?;
             continue;
@@ -340,7 +397,23 @@ mod tests {
         for good in ["icons/stop.png", "icons\\stop.png", "stop.png", "a/b/c.png"] {
             assert!(super::is_inside(good), "{good}");
         }
-        for bad in ["", ".", "..", "../a.png", "icons/../../a.png", "icons\\..\\a.png", "/a.png", "/tmp/icon.png", "\\a.png", "\\\\server\\share\\a.png", "C:\\a.png", "C:/a.png", "C:a.png", "icons//a.png", "./a.png"] {
+        for bad in [
+            "",
+            ".",
+            "..",
+            "../a.png",
+            "icons/../../a.png",
+            "icons\\..\\a.png",
+            "/a.png",
+            "/tmp/icon.png",
+            "\\a.png",
+            "\\\\server\\share\\a.png",
+            "C:\\a.png",
+            "C:/a.png",
+            "C:a.png",
+            "icons//a.png",
+            "./a.png",
+        ] {
             assert!(!super::is_inside(bad), "{bad}");
         }
     }
@@ -351,10 +424,27 @@ mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples");
         let p = Package::open(&dir).expect("docs/examples/openomsi-realmap is a package");
         assert_eq!(p.markers().len(), 2);
-        assert!(p.picture("icons/stop.png").is_some_and(|b| b.len() > 4 && &b[1..4] == b"PNG"));
-        assert!(p.picture("../manifest.cfg").is_none(), "a path cannot climb out of the folder");
-        for bad in ["/tmp/icon.png", "\\icon.png", "C:/icons/stop.png", "C:\\icons\\stop.png", "C:stop.png", "\\\\server\\share\\stop.png", "icons/../../manifest.cfg"] {
-            assert!(p.picture(bad).is_none(), "{bad} is not inside the package folder");
+        assert!(
+            p.picture("icons/stop.png")
+                .is_some_and(|b| b.len() > 4 && &b[1..4] == b"PNG")
+        );
+        assert!(
+            p.picture("../manifest.cfg").is_none(),
+            "a path cannot climb out of the folder"
+        );
+        for bad in [
+            "/tmp/icon.png",
+            "\\icon.png",
+            "C:/icons/stop.png",
+            "C:\\icons\\stop.png",
+            "C:stop.png",
+            "\\\\server\\share\\stop.png",
+            "icons/../../manifest.cfg",
+        ] {
+            assert!(
+                p.picture(bad).is_none(),
+                "{bad} is not inside the package folder"
+            );
         }
         assert_eq!(p.regions().len(), 1);
         assert!(p.has_location());
@@ -362,8 +452,13 @@ mod tests {
         names.sort();
         assert_eq!(names, ["Exampleton", "Lakeside", "Parkfield"]);
         let (city, street) = p.locate((494.0, 730.0));
-        assert_eq!((city.as_deref(), street.as_deref()), (Some("Exampleton"), Some("Example Street")));
-        let s = p.street_info((494.0, 730.0), 30.0).expect("a street within 30 m");
+        assert_eq!(
+            (city.as_deref(), street.as_deref()),
+            (Some("Exampleton"), Some("Example Street"))
+        );
+        let s = p
+            .street_info((494.0, 730.0), 30.0)
+            .expect("a street within 30 m");
         assert_eq!((s.speed, s.heavy), (30, 0));
         // far from every street and outside the region: nothing
         assert_eq!(p.locate((5000.0, 5000.0)), (None, None));

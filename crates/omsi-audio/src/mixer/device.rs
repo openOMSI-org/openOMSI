@@ -5,9 +5,9 @@
 
 use super::render::{MixerCell, Reverb, Shared};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// The engine's end of the device thread.
@@ -20,14 +20,22 @@ pub(super) struct DeviceThread {
 impl DeviceThread {
     /// The thread, with the stream opened on the default device: `None` when no thread
     /// could be started.
-    pub(super) fn start(shared: Arc<Shared>, mixer: Arc<MixerCell>, reopen: Arc<AtomicBool>) -> Option<DeviceThread> {
+    pub(super) fn start(
+        shared: Arc<Shared>,
+        mixer: Arc<MixerCell>,
+        reopen: Arc<AtomicBool>,
+    ) -> Option<DeviceThread> {
         let (open_tx, open_rx) = mpsc::channel::<()>();
         let (done_tx, done_rx) = mpsc::channel();
         let join = std::thread::Builder::new()
             .name("audio device".into())
             .spawn(move || run(open_rx, done_tx, &shared, &mixer, &reopen))
             .ok()?;
-        Some(DeviceThread { open: Some(open_tx), opened: done_rx, join: Some(join) })
+        Some(DeviceThread {
+            open: Some(open_tx),
+            opened: done_rx,
+            join: Some(join),
+        })
     }
 
     /// Play on the system's default output device from now on: the name of the device
@@ -48,7 +56,13 @@ impl Drop for DeviceThread {
     }
 }
 
-fn run(open: mpsc::Receiver<()>, opened: mpsc::Sender<Option<String>>, shared: &Arc<Shared>, mixer: &Arc<MixerCell>, reopen: &Arc<AtomicBool>) {
+fn run(
+    open: mpsc::Receiver<()>,
+    opened: mpsc::Sender<Option<String>>,
+    shared: &Arc<Shared>,
+    mixer: &Arc<MixerCell>,
+    reopen: &Arc<AtomicBool>,
+) {
     let mut stream: Option<cpal::Stream> = None;
     // The default device's name the watcher saw last (from the first stream on; no stream
     // at the start, no watching).
@@ -74,7 +88,10 @@ fn run(open: mpsc::Receiver<()>, opened: mpsc::Sender<Option<String>>, shared: &
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 next_look = Instant::now() + Duration::from_secs(2);
                 if let Some(current) = watched.as_mut() {
-                    let name = cpal::default_host().default_output_device().and_then(|d| d.name().ok()).unwrap_or_default();
+                    let name = cpal::default_host()
+                        .default_output_device()
+                        .and_then(|d| d.name().ok())
+                        .unwrap_or_default();
                     if name != *current {
                         *current = name;
                         reopen.store(true, Ordering::Relaxed);
@@ -89,7 +106,11 @@ fn run(open: mpsc::Receiver<()>, opened: mpsc::Sender<Option<String>>, shared: &
 
 /// A stream on the system's default output device, mixing from `mixer`, with the device's
 /// name.
-fn open_default(shared: &Arc<Shared>, mixer: &Arc<MixerCell>, reopen: &Arc<AtomicBool>) -> Option<(cpal::Stream, String)> {
+fn open_default(
+    shared: &Arc<Shared>,
+    mixer: &Arc<MixerCell>,
+    reopen: &Arc<AtomicBool>,
+) -> Option<(cpal::Stream, String)> {
     let host = cpal::default_host();
     let Some(dev) = host.default_output_device() else {
         log::warn!("audio: no output device");
@@ -136,7 +157,11 @@ fn open_default(shared: &Arc<Shared>, mixer: &Arc<MixerCell>, reopen: &Arc<Atomi
             if let Err(e) = s.play() {
                 log::warn!("audio: cannot start stream: {e}");
             }
-            log::info!("audio: playing on {name} ({} Hz, {} channels)", rate, cfg.channels());
+            log::info!(
+                "audio: playing on {name} ({} Hz, {} channels)",
+                rate,
+                cfg.channels()
+            );
             Some((s, name))
         }
         Err(e) => {

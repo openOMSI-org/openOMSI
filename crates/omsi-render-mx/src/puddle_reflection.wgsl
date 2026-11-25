@@ -181,10 +181,13 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
     } else {
         ripple = puddle_ripple_classic(world.xy + p.origin_rain.xy, p.eye_time.w, p.origin_rain.z, 1.0);
     }
-    let normal = normalize(surface_normal + vec3<f32>(ripple.xy, 0.0));
+    // The discrete screen-space hit must stay on the same ray as the ripple
+    // moves. Keep the rain distortion in the filtered planar sample below.
+    let normal = select(normalize(surface_normal + vec3<f32>(ripple.xy, 0.0)), surface_normal, p.vehicle_info.w > 0.5);
     let direction = reflect(normalize(world - p.eye_time.xyz), normal);
     if (local_vehicle_plane(world)) {
-        let vehicle = textureSampleLevel(t_vehicle, s_linear, uv + ripple.xy * 0.006, 0.0);
+        let distortion = select(0.006, 0.0015, p.vehicle_info.w > 0.5);
+        let vehicle = textureSampleLevel(t_vehicle, s_linear, uv + ripple.xy * distortion, 0.0);
         if (vehicle.a > 0.01) {
             if (p.projection_trace.z == 2.0) { return vec4<f32>(0.0, 1.0, 0.0, depth); }
             if (p.projection_trace.z == 3.0) { return vec4<f32>(finite_colour(vehicle.rgb), depth); }
@@ -259,7 +262,7 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
     return trace_miss(depth);
 }
 
-// Separable five-tap binomial filter at the bounded trace resolution. Filter the
+// Separable blur at the bounded trace resolution. Filter the
 // signed lighting change, including misses, to soften silhouettes and isolated gaps.
 // Receiver depth prevents mixing water on opposite sides of a kerb or foreground mesh.
 fn filter_reflection(px: vec2<i32>, axis: vec2<i32>) -> vec4<f32> {
@@ -267,23 +270,28 @@ fn filter_reflection(px: vec2<i32>, axis: vec2<i32>) -> vec4<f32> {
     let centre = textureLoad(t_trace, px, 0);
     if (centre.a <= 0.0) { return vec4<f32>(0.0); }
     let kernel = array<f32, 5>(1.0, 4.0, 6.0, 4.0, 1.0);
+    // Enhanced keeps the wider blur, but weights all three texel phases equally.
+    // Sparse taps at a stride of three left those phases isolated in both passes.
+    let enhanced_kernel = array<f32, 13>(
+        1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 10.0, 10.0, 8.0, 6.0, 4.0, 2.0, 1.0,
+    );
     var sum = vec3<f32>(0.0);
     var total = 0.0;
-    // (Enhanced blurs wider: a puddle on asphalt is no mirror, its picture is soft)
-    let step = select(1, 3, p.vehicle_info.w > 0.5);
     let enhanced = p.vehicle_info.w > 0.5;
+    let radius = select(2, 6, enhanced);
     var here = vec3<f32>(0.0);
     if (enhanced) {
         here = world_pos((vec2<f32>(px) + vec2<f32>(0.5)) / vec2<f32>(size), centre.a);
     }
-    for (var i = -2; i <= 2; i++) {
-        let q = clamp(px + axis * i * step, vec2<i32>(0), size - vec2<i32>(1));
+    for (var i = -radius; i <= radius; i++) {
+        let q = clamp(px + axis * i, vec2<i32>(0), size - vec2<i32>(1));
         let r = textureLoad(t_trace, q, 0);
         let difference = abs(r.a - centre.a) / max(centre.a, 1e-6);
         var same = 1.0 - smoothstep(0.015, 0.06, difference);
         if (enhanced && r.a > 0.0) { same = same_water(q, r.a, here); }
-        let w = kernel[u32(i + 2)] * same
-            * select(0.0, 1.0, r.a > 0.0);
+        var tap = enhanced_kernel[u32(i + 6)];
+        if (!enhanced) { tap = kernel[u32(i + 2)]; }
+        let w = tap * same * select(0.0, 1.0, r.a > 0.0);
         sum += r.rgb * w;
         total += w;
     }

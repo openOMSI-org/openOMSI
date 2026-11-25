@@ -771,10 +771,27 @@ impl Renderer {
             let data = omsi_texture::Image {
                 width: img.width,
                 height: img.height,
-                rgba: img.rgba.iter().map(|b| lut[*b as usize]).collect(),
-                has_alpha: false,
+                // (the alpha is not sRGB-encoded: a height map in it stays as it is)
+                rgba: img
+                    .rgba
+                    .iter()
+                    .enumerate()
+                    .map(|(i, b)| if i % 4 == 3 { *b } else { lut[*b as usize] })
+                    .collect(),
+                has_alpha: img.has_alpha,
             };
-            self.add_texture(scene, &data, true)
+            // (each channel averaged on its own down the mip chain: the alpha of an ORM map
+            // is a height map, not a coverage that should weigh the other channels)
+            let fitted = fit_image(&data, self.device.limits().max_texture_dimension_2d);
+            let data = fitted.as_ref().unwrap_or(&data);
+            let t = self.upload_rgba_mips_with(
+                data.width,
+                data.height,
+                &data.rgba,
+                MipAverage::Independent,
+            );
+            scene.textures.push(t);
+            scene.textures.len() - 1
         };
         let normal = set.normal.as_ref().map(&mut up);
         let orm = set.orm.as_ref().map(&mut up);
@@ -996,19 +1013,23 @@ impl Renderer {
                     ..Default::default()
                 })
                 .expect("mX: a texture view");
-            let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("mip"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: mx::BindingResource::TextureView(&src),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::Sampler(&self.mip_sampler),
-                    },
-                ],
-            });
+            let bg = HeapGroup::of(
+                crate::pipelines::mip::MIP.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("mip"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: mx::BindingResource::TextureView(&src),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::Sampler(&self.mip_sampler),
+                        },
+                    ],
+                },
+            );
             let mut pass = encoder.begin_render_pass(&mx::RenderPassDescriptor {
                 label: Some("mip"),
                 color_attachments: &[Some(mx::RenderPassColorAttachment {
@@ -1024,7 +1045,7 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &bg);
+            bg.set(&mut pass);
             pass.draw(0..3, 0..1);
         }
         self.queue.submit([encoder.finish()]);

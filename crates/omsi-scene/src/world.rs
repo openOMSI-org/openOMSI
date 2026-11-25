@@ -3,6 +3,9 @@ use super::*;
 
 pub struct World {
     pub root: PathBuf,
+    pub(super) _publisher_mounts: omsi_cfg::publisher::DependencyMounts,
+    /// Cached map-scoped global texture roots for scene lookups.
+    pub(super) publisher_texture_dirs: Vec<PathBuf>,
     pub global: GlobalCfg,
     /// The map's `transport` folder: stations, routes, wires, switches, depots, signals (empty
     /// for a map without one).
@@ -282,6 +285,7 @@ pub fn model_lights_faded(
         pos,
         value_of,
         fades,
+        &[],
         &mut out,
         LampSource::Model(None),
     );
@@ -304,6 +308,7 @@ pub fn model_lights_extend(
         pos,
         value_of,
         fades,
+        &[],
         out,
         LampSource::Model(None),
     );
@@ -323,6 +328,7 @@ pub(crate) fn vehicle_model_lights_extend(
         pos,
         value_of,
         fades,
+        &[],
         out,
         LampSource::Vehicle,
     );
@@ -407,6 +413,17 @@ pub fn model_lights_owned(
     value_of: &dyn Fn(&str) -> f32,
     fades: &[f32],
 ) -> Vec<(omsi_render::Corona, usize)> {
+    model_lights_owned_with_texture_dirs(model, mesh_transforms, pos, value_of, fades, &[])
+}
+
+pub(super) fn model_lights_owned_with_texture_dirs(
+    model: &Model,
+    mesh_transforms: &dyn Fn(usize) -> Mat4,
+    pos: DVec3,
+    value_of: &dyn Fn(&str) -> f32,
+    fades: &[f32],
+    publisher_texture_dirs: &[PathBuf],
+) -> Vec<(omsi_render::Corona, usize)> {
     let mut out = Vec::new();
     let mut owners: Vec<usize> = Vec::new();
     model_lights_into(
@@ -415,6 +432,7 @@ pub fn model_lights_owned(
         pos,
         value_of,
         fades,
+        publisher_texture_dirs,
         &mut out,
         LampSource::Model(Some(&mut owners)),
     );
@@ -457,6 +475,7 @@ fn model_lights_into(
     pos: DVec3,
     value_of: &dyn Fn(&str) -> f32,
     fades: &[f32],
+    publisher_texture_dirs: &[PathBuf],
     out: &mut Vec<omsi_render::Corona>,
     source: LampSource<'_>,
 ) {
@@ -519,7 +538,13 @@ fn model_lights_into(
                 texture: l
                     .texture
                     .as_deref()
-                    .map(|b| crate::lights::corona_texture_id(model_dir, b))
+                    .map(|b| {
+                        crate::lights::corona_texture_id_with_texture_dirs(
+                            model_dir,
+                            b,
+                            publisher_texture_dirs,
+                        )
+                    })
                     .filter(|t| *t != 0)
                     .unwrap_or_else(crate::lights::glow_texture_id),
                 ..Default::default()
@@ -593,7 +618,13 @@ fn model_lights_into(
                 texture: l
                     .bitmap
                     .as_deref()
-                    .map(|b| crate::lights::corona_texture_id(model_dir, b))
+                    .map(|b| {
+                        crate::lights::corona_texture_id_with_texture_dirs(
+                            model_dir,
+                            b,
+                            publisher_texture_dirs,
+                        )
+                    })
                     .filter(|t| *t != 0)
                     .unwrap_or_else(crate::lights::glow_texture_id),
                 ..Default::default()
@@ -731,6 +762,22 @@ pub use omsi_sim::world_data::{
 pub const SURFACE_RASTER: usize = 512;
 
 impl World {
+    pub(super) fn resolve_map_asset(&self, rel: &str) -> PathBuf {
+        map_asset_path(&self.root, &self.map_dir, &self._publisher_mounts, rel)
+    }
+
+    pub(super) fn texture_dirs(&self, root: &Path, content_dir: &Path) -> Vec<PathBuf> {
+        let mut dirs = crate::terrain_paint::texture_dirs(root, content_dir);
+        insert_publisher_texture_dirs(&mut dirs, &self.publisher_texture_dirs, root);
+        dirs
+    }
+
+    pub(super) fn object_texture_dirs(&self, object: &ObjectType) -> Vec<PathBuf> {
+        let mut dirs = object.texture_dirs(&self.root);
+        insert_publisher_texture_dirs(&mut dirs, &self.publisher_texture_dirs, &self.root);
+        dirs
+    }
+
     /// The world the simulation reads as it is now, to keep (see `omsi_sim::world_data`).
     pub fn data(&self) -> Arc<omsi_sim::world_data::WorldData> {
         self.data.snapshot()
@@ -901,4 +948,31 @@ impl World {
             .clone()
             .unwrap_or_else(|| self.start_clock.lock().clone())
     }
+}
+
+pub(super) fn map_asset_path(
+    root: &Path,
+    map_dir: &Path,
+    mounts: &omsi_cfg::publisher::DependencyMounts,
+    rel: &str,
+) -> PathBuf {
+    mounts
+        .resolve_map_alias(map_dir, rel)
+        .unwrap_or_else(|| omsi_cfg::resolve_path(root, rel))
+}
+
+pub(super) fn insert_publisher_texture_dirs(
+    dirs: &mut Vec<PathBuf>,
+    publisher_texture_dirs: &[PathBuf],
+    root: &Path,
+) {
+    if publisher_texture_dirs.is_empty() {
+        return;
+    }
+    let global = omsi_cfg::resolve_path(root, "Texture");
+    let at = dirs
+        .iter()
+        .position(|dir| *dir == global)
+        .unwrap_or(dirs.len());
+    dirs.splice(at..at, publisher_texture_dirs.iter().cloned());
 }

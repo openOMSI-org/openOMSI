@@ -53,7 +53,11 @@ pub fn lower_thread_priority() {
 pub fn background_pool() -> &'static rayon::ThreadPool {
     static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
     POOL.get_or_init(|| {
-        let n = (std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4) / 4).max(1);
+        let n = (std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
+            / 4)
+        .max(1);
         rayon::ThreadPoolBuilder::new()
             .num_threads(n)
             .thread_name(|i| format!("background {i}"))

@@ -9,10 +9,10 @@ mod duty;
 mod ibis;
 mod route;
 mod sim;
-mod times;
-mod tours;
 #[cfg(test)]
 pub(crate) mod tests;
+mod times;
+mod tours;
 
 use crate::traffic::LaneKey;
 use hashbrown::{HashMap, HashSet};
@@ -261,5 +261,9 @@ pub const DAY: f64 = 86_400.0;
 pub fn hhmm(t: f64) -> String {
     // (yesterday's trips of a night tour taken after midnight are before 0:00)
     let t = if t < 0.0 { t + DAY } else { t };
-    format!("{:02}:{:02}", (t / 3600.0) as i32, ((t % 3600.0) / 60.0) as i32)
+    format!(
+        "{:02}:{:02}",
+        (t / 3600.0) as i32,
+        ((t % 3600.0) / 60.0) as i32
+    )
 }

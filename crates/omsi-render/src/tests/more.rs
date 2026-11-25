@@ -2600,6 +2600,8 @@ fn the_reflection_strength_scales_what_an_envmapped_surface_mirrors() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn envmapped_paint_with_normals_off_its_faces_mirrors_no_more_than_with_sound_ones() {
+    // (the reflection's own strength, not the tone curve's roll-off of it)
+    let _neutral = crate::lighting::neutral_for_tests();
     let camera = Camera {
         position: DVec3::ZERO,
         yaw: 0.0,

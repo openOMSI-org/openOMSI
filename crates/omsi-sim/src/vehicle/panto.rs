@@ -58,11 +58,28 @@ fn aux_kw(class: Option<RailClass>) -> f32 {
     }
 }
 
-const NAMES: [&str; 5] = ["Panto_Height", "Panto_Contact", "Panto_Force", "Panto_Arc", "Panto_Powered"];
+const NAMES: [&str; 5] = [
+    "Panto_Height",
+    "Panto_Contact",
+    "Panto_Force",
+    "Panto_Arc",
+    "Panto_Powered",
+];
 
 impl PantoGear {
     pub(super) fn new(seed: u64) -> PantoGear {
-        PantoGear { rig: Pantograph::new(seed), shape: None, wire: None, run: 0.0, amps: 0.0, volts: 600.0, out: PantoOut::default(), sparks: Vec::new(), ids: Vec::new(), log: 0.0 }
+        PantoGear {
+            rig: Pantograph::new(seed),
+            shape: None,
+            wire: None,
+            run: 0.0,
+            amps: 0.0,
+            volts: 600.0,
+            out: PantoOut::default(),
+            sparks: Vec::new(),
+            ids: Vec::new(),
+            log: 0.0,
+        }
     }
 
     /// The pantograph's travel, if it has been measured and is worth the name.
@@ -102,13 +119,20 @@ impl VehicleInstance {
         let g = self.panto.as_deref()?;
         let s = g.shape()?;
         let rot = self.body_rotation();
-        let p = rot.transform_point3(Vec3::new(s.head[0], s.head[1], g.out.height.max(s.bottom())));
+        let p = rot.transform_point3(Vec3::new(
+            s.head[0],
+            s.head[1],
+            g.out.height.max(s.bottom()),
+        ));
         Some(self.position + p.as_dvec3())
     }
 
     /// The arcs struck since the last call, with their place in the world.
     pub fn take_pantograph_sparks(&mut self) -> Vec<Spark> {
-        self.panto.as_mut().map(|g| std::mem::take(&mut g.sparks)).unwrap_or_default()
+        self.panto
+            .as_mut()
+            .map(|g| std::mem::take(&mut g.sparks))
+            .unwrap_or_default()
     }
 
     /// Note the current the drive asks for (the rail dynamics know the force and the speed).
@@ -143,7 +167,15 @@ impl VehicleInstance {
     fn measure_pantograph(&self) -> PantoShape {
         let n = 32usize;
         let none = PantoShape::default();
-        let Some(pid) = self.ty.def.pantograph_var.as_deref().and_then(|v| self.var_slot(v)) else { return none };
+        let Some(pid) = self
+            .ty
+            .def
+            .pantograph_var
+            .as_deref()
+            .and_then(|v| self.var_slot(v))
+        else {
+            return none;
+        };
         let moved = |i: usize, seen: &mut Vec<usize>| -> bool {
             // a mesh moves with the variable if its own animations or its parents' use it
             let mut k = Some(i);
@@ -152,15 +184,22 @@ impl VehicleInstance {
                     break;
                 }
                 seen.push(c);
-                let Some(a) = self.animators.get(c) else { break };
-                if a.anims.iter().any(|(_, _, st)| st.var.map(|v| v as usize) == Some(pid)) {
+                let Some(a) = self.animators.get(c) else {
+                    break;
+                };
+                if a.anims
+                    .iter()
+                    .any(|(_, _, st)| st.var.map(|v| v as usize) == Some(pid))
+                {
                     return true;
                 }
                 k = a.parent;
             }
             false
         };
-        let meshes: Vec<usize> = (0..self.ty.meshes.len()).filter(|&i| !self.ty.meshes[i].data.positions.is_empty() && moved(i, &mut Vec::new())).collect();
+        let meshes: Vec<usize> = (0..self.ty.meshes.len())
+            .filter(|&i| !self.ty.meshes[i].data.positions.is_empty() && moved(i, &mut Vec::new()))
+            .collect();
         if meshes.is_empty() {
             return none;
         }
@@ -199,14 +238,22 @@ impl VehicleInstance {
                 // the head: what lies within 12 cm of the top, where it is and how wide
                 let near: Vec<&Vec3> = pts.iter().filter(|p| p.z >= top - 0.12).collect();
                 if !near.is_empty() {
-                    let (x0, x1) = near.iter().fold((f32::MAX, f32::MIN), |a, p| (a.0.min(p.x), a.1.max(p.x)));
-                    let (y0, y1) = near.iter().fold((f32::MAX, f32::MIN), |a, p| (a.0.min(p.y), a.1.max(p.y)));
+                    let (x0, x1) = near
+                        .iter()
+                        .fold((f32::MAX, f32::MIN), |a, p| (a.0.min(p.x), a.1.max(p.x)));
+                    let (y0, y1) = near
+                        .iter()
+                        .fold((f32::MAX, f32::MIN), |a, p| (a.0.min(p.y), a.1.max(p.y)));
                     head = [(x0 + x1) * 0.5, (y0 + y1) * 0.5];
                     half = ((x1 - x0) * 0.5).clamp(0.3, 1.2);
                 }
             }
         }
-        PantoShape { heights, head, half_width: half }
+        PantoShape {
+            heights,
+            head,
+            half_width: half,
+        }
     }
 
     /// One physics step of the pantograph: the head against the wire, the current, the arcs.
@@ -219,22 +266,50 @@ impl VehicleInstance {
             if omsi_cfg::flags::OMSI_DEBUG_RAIL.is_set() {
                 log::info!(
                     "pantograph: head from {:.2} m to {:.2} m over the origin at ({:.2}, {:.2}), strip {:.2} m{}",
-                    shape.bottom(), shape.top(), shape.head[0], shape.head[1], shape.half_width * 2.0,
-                    if shape.is_usable() { "" } else { " - not usable, the pantograph keeps the old rule" }
+                    shape.bottom(),
+                    shape.top(),
+                    shape.head[0],
+                    shape.head[1],
+                    shape.half_width * 2.0,
+                    if shape.is_usable() {
+                        ""
+                    } else {
+                        " - not usable, the pantograph keeps the old rule"
+                    }
                 );
             }
             if let Some(g) = self.panto.as_mut() {
                 g.shape = Some(shape);
             }
         }
-        let Some(cmd) = self.panto_command() else { return };
+        let Some(cmd) = self.panto_command() else {
+            return;
+        };
         let speed = self.physics.speed;
         let head_at = self.pantograph_head().unwrap_or(self.position);
         let Some(g) = self.panto.as_mut() else { return };
-        let Some(shape) = g.shape.as_ref().filter(|s| s.is_usable()) else { return };
-        let wire = g.wire.map(|c| WireAbove { height: c.height, lateral: c.lateral - shape.head[0], live: c.live, hard: c.hard, roughness: c.roughness });
+        let Some(shape) = g.shape.as_ref().filter(|s| s.is_usable()) else {
+            return;
+        };
+        let wire = g.wire.map(|c| WireAbove {
+            height: c.height,
+            lateral: c.lateral - shape.head[0],
+            live: c.live,
+            hard: c.hard,
+            roughness: c.roughness,
+        });
         g.run += (speed * dt) as f64;
-        let out = g.rig.step(&PantoIn { dt, shape, cmd, wire, run: g.run, speed: speed.abs(), amps: g.amps, volts: g.volts, head_at });
+        let out = g.rig.step(&PantoIn {
+            dt,
+            shape,
+            cmd,
+            wire,
+            run: g.run,
+            speed: speed.abs(),
+            amps: g.amps,
+            volts: g.volts,
+            head_at,
+        });
         g.out = out;
         let sparks = g.rig.take_sparks();
         g.sparks.extend(sparks);
@@ -243,14 +318,29 @@ impl VehicleInstance {
             g.sparks.drain(0..extra);
         }
         // the numbers a model or a sound can follow
-        let vals = [out.height, out.contact as u8 as f32, out.force, out.arc, out.powered as u8 as f32];
+        let vals = [
+            out.height,
+            out.contact as u8 as f32,
+            out.force,
+            out.arc,
+            out.powered as u8 as f32,
+        ];
         if g.ids.len() != vals.len() {
             for (n, v) in NAMES.iter().zip(vals) {
                 self.set_engine_var(n, v);
             }
-            let ids: Vec<omsi_script::VarId> = NAMES.iter().filter_map(|n| omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied())).collect();
+            let ids: Vec<omsi_script::VarId> = NAMES
+                .iter()
+                .filter_map(|n| {
+                    omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied())
+                })
+                .collect();
             if let Some(g) = self.panto.as_mut() {
-                g.ids = if ids.len() == vals.len() { ids } else { Vec::new() };
+                g.ids = if ids.len() == vals.len() {
+                    ids
+                } else {
+                    Vec::new()
+                };
             }
         } else {
             for (id, v) in g.ids.iter().zip(vals) {
@@ -264,7 +354,15 @@ impl VehicleInstance {
                 g.log = 0.0;
                 log::info!(
                     "pantograph: cmd {:.2} shown {:.2} head {:.3} m wire {:?} contact {} powered {} force {:.0} N, {:.0} A, {} losses",
-                    cmd, out.shown, out.height, g.wire.map(|c| (c.height * 100.0).round() / 100.0), out.contact, out.powered, out.force, g.amps, g.rig.losses
+                    cmd,
+                    out.shown,
+                    out.height,
+                    g.wire.map(|c| (c.height * 100.0).round() / 100.0),
+                    out.contact,
+                    out.powered,
+                    out.force,
+                    g.amps,
+                    g.rig.losses
                 );
             }
         }

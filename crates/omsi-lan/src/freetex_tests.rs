@@ -100,7 +100,12 @@ impl Pair {
         while !test(&self.received) && Instant::now() < deadline {
             self.step();
         }
-        assert!(test(&self.received), "pixel transfer timed out: {} bytes, {} committed images", self.bytes, self.received.len());
+        assert!(
+            test(&self.received),
+            "pixel transfer timed out: {} bytes, {} committed images",
+            self.bytes,
+            self.received.len()
+        );
     }
 }
 
@@ -280,8 +285,10 @@ fn matching_file_and_pixels_sha_skip_pixels_but_same_name_different_file_does_no
     pair.received.clear();
     let before = pair.bytes;
     pair.wait(|v| {
-        v.iter().any(|r| r.incoming.owner == 1 && r.generation == 21)
-            && v.iter().any(|r| r.incoming.owner == 2 && r.generation == 11)
+        v.iter()
+            .any(|r| r.incoming.owner == 1 && r.generation == 21)
+            && v.iter()
+                .any(|r| r.incoming.owner == 2 && r.generation == 11)
     });
     assert!(
         pair.bytes - before >= rgba.len(),

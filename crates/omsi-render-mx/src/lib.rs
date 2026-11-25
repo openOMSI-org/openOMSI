@@ -120,6 +120,8 @@ struct PassPipelines {
     rain_pipelines: Vec<mx::RenderPipeline>,
     /// Indexed by `pipe_code`: 4 depth/blend kinds x culled x depth-biased.
     pipelines: Vec<mx::RenderPipeline>,
+    /// The same with `override LEAN` (the enhanced passes only; see `main_key`).
+    lean: Option<Arc<LeanPipelines>>,
     corona_pipeline: mx::RenderPipeline,
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
     smoke_pipeline: mx::RenderPipeline,
@@ -174,13 +176,10 @@ pub struct Renderer {
     prepass_msaa_pipelines: Option<[mx::RenderPipeline; 6]>,
     prepass_eye_pipelines: Option<[mx::RenderPipeline; 6]>,
     pane_mask: Option<pipelines::scene::PaneMaskPipelines>,
-    pane_depth: Option<((u32, u32), mx::TextureView, mx::BindGroup)>,
+    pane_depth: Option<((u32, u32), mx::TextureView)>,
     /// The ground albedo pass's pipelines (see `SceneBase::ground_pipeline_at`); none where
     /// the enhanced path is left out or on OpenGL.
     ground_pipelines: Option<[mx::RenderPipeline; 8]>,
-    /// Whether the camera group's slot 8 (the AO's picture) holds the ground albedo picture
-    /// instead - while the ambient occlusion is off, see `ground_should_bind`.
-    ground_bound: std::cell::Cell<bool>,
     /// Ambient occlusion and its blur; none on OpenGL (GLES), whose shading language cannot
     /// read a depth texture texel by texel - the pipelines failed there, AO off or not (#422).
     ssao_pipeline: Option<mx::RenderPipeline>,

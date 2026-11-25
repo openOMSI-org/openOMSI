@@ -95,7 +95,10 @@ pub fn allow_hardware_id(on: bool) {
 
 /// The identifier a machine id makes (see the module's text).
 pub fn derive_hardware_id(machine_id: &str) -> String {
-    let h = Sha256::new().chain_update(b"openOMSI hardware id v1\0").chain_update(machine_id.trim().to_ascii_lowercase().as_bytes()).finalize();
+    let h = Sha256::new()
+        .chain_update(b"openOMSI hardware id v1\0")
+        .chain_update(machine_id.trim().to_ascii_lowercase().as_bytes())
+        .finalize();
     h[..16].iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -114,7 +117,10 @@ fn machine_id() -> Option<String> {
     }
     #[cfg(target_os = "macos")]
     {
-        let out = std::process::Command::new("/usr/sbin/ioreg").args(["-rd1", "-c", "IOPlatformExpertDevice"]).output().ok()?;
+        let out = std::process::Command::new("/usr/sbin/ioreg")
+            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+            .output()
+            .ok()?;
         let text = String::from_utf8_lossy(&out.stdout).to_string();
         let line = text.lines().find(|l| l.contains("IOPlatformUUID"))?;
         line.split('"').nth(3).map(str::to_string)
@@ -122,9 +128,22 @@ fn machine_id() -> Option<String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        let out = std::process::Command::new("reg").args(["query", r"HKLM\SOFTWARE\Microsoft\Cryptography", "/v", "MachineGuid"]).creation_flags(0x0800_0000).output().ok()?;
+        let out = std::process::Command::new("reg")
+            .args([
+                "query",
+                r"HKLM\SOFTWARE\Microsoft\Cryptography",
+                "/v",
+                "MachineGuid",
+            ])
+            .creation_flags(0x0800_0000)
+            .output()
+            .ok()?;
         let text = String::from_utf8_lossy(&out.stdout).to_string();
-        text.lines().find(|l| l.contains("MachineGuid"))?.split_whitespace().last().map(str::to_string)
+        text.lines()
+            .find(|l| l.contains("MachineGuid"))?
+            .split_whitespace()
+            .last()
+            .map(str::to_string)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
@@ -150,7 +169,12 @@ pub fn local_hardware_id() -> Option<String> {
                 return Some(t.trim().to_string());
             }
         }
-        let id: String = omsi_net::random_session_id().to_le_bytes().iter().chain(omsi_net::random_session_id().to_le_bytes().iter()).map(|b| format!("{b:02x}")).collect();
+        let id: String = omsi_net::random_session_id()
+            .to_le_bytes()
+            .iter()
+            .chain(omsi_net::random_session_id().to_le_bytes().iter())
+            .map(|b| format!("{b:02x}"))
+            .collect();
         let _ = std::fs::create_dir_all(path.parent()?);
         std::fs::write(&path, &id).ok()?;
         Some(id)
@@ -203,18 +227,30 @@ impl BanStore {
     pub fn open(session_path: Option<PathBuf>, owner_path: Option<PathBuf>) -> BanStore {
         let (session, _, _) = read(session_path.as_deref());
         let (owner, realm, readable) = read(owner_path.as_deref());
-        let mut s = BanStore { session, owner, realm, owner_stamp: None, session_path, owner_path, revision: 1 };
+        let mut s = BanStore {
+            session,
+            owner,
+            realm,
+            owner_stamp: None,
+            session_path,
+            owner_path,
+            revision: 1,
+        };
         if s.realm.is_empty() {
             s.realm = random_realm();
             if !s.session.is_empty() || !s.owner.is_empty() {
-                log::warn!("bans: hardware bans made before openOMSI's per-owner identifiers (LAN protocol 16) no longer match anybody; ban those players again");
+                log::warn!(
+                    "bans: hardware bans made before openOMSI's per-owner identifiers (LAN protocol 16) no longer match anybody; ban those players again"
+                );
             }
             let fresh = s.owner_path.as_deref().is_some_and(|p| !p.exists());
             if fresh {
                 s.claim_realm();
             } else if readable {
                 if let Err(e) = s.save(Scope::Owner) {
-                    log::error!("bans: {e}; the identifiers players send will change at the next start");
+                    log::error!(
+                        "bans: {e}; the identifiers players send will change at the next start"
+                    );
                 }
             }
         }
@@ -238,20 +274,40 @@ impl BanStore {
     /// Ban machine `hw`; the new ban's id. A machine already on the list has its entry
     /// replaced (a newer reason, or a longer or shorter time).
     #[allow(clippy::too_many_arguments)]
-    pub fn add(&mut self, scope: Scope, hw: &str, name: &str, reason: &str, by: &str, until: Option<u64>, now: u64) -> Result<Ban, String> {
+    pub fn add(
+        &mut self,
+        scope: Scope,
+        hw: &str,
+        name: &str,
+        reason: &str,
+        by: &str,
+        until: Option<u64>,
+        now: u64,
+    ) -> Result<Ban, String> {
         if !omsi_net::is_hardware_id(hw) {
             return Err("that player's game sent no hardware identifier (an older game, or it switched it off): only a ban by name and address is possible".into());
         }
         self.refresh_owner();
         let all: Vec<&Ban> = self.session.iter().chain(self.owner.iter()).collect();
-        let ban = Ban { id: new_id(&all), hw: hw.to_string(), name: clean(name, 64), reason: clean(reason, MAX_REASON), by: clean(by, 64), at: now, until, scope };
+        let ban = Ban {
+            id: new_id(&all),
+            hw: hw.to_string(),
+            name: clean(name, 64),
+            reason: clean(reason, MAX_REASON),
+            by: clean(by, 64),
+            at: now,
+            until,
+            scope,
+        };
         let list = match scope {
             Scope::Session => &mut self.session,
             Scope::Owner => &mut self.owner,
         };
         list.retain(|b| b.hw != hw);
         if list.len() >= MAX_BANS {
-            return Err(format!("the ban list is full ({MAX_BANS}): remove old bans first"));
+            return Err(format!(
+                "the ban list is full ({MAX_BANS}): remove old bans first"
+            ));
         }
         list.push(ban.clone());
         self.revision += 1;
@@ -279,19 +335,31 @@ impl BanStore {
 
     /// The ban that names machine `hw` and holds now.
     pub fn find(&self, hw: &str, now: u64) -> Option<&Ban> {
-        self.session.iter().chain(self.owner.iter()).find(|b| b.hw == hw && b.active(now))
+        self.session
+            .iter()
+            .chain(self.owner.iter())
+            .find(|b| b.hw == hw && b.active(now))
     }
 
     /// Every ban that holds now, newest first.
     pub fn active(&self, now: u64) -> Vec<Ban> {
-        let mut v: Vec<Ban> = self.session.iter().chain(self.owner.iter()).filter(|b| b.active(now)).cloned().collect();
+        let mut v: Vec<Ban> = self
+            .session
+            .iter()
+            .chain(self.owner.iter())
+            .filter(|b| b.active(now))
+            .cloned()
+            .collect();
         v.sort_by(|a, b| b.at.cmp(&a.at).then(a.id.cmp(&b.id)));
         v
     }
 
     /// What the door holds: (identifier, the reason a turned-away player reads).
     pub fn door(&self, now: u64) -> Vec<(String, String)> {
-        self.active(now).into_iter().map(|b| (b.hw, b.reason)).collect()
+        self.active(now)
+            .into_iter()
+            .map(|b| (b.hw, b.reason))
+            .collect()
     }
 
     /// Forget the bans that ended (kept in the file until the next change, which drops them).
@@ -305,12 +373,23 @@ impl BanStore {
     }
 
     fn claim_realm(&mut self) {
-        let Some(p) = self.owner_path.clone() else { return };
+        let Some(p) = self.owner_path.clone() else {
+            return;
+        };
         if let Some(d) = p.parent() {
             let _ = std::fs::create_dir_all(d);
         }
-        let body = serde_json::to_vec_pretty(&File { version: 1, realm: self.realm.clone(), bans: Vec::new() }).unwrap_or_default();
-        let made = std::fs::OpenOptions::new().write(true).create_new(true).open(&p).and_then(|mut f| std::io::Write::write_all(&mut f, &body));
+        let body = serde_json::to_vec_pretty(&File {
+            version: 1,
+            realm: self.realm.clone(),
+            bans: Vec::new(),
+        })
+        .unwrap_or_default();
+        let made = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&p)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, &body));
         if made.is_err() {
             let (owner, realm, _) = read(Some(&p));
             if !realm.is_empty() {
@@ -322,7 +401,9 @@ impl BanStore {
 
     /// Read the owner's file again if another session of the account changed it.
     pub fn refresh_owner(&mut self) {
-        let Some(p) = self.owner_path.clone() else { return };
+        let Some(p) = self.owner_path.clone() else {
+            return;
+        };
         let now = stamp(&p);
         if now != self.owner_stamp {
             let (owner, realm, _) = read(Some(&p));
@@ -340,8 +421,11 @@ impl BanStore {
             Scope::Session => (&self.session_path, &self.session, ""),
             Scope::Owner => (&self.owner_path, &self.owner, self.realm.as_str()),
         };
-        let Some(path) = path.clone() else { return Ok(()) };
-        write(&path, list, realm).map_err(|e| format!("the ban list {} could not be saved: {e}", path.display()))?;
+        let Some(path) = path.clone() else {
+            return Ok(());
+        };
+        write(&path, list, realm)
+            .map_err(|e| format!("the ban list {} could not be saved: {e}", path.display()))?;
         if scope == Scope::Owner {
             self.owner_stamp = stamp(&path);
         }
@@ -365,12 +449,28 @@ fn stamp(p: &Path) -> Option<(std::time::SystemTime, u64)> {
 }
 
 fn read(path: Option<&Path>) -> (Vec<Ban>, String, bool) {
-    let Some(path) = path else { return (Vec::new(), String::new(), true) };
-    let Ok(text) = std::fs::read_to_string(path) else { return (Vec::new(), String::new(), !path.exists()) };
+    let Some(path) = path else {
+        return (Vec::new(), String::new(), true);
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return (Vec::new(), String::new(), !path.exists());
+    };
     match serde_json::from_str::<File>(&text) {
-        Ok(f) => (f.bans.into_iter().filter(|b| omsi_net::is_hardware_id(&b.hw)).collect(), Some(f.realm).filter(|r| omsi_net::is_hardware_id(r)).unwrap_or_default(), true),
+        Ok(f) => (
+            f.bans
+                .into_iter()
+                .filter(|b| omsi_net::is_hardware_id(&b.hw))
+                .collect(),
+            Some(f.realm)
+                .filter(|r| omsi_net::is_hardware_id(r))
+                .unwrap_or_default(),
+            true,
+        ),
         Err(e) => {
-            log::warn!("bans: {} cannot be read ({e}): no bans from it; a copy is kept beside it", path.display());
+            log::warn!(
+                "bans: {} cannot be read ({e}): no bans from it; a copy is kept beside it",
+                path.display()
+            );
             let _ = std::fs::copy(path, path.with_extension("json.bak"));
             (Vec::new(), String::new(), false)
         }
@@ -382,7 +482,15 @@ fn write(path: &Path, bans: &[Ban], realm: &str) -> std::io::Result<()> {
         std::fs::create_dir_all(d)?;
     }
     let tmp = path.with_extension(format!("json.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&File { version: 1, realm: realm.to_string(), bans: bans.to_vec() }).unwrap_or_default())?;
+    std::fs::write(
+        &tmp,
+        serde_json::to_vec_pretty(&File {
+            version: 1,
+            realm: realm.to_string(),
+            bans: bans.to_vec(),
+        })
+        .unwrap_or_default(),
+    )?;
     std::fs::rename(&tmp, path)
 }
 
@@ -396,7 +504,9 @@ pub fn install(store: BanStore) {
 
 /// The host's lists (None: nothing installed: a game that does not host).
 pub fn global() -> Option<MutexGuard<'static, BanStore>> {
-    STORE.get().map(|m| m.lock().unwrap_or_else(|e| e.into_inner()))
+    STORE
+        .get()
+        .map(|m| m.lock().unwrap_or_else(|e| e.into_inner()))
 }
 
 /// Pass the lists on to the session's door if they changed since `seen` (the caller's own
@@ -455,8 +565,14 @@ mod tests {
     fn an_identifier_is_a_hash_of_the_machine_not_the_machine() {
         let a = derive_hardware_id("4C4C4544-0042-3510-8056-B2C04F4D4D31");
         assert!(omsi_net::is_hardware_id(&a));
-        assert_eq!(a, derive_hardware_id(" 4c4c4544-0042-3510-8056-b2c04f4d4d31\n"));
-        assert_ne!(a, derive_hardware_id("4C4C4544-0042-3510-8056-B2C04F4D4D32"));
+        assert_eq!(
+            a,
+            derive_hardware_id(" 4c4c4544-0042-3510-8056-b2c04f4d4d31\n")
+        );
+        assert_ne!(
+            a,
+            derive_hardware_id("4C4C4544-0042-3510-8056-B2C04F4D4D32")
+        );
         assert!(!a.contains("4c4c"));
         for bad in ["", "abc", &"g".repeat(32), &"A".repeat(32), &"a".repeat(33)] {
             assert!(!omsi_net::is_hardware_id(bad), "{bad}");
@@ -466,7 +582,17 @@ mod tests {
     #[test]
     fn a_ban_matches_its_machine_until_it_ends() {
         let mut s = BanStore::open(None, None);
-        let b = s.add(Scope::Session, &hw(1), "Pichau", "griefing\nkick 3", "Admin (#2)", Some(1100), 1000).unwrap();
+        let b = s
+            .add(
+                Scope::Session,
+                &hw(1),
+                "Pichau",
+                "griefing\nkick 3",
+                "Admin (#2)",
+                Some(1100),
+                1000,
+            )
+            .unwrap();
         assert_eq!(b.reason, "griefing kick 3");
         assert!(s.find(&hw(1), 1050).is_some());
         assert!(s.find(&hw(2), 1050).is_none());
@@ -474,10 +600,14 @@ mod tests {
         assert!(s.door(1050).iter().any(|d| d.0 == hw(1)));
         assert!(s.door(1200).is_empty());
         // a machine banned again has one entry, with the newer reason
-        s.add(Scope::Session, &hw(1), "Pichau", "again", "x", None, 1010).unwrap();
+        s.add(Scope::Session, &hw(1), "Pichau", "again", "x", None, 1010)
+            .unwrap();
         assert_eq!(s.active(1010).len(), 1);
         assert_eq!(s.active(1010)[0].reason, "again");
-        assert!(s.add(Scope::Session, "nonsense", "x", "", "", None, 0).is_err());
+        assert!(
+            s.add(Scope::Session, "nonsense", "x", "", "", None, 0)
+                .is_err()
+        );
     }
 
     #[test]
@@ -490,7 +620,9 @@ mod tests {
         assert_ne!(BanStore::open(None, None).realm, realm);
         let broken = d.join("broken.json");
         std::fs::write(&broken, "{ not json").unwrap();
-        assert!(omsi_net::is_hardware_id(&BanStore::open(None, Some(broken.clone())).realm));
+        assert!(omsi_net::is_hardware_id(
+            &BanStore::open(None, Some(broken.clone())).realm
+        ));
         assert_eq!(std::fs::read_to_string(&broken).unwrap(), "{ not json");
     }
 
@@ -499,8 +631,12 @@ mod tests {
         let d = dir("persist");
         let (sp, op) = (d.join("bans.json"), d.join("owner.json"));
         let mut s = BanStore::open(Some(sp.clone()), Some(op.clone()));
-        let a = s.add(Scope::Session, &hw(1), "A", "r1", "me", None, 5).unwrap();
-        let b = s.add(Scope::Owner, &hw(2), "B", "r2", "me", None, 6).unwrap();
+        let a = s
+            .add(Scope::Session, &hw(1), "A", "r1", "me", None, 5)
+            .unwrap();
+        let b = s
+            .add(Scope::Owner, &hw(2), "B", "r2", "me", None, 6)
+            .unwrap();
         assert_ne!(a.id, b.id);
         let again = BanStore::open(Some(sp.clone()), Some(op.clone()));
         assert_eq!(again.active(10).len(), 2);
@@ -520,9 +656,11 @@ mod tests {
         let mut one = BanStore::open(Some(d.join("one.json")), Some(op.clone()));
         let mut two = BanStore::open(Some(d.join("two.json")), Some(op.clone()));
         assert!(two.find(&hw(3), 10).is_none());
-        one.add(Scope::Owner, &hw(3), "C", "all", "me", None, 5).unwrap();
+        one.add(Scope::Owner, &hw(3), "C", "all", "me", None, 5)
+            .unwrap();
         // (a session-only ban of one stays out of the other)
-        one.add(Scope::Session, &hw(4), "D", "here", "me", None, 5).unwrap();
+        one.add(Scope::Session, &hw(4), "D", "here", "me", None, 5)
+            .unwrap();
         let rev = two.revision;
         two.refresh_owner();
         assert!(two.revision > rev);

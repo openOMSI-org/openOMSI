@@ -1,8 +1,8 @@
 //! Script host for road vehicles: system variables, callbacks, sound triggers.
 
+use crate::SimClock;
 use crate::scripttex::{FontTable, ScriptTexture};
 use crate::texttex::FontLibrary;
-use crate::SimClock;
 use omsi_script::{Host, NameId, Stacks, State, SysVar};
 use omsi_vehicle::hof::Hof;
 use parking_lot::Mutex;
@@ -41,6 +41,9 @@ pub struct VehicleHost {
     pub external_ai_clock: bool,
     pub mouse: (f32, f32),
     pub precip_type: f32,
+    /// The weather's precipitation strength (0..1) whatever its type, as the scripts'
+    /// `PrecipRate` system variable reads it (Omsi.exe 0x6ff020: strength / 255, also
+    /// while nothing falls); what does fall is [`VehicleHost::falling_precip`].
     pub precip_rate: f32,
     /// World-space weather air velocity (m/s), used by water on the glass.
     pub wind: glam::Vec3,
@@ -122,9 +125,9 @@ pub struct VehicleHost {
     pub hof: Option<Arc<Hof>>,
     /// The map's ticket pack for `GetTicketName/Value`.
     pub tickets: Option<Arc<omsi_content::tickets::TicketPack>>,
-    /// Coins the driver handed out with `GiveChangeCoin` (currency coin index, the value the
-    /// cash desk's key names for it or 0), taken by the passenger system.
-    pub change_coins: Vec<(usize, f32)>,
+    /// Coins the driver handed out with `GiveChangeCoin` (the money system's coin index, as
+    /// the script gives it), taken by the passenger system.
+    pub change_coins: Vec<usize>,
     /// The script's `number` string variable (the fleet number): `NrSpecRandom` is
     /// specific to it.
     pub number_var: Option<u32>,
@@ -262,10 +265,26 @@ pub fn set_ambient_weather(temperature: f32, abs_humidity: f32) {
 /// The weather's temperature (°C) and absolute humidity, once a weather has been set.
 pub fn ambient_weather() -> Option<(f32, f32)> {
     let bits = AMBIENT.load(std::sync::atomic::Ordering::Relaxed);
-    (bits != u64::MAX).then(|| (f32::from_bits((bits >> 32) as u32), f32::from_bits(bits as u32)))
+    (bits != u64::MAX).then(|| {
+        (
+            f32::from_bits((bits >> 32) as u32),
+            f32::from_bits(bits as u32),
+        )
+    })
 }
 
 impl VehicleHost {
+    /// How hard it rains or snows (0..1): the strength while something falls (a
+    /// `PrecipType` other than 0), else nothing - Omsi.exe wets the glass only then
+    /// (0x7d22d8).
+    pub fn falling_precip(&self) -> f32 {
+        if self.precip_type as i32 == 0 {
+            0.0
+        } else {
+            self.precip_rate
+        }
+    }
+
     pub fn trigger_mark(&self) -> (usize, usize, usize, usize) {
         (
             self.fired_triggers.len(),
@@ -292,9 +311,24 @@ impl VehicleHost {
             }
         }
         filter_tail(&mut self.fired_triggers, mark.0, |s| s, &mut drop_if);
-        filter_tail(&mut self.fired_trigger_vars, mark.1, |(s, _)| s, &mut drop_if);
-        filter_tail(&mut self.network_sound_triggers, mark.2, |(s, _, _)| s, &mut drop_if);
-        filter_tail(&mut self.fired_file_triggers, mark.3, |(s, _)| s, &mut drop_if);
+        filter_tail(
+            &mut self.fired_trigger_vars,
+            mark.1,
+            |(s, _)| s,
+            &mut drop_if,
+        );
+        filter_tail(
+            &mut self.network_sound_triggers,
+            mark.2,
+            |(s, _, _)| s,
+            &mut drop_if,
+        );
+        filter_tail(
+            &mut self.fired_file_triggers,
+            mark.3,
+            |(s, _)| s,
+            &mut drop_if,
+        );
     }
 
     /// The latest `$msg` of the scripts when it was said no more than `secs` seconds of play
@@ -307,7 +341,8 @@ impl VehicleHost {
     fn record_network_sound(&mut self, name: &str, file: Option<&str>) {
         if self.capture_sound_triggers {
             if self.network_sound_triggers.len() < 512 {
-                self.network_sound_triggers.push((name.to_owned(), file.map(str::to_owned), None));
+                self.network_sound_triggers
+                    .push((name.to_owned(), file.map(str::to_owned), None));
             } else {
                 log::warn!("LAN sound event queue is full");
             }
@@ -339,7 +374,14 @@ impl VehicleHost {
         // 1.0 before reading them): the manual gearboxes of the Sprinters, the PAZ and the
         // LAZ work their clutch themselves then, and at 0 every gear a driver without a
         // clutch pedal put in was thrown out again at once
-        Self { clock, wear_lifespan: AI_WEAR_LIFESPAN, auto_clutch: 1.0, temperature, abs_humidity, ..Default::default() }
+        Self {
+            clock,
+            wear_lifespan: AI_WEAR_LIFESPAN,
+            auto_clutch: 1.0,
+            temperature,
+            abs_humidity,
+            ..Default::default()
+        }
     }
 
     /// A host for trying the scripts out on a copy of the vehicle's state (the IBIS typist
@@ -399,7 +441,16 @@ impl VehicleHost {
     /// Shared environment fields; collisions, mouse picking and wear belong to this car.
     pub fn apply_ai_globals(&mut self, values: &[f32; 22]) {
         for (var, value) in SysVar::ALL.into_iter().zip(values) {
-            if !matches!(var, SysVar::CollPosX | SysVar::CollPosY | SysVar::CollPosZ | SysVar::CollEnergy | SysVar::MouseX | SysVar::MouseY | SysVar::WearLifespan) {
+            if !matches!(
+                var,
+                SysVar::CollPosX
+                    | SysVar::CollPosY
+                    | SysVar::CollPosZ
+                    | SysVar::CollEnergy
+                    | SysVar::MouseX
+                    | SysVar::MouseY
+                    | SysVar::WearLifespan
+            ) {
                 self.set_sys_var(var, *value);
             }
         }
@@ -412,7 +463,13 @@ impl VehicleHost {
             SysVar::Timegap => self.clock.timegap,
             SysVar::GetTime => self.clock.run_time as f32,
             SysVar::NoSound => self.no_sound,
-            SysVar::Pause => if self.clock.paused { 1.0 } else { 0.0 },
+            SysVar::Pause => {
+                if self.clock.paused {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
             // seconds since midnight ("Time in seconds", says the stock clock object): every
             // script divides it by 3600 for the hour (IBIS and ticket printer clocks) or
             // compares it with 28800/72000 (the Citaro's door chime by day). Handing out hours
@@ -446,7 +503,11 @@ impl VehicleHost {
     /// costs one comparison), else it is looked up by its lower-case name.
     fn callback_kind(&mut self, name: &str, id: NameId) -> Option<Cb> {
         let i = id as usize;
-        if let Some(cb) = self.callback_ids.get(i).and_then(|&k| Cb::ALL.get((k as usize).wrapping_sub(1))) {
+        if let Some(cb) = self
+            .callback_ids
+            .get(i)
+            .and_then(|&k| Cb::ALL.get((k as usize).wrapping_sub(1)))
+        {
             if cb.name().eq_ignore_ascii_case(name) {
                 return Some(*cb);
             }
@@ -468,11 +529,16 @@ impl VehicleHost {
 
     /// The font behind a `GetFontIndex` result; -1 (a missing font) draws nothing.
     fn font_atlas(&self, index: i32) -> Option<Arc<omsi_content::font::FontAtlas>> {
-        usize::try_from(index).ok().and_then(|i| self.fonts.entries.get(i)).and_then(|f| f.1.clone())
+        usize::try_from(index)
+            .ok()
+            .and_then(|i| self.fonts.entries.get(i))
+            .and_then(|f| f.1.clone())
     }
 
     fn terminus(&self, index: i32) -> Option<&omsi_vehicle::hof::Terminus> {
-        self.hof.as_ref().and_then(|h| h.termini.get(usize::try_from(index).ok()?))
+        self.hof
+            .as_ref()
+            .and_then(|h| h.termini.get(usize::try_from(index).ok()?))
     }
 
     fn arrival(&self, index: i32) -> Option<&Arrival> {
@@ -480,17 +546,61 @@ impl VehicleHost {
     }
 
     fn bus_stop(&self, index: i32) -> Option<&omsi_vehicle::hof::BusStop> {
-        self.hof.as_ref().and_then(|h| h.bus_stops.get(usize::try_from(index).ok()?))
+        self.hof
+            .as_ref()
+            .and_then(|h| h.bus_stops.get(usize::try_from(index).ok()?))
     }
 }
 
 /// The `(M.V.…)` callbacks this host answers (lower case); anything else reads 0.
 pub const PROVIDED_CALLBACKS: &[&str] = &[
-    "getfontindex", "textlength", "stnewtex", "stlock", "stunlock", "stfilter", "stsetcolor", "stdrawpixel", "stdrawrect", "sttextout", "streadpixel", "stgetr", "stgetg", "stgetb", "stgeta", "stcopycolor", "stloadtex",
-    "getrouteindex", "getrouteterminusindex", "getterminuscode", "getterminusindex", "getterminusstring", "getbusstopcount", "getroutebusstopident", "getbusstopindex", "getbusstopstring", "getdepotstringglobal",
-    "getttlinestring", "getttdelay", "getttbusstopcount", "getttbusstopindex", "gettterminusindex", "getttterminusindex", "getttbusstopname", "getttbusstopdep", "getttbusstoparr",
-    "getheightabovepoint", "gethumancountonpathlink", "gethumancountonseat", "givechangecoin", "nrspecrandom", "getticketname", "gettticketname", "getticketvalue",
-    "getarrbusline", "getarrbusterminus", "getarrbustimediff",
+    "getfontindex",
+    "textlength",
+    "stnewtex",
+    "stlock",
+    "stunlock",
+    "stfilter",
+    "stsetcolor",
+    "stdrawpixel",
+    "stdrawrect",
+    "sttextout",
+    "streadpixel",
+    "stgetr",
+    "stgetg",
+    "stgetb",
+    "stgeta",
+    "stcopycolor",
+    "stloadtex",
+    "getrouteindex",
+    "getrouteterminusindex",
+    "getterminuscode",
+    "getterminusindex",
+    "getterminusstring",
+    "getbusstopcount",
+    "getroutebusstopident",
+    "getbusstopindex",
+    "getbusstopstring",
+    "getdepotstringglobal",
+    "getttlinestring",
+    "getttdelay",
+    "getttbusstopcount",
+    "getttbusstopindex",
+    "gettterminusindex",
+    "getttterminusindex",
+    "getttbusstopname",
+    "getttbusstopdep",
+    "getttbusstoparr",
+    "getheightabovepoint",
+    "gethumancountonpathlink",
+    "gethumancountonseat",
+    "givechangecoin",
+    "nrspecrandom",
+    "getticketname",
+    "gettticketname",
+    "getticketvalue",
+    "getarrbusline",
+    "getarrbusterminus",
+    "getarrbustimediff",
 ];
 
 /// A number a script hands a callback, as Omsi.exe takes it: rounded to the nearest
@@ -507,7 +617,9 @@ fn arg_idx(v: f32) -> usize {
 }
 
 impl Host for VehicleHost {
-    fn sys_var(&mut self, v: SysVar) -> f32 { self.read_sys_var(v) }
+    fn sys_var(&mut self, v: SysVar) -> f32 {
+        self.read_sys_var(v)
+    }
 
     /// `(S.S.x)`: OMSI writes through the system variable's pointer into the engine's
     /// own value (`TXPC_calcblock_var`). What the engine sets anew every frame (the frame
@@ -536,7 +648,10 @@ impl Host for VehicleHost {
                 };
                 self.clock.set_date(y, m, d);
             }
-            SysVar::DayOfYear => self.clock.day_of_year = (value as i32).clamp(1, crate::clock::days_in_year(self.clock.year)),
+            SysVar::DayOfYear => {
+                self.clock.day_of_year =
+                    (value as i32).clamp(1, crate::clock::days_in_year(self.clock.year))
+            }
             SysVar::MouseX => self.mouse.0 = value,
             SysVar::MouseY => self.mouse.1 = value,
             SysVar::PrecipType => self.precip_type = value,
@@ -556,16 +671,40 @@ impl Host for VehicleHost {
     fn callback(&mut self, name: &str, id: NameId, stacks: &mut Stacks, state: &mut State) {
         let cb = self.callback_kind(name, id);
         if debug_text() && omsi_script::compile::with_lower(name, |l| l.starts_with("st")) {
-            log::info!("callback {name} stack {:?} strings {:?}", &stacks.st[..stacks.st.len().min(8)], stacks.sst.last());
+            log::info!(
+                "callback {name} stack {:?} strings {:?}",
+                &stacks.st[..stacks.st.len().min(8)],
+                stacks.sst.last()
+            );
         }
         match cb {
             // the fonts and the `[scripttexture]` drawing (see `draw`), and everything the scripts
             // ask of the depot, the timetable, the passengers and the radio (see `info`)
-            Some(Cb::GetFontIndex | Cb::TextLength | Cb::StNewTex | Cb::StLock | Cb::StUnlock | Cb::StFilter | Cb::StSetColor | Cb::StDrawPixel | Cb::StDrawRect | Cb::StTextOut | Cb::StReadPixel | Cb::StGetR | Cb::StGetG | Cb::StGetB | Cb::StGetA | Cb::StCopyColor | Cb::StLoadTex) => self.draw_callback(cb, stacks),
+            Some(
+                Cb::GetFontIndex
+                | Cb::TextLength
+                | Cb::StNewTex
+                | Cb::StLock
+                | Cb::StUnlock
+                | Cb::StFilter
+                | Cb::StSetColor
+                | Cb::StDrawPixel
+                | Cb::StDrawRect
+                | Cb::StTextOut
+                | Cb::StReadPixel
+                | Cb::StGetR
+                | Cb::StGetG
+                | Cb::StGetB
+                | Cb::StGetA
+                | Cb::StCopyColor
+                | Cb::StLoadTex,
+            ) => self.draw_callback(cb, stacks),
             Some(_) => self.info_callback(cb, stacks, state),
             None => {
                 // numeric callbacks default to 0; say once which one the host lacks
-                if !omsi_script::compile::with_lower(name, |l| self.unknown_callbacks.iter().any(|n| n == l)) {
+                if !omsi_script::compile::with_lower(name, |l| {
+                    self.unknown_callbacks.iter().any(|n| n == l)
+                }) {
                     log::warn!("script callback (M.V.{name}) is not provided; it reads 0");
                     self.unknown_callbacks.push(name.to_ascii_lowercase());
                 }
@@ -576,21 +715,28 @@ impl Host for VehicleHost {
 
     fn sound_trigger_file(&mut self, name: &str, file: &str) {
         // `" " (T.F.ev_nbs_on)` is how the MB_C2 gearbox script says "no sound" (every
-        // frame in neutral, 80 times a minute per bus at Ahlheim): nothing to play
-        if self.remote_sound_triggers || file.trim().is_empty() {
+        // frame in neutral, 80 times a minute per bus at Ahlheim): nothing to play. An empty
+        // name is not that: Omsi.exe (0x74f2e8) plays the entry's sound again with the file
+        // it has, see `SoundSet::play_file_trigger`.
+        if self.remote_sound_triggers || (!file.is_empty() && file.trim().is_empty()) {
             return;
         }
         self.record_network_sound(name, Some(file));
-        self.fired_file_triggers.push((name.to_string(), file.to_string()));
+        self.fired_file_triggers
+            .push((name.to_string(), file.to_string()));
         self.file_triggers_fired += 1;
     }
     fn sound_trigger(&mut self, name: &str, _id: NameId) {
-        if self.remote_sound_triggers { return; }
+        if self.remote_sound_triggers {
+            return;
+        }
         self.record_network_sound(name, None);
         self.fired_triggers.push(name.to_string());
     }
     fn sound_trigger_vars(&mut self, name: &str, id: NameId, vars: &[f32]) {
-        if self.remote_sound_triggers { return; }
+        if self.remote_sound_triggers {
+            return;
+        }
         let network_count = self.network_sound_triggers.len();
         self.sound_trigger(name, id);
         if self.network_sound_triggers.len() > network_count {
@@ -600,8 +746,11 @@ impl Host for VehicleHost {
         }
         // (asked in place; the lower-case name is made only for a trigger that is kept - a
         // copy was made for every trigger fired by a vehicle with such sounds)
-        if !self.snapshot_triggers.is_empty() && omsi_script::compile::with_lower(name, |k| self.snapshot_triggers.contains(k)) {
-            self.fired_trigger_vars.push((name.to_ascii_lowercase(), vars.to_vec()));
+        if !self.snapshot_triggers.is_empty()
+            && omsi_script::compile::with_lower(name, |k| self.snapshot_triggers.contains(k))
+        {
+            self.fired_trigger_vars
+                .push((name.to_ascii_lowercase(), vars.to_vec()));
         }
     }
 
@@ -627,7 +776,7 @@ impl Host for VehicleHost {
 mod tests {
     use super::*;
     use crate::scripttex::ScriptTexture;
-    use omsi_script::{compile, CompileInput, Vm};
+    use omsi_script::{CompileInput, Vm, compile};
 
     /// Every callback is found by its name in any letter case, under any script name id,
     /// also when the id was another name's before; an unknown one is reported once.
@@ -683,7 +832,10 @@ mod tests {
         host.sound_trigger_vars("EV_Door_Open", 0, &[1.0, 2.0]);
         host.sound_trigger_vars("ev_other", 1, &[3.0]);
         assert_eq!(host.fired_triggers, ["EV_Door_Open", "ev_other"]);
-        assert_eq!(host.fired_trigger_vars, vec![("ev_door_open".to_string(), vec![1.0, 2.0])]);
+        assert_eq!(
+            host.fired_trigger_vars,
+            vec![("ev_door_open".to_string(), vec![1.0, 2.0])]
+        );
     }
 
     #[test]
@@ -693,17 +845,53 @@ mod tests {
         h.sound_trigger_vars("door", 0, &[5.0, 1.0]);
         h.sound_trigger_file("announcement", "../Announcements/stop.wav");
         h.sound_trigger_file("announcement", " ");
-        h.fired_triggers.clear(); h.fired_file_triggers.clear();
-        assert_eq!(h.network_sound_triggers, vec![
-            ("door".into(), None, Some(vec![5.0, 1.0])),
-            ("announcement".into(), Some("../Announcements/stop.wav".into()), None),
-        ]);
-        h.network_sound_triggers.clear(); h.remote_sound_triggers = true;
+        h.fired_triggers.clear();
+        h.fired_file_triggers.clear();
+        assert_eq!(
+            h.network_sound_triggers,
+            vec![
+                ("door".into(), None, Some(vec![5.0, 1.0])),
+                (
+                    "announcement".into(),
+                    Some("../Announcements/stop.wav".into()),
+                    None
+                ),
+            ]
+        );
+        h.network_sound_triggers.clear();
+        h.remote_sound_triggers = true;
         h.snapshot_triggers.insert("door".into());
         h.sound_trigger_vars("door", 0, &[7.0]);
         h.sound_trigger_file("announcement", "stop.wav");
-        assert!(h.fired_triggers.is_empty()); assert!(h.fired_file_triggers.is_empty());
-        assert!(h.fired_trigger_vars.is_empty()); assert!(h.network_sound_triggers.is_empty());
+        assert!(h.fired_triggers.is_empty());
+        assert!(h.fired_file_triggers.is_empty());
+        assert!(h.fired_trigger_vars.is_empty());
+        assert!(h.network_sound_triggers.is_empty());
+    }
+
+    /// `PrecipRate` reads the strength while nothing falls (Omsi.exe 0x6ff020); the glass
+    /// and the dirt go by what falls.
+    #[test]
+    fn precip_rate_reads_the_strength_and_only_what_falls_wets() {
+        let mut h = VehicleHost::new(Default::default());
+        h.precip_type = 0.0;
+        h.precip_rate = 0.125;
+        assert_eq!(h.read_sys_var(SysVar::PrecipRate), 0.125);
+        assert_eq!(h.falling_precip(), 0.0);
+        h.precip_type = 2.0;
+        assert_eq!(h.falling_precip(), 0.125);
+    }
+
+    /// `"" (T.F.x)` fires the entry again with the file it has (0x74f2e8); `" " (T.F.x)`
+    /// is no sound.
+    #[test]
+    fn an_empty_file_trigger_is_passed_on_and_a_blank_one_is_not() {
+        let mut h = VehicleHost::default();
+        h.sound_trigger_file("ann", "");
+        h.sound_trigger_file("ann", " ");
+        h.sound_trigger_file("ann", "  ");
+        assert_eq!(h.fired_file_triggers, vec![("ann".into(), String::new())]);
+        assert_eq!(h.file_triggers_fired, 1);
     }
 
     #[test]
@@ -724,9 +912,29 @@ mod tests {
         ai.wear_lifespan = 123.0;
         ai.schedule_active = 1.0;
         ai.apply_ai_globals(&world.system_values());
-        assert_eq!((ai.clock.year, ai.clock.day_of_year, ai.clock.time, ai.clock.run_time), (2024, 61, 23.0 * 3600.0, 1234.0));
-        assert_eq!((ai.temperature, ai.abs_humidity, ai.precip_type, ai.precip_rate, ai.sun_alt), (-8.0, 7.25, 2.0, 0.8, -10.0));
-        assert_eq!((ai.coll_pos, ai.coll_energy, ai.mouse, ai.wear_lifespan), ([1.0, 2.0, 3.0], 42.0, (0.25, 0.5), 123.0));
+        assert_eq!(
+            (
+                ai.clock.year,
+                ai.clock.day_of_year,
+                ai.clock.time,
+                ai.clock.run_time
+            ),
+            (2024, 61, 23.0 * 3600.0, 1234.0)
+        );
+        assert_eq!(
+            (
+                ai.temperature,
+                ai.abs_humidity,
+                ai.precip_type,
+                ai.precip_rate,
+                ai.sun_alt
+            ),
+            (-8.0, 7.25, 2.0, 0.8, -10.0)
+        );
+        assert_eq!(
+            (ai.coll_pos, ai.coll_energy, ai.mouse, ai.wear_lifespan),
+            ([1.0, 2.0, 3.0], 42.0, (0.25, 0.5), 123.0)
+        );
         assert!(ai.external_ai_clock);
         assert_eq!(ai.scratch().schedule_active, 1.0);
         assert_eq!(ai.scratch().system_values(), ai.system_values());
@@ -739,13 +947,25 @@ mod tests {
             host.want_departures(format!("stop {i}"));
         }
         assert_eq!(host.html_departure_wants.len(), MAX_HTML_DEPARTURE_STOPS);
-        assert_eq!(host.html_departure_wants.first().map(String::as_str), Some("stop 3"));
-        assert_eq!(host.html_departure_wants.last().map(String::as_str), Some("stop 10"));
+        assert_eq!(
+            host.html_departure_wants.first().map(String::as_str),
+            Some("stop 3")
+        );
+        assert_eq!(
+            host.html_departure_wants.last().map(String::as_str),
+            Some("stop 10")
+        );
         // asked again: moves to the back and nothing is pushed out
         host.want_departures("stop 3".to_string());
         assert_eq!(host.html_departure_wants.len(), MAX_HTML_DEPARTURE_STOPS);
-        assert_eq!(host.html_departure_wants.last().map(String::as_str), Some("stop 3"));
-        assert_eq!(host.html_departure_wants.first().map(String::as_str), Some("stop 4"));
+        assert_eq!(
+            host.html_departure_wants.last().map(String::as_str),
+            Some("stop 3")
+        );
+        assert_eq!(
+            host.html_departure_wants.first().map(String::as_str),
+            Some("stop 4")
+        );
     }
 
     /// A callback's argument is rounded, as Omsi.exe's `fistp` does: 1100.9999 out of the
@@ -755,8 +975,15 @@ mod tests {
         let p = compile(&CompileInput::default());
         let mut state = State::new(&p);
         let mut host = VehicleHost::new(SimClock::default());
-        let terminus = |code: i32, name: &str| omsi_vehicle::hof::Terminus { code, strings: vec![name.to_string()], ..Default::default() };
-        host.hof = Some(Arc::new(Hof { termini: vec![terminus(1100, "A"), terminus(1101, "B")], ..Default::default() }));
+        let terminus = |code: i32, name: &str| omsi_vehicle::hof::Terminus {
+            code,
+            strings: vec![name.to_string()],
+            ..Default::default()
+        };
+        host.hof = Some(Arc::new(Hof {
+            termini: vec![terminus(1100, "A"), terminus(1101, "B")],
+            ..Default::default()
+        }));
         let mut stacks = Stacks::default();
         stacks.push(1100.9999);
         host.callback("GetTerminusIndex", 0, &mut stacks, &mut state);
@@ -767,7 +994,10 @@ mod tests {
         host.callback("GetTerminusString", 0, &mut stacks, &mut state);
         assert_eq!(stacks.pop_str(), "B");
         // a half goes to the even number, as under Delphi's control word
-        assert_eq!((arg_i32(0.5), arg_i32(1.5), arg_i32(2.5), arg_i32(-0.5)), (0, 2, 2, 0));
+        assert_eq!(
+            (arg_i32(0.5), arg_i32(1.5), arg_i32(2.5), arg_i32(-0.5)),
+            (0, 2, 2, 0)
+        );
         assert_eq!(arg_idx(-1.0), usize::MAX);
     }
 
@@ -790,15 +1020,22 @@ mod tests {
             ("STDrawRect", vec![0.0, 0.0, 0.0, 1.0, 0.0]),
         ] {
             let mut stacks = Stacks::default();
-            for arg in args { stacks.push(arg); }
+            for arg in args {
+                stacks.push(arg);
+            }
             host.callback(name, 0, &mut stacks, &mut state);
-            assert_eq!(stacks.st, [0.0; 8], "{name} must still consume its arguments");
+            assert_eq!(
+                stacks.st, [0.0; 8],
+                "{name} must still consume its arguments"
+            );
         }
         let mut stacks = Stacks::default();
         stacks.push_str("missing.png".into());
         stacks.push(0.0);
         host.callback("STLoadTex", 0, &mut stacks, &mut state);
-        for arg in [0.0, 1.0, 1.0, 0.0, 2.0, 3.0] { stacks.push(arg); }
+        for arg in [0.0, 1.0, 1.0, 0.0, 2.0, 3.0] {
+            stacks.push(arg);
+        }
         stacks.push_str("local text must not be drawn".into());
         host.callback("STTextOut", 0, &mut stacks, &mut state);
         assert_eq!(stacks.st, [0.0; 8]);
@@ -810,7 +1047,9 @@ mod tests {
         assert_eq!(texture.color, [255; 4]);
         // Reading the owner's pixels is still useful for scripts; it only selects a
         // local read colour and cannot change the replicated image.
-        for arg in [0.0, 1.0, 0.0] { stacks.push(arg); }
+        for arg in [0.0, 1.0, 0.0] {
+            stacks.push(arg);
+        }
         host.callback("STReadPixel", 0, &mut stacks, &mut state);
         stacks.push(0.0);
         host.callback("STGetA", 0, &mut stacks, &mut state);
@@ -862,14 +1101,15 @@ mod tests {
 
     #[test]
     fn stfilter_marks_a_script_texture_for_mipmaps() {
-        let dir = std::env::temp_dir().join(format!("omsi_host_stfilter_test_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("omsi_host_stfilter_test_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let script = dir.join("matrix.osc");
         std::fs::write(
             &script,
             "{trigger:matrix_refresh}\n0 (M.V.STLock)\n0 (M.V.STUnlock)\n0 (M.V.STFilter)\n{end}\n",
         )
-            .unwrap();
+        .unwrap();
         let p = compile(&CompileInput {
             scripts: vec![script],
             ..Default::default()
@@ -889,10 +1129,7 @@ mod tests {
 
     #[test]
     fn atron_unlock_filter_relock_publishes_the_released_image() {
-        let dir = std::env::temp_dir().join(format!(
-            "omsi_host_atron_test_{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("omsi_host_atron_test_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let script = dir.join("atron.osc");
         std::fs::write(
@@ -912,7 +1149,9 @@ mod tests {
         let t = &mut host.script_textures[0];
         assert!(t.locked);
         assert!(t.mipmaps);
-        let first = t.take_upload().expect("STUnlock must survive STLock in the same frame");
+        let first = t
+            .take_upload()
+            .expect("STUnlock must survive STLock in the same frame");
         assert_eq!(&first[20..24], &[255; 4]);
         assert_eq!(
             &first[24..28],
@@ -975,7 +1214,11 @@ mod tests {
             .unwrap();
         let vars = dir.join("vars.txt");
         std::fs::write(&vars, "collision_energy\ncollision_energy_eng\n").unwrap();
-        let p = compile(&CompileInput { varlists: vec![vars], scripts: vec![script], ..Default::default() });
+        let p = compile(&CompileInput {
+            varlists: vec![vars],
+            scripts: vec![script],
+            ..Default::default()
+        });
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         let mut host = VehicleHost::new(SimClock::default());
         let mut st = State::new(&p);
@@ -994,19 +1237,42 @@ mod tests {
     fn drop_triggers_since_filters_only_new_matching_triggers() {
         let mut h = VehicleHost::default();
         h.capture_sound_triggers = true;
-        h.snapshot_triggers.insert("ev_lights_blinker_sw_off".into());
+        h.snapshot_triggers
+            .insert("ev_lights_blinker_sw_off".into());
         h.sound_trigger_vars("ev_lights_blinker_sw_off", 0, &[1.0]);
         let mark = h.trigger_mark();
         h.sound_trigger_vars("ev_lights_blinker_sw_off", 1, &[0.0]);
         h.sound_trigger_vars("ev_lights_blinker_off", 2, &[0.0]);
         h.sound_trigger_file("ev_blinker_aus", "click.wav");
         h.sound_trigger_file("ev_door", "door.wav");
-        h.drop_triggers_since(mark, |n| n == "ev_lights_blinker_sw_off" || n == "ev_blinker_aus");
-        assert_eq!(h.fired_triggers, ["ev_lights_blinker_sw_off", "ev_lights_blinker_off"]);
-        assert_eq!(h.fired_trigger_vars, vec![("ev_lights_blinker_sw_off".into(), vec![1.0])]);
-        let network: Vec<&str> = h.network_sound_triggers.iter().map(|t| t.0.as_str()).collect();
-        assert_eq!(network, ["ev_lights_blinker_sw_off", "ev_lights_blinker_off", "ev_door"]);
-        assert_eq!(h.fired_file_triggers, vec![("ev_door".into(), "door.wav".into())]);
+        h.drop_triggers_since(mark, |n| {
+            n == "ev_lights_blinker_sw_off" || n == "ev_blinker_aus"
+        });
+        assert_eq!(
+            h.fired_triggers,
+            ["ev_lights_blinker_sw_off", "ev_lights_blinker_off"]
+        );
+        assert_eq!(
+            h.fired_trigger_vars,
+            vec![("ev_lights_blinker_sw_off".into(), vec![1.0])]
+        );
+        let network: Vec<&str> = h
+            .network_sound_triggers
+            .iter()
+            .map(|t| t.0.as_str())
+            .collect();
+        assert_eq!(
+            network,
+            [
+                "ev_lights_blinker_sw_off",
+                "ev_lights_blinker_off",
+                "ev_door"
+            ]
+        );
+        assert_eq!(
+            h.fired_file_triggers,
+            vec![("ev_door".into(), "door.wav".into())]
+        );
     }
 }
 

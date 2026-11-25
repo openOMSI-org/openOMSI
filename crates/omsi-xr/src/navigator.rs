@@ -34,19 +34,28 @@ impl Default for Placement {
 impl Placement {
     pub fn value(&self, field: &str) -> Option<f32> {
         Some(match field {
-            "x" => self.offset[0], "y" => self.offset[1], "z" => self.offset[2],
-            "width" => self.width, "yaw" => self.yaw, "tilt" => self.tilt,
-            "roll" => self.roll, "opacity" => self.opacity,
+            "x" => self.offset[0],
+            "y" => self.offset[1],
+            "z" => self.offset[2],
+            "width" => self.width,
+            "yaw" => self.yaw,
+            "tilt" => self.tilt,
+            "roll" => self.roll,
+            "opacity" => self.opacity,
             _ => return None,
         })
     }
 
     pub fn set_value(&mut self, field: &str, value: f32) {
         match field {
-            "x" => self.offset[0] = value, "y" => self.offset[1] = value,
-            "z" => self.offset[2] = value, "width" => self.width = value,
-            "yaw" => self.yaw = value, "tilt" => self.tilt = value,
-            "roll" => self.roll = value, "opacity" => self.opacity = value,
+            "x" => self.offset[0] = value,
+            "y" => self.offset[1] = value,
+            "z" => self.offset[2] = value,
+            "width" => self.width = value,
+            "yaw" => self.yaw = value,
+            "tilt" => self.tilt = value,
+            "roll" => self.roll = value,
+            "opacity" => self.opacity = value,
             _ => return,
         }
         *self = self.sanitize();
@@ -100,7 +109,12 @@ impl Placement {
             "roll" => self.roll += direction * 2.0,
             "opacity" => self.opacity += direction * 0.05,
             "enabled" => self.enabled = !self.enabled,
-            "reset" => *self = Self { enabled: self.enabled, ..Self::default() },
+            "reset" => {
+                *self = Self {
+                    enabled: self.enabled,
+                    ..Self::default()
+                }
+            }
             _ => return,
         }
         *self = self.sanitize();

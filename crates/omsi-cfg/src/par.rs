@@ -8,8 +8,8 @@
 //! thread and lets workers join in: every item goes to whoever is free first, the caller
 //! too, and the caller only ever waits for items a worker has already started.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The items' address, shared with the helpers (each index is claimed by one thread only).
 struct SendPtr<T>(*mut T);
@@ -116,7 +116,10 @@ mod tests {
         for helpers in [0, 1, 3, 16] {
             let mut v: Vec<u64> = (0..1000).collect();
             frame_each(&mut v, helpers, |x| *x = *x * 2 + 1);
-            assert!(v.iter().enumerate().all(|(i, &x)| x == i as u64 * 2 + 1), "helpers {helpers}");
+            assert!(
+                v.iter().enumerate().all(|(i, &x)| x == i as u64 * 2 + 1),
+                "helpers {helpers}"
+            );
         }
         let mut empty: Vec<u8> = Vec::new();
         frame_each(&mut empty, 4, |_| unreachable!());

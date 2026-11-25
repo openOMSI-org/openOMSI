@@ -16,8 +16,15 @@
 /// the number's three digits followed by the letter (`052D`), as the lines with a letter
 /// behind the number (`10`, `30`…) already were.
 fn four_char_matrix(lines: &mut [String]) -> bool {
-    let has = |s: &str| lines.iter().any(|l| l.split_whitespace().collect::<Vec<_>>().join(" ") == s);
-    if !(has("(L.$.Matrix_NewNr) $length 1 <=") && has("(L.$.Matrix_NewNr) 3 $SetLengthR \"E\" $+") && has("4 $SetLengthL")) {
+    let has = |s: &str| {
+        lines
+            .iter()
+            .any(|l| l.split_whitespace().collect::<Vec<_>>().join(" ") == s)
+    };
+    if !(has("(L.$.Matrix_NewNr) $length 1 <=")
+        && has("(L.$.Matrix_NewNr) 3 $SetLengthR \"E\" $+")
+        && has("4 $SetLengthL"))
+    {
         return false;
     }
     let mut changed = false;
@@ -28,7 +35,10 @@ fn four_char_matrix(lines: &mut [String]) -> bool {
         if lines[i].split_whitespace().collect::<Vec<_>>().join(" ") != "4 $SetLengthR" {
             continue;
         }
-        let next = lines[i + 1..].iter().map(|l| l.trim()).find(|l| !l.is_empty());
+        let next = lines[i + 1..]
+            .iter()
+            .map(|l| l.trim())
+            .find(|l| !l.is_empty());
         if next == Some("(S.$.Matrix_NewNr)") {
             let indent: String = lines[i].chars().take_while(|c| c.is_whitespace()).collect();
             lines[i] = format!("{indent}4 $SetLengthR $__DigitsFirst");
@@ -245,8 +255,7 @@ fn aachen_ibox_route_pad(lines: &mut Vec<String>) -> bool {
     }
 
     // Skip blanking while PIN / line / route entry holds a typed leading zero (float still 0).
-    let blanking_target =
-        "(L.L.ibox_eingabe) 0 = (L.L.ibox_modus) 2 = ! && (L.L.ibox_modus) 7 = ! && (L.L.ibox_modus) 10 = ! &&";
+    let blanking_target = "(L.L.ibox_eingabe) 0 = (L.L.ibox_modus) 2 = ! && (L.L.ibox_modus) 7 = ! && (L.L.ibox_modus) 10 = ! &&";
     if !blanking_done {
         for i in 0..lines.len() {
             let n = norm(&lines[i]);
@@ -298,8 +307,10 @@ fn aachen_ibox_route_pad(lines: &mut Vec<String>) -> bool {
         if entry_mode && clears_eingabe {
             let next = lines.get(i + 2).map(|l| norm(l)).unwrap_or_default();
             if next != "\"\" (S.$.ibox_Zahleingabe)" {
-                let indent: String =
-                    lines[i + 1].chars().take_while(|c| c.is_whitespace()).collect();
+                let indent: String = lines[i + 1]
+                    .chars()
+                    .take_while(|c| c.is_whitespace())
+                    .collect();
                 lines.insert(i + 2, format!("{indent}\"\" (S.$.ibox_Zahleingabe)"));
                 changed = true;
                 i += 3;
@@ -385,7 +396,10 @@ fn aachen_ibox_line_buffer(lines: &mut Vec<String>) -> bool {
                 format!("{indent}(L.L.ibox_modus) 7 ="),
                 format!("{indent}{{if}}"),
             ];
-            block.extend(aachen_ibox_digit_append_block(&format!("{indent}\t"), false));
+            block.extend(aachen_ibox_digit_append_block(
+                &format!("{indent}\t"),
+                false,
+            ));
             block.push(format!("{indent}{{endif}}"));
             let n_lines = block.len();
             lines.splice(i..=i + 5, block);
@@ -405,7 +419,8 @@ fn aachen_ibox_line_buffer(lines: &mut Vec<String>) -> bool {
             i += 1;
             continue;
         }
-        if in_mode7 && (n == "{end}" || (n.starts_with("(L.L.ibox_modus)") && n != "(L.L.ibox_modus) 7 ="))
+        if in_mode7
+            && (n == "{end}" || (n.starts_with("(L.L.ibox_modus)") && n != "(L.L.ibox_modus) 7 ="))
         {
             in_mode7 = false;
         }
@@ -415,7 +430,10 @@ fn aachen_ibox_line_buffer(lines: &mut Vec<String>) -> bool {
                 format!("{indent}(L.L.ibox_modus) 7 ="),
                 format!("{indent}{{if}}"),
             ];
-            block.extend(aachen_ibox_digit_append_block(&format!("{indent}\t"), false));
+            block.extend(aachen_ibox_digit_append_block(
+                &format!("{indent}\t"),
+                false,
+            ));
             block.push(format!("{indent}{{endif}}"));
             let n_lines = block.len();
             lines.splice(i..=i, block);
@@ -494,7 +512,10 @@ fn aachen_ibox_backspace(lines: &mut Vec<String>) -> bool {
             && norm(&lines[i + 2]) == "(L.L.ibox_eingabe) 10 / trunc (S.L.ibox_eingabe)"
             && norm(&lines[i + 3]) == "0 (S.L.ibox_taste_D10)"
         {
-            let indent: String = lines[i + 2].chars().take_while(|c| c.is_whitespace()).collect();
+            let indent: String = lines[i + 2]
+                .chars()
+                .take_while(|c| c.is_whitespace())
+                .collect();
             let trim = [
                 format!("{indent}(L.L.ibox_modus) 2 ="),
                 format!("{indent}(L.L.ibox_modus) 7 = ||"),
@@ -514,7 +535,11 @@ fn aachen_ibox_backspace(lines: &mut Vec<String>) -> bool {
 
 /// `aachen_ibox_route_pad`'s click spots: the buffer kept across frames in modes 2, 7 and 10
 /// (the older patch guarded mode 10 only).
-fn aachen_ibox_click_spots(lines: &mut Vec<String>, clickspots_stripped: bool, clickspots_modes_done: bool) -> bool {
+fn aachen_ibox_click_spots(
+    lines: &mut Vec<String>,
+    clickspots_stripped: bool,
+    clickspots_modes_done: bool,
+) -> bool {
     let norm = |l: &str| l.split_whitespace().collect::<Vec<_>>().join(" ");
     let mut changed = false;
     if !clickspots_stripped {
@@ -557,8 +582,10 @@ fn aachen_ibox_click_spots(lines: &mut Vec<String>, clickspots_stripped: bool, c
             if norm(&lines.get(i + 1).cloned().unwrap_or_default()) == "(L.L.ibox_modus) 10 = !"
                 && lines.get(i + 2).is_some_and(|l| l.trim() == "{if}")
             {
-                let indent: String =
-                    lines[i + 1].chars().take_while(|c| c.is_whitespace()).collect();
+                let indent: String = lines[i + 1]
+                    .chars()
+                    .take_while(|c| c.is_whitespace())
+                    .collect();
                 let guard = [
                     format!("{indent}(L.L.ibox_modus) 2 = !"),
                     format!("{indent}(L.L.ibox_modus) 7 = ! &&"),
@@ -584,7 +611,8 @@ pub fn patch(lines: &mut Vec<String>) -> Vec<&'static str> {
         applied.push("4-character line matrix: number padded to three digits");
     }
     if aachen_ibox_route_pad(lines) {
-        applied.push("Aachen ibox: digit buffer for PIN/line/route; typed leading zero; max 4 chars");
+        applied
+            .push("Aachen ibox: digit buffer for PIN/line/route; typed leading zero; max 4 chars");
     }
     applied
 }
@@ -661,15 +689,47 @@ mod tests {
         assert!(applied.iter().any(|n| n.contains("Aachen ibox")));
         let n = |l: &str| l.split_whitespace().collect::<Vec<_>>().join(" ");
         // Digit / star buffer append — no IntToStrEnh auto-pad; stock 4-char cap.
-        assert!(lines.iter().any(|l| n(l) == "(L.$.ibox_Zahleingabe) $length 4 <"));
-        assert!(lines.iter().any(|l| n(l) == "(L.$.ibox_Zahleingabe) \"0\" $+ (S.$.ibox_Zahleingabe)"));
-        assert!(lines.iter().any(|l| n(l) == "(L.$.ibox_Zahleingabe) \"1\" $+ (S.$.ibox_Zahleingabe)"));
-        assert!(lines.iter().any(|l| n(l) == "(L.$.ibox_Zahleingabe) \"*\" $+ (S.$.ibox_Zahleingabe)"));
-        assert!(!lines.iter().any(|l| l.contains("IntToStrEnh") && l.contains("ibox_Zahleingabe")));
-        assert!(lines.iter().any(|l| n(l) == "(L.$.ibox_Zahleingabe) 1 $cutEnd (S.$.ibox_Zahleingabe)"));
+        assert!(
+            lines
+                .iter()
+                .any(|l| n(l) == "(L.$.ibox_Zahleingabe) $length 4 <")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| n(l) == "(L.$.ibox_Zahleingabe) \"0\" $+ (S.$.ibox_Zahleingabe)")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| n(l) == "(L.$.ibox_Zahleingabe) \"1\" $+ (S.$.ibox_Zahleingabe)")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| n(l) == "(L.$.ibox_Zahleingabe) \"*\" $+ (S.$.ibox_Zahleingabe)")
+        );
+        assert!(
+            !lines
+                .iter()
+                .any(|l| l.contains("IntToStrEnh") && l.contains("ibox_Zahleingabe"))
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| n(l) == "(L.$.ibox_Zahleingabe) 1 $cutEnd (S.$.ibox_Zahleingabe)")
+        );
         // Mode 11 stays plain IntToStr; PIN mask / line IntToStr are gone.
-        assert!(lines.iter().any(|l| n(l) == "(L.L.ibox_eingabe) $IntToStr (S.$.ibox_Zahleingabe)"));
-        assert!(!lines.iter().any(|l| n(l) == "(L.L.ibox_eingabe) $IntToStr $length s0"));
+        assert!(
+            lines
+                .iter()
+                .any(|l| n(l) == "(L.L.ibox_eingabe) $IntToStr (S.$.ibox_Zahleingabe)")
+        );
+        assert!(
+            !lines
+                .iter()
+                .any(|l| n(l) == "(L.L.ibox_eingabe) $IntToStr $length s0")
+        );
         assert!(lines.iter().any(|l| {
             n(l) == "(L.L.ibox_eingabe) 0 = (L.L.ibox_modus) 2 = ! && (L.L.ibox_modus) 7 = ! && (L.L.ibox_modus) 10 = ! &&"
         }));
@@ -745,9 +805,19 @@ mod tests {
 "#;
         let mut lines: Vec<String> = src.lines().map(String::from).collect();
         let applied = patch(&mut lines);
-        assert!(applied.iter().any(|n| n.contains("Aachen ibox")), "{applied:?}");
+        assert!(
+            applied.iter().any(|n| n.contains("Aachen ibox")),
+            "{applied:?}"
+        );
         let n = |l: &str| l.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(lines.iter().any(|l| n(l) == "(L.$.ibox_Zahleingabe) $length 4 <"));
-        assert!(patch(&mut lines).is_empty(), "idempotent after length-cap upgrade");
+        assert!(
+            lines
+                .iter()
+                .any(|l| n(l) == "(L.$.ibox_Zahleingabe) $length 4 <")
+        );
+        assert!(
+            patch(&mut lines).is_empty(),
+            "idempotent after length-cap upgrade"
+        );
     }
 }

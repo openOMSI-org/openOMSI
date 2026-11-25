@@ -12,6 +12,7 @@ use crate::api::{ApiError, ApiFn, Ctx, Value};
 const NEW: &str = crate::api::VERSION;
 /// The cruise control (#3976).
 const CRUISE: &str = "0.3.55";
+const TRACK: &str = "0.3.55";
 
 fn has(c: &mut Ctx<'_>) -> bool {
     c.io().has_vehicle()
@@ -477,6 +478,33 @@ pub static FNS: &[ApiFn] = &[
         |c, a| {
             let kmh = a.opt_num(0)?;
             Ok::<_, ApiError>(c.io().bus_set_cruise(kmh.map(|k| k as f32)))
+        }
+    ),
+    def!(
+        "bus.track",
+        "vehicle",
+        [],
+        "table or nil",
+        "Where the player's rail vehicle (tram, metro, train) is on its track, as distances along \
+         it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (an index \
+         into the map's lanes), the metres from its start and its length, whether the vehicle faces \
+         the track's direction, and the net metres it has moved along the tracks since it was put \
+         on them (they go down, below zero too, while it backs up). `nil` for a road vehicle. A \
+         plugin can work out block sections, distances to a signal or a stop, or a train protection \
+         system from it.",
+        TRACK,
+        None,
+        false,
+        |c, a| {
+            c.io().bus_track().map(|t| {
+                rec(vec![
+                    ("lane", Value::Int(t.lane as i64)),
+                    ("s", Value::from(t.s)),
+                    ("lane_length", Value::from(t.lane_length)),
+                    ("forward", t.forward.into()),
+                    ("travelled", t.travelled.into()),
+                ])
+            })
         }
     ),
     def!(

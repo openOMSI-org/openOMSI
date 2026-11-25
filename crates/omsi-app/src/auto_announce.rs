@@ -20,9 +20,9 @@
 //! first stop's recording. A start recording the scripts start late is not waited for: the
 //! departure recording takes over, as it would in service.
 
-use omsi_sim::timetable_run::announce::{self, TwoRecordings};
-use omsi_sim::timetable_run::PlayerDuty;
 use omsi_sim::VehicleInstance;
+use omsi_sim::timetable_run::PlayerDuty;
+use omsi_sim::timetable_run::announce::{self, TwoRecordings};
 
 /// The least time between two presses of a key (s): one press a frame at most, and the
 /// scripts a moment to run their own step in between.
@@ -135,7 +135,11 @@ impl AutoAnnounce {
                 return layout;
             }
         }
-        let layout = bus.host.hof.as_ref().and_then(|hof| announce::layout(hof, route));
+        let layout = bus
+            .host
+            .hof
+            .as_ref()
+            .and_then(|hof| announce::layout(hof, route));
         self.layout = Some((route, layout));
         if let Some(l) = layout {
             log::info!(
@@ -161,21 +165,37 @@ impl AutoAnnounce {
             self.parked = None;
             return;
         }
-        let Some(layout) = layout.filter(|l| l.pairs > 0) else { return };
+        let Some(layout) = layout.filter(|l| l.pairs > 0) else {
+            return;
+        };
         let route = route(bus);
         if route.is_some() && self.parked == route {
             return;
         }
-        let Some(entry) = park_target(layout, bus.var("IBIS_busstop")) else { return };
+        let Some(entry) = park_target(layout, bus.var("IBIS_busstop")) else {
+            return;
+        };
         // (one silent step a frame, so that a script's own press in between is seen; once a
         // route, see `press_step`)
         if self.want.is_none() {
-            self.want = Some(Want { entry, until: now + ARRIVAL_WAIT, at_stop: true, start: true, recordings: None });
+            self.want = Some(Want {
+                entry,
+                until: now + ARRIVAL_WAIT,
+                at_stop: true,
+                start: true,
+                recordings: None,
+            });
         }
     }
 
     /// The bus reached the stop it stands at: the stop's arrival recording.
-    fn arrive(&mut self, bus: &VehicleInstance, d: &PlayerDuty, layout: Option<TwoRecordings>, now: f64) {
+    fn arrive(
+        &mut self,
+        bus: &VehicleInstance,
+        d: &PlayerDuty,
+        layout: Option<TwoRecordings>,
+        now: f64,
+    ) {
         // (the first stop is the one the bus pulls out of, and its listener has just boarded:
         // what is due there is the line's start recording, which `park` sees to)
         if d.next_stop == 0 || self.announced == Some(d.next_stop) {
@@ -185,12 +205,20 @@ impl AutoAnnounce {
         if !layout.is_some_and(|l| l.pairs > 0) {
             return;
         }
-        let Some(stop) = d.trips.get(d.trip_index).and_then(|t| t.stops.get(d.next_stop)) else { return };
+        let Some(stop) = d
+            .trips
+            .get(d.trip_index)
+            .and_then(|t| t.stops.get(d.next_stop))
+        else {
+            return;
+        };
         if !stop.stops {
             self.announced = Some(d.next_stop);
             return;
         }
-        let (Some(hof), Some(route)) = (bus.host.hof.clone(), route(bus)) else { return };
+        let (Some(hof), Some(route)) = (bus.host.hof.clone(), route(bus)) else {
+            return;
+        };
         let Some(entry) = announce::arrival_entry(&hof, route, &stop.name, d.next_stop) else {
             // (the depot file keeps no pair of recordings that this stop could be: said
             // once, so that a stop that stays silent can be looked up)
@@ -203,8 +231,17 @@ impl AutoAnnounce {
             return;
         };
         self.announced = Some(d.next_stop);
-        self.want = Some(Want { entry, until: now + ARRIVAL_WAIT, at_stop: true, start: false, recordings: None });
-        log::info!("auto-announce: arrival at '{}', entry {entry} of route {route}", stop.name.trim());
+        self.want = Some(Want {
+            entry,
+            until: now + ARRIVAL_WAIT,
+            at_stop: true,
+            start: false,
+            recordings: None,
+        });
+        log::info!(
+            "auto-announce: arrival at '{}', entry {entry} of route {route}",
+            stop.name.trim()
+        );
     }
 
     /// The bus left the stop: a stock script steps the counter on by itself here, and plays
@@ -229,7 +266,10 @@ impl AutoAnnounce {
             self.want = None;
             return;
         }
-        if want.recordings.is_some_and(|before| bus.recordings() > before) {
+        if want
+            .recordings
+            .is_some_and(|before| bus.recordings() > before)
+        {
             // (the last press was heard after all: its recording came after it)
             self.played(bus, want);
             return;
@@ -237,7 +277,9 @@ impl AutoAnnounce {
         // (a press the script did not take leaves the counter where it stood: the next one is
         // a retry, and waits a second rather than a fifth; a press that stepped it on was
         // heard by the script, and the entries in between follow a fifth of a second apart)
-        let retry = self.pressed.is_some_and(|(_, before)| bus.var("IBIS_busstop") == Some(before));
+        let retry = self
+            .pressed
+            .is_some_and(|(_, before)| bus.var("IBIS_busstop") == Some(before));
         let gap = if retry { RETRY_GAP } else { MIN_GAP };
         if self.pressed.is_some_and(|(last, _)| now - last < gap) {
             return;
@@ -255,7 +297,9 @@ impl AutoAnnounce {
         if target - at > MAX_SKIP as f32 + 1.0 {
             // (far behind - a duty taken over in the middle of its trip: stepping it on to
             // this stop would play the recordings of the stops that were skipped)
-            log::info!("auto-announce: the IBIS stands at entry {at}, {target} expected here, left alone");
+            log::info!(
+                "auto-announce: the IBIS stands at entry {at}, {target} expected here, left alone"
+            );
             self.want = None;
             return;
         }
@@ -273,7 +317,9 @@ impl AutoAnnounce {
             return;
         } else if self.no_skip {
             // (no `IBIS_vor_stumm`: pressing on would play the entries in between)
-            log::info!("auto-announce: the IBIS cannot be stepped on silently, entry {target} left alone");
+            log::info!(
+                "auto-announce: the IBIS cannot be stepped on silently, entry {target} left alone"
+            );
             if want.start {
                 // (given up for this route, not asked for again every frame)
                 self.parked = route(bus);
@@ -283,7 +329,10 @@ impl AutoAnnounce {
             self.press(bus, "IBIS_vor_stumm", now);
         }
         // (an entry the press did reach needs no second one; one it did not is tried again)
-        if bus.var("IBIS_busstop").is_some_and(|v| (v - want.entry as f32).abs() < 0.5) {
+        if bus
+            .var("IBIS_busstop")
+            .is_some_and(|v| (v - want.entry as f32).abs() < 0.5)
+        {
             self.want = None;
         }
     }
@@ -292,7 +341,9 @@ impl AutoAnnounce {
     /// index the scripts read did not change, the electrics are off, another IBIS mode - would
     /// stay silent for the rest of the duty, so the game presses the key once.
     fn watch_step(&mut self, bus: &mut impl Ibis, now: f64) {
-        let Some((since, entry)) = self.watch else { return };
+        let Some((since, entry)) = self.watch else {
+            return;
+        };
         if bus.var("IBIS_busstop") != Some(entry) {
             self.watch = None;
             return;
@@ -304,7 +355,13 @@ impl AutoAnnounce {
         if self.want.is_some() {
             return;
         }
-        self.want = Some(Want { entry: entry as usize + 1, until: now + SCRIPT_GRACE, at_stop: false, start: false, recordings: None });
+        self.want = Some(Want {
+            entry: entry as usize + 1,
+            until: now + SCRIPT_GRACE,
+            at_stop: false,
+            start: false,
+            recordings: None,
+        });
         log::warn!("auto-announce: the scripts left the IBIS at entry {entry}, pressed it on");
     }
 
@@ -415,7 +472,17 @@ mod tests {
 
     impl FakeIbis {
         fn new(steps: bool) -> Self {
-            FakeIbis { busstop: 0.0, steps, plays: 0, power: true, deaf: false, late: false, silent_key: true, pending: 0, route: 57.0 }
+            FakeIbis {
+                busstop: 0.0,
+                steps,
+                plays: 0,
+                power: true,
+                deaf: false,
+                late: false,
+                silent_key: true,
+                pending: 0,
+                route: 57.0,
+            }
         }
 
         /// A frame of the scripts: what a `late` IBIS was pressed for plays now.
@@ -464,11 +531,21 @@ mod tests {
         }
     }
 
-    const LAYOUT: Option<TwoRecordings> = Some(TwoRecordings { first: 2, pairs: 18 });
+    const LAYOUT: Option<TwoRecordings> = Some(TwoRecordings {
+        first: 2,
+        pairs: 18,
+    });
 
     /// `secs` at a stop at 60 frames a second, as `step` runs it there, from `t0`; `bus`
     /// may be changed at each frame.
-    fn stand(a: &mut AutoAnnounce, bus: &mut FakeIbis, next_stop: usize, t0: f64, secs: f64, at: &mut dyn FnMut(f64, &mut FakeIbis)) {
+    fn stand(
+        a: &mut AutoAnnounce,
+        bus: &mut FakeIbis,
+        next_stop: usize,
+        t0: f64,
+        secs: f64,
+        at: &mut dyn FnMut(f64, &mut FakeIbis),
+    ) {
         a.at_stop = Some(true);
         for f in 0..(secs * 60.0) as usize {
             let now = t0 + f as f64 / 60.0;
@@ -484,11 +561,25 @@ mod tests {
         // (the O560 of #3282: its script plays `welcome…` and leaves the counter at 0 - it
         // was pressed again every second, 63 times in a minute)
         let mut keeps = FakeIbis::new(false);
-        stand(&mut AutoAnnounce::new(), &mut keeps, 0, 0.0, 60.0, &mut |_, _| {});
+        stand(
+            &mut AutoAnnounce::new(),
+            &mut keeps,
+            0,
+            0.0,
+            60.0,
+            &mut |_, _| {},
+        );
         assert_eq!(keeps.plays, 1);
         // (a stock script steps on to the start recording's entry: once, and parked there)
         let mut steps = FakeIbis::new(true);
-        stand(&mut AutoAnnounce::new(), &mut steps, 0, 0.0, 60.0, &mut |_, _| {});
+        stand(
+            &mut AutoAnnounce::new(),
+            &mut steps,
+            0,
+            0.0,
+            60.0,
+            &mut |_, _| {},
+        );
         assert_eq!((steps.plays, steps.busstop), (1, 1.0));
     }
 
@@ -498,7 +589,14 @@ mod tests {
         // then, once - not lost because the first presses went unheard)
         let mut bus = FakeIbis::new(false);
         bus.power = false;
-        stand(&mut AutoAnnounce::new(), &mut bus, 0, 0.0, 60.0, &mut |now, b| b.power = now >= 30.0);
+        stand(
+            &mut AutoAnnounce::new(),
+            &mut bus,
+            0,
+            0.0,
+            60.0,
+            &mut |now, b| b.power = now >= 30.0,
+        );
         assert_eq!(bus.plays, 1);
     }
 
@@ -521,7 +619,13 @@ mod tests {
     fn arrival(bus: &mut FakeIbis, secs: f64, power_at: f64, heard_at: f64) {
         let mut a = AutoAnnounce::new();
         a.at_stop = Some(true);
-        a.want = Some(Want { entry: 5, until: ARRIVAL_WAIT, at_stop: true, start: false, recordings: None });
+        a.want = Some(Want {
+            entry: 5,
+            until: ARRIVAL_WAIT,
+            at_stop: true,
+            start: false,
+            recordings: None,
+        });
         bus.busstop = 4.0;
         for f in 0..(secs * 60.0) as usize {
             let now = f as f64 / 60.0;
@@ -570,7 +674,10 @@ mod tests {
             a.park(&bus, 0, far, now);
             a.press_step(&mut bus, now);
         }
-        assert_eq!((bus.plays, bus.busstop, a.parked, a.want.is_none()), (0, 0.0, Some(57), true));
+        assert_eq!(
+            (bus.plays, bus.busstop, a.parked, a.want.is_none()),
+            (0, 0.0, Some(57), true)
+        );
     }
 
     #[test]
@@ -583,7 +690,14 @@ mod tests {
         assert_eq!(bus.plays, 1);
         let mut bus = FakeIbis::new(false);
         bus.late = true;
-        stand(&mut AutoAnnounce::new(), &mut bus, 0, 0.0, 60.0, &mut |_, _| {});
+        stand(
+            &mut AutoAnnounce::new(),
+            &mut bus,
+            0,
+            0.0,
+            60.0,
+            &mut |_, _| {},
+        );
         assert_eq!(bus.plays, 1);
     }
 }

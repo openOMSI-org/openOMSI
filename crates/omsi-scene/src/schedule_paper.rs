@@ -4,11 +4,11 @@
 //! bitmap named by that string; openOMSI makes it from the player's current duty and keeps
 //! it in its own cache so the original installation remains read-only.
 
-use omsi_sim::timetable_run::PlayerDuty;
 use ab_glyph::{Font as _, FontVec, PxScale, ScaleFont};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use omsi_content::font::{Font, FontAtlas, FontChar, TextAlign};
 use omsi_sim::VehicleInstance;
+use omsi_sim::timetable_run::PlayerDuty;
 use omsi_texture::Image;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -59,7 +59,13 @@ pub fn update_vehicle(
         }
     }
     let (arr, dep) = tt_labels(language);
-    let (title, rows) = paper_content(&duty.line, &duty.tour, &duty.trips, duty.trip_index, (arr, dep));
+    let (title, rows) = paper_content(
+        &duty.line,
+        &duty.tour,
+        &duty.trips,
+        duty.trip_index,
+        (arr, dep),
+    );
     let lines = paper_lines(&title, &rows);
     let signature = content_signature(&lines);
     let path = cache_dir()?.join(format!("schedule-v7-{signature:016x}.png"));
@@ -108,7 +114,11 @@ fn input_key(duty: &PlayerDuty) -> u64 {
             stop.dep.to_bits().hash(&mut hasher);
         }
     }
-    duty.trip_index.checked_add(1).and_then(|next| duty.trips.get(next)).map(|t| t.departure.to_bits()).hash(&mut hasher);
+    duty.trip_index
+        .checked_add(1)
+        .and_then(|next| duty.trips.get(next))
+        .map(|t| t.departure.to_bits())
+        .hash(&mut hasher);
     hasher.finish()
 }
 
@@ -142,13 +152,11 @@ fn schedule_font(
     fonts: &mut omsi_sim::texttex::FontLibrary,
     lines: &[String],
 ) -> Option<std::sync::Arc<FontAtlas>> {
-    typewriter_font(lines)
-        .map(std::sync::Arc::new)
-        .or_else(|| {
-            ["19_HHAschedule_font", "DIN Narrow", "DIN_Narrow", "DIN"]
-                .into_iter()
-                .find_map(|name| fonts.load(name))
-        })
+    typewriter_font(lines).map(std::sync::Arc::new).or_else(|| {
+        ["19_HHAschedule_font", "DIN Narrow", "DIN_Narrow", "DIN"]
+            .into_iter()
+            .find_map(|name| fonts.load(name))
+    })
 }
 
 /// OMSI prints the schedule in a bold typewriter face, rather than a bus display's
@@ -260,7 +268,10 @@ fn linux_typewriter_fonts() -> Vec<PathBuf> {
         "freemonobold.ttf",
         "dejavusansmono-bold.ttf",
     ];
-    let mut dirs = vec![PathBuf::from("/usr/share/fonts"), PathBuf::from("/usr/local/share/fonts")];
+    let mut dirs = vec![
+        PathBuf::from("/usr/share/fonts"),
+        PathBuf::from("/usr/local/share/fonts"),
+    ];
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
         dirs.push(home.join(".local/share/fonts"));
         dirs.push(home.join(".fonts"));
@@ -268,14 +279,20 @@ fn linux_typewriter_fonts() -> Vec<PathBuf> {
     let mut found: Vec<(usize, PathBuf)> = Vec::new();
     let mut stack: Vec<(PathBuf, u32)> = dirs.into_iter().map(|d| (d, 0)).collect();
     while let Some((dir, depth)) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             let path = e.path();
             if path.is_dir() {
                 if depth < 4 {
                     stack.push((path, depth + 1));
                 }
-            } else if let Some(rank) = path.file_name().and_then(|n| n.to_str()).and_then(|n| NAMES.iter().position(|w| n.eq_ignore_ascii_case(w))) {
+            } else if let Some(rank) = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| NAMES.iter().position(|w| n.eq_ignore_ascii_case(w)))
+            {
                 found.push((rank, path));
             }
         }
@@ -297,9 +314,12 @@ fn tt_labels(language: impl FnOnce() -> String) -> &'static (String, String) {
     LABELS.get_or_init(|| {
         let lang = language();
         let find = |lang: &str| {
-            omsi_cfg::content_dirs("Languages").into_iter().find_map(|dir| {
-                omsi_content::language::Language::load(&dir.join(format!("{lang}_basic.olf"))).ok()
-            })
+            omsi_cfg::content_dirs("Languages")
+                .into_iter()
+                .find_map(|dir| {
+                    omsi_content::language::Language::load(&dir.join(format!("{lang}_basic.olf")))
+                        .ok()
+                })
         };
         let l = find(&lang).or_else(|| find("ENG"));
         let get = |key: &str, default: &str| {
@@ -325,7 +345,10 @@ fn paper_content(
     (arr_label, dep_label): (&str, &str),
 ) -> (String, Vec<PaperRow>) {
     let Some(trip) = trips.get(trip_index) else {
-        return (format!("{} - {}", duty_line.trim(), duty_tour.trim()), Vec::new());
+        return (
+            format!("{} - {}", duty_line.trim(), duty_tour.trim()),
+            Vec::new(),
+        );
     };
     let line = if trip.line.trim().is_empty() {
         duty_line.trim()
@@ -420,7 +443,13 @@ fn paper_base() -> Image {
 fn draw_schedule(image: &mut Image, font: &FontAtlas, lines: &[String]) {
     let line_height = font.font.height.max(1) as u32;
     for (i, line) in lines.iter().enumerate() {
-        draw_text(image, font, line, PAPER_X, PAPER_TOP + i as u32 * line_height);
+        draw_text(
+            image,
+            font,
+            line,
+            PAPER_X,
+            PAPER_TOP + i as u32 * line_height,
+        );
     }
 }
 
@@ -532,7 +561,8 @@ mod tests {
         let (title, rows) = paper_content("76", "1", no_trips, 0, ("Arrival ", "Depart. "));
         assert_eq!(title, "76 - 1");
         assert!(rows.is_empty());
-        let (title, rows) = paper_content("76", "1", no_trips, usize::MAX, ("Arrival ", "Depart. "));
+        let (title, rows) =
+            paper_content("76", "1", no_trips, usize::MAX, ("Arrival ", "Depart. "));
         assert_eq!(title, "76 - 1");
         assert!(rows.is_empty());
     }
@@ -555,7 +585,8 @@ mod tests {
                 stop(4, "Bauernhof", t(11.0, 59.0), t(12.0, 1.0)),
             ],
         };
-        let (title, rows) = paper_content("76", "1", &[current.clone()], 0, ("Arrival ", "Depart. "));
+        let (title, rows) =
+            paper_content("76", "1", &[current.clone()], 0, ("Arrival ", "Depart. "));
         assert_eq!(title, "76 - Bauernhof - 1");
         assert_eq!(
             rows.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
@@ -565,7 +596,10 @@ mod tests {
             rows.iter().map(|r| r.time.as_str()).collect::<Vec<_>>(),
             ["11:52", "11:57", "11:59", "12:01"]
         );
-        let next = PlannedTrip { departure: t(12.0, 10.0), ..current.clone() };
+        let next = PlannedTrip {
+            departure: t(12.0, 10.0),
+            ..current.clone()
+        };
         let (_, rows) = paper_content("76", "1", &[current, next], 0, ("Arrival ", "Depart. "));
         assert_eq!(rows.last().map(|r| r.time.as_str()), Some("12:10"));
     }
@@ -579,7 +613,11 @@ mod tests {
     fn paper_text_is_two_columns_of_25_character_labels() {
         let rows: Vec<_> = (0..50)
             .map(|i| PaperRow {
-                name: if i == 0 { "Gustav-Adolf-Str./Langhansstr.  ".into() } else { format!("Stop {i:02}  ") },
+                name: if i == 0 {
+                    "Gustav-Adolf-Str./Langhansstr.  ".into()
+                } else {
+                    format!("Stop {i:02}  ")
+                },
                 time: "12:34".into(),
             })
             .collect();
@@ -591,7 +629,10 @@ mod tests {
             lines[2],
             "Gustav-Adolf-Str./Langhan 12:34     Stop 24  ................ 12:34"
         );
-        assert_eq!(lines[25], "Stop 23  ................ 12:34     Stop 47  ................ 12:34");
+        assert_eq!(
+            lines[25],
+            "Stop 23  ................ 12:34     Stop 47  ................ 12:34"
+        );
         // rows past the second column are left out
         assert!(!lines.iter().any(|l| l.contains("Stop 48")));
 
@@ -603,7 +644,12 @@ mod tests {
     #[test]
     fn paper_lines_are_drawn_from_60_90_one_font_height_apart() {
         let font = test_font();
-        let mut image = Image { width: 1024, height: 1024, rgba: vec![255; 1024 * 1024 * 4], has_alpha: false };
+        let mut image = Image {
+            width: 1024,
+            height: 1024,
+            rgba: vec![255; 1024 * 1024 * 4],
+            has_alpha: false,
+        };
         draw_schedule(&mut image, &font, &["AB".to_string(), "CD".to_string()]);
         let ink = |x: u32, y: u32| image.rgba[((y * image.width + x) * 4) as usize] < 100;
         assert!(ink(PAPER_X, PAPER_TOP));

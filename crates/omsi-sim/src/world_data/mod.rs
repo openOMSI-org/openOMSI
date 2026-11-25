@@ -16,7 +16,10 @@ mod traits;
 
 pub use arrivals::{TrafficArrival, TrafficArrivals};
 
-pub use ground::{probe_tile, surface_flush, tile_key, GroundTiles, LiveGround, BURIED_FACE, PAINT_LAYER, WALL_TOP_STEP};
+pub use ground::{
+    BURIED_FACE, GroundTiles, LiveGround, PAINT_LAYER, WALL_TOP_STEP, probe_tile, surface_flush,
+    tile_key,
+};
 
 use crate::collision::{CollisionWorld, Obb};
 use arc_swap::ArcSwap;
@@ -99,13 +102,22 @@ const PLACE_LAYERS: usize = 8;
 impl ObjectPlaces {
     /// Where object `id` stands.
     pub fn get(&self, id: &i64) -> Option<&Place> {
-        self.layers.iter().rev().find_map(|l| l.get(id)).or_else(|| self.base.get(id))
+        self.layers
+            .iter()
+            .rev()
+            .find_map(|l| l.get(id))
+            .or_else(|| self.base.get(id))
     }
 
     /// Every object once, where it stands now (in no particular order).
     pub fn iter(&self) -> impl Iterator<Item = (&i64, &Place)> + '_ {
         let mut seen: HashSet<i64> = HashSet::new();
-        self.layers.iter().rev().chain(std::iter::once(&self.base)).flat_map(|l| l.iter()).filter(move |(id, _)| seen.insert(**id))
+        self.layers
+            .iter()
+            .rev()
+            .chain(std::iter::once(&self.base))
+            .flat_map(|l| l.iter())
+            .filter(move |(id, _)| seen.insert(**id))
     }
 
     /// Object `id` of tile `tile`, when its id is used on more than one tile.
@@ -115,7 +127,11 @@ impl ObjectPlaces {
 
     /// The map index's objects and duplicates: those not known yet are added (an object
     /// already known keeps its place).
-    pub fn add_index(&mut self, objects: impl IntoIterator<Item = (i64, Place)>, dups: impl IntoIterator<Item = (((i32, i32), i64), Place)>) {
+    pub fn add_index(
+        &mut self,
+        objects: impl IntoIterator<Item = (i64, Place)>,
+        dups: impl IntoIterator<Item = (((i32, i32), i64), Place)>,
+    ) {
         let base = Arc::make_mut(&mut self.base);
         for (id, p) in objects {
             base.entry(id).or_insert(p);
@@ -135,7 +151,10 @@ impl ObjectPlaces {
         if placed.is_empty() {
             return;
         }
-        if placed.iter().any(|(id, _)| self.dups.contains_key(&(tile, *id))) {
+        if placed
+            .iter()
+            .any(|(id, _)| self.dups.contains_key(&(tile, *id)))
+        {
             let d = Arc::make_mut(&mut self.dups);
             for (id, p) in &placed {
                 if let Some(e) = d.get_mut(&(tile, *id)) {
@@ -145,7 +164,8 @@ impl ObjectPlaces {
         }
         self.layers.push(Arc::new(placed.into_iter().collect()));
         if self.layers.len() > PLACE_LAYERS {
-            let mut merged: HashMap<i64, Place> = HashMap::with_capacity(self.layers.iter().map(|l| l.len()).sum());
+            let mut merged: HashMap<i64, Place> =
+                HashMap::with_capacity(self.layers.iter().map(|l| l.len()).sum());
             for l in &self.layers {
                 merged.extend(l.iter().map(|(k, v)| (*k, *v)));
             }
@@ -160,30 +180,44 @@ impl WorldData {
         match &self.tile_files {
             Some(t) => t.contains(&key),
             // (before the layout is known: the same question asked of the files)
-            None => self.map.tiles.iter().any(|(k, f)| *k == key && omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(&self.map.map_dir, f))),
+            None => self.map.tiles.iter().any(|(k, f)| {
+                *k == key && omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(&self.map.map_dir, f))
+            }),
         }
     }
 
     /// How many passengers get off at stop object `id` (a stop without strings: the
     /// defaults' mean, 0.5).
     pub fn stop_exit_weight(&self, id: i64) -> f32 {
-        self.index.as_ref().and_then(|ix| ix.stop_weights.get(&id).copied()).unwrap_or(0.5)
+        self.index
+            .as_ref()
+            .and_then(|ix| ix.stop_weights.get(&id).copied())
+            .unwrap_or(0.5)
     }
 
     /// Stop object `id`'s (pass_enter_max, pass_enter_min) (a stop without strings: 1 and 0).
     pub fn stop_enter(&self, id: i64) -> (f32, f32) {
-        self.index.as_ref().and_then(|ix| ix.stop_enter.get(&id).copied()).unwrap_or((1.0, 0.0))
+        self.index
+            .as_ref()
+            .and_then(|ix| ix.stop_enter.get(&id).copied())
+            .unwrap_or((1.0, 0.0))
     }
 
     /// The side stop object `id`'s platform lies on: 0 = right, 1 = the other, 2 = both; a
     /// stop the map says nothing about: 0.
     pub fn stop_side(&self, id: i64) -> f32 {
-        self.index.as_ref().and_then(|ix| ix.stop_side.get(&id).copied()).unwrap_or(0.0)
+        self.index
+            .as_ref()
+            .and_then(|ix| ix.stop_side.get(&id).copied())
+            .unwrap_or(0.0)
     }
 
     /// Stop object `id`'s length (30 m when the map says nothing).
     pub fn stop_length(&self, id: i64) -> f32 {
-        self.index.as_ref().and_then(|ix| ix.stop_length.get(&id).copied()).unwrap_or(30.0)
+        self.index
+            .as_ref()
+            .and_then(|ix| ix.stop_length.get(&id).copied())
+            .unwrap_or(30.0)
     }
 }
 
@@ -197,7 +231,10 @@ pub struct WorldCell {
 
 impl WorldCell {
     pub fn new(data: WorldData) -> WorldCell {
-        WorldCell { current: ArcSwap::from_pointee(data), writer: parking_lot::Mutex::new(()) }
+        WorldCell {
+            current: ArcSwap::from_pointee(data),
+            writer: parking_lot::Mutex::new(()),
+        }
     }
 
     /// The current snapshot, to keep (a step's or a tick's world).
@@ -239,7 +276,10 @@ mod tests {
     #[test]
     fn placed_objects_override_the_index_and_the_latest_placing_wins() {
         let mut o = ObjectPlaces::default();
-        o.add_index([(1, at(1.0)), (2, at(2.0))], [(((0, 0), 2), at(2.0)), (((1, 0), 2), at(20.0))]);
+        o.add_index(
+            [(1, at(1.0)), (2, at(2.0))],
+            [(((0, 0), 2), at(2.0)), (((1, 0), 2), at(20.0))],
+        );
         o.place((1, 0), vec![(2, at(21.0)), (3, at(3.0))]);
         assert_eq!(o.get(&2), Some(&at(21.0)));
         assert_eq!(o.dup((1, 0), 2), Some(&at(21.0)));
@@ -256,7 +296,15 @@ mod tests {
         assert_eq!(o.get(&3), Some(&at(3.0)));
         let mut all: Vec<(i64, f64)> = o.iter().map(|(k, p)| (*k, p.0.x)).collect();
         all.sort_by(|a, b| a.0.cmp(&b.0));
-        assert_eq!(all, vec![(1, 1.0), (2, 30.0 + (PLACE_LAYERS * 2 - 1) as f64), (3, 3.0), (4, 4.0)]);
+        assert_eq!(
+            all,
+            vec![
+                (1, 1.0),
+                (2, 30.0 + (PLACE_LAYERS * 2 - 1) as f64),
+                (3, 3.0),
+                (4, 4.0)
+            ]
+        );
     }
 
     #[test]

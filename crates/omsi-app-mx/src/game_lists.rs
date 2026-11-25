@@ -268,10 +268,15 @@ fn line_shown(v: &omsi_sim::VehicleInstance) -> Option<String> {
         .or_else(|| ibis_line_number(v))
 }
 
+/// The IBIS's line with its letter (`IBIS_Linie_Suffix`, as the IBIS types it: 6E, C6),
+/// so that a destination picked by hand gives the IBIS the same line code and the matrix
+/// does not draw its number again without the letter (#2369); a code no letter stands for
+/// gives the number alone.
 fn ibis_line_number(v: &omsi_sim::VehicleInstance) -> Option<String> {
-    v.var("IBIS_LinieKurs")
-        .filter(|l| *l > 0.0)
-        .map(|l| format!("{}", l as i64))
+    let line = v.var("IBIS_LinieKurs").filter(|l| *l > 0.0)? as i64;
+    let suffix = v.var("IBIS_Linie_Suffix").unwrap_or(0.0).round().max(0.0) as u32;
+    omsi_sim::timetable_run::line_text_from_code(line as u32, suffix)
+        .or_else(|| Some(line.to_string()))
 }
 
 pub(crate) fn display_route_line(s: &str) -> bool {
@@ -293,10 +298,10 @@ pub(crate) fn set_symbol_route(p: &mut crate::player::Player, shown: Option<usiz
 
 /// The line a destination picked from the list is set with: the route number the bus
 /// shows, when the IBIS can take it - its matrix's (`Matrix_Nr`), a roller blind's
-/// (`SetLineTo`, which its crank sets) - else the IBIS's own number. Taken from
-/// `IBIS_LinieKurs`, the IBIS's number without its letter, a pick made 92E into 92 on the
-/// IBIS and the matrix. Not `SetLineTo` on any other bus: no script of its own writes it,
-/// only an earlier pick, so a line typed on the IBIS since went back to that pick's.
+/// (`SetLineTo`, which its crank sets) - else the IBIS's own line, its letter included
+/// (`ibis_line_number`): without it a pick made 92E into 92 on the IBIS and the matrix.
+/// Not `SetLineTo` on any other bus: no script of its own writes it, only an earlier pick,
+/// so a line typed on the IBIS since went back to that pick's.
 pub(crate) fn destination_line(v: &omsi_sim::VehicleInstance) -> String {
     let blind = crate::schedule::has_roller_blind(v).then(|| v.str_var("SetLineTo"));
     [Some(v.str_var("Matrix_Nr")), blind]
@@ -1749,6 +1754,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     Ok(h) => {
                         let name = h.name.clone();
                         p.vehicle.host.hof = Some(std::sync::Arc::new(h));
+                        p.vehicle.set_yard(&name);
                         app.service_msg = Some((
                             omsi_ui::i18n::tr_fill("Depot file: {}", &[("{}", &name.trim())]),
                             3.0,
@@ -2085,6 +2091,56 @@ mod tests {
         }
     }
 
+    /// #2369: the IBIS on 6 with letter code 12 (C6), the display showing "6a" typed by hand.
+    /// A destination picked keeps the IBIS's line code: given as the bare 6 it became 600,
+    /// and the stock matrix, drawing its number again on any change of
+    /// `IBIS_Linie_Complex`, put a plain 6 over the 6a about a second later.
+    #[test]
+    fn a_destination_picked_keeps_the_ibis_letter_under_a_display_only_route_number() {
+        let mut v = crate::schedule::tests::script_test_vehicle(
+            "{frame}\n{end}\n",
+            "IBIS_LinieKurs\nIBIS_Linie_Suffix\nIBIS_Linie_Complex\nIBIS_TerminusCode\n",
+            "Matrix_Nr\nSetLineTo\n",
+        );
+        v.set_var("IBIS_LinieKurs", 6.0);
+        v.set_var("IBIS_Linie_Suffix", 12.0);
+        v.set_var("IBIS_Linie_Complex", 612.0);
+        let i = v.ty.program.str_var("Matrix_Nr").unwrap();
+        v.state.str_vars[i as usize] = "6a".into();
+        let hof = omsi_vehicle::Hof {
+            termini: vec![omsi_vehicle::hof::Terminus {
+                code: 7,
+                texture_id: "Mei Foo".into(),
+                strings: vec!["MEI FOO".into()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let line = super::destination_line(&v);
+        assert_eq!(line, "C6");
+        crate::schedule::set_player_destination_with_display(
+            &mut v,
+            &hof,
+            &line,
+            Some("6a"),
+            0,
+            &[],
+        );
+        assert_eq!(
+            (
+                v.var("IBIS_LinieKurs"),
+                v.var("IBIS_Linie_Suffix"),
+                v.var("IBIS_Linie_Complex")
+            ),
+            (Some(6.0), Some(12.0), Some(612.0))
+        );
+        assert_eq!(v.str_var("Matrix_Nr"), "6a");
+        // the IBIS's 6E (suffix 10) is kept the same way
+        v.set_var("IBIS_Linie_Suffix", 10.0);
+        v.state.str_vars[i as usize] = String::new();
+        assert_eq!(super::destination_line(&v), "6E");
+    }
+
     /// A destination picked from the list keeps the route number the bus shows, its letter
     /// too (92E, IBIS 92 and suffix 10).
     #[test]
@@ -2125,23 +2181,23 @@ mod tests {
         );
         // a route number the IBIS cannot take is left to the display: the IBIS keeps its own
         set_str(&mut v, "Matrix_Nr", "-10");
-        assert_eq!(super::destination_line(&v), "92");
+        assert_eq!(super::destination_line(&v), "92E");
         for alpha in ["R56", "CE19", "SB15"] {
             set_str(&mut v, "Matrix_Nr", alpha);
-            assert_eq!(super::destination_line(&v), "92");
+            assert_eq!(super::destination_line(&v), "92E");
             assert_eq!(super::form_route(&v, None), alpha);
         }
         assert!(super::display_route_line("R56") && !super::display_route_line("-10"));
         // nothing shown: the IBIS's number
         set_str(&mut v, "Matrix_Nr", "   ");
         set_str(&mut v, "SetLineTo", "");
-        assert_eq!(super::destination_line(&v), "92");
+        assert_eq!(super::destination_line(&v), "92E");
         // no matrix line, the line of an earlier pick left in SetLineTo and another typed on
         // the IBIS since: the IBIS's (only a roller blind shows SetLineTo)
         set_str(&mut v, "Matrix_Nr", "");
         set_str(&mut v, "SetLineTo", "5");
         v.set_var("IBIS_LinieKurs", 145.0);
-        assert_eq!(super::destination_line(&v), "145");
+        assert_eq!(super::destination_line(&v), "145E");
         let mut blind = crate::schedule::tests::script_test_vehicle(
             "{trigger:rollband_sync}\n{end}\n",
             "IBIS_LinieKurs\n",

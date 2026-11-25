@@ -1,12 +1,22 @@
 use super::*;
 
 fn wheel() -> DeviceCfg {
-    let mut d = DeviceCfg { name: "Test wheel".into(), second: "0".into(), ff_scale: Some((0.65, 1.25)), ff_invert: Some(true), ..Default::default() };
+    let mut d = DeviceCfg {
+        name: "Test wheel".into(),
+        second: "0".into(),
+        ff_scale: Some((0.65, 1.25)),
+        ff_invert: Some(true),
+        ..Default::default()
+    };
     d.axes[0] = Some((Func::Steering, true));
     d.axes[1] = Some((Func::Throttle, true));
     d.axes[5] = Some((Func::Brake, false));
     d.axis_flags[0] = 2 | 8 | 0x10;
-    d.buttons = vec![("horn".into(), "7".into()), ("kw_s_1_fest".into(), "0".into()), ("blinker_warn_toggle".into(), "0".into())];
+    d.buttons = vec![
+        ("horn".into(), "7".into()),
+        ("kw_s_1_fest".into(), "0".into()),
+        ("blinker_warn_toggle".into(), "0".into()),
+    ];
     d.latching = vec![2];
     d
 }
@@ -49,8 +59,18 @@ fn hot_reload_keeps_device_owner_and_ffb_runtime_state() {
     c.ff_lateral = 0.25;
     c.ff_bump = 0.75;
     c.ff_bump_age = 0.125;
-    c.ff_micro = Micro { roll: 10.0, rpm: 850.0, crank: 0.1, firing: 0.2, mass: 0.3 };
-    c.ff_vib = ScriptVib { amp: 0.4, period: 2.0, t: 0.12 };
+    c.ff_micro = Micro {
+        roll: 10.0,
+        rpm: 850.0,
+        crank: 0.1,
+        firing: 0.2,
+        mass: 0.3,
+    };
+    c.ff_vib = ScriptVib {
+        amp: 0.4,
+        period: 2.0,
+        t: 0.12,
+    };
     c.ff_rumble = 0.6;
     c.steer = Some(("Test wheel".into(), 0.2, 0.1, true));
     c.settled = vec![0.3, 0.4];
@@ -60,11 +80,26 @@ fn hot_reload_keeps_device_owner_and_ffb_runtime_state() {
     cfg[0].ff_invert = Some(false);
     c.install_cfg(cfg);
     assert_eq!(std::ptr::addr_of!(c.devices), devices);
-    assert_eq!((c.ff_t, c.ff_lateral, c.ff_bump, c.ff_bump_age), (12.0, 0.25, 0.75, 0.125));
+    assert_eq!(
+        (c.ff_t, c.ff_lateral, c.ff_bump, c.ff_bump_age),
+        (12.0, 0.25, 0.75, 0.125)
+    );
     assert_eq!(c.steer, Some(("Test wheel".into(), 0.2, 0.1, true)));
     assert_eq!(c.settled, vec![0.3, 0.4]);
-    assert_eq!((c.ff_micro.roll, c.ff_micro.rpm, c.ff_micro.crank, c.ff_micro.firing, c.ff_micro.mass), (10.0, 850.0, 0.1, 0.2, 0.3));
-    assert_eq!((c.ff_vib.amp, c.ff_vib.period, c.ff_vib.t, c.ff_rumble), (0.4, 2.0, 0.12, 0.6));
+    assert_eq!(
+        (
+            c.ff_micro.roll,
+            c.ff_micro.rpm,
+            c.ff_micro.crank,
+            c.ff_micro.firing,
+            c.ff_micro.mass
+        ),
+        (10.0, 850.0, 0.1, 0.2, 0.3)
+    );
+    assert_eq!(
+        (c.ff_vib.amp, c.ff_vib.period, c.ff_vib.t, c.ff_rumble),
+        (0.4, 2.0, 0.12, 0.6)
+    );
     assert_eq!(c.actions.last(), Some(&("kw_s_1_fest".into(), false)));
     assert_eq!(c.configuration()[0].ff_invert, Some(false));
 }
@@ -76,7 +111,11 @@ fn hot_reload_hands_a_new_force_feedback_tuning_to_the_open_wheel() {
     c.ff_smooth = -0.2;
     c.steer = Some(("Test wheel".into(), 0.2, 0.15, true));
     let devices = std::ptr::addr_of!(c.devices);
-    let tune = FfTune { parking: 0.0, smoothing: 0.02, ..Default::default() };
+    let tune = FfTune {
+        parking: 0.0,
+        smoothing: 0.02,
+        ..Default::default()
+    };
     let mut cfg = c.configuration();
     assert_eq!(cfg[0].ff_tune, None);
     cfg[0].ff_tune = Some(tune);
@@ -86,13 +125,37 @@ fn hot_reload_hands_a_new_force_feedback_tuning_to_the_open_wheel() {
     assert_eq!((c.ff_t, c.ff_smooth), (3.0, -0.2));
     assert_eq!(c.steer, Some(("Test wheel".into(), 0.2, 0.15, true)));
     // ...and from the next frame on tuned as the launcher said: no scrub in a parked bus
-    let in_use = find_device_cfg(&c.cfg, "Test wheel").and_then(|d| d.ff_tune).unwrap_or_default();
+    let in_use = find_device_cfg(&c.cfg, "Test wheel")
+        .and_then(|d| d.ff_tune)
+        .unwrap_or_default();
     assert_eq!(in_use, tune);
-    let parked = FfInput { on: true, dt: 1.0 / 60.0, ..Default::default() };
-    assert!(tuned_wheel_force(&parked, 0.2, 0.15, &mut 0.0, &mut 0.0, 1.0, 0.0, &FfTune::default()) < -0.1);
-    assert_eq!(tuned_wheel_force(&parked, 0.2, 0.15, &mut 0.0, &mut 0.0, 1.0, 0.0, &in_use), 0.0);
+    let parked = FfInput {
+        on: true,
+        dt: 1.0 / 60.0,
+        ..Default::default()
+    };
+    assert!(
+        tuned_wheel_force(
+            &parked,
+            0.2,
+            0.15,
+            &mut 0.0,
+            &mut 0.0,
+            1.0,
+            0.0,
+            &FfTune::default()
+        ) < -0.1
+    );
+    assert_eq!(
+        tuned_wheel_force(&parked, 0.2, 0.15, &mut 0.0, &mut 0.0, 1.0, 0.0, &in_use),
+        0.0
+    );
     // and a wheel whose forces go off forgets what its smoothing held
-    c.feedback(FfInput { on: false, dt: 1.0 / 60.0, ..Default::default() });
+    c.feedback(FfInput {
+        on: false,
+        dt: 1.0 / 60.0,
+        ..Default::default()
+    });
     assert_eq!(c.ff_smooth, 0.0);
 }
 
@@ -109,7 +172,12 @@ fn a_device_nobody_set_up_steers_only_once_its_axis_moved() {
     // turned: it steers, also when back at the centre
     assert!(free_axis_steers(&mut moved, j, 0.4, Some(0.0)));
     assert!(free_axis_steers(&mut moved, j, 0.0, Some(0.0)));
-    assert!(!free_axis_steers(&mut moved, "another joystick", 0.0, Some(0.0)));
+    assert!(!free_axis_steers(
+        &mut moved,
+        "another joystick",
+        0.0,
+        Some(0.0)
+    ));
 }
 
 /// An X axis resting at an end (a pedal, a macro keypad's stray axis) never steers (#868).
@@ -138,14 +206,26 @@ fn hot_reload_editing_suppresses_input_and_releases_once() {
     c.set_editing(true);
     c.poll();
     assert!(c.editing);
-    assert_eq!(c.actions, vec![("horn".into(), true), ("horn".into(), false)]);
+    assert_eq!(
+        c.actions,
+        vec![("horn".into(), true), ("horn".into(), false)]
+    );
     c.set_editing(false);
     assert!(!c.editing);
 }
 
 #[test]
 fn a_latching_switch_stays_in_through_the_menu_and_the_focus() {
-    let cfg = vec![DeviceCfg { name: "Test wheel".into(), buttons: vec![(String::new(), String::new()), ("bus_stopbrake".into(), String::new()), ("bus_horn".into(), String::new())], latching: vec![1], ..Default::default() }];
+    let cfg = vec![DeviceCfg {
+        name: "Test wheel".into(),
+        buttons: vec![
+            (String::new(), String::new()),
+            ("bus_stopbrake".into(), String::new()),
+            ("bus_horn".into(), String::new()),
+        ],
+        latching: vec![1],
+        ..Default::default()
+    }];
     let mut held = HeldButtons::default();
     let mut actions = Vec::new();
     held.event(&cfg, "Test wheel", 1, true, &mut actions);
@@ -161,7 +241,12 @@ fn a_latching_switch_stays_in_through_the_menu_and_the_focus() {
 
 #[test]
 fn a_latching_continuous_switch_stops_repeating_when_the_focus_goes() {
-    let mut cfg = DeviceCfg { name: "Test wheel".into(), buttons: vec![("retarder_up".into(), "1".into())], latching: vec![0], ..Default::default() };
+    let mut cfg = DeviceCfg {
+        name: "Test wheel".into(),
+        buttons: vec![("retarder_up".into(), "1".into())],
+        latching: vec![0],
+        ..Default::default()
+    };
     cfg.more = vec![(0, "gear_up".into())];
     let mut c = Controllers::with_devices(no_hardware(), vec![cfg]);
     c.held.event(&c.cfg, "Test wheel", 0, true, &mut c.actions);
@@ -185,7 +270,10 @@ fn hot_reload_releases_original_held_gear_and_does_not_press_new_binding() {
     cfg[0].buttons[1].0 = "horn".into();
     held.release(&mut actions);
     held.event(&cfg, "Test wheel", 1, false, &mut actions);
-    assert_eq!(actions, vec![("kw_s_1_fest".into(), true), ("kw_s_1_fest".into(), false)]);
+    assert_eq!(
+        actions,
+        vec![("kw_s_1_fest".into(), true), ("kw_s_1_fest".into(), false)]
+    );
     held.event(&cfg, "Test wheel", 1, true, &mut actions);
     assert_eq!(actions.last(), Some(&("horn".into(), true)));
 }
@@ -199,7 +287,13 @@ fn hot_reload_does_not_toggle_latching_switch_on_menu_entry() {
     held.event(&cfg, "Test wheel", 2, true, &mut actions); // duplicate down
     held.release(&mut actions);
     held.event(&cfg, "Test wheel", 2, false, &mut actions);
-    assert_eq!(actions, vec![("blinker_warn_toggle".into(), true), ("blinker_warn_toggle".into(), false)]);
+    assert_eq!(
+        actions,
+        vec![
+            ("blinker_warn_toggle".into(), true),
+            ("blinker_warn_toggle".into(), false)
+        ]
+    );
     // A physical release during driving still performs the existing latching behaviour.
     held.event(&cfg, "Test wheel", 2, true, &mut actions);
     held.event(&cfg, "Test wheel", 2, false, &mut actions);
@@ -219,7 +313,15 @@ fn hot_reload_release_uses_mapping_at_press_even_after_external_change() {
 
 #[test]
 fn hot_reload_preserves_axis_flags_button_metadata_and_per_device_ffb() {
-    let cfg = vec![wheel(), DeviceCfg { name: "Separate pedals".into(), second: "12".into(), ff_scale: Some((1.0, 1.0)), ..Default::default() }];
+    let cfg = vec![
+        wheel(),
+        DeviceCfg {
+            name: "Separate pedals".into(),
+            second: "12".into(),
+            ff_scale: Some((1.0, 1.0)),
+            ..Default::default()
+        },
+    ];
     assert_eq!(parse_cfg(&cfg_text(&cfg)), cfg);
     assert_eq!(cfg[0].axis_flags[0], 26);
     let (steer, physical) = wheel_steering(0.6, true, 0, 0.1, 1.0);
@@ -243,7 +345,14 @@ fn hot_reload_mixed_devices_keep_the_selected_steering_kind() {
 
 #[test]
 fn hot_reload_gamepad_vibration_uses_its_own_device_scale() {
-    let mut cfg = vec![wheel(), DeviceCfg { name: "Xbox Controller".into(), ff_scale: Some((1.0, 0.5)), ..Default::default() }];
+    let mut cfg = vec![
+        wheel(),
+        DeviceCfg {
+            name: "Xbox Controller".into(),
+            ff_scale: Some((1.0, 0.5)),
+            ..Default::default()
+        },
+    ];
     assert_eq!(rumble_scale(&cfg, "Xbox Controller"), 0.5);
     cfg[1].ff_scale = Some((1.0, 1.5));
     assert_eq!(rumble_scale(&cfg, "Xbox Controller"), 1.5);
@@ -253,7 +362,11 @@ fn hot_reload_gamepad_vibration_uses_its_own_device_scale() {
 
 #[test]
 fn hot_reload_custom_gamepad_layout_owns_analog_controls() {
-    let mut cfg = vec![DeviceCfg { name: "Xbox Controller".into(), second: "0".into(), ..Default::default() }];
+    let mut cfg = vec![DeviceCfg {
+        name: "Xbox Controller".into(),
+        second: "0".into(),
+        ..Default::default()
+    }];
     cfg[0].buttons.push(("horn".into(), "0".into()));
     assert!(!custom_gamepad_axes(&cfg, "Xbox Controller"));
     cfg[0].axes[0] = Some((Func::Steering, false));
@@ -296,12 +409,38 @@ fn the_forces_go_to_the_wheel_whichever_steering_device_is_listed_first() {
 
 #[test]
 fn only_a_connected_force_feedback_wheel_set_up_to_steer_counts_as_the_wheel() {
-    let connected = |name: &str, gamepad: bool, ff: bool| Connected { name: name.into(), hardware_id: None, axes: vec![(0, 0.0)], gamepad, ff, ff_capable: ff, buttons: 0 };
+    let connected = |name: &str, gamepad: bool, ff: bool| Connected {
+        name: name.into(),
+        hardware_id: None,
+        axes: vec![(0, 0.0)],
+        gamepad,
+        ff,
+        ff_capable: ff,
+        buttons: 0,
+    };
     let mut pad = wheel();
     pad.name = "Xbox Controller".into();
-    assert!(wheel_set_up(&[wheel()], &[connected("Test wheel", false, true)]));
-    assert!(!wheel_set_up(&[wheel()], &[connected("Test wheel", false, false)]));
-    assert!(!wheel_set_up(&[wheel()], &[connected("Shifter", false, true)]));
-    assert!(!wheel_set_up(&[pad], &[connected("Xbox Controller", true, true)]));
-    assert!(!wheel_set_up(&[DeviceCfg { name: "Test wheel".into(), ..Default::default() }], &[connected("Test wheel", false, true)]));
+    assert!(wheel_set_up(
+        &[wheel()],
+        &[connected("Test wheel", false, true)]
+    ));
+    assert!(!wheel_set_up(
+        &[wheel()],
+        &[connected("Test wheel", false, false)]
+    ));
+    assert!(!wheel_set_up(
+        &[wheel()],
+        &[connected("Shifter", false, true)]
+    ));
+    assert!(!wheel_set_up(
+        &[pad],
+        &[connected("Xbox Controller", true, true)]
+    ));
+    assert!(!wheel_set_up(
+        &[DeviceCfg {
+            name: "Test wheel".into(),
+            ..Default::default()
+        }],
+        &[connected("Test wheel", false, true)]
+    ));
 }

@@ -30,7 +30,11 @@ fn cross_2d(a0: DVec3, a1: DVec3, b0: DVec3, b1: DVec3) -> Option<(f64, f64)> {
     let d = b0 - a0;
     let t = (d.x * s.y - d.y * s.x) / den;
     let u = (d.x * r.y - d.y * r.x) / den;
-    if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) { Some((t, u)) } else { None }
+    if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
+        Some((t, u))
+    } else {
+        None
+    }
 }
 
 impl WireNet {
@@ -53,9 +57,13 @@ impl WireNet {
         for a in 0..self.spans.len() {
             let mut near = Vec::new();
             for cell in self.cells_of(a as u32) {
-                let Some(list) = self.grid.get(&cell) else { continue };
+                let Some(list) = self.grid.get(&cell) else {
+                    continue;
+                };
                 for &b in list {
-                    if b as usize > a { near.push(b); }
+                    if b as usize > a {
+                        near.push(b);
+                    }
                 }
             }
             near.sort_unstable();
@@ -63,10 +71,20 @@ impl WireNet {
             for b in near {
                 let (alo, ahi) = boxes[a];
                 let (blo, bhi) = boxes[b as usize];
-                if ahi.x < blo.x || bhi.x < alo.x || ahi.y < blo.y || bhi.y < alo.y { continue; }
+                if ahi.x < blo.x || bhi.x < alo.x || ahi.y < blo.y || bhi.y < alo.y {
+                    continue;
+                }
                 for (side_a, side_b, sa, sb, pos) in self.wire_intersections(a, b) {
                     let ci = crossings.len() as u32;
-                    crossings.push(Crossing { a: a as u32, b, side_a, side_b, sa, sb, pos });
+                    crossings.push(Crossing {
+                        a: a as u32,
+                        b,
+                        side_a,
+                        side_b,
+                        sa,
+                        sb,
+                        pos,
+                    });
                     on_span[a].push((ci, sa));
                     on_span[b as usize].push((ci, sb));
                 }
@@ -104,21 +122,37 @@ impl WireNet {
                     let (a0, a1) = sa.wire_segment(i, side_a);
                     for j in 0..sb.pts.len() - 1 {
                         let (b0, b1) = sb.wire_segment(j, side_b);
-                        let Some((t, u)) = cross_2d(a0, a1, b0, b1) else { continue };
+                        let Some((t, u)) = cross_2d(a0, a1, b0, b1) else {
+                            continue;
+                        };
                         let za = a0.z + t * (a1.z - a0.z);
                         let zb = b0.z + u * (b1.z - b0.z);
-                        if (za - zb).abs() > CROSS_HEIGHT { continue; }
+                        if (za - zb).abs() > CROSS_HEIGHT {
+                            continue;
+                        }
                         let la = sa.cum[i] + t * sa.pts[i].distance(sa.pts[i + 1]);
                         let lb = sb.cum[j] + u * sb.pts[j].distance(sb.pts[j + 1]);
                         const END_EPS: f64 = 1e-1;
-                        if la <= END_EPS || sa.len() - la <= END_EPS || lb <= END_EPS || sb.len() - lb <= END_EPS {
+                        if la <= END_EPS
+                            || sa.len() - la <= END_EPS
+                            || lb <= END_EPS
+                            || sb.len() - lb <= END_EPS
+                        {
                             continue;
                         }
                         let pos = a0.lerp(a1, t);
                         // Adjacent polyline pieces can describe the same conductor crossing.
-                        if out.iter().any(|(as_, bs, x, y, _): &(u8, u8, f64, f64, DVec3)| {
-                            *as_ == side_a && *bs == side_b && (*x - la).abs() < 1e-5 && (*y - lb).abs() < 1e-5
-                        }) { continue; }
+                        if out
+                            .iter()
+                            .any(|(as_, bs, x, y, _): &(u8, u8, f64, f64, DVec3)| {
+                                *as_ == side_a
+                                    && *bs == side_b
+                                    && (*x - la).abs() < 1e-5
+                                    && (*y - lb).abs() < 1e-5
+                            })
+                        {
+                            continue;
+                        }
                         out.push((side_a, side_b, la, lb, pos));
                     }
                 }
@@ -129,7 +163,10 @@ impl WireNet {
 
     /// Crossings on a span: crossing id and distance along the span.
     pub fn crossings_of(&self, span: u32) -> &[(u32, f64)] {
-        self.span_crossings.get(span as usize).map(|v| v.as_slice()).unwrap_or(&[])
+        self.span_crossings
+            .get(span as usize)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }
 
@@ -142,7 +179,10 @@ mod tests {
         let net = WireNet::parse(
             "[trolley_span]\np -20 0 5.5\np 20 0 5.5\n[trolley_span]\np 0 -20 5.5\np 0 20 5.5\n",
         );
-        assert!(!net.crossings.is_empty(), "same-height wires crossing should be recorded");
+        assert!(
+            !net.crossings.is_empty(),
+            "same-height wires crossing should be recorded"
+        );
     }
 
     #[test]
@@ -150,7 +190,10 @@ mod tests {
         let net = WireNet::parse(
             "[trolley_span]\np -20 0 5.5\np 20 0 5.5\n[trolley_span]\np 0 -20 6.5\np 0 20 6.5\n",
         );
-        assert!(net.crossings.is_empty(), "wires separated by 1 m should not cross");
+        assert!(
+            net.crossings.is_empty(),
+            "wires separated by 1 m should not cross"
+        );
     }
 
     #[test]
@@ -170,7 +213,8 @@ mod tests {
         for angle in [10.0_f64, 17.0, 22.0, 45.0] {
             for spacing in [0.2, 0.6, 2.0] {
                 for split in [false, true] {
-                    let direction = DVec3::new(angle.to_radians().cos(), angle.to_radians().sin(), 0.0);
+                    let direction =
+                        DVec3::new(angle.to_radians().cos(), angle.to_radians().sin(), 0.0);
                     let end = direction * 50.0;
                     let branch = if split {
                         let mid = direction * 1.0;
@@ -187,7 +231,11 @@ mod tests {
                          [trolley_span]\np 0 0 5.5\np 50 0 5.5\n\
                          {branch}[trolley_switch]\npos 0 0 5.5\nmode fixed\n",
                     ));
-                    assert_eq!(net.crossings.len(), 1, "angle={angle}, spacing={spacing}, split={split}");
+                    assert_eq!(
+                        net.crossings.len(),
+                        1,
+                        "angle={angle}, spacing={spacing}, split={split}"
+                    );
                     let crossing = &net.crossings[0];
                     assert_eq!(crossing.a, 1);
                     assert_ne!(crossing.side_a, crossing.side_b);
@@ -201,7 +249,10 @@ mod tests {
         let net = WireNet::parse(
             "[trolley_span]\np -50 0 5.5\np 0 0 5.5\n[trolley_span]\np 0 0 5.5\np 50 50 5.5\n",
         );
-        assert!(net.crossings.is_empty(), "joined angled spans should not create crossings");
+        assert!(
+            net.crossings.is_empty(),
+            "joined angled spans should not create crossings"
+        );
     }
 
     #[test]
@@ -209,7 +260,10 @@ mod tests {
         let net = WireNet::parse(
             "[trolley_span]\np -20 0 5.5\np 0 0 5.5\n[trolley_span]\np 0 0 5.5\np 0 20 5.5\n",
         );
-        assert!(net.crossings.is_empty(), "endpoint meetings should not be recorded as crossings");
+        assert!(
+            net.crossings.is_empty(),
+            "endpoint meetings should not be recorded as crossings"
+        );
     }
 
     #[test]
@@ -217,7 +271,10 @@ mod tests {
         let net = WireNet::parse(
             "[trolley_span]\np -20 0 5.5\np 20 0 5.5\n[trolley_span]\np 0 -20 5.5\np 0 20 5.5\n",
         );
-        assert!(!net.crossings.is_empty(), "interior crossings should still be recorded");
+        assert!(
+            !net.crossings.is_empty(),
+            "interior crossings should still be recorded"
+        );
     }
 
     #[test]
@@ -225,6 +282,9 @@ mod tests {
         let net = WireNet::parse(
             "[trolley_span]\np 0 0 5.5\np 20 0 5.5\np 20 20 5.5\n[trolley_span]\np 0 0 5.5\np 10 -10 5.5\np 10 10 5.5\n",
         );
-        assert!(!net.crossings.is_empty(), "a shared endpoint should not hide a separate interior crossing");
+        assert!(
+            !net.crossings.is_empty(),
+            "a shared endpoint should not hide a separate interior crossing"
+        );
     }
 }

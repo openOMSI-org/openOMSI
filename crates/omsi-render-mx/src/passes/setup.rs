@@ -170,7 +170,7 @@ impl Renderer {
             || vanilla_fxaa
             || (glass_on && !enhanced_view)
             || temporal_frame;
-        let scene_target: Option<(mx::TextureView, mx::BindGroup)> = if temporal_frame {
+        let scene_target: Option<(mx::TextureView, HeapGroup)> = if temporal_frame {
             // (the picture goes into the upscaler's input, not into the render scale's target)
             self.temporal
                 .as_ref()
@@ -238,8 +238,11 @@ impl Renderer {
             scene,
             &eye,
             enhanced_frame,
-            lighting.lamp_shadows
-                && self.options.light_shadows > 0
+            // (the saloon's lamps always have their maps in the Enhanced picture - the
+            // seats', the handrails' and the partitions' shadows under them; the street's
+            // and the headlamps' follow `light_shadows`, see `LampTiles::tiles`)
+            enhanced_frame
+                && lighting.lamp_shadows
                 && with_overlays
                 && projection.is_none()
                 && self.shadows.shadow_pipelines.len() > 6,
@@ -278,15 +281,13 @@ impl Renderer {
             || temporal_frame;
         let prepass_on = ao_on || depth_wanted;
         // the terrain's paint laid into one albedo picture first: the window's enhanced
-        // picture, single-sampled, with the camera group's slot 8 free of the AO
+        // picture (any number of samples, with or without the ambient occlusion: the picture
+        // has a depth of its own, and the main pass reads it through the heap)
         let ground_ok = with_overlays
             && enhanced
             && projection.is_none()
             && !second_eye
-            && !ao_on
-            && !rt_frame
             && prepass_on
-            && self.options.msaa <= 1
             && exclude_texture.is_none()
             && !env.no_ground_pass
             && self.ground_eligible();
@@ -305,21 +306,22 @@ impl Renderer {
             )
         {
             // a new AO texture: the camera bind group must point at it
-            scene.camera_bind_group = None;
+            scene.camera_heaps = None;
             self.targets.hdr_targets.clear();
         }
         // (the window's clouds at its size: the camera group reads them)
         if enhanced && lead_view && self.ensure_cloud_targets(width, height) {
-            scene.camera_bind_group = None;
+            scene.camera_heaps = None;
         }
-        // (the ground albedo picture only while that pass can run)
-        if prepass_on && self.ensure_ground(width, height, self.ground_eligible()) {
-            scene.camera_bind_group = None;
+        // (the ground albedo picture only while that pass can run; read through the heap)
+        if prepass_on {
+            self.ensure_ground(width, height, self.ground_eligible());
         }
-        // (slot 8 holds the AO's picture or the ground albedo's: the group is made again when that changes)
-        if prepass_on && self.ground_bound.get() != self.ground_should_bind() {
-            scene.camera_bind_group = None;
-        }
+        scene.frame_heap.ground = self
+            .targets
+            .ground
+            .as_ref()
+            .map_or(self.white_texture.view.index(), |g| g.1.index());
         if rt_frame
             && self
                 .rt
@@ -327,7 +329,7 @@ impl Renderer {
                 .is_some_and(|rt| rt.ensure_targets(&self.device, width, height))
         {
             // the camera bind group must point at the new lighting texture
-            scene.camera_bind_group = None;
+            scene.camera_heaps = None;
         }
         if masked_frame {
             self.hdr_targets(width, height, rt_gbuf() && !eye_color);
@@ -367,6 +369,11 @@ impl Renderer {
         if with_overlays {
             self.prepare_overlays(scene, full_w, full_h);
         }
+        let lean = FrameLean {
+            lean: !env.no_lean && crate::lighting::debug_view() == 0.0,
+            wet: lighting.wetness > 0.0,
+            snow: lighting.snow > 0.0 || lighting.road_snow.is_some(),
+        };
         FrameCtx {
             env,
             target,
@@ -402,6 +409,7 @@ impl Renderer {
             ground_ok,
             prepass_on,
             prepass_reach,
+            lean,
             dt,
             overlays,
         }

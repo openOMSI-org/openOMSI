@@ -6,7 +6,12 @@ use glam::{Affine3A, Mat3A, Vec3A};
 impl VehicleInstance {
     /// Rotation of the vehicle body (model frame → world, without translation).
     pub fn body_rotation(&self) -> Mat4 {
-        body_rotation(self.heading, self.pitch, self.bank, body_reversed(&self.ty.def, false))
+        body_rotation(
+            self.heading,
+            self.pitch,
+            self.bank,
+            body_reversed(&self.ty.def, false),
+        )
     }
 
     pub fn body_heading(&self) -> f64 {
@@ -25,11 +30,13 @@ impl VehicleInstance {
     /// lies at z = 0, which the springs' sag takes 10-16 cm under the road, where no depth
     /// bias brings it through.
     pub fn mesh_local_transform(&self, i: usize) -> Mat4 {
-        let xf = self.mesh_transforms.get(i).copied().unwrap_or(Mat4::IDENTITY);
+        let xf = self
+            .mesh_transforms
+            .get(i)
+            .copied()
+            .unwrap_or(Mat4::IDENTITY);
         if is_shadow_mesh(&self.ty, i) {
-            return self.body_rotation()
-                * onto_plane(self.contact_plane())
-                * xf;
+            return self.body_rotation() * onto_plane(self.contact_plane()) * xf;
         }
         self.body_rotation() * xf
     }
@@ -101,15 +108,22 @@ impl VehicleInstance {
 
 /// A camera in a body's own matrix (`rot`, at `position`): see
 /// `VehicleInstance::camera_world_full`.
-pub(super) fn camera_in_body(position: DVec3, rot: Mat4, cam: &omsi_vehicle::Camera) -> (DVec3, f32, f32, f32) {
+pub(super) fn camera_in_body(
+    position: DVec3,
+    rot: Mat4,
+    cam: &omsi_vehicle::Camera,
+) -> (DVec3, f32, f32, f32) {
     let (sy, cy) = cam.yaw.to_radians().sin_cos();
     let (sp, cp) = cam.pitch.to_radians().sin_cos();
     let f_local = Vec3::new(sy * cp, cy * cp, sp);
     let r_local = Vec3::new(cy, -sy, 0.0);
     let f = rot.transform_vector3(f_local).normalize_or(Vec3::Y);
-    let up = rot.transform_vector3(r_local.cross(f_local)).normalize_or(Vec3::Z);
+    let up = rot
+        .transform_vector3(r_local.cross(f_local))
+        .normalize_or(Vec3::Z);
     let local = Vec3::new(cam.pos[0], cam.pos[1], cam.pos[2]);
-    let eye = position + rot.transform_point3(local).as_dvec3() - (f * cam.dist.max(0.0)).as_dvec3();
+    let eye =
+        position + rot.transform_point3(local).as_dvec3() - (f * cam.dist.max(0.0)).as_dvec3();
     let yaw = f.x.atan2(f.y).to_degrees();
     let pitch = f.z.clamp(-1.0, 1.0).asin().to_degrees();
     // (the roll the renderer's `Camera::up` turns back into this up)
@@ -125,7 +139,11 @@ pub(super) fn skin_key(ty: &VehicleType, i: usize, transforms: &[Mat4]) -> Vec<M
     };
     let mut key = vec![transforms.get(i).copied().unwrap_or(Mat4::IDENTITY)];
     for b in &vm.skin {
-        if let Some(k) = ty.meshes.iter().position(|m| Some(m.def_index) == b.def_index) {
+        if let Some(k) = ty
+            .meshes
+            .iter()
+            .position(|m| Some(m.def_index) == b.def_index)
+        {
             key.push(transforms.get(k).copied().unwrap_or(Mat4::IDENTITY));
         }
     }
@@ -175,7 +193,11 @@ pub fn skin_vertices(
 ) -> Option<(Vec<Vec3>, Vec<Vec3>)> {
     let vm = ty.meshes.get(i)?;
     let n = vm.data.positions.len();
-    if n == 0 || plan.starts.len() != n + 1 || transforms.len() < ty.meshes.len() || rest.len() < ty.meshes.len() {
+    if n == 0
+        || plan.starts.len() != n + 1
+        || transforms.len() < ty.meshes.len()
+        || rest.len() < ty.meshes.len()
+    {
         return None;
     }
     // (the renderer puts the mesh's transform on top; its modelled pose is taken off each bone once)
@@ -183,10 +205,12 @@ pub fn skin_vertices(
     let bones: Vec<Affine3A> = plan
         .bones
         .iter()
-        .map(|k| Affine3A::from_mat4(match *k {
-            None => own_rest_inv,
-            Some(k) => own_rest_inv * transforms[k] * rest[k].inverse(),
-        }))
+        .map(|k| {
+            Affine3A::from_mat4(match *k {
+                None => own_rest_inv,
+                Some(k) => own_rest_inv * transforms[k] * rest[k].inverse(),
+            })
+        })
         .collect();
     let mut pos = Vec::with_capacity(n);
     let mut nrm = Vec::with_capacity(n);
@@ -254,7 +278,11 @@ impl SkinPlan {
             }
         }
         starts.push(weights.len() as u32);
-        Some(SkinPlan { bones, starts, weights })
+        Some(SkinPlan {
+            bones,
+            starts,
+            weights,
+        })
     }
 }
 
@@ -270,7 +298,10 @@ impl SkinPlans {
     pub fn get(&mut self, ty: &Arc<VehicleType>, i: usize) -> Option<&SkinPlan> {
         let of = Arc::as_ptr(ty) as usize;
         if self.of != of || self.plans.len() != ty.meshes.len() {
-            *self = SkinPlans { of, plans: vec![None; ty.meshes.len()] };
+            *self = SkinPlans {
+                of,
+                plans: vec![None; ty.meshes.len()],
+            };
         }
         let slot = self.plans.get_mut(i)?;
         if slot.is_none() {

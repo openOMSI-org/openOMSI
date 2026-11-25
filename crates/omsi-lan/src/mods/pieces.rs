@@ -46,7 +46,10 @@ pub(crate) fn span(size: u64, i: u64) -> (u64, u64) {
 
 /// A piece as it goes: (codec, bytes) - compressed when that is smaller.
 pub(crate) fn pack(data: &[u8]) -> (char, Vec<u8>) {
-    let mut z = flate2::write::ZlibEncoder::new(Vec::with_capacity(data.len() / 2), flate2::Compression::fast());
+    let mut z = flate2::write::ZlibEncoder::new(
+        Vec::with_capacity(data.len() / 2),
+        flate2::Compression::fast(),
+    );
     if z.write_all(data).is_ok() {
         if let Ok(packed) = z.finish() {
             if packed.len() < data.len() {
@@ -67,10 +70,13 @@ pub(crate) const ZSTD_BEST: i32 = 19;
 /// thread for every connection (up to 160), players fetching buses together packed on every
 /// core and the server's own step - its traffic and people - got none.
 pub(crate) fn packers() -> usize {
-    std::thread::available_parallelism().map(|n| (n.get() / 4).max(1)).unwrap_or(1)
+    std::thread::available_parallelism()
+        .map(|n| (n.get() / 4).max(1))
+        .unwrap_or(1)
 }
 
-static PACKING: (std::sync::Mutex<usize>, std::sync::Condvar) = (std::sync::Mutex::new(0), std::sync::Condvar::new());
+static PACKING: (std::sync::Mutex<usize>, std::sync::Condvar) =
+    (std::sync::Mutex::new(0), std::sync::Condvar::new());
 
 /// One of the `packers()` places to pack a piece in, held until it is dropped: a connection
 /// past them waits its turn (it only waits on its own player's download).
@@ -109,11 +115,15 @@ pub(crate) fn unpack(codec: &str, wire: Vec<u8>, raw: u64) -> Result<Vec<u8>, St
         "-" => wire,
         "z" => {
             let mut out = Vec::with_capacity(raw as usize);
-            flate2::read::ZlibDecoder::new(wire.as_slice()).take(raw + 1).read_to_end(&mut out).map_err(|e| format!("a piece does not unpack: {e}"))?;
+            flate2::read::ZlibDecoder::new(wire.as_slice())
+                .take(raw + 1)
+                .read_to_end(&mut out)
+                .map_err(|e| format!("a piece does not unpack: {e}"))?;
             out
         }
         // (into room for `raw` bytes and no more: a piece that would unpack to more fails)
-        "s" => zstd::bulk::decompress(&wire, raw as usize).map_err(|e| format!("a piece does not unpack: {e}"))?,
+        "s" => zstd::bulk::decompress(&wire, raw as usize)
+            .map_err(|e| format!("a piece does not unpack: {e}"))?,
         _ => return Err(format!("a piece in an unknown form ({codec})")),
     };
     if data.len() as u64 != raw {
@@ -132,7 +142,12 @@ pub(crate) fn send(out: &mut impl Write, data: &[u8]) -> std::io::Result<()> {
 }
 
 /// Answer a `PIECE` request with a piece of `raw` bytes packed already.
-pub(crate) fn send_packed(out: &mut impl Write, raw: u64, codec: char, wire: &[u8]) -> std::io::Result<()> {
+pub(crate) fn send_packed(
+    out: &mut impl Write,
+    raw: u64,
+    codec: char,
+    wire: &[u8],
+) -> std::io::Result<()> {
     writeln!(out, "OK {raw} {codec} {}", wire.len())?;
     out.write_all(wire)
 }
@@ -142,16 +157,24 @@ pub(crate) fn send_packed(out: &mut impl Write, raw: u64, codec: char, wire: &[u
 pub(crate) fn receive(input: &mut impl BufRead, raw: u64) -> Result<(Vec<u8>, u64), Failure> {
     let mut line = String::new();
     // (a header is a few words: a longer line from the host ends the transfer)
-    if super::read_line_within(input, &mut line, super::MAX_REPLY).map_err(|e| Failure::ConnectionLost(e.to_string()))? == 0 {
+    if super::read_line_within(input, &mut line, super::MAX_REPLY)
+        .map_err(|e| Failure::ConnectionLost(e.to_string()))?
+        == 0
+    {
         return Err(Failure::ConnectionLost("closed by the host".into()));
     }
     let t = line.trim();
     let Some(rest) = t.strip_prefix("OK ") else {
-        return Err(Failure::HostSays(t.strip_prefix("ERR").unwrap_or(t).trim().to_string()));
+        return Err(Failure::HostSays(
+            t.strip_prefix("ERR").unwrap_or(t).trim().to_string(),
+        ));
     };
-    let (said, codec, wire) = head(rest).ok_or_else(|| Failure::Other(format!("bad reply {t:?}")))?;
+    let (said, codec, wire) =
+        head(rest).ok_or_else(|| Failure::Other(format!("bad reply {t:?}")))?;
     if said != raw {
-        return Err(Failure::Other(format!("a piece of {said} bytes, {raw} asked for")));
+        return Err(Failure::Other(format!(
+            "a piece of {said} bytes, {raw} asked for"
+        )));
     }
     read_piece(input, codec, raw, wire).map(|d| (d, wire))
 }
@@ -166,20 +189,31 @@ pub(crate) fn head(s: &str) -> Option<(u64, &str, u64)> {
 }
 
 /// The `wire` bytes of a piece of `raw` bytes, read and unpacked.
-pub(crate) fn read_piece(input: &mut impl Read, codec: &str, raw: u64, wire: u64) -> Result<Vec<u8>, Failure> {
+pub(crate) fn read_piece(
+    input: &mut impl Read,
+    codec: &str,
+    raw: u64,
+    wire: u64,
+) -> Result<Vec<u8>, Failure> {
     // (a piece never goes bigger than it is: anything more is no piece of ours)
     if raw > PIECE || wire > raw.max(64) {
         return Err(Failure::Other(format!("a piece of {wire} bytes for {raw}")));
     }
     let mut bytes = vec![0u8; wire as usize];
-    input.read_exact(&mut bytes).map_err(|e| Failure::ConnectionLost(e.to_string()))?;
+    input
+        .read_exact(&mut bytes)
+        .map_err(|e| Failure::ConnectionLost(e.to_string()))?;
     unpack(codec, bytes, raw).map_err(Failure::Other)
 }
 
 /// Work `items` off over up to `connections` workers at once: each takes a few items at a
 /// time from the common queue until none is left (so a big file is shared out, piece by
 /// piece). The first failure is the answer; the others' work is kept all the same.
-pub(crate) fn share_out<T: Send, E: Send + From<&'static str>>(items: Vec<T>, connections: usize, worker: impl Fn(&dyn Fn() -> Vec<T>) -> Result<(), E> + Sync) -> Result<(), E> {
+pub(crate) fn share_out<T: Send, E: Send + From<&'static str>>(
+    items: Vec<T>,
+    connections: usize,
+    worker: impl Fn(&dyn Fn() -> Vec<T>) -> Result<(), E> + Sync,
+) -> Result<(), E> {
     if items.is_empty() {
         return Ok(());
     }
@@ -192,7 +226,13 @@ pub(crate) fn share_out<T: Send, E: Send + From<&'static str>>(items: Vec<T>, co
     };
     let results: Vec<Result<(), E>> = std::thread::scope(|s| {
         let handles: Vec<_> = (0..n).map(|_| s.spawn(|| worker(&take))).collect();
-        handles.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("a transfer stopped".into()))).collect()
+        handles
+            .into_iter()
+            .map(|h| {
+                h.join()
+                    .unwrap_or_else(|_| Err("a transfer stopped".into()))
+            })
+            .collect()
     });
     results.into_iter().collect()
 }
@@ -239,9 +279,19 @@ mod tests {
         big.extend(vec![1u8; 5000]);
         assert!(receive(&mut big.as_slice(), 10).is_err());
         // a piece larger than a piece
-        assert!(receive(&mut format!("OK {} - {}\n", PIECE + 1, PIECE + 1).as_bytes(), PIECE + 1).is_err());
+        assert!(
+            receive(
+                &mut format!("OK {} - {}\n", PIECE + 1, PIECE + 1).as_bytes(),
+                PIECE + 1
+            )
+            .is_err()
+        );
         assert!(unpack("?", vec![1], 1).is_err());
-        assert!(receive(&mut b"ERR no such file\n".as_slice(), 10).unwrap_err().host_says("no such file"));
+        assert!(
+            receive(&mut b"ERR no such file\n".as_slice(), 10)
+                .unwrap_err()
+                .host_says("no such file")
+        );
         // the same with zstd: one that unpacks to more than it says, or to less
         let (codec, bomb) = pack_zstd(&vec![0u8; 64 << 20], ZSTD_FAST);
         assert_eq!(codec, 's');
@@ -263,7 +313,11 @@ mod tests {
                 x ^= x << 13;
                 x ^= x >> 17;
                 x ^= x << 5;
-                if i % 4096 < 3000 { (i / 4096) as u8 } else { x as u8 }
+                if i % 4096 < 3000 {
+                    (i / 4096) as u8
+                } else {
+                    x as u8
+                }
             })
             .collect();
         let (_, zlib) = pack(&tex);
@@ -271,7 +325,12 @@ mod tests {
         let (_, best) = pack_zstd(&tex, ZSTD_BEST);
         assert_eq!(codec, 's');
         // (the slowest is not smaller every time: `vehicles::recompress` keeps the smaller)
-        assert!(fast.len() < zlib.len(), "zlib {} fast {}", zlib.len(), fast.len());
+        assert!(
+            fast.len() < zlib.len(),
+            "zlib {} fast {}",
+            zlib.len(),
+            fast.len()
+        );
         for wire in [fast, best] {
             let mut buf = Vec::new();
             send_packed(&mut buf, PIECE, 's', &wire).unwrap();
@@ -318,7 +377,11 @@ mod tests {
         d.sort();
         assert_eq!(d, (0..100).collect::<Vec<_>>());
         // a worker that fails: the answer is its failure
-        assert!(share_out(vec![1, 2, 3], 2, |_| Err(String::from("broke"))).unwrap_err().contains("broke"));
+        assert!(
+            share_out(vec![1, 2, 3], 2, |_| Err(String::from("broke")))
+                .unwrap_err()
+                .contains("broke")
+        );
     }
 
     /// No more than `packers()` pieces are packed on request at once, however many players
@@ -342,7 +405,11 @@ mod tests {
         for t in done {
             t.join().unwrap();
         }
-        assert!(MOST.load(Ordering::SeqCst) <= packers(), "{} at once", MOST.load(Ordering::SeqCst));
+        assert!(
+            MOST.load(Ordering::SeqCst) <= packers(),
+            "{} at once",
+            MOST.load(Ordering::SeqCst)
+        );
         assert_eq!(NOW.load(Ordering::SeqCst), 0);
     }
 }

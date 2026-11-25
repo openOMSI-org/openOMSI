@@ -17,7 +17,10 @@ pub(crate) fn build(device: &mx::Device, format: mx::TextureFormat, use_fsr1: bo
         device,
         mx::ShaderModuleDescriptor {
             label: Some("upscale"),
-            source: &*(crate::shaders::hot_wgsl(include_str!("../upscale.wgsl"), "upscale.wgsl")),
+            source: &picture_wgsl(crate::shaders::hot_wgsl(
+                include_str!("../upscale.wgsl"),
+                "upscale.wgsl",
+            )),
         },
     );
     let targets = [target(format, None)];
@@ -74,7 +77,7 @@ pub(crate) fn build_fsr(device: &mx::Device, format: mx::TextureFormat) -> Optio
             device,
             mx::ShaderModuleDescriptor {
                 label: Some("fsr1 EASU/RCAS"),
-                source: &*(crate::shaders::fsr1_source_for(format, raw_input)),
+                source: &picture_wgsl(&crate::shaders::fsr1_source_for(format, raw_input)),
             },
         );
         let mid_format = mx::TextureFormat::Rgb10a2Unorm;

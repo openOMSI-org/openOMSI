@@ -1007,7 +1007,7 @@ impl Renderer {
             } else {
                 &plan.main_batches
             };
-            let camera = scene.camera_bind_group.as_ref().expect("camera bind group");
+            let camera = scene.camera_epoch;
             // The window's bundles of the last frame are drawn again where this frame's
             // batches are the same and name the same buffers and bind groups: a bundle holds
             // only which draws to make, and what the draws read (the instances' places, the
@@ -1027,6 +1027,9 @@ impl Renderer {
                 format,
                 self.options.msaa,
                 rt_gbuf() && !f.eye_color,
+                f.lean,
+                // (a lean pipeline that came since: recorded again to draw with it)
+                pp.lean.as_ref().map_or(0, |l| l.ready()),
             );
             let chunks = bundle_chunks(self.encoding_pool.as_ref(), batches);
             let mut reuse: Vec<Option<mx::RenderBundle>> = vec![None; chunks.len()];
@@ -1040,7 +1043,7 @@ impl Renderer {
             };
             {
                 if let Some(c) = last {
-                    if c.mode == mode && c.camera == *camera {
+                    if c.mode == mode && c.camera == camera {
                         for (k, chunk) in chunks.iter().enumerate() {
                             if let Some((_, r, bundle)) =
                                 c.parts.get(k).filter(|(b, ..)| *b == **chunk)
@@ -1073,10 +1076,10 @@ impl Renderer {
                 &chunks,
                 &reuse,
                 pp,
-                camera,
                 format,
                 self.options.msaa,
                 rt_gbuf() && !f.eye_color,
+                f.lean,
             );
             // (not when a part could not be recorded: it would be left out frame after frame;
             // and a mirror's or an eye's picture leaves the window's alone - it cleared them,
@@ -1085,7 +1088,7 @@ impl Renderer {
             let whole = bundles.iter().all(Option::is_some);
             let made = || MainBundles {
                 mode,
-                camera: camera.clone(),
+                camera,
                 parts: chunks
                     .iter()
                     .zip(&bundles)
@@ -1122,8 +1125,8 @@ impl Renderer {
 
 /// The window's main-pass bundles as last recorded and what they were recorded from.
 pub(crate) struct MainBundles {
-    mode: (bool, bool, mx::TextureFormat, u32, bool),
-    camera: mx::BindGroup,
+    mode: (bool, bool, mx::TextureFormat, u32, bool, FrameLean, u32),
+    camera: u64,
     /// each bundle with the batches it was recorded from and what they bound (once they repeat)
     parts: Vec<(Vec<Batch>, Option<Vec<BatchResources>>, mx::RenderBundle)>,
 }
@@ -1180,7 +1183,7 @@ mod tests {
 
     #[test]
     fn state_changes_count_what_the_encoder_sets() {
-        use crate::frame_plan::{Batch, state_changes, state_changes_by_material};
+        use crate::frame_plan::{Batch, Lean, state_changes, state_changes_by_material};
         let b = |pipe: u8, material: u32| Batch {
             pipe,
             mesh: 0,
@@ -1188,6 +1191,7 @@ mod tests {
             count: 3,
             material,
             instances: 0..1,
+            lean: Lean::No,
         };
         // opaque culled (pipe 2) and not culled (pipe 0) of two looks, then a blended one
         let batches = [b(0, 1), b(0, 2), b(2, 1), b(2, 2), b(8, 1)];

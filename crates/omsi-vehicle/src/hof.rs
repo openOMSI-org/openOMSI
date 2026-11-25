@@ -18,11 +18,19 @@ pub struct Terminus {
 impl Terminus {
     /// Name used for destination text while preserving the original HOF string indices.
     pub fn display_name(&self) -> String {
-        let first = self.strings.iter().find(|s| !s.trim().is_empty()).map(String::as_str);
+        let first = self
+            .strings
+            .iter()
+            .find(|s| !s.trim().is_empty())
+            .map(String::as_str);
         if first.is_some_and(|s| is_destination_image_path(s)) {
             return self.texture_id.trim().to_string();
         }
-        first.map(str::trim).filter(|s| !s.is_empty()).unwrap_or_else(|| self.texture_id.trim()).to_string()
+        first
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| self.texture_id.trim())
+            .to_string()
     }
 
     /// Name used by the destination menu: the identifier on the second `[addterminus]` line.
@@ -92,12 +100,40 @@ impl Hof {
     /// destination of the file is taken for it. Returns the file and its index.
     pub fn with_free_text(&self, lines: [&str; 2]) -> (Hof, usize) {
         let mut hof = self.clone();
-        let n = self.string_count_terminus.max(self.termini.iter().map(|t| t.strings.len()).max().unwrap_or(0)).max(2);
+        let n = self
+            .string_count_terminus
+            .max(
+                self.termini
+                    .iter()
+                    .map(|t| t.strings.len())
+                    .max()
+                    .unwrap_or(0),
+            )
+            .max(2);
         let (a, b) = (lines[0].trim(), lines[1].trim());
-        let strings = (0..n).map(|k| if k == 1 { b } else { a }.to_string()).collect();
-        let index = hof.termini.iter().position(|t| t.texture_id == FREE_TEXT).unwrap_or(hof.termini.len());
-        let code = self.termini.iter().filter(|t| t.texture_id != FREE_TEXT).map(|t| t.code).max().unwrap_or(0) + 1;
-        let t = Terminus { code, texture_id: FREE_TEXT.to_string(), terminus_stop: None, all_exit: true, strings };
+        let strings = (0..n)
+            .map(|k| if k == 1 { b } else { a }.to_string())
+            .collect();
+        let index = hof
+            .termini
+            .iter()
+            .position(|t| t.texture_id == FREE_TEXT)
+            .unwrap_or(hof.termini.len());
+        let code = self
+            .termini
+            .iter()
+            .filter(|t| t.texture_id != FREE_TEXT)
+            .map(|t| t.code)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let t = Terminus {
+            code,
+            texture_id: FREE_TEXT.to_string(),
+            terminus_stop: None,
+            all_exit: true,
+            strings,
+        };
         if index == hof.termini.len() {
             hof.termini.push(t);
         } else {
@@ -121,14 +157,26 @@ impl Hof {
         let digits: String = l.chars().take_while(|c| c.is_ascii_digit()).collect();
         let number = digits.parse::<i32>().ok().filter(|n| *n > 0);
         let encoded = encoded_hof_line(&l);
-        let boundary = |rest: &str| rest.chars().next().is_none_or(|c| !c.is_ascii_alphanumeric());
+        let boundary = |rest: &str| {
+            rest.chars()
+                .next()
+                .is_none_or(|c| !c.is_ascii_alphanumeric())
+        };
         self.info_trips.iter().any(|t| {
             let code = omsi_cfg::parse_i32(&t.code);
-            let head = t.name.split("->").next().unwrap_or("").trim().to_ascii_lowercase();
+            let head = t
+                .name
+                .split("->")
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
             let named = !head.is_empty()
                 && (l.strip_prefix(head.as_str()).is_some_and(boundary)
                     || (l.ends_with(|c: char| c.is_ascii_digit())
-                        && head.strip_prefix(l.as_str()).is_some_and(|r| r.chars().next().is_some_and(|c| c.is_ascii_alphabetic()))));
+                        && head.strip_prefix(l.as_str()).is_some_and(|r| {
+                            r.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+                        })));
             named
                 || number.is_some_and(|n| code >= 100 && code / 100 == n)
                 || encoded.is_some_and(|enc| code >= 100 && code / 100 == enc as i32)
@@ -141,7 +189,8 @@ impl Hof {
     /// minutes.
     pub fn read_name(path: &Path) -> Option<String> {
         type Names = std::collections::HashMap<PathBuf, Option<String>>;
-        static CACHE: std::sync::OnceLock<std::sync::Mutex<(u64, Names)>> = std::sync::OnceLock::new();
+        static CACHE: std::sync::OnceLock<std::sync::Mutex<(u64, Names)>> =
+            std::sync::OnceLock::new();
         let cache = CACHE.get_or_init(Default::default);
         let generation = omsi_cfg::content_generation();
         {
@@ -162,19 +211,36 @@ impl Hof {
             }
             String::new()
         });
-        cache.lock().unwrap_or_else(|e| e.into_inner()).1.insert(path.to_path_buf(), name.clone());
+        cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .1
+            .insert(path.to_path_buf(), name.clone());
         name
     }
 
     pub fn parse(f: &CfgFile) -> Hof {
-        let mut h = Hof { path: f.path.clone(), string_count_terminus: 0, string_count_busstop: 0, ..Default::default() };
+        let mut h = Hof {
+            path: f.path.clone(),
+            string_count_terminus: 0,
+            string_count_busstop: 0,
+            ..Default::default()
+        };
         // `stringcount_terminus` / `stringcount_busstop` are bare (unbracketed) directives.
         for (i, l) in f.lines.iter().enumerate() {
             let w = l.trim_end();
             if w.eq_ignore_ascii_case("stringcount_terminus") {
-                h.string_count_terminus = f.lines.get(i + 1).map(|s| omsi_cfg::parse_i64(s).max(0) as usize).unwrap_or(0);
+                h.string_count_terminus = f
+                    .lines
+                    .get(i + 1)
+                    .map(|s| omsi_cfg::parse_i64(s).max(0) as usize)
+                    .unwrap_or(0);
             } else if w.eq_ignore_ascii_case("stringcount_busstop") {
-                h.string_count_busstop = f.lines.get(i + 1).map(|s| omsi_cfg::parse_i64(s).max(0) as usize).unwrap_or(0);
+                h.string_count_busstop = f
+                    .lines
+                    .get(i + 1)
+                    .map(|s| omsi_cfg::parse_i64(s).max(0) as usize)
+                    .unwrap_or(0);
             }
         }
         // the stock depot files are spreadsheet exports: every line ends in tabs, which the
@@ -195,9 +261,21 @@ impl Hof {
                     let all_exit = k.ends_with("allexit");
                     let code = r.i32();
                     let texture_id = r.str().to_string();
-                    let terminus_stop = if all_exit { None } else { Some(texture_id.clone()) };
-                    let strings: Vec<String> = (0..h.string_count_terminus).map(|_| r.str().to_string()).collect();
-                    h.termini.push(Terminus { code, texture_id, terminus_stop, all_exit, strings });
+                    let terminus_stop = if all_exit {
+                        None
+                    } else {
+                        Some(texture_id.clone())
+                    };
+                    let strings: Vec<String> = (0..h.string_count_terminus)
+                        .map(|_| r.str().to_string())
+                        .collect();
+                    h.termini.push(Terminus {
+                        code,
+                        texture_id,
+                        terminus_stop,
+                        all_exit,
+                        strings,
+                    });
                 }
                 "addterminus_list" => {
                     // One row per terminus, tab separated: a flag column (`{ALLEX}` or
@@ -215,17 +293,30 @@ impl Hof {
                         let all_exit = cols[0].trim().eq_ignore_ascii_case("{ALLEX}");
                         let code = omsi_cfg::parse_i32(cols.get(1).unwrap_or(&"0"));
                         let texture_id = cols.get(2).unwrap_or(&"").trim().to_string();
-                        let terminus_stop = if all_exit { None } else { Some(texture_id.clone()) };
-                        let mut strings: Vec<String> = cols.iter().skip(3).map(|s| s.to_string()).collect();
+                        let terminus_stop = if all_exit {
+                            None
+                        } else {
+                            Some(texture_id.clone())
+                        };
+                        let mut strings: Vec<String> =
+                            cols.iter().skip(3).map(|s| s.to_string()).collect();
                         if h.string_count_terminus > 0 {
                             strings.resize(h.string_count_terminus, String::new());
                         }
-                        h.termini.push(Terminus { code, texture_id, terminus_stop, all_exit, strings });
+                        h.termini.push(Terminus {
+                            code,
+                            texture_id,
+                            terminus_stop,
+                            all_exit,
+                            strings,
+                        });
                     }
                 }
                 "addbusstop" => {
                     let ident = r.str().to_string();
-                    let strings = (0..h.string_count_busstop).map(|_| r.str().to_string()).collect();
+                    let strings = (0..h.string_count_busstop)
+                        .map(|_| r.str().to_string())
+                        .collect();
                     h.bus_stops.push(BusStop { ident, strings });
                 }
                 "addbusstop_list" => {
@@ -235,7 +326,10 @@ impl Hof {
                         }
                         let mut cols = l.split('\t');
                         let ident = cols.next().unwrap_or("").trim().to_string();
-                        h.bus_stops.push(BusStop { ident, strings: cols.map(|s| s.to_string()).collect() });
+                        h.bus_stops.push(BusStop {
+                            ident,
+                            strings: cols.map(|s| s.to_string()).collect(),
+                        });
                     }
                 }
                 "infosystem_trip" => {
@@ -243,7 +337,13 @@ impl Hof {
                     let name = r.str().to_string();
                     let route = r.str().to_string();
                     let line = r.str().to_string();
-                    h.info_trips.push(InfoTrip { code, name, route, line, extra: Vec::new() });
+                    h.info_trips.push(InfoTrip {
+                        code,
+                        name,
+                        route,
+                        line,
+                        extra: Vec::new(),
+                    });
                     // every trip has a stop list, empty until one follows (THof.LoadFromFile
                     // 0x7ea142), so that the lists stay in step with the trips
                     h.info_busstop_lists.push(Vec::new());
@@ -258,7 +358,9 @@ impl Hof {
                         *last = list;
                     }
                 }
-                "infosystem_busstop" => h.info_busstops.push((0..3).map(|_| r.str().to_string()).collect()),
+                "infosystem_busstop" => h
+                    .info_busstops
+                    .push((0..3).map(|_| r.str().to_string()).collect()),
                 _ => {}
             }
         }
@@ -271,7 +373,8 @@ impl Hof {
 }
 
 fn shared_hofs() -> Arc<[PathBuf]> {
-    static SHARED: std::sync::OnceLock<std::sync::Mutex<(u64, Arc<[PathBuf]>)>> = std::sync::OnceLock::new();
+    static SHARED: std::sync::OnceLock<std::sync::Mutex<(u64, Arc<[PathBuf]>)>> =
+        std::sync::OnceLock::new();
     let cell = SHARED.get_or_init(Default::default);
     let generation = omsi_cfg::content_generation();
     let mut guard = cell.lock().unwrap_or_else(|e| e.into_inner());
@@ -279,10 +382,26 @@ fn shared_hofs() -> Arc<[PathBuf]> {
         let mut seen = std::collections::HashSet::new();
         let mut shared: Vec<PathBuf> = omsi_cfg::read_dir_merged("HOFs")
             .into_iter()
-            .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("hof")).unwrap_or(false))
-            .filter(|p| seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()))
+            .filter(|p| {
+                p.extension()
+                    .map(|e| e.eq_ignore_ascii_case("hof"))
+                    .unwrap_or(false)
+            })
+            .filter(|p| {
+                seen.insert(
+                    p.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_ascii_lowercase(),
+                )
+            })
             .collect();
-        shared.sort_by_key(|f| f.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
+        shared.sort_by_key(|f| {
+            f.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_ascii_lowercase()
+        });
         *guard = (generation, Arc::from(shared));
     }
     Arc::clone(&guard.1)
@@ -297,18 +416,37 @@ pub fn depot_files(dir: &Path) -> Vec<PathBuf> {
     let mut local: Vec<PathBuf> = Vec::new();
     for d in omsi_cfg::mirrored_dirs(dir) {
         for p in omsi_cfg::vfs::read_dir_paths(&d) {
-            if !p.extension().map(|e| e.eq_ignore_ascii_case("hof")).unwrap_or(false) {
+            if !p
+                .extension()
+                .map(|e| e.eq_ignore_ascii_case("hof"))
+                .unwrap_or(false)
+            {
                 continue;
             }
-            if seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()) {
+            if seen.insert(
+                p.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_ascii_lowercase(),
+            ) {
                 local.push(p);
             }
         }
     }
-    local.sort_by_key(|f| f.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
+    local.sort_by_key(|f| {
+        f.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_ascii_lowercase()
+    });
 
     for p in shared_hofs().iter() {
-        if seen.insert(p.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase()) {
+        if seen.insert(
+            p.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_ascii_lowercase(),
+        ) {
             local.push(p.clone());
         }
     }
@@ -322,7 +460,11 @@ pub fn depot_in(dir: &Path, name: &str) -> Option<Hof> {
         return None;
     }
     let files = depot_files(dir);
-    if let Some(f) = files.iter().find(|f| f.file_stem().map(|s| s.to_string_lossy().trim().eq_ignore_ascii_case(name)).unwrap_or(false)) {
+    if let Some(f) = files.iter().find(|f| {
+        f.file_stem()
+            .map(|s| s.to_string_lossy().trim().eq_ignore_ascii_case(name))
+            .unwrap_or(false)
+    }) {
         if let Ok(h) = Hof::load(f) {
             return Some(h);
         }
@@ -336,10 +478,17 @@ pub fn depot_in(dir: &Path, name: &str) -> Option<Hof> {
 /// The words of a depot or map name that tell one place from another: four letters or
 /// more, not a year or a number, not a word every depot file has ("Linie 20", "Hof").
 fn place_words(s: &str) -> Vec<String> {
-    const COMMON: [&str; 14] = ["linie", "line", "lines", "depot", "omsi", "maps", "version", "final", "neue", "update", "addon", "fixed", "standard", "default"];
+    const COMMON: [&str; 14] = [
+        "linie", "line", "lines", "depot", "omsi", "maps", "version", "final", "neue", "update",
+        "addon", "fixed", "standard", "default",
+    ];
     s.split(|c: char| !c.is_alphanumeric())
         .map(|w| w.to_lowercase())
-        .filter(|w| w.chars().count() >= 4 && !w.chars().all(|c| c.is_ascii_digit()) && !COMMON.contains(&w.as_str()))
+        .filter(|w| {
+            w.chars().count() >= 4
+                && !w.chars().all(|c| c.is_ascii_digit())
+                && !COMMON.contains(&w.as_str())
+        })
         .collect()
 }
 
@@ -356,7 +505,11 @@ pub fn closest_name(names: &[&str], hints: &[&str]) -> Option<usize> {
     for (i, n) in names.iter().enumerate() {
         let mut words = place_words(n);
         words.dedup();
-        let score: usize = words.iter().filter(|w| wanted.contains(w)).map(|w| w.chars().count()).sum();
+        let score: usize = words
+            .iter()
+            .filter(|w| wanted.contains(w))
+            .map(|w| w.chars().count())
+            .sum();
         if score > 0 && best.is_none_or(|(_, b)| score > b) {
             best = Some((i, score));
         }
@@ -371,7 +524,11 @@ pub fn depot_like(dir: &Path, hints: &[&str]) -> Option<Hof> {
     let names: Vec<String> = files
         .iter()
         .map(|f| {
-            let stem = f.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+            let stem = f
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
             match Hof::read_name(f) {
                 Some(n) => format!("{stem} {n}"),
                 None => stem,
@@ -409,14 +566,26 @@ pub fn depot_anywhere(name: &str) -> Option<Hof> {
         return path.and_then(|p| Hof::load(&p).ok());
     }
     let sorted = |folder: &str| {
-        let mut dirs: Vec<PathBuf> = omsi_cfg::read_dir_merged(folder).into_iter().filter(|d| omsi_cfg::vfs::is_dir(d)).collect();
-        dirs.sort_by_key(|d| d.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase());
+        let mut dirs: Vec<PathBuf> = omsi_cfg::read_dir_merged(folder)
+            .into_iter()
+            .filter(|d| omsi_cfg::vfs::is_dir(d))
+            .collect();
+        dirs.sort_by_key(|d| {
+            d.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_ascii_lowercase()
+        });
         dirs
     };
     let mut dirs = sorted("maps");
     dirs.extend(sorted("Vehicles"));
     let h = dirs.iter().find_map(|d| depot_in(d, name));
-    found.lock().unwrap_or_else(|e| e.into_inner()).1.insert(key, h.as_ref().map(|h| h.path.clone()));
+    found
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .1
+        .insert(key, h.as_ref().map(|h| h.path.clone()));
     h
 }
 
@@ -427,14 +596,27 @@ mod tests {
         let hof = Hof {
             string_count_terminus: 3,
             termini: vec![
-                Terminus { code: 12, texture_id: "Rathaus".into(), strings: vec!["Rathaus".into(), "Spandau".into(), "Rathaus".into()], ..Default::default() },
-                Terminus { code: 40, texture_id: "Hbf".into(), strings: vec!["Hbf".into()], ..Default::default() },
+                Terminus {
+                    code: 12,
+                    texture_id: "Rathaus".into(),
+                    strings: vec!["Rathaus".into(), "Spandau".into(), "Rathaus".into()],
+                    ..Default::default()
+                },
+                Terminus {
+                    code: 40,
+                    texture_id: "Hbf".into(),
+                    strings: vec!["Hbf".into()],
+                    ..Default::default()
+                },
             ],
             ..Default::default()
         };
         let (one, i) = hof.with_free_text(["Sonderfahrt", " Betriebshof "]);
         assert_eq!(i, 2);
-        assert_eq!(one.termini[2].strings, ["Sonderfahrt", "Betriebshof", "Sonderfahrt"]);
+        assert_eq!(
+            one.termini[2].strings,
+            ["Sonderfahrt", "Betriebshof", "Sonderfahrt"]
+        );
         assert_eq!(one.termini[2].code, 41);
         assert_eq!(one.termini[2].menu_name(), FREE_TEXT);
         // typed again: the same destination changed, not another one added
@@ -446,9 +628,25 @@ mod tests {
 
     #[test]
     fn a_depot_file_carries_a_line_by_its_trip_codes_or_names() {
-        let trip = |code: &str, name: &str| InfoTrip { code: code.into(), name: name.into(), ..Default::default() };
-        let global = Hof { info_trips: vec![trip("1101", "11 -> PETIT VILTAIN"), trip("1401", "14 -> MOULON")], ..Default::default() };
-        let inter = Hof { info_trips: vec![trip("001", "91.06A -> MASSY GARE"), trip("005", "91.06C -> MASSY GARE")], ..Default::default() };
+        let trip = |code: &str, name: &str| InfoTrip {
+            code: code.into(),
+            name: name.into(),
+            ..Default::default()
+        };
+        let global = Hof {
+            info_trips: vec![
+                trip("1101", "11 -> PETIT VILTAIN"),
+                trip("1401", "14 -> MOULON"),
+            ],
+            ..Default::default()
+        };
+        let inter = Hof {
+            info_trips: vec![
+                trip("001", "91.06A -> MASSY GARE"),
+                trip("005", "91.06C -> MASSY GARE"),
+            ],
+            ..Default::default()
+        };
         assert!(global.has_line("11-11s") && global.has_line("14"));
         assert!(!global.has_line("1") && !global.has_line("91.06C") && !global.has_line(""));
         assert!(inter.has_line("91.06C") && inter.has_line("91.06") && !inter.has_line("11-11s"));
@@ -503,11 +701,17 @@ mod tests {
     #[test]
     fn closest_depot_name_is_the_maps_place() {
         let names = ["Grundorf", "Hamburg Linie 20", "Spandau 2019"];
-        assert_eq!(closest_name(&names, &["Hamburg_Linie_20", "Linie 20"]), Some(1));
+        assert_eq!(
+            closest_name(&names, &["Hamburg_Linie_20", "Linie 20"]),
+            Some(1)
+        );
         assert_eq!(closest_name(&names, &["Spandau 1986"]), Some(2));
         assert_eq!(closest_name(&names, &["Berlin-Spandau"]), Some(2));
         assert_eq!(closest_name(&names, &["Thüringer Wald"]), None);
-        assert_eq!(closest_name(&["Berlin X10", "Spandau"], &["Berlin-Spandau"]), Some(1));
+        assert_eq!(
+            closest_name(&["Berlin X10", "Spandau"], &["Berlin-Spandau"]),
+            Some(1)
+        );
         assert_eq!(closest_name(&["Linie 20"], &["Linie 7"]), None);
     }
 
@@ -533,13 +737,20 @@ mod tests {
 
         omsi_cfg::add_content_root(root.clone());
         let files = depot_files(&bus);
-        let named = |p: &Path, name: &str| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n == name);
+        let named = |p: &Path, name: &str| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n == name)
+        };
         let local_i = files.iter().position(|p| named(p, &local_name)).unwrap();
         let shared_i = files.iter().position(|p| named(p, &shared_name)).unwrap();
         let duplicate = files.iter().find(|p| named(p, &same_name)).unwrap();
         assert!(local_i < shared_i);
         assert_eq!(duplicate, &bus.join(&same_name));
-        assert_eq!(depot_in(&bus, "Shared").map(|h| h.name), Some("Shared".into()));
+        assert_eq!(
+            depot_in(&bus, "Shared").map(|h| h.name),
+            Some("Shared".into())
+        );
 
         omsi_cfg::remove_content_root(&root);
         let _ = std::fs::remove_dir_all(root);
@@ -547,11 +758,18 @@ mod tests {
 
     #[test]
     fn a_depot_kept_in_its_map_folder_is_found() {
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let root = std::env::temp_dir().join(format!("openomsi-map-hof-{stamp}"));
         let map = root.join("maps/Moulon");
         std::fs::create_dir_all(&map).unwrap();
-        std::fs::write(map.join(format!("company-{stamp}.hof")), format!("[name]\nCompany {stamp}\n")).unwrap();
+        std::fs::write(
+            map.join(format!("company-{stamp}.hof")),
+            format!("[name]\nCompany {stamp}\n"),
+        )
+        .unwrap();
 
         omsi_cfg::add_content_root(root.clone());
         let found = depot_anywhere(&format!("Company {stamp}")).map(|h| h.path);
@@ -571,7 +789,10 @@ mod tests {
         assert_eq!(h2.depot_name(), "HOF2");
         let picked = depot_in(&dir, &h2.depot_name()).unwrap();
         assert_eq!(picked.path, dir.join("HOF2.hof"));
-        let memory_only = Hof { name: "Fallback".into(), ..Default::default() };
+        let memory_only = Hof {
+            name: "Fallback".into(),
+            ..Default::default()
+        };
         assert_eq!(memory_only.depot_name(), "Fallback");
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -581,12 +802,35 @@ mod tests {
         let text = "stringcount_terminus\r\n3\r\n\r\n[addterminus_list]\r\n{ALLEX}\t13\tBetriebsfahrt\tBETRIEBSFAHRT\t\tBETRIEBSFAHRT\t\t\r\n\t282\tU Ruhleben\tRUHLEBEN\tU-BAHNHOF\tRUHLEBEN  \t\t\t\r\n[end]\r\n";
         let h = Hof::parse(&CfgFile::from_str("test.hof", text));
         assert_eq!(h.termini.len(), 2);
-        assert_eq!((h.termini[0].code, h.termini[0].texture_id.as_str(), h.termini[0].all_exit), (13, "Betriebsfahrt", true));
-        assert_eq!(h.termini[0].strings, vec!["BETRIEBSFAHRT", "", "BETRIEBSFAHRT"]);
-        assert_eq!((h.termini[1].code, h.termini[1].texture_id.as_str(), h.termini[1].all_exit), (282, "U Ruhleben", false));
+        assert_eq!(
+            (
+                h.termini[0].code,
+                h.termini[0].texture_id.as_str(),
+                h.termini[0].all_exit
+            ),
+            (13, "Betriebsfahrt", true)
+        );
+        assert_eq!(
+            h.termini[0].strings,
+            vec!["BETRIEBSFAHRT", "", "BETRIEBSFAHRT"]
+        );
+        assert_eq!(
+            (
+                h.termini[1].code,
+                h.termini[1].texture_id.as_str(),
+                h.termini[1].all_exit
+            ),
+            (282, "U Ruhleben", false)
+        );
         assert_eq!(h.termini[1].terminus_stop.as_deref(), Some("U Ruhleben"));
-        assert_eq!(h.termini[1].strings, vec!["RUHLEBEN", "U-BAHNHOF", "RUHLEBEN  "]);
-        assert_eq!(h.terminus_by_code(282).map(|t| t.texture_id.as_str()), Some("U Ruhleben"));
+        assert_eq!(
+            h.termini[1].strings,
+            vec!["RUHLEBEN", "U-BAHNHOF", "RUHLEBEN  "]
+        );
+        assert_eq!(
+            h.terminus_by_code(282).map(|t| t.texture_id.as_str()),
+            Some("U Ruhleben")
+        );
     }
 
     #[test]
@@ -603,25 +847,42 @@ mod tests {
 
     #[test]
     fn numeric_hof_menu_name_uses_the_ident() {
-        let t = Terminus { texture_id: "910".into(), strings: vec!["AEC".into()], ..Default::default() };
+        let t = Terminus {
+            texture_id: "910".into(),
+            strings: vec!["AEC".into()],
+            ..Default::default()
+        };
         assert_eq!(t.menu_name(), "910");
         assert_eq!(t.display_name(), "AEC");
     }
 
     #[test]
     fn menu_names_do_not_use_matrix_text_or_empty_destination_markers() {
-        let t = Terminus { texture_id: " Matrix check ".into(), strings: vec!["###".into(), "M A T R I X".into()], ..Default::default() };
+        let t = Terminus {
+            texture_id: " Matrix check ".into(),
+            strings: vec!["###".into(), "M A T R I X".into()],
+            ..Default::default()
+        };
         assert_eq!(t.menu_name(), "Matrix check");
         assert_eq!(t.display_name(), "###");
 
-        let empty = Terminus { code: 0, texture_id: "empty".into(), all_exit: true, strings: vec!["A".into()], ..Default::default() };
+        let empty = Terminus {
+            code: 0,
+            texture_id: "empty".into(),
+            all_exit: true,
+            strings: vec!["A".into()],
+            ..Default::default()
+        };
         assert_eq!(empty.menu_name(), "empty");
         assert_eq!(empty.strings, vec!["A"]);
     }
 
     #[test]
     fn unnamed_hof_menu_entry_falls_back_to_display_text() {
-        let t = Terminus { strings: vec!["".into(), "Fallback".into()], ..Default::default() };
+        let t = Terminus {
+            strings: vec!["".into(), "Fallback".into()],
+            ..Default::default()
+        };
         assert_eq!(t.menu_name(), "Fallback");
     }
 
@@ -633,20 +894,36 @@ mod tests {
             "[addterminus_list]\n{ALLEX}\t0\tempty\t\t\t\t\t\n{ALLEX}\t505\tMatrix check\t###\tM A T R I X\tCHECK\tx\tMC\n[end]\n",
         ];
         for records in records {
-            let h = Hof::parse(&CfgFile::from_str("menu.hof", &format!("stringcount_terminus\n5\n{records}")));
+            let h = Hof::parse(&CfgFile::from_str(
+                "menu.hof",
+                &format!("stringcount_terminus\n5\n{records}"),
+            ));
             assert_eq!(h.termini.len(), 2);
             let empty = &h.termini[0];
-            assert_eq!((empty.code, empty.menu_name(), empty.all_exit), (0, "empty".into(), true));
+            assert_eq!(
+                (empty.code, empty.menu_name(), empty.all_exit),
+                (0, "empty".into(), true)
+            );
             assert_eq!(empty.strings, vec![""; 5]);
             let check = &h.termini[1];
-            assert_eq!((check.code, check.menu_name()), (505, "Matrix check".into()));
-            assert_eq!(check.strings, vec!["###", "M A T R I X", "CHECK", "x", "MC"]);
+            assert_eq!(
+                (check.code, check.menu_name()),
+                (505, "Matrix check".into())
+            );
+            assert_eq!(
+                check.strings,
+                vec!["###", "M A T R I X", "CHECK", "x", "MC"]
+            );
         }
     }
 
     #[test]
     fn route_label_menu_name_uses_the_ident() {
-        let t = Terminus { texture_id: "66: South Valley Railway Station Circular".into(), strings: vec!["S.VALLEY STN CIR".into()], ..Default::default() };
+        let t = Terminus {
+            texture_id: "66: South Valley Railway Station Circular".into(),
+            strings: vec!["S.VALLEY STN CIR".into()],
+            ..Default::default()
+        };
         assert_eq!(t.menu_name(), "66: South Valley Railway Station Circular");
     }
 
@@ -664,7 +941,10 @@ mod tests {
         assert_eq!(h.info_busstop_lists.len(), 3);
         assert_eq!(h.info_busstop_lists[0], vec!["ZOB", "Hoheneck"]);
         assert!(h.info_busstop_lists[1].is_empty());
-        assert_eq!(h.info_busstop_lists[2], vec!["Hauptbahnhof", "Markt", "Bergerfuerth"]);
+        assert_eq!(
+            h.info_busstop_lists[2],
+            vec!["Hauptbahnhof", "Markt", "Bergerfuerth"]
+        );
     }
 }
 
@@ -708,13 +988,21 @@ pub fn terminus_match_score(t: &Terminus, wanted: &str) -> u8 {
 /// codes 92, 120, 123 and 124, #738).
 pub fn termini_named(hof: &Hof, wanted: &str) -> Vec<usize> {
     let exact = wanted.trim();
-    let rows: Vec<usize> = (0..hof.termini.len()).filter(|&i| hof.termini[i].texture_id == exact).collect();
+    let rows: Vec<usize> = (0..hof.termini.len())
+        .filter(|&i| hof.termini[i].texture_id == exact)
+        .collect();
     if !rows.is_empty() {
         return rows;
     }
-    let scores: Vec<u8> = hof.termini.iter().map(|t| terminus_match_score(t, wanted)).collect();
+    let scores: Vec<u8> = hof
+        .termini
+        .iter()
+        .map(|t| terminus_match_score(t, wanted))
+        .collect();
     let best = scores.iter().copied().max().unwrap_or(0);
-    (0..scores.len()).filter(|&i| best > 0 && scores[i] == best).collect()
+    (0..scores.len())
+        .filter(|&i| best > 0 && scores[i] == best)
+        .collect()
 }
 
 /// The depot file's terminus a trip of `line` to `terminus` through `stops` ends at, and
@@ -748,7 +1036,10 @@ pub fn trip_terminus(
 fn encoded_hof_line(line: &str) -> Option<u32> {
     let s = line.trim();
     let mut chars = s.chars();
-    let prefix = chars.next().filter(|c| c.is_ascii_alphabetic())?.to_ascii_uppercase();
+    let prefix = chars
+        .next()
+        .filter(|c| c.is_ascii_alphabetic())?
+        .to_ascii_uppercase();
     let rest = chars.as_str();
     if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()) {
         return None;
@@ -823,7 +1114,11 @@ pub fn pick_route(hof: &Hof, routes: &[usize], stops: &[&str]) -> Option<usize> 
             let mut diag = 0;
             for (j, n) in names.iter().enumerate() {
                 let up = row[j + 1];
-                row[j + 1] = if same_stop(n, t) { diag + 1 } else { up.max(row[j]) };
+                row[j + 1] = if same_stop(n, t) {
+                    diag + 1
+                } else {
+                    up.max(row[j])
+                };
                 diag = up;
             }
         }
@@ -872,9 +1167,9 @@ pub fn same_stop(names: &[(String, Vec<String>)], stop: &(String, Vec<String>)) 
     names.iter().any(|(raw, words)| {
         !raw.is_empty()
             && (*raw == stop.0
-            || raw.starts_with(&stop.0)
-            || stop.0.starts_with(raw.as_str())
-            || (!words.is_empty() && *words == stop.1))
+                || raw.starts_with(&stop.0)
+                || stop.0.starts_with(raw.as_str())
+                || (!words.is_empty() && *words == stop.1))
     })
 }
 

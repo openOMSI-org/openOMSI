@@ -1,4 +1,4 @@
-use super::{find_device_cfg, latch_release, names_match, DeviceCfg};
+use super::{DeviceCfg, find_device_cfg, latch_release, names_match};
 use crate::actions::is_game_action;
 
 struct Held {
@@ -9,6 +9,9 @@ struct Held {
     continuous: bool,
     fresh: bool,
     out: bool,
+    /// A latching switch put in while the menu was open: its press is still to come, when
+    /// the menu closes (`resume`).
+    pending: bool,
 }
 
 /// Button-down actions remember their original mapping until release. Editing a binding
@@ -17,19 +20,45 @@ struct Held {
 pub(super) struct HeldButtons(Vec<Held>);
 
 impl HeldButtons {
-    pub(super) fn event(&mut self, cfg: &[DeviceCfg], name: &str, button: usize, down: bool, actions: &mut Vec<(String, bool)>) {
+    pub(super) fn event(
+        &mut self,
+        cfg: &[DeviceCfg],
+        name: &str,
+        button: usize,
+        down: bool,
+        actions: &mut Vec<(String, bool)>,
+    ) {
         if down {
-            if self.0.iter().any(|h| names_match(&h.device, name) && h.button == button) {
+            if self
+                .0
+                .iter()
+                .any(|h| names_match(&h.device, name) && h.button == button)
+            {
                 return;
             }
-            let Some(d) = find_device_cfg(cfg, name) else { return };
+            let Some(d) = find_device_cfg(cfg, name) else {
+                return;
+            };
             let bound = d.actions_of(button);
             if bound.is_empty() {
                 return;
             }
             actions.extend(bound.iter().map(|a| (a.clone(), true)));
-            self.0.push(Held { device: name.to_string(), button, actions: bound, latching: d.latching.contains(&button), continuous: d.continuous(button), fresh: true, out: false });
-        } else if let Some(i) = self.0.iter().position(|h| names_match(&h.device, name) && h.button == button) {
+            self.0.push(Held {
+                device: name.to_string(),
+                button,
+                actions: bound,
+                latching: d.latching.contains(&button),
+                continuous: d.continuous(button),
+                fresh: true,
+                out: false,
+                pending: false,
+            });
+        } else if let Some(i) = self
+            .0
+            .iter()
+            .position(|h| names_match(&h.device, name) && h.button == button)
+        {
             let h = self.0.remove(i);
             actions.extend(h.actions.iter().map(|a| (a.clone(), false)));
             if h.latching {
@@ -45,7 +74,10 @@ impl HeldButtons {
     pub(super) fn release(&mut self, actions: &mut Vec<(String, bool)>) {
         for h in self.0.drain(..) {
             // Do not toggle a latching switch just because its configuration changed.
-            actions.extend(h.actions.into_iter().map(|a| (a, false)));
+            // (a pending one never sent its press: there is nothing to let go of)
+            if !h.pending {
+                actions.extend(h.actions.into_iter().map(|a| (a, false)));
+            }
         }
     }
 
@@ -63,14 +95,66 @@ impl HeldButtons {
         });
     }
 
-    pub(super) fn while_editing(&mut self, name: &str, button: usize, down: bool) {
-        if let Some(h) = self.0.iter_mut().find(|h| names_match(&h.device, name) && h.button == button) {
-            h.out = !down;
+    /// A button moved while the menu is open. A latching switch keeps the bus's state
+    /// with its own, so either way it moves counts once the menu closes: one switched out
+    /// goes out then, and one switched in goes in then. Only the first was kept: a switch
+    /// put in during the pause was forgotten, stood in while what it works stayed off,
+    /// and from then on worked the wrong way round (#3861).
+    pub(super) fn while_editing(
+        &mut self,
+        cfg: &[DeviceCfg],
+        name: &str,
+        button: usize,
+        down: bool,
+        live: bool,
+    ) {
+        if let Some(i) = self
+            .0
+            .iter()
+            .position(|h| names_match(&h.device, name) && h.button == button)
+        {
+            if self.0[i].pending && !down {
+                // in and out again within the pause: nothing happened
+                self.0.remove(i);
+            } else {
+                self.0[i].out = !down;
+            }
+            return;
         }
+        if !down || !live {
+            return;
+        }
+        let Some(d) = find_device_cfg(cfg, name) else {
+            return;
+        };
+        let bound = d.actions_of(button);
+        if bound.is_empty() || !d.latching.contains(&button) {
+            return;
+        }
+        self.0.push(Held {
+            device: name.to_string(),
+            button,
+            actions: bound,
+            latching: true,
+            continuous: d.continuous(button),
+            fresh: true,
+            out: false,
+            pending: true,
+        });
     }
 
     pub(super) fn resume(&mut self, cfg: &[DeviceCfg], actions: &mut Vec<(String, bool)>) {
-        let out: Vec<(String, usize)> = self.0.iter().filter(|h| h.out).map(|h| (h.device.clone(), h.button)).collect();
+        for h in self.0.iter_mut().filter(|h| h.pending) {
+            h.pending = false;
+            h.fresh = true;
+            actions.extend(h.actions.iter().map(|a| (a.clone(), true)));
+        }
+        let out: Vec<(String, usize)> = self
+            .0
+            .iter()
+            .filter(|h| h.out)
+            .map(|h| (h.device.clone(), h.button))
+            .collect();
         for (name, button) in out {
             self.event(cfg, &name, button, false, actions);
         }
@@ -78,7 +162,11 @@ impl HeldButtons {
 
     pub(super) fn repeating(&mut self) -> Vec<String> {
         let mut due = Vec::new();
-        for h in self.0.iter_mut().filter(|h| h.continuous && !h.out) {
+        for h in self
+            .0
+            .iter_mut()
+            .filter(|h| h.continuous && !h.out && !h.pending)
+        {
             if !std::mem::take(&mut h.fresh) {
                 due.extend(h.actions.iter().filter(|a| !is_game_action(a)).cloned());
             }
@@ -92,9 +180,20 @@ mod tests {
     use super::*;
 
     fn wheel() -> Vec<DeviceCfg> {
-        let mut d = DeviceCfg { name: "Wheel".into(), ..Default::default() };
-        d.buttons = vec![("bus_doorfront0".into(), "0".into()), ("retarder_up".into(), "1".into()), ("gear_up".into(), "1".into())];
-        d.more = vec![(0, "bus_doorfront1".into()), (0, "bus_doorrear0".into()), (2, "sim_pause".into())];
+        let mut d = DeviceCfg {
+            name: "Wheel".into(),
+            ..Default::default()
+        };
+        d.buttons = vec![
+            ("bus_doorfront0".into(), "0".into()),
+            ("retarder_up".into(), "1".into()),
+            ("gear_up".into(), "1".into()),
+        ];
+        d.more = vec![
+            (0, "bus_doorfront1".into()),
+            (0, "bus_doorrear0".into()),
+            (2, "sim_pause".into()),
+        ];
         vec![d]
     }
 
@@ -104,7 +203,17 @@ mod tests {
         held.event(&cfg, "Wheel", 0, true, &mut actions);
         held.event(&cfg, "Wheel", 0, false, &mut actions);
         let names: Vec<(&str, bool)> = actions.iter().map(|(a, d)| (a.as_str(), *d)).collect();
-        assert_eq!(names, [("bus_doorfront0", true), ("bus_doorfront1", true), ("bus_doorrear0", true), ("bus_doorfront0", false), ("bus_doorfront1", false), ("bus_doorrear0", false)]);
+        assert_eq!(
+            names,
+            [
+                ("bus_doorfront0", true),
+                ("bus_doorfront1", true),
+                ("bus_doorrear0", true),
+                ("bus_doorfront0", false),
+                ("bus_doorfront1", false),
+                ("bus_doorrear0", false)
+            ]
+        );
     }
 
     #[test]
@@ -123,7 +232,13 @@ mod tests {
     fn the_gears_repeat_but_the_game_switches_do_not() {
         let (cfg, mut held, mut actions) = (wheel(), HeldButtons::default(), Vec::new());
         held.event(&cfg, "Wheel", 2, true, &mut actions);
-        assert_eq!(actions, [("gear_up".to_string(), true), ("sim_pause".to_string(), true)]);
+        assert_eq!(
+            actions,
+            [
+                ("gear_up".to_string(), true),
+                ("sim_pause".to_string(), true)
+            ]
+        );
         assert!(held.repeating().is_empty());
         assert_eq!(held.repeating(), ["gear_up"]);
     }
@@ -136,7 +251,7 @@ mod tests {
         held.event(&cfg, "Wheel", 1, true, &mut actions);
         held.repeating();
         held.release_momentary(&mut actions);
-        held.while_editing("Wheel", 1, false);
+        held.while_editing(&cfg, "Wheel", 1, false, true);
         assert!(held.repeating().is_empty());
         actions.clear();
         held.resume(&cfg, &mut actions);
@@ -145,5 +260,60 @@ mod tests {
         held.event(&cfg, "Wheel", 1, true, &mut actions);
         held.repeating();
         assert_eq!(held.repeating(), ["retarder_up"]);
+    }
+
+    /// #3861: a latching switch put in while the menu is open goes in when it closes, so
+    /// the bus follows it and its next way out switches back.
+    #[test]
+    fn a_latching_switch_switched_on_in_the_menu_goes_in_when_it_closes() {
+        let mut cfg = wheel();
+        cfg[0].latching = vec![0];
+        let (mut held, mut actions) = (HeldButtons::default(), Vec::new());
+        held.while_editing(&cfg, "Wheel", 0, true, true);
+        assert!(actions.is_empty());
+        assert!(held.repeating().is_empty());
+        held.resume(&cfg, &mut actions);
+        let names: Vec<(&str, bool)> = actions.iter().map(|(a, d)| (a.as_str(), *d)).collect();
+        assert_eq!(
+            names,
+            [
+                ("bus_doorfront0", true),
+                ("bus_doorfront1", true),
+                ("bus_doorrear0", true)
+            ]
+        );
+        actions.clear();
+        held.event(&cfg, "Wheel", 0, false, &mut actions);
+        // let go, then the latch's way back: each action once more
+        assert_eq!(actions.len(), 3 + 3 * 2);
+        assert_eq!(actions[0], ("bus_doorfront0".to_string(), false));
+        assert_eq!(actions[3], ("bus_doorfront0".to_string(), true));
+        assert_eq!(actions[4], ("bus_doorfront0".to_string(), false));
+    }
+
+    /// In and out again during the pause, or a button that is no latch: nothing at all.
+    #[test]
+    fn a_switch_moved_and_back_in_the_menu_or_a_plain_button_does_nothing() {
+        let mut cfg = wheel();
+        cfg[0].latching = vec![0];
+        let (mut held, mut actions) = (HeldButtons::default(), Vec::new());
+        held.while_editing(&cfg, "Wheel", 0, true, true);
+        held.while_editing(&cfg, "Wheel", 0, false, true);
+        held.while_editing(&cfg, "Wheel", 2, true, true);
+        held.resume(&cfg, &mut actions);
+        held.release(&mut actions);
+        assert!(actions.is_empty());
+    }
+
+    /// A latch put in during the menu on a device that is switched off (or with the
+    /// controllers off) works nothing when the menu closes.
+    #[test]
+    fn a_latch_put_in_on_a_device_that_is_off_does_nothing() {
+        let mut cfg = wheel();
+        cfg[0].latching = vec![0];
+        let (mut held, mut actions) = (HeldButtons::default(), Vec::new());
+        held.while_editing(&cfg, "Wheel", 0, true, false);
+        held.resume(&cfg, &mut actions);
+        assert!(actions.is_empty());
     }
 }

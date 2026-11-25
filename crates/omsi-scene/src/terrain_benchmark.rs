@@ -20,7 +20,8 @@ fn tile_preparation_benchmark() {
     log::set_logger(&WARNINGS).expect("standalone benchmark logger");
     log::set_max_level(log::LevelFilter::Warn);
     let root = PathBuf::from(std::env::var_os("TERRAIN_BENCH_ROOT").expect("TERRAIN_BENCH_ROOT"));
-    let global = PathBuf::from(std::env::var_os("TERRAIN_BENCH_GLOBAL").expect("TERRAIN_BENCH_GLOBAL"));
+    let global =
+        PathBuf::from(std::env::var_os("TERRAIN_BENCH_GLOBAL").expect("TERRAIN_BENCH_GLOBAL"));
     let tile = std::env::var("TERRAIN_BENCH_TILE").expect("TERRAIN_BENCH_TILE=x,y");
     let date = std::env::var("TERRAIN_BENCH_DATE")
         .unwrap_or_else(|_| "20261001".into())

@@ -41,8 +41,8 @@ struct Targets {
     depth: mx::Texture,
     air: [mx::TextureView; 2],
     dist: [mx::TextureView; 2],
-    march: [mx::BindGroup; 2],
-    composite: [mx::BindGroup; 2],
+    march: [HeapGroup; 2],
+    composite: [HeapGroup; 2],
 }
 
 /// What the next frame follows its history by.
@@ -56,6 +56,8 @@ struct Last {
 }
 
 pub(crate) struct VolFog {
+    /// the module's places in the heap (`groups_to_heap`)
+    pub(crate) layout: crate::shaders::HeapLayout,
     buf: mx::Buffer,
     march: mx::RenderPipeline,
     composite: mx::RenderPipeline,
@@ -96,7 +98,7 @@ impl VolFog {
                 device,
                 mx::ShaderModuleDescriptor {
                     label: Some("volumetric fog"),
-                    source: &*(shader_source()),
+                    source: &crate::shaders::groups_to_heap(&shader_source()),
                 },
             );
             let march_targets = [
@@ -151,6 +153,7 @@ impl VolFog {
                 std::mem::size_of::<VolFogUniform>() as u64,
             );
             VolFog {
+                layout: crate::shaders::layout_of(&shader_source()),
                 buf,
                 march,
                 composite,
@@ -211,35 +214,39 @@ impl VolFog {
             make("volumetric fog distance", mx::TextureFormat::R16Float),
         ];
         let bg = |k: usize| {
-            device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("volumetric fog"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: self.buf.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::TextureView(depth_view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 2,
-                        resource: mx::BindingResource::TextureView(&air[k]),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 3,
-                        resource: mx::BindingResource::TextureView(&dist[k]),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 4,
-                        resource: mx::BindingResource::TextureView(&self.noise),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 5,
-                        resource: mx::BindingResource::Sampler(&self.sampler),
-                    },
-                ],
-            })
+            HeapGroup::of(
+                &self.layout,
+                2,
+                &mx::BindGroupDescriptor {
+                    label: Some("volumetric fog"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: self.buf.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::TextureView(depth_view),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 2,
+                            resource: mx::BindingResource::TextureView(&air[k]),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 3,
+                            resource: mx::BindingResource::TextureView(&dist[k]),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 4,
+                            resource: mx::BindingResource::TextureView(&self.noise),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 5,
+                            resource: mx::BindingResource::Sampler(&self.sampler),
+                        },
+                    ],
+                },
+            )
         };
         // (the march into k reads the other pair; the composite reads k)
         let march = [bg(1), bg(0)];
@@ -302,8 +309,10 @@ impl Renderer {
         view: &mx::TextureView,
         timers: &mut PassTimers,
     ) -> bool {
-        let (Some(ao), Some(cam_bg)) = (self.targets.ao.as_ref(), scene.camera_bind_group.as_ref())
-        else {
+        let (Some(ao), Some(cam_bg)) = (
+            self.targets.ao.as_ref(),
+            scene.camera_heaps.as_ref().and_then(|c| c.vol.as_ref()),
+        ) else {
             return false;
         };
         let (w, h) = (f.width, f.height);
@@ -379,8 +388,8 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&vf.march);
-            pass.set_bind_group(0, cam_bg);
-            pass.set_bind_group(2, &t.march[k]);
+            cam_bg.set(&mut pass);
+            t.march[k].set(&mut pass);
             pass.draw(0..3, 0..1);
         }
         {
@@ -399,8 +408,8 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&vf.composite);
-            pass.set_bind_group(0, cam_bg);
-            pass.set_bind_group(2, &t.composite[k]);
+            cam_bg.set(&mut pass);
+            t.composite[k].set(&mut pass);
             pass.draw(0..3, 0..1);
         }
         vf.last = Some(Last {
@@ -453,10 +462,48 @@ pub(crate) fn slots(
     };
     let reach = march_reach(weather_fog, lighting.cloud_density > 0.0 && cloud_shadows);
     (
-        [1.0, 0.85 * droplets, reach, 0.0],
+        [
+            1.0,
+            0.85 * droplets,
+            reach,
+            // (the haze is lost in a thick fog of the weather's own: none to march there)
+            ground_haze(lighting) * (1.0 - weather_fog / HAZE_FOG_OUT).clamp(0.0, 1.0),
+        ],
         [banks.x, banks.y, banks.z, 0.0],
     )
 }
+
+/// The low haze over the ground the volumetric fog marches besides the weather's own fog
+/// (1/m at the ground, thinning over some 40 m - volumetric_fog.wgsl `HAZE_HEIGHT`): the
+/// moisture and dust of the lowest air, thickest round sunrise and sunset (dew and the
+/// evening's cooling), faint at noon, swept away by wind and washed out by rain. It is what
+/// shows the sun's shafts through the crowns and between the houses on a clear morning, a
+/// low sun's beams through a street's trees - the weather's fog alone is zero then, and
+/// the air was as clear as a vacuum to them.
+pub(crate) fn ground_haze(lighting: &Lighting) -> f32 {
+    let alt = lighting
+        .sun_dir
+        .normalize_or_zero()
+        .z
+        .clamp(-1.0, 1.0)
+        .asin()
+        .to_degrees();
+    let low_sun = (-((alt - 3.0) / 10.0).powi(2)).exp();
+    let night = crate::atmosphere::smoothstep(-2.0, -10.0, alt);
+    let base = HAZE_NOON + (HAZE_LOW_SUN - HAZE_NOON) * low_sun;
+    let base = base + (HAZE_NIGHT - base) * night;
+    let wind = lighting.wind.truncate().length();
+    let swept = 1.0 / (1.0 + wind / 5.0);
+    let washed = 1.0 - 0.6 * lighting.rain.clamp(0.0, 1.0);
+    base * swept * washed
+}
+
+/// The ground haze's density round a low sun, at noon and at night (1/m).
+const HAZE_LOW_SUN: f32 = 0.0035;
+const HAZE_NOON: f32 = 0.00045;
+const HAZE_NIGHT: f32 = 0.0009;
+/// The weather's fog (1/m) at which the ground haze is gone in it.
+const HAZE_FOG_OUT: f32 = 0.004;
 
 /// How far the air is marched (m): in a thick fog only as far as anything shows through it
 /// (all the steps where they are seen), in clear air or a mist as far as `REACH`, under a

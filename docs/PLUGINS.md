@@ -1,91 +1,136 @@
 # Plugins
 
-openOMSI runs three kinds of plugins from the `plugins` folder of the game (and of every
-content root):
+Plugins add features to openOMSI: panels on the screen, dispatchers, fare systems, HUDs, telemetry for other programs, weather and time control. This guide is for players who install plugins and for anyone who wants to write one. Every function is listed in the [plugin API reference](PLUGIN_API.md).
 
-* **Lua plugins** (`.lua`) - a text file, no compiler, works the same on Windows, macOS,
-  Linux and Android, and is loaded again the moment you save it. They reach the whole game
-  through the plugin API: the player's bus, the duty and timetable, the map, the AI traffic
-  and the people, the weather and the clock, the camera, input, sound, panels of their own
-  on the screen, storage, settings and the LAN session - about 270 functions and 60 events.
-* **Compiled plugins** (`.oop`) - a plugin built with the
-  [openOMSI Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools):
-  Lua, or Rust (and other languages) compiled to WebAssembly. One file for every platform,
-  run in a sandbox with only the permissions it declares (see
-  [below](#compiled-plugins-oop)).
-* **OMSI plugins** (`.opl` + DLL) - the original's plugins, unchanged (see
-  [below](#omsi-plugins-pluginsopl--dll)).
+## Kinds of plugins
 
-The plugin API is one registry in the game (`crates/omsi-plugin/src/api`): every function
-and event is described there once, and the [reference](#reference) at the end of this page
-and [`plugin-api.json`](plugin-api.json) are written from it. Other plugin languages bind to
-the same registry.
+openOMSI runs three kinds of plugins.
 
-## Lua plugins
+| Kind | File | Made with | Runs on |
+| --- | --- | --- | --- |
+| Lua plugin | `.lua` | any text editor | Windows, macOS, Linux, Android |
+| Compiled plugin | `.oop` | the openOMSI Development Tools (Lua or Rust) | Windows, macOS, Linux, Android |
+| OMSI 2 plugin | `.opl` + DLL | as for OMSI 2 | Windows; macOS and Linux through Wine |
 
-### Your first plugin
+**Lua plugins** are plain text. There is nothing to compile, and the game loads a plugin again within a second after you save its file. They reach the whole game through the plugin API: the player's bus, the duty and timetable, the map, AI traffic and people, weather and time, camera, input, sound, panels on the screen, storage, settings and the LAN session. That is about 310 functions and 65 events.
 
-Create `plugins/hello.lua` next to the game:
+**Compiled plugins** (`.oop`, "openOMSI plugin") are build output, not sources. One file works on every system. The code is either Lua compiled into an obfuscated chunk, or WebAssembly (usually from Rust). They run in a sandbox with only the permissions they declare. See [Compiled plugins](#compiled-plugins).
 
-```lua
--- plugins/hello.lua
-omsi.on("vehicle", function(name)
-  omsi.message("Good morning! Today you drive the " .. name, 6)
-end)
+**OMSI 2 plugins** are the original game's `.opl` files with their DLLs, loaded unchanged. See [OMSI 2 DLL plugins](#omsi-2-dll-plugins).
 
-omsi.every(1, function()
-  local kmh = omsi.var("Velocity")
-  if kmh and kmh > 50 then
-    omsi.message(string.format("Slow down: %.0f km/h", kmh), 1)
-  end
-end)
-```
+A vehicle can also carry its own scripts, which run as plugins while the player drives it. See [Scripts in a vehicle](#scripts-in-a-vehicle).
 
-Start a map with a bus: the greeting shows up on the screen, and above 50 km/h the warning.
-Edit the file while the game runs and save it - the plugin is loaded again within a second
-("Lua plugin hello reloaded").
+## Installing and managing plugins
 
-### Scripts that belong to a vehicle
+### Turn plugins on
 
-A vehicle can carry its own scripts, written in Lua or compiled to a `.oop` (Lua or Rust), so a
-mod needs no plugin installed by the player. Name them in the vehicle's `.bus` or `.ovh`, relative
-to the vehicle's folder:
+On a fresh install, plugins are off.
 
-```
-[vehicle_script]
-scripts/cab.lua
+1. Open the launcher's **Settings → General**.
+2. Under **Interface & online**, switch off **Disable plugins**.
 
-[vehicle_script]
-scripts/ibis.oop
-```
+The setting applies from the next game. With it on, no Lua plugins and no OMSI 2 plugins run, including vehicle scripts. The vehicles' normal `.osc` scripts always run.
 
-The scripts start when the vehicle becomes the player's and stop when another vehicle (or none)
-does; they see the same `omsi.*` API as any plugin, the `omsi.var` of the bus being theirs. They
-are named `vehicle:<file>` in the log. Because a vehicle is content from anywhere, they have only
-these permissions: `ui`, `storage`, `vehicle_write` and `audio`. The world, the traffic, the
-camera, the LAN, UDP and native programs stay with the player's own plugins; a `.oop` that
-declares more keeps these four. OMSI 2 skips the keyword and runs the vehicle's `.osc` scripts as
-ever; a vehicle can have both.
+### Where plugins go
 
-### Where plugins live
+Plugins live in the `plugins` folder of the game, and of every other content root.
 
-| Path | The plugin's name | Its data folder |
+| Path | What it is | Its data folder |
 | --- | --- | --- |
 | `plugins/<name>.lua` | a one-file plugin | `plugins/<name>.data/` |
-| `plugins/<name>/main.lua` | a plugin with several files: `require("util")` loads `plugins/<name>/util.lua` (or `util/init.lua`), and its pictures, sounds and data files sit beside them | `plugins/<name>/data/` |
+| `plugins/<name>/main.lua` | a plugin with several files | `plugins/<name>/data/` |
+| `plugins/<name>.oop` | a compiled plugin | `plugins/<name>.data/` |
+| `plugins/**/<name>.opl` | an OMSI 2 plugin and its DLL | - |
 
-Other `.lua` files are not started on their own, so a folder plugin's modules stay modules.
-`OMSI_NO_PLUGINS=1` leaves every plugin out, Lua ones included.
+In a folder plugin, `require("util")` loads `plugins/<name>/util.lua` (or `util/init.lua`). Its pictures, sounds and data files sit next to the code. Other `.lua` files in a folder are not started on their own, so modules stay modules.
 
-### How a plugin runs
+When a `.lua` plugin and an `.oop` have the same name, the `.lua` wins. That lets an author work on the source while the compiled copy is installed.
 
-The file's top level runs once when the game starts. After that the plugin reacts to
-**events**. A handler is registered with `omsi.on(event, fn)` (as many as you like), or
-by defining a global function `on_<event>`:
+### The launcher's Plugins page
+
+The launcher's **Plugins** page has two tabs.
+
+- **Installed** lists every plugin in the `plugins` folders: Lua, `.oop` and `.opl`. Switch each one on or off without moving its files, open its **Settings**, or press **Plugins folder** to open the folder.
+- **Browse** lists the plugins of the [plugin catalog](#distributing-a-plugin). **Install**, **Update** and remove them from there.
+
+A plugin switched off is left out of the next game. Its files and settings stay.
+
+> **Note:** The **Settings** button appears only after the plugin has run once, because the plugin declares its settings when it starts.
+
+### Files the launcher and game share
+
+| File | Contents |
+| --- | --- |
+| `~/.openomsi/plugins-off.txt` | the plugins switched off, one per line, in lower case |
+| `~/.openomsi/plugins-status.json` | what the last game did with each plugin |
+| `<data folder>/settings.schema.json` | the settings a plugin declared |
+| `<data folder>/settings.json` | the values the player chose |
+
+In `plugins-off.txt` each plugin is named by its path under `plugins`: `foo.lua`, a folder plugin as `foo/` (for `foo/main.lua`), `foo.oop`, or an `.opl` path such as `pablo/mbas.opl`. So `foo.lua` and `foo/main.lua` are two different plugins. A bare name like `foo`, written by an older launcher, still switches off every Lua or `.oop` plugin of that name.
+
+`plugins-status.json` lists every plugin by the same names with its `state`: `loaded`, `off`, or `failed` with the load error (for example a syntax error). A plugin the game switched off during play for its errors also has `switched_off` with the error.
+
+On Windows `~` is `%USERPROFILE%`.
+
+## Your first Lua plugin
+
+This takes about five minutes. You need openOMSI with plugins turned on (see [Turn plugins on](#turn-plugins-on)) and a text editor.
+
+1. Open the `plugins` folder next to the game. The launcher's **Plugins** page has a **Plugins folder** button. Create the folder if it is missing.
+2. Create a file `hello.lua` in it and paste this:
+
+   ```lua
+   -- plugins/hello.lua
+
+   -- Greet the driver when they get into a bus.
+   omsi.on("vehicle", function(name)
+     if name then
+       omsi.message("Good morning! Today you drive the " .. name, 6)
+     end
+   end)
+
+   -- A small panel with the speed, top left.
+   local function show()
+     if not omsi.has_vehicle() then
+       omsi.ui.remove("speed")
+       return
+     end
+     omsi.ui.set("speed", {
+       anchor = "top_left", x = 16, y = 60, width = 200,
+       children = {
+         { type = "text", text = "Speed", size = 12 },
+         { type = "text", text = omsi.fmt.speed(omsi.speed()), size = 24, weight = "bold" },
+       },
+     })
+   end
+   omsi.every(0.5, show)
+
+   -- A warning above 50 km/h, checked once a second.
+   omsi.every(1, function()
+     local kmh = omsi.var("Velocity")
+     if kmh and kmh > 50 then
+       omsi.message(string.format("Slow down: %.0f km/h", kmh), 1)
+     end
+   end)
+   ```
+
+3. Start a map with a bus. The greeting appears, the panel shows your speed, and above 50 km/h you get a warning.
+4. While the game runs, change `50` to `30` and save the file. Within a second the game says "Lua plugin hello reloaded" and the new limit applies.
+5. Make a mistake on purpose, for example delete an `end`, and save. The error appears on the screen and in `game.log`. Fix it and save again.
+
+Next steps:
+
+- Read [How a plugin runs](#how-a-plugin-runs) for events, timers and reloading.
+- Look at the [example plugins](#example-plugins).
+- Browse the [API reference](PLUGIN_API.md) for what else you can read and change.
+
+## How a plugin runs
+
+The file's top level runs once, when the game starts (and again after each reload). After that the plugin reacts to **events**. Register a handler with `omsi.on(event, fn)`, as many as you like, or define a global function `on_<event>`:
 
 ```lua
 function on_frame(dt)
-  -- runs ~60 times a second: keep it short, prefer omsi.every for slow work
+  -- about 60 times a second: keep it short
 end
 
 omsi.on("stop_arrive", function(name, id, number, delay)
@@ -93,121 +138,38 @@ omsi.on("stop_arrive", function(name, id, number, delay)
 end)
 ```
 
-The [events](#events) table lists them all: the game's (a crash, a ticket sold, a trip
-done), what changed (a door opened, the engine started, the bus arrived at a stop, a new
-minute, a red light run), the panels' (a click, a slider moved), messages from other
-plugins and from other players' games. An event the game has to work out by comparing two
-frames - doors, gears, stops, the traffic light ahead - is only worked out while some plugin
-listens to it.
+The [event list](PLUGIN_API.md#events) has all 65 events: the game's (a crash, a ticket sold, a trip done), state changes (a door opened, the engine started, the bus arrived at a stop, a new minute, a red light), panel clicks, messages from other plugins and from other players. An event the game has to work out by comparing two frames (doors, gears, stops, the light ahead) is only worked out while a plugin listens to it.
 
-`omsi.after`, `omsi.every` and `omsi.watch` call a function later, regularly, or when a
-value changes; `omsi.emit("my_event", 1, 2)` sends an event to the plugin's own handlers
-(handy between the modules of a bigger plugin), `omsi.plugin.send` to another plugin.
+### The plugin's life
 
-### The API
+| Event | When |
+| --- | --- |
+| `start` | right after the plugin was loaded, also after a reload |
+| `vehicle` | the player got into a vehicle, changed it, or left it (`nil`) |
+| `frame` | every frame, after the bus's own scripts; not while paused |
+| `pause`, `resume` | the game was paused, and goes on |
+| `stop` | the game ends, or the plugin is about to be reloaded |
 
-Every function is `omsi.<name>` - `omsi.bus.state()`, `omsi.ui.set(...)`. A few rules hold
-for all of them:
+When you save a plugin's file, the game stops it (`stop`), loads it again and runs it from the top. Its panels go, its `omsi.data` and storage are written first and read back.
 
-* **Without the thing they read, readings are `nil`** (no bus, on foot, no duty, no
-  timetable on the map), lists are empty, and changes give `false`. A plugin works on
-  every map and with every bus; a bus that lacks a script variable gives `nil` for it.
-* **Several results** come as several values: `local x, y, z, heading = omsi.position()`;
-  none at all when there is nothing (`if omsi.position() then`).
-* **Changes that can fail** give `true`, or `false` and the reason:
-  `local ok, why = omsi.weather.set({ temperature = -5 })`.
-* **A wrong argument is an error** that names the function and the argument
-  (`omsi.var: argument 1 (name) must be a string, not table`); catch it with `pcall`
-  where it may happen.
-* **Units**: metres, map coordinates x east, y north, z up; headings in degrees clockwise
-  from north; speeds km/h; times seconds (of the day since midnight for clock times).
-* **New functions come with new openOMSI versions.** `omsi.game.has("weather.set")` tells
-  whether this game has one; the reference says since which version each exists.
+### Timers, watches and your own events
 
-The parts of the API, with a taste of each (the [reference](#reference) has every
-function):
+| Function | What it does |
+| --- | --- |
+| `omsi.after(seconds, fn)` | runs `fn` once, later |
+| `omsi.every(seconds, fn)` | runs `fn` regularly |
+| `omsi.watch(name, fn)` | runs `fn(new, old)` when a bus variable changes |
+| `omsi.watch(kind, name, fn)` | the same for `"var"`, `"str"`, `"sys"` or `"info"` values |
+| `omsi.cancel(id)` | stops a timer, watch or hotkey |
+| `omsi.emit(event, ...)` | sends an event to this plugin's own handlers |
 
-```lua
--- the player's bus: a dashboard in one table, and its parts by name
-local s = omsi.bus.state()            -- speed, gear, rpm, doors_open, indicator, fuel, ...
-omsi.bus.toggle_door(1)               -- the front door's key
-omsi.bus.set_indicator("left")
-local all, seated, standing = omsi.bus.passengers()
-omsi.var("elec_busbar_main")          -- any script variable; omsi.trigger("bus_horn") any trigger
+Times are game time: they stand still while the game is paused. `omsi.emit` is handy between the modules of a bigger plugin. To reach another plugin, use `omsi.plugin.send` (see [Talking to other plugins and programs](#talking-to-other-plugins-and-programs)).
 
--- the duty and the timetable
-local d = omsi.duty.get()             -- line, tour, trip, next_stop, delay, ...
-for _, stop in ipairs(omsi.duty.stops()) do print(stop.name, omsi.fmt.clock(stop.departure)) end
-omsi.duty.start("136", "3")           -- as the game menu takes a duty
+### Saved data
 
--- the map and moving the bus
-local ground = omsi.map.ground(x, y)
-omsi.map.teleport(x, y, nil, 90)      -- z nil: onto the ground there
-local limit = omsi.map.speed_limit()
+`omsi.data` is a table that survives the session. It is written when the game ends and before a reload, and read back on the next start. Numbers, strings, booleans and tables of them are kept. `omsi.save()` writes it at once.
 
--- the AI traffic and the people
-local ahead = omsi.traffic.ahead(80)  -- the car in front, with its distance
-local light = omsi.traffic.light_ahead()
-omsi.traffic.set_density(50)
-local waiting = omsi.people.waiting(stop_id)
-
--- time and weather, read and set as the game menu does
-omsi.world.set_time("07:30")
-omsi.weather.set({ precipitation = "snow", precipitation_rate = 0.5, temperature = -3 })
-omsi.weather.preset(omsi.weather.presets()[1].file, 60)
-
--- camera, input, sound
-local sx, sy = omsi.camera.project(x, y, z + 3)   -- where a map point is on the screen
-omsi.input.hotkey("Ctrl+KeyH", function() ... end)
-local id = omsi.audio.play("gong.wav", { on_bus = true, volume = 0.8 })
-
--- storage, files, settings, other plugins
-omsi.storage.set("best_trip", 812)
-omsi.files.append("trips.csv", "136,3,+30\n")
-local settings = omsi.plugin.settings({ { key = "volume", type = "number", default = 50 } })
-omsi.plugin.broadcast("delay", omsi.duty.delay())
-
--- the LAN session
-for _, p in ipairs(omsi.lan.players()) do print(p.name, p.line) end
-omsi.lan.send(0, "hello")             -- to this plugin on every other player's game
-```
-
-#### `omsi.info()` in detail
-
-`omsi.info()` is the game's state as one table (`omsi.info_value(key)` reads one key
-without building the table):
-
-`map`, `clock` (seconds since midnight), `day`, `year`, `view`, `paused`, `on_foot`,
-`multiplayer`, `traffic` (AI vehicles), `speed` (km/h), `delay` (s, late positive),
-`map_path` (the map's global.cfg), `version` (of openOMSI); with a bus also `tile_x`,
-`tile_y` (its tile, as global.cfg's `[map]` list numbers them), `tile_pos_x`, `tile_pos_y`
-(metres in that tile, x east, y north), `heading` (degrees, clockwise from north),
-`vehicle_manufacturer`, `vehicle_model`, `destination` (the terminus the bus shows),
-`passengers` (aboard); `crashes`, `heavy_crashes` and `pedestrians_hit` this session (as
-the personnel file counts them); `situation`, the situation file the game started from (the
-launcher's "continue" loads `maps/<map>/laststn.osn`), `nil` for a new game; on a duty also
-`line`, `tour`, `trip` (its number in the duty), `trips`, `trip_name` (the timetable's name
-of the trip), `terminus`, `stops` (how many the trip has), `trip_done` (`true` once the bus
-has reached the trip's last stop, the stop was skipped, or a saved game was left there: the
-trip is over, though the duty moves on to the next trip only a minute before it leaves),
-`next_stop`, `next_stop_number` (from 1), `next_stop_arrival`, `next_stop_departure`,
-`next_stop_id` (the stop's object ID in the map, as the timetable names it: the same name
-can stand for two stops, the ID cannot), `at_stop` (`true` while the bus stands at the next
-stop), `previous_stop` and `previous_stop_id` (the last stop before the next one the trip
-calls at; none before the first), `next_stop_distance` and `previous_stop_distance` (metres
-in a straight line from the bus, where the stop's place is known). `next_stop_distance_nav`
-is the navigator's route-following distance in metres; it is `nil` when navigator and the 
-route arrows are both off (pause menu included). If Navigator are "Recalculating Route", it
-will holds the last value until the route is recalculated.
-
-#### Saved data
-
-`omsi.data` is a table that survives the session: it is written when the game ends (and
-before a reload) and read back on the next start. Numbers, strings, booleans and tables of
-them are kept. `omsi.save()` writes it at once. The file is `<name>.save.lua` next to a
-one-file plugin, `data.save.lua` in a folder plugin's folder. `omsi.storage` is the same
-idea as keys and values, kept as JSON in the plugin's data folder (and the same for every
-plugin language).
+The file is `<name>.save.lua` next to a one-file plugin, or `data.save.lua` in a folder plugin's folder.
 
 ```lua
 -- plugins/odometer.lua: kilometres driven, over every session
@@ -220,93 +182,13 @@ omsi.every(60, function()
 end)
 ```
 
-#### Settings
+`omsi.storage` is the same idea as keys and values, kept as `storage.json` in the plugin's data folder. It works in every plugin language. `omsi.files` reads and writes files in the data folder (at most 16 MB per write, 256 MB in all).
 
-`omsi.plugin.settings({...})` declares the plugin's settings and gives back the values the
-player chose. The game makes a panel of them (`omsi.plugin.show_settings()`: checkboxes,
-sliders, text fields, tabs; it can be dragged and closed), keeps them in the data folder and
-tells the plugin each change (`setting(key, value)`).
+## Panels
 
-#### Talking to other programs
+`omsi.ui` puts the plugin's own panels on the screen, in the game's look: the Inter font, the game's icons, dark rounded cards with a shadow. They scale with the interface size setting and the window height.
 
-`omsi.send(port, text)` sends `text` as one UDP datagram to `127.0.0.1:port`: to another
-program on this computer (an overlay, a dashboard, a company's tracker), never over the
-network. It does not wait and nothing comes back: a message sent while no program listens
-is lost, so keep what must not be lost in `omsi.storage` as well.
-
-| Returns | When |
-| --- | --- |
-| `true` | the message was handed to the system |
-| `false`, reason | the port is below 1024 or one of the game's multiplayer ports (27015-27024), the message is longer than 8 KB, the plugin sent 100 messages in the last second already, or the system refused it |
-
-```lua
--- plugins/live.lua: the speed and the next stop, twice a second, for a program on port 47800
-omsi.every(0.5, function()
-  local d = omsi.duty.get()
-  omsi.send(47800, omsi.json.encode({ speed = omsi.speed(), next_stop = d and d.next_stop and d.next_stop.name }))
-end)
-```
-
-`nc -lu 47800` in a terminal shows what arrives.
-
-#### Between plugins and between players
-
-`omsi.plugin.send(to, topic, data)` and `omsi.plugin.broadcast(topic, data)` reach other
-plugins in their next frame (`message(from, topic, data)`); `omsi.plugin.list()` names the
-plugins loaded. In a LAN game `omsi.lan.send(player, text)` reaches the same plugin on
-another player's game (`lan_message(from, text)`): short texts (120 characters), about ten
-a second, carried in the session's own messages - a game without the plugin ignores them.
-
-#### Passengers' tickets
-
-What a passenger asks for at the cash desk is the ticket pack's choice - unless a plugin
-says otherwise. Everybody boarding the player's bus is reported once, on their way to the
-door, as the `passenger_ticket` event: who they are (`id`, `age`), what they do about a
-ticket (`kind`: `"none"`, `"stamp"`, `"buy"`), the pack's ticket and price, the stop they
-board at and the stop they ride to, with where both are in the duty's trip. They wait in the
-doorway, and their request at the desk waits, until the plugins have had that frame
-(normally the next one; 5 s of game time at most), so a plugin has time to work out a fare of its own - a tariff of zones, a table of fare units, a pass - and hand it
-over with `omsi.people.set_ticket`:
-
-```lua
-omsi.on("passenger_ticket", function(p)
-  if p.kind ~= "buy" or not p.destination_number then return end
-  local stops = p.destination_number - p.stop_number
-  omsi.people.set_ticket(p.id, {
-    name = stops <= 3 and "Short hop" or "Single",
-    price = stops <= 3 and 1.5 or 3,
-    voice = "Zone_" .. stops,   -- Zone_<n>.wav of the passenger's voice folder, else the usual line
-    tag = "my_tariff",          -- kept with the passenger: omsi.people.get(id).tag
-  })
-end)
-```
-
-* `kind` changes only until the passenger is in the bus; the ticket, the name, the price
-  and the voice until they have asked for it (`omsi.people.get(id).ticket_asked`).
-* `ticket` picks another ticket of the pack (its name, price and `GivenTicket` number with
-  it); `name` and `price` alone keep the pack's number, so a bus's ticket printer and the
-  driver's ticket key go on working.
-* A buyer always has a ticket of the pack the driver can give: `ticket = 0` is refused for
-  them, and somebody made a buyer without `ticket` gets the pack's ticket for their age (or,
-  when none is for their age, the change is refused).
-* A voice line the passenger's voice folder does not have falls back to `Ticket_<n>_<k>`.
-* `omsi.people.get(id)` shows the passenger's ticket now and which plugin changed it
-  (`ticket_by`). Without a plugin listening the passengers ask for what the ticket pack
-  gives them, and nobody waits.
-
-[`reduced_tickets.lua`](examples/plugins/reduced_tickets.lua) has every adult ask for the
-reduced fare of the stock Berlin ticket packs; [`passenger_log.lua`](examples/plugins/passenger_log.lua)
-writes what a plugin learns of each passenger into `game.log`.
-
-### On-screen panels
-
-`omsi.ui` puts panels of the plugin's own on the screen, in the game's look: Inter, the
-game's icons, dark rounded cards with a shadow, as large as the rest of the interface (the
-interface size setting and the window's height scale them). A plugin describes a panel as a
-table once and sets it again when its content changes - every half second, say, not every
-frame; the same table again changes nothing. `omsi.ui.update(panel, element, {...})`
-changes one element in place. The game lays the panel out and draws it again only when it
-did change.
+A plugin describes a panel as a table and sets it again when its content changes, for example every half second. Setting the same table again changes nothing. `omsi.ui.update(panel, element, {...})` changes one element in place, which is cheaper. The game lays out and redraws a panel only when it changed.
 
 ```lua
 -- plugins/trip_panel.lua: the next stop, the speed and a button
@@ -335,61 +217,119 @@ omsi.on("ui_click", function(panel, element)
 end)
 ```
 
-F10 gives the panels the mouse; a click on the button sounds the horn. The whole example is
-[`docs/examples/plugins/trip_panel.lua`](examples/plugins/trip_panel.lua).
+**F10** gives the panels the mouse, and a click on the button sounds the horn. The full example is [`trip_panel.lua`](examples/plugins/trip_panel.lua).
 
-`omsi.ui.version` is `8` (`7` before cards over the map, `6` before the interface themes, `5` before a navigator panel in the whole frame and the `map`
-element, `4` before `grab`, `3` before boxes, stop lists and the other
-elements and keys marked 4 below, `2` before the navigator's board, `1` before the controls):
-test `if omsi.ui and omsi.ui.version >= 2` in a plugin that should also run in an older openOMSI.
-The panels are the plugin's own: one plugin cannot change or remove another's, and when the
-plugin stops, or is loaded again after a change of its file, its panels go (its
-notifications run their time). They show over the picture and the navigator and under the
-game's own lines, menus and windows, and not at all while the game menu, a list of it or the
-city map is open, nor in VR.
+Panels belong to their plugin. One plugin cannot change or remove another's. When the plugin stops or reloads, its panels go (its notifications run out their time). Panels show over the picture and the navigator, under the game's own text, menus and windows. They are hidden while the game menu, one of its lists or the city map is open, and in VR.
 
-#### The panel table
+Panel texts are shown as they are. They are not translated into the game's language.
+
+### The mouse
+
+Panels take clicks only while they have the mouse. `omsi.ui.focus(true)` gives it to them: the cursor shows, and a click goes to the panel under it, not to the bus. `omsi.ui.focus(false)`, **Esc** or a game menu gives it back. The `ui_focus` event reports both.
+
+A panel with `grab = true` takes a left click even while the panels do not have the mouse. Its buttons, boxes, sliders and tabs answer, and the cab behind gets nothing. Such a click does not start typing in a text field or drag the panel. It is meant for small cards: a panel that covers more than a quarter of the screen, or whose background is less than half opaque, does not grab clicks.
+
+### The panel table
 
 ```lua
 omsi.ui.set("trip", {
-  anchor = "top_left",       -- top_left top top_right left center right bottom_left bottom bottom_right, or navigator
-  x = 16, y = 16,             -- from the anchor towards the middle (from a middle: right and down)
-  width = 340,                -- the height follows the content
-  padding = 12,               -- default 12
-  gap = 6,                    -- between the children, default 6
-  background = "#14161ACC",   -- default: the game's card colour; "#RRGGBB" or "#RRGGBBAA"
-  radius = 12,                -- default 12
-  accent = "#F47F30",         -- a stripe along the left edge
-  visible = true,             -- false hides it and keeps it
-  clickable = false,          -- true: a click anywhere on it is ui_click(id, nil)
-  draggable = false,          -- true: while the panels have the mouse it can be moved by its free parts
-  grab = false,               -- true: it takes its clicks even while the panels do not have the mouse (ui.version 5)
-  frame = false,              -- with anchor = "navigator": the navigator's whole frame, not the board under its map (ui.version 6)
-  children = { ... },         -- elements, top to bottom
+  anchor = "top_left",      -- see below
+  x = 16, y = 16,           -- offset from the anchor towards the middle
+  width = 340,              -- the height follows the content
+  padding = 12,             -- default 12
+  gap = 6,                  -- space between children, default 6
+  background = "#14161ACC", -- default: the game's card colour
+  radius = 12,              -- corner radius, default 12
+  accent = "#F47F30",       -- a stripe along the left edge
+  visible = true,           -- false hides it and keeps it
+  clickable = false,        -- true: a click anywhere is ui_click(id, nil)
+  draggable = false,        -- true: the player can move it while panels have the mouse
+  grab = false,             -- true: takes clicks without the mouse (ui.version 5)
+  frame = false,            -- with anchor "navigator": the whole frame (ui.version 6)
+  children = { ... },       -- elements, top to bottom
 })
 ```
 
-A panel with `grab = true` takes a left click on it even while the panels do not have the
-mouse (no F10 or `ui.focus` first): its buttons, boxes, sliders and tabs answer as with the
-mouse, and the cab behind it gets none of the click. Such a click starts no typing into a text
-field and does not drag the panel. Elsewhere the click is the cab's as before; while the mouse
-turns the head (no cursor) it is the head's, and the game's own panels over it come first. It is
-for small cards the driver clicks away or keeps: a card that covers more than a quarter of the
-screen, or whose background is less than half opaque, takes no click this way.
+| Key | Values |
+| --- | --- |
+| `anchor` | `top_left`, `top`, `top_right`, `left`, `center`, `right`, `bottom_left`, `bottom`, `bottom_right`, `navigator` |
+| `x`, `y` | from a corner or edge: towards the middle. From a middle: right and down |
+| colours | `"#RRGGBB"` or `"#RRGGBBAA"` |
 
-Sizes are pixels of a 1080p screen at the normal interface size. A panel stays on the screen
-whatever its offset; one the player dragged keeps its new place when it is set again
-(`omsi.ui.moved(id)` says how far).
+Sizes are pixels of a 1080p screen at the normal interface size. A panel always stays on the screen. One the player dragged keeps its new place when it is set again; `omsi.ui.moved(id)` says how far it was moved.
 
-#### In the navigator
+### Elements
 
-A panel with `anchor = "navigator"` goes into the navigator's board under its map, in place
-of the list of the next stops: as wide as the navigator, at its scale, and on its card (no
-card, shadow, accent or rounded corners of its own; `background` still paints it). `x`, `y`,
-`width` and `draggable` are left aside, and the navigator grows as tall as the panel comes to,
-as far as the window has room. Shift+N cycles the navigator through map, map and board, off
-as it does with the stop list; the first time a plugin asks for the board the navigator opens
-it by itself. One plugin's panel is in the board at a time: another waits until it goes.
+Every element can have an `id`, a `color`, and `visible = false` (left out, no room kept). Elements marked (4) need `omsi.ui.version` 4 or later.
+
+| `type` | Draws |
+| --- | --- |
+| `text` | a line or paragraph, wrapped to its width |
+| `icon` | one of the game's icons |
+| `row` | its children side by side |
+| `bar` | a progress bar, or a bar of coloured segments |
+| `badge` | a small rounded label |
+| `box` (4) | its children in a tinted box with a stripe on the left |
+| `stops` (4) | stops on a rail, one row each |
+| `divider` | a thin line |
+| `map` (6) | the navigator's map, in a panel that fills the navigator |
+| `space` | empty room |
+| `button` | a button |
+| `image` | a picture from the plugin's folder |
+| `checkbox` | a box ticked by a click |
+| `slider` | a track with a knob |
+| `input` | a text field |
+| `tabs` | a row of tabs |
+| `chart` | a line or bar chart |
+| `table` | columns of text with a bold header |
+
+The keys of each element:
+
+- **`text`**: `text`; `size` (default 14); `weight` (`regular`, `medium`, `bold`); `align` (`left`, `center`, `right`); `wrap` (default `true`; `false` keeps one line and cuts it with "…"). A line is 1.3 × `size` high.
+- **`icon`**: `name`, a Material Symbols name such as `directions_bus`, `schedule`, `payments`, `warning`, `star`, `emoji_events` (every icon is in [`assets/icons/material`](../assets/icons/material)); `size` (default 20). An unknown name draws nothing.
+- **`row`**: `children`; `gap` (default 8); `align` (`start`, `center`, `end`, `between`). Children are centred on each other. A child with `grow = true` takes the width the others leave; several share it. When the children do not fit, texts, labels and buttons give up width alike.
+- **`bar`**: `value` (0 to 1); `height` (default 6); `color` (the filled part, default amber); `background`. Or (4) `segments`: up to 16 parts side by side, `{ { value = 3, color = "#34B26E" }, ... }`, each its share of the sum. In a row a bar is 60 wide unless it grows.
+- **`badge`**: `text`; `color` (its fill, default amber); `text_color`; `weight` (4; default `medium`). It is 20 high.
+- **`box`** (4): `children`; `gap` (default 4); `color` (default amber). For a note or a piece of advice.
+- **`stops`** (4): `stops`, up to 128 of `{ name, time, expected, expected_color, state, tag }`; `size` (13); `color` (the rail, default amber). `state` is `"done"` (grey), `"now"` (marked, bold) or `"ahead"` (default). `time` is on the right, `expected` before it in `expected_color`, `tag` (for example `"terminus"`) before them.
+- **`divider`**: `color`. In a row it is upright.
+- **`map`** (6): `height` (default: the navigator map's, 0.8 × the width); `cards` (default `true`); `overlay` (8: cards of the plugin over the map). See [In the navigator](#in-the-navigator).
+- **`space`**: `size` (default 8). In a row it is across.
+- **`button`**: `id` (required); `text`; `icon`; `color`. 34 high and as wide as the panel; in a row as wide as its label or what it grows to. A click is `ui_click(panel, id)`.
+- **`image`**: `src` (a PNG, JPEG, BMP or TGA in the plugin's folder); `width`; `height` (default 64). Shrunk to fit its width.
+- **`checkbox`**: `id` (required); `text`; `checked`. A click sends `ui_change(panel, id, true/false)`.
+- **`slider`**: `id` (required); `value`; `min` (0); `max` (1); `step` (0: any). It follows the mouse while the button is held and sends `ui_change(panel, id, number)`.
+- **`input`**: `id` (required); `text`; `placeholder`; `max` (characters, default 100). Clicked, it takes typing, and the keys do not reach the bus. Every key sends `ui_change`; **Enter** is a `ui_click` on it; **Esc** or a click elsewhere leaves it.
+- **`tabs`**: `id` (required); `tabs` (a list of texts); `selected` (from 1). Choosing one sends `ui_change(panel, id, number)`.
+- **`chart`**: `values` (up to 512 numbers); `min`, `max` (default: from the values); `height` (48); `style` (`line` or `bars`); `fill` (fills below the line).
+- **`table`**: `columns` (header texts); `rows` (a list of lists of texts; (4) a cell can be `{ text = "+3:12", color = "#FF5F57" }`); `widths` (shares of the width); `size` (13); `aligns` (4: one per column, `"left"`, `"right"`, ...).
+
+Any other element with an `id` and `clickable = true` (a whole row, say) is clicked like a button.
+
+Unknown keys are ignored and an element of an unknown `type` is left out, so a plugin written for a newer openOMSI still shows its panels. A key of the wrong kind makes `ui.set` return `false` and the reason, such as `children[2].size: a number is expected`.
+
+**Limits per plugin:** 16 panels; 200 elements per panel (counting those in rows, boxes and map cards, and each card); 500 characters per text; 64 per id; rows and boxes 8 levels deep; 512 chart values or table cells; 8 notifications at a time.
+
+### Panel versions
+
+`omsi.ui.version` says which panel features the game has. Test it in a plugin that should also run on an older openOMSI: `if omsi.ui and omsi.ui.version >= 2 then`.
+
+| Version | Added |
+| --- | --- |
+| 1 | panels |
+| 2 | controls: buttons, checkboxes, sliders, text fields, tabs |
+| 3 | the navigator's board (`anchor = "navigator"`) |
+| 4 | boxes, stop lists and the other elements and keys marked (4) |
+| 5 | `grab` |
+| 6 | `frame` (a panel in the whole navigator) and the `map` element |
+| 7 | interface themes |
+| 8 | cards over the map (`overlay`) |
+
+### In the navigator
+
+A panel with `anchor = "navigator"` goes into the navigator's board under its map, in place of the list of next stops. It is as wide as the navigator, at its scale, and sits on the navigator's card: no card, shadow, accent or rounded corners of its own, though `background` still paints it. `x`, `y`, `width` and `draggable` are ignored. The navigator grows as tall as the panel needs, as far as the window has room.
+
+**Shift+N** cycles the navigator through map, map and board, and off. The first time a plugin asks for the board, the navigator opens it. Only one plugin's panel is in the board at a time; another waits until it goes.
 
 ```lua
 if (omsi.ui.version or 0) >= 3 then
@@ -399,27 +339,17 @@ else
 end
 ```
 
-`omsi.ui.dock()` gives the board's width, the most height there is room for, the height the
-panel came to, in the panel's pixels, and whether the panel in the board is this plugin's. A
-panel taller than the room is cut off at the bottom (what is cut off takes no click either), so
-a plugin can leave out rows that do not fit.
+`omsi.ui.dock()` returns the board's width, the most height there is room for, the height the panel came to, and whether the panel in the board is this plugin's. A panel taller than the room is cut off at the bottom, and the cut-off part takes no clicks. A plugin can leave out rows that do not fit.
 
-With `frame = true` (`omsi.ui.version` 6) the panel fills the navigator's whole frame instead:
-from its top, as wide as the navigator and as tall as the panel comes to (as far as the window
-has room), on the navigator's card with its rounded corners - in the panel's `background` where
-it gives one, which the navigator paints as its card (with its corners and its opacity setting),
-not the panel as a square of its own. The map, the place row and the
-stop list make way for it; the map shows only where the panel has a `map` element, with its
-own rounded corners, and the navigator's cards over it (the next turn, the clock, the speed,
-the next stop) unless the element says `cards = false`. The navigator stays the navigator: it
-is moved and sized as before, Shift+N shows and hides it (there is no lower part to open), and
-a press on the map or on a part of the panel that takes no click is the navigator's - a drag
-moves it, a click opens the city map. A `grab` panel there takes clicks without the mouse on
-its buttons and other clickable parts alone. `omsi.ui.dock()` then gives the whole frame: its
-width, the most height there is room for, the height the panel came to, and `true` as its
-fifth value (a game that does not know `frame` lays the panel out under the map, leaves the
-`map` element out and gives no fifth value: a plugin can test for it rather than for a
-version).
+#### The whole navigator frame
+
+With `frame = true` the panel fills the navigator's whole frame instead: from its top, as wide as the navigator, as tall as the panel. It sits on the navigator's rounded card. A `background` is painted as that card, with its corners and the navigator's opacity setting.
+
+The map, the place row and the stop list make way. The map shows only where the panel has a `map` element, with its own rounded corners, and with the navigator's cards over it (the next turn, the clock, the speed, the next stop) unless the element says `cards = false`.
+
+The navigator stays the navigator: it is moved and sized as before, and **Shift+N** shows and hides it. A press on the map, or on a part of the panel that takes no click, is the navigator's: a drag moves it, a click opens the city map. A `grab` panel here takes clicks without the mouse only on its buttons and other clickable parts.
+
+`omsi.ui.dock()` then describes the whole frame and returns `true` as a fifth value. A game that does not know `frame` lays the panel out under the map, leaves out the `map` element and returns no fifth value, so a plugin can test for that.
 
 ```lua
 omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding = 10, children = {
@@ -429,21 +359,24 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, grab = true, padding 
 } })
 ```
 
-With `overlay` (`omsi.ui.version` 8) the `map` element takes cards of the plugin's own over the
-map, in place of the navigator's or beside them: a list of small panels, each with a panel
-table's keys - `place` (the anchors, `navigator` aside; default `top_left`), `x` and `y` (the
-room kept from the map's edges, default 8), `width` (default: what is in it needs, never more
-than the map less `x` on both sides), `padding` (default 10), `gap` (6), `background` (default
-the game's card colour), `radius` (10) and `children` (any elements); a key of a card that the game does not know is left alone, so a
-plugin written for a later game still shows. A card is laid out at its
-place in the map and drawn with the panel, which lies over the map. It is held inside the map
-(never wider than it, never above its top); what still crosses the map's edge - the bottom of a
-card taller than the map - is left out: its background stops at the edge with its corners still
-rounded, and a text, an icon or a picture that does not wholly fit is not drawn. Its buttons
-and other clickable parts take clicks as in the panel; a press on the map beside them is still
-the navigator's. A `map` element outside a panel in the whole frame is empty room, and its cards
-are laid out in that room the same way. An older openOMSI leaves `overlay` out and shows the map
-without them; [`navigator_map.lua`](examples/plugins/navigator_map.lua) is a whole example.
+#### Cards over the map
+
+With `overlay` the `map` element carries the plugin's own cards over the map, instead of or beside the navigator's. `overlay` is a list of small panels. Each card takes these keys:
+
+| Key | Default |
+| --- | --- |
+| `place` | `top_left` (any anchor except `navigator`) |
+| `x`, `y` | 8: distance from the map's edges |
+| `width` | what the content needs, never more than the map less `x` on both sides |
+| `padding` | 10 |
+| `gap` | 6 |
+| `background` | the game's card colour |
+| `radius` | 10 |
+| `children` | any elements |
+
+Unknown keys are ignored. A card is held inside the map: never wider than it, never above its top. What still crosses the map's edge (the bottom of a card taller than the map) is cut: the background stops at the edge with rounded corners, and a text, icon or picture that does not fully fit is not drawn. Card buttons take clicks as in a panel; a press on the map beside them is still the navigator's.
+
+A `map` element outside a whole-frame panel is empty room, and its cards are laid out in that room. An older openOMSI ignores `overlay` and shows the map without cards. [`navigator_map.lua`](examples/plugins/navigator_map.lua) is a complete example.
 
 ```lua
 omsi.ui.set("phone", { anchor = "navigator", frame = true, padding = 10, children = {
@@ -454,45 +387,15 @@ omsi.ui.set("phone", { anchor = "navigator", frame = true, padding = 10, childre
 } })
 ```
 
-#### Elements
+### Notifications and messages
 
-Every element can have an `id`, a `color` and `visible = false` (left out, no room kept).
+- `omsi.message(text, seconds)` shows a line of text on the screen.
+- `omsi.ui.toast(text, { title, icon, color, seconds })` shows a notification card at the top right. A plugin shows 8 at most; a ninth pushes out its oldest.
+- `omsi.game.notify(text, kind, seconds)` shows one of the game's own notification cards, `kind` being `"info"`, `"warning"` or `"alert"`.
 
-| `type` | Keys | Draws |
-| --- | --- | --- |
-| `text` | `text`, `size` (default 14), `weight` (`regular`, `medium`, `bold`), `align` (`left`, `center`, `right`), `wrap` (default `true`; `false`: one line, cut with "…") | a line or a paragraph, wrapped at the width it has; a line is 1.3 × `size` high |
-| `icon` | `name`, `size` (default 20) | one of the game's icons (Material Symbols names: `directions_bus`, `schedule`, `payments`, `warning`, `star`, `emoji_events`... - every one in [`assets/icons/material`](../assets/icons/material)); a name the game does not have draws nothing |
-| `row` | `children`, `gap` (default 8), `align` (`start`, `center`, `end`, `between`) | its children side by side, centred on each other; a child with `grow = true` takes the width the others leave (several share it); when they do not fit, texts, labels and buttons give up width alike |
-| `bar` | `value` (0 to 1), `height` (default 6), `color` (the filled part, default the game's amber), `background`; `segments` (4: `{ { value = 3, color = "#34B26E" }, ... }`, up to 16) | a progress bar; in a row 60 wide unless it grows. With `segments`: its parts side by side, each its share of their sum (early, on time, late...), in place of `value` |
-| `badge` | `text`, `color` (its fill, default amber), `text_color`, `weight` (4; default `medium`) | a small rounded label, 20 high |
-| `box` (4) | `children`, `gap` (default 4), `color` (default amber) | its children stacked in a box tinted with `color`, a stripe of it on the left: a note, an advice |
-| `stops` (4) | `stops` (`{ { name, time, expected, expected_color, state, tag }, ... }`, up to 128), `size` (13), `color` (the rail, default amber) | stops on a rail, a row each: `state` `"done"` (behind the bus: grey), `"now"` (the one it heads for: marked, bold) or `"ahead"` (the default); `time` on the right, `expected` before it in `expected_color`, and `tag` (`"terminus"`) before them |
-| `divider` | `color` | a thin line (in a row: upright) |
-| `map` (6) | `height` (default: the navigator's own map's, 0.8 times the width), `cards` (default `true`), `overlay` (8: a list of cards, see [In the navigator](#in-the-navigator)) | in a panel that fills the navigator's frame, the navigator's map there (with its cards over it unless `cards = false`, and the plugin's `overlay` cards); elsewhere empty room of its height, with the `overlay` cards in it |
-| `space` | `size` (default 8) | empty room (in a row: across) |
-| `button` | `id` (needed), `text`, `icon`, `color` | a button 34 high, across the panel (in a row as wide as its label, or what it grows to); a click on it is `ui_click(panel id, button id)` |
-| `image` | `src` (a PNG, JPEG, BMP or TGA of the plugin's folder), `width`, `height` (default 64) | the picture, made smaller to fit the width it has |
-| `checkbox` | `id` (needed), `text`, `checked` | a box ticked and unticked by a click: `ui_change(panel, id, true/false)` |
-| `slider` | `id` (needed), `value`, `min` (0), `max` (1), `step` (0: any) | a track with a knob, set where it is pressed and followed while the button is held: `ui_change(panel, id, number)` |
-| `input` | `id` (needed), `text`, `placeholder`, `max` (characters, default 100) | a text field: clicked, it takes what is typed (the keys do not reach the bus meanwhile) - `ui_change` at every key, Enter is a `ui_click` on it, Esc or a click elsewhere leaves it |
-| `tabs` | `id` (needed), `tabs` (a list of texts), `selected` (from 1) | a row of tabs: `ui_change(panel, id, number)` when one is chosen |
-| `chart` | `values` (up to 512 numbers), `min`, `max` (default: the values'), `height` (48), `style` (`line`, `bars`), `fill` | the values over the width: a line (filled below with `fill`) or bars |
-| `table` | `columns` (header texts), `rows` (a list of lists of texts; 4: a cell may be `{ text = "+3:12", color = "#FF5F57" }`), `widths` (shares of the width), `size` (13), `aligns` (4: `{ "left", "right", ... }`, each column's) | columns of texts, the header bold over a line |
+### A line in the pause menu
 
-Another element with an `id` and `clickable = true` (a whole row, say) is clicked as a
-button is. Texts are shown as they are: they are not translated into the game's language.
-
-Keys the game does not know are left alone and an element of an unknown `type` is left out,
-so a plugin written for a later openOMSI still shows its panels here. A key of the wrong
-kind makes `set` return `false` and the reason. Limits, each plugin: 16 panels, 200
-elements in a panel (those in rows, boxes and cards over a map counted, and each card), 500 characters in a text, 64 in an id,
-rows and boxes 8 deep, 512 values in a chart or cells in a table.
-
-#### A line in the pause menu
-
-A plugin can put up to 3 lines of its own in the pause menu (Esc), in a group before the
-saving lines. Choosing one closes the menu and sends the plugin `menu_item`, for example to
-open the plugin's panel:
+A plugin can put up to 3 lines of its own in the pause menu (**Esc**), in a group before the save lines. Choosing one closes the menu and sends the plugin `menu_item`:
 
 ```lua
 omsi.ui.set_menu_item("board", "Duty board", "departure_board")
@@ -501,18 +404,13 @@ omsi.on("menu_item", function(id)
 end)
 ```
 
-The label is shown as the plugin gives it, so the plugin writes it in the player's language.
-The icon is one of the game's Material Symbols; without one, or with one the game does not
-have, the line gets the plugins' own icon. The lines go when the plugin stops
-(`ui.remove_menu_item` takes one out before that).
+The label (at most 40 characters) is shown as given, so write it in the player's language. The icon is a Material Symbols name; without one, or with an unknown one, the line gets the plugins' icon. The lines go when the plugin stops; `omsi.ui.remove_menu_item` takes one out earlier.
 
-#### An interface theme
+### An interface theme
 
-A plugin can bring a look for the game's own screens - the colours of the menus, their panels as
-frosted glass over the picture, the loading screen with the plugin's logo, which may itself be the
-loading bar: a `theme.json` in the plugin's folder makes it a theme of the plugin's name (see
-[THEMES.md](THEMES.md)). The player chooses it in Options › Interface; the plugin may switch to
-it, once and after asking, with `ui.set_theme`:
+A plugin can bring a look for the game's own screens: menu colours, frosted-glass panels over the picture, a loading screen with the plugin's logo (which can itself be the loading bar). A `theme.json` in the plugin's folder makes it a theme with the plugin's name; see [Interface themes](THEMES.md).
+
+The player chooses it in **Options › Interface**. The plugin may switch to it with `omsi.ui.set_theme`, but should ask the player and do it only once:
 
 ```lua
 if omsi.ui.set_theme and not omsi.data.theme_offered then
@@ -521,840 +419,545 @@ if omsi.ui.set_theme and not omsi.data.theme_offered then
 end
 ```
 
-The choice is the player's setting from then on, kept for the next start; `ui.themes()` lists
-the themes there are.
+From then on the choice is the player's setting, kept for the next start. `omsi.ui.themes()` lists the themes there are.
 
-### Example plugins
+## Settings
 
-Complete plugins to start from (each runs in the tests against a stand-in game):
-
-| Plugin | What it shows |
-| --- | --- |
-| [`trip_panel.lua`](examples/plugins/trip_panel.lua) | a panel with the line, the next stop and a button |
-| [`navigator_map.lua`](examples/plugins/navigator_map.lua) | the navigator's frame with its map and three cards of the plugin's own over it: the line, the next stop, the speed |
-| [`dispatcher/`](examples/plugins/dispatcher/main.lua) | a dispatcher and a small career: a draggable panel with tabs, the duty's next stops in a table, a chart of the delays, pay for stops and trips kept in the storage, today's duties offered and taken with a click, settings, hotkeys |
-| [`telemetry_hud.lua`](examples/plugins/telemetry_hud.lua) | a HUD: the speed with a chart of the last minute, gear, rpm, fuel, passengers, the speed limit and the traffic light ahead; a warning before a red light; the values as JSON over UDP for a program beside the game |
-| [`passenger_log.lua`](examples/plugins/passenger_log.lua) | every passenger boarding the bus in `game.log`: age, boarding stop and destination, the ticket they will ask for (`passenger_ticket`, `people.get`) |
-| [`reduced_tickets.lua`](examples/plugins/reduced_tickets.lua) | every adult asks for the reduced fare instead of the full one (`passenger_ticket`, `people.set_ticket`) |
-| [`weather_controller.lua`](examples/plugins/weather_controller.lua) | the weather files as tabs, sliders for temperature, visibility and rain, snow cover, the clock moved by buttons, and a day cycle of its own |
-
-### Reading game data and the complete selected tour
-
-`omsi.game.query` reads the same game-owned sources as the M.V. getters, without running
-the vehicle script or dispatching its callbacks. Use `omsi.game.queries()` to discover
-names, argument names/types and return types. Getter arguments retain OMSI's zero-based
-indices; other plugin lists use one-based Lua indices. Reads refer to the player's bus
-and its current HOF and timetable. No bus returns `nil, reason`. An optional third
-argument selects a loaded scripted scenery object's map id instead, allowing `GetArrBus*`
-to read a departure board's actual arrivals even without a player vehicle. Find object ids
-with `omsi.map.objects_near(x, y)`; an unloaded or nonscripted object returns `nil, reason`. Mutation/drawing commands
-are deliberately not data getters. `GetFontIndex` is excluded because it can load fonts
-and extend the vehicle's font list.
+`omsi.plugin.settings` declares the plugin's settings and returns the values the player chose:
 
 ```lua
-local text = omsi.game.query("GetTerminusString", {0, 0})
-local arrival = omsi.game.query("GetTTBusstopArr", {0})
-local tour = omsi.duty.tour() -- entire source tour, even with just one trip selected
-if tour then
-    for _, trip in ipairs(tour.trips) do
-        for _, stop in ipairs(trip.stops) do
-            -- Seconds from service-day midnight, including 24:xx and passing stops.
-            print(trip.line, trip.terminus, stop.name, stop.arrival, stop.departure)
-        end
-    end
-end
+local settings = omsi.plugin.settings({
+  { key = "send", type = "bool", label = "Send the values to a program", default = false },
+  { key = "port", type = "number", label = "UDP port", default = 47800, min = 1024, max = 65535, step = 1 },
+  { key = "unit", type = "choice", label = "Speed in", choices = { "km/h", "mph" }, default = "km/h" },
+  { key = "name", type = "text", label = "Your name", default = "" },
+}, "Telemetry HUD")
+
+omsi.on("setting", function(key, value)
+  settings[key] = value
+end)
 ```
 
-### Reading the complete loaded HOF
+| Field | Meaning |
+| --- | --- |
+| `key` | the setting's name (required, unique) |
+| `type` | `"bool"`, `"number"`, `"text"` or `"choice"` |
+| `label` | the text shown; default the key |
+| `default` | the value before the player changes it |
+| `min`, `max`, `step` | for `number`; defaults 0, 100, 0 (any) |
+| `choices` | for `choice`: a list of texts (required) |
 
-`omsi.hof.get()` returns an owned snapshot of every field parsed from the player's
-currently loaded depot file. It includes the depot name and source path, service-trip
-identifier, global strings, declared string counts, all termini and bus stops (including
-their internal identifiers and every string), and the info-system trips, stop lists and
-stop rows. Empty strings and original ordering are preserved; `info_trips[].code` stays
-a string, including leading zeroes. Comments and unrecognized file directives are not
-part of the parsed data. The API does not open arbitrary HOF files or alter the depot.
-It is shared by Lua and WASM on every game platform and requires no extra permission.
+The second argument is the title; the default is the plugin's name. A plugin can declare up to 40 settings. Values are kept in range: a number is clamped and rounded to `step`, a choice must be one of `choices`.
 
-Use `omsi.hof.terminus(identifier)` for a single timetable destination or
-`omsi.hof.busstop(identifier)` for a single stop, without copying the whole depot.
-Both return the first exact, case-sensitive identifier match, or nil without a match,
-player vehicle or loaded HOF. Returned `index` fields are zero-based, as the existing
-`GetTerminusString` and `GetBusstopString` getters expect; arrays in Lua start at 1.
-For a terminus, `identifier` is the HOF's internal texture/change identifier, not a
-display string or numeric IBIS code. `terminus_stop` is absent when the HOF has none.
+The player can change settings in two places:
 
-`GetTTTerminusIndex` reads the current vehicle timetable state and accepts no trip
-argument. To resolve every trip of a tour without changing that state:
+- **In the game:** `omsi.plugin.show_settings()` opens a panel with checkboxes, sliders, text fields and tabs. It can be dragged and closed while the panels have the mouse.
+- **In the launcher:** **Plugins → Installed → Settings**. The launcher reads `settings.schema.json` and writes `settings.json` in the plugin's data folder. The plugin gets the values the next time it starts.
+
+Every change in the game sends the `setting(key, value)` event. `omsi.plugin.setting(key)` reads one value, `omsi.plugin.set_setting(key, value)` changes one.
+
+## Talking to other plugins and programs
+
+### Other plugins
+
+`omsi.plugin.send(to, topic, data)` sends to one plugin by name, `omsi.plugin.broadcast(topic, data)` to all others. They receive it in their next frame as the `message(from, topic, data)` event. Data can be numbers, texts, booleans and tables of them. `omsi.plugin.list()` names the loaded plugins.
+
+### Other players
+
+In a LAN game, `omsi.lan.send(player, text)` reaches the same plugin on another player's game (`0`: every other player). It arrives as `lan_message(from, text)`. Texts are short (120 characters, no `|`), about ten a second at most, carried in the session's own messages. A game without the plugin ignores them.
+
+### Programs on this computer
+
+`omsi.send(port, text)` sends `text` as one UDP datagram to `127.0.0.1:port`: to an overlay, a dashboard or a company's tracker on the same computer. It never reaches the network. It does not wait and nothing comes back. A message sent while no program listens is lost, so keep what must not be lost in `omsi.storage` too.
+
+`omsi.send` returns `true` when the message was handed to the system. It returns `false` and the reason when:
+
+- the port is below 1024, or one of the game's multiplayer ports (27015 to 27024);
+- the message is longer than 8 KB;
+- the plugin already sent 100 messages in the last second;
+- the system refused it.
+
+```lua
+-- the speed and the next stop, twice a second, for a program on port 47800
+omsi.every(0.5, function()
+  local d = omsi.duty.get()
+  omsi.send(47800, omsi.json.encode({
+    speed = omsi.speed(),
+    next_stop = d and d.next_stop and d.next_stop.name,
+  }))
+end)
+```
+
+To see what arrives, run `nc -lu 47800` in a terminal.
+
+### The telemetry file
+
+A program that only wants to follow the player's bus (a fleet map, an in-vehicle terminal, a stream overlay) can read `~/.openomsi/telemetry.json` instead of being a plugin. On Windows it is `%USERPROFILE%\.openomsi\telemetry.json`.
+
+1. Create the file once, empty.
+2. The game fills it from then on, about twice a second. It replaces the whole file each time, so a reader never sees half of it.
+3. Delete the file to stop the writing.
+
+The file stays on this computer. A file whose `updated` stops changing belongs to a game that ended.
+
+| Field | Contents |
+| --- | --- |
+| `version` | `2` |
+| `pid`, `updated`, `paused` | the game's process, Unix seconds, paused or not |
+| `player` | `null` without a bus, else `x`, `y`, `z`, `tile_x`, `tile_y`, `local_x`, `local_y`, `heading`, `speed_kmh`, `delay_s`, `passengers` |
+| `duty` | `null` without a duty, else the fields below |
+| `ai_buses` | the timetable buses on the road |
+
+`duty` holds `line`, `tour`, `trip`, `trip_index`, `trip_count`, `terminus`, `next_stop_index`, `next_stop_id`, `next_stop_name`, `next_stop_dist`, `prev_stop_id`, `at_stop` and `stops`. Each stop has `object_id`, `name`, `stops`, `arr`, `dep`, `x`, `y`.
+
+Each entry of `ai_buses` has `id`, `line`, `tour`, `trip`, `terminus`, `depart`, `next_stop_id`, `at_stop`, `trip_done`, `delay_s`, `x`, `y`, `number`. Stop ids are the map's object ids, as in `omsi.info()`.
+
+## Passengers' tickets
+
+What a passenger asks for at the cash desk is normally the ticket pack's choice. A plugin can change it, for example to charge by zones, by fare units, or to accept a pass.
+
+Everybody boarding the player's bus is reported once, on the way to the door, as the `passenger_ticket` event. It says who they are (`id`, `age`), what they do about a ticket (`kind`: `"none"`, `"stamp"` or `"buy"`), the pack's ticket and price, the stop they board at and the stop they ride to, and where both are in the duty's trip. The passenger waits in the doorway until the plugins have had that frame (normally the next one, at most 5 s of game time). In that time a plugin can hand over its own fare with `omsi.people.set_ticket`:
+
+```lua
+omsi.on("passenger_ticket", function(p)
+  if p.kind ~= "buy" or not p.destination_number then return end
+  local stops = p.destination_number - p.stop_number
+  omsi.people.set_ticket(p.id, {
+    name = stops <= 3 and "Short hop" or "Single",
+    price = stops <= 3 and 1.5 or 3,
+    voice = "Zone_" .. stops,   -- Zone_<n>.wav of the passenger's voice folder
+    tag = "my_tariff",          -- kept with the passenger: omsi.people.get(id).tag
+  })
+end)
+```
+
+The rules:
+
+- `kind` can change only until the passenger is in the bus. The ticket, name, price, payment and voice can change until they have asked at the desk (`omsi.people.get(id).ticket_asked`).
+- `ticket` picks another ticket of the pack, with its name, price and `GivenTicket` number. `name` and `price` alone keep the pack's number, so the bus's ticket printer and the driver's ticket key keep working.
+- A buyer always has a ticket of the pack that the driver can give. `ticket = 0` is refused for them. Somebody made a buyer without `ticket` gets the pack's ticket for their age; when the pack has none for their age, the change is refused.
+- `payment` is the money handed over. It does not change the price and is at least the price. The amount may be higher when the currency's coins and notes cannot make it exactly.
+- A voice line the passenger's voice folder does not have falls back to the usual `Ticket_<n>_<k>`.
+- `omsi.people.get(id)` shows the passenger's ticket now and which plugin changed it (`ticket_by`).
+
+Without a plugin listening, passengers ask for what the ticket pack gives them and nobody waits.
+
+[`reduced_tickets.lua`](examples/plugins/reduced_tickets.lua) has every adult ask for the reduced fare of the stock Berlin ticket packs. [`passenger_log.lua`](examples/plugins/passenger_log.lua) writes what a plugin learns of each passenger into `game.log`.
+
+## Reading timetable and depot data
+
+### Game data getters
+
+`omsi.game.query(name, args)` reads the same data as the vehicle scripts' getters (`GetTerminusString`, `GetTTBusstopArr` and so on), without running a script. `omsi.game.queries()` lists the names, argument names and types, and result types; the full list is in the [reference](PLUGIN_API.md#omsigamequery). Getter arguments keep OMSI's zero-based indices.
+
+Reads use the player's bus and its current HOF and timetable. Without a bus they return `nil` and a reason. As a third argument, pass the map id of a loaded scripted scenery object to read that object instead; this lets `GetArrBus*` read a departure board's arrivals without a player vehicle. Find object ids with `omsi.map.objects_near(x, y)`.
+
+### The whole tour
+
+`omsi.duty.tour()` returns the complete source tour of the current duty, even when only one trip was chosen. `omsi.timetable.tour(line, tour)` reads any tour without taking it. Times are seconds from midnight of the service day, can go past 24:00, and passing stops are included.
 
 ```lua
 local tour = omsi.duty.tour()
 if tour then
-    for _, trip in ipairs(tour.trips) do
-        local terminus = omsi.hof.terminus(trip.terminus)
-        if terminus then
-            -- Getter fields 8 and 9 are Lua array elements 9 and 10.
-            local kind = terminus.strings[9] or ""
-            local route = terminus.strings[10] or ""
-            print(trip.name, terminus.index, terminus.code, kind, route)
-        end
+  for _, trip in ipairs(tour.trips) do
+    for _, stop in ipairs(trip.stops) do
+      print(trip.line, trip.terminus, stop.name, stop.arrival, stop.departure)
     end
+  end
 end
 ```
 
-Snapshots are independent copies: changing a returned table does not change the game.
-Keep a snapshot for repeated reads rather than copying the whole depot every frame;
-read a fresh one when the vehicle or its HOF changes. Lookups always use the current HOF.
+### The loaded HOF file
 
-### Safety and errors
+`omsi.hof.get()` returns a snapshot of every field of the player's loaded depot (HOF) file: its name and path, the service-trip identifier, the global strings and string counts, all termini and bus stops with their identifiers and strings, and the info-system trips, stop lists and stop rows. Empty strings and the original order are kept. `info_trips[].code` stays a string, leading zeroes included. Comments and unknown directives are not part of it.
 
-A Lua plugin gets Lua 5.4 with the safe libraries only: `string`, `table`, `math`, `utf8`,
-`coroutine`, `require` for its own folder, and `os.clock/time/date/difftime`. There is no
-`io`, no `os.execute` (not through `require("os")` either), no C modules, no `dofile`, and no
-binary chunks anywhere: plugin files, modules and `load` read text only (Lua has no checker
-for compiled code), and `string.dump` gives no code. A plugin reads and writes files only in
-its own data folder (`..` and absolute paths are refused) and reads its own folder; it
-cannot reach the network either: `omsi.send` talks only to programs on this computer, and
-only to ports from 1024 up. It holds at most 256 MB of memory.
+`omsi.hof.terminus(identifier)` and `omsi.hof.busstop(identifier)` look up one entry without copying the whole depot. Both match the identifier exactly, case-sensitively, and return the first match. For a terminus, the identifier is the HOF's internal one, not a display text or IBIS code.
 
-* An error in a handler is written to `game.log` and shown on the screen; the other
-  plugins and the game carry on. After 10 errors the plugin is switched off until you
-  change its file or restart the game.
-* A call into the plugin that runs longer than 50 ms (an endless loop) is stopped and the
-  plugin switched off, with a line in `game.log`; loading it may take a second.
-* A file that does not compile is left out, with the Lua error in `game.log`.
+`index` fields are zero-based, as `GetTerminusString` and `GetBusstopString` expect, while Lua lists start at 1. So getter field 8 is `strings[9]`:
 
-### Tips
+```lua
+local tour = omsi.duty.tour()
+if tour then
+  for _, trip in ipairs(tour.trips) do
+    local t = omsi.hof.terminus(trip.terminus)
+    if t then
+      print(trip.name, t.index, t.code, t.strings[9] or "", t.strings[10] or "")
+    end
+  end
+end
+```
 
-* Watch `game.log` (in `~/.openomsi/`) while you write a plugin: every `omsi.log` line and
-  every error is there.
-* `OMSI_WATCH_VARS=Velocity,throttle` logs changes of bus variables - useful to find the
-  names a bus uses; the bus's `.osc` scripts list them all, `omsi.vars()` too.
-* Keep `on_frame` light; use `omsi.every`, `omsi.watch` and the events for everything that
-  does not need every frame. Read what you need (`omsi.bus.velocity()`,
-  `omsi.info_value("delay")`) rather than whole tables every frame.
-* `omsi.ui.update` changes one element of a panel; setting the whole panel every frame
-  costs more.
+`GetTTTerminusIndex` reads the current timetable state and takes no trip, so the code above is how to resolve every trip of a tour without changing the duty.
 
-### Reference
+Snapshots are copies: changing them changes nothing in the game. Keep a snapshot for repeated reads instead of copying the depot every frame, and read a new one when the vehicle or its HOF changes. The API cannot open other HOF files or change the depot, needs no permission, and works the same in Lua and WebAssembly.
 
-Every function and event, as the game's API registry describes them (also as JSON in
-[`plugin-api.json`](plugin-api.json), for tools and other plugin languages). `[x]` is an
-optional argument; a permission is what a plugin packed with a list of permissions must have
-declared to call the function (a plain `.lua` file has all except native process access, which always requires player opt-in).
+## Scripts in a vehicle
+
+A vehicle can carry its own scripts, written in Lua or compiled to an `.oop`, so a mod needs no plugin installed by the player. Name them in the vehicle's `.bus` or `.ovh` file, relative to the vehicle's folder:
+
+```text
+[vehicle_script]
+scripts/cab.lua
+
+[vehicle_script]
+scripts/ibis.oop
+```
+
+The scripts start when the vehicle becomes the player's and stop when the player changes to another vehicle or none. They see the same `omsi.*` API as any plugin, and `omsi.var` reads their own bus. In the log they are named `vehicle:<file>`.
+
+A vehicle is content from anywhere, so its scripts get only these permissions: `ui`, `storage`, `vehicle_write` and `audio`. The world, the traffic, the camera, the LAN, UDP and native programs are only for the player's own plugins. An `.oop` that declares more keeps only these four.
+
+OMSI 2 ignores the keyword and runs the vehicle's `.osc` scripts as always. A vehicle can have both.
+
+Scenery objects can also have Lua scripts, named with `[lua_script]` in the `.sco` file. See [Scripts of map objects](OBJECT_SCRIPTS.md).
+
+## Permissions and sandbox
+
+### Permissions
+
+| Permission | Allows |
+| --- | --- |
+| `ui` | panels, messages, notifications, cables, screenshots |
+| `storage` | `omsi.storage` and `omsi.files` |
+| `vehicle_write` | driving the player's bus: variables, triggers, doors, IBIS |
+| `traffic_write` | changing AI traffic, people and other vehicles |
+| `world_write` | time, weather, duty, teleport, game commands |
+| `camera` | moving the camera |
+| `audio` | playing sounds |
+| `network_local` | `omsi.send` (UDP to this computer) |
+| `lan` | sending in a LAN session |
+| `process` | starting native helper programs |
+
+- A plain `.lua` plugin has every permission.
+- A compiled `.oop` has only the permissions it declares. A function that needs another one raises an error the plugin can catch. An unknown permission name grants nothing.
+- Vehicle scripts have only `ui`, `storage`, `vehicle_write` and `audio`.
+- Reading the game needs no permission.
+- `process` also always needs the player's approval for each helper.
+
+`omsi.plugin.permissions()` lists what the plugin has. The [API reference](PLUGIN_API.md) names the permission of each function.
+
+### The Lua sandbox
+
+A Lua plugin gets Lua 5.4 with the safe libraries only: `string`, `table`, `math`, `utf8`, `coroutine`, `require` for its own folder, and `os.clock`, `os.time`, `os.date`, `os.difftime`.
+
+- No `io`, no `os.execute` (not through `require("os")` either), no C modules, no `dofile` or `loadfile`.
+- No binary chunks anywhere. Plugin files, modules and `load` read text only, because Lua does not check compiled code. `string.dump` gives no code.
+- A plugin writes files only in its data folder, and reads only that and its own folder. `..` and absolute paths are refused.
+- It cannot reach the network. `omsi.send` talks only to programs on this computer, on ports from 1024 up.
+- It holds at most 256 MB of memory.
+
+### Errors and limits
+
+- An error in a handler is written to `game.log` and shown on the screen. The other plugins and the game carry on.
+- After 10 errors the plugin is switched off until you change its file or restart the game. `omsi.plugin.errors()` counts them.
+- A call into the plugin that runs longer than 50 ms (an endless loop, say) is stopped and the plugin switched off, with a line in `game.log`. Loading may take up to a second.
+- A file that does not compile is left out, with the Lua error in `game.log`.
+- `omsi.plugin.disable(reason)` switches a plugin off by its own choice.
 
 ### Native helper programs
 
-The interactive game asks for permission when a plugin first tries to start a native helper. The host-owned window initially shows the plugin name, the application's filename and the number of arguments, together with the safety warning and decision descriptions. **Details** reveals the full executable path, plugin entry path, individual arguments and working directory; **Hide details** collapses them again. Each new request starts collapsed, and opening details never approves execution. **Allow once** covers only that launch. **Always allow** stores a hash-bound approval in `~/.openomsi/plugin-process-permissions.json` (on Windows, `%USERPROFILE%\.openomsi\plugin-process-permissions.json`). It applies only to that entry, folder snapshot and helper; changed content asks again. **Deny** blocks all native helpers for that canonical plugin entry for the current game session, even if helper names, content or arguments change. Escape also denies; Enter never automatically approves. The game and other plugins keep running while a request waits. Unload/reload cancels it. Packages must still declare `process`. Dialog text and buttons are translated into every supported interface language; plugin names, file paths and arguments are displayed literally and are never sent to translation.
+`omsi.process.start("bin/helper.exe", args, options)` starts a program from the plugin's own folder. This is the only way out of the sandbox, so the player decides every time.
 
-Embedded hosts remain default-deny unless they explicitly install `ProcessPermissions` through `Plugins::load_with_process_permissions`. The optional `OMSI_PLUGIN_PROCESS_ALLOW` variable names an absolute JSON manifest for preapproved content; ordinary players do not need environment variables or terminal commands. The manifest schema is unchanged, but older full-folder snapshots may need regeneration under the executable-content policy below. All approvals bind the canonical entry path and SHA256, canonical plugin folder, relevant executable-content files (including required modules), and the helper path and SHA256. Remove a saved approval from the user settings file with the game closed to revoke it.
+**The approval window.** The first time a plugin tries to start a helper, the game asks. The window shows the plugin's name, the program's file name and the number of arguments, with a safety warning. **Details** shows the full program path, the plugin's entry file, every argument and the working directory; **Hide details** folds them again. Opening the details never approves anything.
 
-Inspect the plugin and its helpers before granting access. For example, generate a manifest from a dedicated deployed plugin folder with the repository utility:
+| Button | Effect |
+| --- | --- |
+| **Allow once** | this one start |
+| **Always allow** | saved, bound to this plugin's code and this helper |
+| **Deny** | no helpers for this plugin until the game restarts |
 
-```powershell
-cargo run -p omsi-plugin --bin omsi-plugin-grant -- D:\Plugins\example\plugin.lua D:\Plugins\example bin/helper.exe | Set-Content -Encoding utf8 D:\Plugins\process-grants.json
-$env:OMSI_PLUGIN_PROCESS_ALLOW = 'D:\Plugins\process-grants.json'
+**Esc** also denies; **Enter** never approves. The game and other plugins keep running while the window waits. Reloading or unloading the plugin cancels the request. The window is translated into every interface language; plugin names, paths and arguments are shown literally.
+
+**What "Always allow" binds to.** The approval is saved in `~/.openomsi/plugin-process-permissions.json`. It covers the plugin's entry file, its folder's executable content (Lua modules, native `.dll`, `.so`, `.dylib` libraries and, for a folder plugin, the other package files) and the helper, each by SHA-256. Changing any of these, or moving the plugin, asks again. Saved data (`*.save.lua`, non-executable files in `data/` or `*.data/`) is not included, so `omsi.save()`, `omsi.storage` and `omsi.files` do not invalidate it. For a one-file plugin in the top-level `plugins` folder, sibling Lua files are included because `require` can load them; use a folder plugin to keep them apart. To revoke an approval, close the game and remove it from that file.
+
+**Deny** blocks every helper of that plugin for the rest of the session, even if the helper's name, content or arguments change.
+
+**Rules for helpers:**
+
+- `file` must be a relative path inside the plugin's folder. On Windows it must be an `.exe`, not a script.
+- `args` are separate literal strings; there is no shell.
+- `options` may set `cwd` and `env` (overrides; other variables are inherited). `OMSI_PLUGIN_PROCESS_ALLOW` is always removed from the helper's environment.
+- Standard input and output are disconnected.
+- A compiled plugin must also declare the `process` permission.
+- Helpers run with the player's account rights. The hash check is not a sandbox and not a lock: approved code can choose its arguments, working directory and environment.
+
+**Handles and waiting.** `process.start` returns a handle at once; the check and the start happen on background workers. At most 32 starts are queued in the whole game, and each plugin has at most 32 handles (queued and failed ones count). A request that cannot be queued returns `nil` and a reason. One that fails later shows it in `process.status(h).error`, or `nil, "failed", reason` from `exit_code` and `wait`. `pid` is `nil` until the program runs. Requests are limited to 256 arguments, 128 environment overrides and 64 KiB of text.
+
+`process.status` and `process.exit_code` never block. In Lua, `process.wait(h)` suspends the plugin's current top-level callback (the main chunk, an event handler or a timer) until the helper exits, while the game and other plugins go on. Callbacks that arrive meanwhile wait (up to 256). A nested `emit` handler or a hand-made coroutine cannot wait. Call `process.forget(h)` when you are done with a finished handle.
+
+**Cleanup.** Stopping, disabling or reloading the plugin cancels pending waits and ends its helpers.
+
+| System | Cleanup |
+| --- | --- |
+| Windows | a job object ends the helper and its children, even if the game crashes; `forget` also ends leftover children |
+| Linux | the direct helper gets a signal when the game exits; its children do not |
+| macOS | only normal plugin shutdown |
+
+On macOS, a helper unpacked from a ZIP may need its executable bit (`chmod +x /path/to/helper`) and may be blocked by Gatekeeper quarantine. Check the helper and use macOS's normal approval; the game does not remove the quarantine.
+
+**Pre-approval (advanced).** The environment variable `OMSI_PLUGIN_PROCESS_ALLOW` can name an absolute path to a JSON manifest of pre-approved plugins and helpers, for example on a managed machine. Generate it from the deployed plugin with the repository's tool, and keep it outside the plugin folder:
+
+```bash
+cargo run -p omsi-plugin --bin omsi-plugin-grant -- /plugins/example/plugin.lua /plugins/example bin/helper.exe > /plugins/process-grants.json
 ```
 
-When using a manual manifest, save it outside the plugin folder; its hashes must describe the deployed files, not the manifest itself. For `.oop`, use the archive as the entry and its extracted runtime asset folder as the folder (the archive's parent if it has no extracted assets). Multiple entries can be combined in the manifest's `grants` array. Embedded hosts can pass `ProcessGrants` through `Plugins::load_with_process_grants`; `ProcessGrant::capture` creates a snapshot, while `from_paths` approves code without any executable helpers.
+For an `.oop`, the entry is the archive and the folder is its extracted asset folder (or the archive's folder when it has no assets). Several entries go in the manifest's `grants` list. The game still re-checks every hash before each start. Grants from an older full-folder snapshot may need approval once more.
 
-Replacing the entry/helper or changing executable content invalidates the saved grant. Ordinary `*.save.lua` files and non-executable files in top-level `data/` or `*.data/` directories are excluded: `omsi.save()`, `omsi.storage` and `omsi.files` writes therefore preserve consent. Lua modules in those directories remain hashed, since disk `require` can reach Lua modules. Native `.dll`, `.so` (including versioned names) and `.dylib` libraries also remain covered. For a folder plugin, other package files remain covered. For a one-file Lua plugin sharing the top-level plugins folder, the snapshot covers its entry, all disk-importable Lua code, native libraries and the explicitly selected helper; unrelated images, XML/configuration files, other helper executables and saved data are excluded. Sibling Lua code remains a shared trust boundary because `require` can import it; use a dedicated folder plugin to isolate module dependencies. Moving the plugin also requires new approval. Existing approvals created with the older full-folder snapshot may require approval once after updating.
+## Compiled plugins
 
-Load/reload only selects a manifest candidate by its absolute lexical entry/folder paths; Windows path casing and ambiguous DOS (8.3) components are accepted as candidate hints without filesystem I/O. This grants no executable access by itself: the worker resolves the actual canonical entry/folder, so a short-name lookalike at a different location is rejected. Every start freshly verifies executable content on a worker. Relevant symlinks, special files, traversal and absolute helper paths fail closed. Limits are 256 MiB/4096 included files and 4096 traversed directories; excluded data files do not consume the file/byte budget. Denial takes effect immediately for all queued requests from that plugin and survives plugin reload/content changes until the game restarts. After 256 distinct plugin session denials the broker rejects further starts rather than forgetting denials. Remove any manual manifest override and the matching saved approval, then restart to revoke consent. An already running helper is not retroactively stopped by editing its files.
+An `.oop` is to a plugin what a DLL is to a program, but sandboxed. It holds build output, not sources, and one file runs on every system.
 
-`process.start("bin/helper.exe", args, options)` accepts only explicitly approved helpers inside the plugin folder; Windows accepts `.exe` files, not shell scripts. Helpers run with the game account's permissions and inherited environment, except the grant variable is always removed even if an override supplies it. The hash is a check, not a filesystem lock: a concurrent writer can replace a file between verification and the path-based spawn. The checks do not sandbox trusted native code. `cwd` and `env` remain controlled by the approved plugin; overrides such as `PATH`, `LD_PRELOAD` or `DYLD_INSERT_LIBRARIES` can affect executable/library loading. Always allow therefore trusts that code to choose its arguments, working directory and environment, not only the displayed invocation.
+| Kind | Source | In the `.oop` |
+| --- | --- | --- |
+| Lua | `.lua` files | one obfuscated chunk: locals renamed, strings encoded, modules bundled |
+| WebAssembly | usually Rust, built for `wasm32-unknown-unknown` | a stripped module |
 
-`process.start` reserves and returns a plugin-owned handle immediately. Hash verification and OS process creation run on two shared workers, with a global queue of at most 32 starts. The per-plugin limit of 32 handles counts queued and failed requests and is checked before admission. Queue/capacity failure returns nil and a reason immediately. Accepted requests can fail later: `status` has `starting`, `failed` and `error`, and `pid` is nil until launched. `exit_code`/Lua `wait` return `nil, "failed", reason` on preparation failure. Forget failed handles as well as completed children. Requests are limited to 256 arguments, 128 environment overrides and 64 KiB of argument/options text. Polling uses a cached snapshot and never waits for the worker lock. A separate owner thread polls and cleans children even while validation is slow; stop/reload cancels queued work and kills/reaps late launches.
+A compiled Lua plugin behaves as its sources did, through the same API. Compiled Lua *bytecode* is refused, because crafted bytecode could break out of the sandbox.
 
-`process.start` returns a plugin-owned handle; `status` and `exit_code` poll without blocking. Lua `process.wait` suspends the top-level callback while the game and other plugins continue. Nested event callbacks and manual coroutines cannot wait. Stop, disable and reload cancel pending waits and terminate direct children. Windows assigns children atomically to a kill-on-close Job Object, including descendants, so abrupt game termination also cleans them up. Linux sets `PR_SET_PDEATHSIG` for direct children with a parent-race check; descendants are not covered. On macOS only normal plugin lifecycle cleanup is provided. Completed handles retain status until `forget`; the limit is 32 handles per plugin. Windows closes the job on forget, killing any remaining descendants. Plugins without consent keep direct callback dispatch; approved Lua plugins reuse completed callback coroutines.
+A WebAssembly module calls every API function by its name (`openomsi.call("ui.set", ...)`, arguments and results as JSON) and gets the same events, timers and watches. It runs in an interpreter (wasmi) on every system the game runs on. A call into it that runs too long stops the plugin, not the game, and it may use 256 MB of memory. A callback the module's own call causes (its `emit` reaching its own handler) runs right after that call returns.
 
-On macOS, helpers extracted from ZIP files may need their executable bit restored (`chmod +x /absolute/path/to/helper`) and may be blocked by Gatekeeper quarantine. Review the downloaded helper and use macOS's normal security approval flow before running it; the plugin host does not remove quarantine automatically.
+### Build one
 
-<!-- api:begin (written from the registry: OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest) -->
+Get the [openOMSI Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools/releases): a desktop app with an editor, and `oopc`, the same compiler on the command line.
 
-#### The player's bus
+In the app:
 
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.body_frame([section])` | x, y, z, rx, ry, rz, fx, fy, fz, ux, uy, uz | The bus's body now, as the last simulation step left it: its origin (map metres) and its model's axes in the world - right, forward and up, each a unit vector - with the heading, the climb and the lean on the springs in them. A point of the model at (mx, my, mz) is at origin + mx·right + my·forward + mz·up. `section` 1, 2, ... is a section coupled behind (an articulated bus's rear one). Nothing on foot. | 0.2.22 |
-| `omsi.bus.acceleration()` | across, along, up | Its acceleration in its own frame, m/s² without gravity: to the right, forwards, up. | 0.2.22 |
-| `omsi.bus.action(name, [down])` | boolean | A key action of the vehicles (`[vehicles]` of keyboard.cfg: `horn`, `parking_brake_toggle`, `kw_scheinwerfer_toggle`, `blinker_left_set`, `ticket_give`, ...): pressed and let go, or held (`down` true) and let go (`false`). `true` when the bus knows it. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.controls()` | throttle, brake, clutch, steering | What the bus drives with now: the pedals (0 to 1) and the steering (-1 left to 1 right), from the keys, the mouse or a controller. | 0.2.22 |
-| `omsi.bus.cruise()` | number or nil | The speed the cruise control holds, km/h (`nil` while it is off). The player switches it with Num0. | 0.3.55 |
-| `omsi.bus.damage()` | table or nil | `{crashes, last_impact_kj, repair_minutes}`: the bus's crashes, the energy of the last one and how long a repair would take (`nil`: nothing to repair). | 0.2.22 |
-| `omsi.bus.destination()` | name, index | The destination the bus shows and its index in `destinations` (nothing when none). | 0.2.22 |
-| `omsi.bus.destinations()` | list of tables | The destinations of the bus's depot file: `{index, code, name, all_exit}` (`index` from 1, for `set_destination`). | 0.2.22 |
-| `omsi.bus.dirt()` | number or nil | How dirty the bus is, 0 (clean) to 1. | 0.2.22 |
-| `omsi.bus.door(n)` | boolean or nil | Whether door leaf `n` (from 1) is open. | 0.2.22 |
-| `omsi.bus.door_count()` | integer | The doorways the door keys work, front to back. | 0.2.22 |
-| `omsi.bus.doors()` | list of numbers | Each door leaf's position, front to back: 0 shut, 1 open (the scripts' `door_0`, `door_1`, ...). | 0.2.22 |
-| `omsi.bus.doors_open()` | boolean or nil | Whether any door is open (by the passengers' door flags where the bus has them). | 0.2.22 |
-| `omsi.bus.electrics()` | boolean or nil | Whether the bus's electrics are on (the main switch). | 0.2.22 |
-| `omsi.bus.engine()` | running, rpm, electrics | The engine: whether it runs, its rpm (where the bus shows one) and whether the electrics are on. | 0.2.22 |
-| `omsi.bus.engine_running()` | boolean or nil | Whether the engine runs. | 0.2.22 |
-| `omsi.bus.file()` | string or nil | The bus's `.bus` file, relative to the game folder. | 0.2.22 |
-| `omsi.bus.fuel()` | number or nil | The fuel in the tank, litres (the scripts' `engine_tank_content`). | 0.2.22 |
-| `omsi.bus.gear()` | integer or nil | The gear engaged (-1 reverse, 0 neutral), where the bus shows one. | 0.2.22 |
-| `omsi.bus.get_strings([names])` | table | The same for string variables. | 0.2.22 |
-| `omsi.bus.get_vars([names])` | table | Many script variables at once: a table name -> value of the names given, or of every variable of the bus without a list. | 0.2.22 |
-| `omsi.bus.handbrake()` | boolean or nil | Whether the parking brake is on. | 0.2.22 |
-| `omsi.bus.headlights()` | integer or nil | The headlights: 0 off, 1 side lights, 2 dipped, 3 high beam. | 0.2.22 |
-| `omsi.bus.horn()` | boolean or nil | Whether the horn sounds. | 0.2.22 |
-| `omsi.bus.indicator()` | string or nil | The indicators: `"off"`, `"left"`, `"right"` or `"hazard"`. | 0.2.22 |
-| `omsi.bus.interior_light()` | number or nil | The passenger room's light, 0 (off) to 1. | 0.2.22 |
-| `omsi.bus.km_today()` | number or nil | Kilometres driven this session (as the personnel file counts them). | 0.2.22 |
-| `omsi.bus.kneeling()` | boolean or nil | Whether the bus kneels. | 0.2.22 |
-| `omsi.bus.mass()` | number or nil | The bus's mass in kg. | 0.2.22 |
-| `omsi.bus.number()` | string or nil | The bus's fleet number. | 0.2.22 |
-| `omsi.bus.odometer()` | number or nil | The bus's odometer in km. | 0.2.22 |
-| `omsi.bus.orientation()` | heading, pitch, bank | Heading (degrees clockwise from north), pitch (nose up positive) and bank (right side down positive). | 0.2.22 |
-| `omsi.bus.passengers()` | total, seated, standing | The people aboard the bus: all, sitting, standing. | 0.2.22 |
-| `omsi.bus.play_sound(event)` | boolean | Plays the bus's own sound of this event (a trigger name of its sound files, `ev_...`). *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.retarder()` | number or nil | The retarder's step, where the bus has one. | 0.2.22 |
-| `omsi.bus.rpm()` | number or nil | The engine's revolutions per minute. | 0.2.22 |
-| `omsi.bus.sales()` | tickets, money | Tickets sold this session and the money taken (the game knows no currency). | 0.2.22 |
-| `omsi.bus.set_cruise([kmh])` | boolean | Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). Like Num0, it is refused (false) while the bus goes slower than 5 km/h. It works the throttle and the brake the bus's scripts read, which a plugin's `set_var("Throttle")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held. *Permission: `vehicle_write`.* | 0.3.55 |
-| `omsi.bus.set_destination(index)` | boolean | Shows destination `index` (from 1, as `destinations` lists them). *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.set_indicator(state)` | boolean | Sets the indicators: `"off"`, `"left"`, `"right"` or `"hazard"`. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.set_interior_light(on)` | boolean | Switches the passenger room's light on or off. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.set_line(line)` | boolean | Types a line (route) into the bus's IBIS, as the player would. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.set_vars(values)` | integer | Sets many script variables at once (a table name -> number); how many the bus has. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.shift(gear)` | boolean | Puts a manual gearbox's lever in a gear (-1 reverse, 0 neutral). *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.sound_horn(down)` | boolean | Holds the horn (`true`) or lets it go. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.start_up()` | string or nil | Starts the bus up the way Shift+U does (the battery, the electrics, the engine) - or shuts a running bus down; what the game says it does. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.state()` | table or nil | Everything a dashboard shows, in one table: `speed` (km/h, signed), `gear`, `engine` (running), `rpm`, `electrics`, `doors_open`, `indicator`, `headlights`, `dirt`, `passengers`, `odometer`, `km_today`, `throttle`, `brake`, `clutch`, `steering`, `fuel`, `handbrake`, `horn`, `stop_request` (a key is `nil` where the bus does not have it). | 0.2.22 |
-| `omsi.bus.steering_angle()` | angle, max | The front wheels' angle and the most they turn, degrees (right positive). | 0.2.22 |
-| `omsi.bus.stop_brake()` | boolean or nil | Whether the stop brake (the door brake) holds the bus. | 0.2.22 |
-| `omsi.bus.stop_requested()` | boolean or nil | Whether a passenger has asked to stop. | 0.2.22 |
-| `omsi.bus.ticket_request()` | name, price | The ticket the passenger at the cash desk asks for (nothing when nobody asks). | 0.2.22 |
-| `omsi.bus.tickets()` | list of tables | The tickets the map sells: `{name, price, day_ticket}`. | 0.2.22 |
-| `omsi.bus.toggle_door([n])` | boolean | Presses the key of doorway `n` (from 1; 0 or none: all doors), as the player would. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.toggle_handbrake()` | boolean | Puts the parking brake on or off, as its key does. *Permission: `vehicle_write`.* | 0.2.22 |
-| `omsi.bus.trailers()` | integer or nil | Parts coupled behind the bus (an articulated bus's rear counts). | 0.2.22 |
-| `omsi.bus.triggers()` | list of strings | The names of the bus's script triggers (for `trigger`, `press`). | 0.2.22 |
-| `omsi.bus.velocity()` | number or nil | The bus's speed in km/h, negative backwards. | 0.2.22 |
-| `omsi.bus.velocity_vector()` | x, y, z | Its velocity in the world, m/s (x east, y north, z up). | 0.2.22 |
-| `omsi.bus.wheels()` | list of tables | Each wheel: `{axle, side, rpm, radius, suspension, driven}` (`side` 0 left, 1 right; `suspension` the spring's travel). | 0.2.22 |
-| `omsi.distance(x, y)` | number or nil | Metres from the bus to a map point, or `nil` on foot. | 0.1.10 |
-| `omsi.has_vehicle()` | boolean | `true` while the player drives a vehicle. | 0.1.5 |
-| `omsi.mesh_point(mesh, x, y, z, [section])` | x, y, z | Where a point of one of the bus's meshes is now, in map metres: `mesh` names the mesh's file (`"sht_bashmak.o3d"`, or a part of its path), `x, y, z` is the point in the model's frame (x right, y forward, z up) as the mesh stands at rest; its animations and the body's lean move it. `section` (0, the default) looks in a section coupled behind instead (1, 2, ...: an articulated bus's rear part), its point in that section's model frame. For a plugin that lines a part of the bus up with something outside it. Nothing when the bus or the section has no such mesh, or `mesh` is empty. | 0.2.22 |
-| `omsi.position()` | x, y, z, heading | Where the bus is: map metres (x east, y north, z up) and its heading in degrees clockwise from north; nothing on foot. | 0.1.10 |
-| `omsi.press(name)` | nil | Holds a key of the bus down: fires the trigger `name` (let it go with `release`). *Permission: `vehicle_write`.* | 0.1.5 |
-| `omsi.release(name)` | nil | Lets a key go: fires `<name>_off`. *Permission: `vehicle_write`.* | 0.1.5 |
-| `omsi.set_str(name, text)` | boolean | Sets a string variable; `true` when the bus has it. *Permission: `vehicle_write`.* | 0.1.5 |
-| `omsi.set_var(name, value)` | boolean | Sets a script variable; `true` when the bus has that variable. *Permission: `vehicle_write`.* | 0.1.5 |
-| `omsi.speed()` | number | The bus's speed in km/h, forwards or backwards (0 on foot). | 0.1.10 |
-| `omsi.str(name)` | string or nil | A string variable of the bus's scripts (`IBIS_terminus_name`). | 0.1.5 |
-| `omsi.sys(name)` | number or nil | A system variable of the scripts: `Time`, `Day`, `Weather_Temperature`, `SunAlt`, ... (read only). | 0.1.5 |
-| `omsi.trigger(name)` | nil | A key press of the bus: fires the trigger, then `<name>_off`. *Permission: `vehicle_write`.* | 0.1.5 |
-| `omsi.var(name)` | number or nil | A script variable of the bus (`Velocity`, `elec_busbar_main`, the names the `.osc` files and `.opl` lists use); `nil` without a bus or for a name it does not have. | 0.1.5 |
-| `omsi.vars([kind])` | list of strings | The names of every variable of the bus's scripts, or of every string variable with `"str"`. | 0.1.10 |
-| `omsi.vehicle()` | string or nil | The vehicle's name (manufacturer and type), or `nil` on foot. | 0.1.5 |
-| `omsi.vehicle_manufacturer()` | string or nil | The manufacturer part of the vehicle's name, as its `[friendlyname]` has it (`"Solaris III Gen"`). | 0.2.21 |
-| `omsi.vehicle_model()` | string or nil | The model part of the vehicle's name (`"Urbino 10 / 2D"`). | 0.2.21 |
+1. Press **New plugin**, give it a name, choose Lua or Rust, and press **Create plugin**.
+2. Press **Run in openOMSI**. The first time, the app asks where openOMSI is. It copies the plugin into the game's `plugins` folder and starts the game. With **Live** on, every save reaches the running game.
+3. On the **Details** page, tick the permissions the plugin needs. **Match my code** ticks exactly what the code uses.
+4. On **Build and publish**, choose whether to sign, and press **Build**. The result is one `.oop` file.
 
-#### Game data getters
+From a terminal:
 
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.game.queries()` | list of tables | Read-only game data getters: `{name, args = {{name, type}, ...}, result}`. Names and zero-based indices follow the M.V. getter names, but plugins read the game data directly without executing scripts. `rgba` means four results in the range 0–255. | 0.3.40 |
-| `omsi.game.query(name, [args], [object])` | value(s), or nil and reason | Read a getter listed by `game.queries` from the player's vehicle's HOF, timetable, passengers, tickets, radio, fonts or textures. Arguments are an ordered list (empty by default). No script callback is invoked. `STReadPixel` returns RGBA without changing the bus's drawing colour. Supply a loaded scripted map object's id as `object` to read its data, including `GetArrBus*` on departure boards, without needing a player vehicle. Object ids can be found through `map.objects_near`. Without `object`, reads use the player's vehicle. Unknown names, mutating operations and invalid arguments raise an error; no vehicle returns nil and a reason. | 0.3.40 |
-
-#### The loaded HOF depot file
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.hof.busstop(identifier)` | table or nil | The first bus stop whose `identifier` exactly matches the supplied HOF stop identifier. Returns `{index, identifier, strings}`; `index` is zero-based for `GetBusstopString` and `strings[1]` is getter field 0. Returns nil without a vehicle, HOF or match. | 0.3.40 |
-| `omsi.hof.get()` | table or nil | A snapshot of every parsed field of the player's loaded HOF: `path`, `name`, `service_trip`, `global_strings`, `string_count_terminus`, `string_count_busstop`, `termini`, `bus_stops`, `info_trips`, `info_busstop_lists`, `info_busstops`. Records include their zero-based `index`; Lua arrays (including strings) start at 1. Returns nil without a vehicle or HOF. No filesystem access or scripts are involved; retain the snapshot until the vehicle or HOF changes. | 0.3.40 |
-| `omsi.hof.terminus(identifier)` | table or nil | The first terminus whose internal `identifier` exactly matches the supplied timetable terminus, using the same case-sensitive comparison as `GetTTTerminusIndex`. Returns `{index, code, identifier, terminus_stop, all_exit, strings}`; `index` is zero-based for `GetTerminusString`, `strings[1]` is getter field 0, and `terminus_stop` is nil when absent. Returns nil without a vehicle, HOF or match; does not change the duty or destination. | 0.3.40 |
-
-#### Duty and timetable
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.duty.active()` | boolean | Whether the player drives a duty (a line and tour of the timetable). | 0.2.22 |
-| `omsi.duty.at_stop()` | boolean | Whether the bus stands at the next stop (within 25 m of it). | 0.2.22 |
-| `omsi.duty.delay()` | number or nil | Seconds the bus is late (early negative), worked out between the stops as the game's timetable does. | 0.2.22 |
-| `omsi.duty.finish()` | boolean | Gives the duty up (the bus drives on without a timetable); `true` when there was one. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.duty.get()` | table or nil | The duty now: `line`, `tour`, `trip` (its number in the duty, from 1), `trips`, `trip_name`, `terminus`, `departure`, `arrival`, `stops`, `next_stop` and `previous_stop` (each a stop: `{number, name, id, arrival, departure, stops, x, y, z}`), `at_stop`, `trip_done`, `delay` (seconds, late positive). | 0.2.22 |
-| `omsi.duty.next_stop()` | table or nil | The next stop of the trip (as `duty.stops` gives them). | 0.2.22 |
-| `omsi.duty.set_auto_ibis(on)` | boolean | Whether the game types the duty into the bus's IBIS by itself - line, route, destination and the stop, at Shift+U and `--autostart` and again as each trip begins (on as a bus is taken). Off, the driver types them, or the plugin with `duty.type_ibis`. For the bus the player drives now, and while the plugin runs: when it stops or is switched off the game types the IBIS again, unless another plugin still leaves it to the driver. Off lasts for that bus only: after a change of vehicle (the `vehicle` event) the game types the new one's IBIS again, so a plugin that leaves it to the driver calls `duty.set_auto_ibis(false)` again there. `true` when there is a bus. *Permission: `vehicle_write`.* | 0.3.41 |
-| `omsi.duty.set_closed_stops(stops, [via])` | boolean | Closes stops of the duty's route for today - a diversion, roadworks: a list of their names (on every trip of the duty), and the way round them (`via`). The navigator strikes them through and shows `via` for the next one; the bus does not call there, and the duty goes on past them without counting them missed (no `stops_skipped`). Each call replaces the list (64 names at most), an empty one opens them all again; a duty taken anew (`duty.start`) starts with none. `duty.stops` marks them `closed`. `true` when there is a duty. *Permission: `world_write`.* | 0.3.36 |
-| `omsi.duty.skip_stop()` | string or nil | Skips the next stop (the duty goes on to the one after); the name of the stop skipped. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.duty.skip_to(stop)` | boolean | Makes stop `stop` (from 1) of the trip the next one, forwards or back. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.duty.start(line, tour, [trip], [stop])` | true, or false and the reason | Takes a duty, as the game menu's "Line and tour" does: a line and tour of `timetable.lines`, its trip (from 1 in the order they leave; default the first) and the stop to start at (from 1 among those the trip calls at; default the first). The bus stays where it is. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.duty.stops()` | list of tables | The stops of the trip now: `{number, name, id, arrival, departure, stops, closed, passed, x, y, z}` (`stops` false: the bus passes it; `closed`: closed today, `duty.set_closed_stops`; `x, y, z` where the stop's place is known; `id` the map's object id). | 0.2.22 |
-| `omsi.duty.tour()` | table or nil | The complete source tour of the selected duty, even when only one trip was selected. Same structure as `timetable.tour`; times align with the active duty's service day, with `time_offset` seconds applied to all trips and stops. | 0.3.40 |
-| `omsi.duty.trip_stops(trip)` | list of tables or nil | The stops of a trip of the duty (from 1), as `duty.stops` gives them. | 0.2.22 |
-| `omsi.duty.trips()` | list of tables | The trips of the duty: `{number, name, line, terminus, departure, arrival, stops}`. | 0.2.22 |
-| `omsi.duty.type_ibis()` | boolean | Types the trip under way into the bus's IBIS now - line, route, destination and the stop the bus is at - as Shift+U does (`bus.set_line` types the line only); with `duty.set_auto_ibis` on, the next trips follow by themselves. `true` when there is a duty and a bus. *Permission: `vehicle_write`.* | 0.3.41 |
-| `omsi.timetable.buses()` | list of tables | The timetable buses of the AI on the road: `{id, line, tour, trip, terminus, departure, next_stop_id, at_stop, trip_done, delay, x, y, number}`. | 0.2.22 |
-| `omsi.timetable.lines()` | list of tables | The map's lines: `{name, user_allowed, tours}`, each tour `{number, today, trips}` (`today`: it runs on the game's date). | 0.2.22 |
-| `omsi.timetable.stop_names()` | list of tables | The stops the timetable knows: `{id, name}` (`id` the map's object id). | 0.2.22 |
-| `omsi.timetable.stops(line, tour, [trip])` | list of tables | The stops of a tour's trips (or of its trip `trip`, from 1 in the order they leave) that the bus calls at: `{trip, station, name, departure}`. | 0.2.22 |
-| `omsi.timetable.tour(line, tour)` | table, or nil and reason | Read a full tour without taking it: `{line, number, ai_group, extra, today, time_offset, trips}`. Each trip has `number`, `source_number` (both from 1), `name`, `line`, `terminus`, `track`, `reverse`, `profile_index` (from 0), `profile` (`name`, `factor`), `departure`, `arrival`, and all `stops` (`id`, `name`, `arrival`, `departure`, `stops`, optional `x,y,z`). Times are seconds from service-day midnight and can exceed 86400; passing stops are retained. Unknown trip references are skipped, retaining their source numbers. No AI vehicle is reserved. | 0.3.40 |
-
-#### The map
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.map.entrypoints()` | list of tables | The map's start points: `{index, name, x, y, z, heading}` (`index` from 1; the place where the game has read its tile). | 0.2.22 |
-| `omsi.map.ground(x, y)` | number or nil | The height of the ground (the road where there is one, else the terrain) at a map point, where its tile is loaded. | 0.2.22 |
-| `omsi.map.info()` | table or nil | `{name, friendly_name, path, left_hand_traffic, tile_size}`: the map's names, its global.cfg and the side it drives on. | 0.2.22 |
-| `omsi.map.lane(x, y)` | table or nil | The traffic lane nearest to a map point: `{index, distance, speed_limit, name, traffic_light}`. | 0.2.22 |
-| `omsi.map.name()` | string or nil | The map's name (its folder's). | 0.2.22 |
-| `omsi.map.object(id)` | x, y, z, heading | Where a map object is, by its id (a stop's id of the timetable, say); nothing when the game has not read its tile. | 0.2.22 |
-| `omsi.map.objects_near(x, y, [radius])` | list of tables | The map objects within `radius` m (default 50, at most 2000 of them, nearest first): `{id, x, y, z, heading, distance}`. | 0.2.22 |
-| `omsi.map.place_on_road(x, y)` | boolean | Puts the player's bus on the street nearest to a map point (within 300 m), along it. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.map.speed_limit()` | number or nil | The speed limit (km/h) of the lane the player's bus drives on (`nil` off the lanes). | 0.2.22 |
-| `omsi.map.stops()` | list of tables | The bus stops of the tiles loaded (around the camera): `{id, name, x, y, z, heading}`. | 0.2.22 |
-| `omsi.map.teleport(x, y, [z], [heading])` | boolean | Moves the player's bus to a map point (z none: onto the highest ground there) facing `heading` (default north), as the game menu's move does; the `service` event says `teleport`. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.map.teleport_to(index)` | boolean | Moves the player's bus to start point `index` (from 1, as `map.entrypoints` lists them). *Permission: `world_write`.* | 0.2.22 |
-| `omsi.map.terrain(x, y)` | number or nil | The terrain's height alone at a map point. | 0.2.22 |
-| `omsi.map.tile()` | tile_x, tile_y | The tile the player's bus is on (nothing on foot). | 0.2.22 |
-| `omsi.map.tile_at(x, y)` | tile_x, tile_y, local_x, local_y | The tile of a map point and the metres in it (x east, y north). | 0.2.22 |
-| `omsi.map.tiles()` | list of tables | The map's tiles: `{x, y, file, loaded}` (numbered as global.cfg's `[map]` list). | 0.2.22 |
-| `omsi.map.to_world(tile_x, tile_y, local_x, local_y)` | x, y | A place given by its tile and the metres in it, in map coordinates. | 0.2.22 |
-
-#### Scenery objects (for scripts a .sco names)
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.object.info(id)` | table | `{id, type, x, y, z, heading, active, distance}` of an object: its type (the `.sco` file's name), where it stands (map coordinates), the way it faces (compass degrees), whether it is in the script's range and how far the listener is from it (m). | 0.2.22 |
-| `omsi.object.list()` | list of numbers | The ids of the objects this script drives that are loaded now (those within its range are active). | 0.2.22 |
-| `omsi.object.meshes(id)` | list of strings | The mesh files of an object, in the order the scripts number them from 1. | 0.2.22 |
-| `omsi.object.set_mesh(id, mesh, [transform])` | boolean | Moves, turns and scales one mesh of an object over what its animations do. `mesh` is its number from 1 or its file name; `transform` is `{x, y, z, rx, ry, rz, sx, sy, sz, px, py, pz}`: a move in metres, a turn about the x, y and z axes in degrees (z up, positive counter-clockwise seen from above), a scale, all about the point (px, py, pz) of the mesh, every key optional. Without a table the mesh is as the model has it. Objects with a script are redrawn every frame; moving a mesh costs nothing more. | 0.2.22 |
-| `omsi.object.set_str(id, name, value)` | boolean | Sets a string variable of an object (a display's text, a texture's name). | 0.2.22 |
-| `omsi.object.set_var(id, name, value)` | boolean | Sets a script variable of an object, which its `[newanim]` animations, `[visible]` conditions, materials, lamps and sounds read; false when it has none of that name. | 0.2.22 |
-| `omsi.object.set_vars(id, values)` | integer | Sets many variables of an object at once (a table name -> number); how many it has. | 0.2.22 |
-| `omsi.object.set_visible(id, mesh, [visible])` | boolean | Shows or hides one mesh of an object whatever its `[visible]` conditions say; without `visible` the conditions decide again. | 0.2.22 |
-| `omsi.object.str(id, name)` | string or nil | A string variable of an object. | 0.2.22 |
-| `omsi.object.trigger(id, name)` | boolean | Runs a `{trigger:name}` of the object's own `.osc` script; false when it has none. | 0.2.22 |
-| `omsi.object.var(id, name)` | number or nil | A script variable of an object (those its `[varnamelist]` declares, and the builtin ones: `Switch`, `InUse`, `NightlightA` ...); `nil` when it has none of that name. | 0.2.22 |
-
-#### AI traffic
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.other_body_frame(id, [section])` | x, y, z, rx, ry, rz, fx, fy, fz, ux, uy, uz | `body_frame` of one of `others`: its body now, origin and axes. | 0.2.22 |
-| `omsi.other_mesh_point(id, mesh, x, y, z, [section])` | x, y, z | `mesh_point` of one of `others`: where a point of one of its meshes (or, with `section`, of one of its coupled sections') is now. | 0.2.22 |
-| `omsi.other_var(id, name)` | number or nil | A script variable of one of `others`, or `nil`. | 0.2.21 |
-| `omsi.others([radius])` | list of tables | The other vehicles within `radius` m of the bus (default 300): each `{id, kind, name, x, y, z, heading}`, `kind` being `"ai"` (the traffic) or `"player"` (another player's bus in a LAN game); empty on foot. | 0.2.21 |
-| `omsi.set_other_var(id, name, value)` | boolean | Sets a script variable of one of `others`; `true` when that vehicle has it. An AI vehicle keeps it until its scripts write it again; another player's bus takes its values from the network again. *Permission: `traffic_write`.* | 0.2.21 |
-| `omsi.traffic.ahead([reach])` | table or nil | The AI vehicle ahead of the player's bus within `reach` m (default 100) and 20° of its heading, with its `distance`: for a distance warning or a cruise control. | 0.2.22 |
-| `omsi.traffic.clear()` | integer or nil | Takes every car not running to a timetable off the road; how many went. *Permission: `traffic_write`.* | 0.2.22 |
-| `omsi.traffic.counts()` | driving, buses, asleep, parked | The AI vehicles: driving, timetable buses among them, asleep out of range, parked. | 0.2.22 |
-| `omsi.traffic.density()` | cars, share | How many cars the traffic keeps around the camera, and the share of them that do not run to a timetable (0 to 1). | 0.2.22 |
-| `omsi.traffic.get(id)` | table or nil | One AI vehicle by its id, as `traffic.list` gives them. | 0.2.22 |
-| `omsi.traffic.light_ahead([reach])` | table or nil | The traffic light the player's bus comes to within `reach` m (default 80): `{aspect, change_in, distance}` - `aspect` `"red"`, `"red_yellow"`, `"green"`, `"green_yellow"`, `"yellow"` or `"dark"`, `change_in` the seconds to its next change. | 0.2.22 |
-| `omsi.traffic.list([radius])` | list of tables | The AI vehicles (within `radius` m of the player's bus, when given): `{id, kind, name, x, y, z, heading, speed, max_speed, waiting_for, standing, braking, blinker, line, bounding_box, distance}`. `kind`: `"car"`, `"taxi"`, `"bus"`, `"truck"`, `"timetable_bus"`, `"tram"`, `"bicycle"`; `waiting_for` why it waits or slows (`"lead"`, `"light"`, `"yield"`, `"people"`, ...); `standing` the seconds it has stood; `bounding_box` the body's `[boundingbox]` as `{width, length, height, cx, cy, cz, heading, default}` (metres, the .bus/.ovh order; `cx`/`cy`/`cz` the box centre's offset from the vehicle's x, y, z along the body's right, forward and up, which follow `heading`; `default` when the file gives no box and the collision code's 2.5 x 12 x 3 m is used). | 0.2.22 |
-| `omsi.traffic.nearest([kind])` | table or nil | The AI vehicle nearest to the player's bus (of that `kind`, when given), with its `distance`. | 0.2.22 |
-| `omsi.traffic.remove(id)` | boolean | Takes an AI vehicle off the road (a timetable bus too: its timetable forgets it); its passengers get out. *Permission: `traffic_write`.* | 0.2.22 |
-| `omsi.traffic.set_density(cars, [share])` | boolean | Changes the traffic's amount (as the game menu's slider: 0 to 500 cars) and, when given, the share not running to a timetable; it fills up or thins out over the next seconds. *Permission: `traffic_write`.* | 0.2.22 |
-
-#### People
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.people.counts()` | walking, waiting, riding | The people of the map near the camera: walking, waiting at stops, riding a bus. | 0.2.22 |
-| `omsi.people.density()` | number or nil | The people setting: 0 to 3, 1 the map's own amount. | 0.2.22 |
-| `omsi.people.get(id)` | table or nil | One person by id, as `people.list` gives them, and more: `stop_name` (the timetable's name of the stop they wait or waited at), `ticket` (the name of the ticket they ask for), `ticket_kind` (`"none"`, `"stamp"`, `"buy"`), `ticket_index` (the ticket pack's, from 1; 0 none), `ticket_price`, `ticket_voice`, `ticket_by` (the plugin that changed it), `ticket_asked` (asked for at the cash desk already), `tag` (`people.set_ticket`'s), `age`, `model` (the `.hum` file), `voice` (its voice folder). `people.list` gives the same fields. | 0.3 |
-| `omsi.people.list([radius])` | list of tables | The people (within `radius` m of the player's bus, when given): `{id, x, y, z, state, aboard, ai_bus, stop, destination, ticket, complaint}`. `state`: `"strolling"`, `"idle"`, `"standing"`, `"waiting"`, `"to_bus"`, `"boarding"`, `"riding"`, `"seated"`, `"leaving"`, `"to_stop"`; `aboard` in the player's bus; `complaint` 0 to 3 (3: they leave); and the fields `people.get` describes. | 0.2.22 |
-| `omsi.people.set_density(value)` | boolean | Changes the people setting (0 to 3). *Permission: `traffic_write`.* | 0.2.22 |
-| `omsi.people.set_ticket(id, ticket)` | true, or false and the reason | Changes the ticket of a passenger boarding the player's bus (the `passenger_ticket` event names them): `{kind, ticket, name, price, payment, voice, tag}`, each optional. `kind` (`"none"`: a pass, `"stamp"`, `"buy"`) can only be changed until they are in the bus; `ticket` selects another ticket from the pack (starting at 1, with its name and price; a buyer must have a ticket: 0 is refused, and a buyer created without `ticket` gets the pack's ticket for their age). `name` and `price` set the ticket name and ticket price, respectively, until the passenger has asked at the cash desk. `payment` specifies the amount of money handed over for a ticket purchase; it does not change the ticket price and is raised to at least the ticket price. It must be set before the passenger reaches the cash desk. If the currency's denominations cannot represent the requested amount exactly, the amount handed over may be higher. `voice` selects a line from the passenger's voice folder to use instead of `Ticket_<n>_<k>` (`"Zone_4"` selects `Zone_4.wav`; if the file is missing, the usual line is used; `""` also falls back to the usual line), until the passenger has asked at the cash desk. `tag` is plugin-defined text kept with the person (`people.get`), and can be set at any time. Returns `false` and the reason when nothing changed. *Permission: `traffic_write`.* | 0.3 |
-| `omsi.people.stops()` | list of tables | The stops near the camera where people wait: `{id, name, x, y, z, waiting}`. | 0.2.22 |
-| `omsi.people.waiting(stop)` | integer | How many people wait at a stop (its map object id). | 0.2.22 |
-
-#### Time
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.clock()` | string | The game's time of day as `"HH:MM:SS"`. | 0.1.10 |
-| `omsi.world.date()` | table or nil | The game's date: `{year, month, day, weekday, day_of_year}` (`weekday` 1 Monday to 7 Sunday). | 0.2.22 |
-| `omsi.world.pause()` | boolean | Pauses the game, as P does (not in a LAN game). The plugins stand still with it: the player resumes it. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.world.paused()` | boolean | Whether the game stands still (a plugin hears `pause` and runs no more until `resume`). | 0.2.22 |
-| `omsi.world.play_time()` | number or nil | Seconds played this session (game time, never wraps). | 0.2.22 |
-| `omsi.world.season()` | folder, snow | The season's texture folder (`nil`: the base textures) and whether snow lies. | 0.2.22 |
-| `omsi.world.set_date(year, month, day)` | boolean | Sets the game's date (the season's textures follow). *Permission: `world_write`.* | 0.2.22 |
-| `omsi.world.set_time(time)` | boolean | Sets the time of day: seconds since midnight or `"HH:MM"` / `"HH:MM:SS"`, as the game menu's clock does (the timetable starts again after a jump of minutes). Not in a LAN game as a client, nor while the clock follows the computer's. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.world.set_time_speed(factor)` | boolean | Sets how much faster the clock runs (1 to 30; not in a LAN game). *Permission: `world_write`.* | 0.2.22 |
-| `omsi.world.sun_altitude()` | number or nil | The sun's height over the horizon, degrees. | 0.2.22 |
-| `omsi.world.time()` | number or nil | The game's time of day, seconds since midnight. | 0.2.22 |
-| `omsi.world.time_speed()` | number or nil | How much faster than real time the game's clock runs (1 to 30). | 0.2.22 |
-
-#### Weather
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.weather.get()` | table or nil | The weather now: `{name, visibility (m), wind_direction (°), wind_speed (m/s), temperature (°C), humidity (%), absolute_humidity (g/m³), pressure (hPa), clouds, cloud_base (m), precipitation ("none", "rain", "snow"), precipitation_rate (0..1), snow_cover, snow_on_road, wetness (the roads, 0..1), changing, locked}` (`locked`: it follows a real weather station and cannot be set). | 0.2.22 |
-| `omsi.weather.precipitation()` | kind, rate | `"none"`, `"rain"` or `"snow"`, and how hard (0 to 1). | 0.2.22 |
-| `omsi.weather.preset(file, [seconds])` | true, or false and the reason | Changes to a weather file (as `weather.presets` names it; `""`: the map's own, changing with the day) over `seconds` (default 1). *Permission: `world_write`.* | 0.2.22 |
-| `omsi.weather.presets()` | list of tables | The weather files installed: `{file, name}`. | 0.2.22 |
-| `omsi.weather.set(values)` | true, or false and the reason | Changes the weather as the game menu's sliders do; any of `visibility`, `wind_direction`, `wind_speed`, `temperature`, `pressure`, `clouds` (`"-1"` none, `"Cumulus 1"`..`"3"`, `"Overcast 1"`), `cloud_base`, `precipitation` (`"none"`, `"rain"`, `"snow"`), `precipitation_rate` (0..1), `snow_cover`, `snow_on_road`, `wetness`; the rest stays. Held to the game's ranges; refused in a LAN game as a client or while the weather follows a station. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.weather.temperature()` | number or nil | The air temperature, °C. | 0.2.22 |
-| `omsi.weather.visibility()` | number or nil | How far one sees, metres. | 0.2.22 |
-| `omsi.weather.wetness()` | number or nil | How wet the roads are, 0 (dry) to 1. | 0.2.22 |
-| `omsi.weather.wind()` | direction, speed | The wind: where it comes from (degrees) and its speed (m/s). | 0.2.22 |
-
-#### Camera
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.camera.fov()` | number or nil | Its vertical field of view, degrees. | 0.2.22 |
-| `omsi.camera.get()` | table or nil | The camera: `{view, x, y, z, yaw, pitch, roll, fov, in_cab, zoom, look_yaw, look_pitch, width, height}` - map metres, degrees (yaw clockwise from north, pitch up positive), the vertical field of view, the picture's pixels. | 0.2.22 |
-| `omsi.camera.in_cab()` | boolean | Whether the camera is in the player's own bus (driver or passenger view). | 0.2.22 |
-| `omsi.camera.look(yaw, pitch)` | boolean | Turns the head (driver, passenger view) or swings the outside camera round the bus: degrees from straight ahead. *Permission: `camera`.* | 0.2.22 |
-| `omsi.camera.orientation()` | yaw, pitch, roll | Where it looks, degrees. | 0.2.22 |
-| `omsi.camera.position()` | x, y, z | Where the camera is (map metres). | 0.2.22 |
-| `omsi.camera.project(x, y, z)` | screen_x, screen_y | Where a map point is seen on the screen, in the panels' pixels (as `ui.screen` measures them); nothing when it is behind the camera. For labels over buses, stops, people. | 0.2.22 |
-| `omsi.camera.set_free(x, y, z, [yaw], [pitch])` | boolean | Puts the free camera at a map point looking along `yaw` and `pitch` (degrees); the view becomes `"free"` (the player moves it on from there). *Permission: `camera`.* | 0.2.22 |
-| `omsi.camera.set_view(view)` | boolean | Switches the view: `"driver"`, `"pax"`, `"outside"`, `"map"` (the free camera above the bus), `"ego"` (walking), or a `view_*` action of keyboard.cfg. *Permission: `camera`.* | 0.2.22 |
-| `omsi.camera.set_zoom(zoom)` | boolean | The zoom of the view now (its field of view times this, 0.2 to 3). *Permission: `camera`.* | 0.2.22 |
-| `omsi.camera.view()` | string or nil | The view: `"driver"`, `"pax"`, `"outside"`, `"free"` or `"foot"`. | 0.2.22 |
-
-#### Input
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.input.bindings([vehicles])` | list of tables | The key bindings: `{action, key}` of the game's keys, or the vehicles' with `true` (`key` as the game writes it: `"Ctrl+D"`). | 0.2.22 |
-| `omsi.input.controllers()` | list of tables | The steering wheels, pedals, joysticks and gamepads: `{name, gamepad, axes, buttons}` (`axes` each axis's value; `buttons` how many it has - the `controller_button` event tells presses). | 0.2.22 |
-| `omsi.input.hotkey(keys, fn)` | integer id | Runs `fn(key)` when a key combination is pressed: `"F10"`, `"Ctrl+KeyH"`, `"Shift+Alt+Digit1"` (modifiers exact: `"KeyH"` is not `Ctrl+KeyH`). The keys still reach the bus. `cancel(id)` removes it. | 0.2.22 |
-| `omsi.input.key_down(key)` | boolean | Whether a key is held now (winit's names, as the `key` event: `"KeyW"`, `"ShiftLeft"`, `"F5"`). | 0.2.22 |
-| `omsi.input.keys_down()` | list of strings | Every key held now. | 0.2.22 |
-| `omsi.input.mouse()` | x, y, left, right, middle | The mouse: where it is in the panels' pixels and its buttons held. | 0.2.22 |
-
-#### Sound
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.audio.play(file, [opts])` | integer id or nil, reason | Plays a WAV file of the plugin's folder. `opts`: `volume` (1), `pitch` (1), `loop`, `range` (metres heard at full volume, 5), and either `x, y, z` (a sound at a map point) or `on_bus = true` (it moves with the player's bus); none: heard alike everywhere. The game's volume setting applies. A plugin plays 32 at most. *Permission: `audio`.* | 0.2.22 |
-| `omsi.audio.playing(id)` | boolean | Whether a sound of the plugin's still plays. | 0.2.22 |
-| `omsi.audio.set(id, opts)` | boolean | Changes a sound of the plugin's: `volume`, `pitch`, `range`, `x, y, z` / `on_bus`. *Permission: `audio`.* | 0.2.22 |
-| `omsi.audio.stop(id)` | boolean | Stops a sound of the plugin's. *Permission: `audio`.* | 0.2.22 |
-| `omsi.audio.stop_all()` | nil | Stops every sound of the plugin's. *Permission: `audio`.* | 0.2.22 |
-| `omsi.audio.volume()` | number or nil | The game's volume setting, 0 to 1. | 0.2.22 |
-
-#### On screen
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.message(text, [seconds])` | nil | A line of text on the screen (5 seconds when not given). *Permission: `ui`.* | 0.1.5 |
-| `omsi.ui.clear()` | nil | Removes every panel of the plugin. *Permission: `ui`.* | 0.2.21 |
-| `omsi.ui.dock()` | width, room, height, mine, frame | The navigator's board, where a panel with `anchor = "navigator"` goes, in that panel's pixels: its width, the most height there is room for, the height the panel there came to (0 before it is laid out; more than `room`: it is cut off at the bottom), whether that panel is this plugin's (the first one asked for has the board, another waits), and whether it fills the navigator's whole frame (`frame = true`, ui version 6; false under the map, and nothing in an older game). Nothing while the navigator shows no board: it is off, or Shift+N put its lower part away. | 0.3.36 |
-| `omsi.ui.focus(on)` | boolean | `true`: the panels get the mouse (the cursor shows, a click goes to the panel under it and none to the bus); `false`, Esc or a menu of the game gives it back. Returns the new state. *Permission: `ui`.* | 0.2.21 |
-| `omsi.ui.focused()` | boolean | Whether the panels have the mouse. | 0.2.21 |
-| `omsi.ui.moved(panel)` | dx, dy | How far the player dragged a panel from where its table puts it (pixels). | 0.2.22 |
-| `omsi.ui.panels()` | list of strings | The ids of the plugin's panels. | 0.2.22 |
-| `omsi.ui.remove(id)` | boolean | Removes a panel; `true` when there was one. *Permission: `ui`.* | 0.2.21 |
-| `omsi.ui.remove_menu_item(id)` | boolean | Takes the plugin's line `id` out of the pause menu; `true` when there was one. *Permission: `ui`.* | 0.3.36 |
-| `omsi.ui.screen()` | width, height, scale | The screen in the panels' pixels, and how many of the screen's own pixels one of them is. | 0.2.21 |
-| `omsi.ui.set(id, panel)` | true, or false and the reason | Creates the panel `id` or replaces it; a table that is not right gives `false` and where (`"children[2].size: a number is expected"`). The same table again changes nothing. *Permission: `ui`.* | 0.2.21 |
-| `omsi.ui.set_menu_item(id, label, [icon])` | true, or false and the reason | Puts a line in the game's pause menu, or changes the plugin's line `id`: its label (40 characters at most, shown as it is) and a Material Symbols icon of the game's (`"departure_board"`; the plugins' own icon without one). Choosing it closes the menu and sends `menu_item` with `id` - to open the plugin's panel, say. A plugin has 3 lines at most; they go when it stops. *Permission: `ui`.* | 0.3.36 |
-| `omsi.ui.set_theme(id)` | true, or false and the reason | Switches the game's interface to theme `id` (`""` or `"openomsi"`: openOMSI's own look), as if the player chose it in Options › Interface: it is kept for the next start. Ask the player first; they can switch back there. *Permission: `ui`.* | 0.3.42 |
-| `omsi.ui.show(panel, [on])` | boolean | Shows a panel (or hides it with `false`; it is kept); `false` when there is none. *Permission: `ui`.* | 0.2.22 |
-| `omsi.ui.theme()` | string | The id of the interface theme in use (`""`: openOMSI's own look). | 0.3.42 |
-| `omsi.ui.themes()` | list of tables | The game's interface themes: each `{ id, name }`, openOMSI's own look first (its id `""`). A theme is a folder with a `theme.json` (`Themes/<id>/`, or a plugin's own folder: see docs/THEMES.md). | 0.3.42 |
-| `omsi.ui.toast(text, [opts])` | true, or false and the reason | A notification card at the top right, newest at the top; it goes after `opts.seconds` (1 to 60, default 5). `opts`: `title`, `icon`, `color`. A plugin shows 8 at most: a ninth makes its oldest go. *Permission: `ui`.* | 0.2.21 |
-| `omsi.ui.toggle(panel)` | boolean | Shows a hidden panel or hides a shown one; whether it shows now. *Permission: `ui`.* | 0.2.22 |
-| `omsi.ui.typing()` | boolean | Whether the player types into a text field of a plugin now (the keys then go to the field, not to the bus). | 0.2.22 |
-| `omsi.ui.update(panel, element, values)` | true, or false and the reason | Changes one element of a panel in place, by its id: `text`, `color`, `value` (a bar, a slider), `segments` (a bar), `checked`, `selected`, `name` (an icon), `values` (a chart), `rows` and `aligns` (a table), `stops` (a stop list), `src` (an image) - cheaper than setting the whole panel again. *Permission: `ui`.* | 0.2.22 |
-| `omsi.ui.value(panel, element)` | any | The value of a checkbox, slider, text field or tabs element now (as `ui_change` gives it). *Permission: `ui`.* | 0.2.22 |
-
-#### Cables in the world
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.cable.clear()` | integer | Takes every cable of the plugin away; how many went. They go by themselves when the plugin stops. *Permission: `ui`.* | 0.2.22 |
-| `omsi.cable.remove(id)` | boolean | Takes the cable `id` away; `true` when there was one. *Permission: `ui`.* | 0.2.22 |
-| `omsi.cable.set(id, points, [options])` | boolean | Lays the cable `id` or moves it: a thin round tube through `points` (a flat list `{x1, y1, z1, x2, ...}` or a list of `{x, y, z}`, metres), lit and shaded as the scene. `options`: `radius` (m, default 0.006), `color` (`{r, g, b}` or `{r, g, b, a}`, 0 to 1, default dark grey) and `frame`: `"world"` (the map's coordinates, z up; the default) or `"bus"` (the player's bus's model frame: x right, y forward, z up, so a rope tied to the bus moves with it as drawn). Set it again whenever it moves; `false` (and the cable stays as it was) when the plugin would have more than 4096 cables, or more than 65536 points in all its cables together. *Permission: `ui`.* | 0.2.22 |
-
-#### Events, timers and watches
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.after(seconds, fn)` | integer id | Runs `fn` once, `seconds` of game time later. | 0.1.5 |
-| `omsi.cancel(id)` | boolean | Stops a timer, a watch or a hotkey; `true` when there was one. | 0.1.5 |
-| `omsi.emit(event, [...])` | nil | Sends an event to this plugin's own handlers at once (handy between the modules of a bigger plugin); an error of a handler is this call's. | 0.1.5 |
-| `omsi.every(seconds, fn)` | integer id | Runs `fn` every `seconds` of game time. | 0.1.5 |
-| `omsi.off(event, fn)` | nil | Removes a handler added with `on`. | 0.1.5 |
-| `omsi.on(event, fn)` | the function | Adds a handler of an event (see the events); several may hear one event, in the order they were added. | 0.1.5 |
-| `omsi.time()` | number | Seconds of game time since the plugin started (stands still while paused). | 0.1.5 |
-| `omsi.watch(kind, name, [fn])` | integer id | Runs `fn(new, old)` whenever a value changes: `watch(name, fn)` a variable of the bus, `watch(kind, name, fn)` of kind `"var"`, `"str"`, `"sys"` or `"info"` (a key of `info()`). | 0.1.5 |
-
-#### The plugin itself
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.plugin.broadcast(topic, [data])` | nil | Sends a message to every other plugin loaded. | 0.2.22 |
-| `omsi.plugin.disable([reason])` | nil | Switches the plugin off until its file changes or the game starts again (its `stop` comes). | 0.2.22 |
-| `omsi.plugin.errors()` | integer | How many errors the plugin had (at 10 it is switched off). | 0.2.22 |
-| `omsi.plugin.files([dir])` | list of tables | The files of the plugin's own folder (or a folder in it): `{name, dir, size}`. | 0.2.22 |
-| `omsi.plugin.list()` | list of strings | The names of the plugins loaded, this one too. | 0.2.22 |
-| `omsi.plugin.name()` | string | The plugin's name: its file's, or its folder's for a `main.lua`. | 0.2.22 |
-| `omsi.plugin.permissions()` | list of strings | The permissions the plugin has (native process access additionally requires player opt-in). | 0.2.22 |
-| `omsi.plugin.read(path)` | text, or nil and the reason | A file of the plugin's own folder (a table of stops, a translation): read only, relative to the folder. | 0.2.22 |
-| `omsi.plugin.send(to, topic, [data])` | nil | Sends a message to another plugin (by its name): it hears `message(from, topic, data)` in its next frame. The data is numbers, texts, booleans or tables of them. | 0.2.22 |
-| `omsi.plugin.set_setting(key, value)` | boolean | Changes a setting (held to its range; saved); `true` when it took the value. | 0.2.22 |
-| `omsi.plugin.setting(key)` | any | A setting's value (`nil`: no such setting). | 0.2.22 |
-| `omsi.plugin.settings(settings, [title])` | table | Declares the plugin's settings: a list of `{key, type, label, default}` with `type` `"bool"`, `"number"` (`min`, `max`, `step`), `"text"` or `"choice"` (`choices`, a list of texts). The values the player chose before come back (as a table key -> value); the game makes a settings panel of them (`plugin.show_settings`), saves them in the data folder and sends `setting(key, value)` when one changes. | 0.2.22 |
-| `omsi.plugin.show_settings([on])` | boolean | Shows the plugin's settings panel (or hides it with `false`); it can be dragged and closed while the panels have the mouse (`ui.focus`). `false` when the plugin declared no settings. *Permission: `ui`.* | 0.2.22 |
-
-#### Storage and files
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.files.append(path, data)` | true, or false and the reason | Adds to the end of a file of the data folder (a log, a CSV of trips). *Permission: `storage`.* | 0.2.22 |
-| `omsi.files.delete(path)` | boolean | Removes a file or an empty folder of the data folder. *Permission: `storage`.* | 0.2.22 |
-| `omsi.files.dir()` | string | Where the data folder is on this computer (to tell the player; the plugin reaches it with relative paths only). *Permission: `storage`.* | 0.2.22 |
-| `omsi.files.exists(path)` | boolean | Whether the data folder has this file or folder. *Permission: `storage`.* | 0.2.22 |
-| `omsi.files.list([dir])` | list of tables, or nil and the reason | The entries of the data folder (or a folder in it): `{name, dir, size}`. *Permission: `storage`.* | 0.2.22 |
-| `omsi.files.mkdir(path)` | boolean | Makes a folder (and those above it) in the data folder. *Permission: `storage`.* | 0.2.22 |
-| `omsi.files.read(path)` | text, or nil and the reason | A file of the plugin's data folder (`path` relative to it; `..` and absolute paths are refused). *Permission: `storage`.* | 0.2.22 |
-| `omsi.files.write(path, data)` | true, or false and the reason | Writes a file of the data folder (its folders are made); at most 16 MB at once and 256 MB in all. *Permission: `storage`.* | 0.2.22 |
-| `omsi.storage.all()` | table | Everything stored, as one table. *Permission: `storage`.* | 0.2.22 |
-| `omsi.storage.clear()` | nil | Removes every key. *Permission: `storage`.* | 0.2.22 |
-| `omsi.storage.delete(key)` | boolean | Removes a key; `true` when it was there. *Permission: `storage`.* | 0.2.22 |
-| `omsi.storage.get(key)` | any | A value the plugin stored, or `nil`. The storage is the plugin's own and survives the session (kept as `storage.json` in its data folder). *Permission: `storage`.* | 0.2.22 |
-| `omsi.storage.keys()` | list of strings | The keys stored, in the order they were first set. *Permission: `storage`.* | 0.2.22 |
-| `omsi.storage.save()` | nil | Writes the storage now (it is written by itself when the game ends). *Permission: `storage`.* | 0.2.22 |
-| `omsi.storage.set(key, value)` | nil | Stores a value under a key: a number, text, boolean or a table of them (`nil` removes it). It is written when the game ends, the plugin is loaded again, or `storage.save()` is called. *Permission: `storage`.* | 0.2.22 |
-
-#### External programs
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.process.exit_code(handle)` | code or nil, state or reason | Nonblocking exit code lookup (queued verification also counts as running): `nil, "running"` while running; `code, "exited"` after normal exit. A nonzero code is retained. Signal termination returns `nil, "exited"`; inspect `process.status` for details. Preparation failure returns `nil, "failed", reason`. An unknown handle returns `nil` and a reason. *Permission: `process`.* | unreleased |
-| `omsi.process.forget(handle)` | true, or nil and reason | Release a completed or failed process handle and its retained result. A running process cannot be forgotten. On Windows, closing its job also terminates any remaining descendants. *Permission: `process`.* | unreleased |
-| `omsi.process.kill(handle)` | true, or nil and reason | Cancel a queued start or request termination of a plugin-owned direct child without waiting. Poll `process.status` for completion; Windows also terminates the job descendants, Unix targets only the direct child. *Permission: `process`.* | unreleased |
-| `omsi.process.start(file, [args], [options])` | handle, or nil and reason | Queue a native helper without waiting; return a reserved handle immediately. The interactive game asks the player with Allow once, Always allow or Deny unless the exact content was already approved. Embedded hosts without a permission broker remain default-deny. Verification and OS process creation run on two shared workers with at most 32 globally queued starts. The 32-handle plugin limit (including queued and failed starts) is checked before admission. A full queue returns nil and a reason. Accepted starts can fail later: inspect status.error or exit_code/wait returning nil, failed, reason. `file` must be a relative path inside the plugin folder. Approval is bound to the entry, folder snapshot and helper SHA256. Allow once covers one launch; Always allow saves consent in the host user settings; Deny blocks all native helpers for this canonical plugin entry for the current session, including renamed helpers or changed content or arguments. Changed content needs new approval. While the dialog is open, preparation workers and child cleanup keep running. The entry, executable-content snapshot (including importable Lua modules and native libraries), and helper hashes are rechecked on the worker immediately before each start; code changes revoke consent, while ordinary save/data writes do not. `args` are separate literal strings without shell expansion. Options: `cwd` and `env` (string overrides, other variables inherited, except OMSI_PLUGIN_PROCESS_ALLOW is always removed). Standard streams are disconnected. Windows helpers must be .exe files. At most 32 handles per plugin; forget completed handles. Stop, disable and reload terminate children; Windows job objects also terminate descendants and survive abrupt game exit, Linux uses a parent-death signal for direct children. No native helper runs before player approval. OMSI_PLUGIN_PROCESS_ALLOW can optionally name an absolute JSON grant manifest for preapproved content. Packages must also declare process. Unload/reload cancels unanswered requests. Approved helpers run with the game account's permissions. *Permission: `process`.* | unreleased |
-| `omsi.process.status(handle)` | table, or nil and reason | Nonblocking status: `{pid, starting, awaiting_permission, running, exited, failed, error, code, success, signal}`. While verification/start is pending, starting and running are true and pid is nil. Failed preparation sets failed/error without an exit code. While running `code`, `success` and `signal` are nil. After exit `code` is the exit code (including nonzero); termination by a signal has no code, and `signal` is available on Unix. Results remain readable until forgotten. *Permission: `process`.* | unreleased |
-| `omsi.process.wait(handle)` | exit code or nil, state or reason | Lua: suspend this plugin through queued verification/start and until its direct child exits, then return `code, "exited"` (nonzero codes retained; nil code on signal exit). The game and other plugins keep running; no game-thread wait occurs. Works in the main chunk, start/frame/event handlers and timers. Queued callbacks resume afterwards (limit 256), and normal frames/timers pause during the wait. Stop/reload cancels the continuation and terminates the child. A nested `emit` callback or manually resumed coroutine cannot suspend. Preparation failure returns `nil, "failed", reason`. Other language bindings should poll `process.exit_code` instead. *Permission: `process`.* | unreleased |
-
-#### Programs on this computer
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.send(port, data)` | true, or false and the reason | Sends `data` as one UDP datagram to `127.0.0.1:port`: to another program on this computer, never over the network. Not sent when the port is below 1024 or one of the game's multiplayer ports (27015-27024), the message is longer than 8 KB, or the plugin sent 100 in the last second. *Permission: `network_local`.* | 0.2.21 |
-
-#### LAN games
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.lan.active()` | boolean | Whether this game is in a LAN session. | 0.2.22 |
-| `omsi.lan.chat(text)` | true, or false and the reason | Says a line in the session's chat, as the player would (every player sees it; at most one a second). *Permission: `lan`.* | 0.2.22 |
-| `omsi.lan.me()` | id, name, host | This player in the session: its id (the host is 1), its name, whether it hosts. | 0.2.22 |
-| `omsi.lan.players()` | list of tables | The other players of the session: `{id, name, host, bus, line, tour, x, y, z, heading, speed, on_foot, passengers}`. | 0.2.22 |
-| `omsi.lan.send(to, text)` | true, or false and the reason | Sends a short text (at most 120 characters, no `\|`) to the same plugin on another player's game (`to` its id; 0: every other player); it hears `lan_message(from, text)`. A player sends at most about ten a second; a game without the plugin ignores them. *Permission: `lan`.* | 0.2.22 |
-
-#### The game
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.command(name)` | boolean | Does what a line of the game menu does: `refuel`, `wash`, `repair`, `shot`, `save`, `load`, `weather`, `later`, `earlier`, `info`, `timetable`, `reset`, `couple`, `uncouple`; `true` when the game knows it (it runs after the frame). *Permission: `world_write`.* | 0.1.10 |
-| `omsi.debug([...])` | nil | A line of the log's debug level (shown with `RUST_LOG=debug`). | 0.2.22 |
-| `omsi.error([...])` | nil | The same as an error line (the plugin goes on). | 0.2.22 |
-| `omsi.game.action(name)` | boolean | A game action of keyboard.cfg's `[game]` (`sim_pause`, `view_set_map`, `view_toggle_informationdisplay`, `view_set_schedule`, ...), as its key does; `true` when the game knows it. *Permission: `world_write`.* | 0.2.22 |
-| `omsi.game.api()` | integer | The version of the plugin interface (`api_abi` of an `.oop`; raised only when something is taken away or changes). | 0.2.22 |
-| `omsi.game.fps()` | number or nil | Frames a second now. | 0.2.22 |
-| `omsi.game.has(name)` | boolean | Whether this game has an API function (`"weather.set"`): for a plugin that should also run in an older openOMSI. | 0.2.22 |
-| `omsi.game.menu_open()` | boolean | Whether the game menu is open. | 0.2.22 |
-| `omsi.game.notify(text, [kind], [seconds])` | boolean | A notification of the game's own (the cards the server's messages use): `kind` `"info"`, `"warning"` or `"alert"`. *Permission: `ui`.* | 0.2.22 |
-| `omsi.game.platform()` | string | The system the game runs on: `"windows"`, `"macos"`, `"linux"`, `"android"`. | 0.2.22 |
-| `omsi.game.screenshot()` | string or nil | Takes a screenshot with the next frame, as the camera key does; the file it goes to (the `screenshot` event says when it is there). *Permission: `ui`.* | 0.2.22 |
-| `omsi.game.settings()` | table | The settings a plugin may read: `graphics` (`"vanilla"`, `"vanilla_plus"`, `"enhanced"`), `language` (the cockpit's, `"ENG"`), `ui_language`, `ui_scale`, `volume`, `fov`, `render_scale`, `max_fps`, `fullscreen`, `vsync`, `msaa`, `shadows`, `time_speed`, `units` (`"metric"`: speeds are km/h everywhere), ... | 0.2.22 |
-| `omsi.game.stats()` | table | This session's counts, as the personnel file has them: `km`, `stops_served`, `stops_skipped`, `crashes`, `heavy_crashes`, `pedestrians`, `tickets`, `cash`, `passengers`, ... | 0.2.22 |
-| `omsi.game.version()` | string | The game's version (`"0.2.22"`). | 0.2.22 |
-| `omsi.info()` | table | What the game is doing: `map`, `clock` (seconds since midnight), `day`, `year`, `view`, `paused`, `on_foot`, `multiplayer`, `traffic`, `speed`, `delay`, `map_path`, `version`; with a bus also `tile_x`, `tile_y`, `tile_pos_x`, `tile_pos_y`, `heading`, `vehicle_manufacturer`, `vehicle_model`, `destination`, `passengers`; `crashes`, `heavy_crashes`, `pedestrians_hit`; `situation`; on a duty also `line`, `tour`, `trip`, `trips`, `trip_name`, `terminus`, `stops`, `trip_done`, `next_stop`, `next_stop_number`, `next_stop_arrival`, `next_stop_departure`, `next_stop_id`, `at_stop`, `previous_stop`, `previous_stop_id`, `next_stop_distance`, `next_stop_distance_nav`, `previous_stop_distance` (see the plugin docs for each). | 0.1.10 |
-| `omsi.info_value(key)` | any | One value of `info()` without building the whole table: cheaper for a plugin that reads one or two every frame. | 0.2.22 |
-| `omsi.log([...])` | nil | A line in `game.log`, tagged `[lua <name>]` (`print` does the same). | 0.1.5 |
-| `omsi.warn([...])` | nil | The same as a warning. | 0.1.5 |
-
-#### Helpers
-
-| Function | Returns | What it does | Since |
-| --- | --- | --- | --- |
-| `omsi.fmt.clock(seconds, [with_seconds])` | string | Seconds since midnight as `"HH:MM"` (`"HH:MM:SS"` with `true`); past midnight wraps. | 0.2.22 |
-| `omsi.fmt.delay(seconds)` | string | A delay as a timetable display shows it: `"+2:30"` late, `"-0:45"` early, `"0:00"`. | 0.2.22 |
-| `omsi.fmt.distance(metres)` | string | A distance as `"350 m"` or `"2.4 km"`. | 0.2.22 |
-| `omsi.fmt.duration(seconds)` | string | A length of time as people read it: `"45 s"`, `"3 min 05 s"`, `"1 h 20 min"` (negative with a minus). | 0.2.22 |
-| `omsi.fmt.money(amount, [symbol])` | string | An amount with two decimals and a currency symbol after it (`"12.50 €"`; the game knows no currency of its own). | 0.2.22 |
-| `omsi.fmt.number(x, [decimals], [separator])` | string | A number with `decimals` (0) and a thousands `separator` (`","`, `" "`; none by default). | 0.2.22 |
-| `omsi.fmt.pad(text, width, [right])` | string | A text made `width` characters long with spaces (on the left with `right` = true, to line numbers up), or cut to it. | 0.2.22 |
-| `omsi.fmt.speed(kmh, [unit])` | string | A speed as `"42 km/h"`, or in `"mph"` or `"m/s"`. | 0.2.22 |
-| `omsi.fmt.split(text, [separator])` | list of strings | A text cut at every `separator` (`","` by default; plainly, no patterns). | 0.2.22 |
-| `omsi.fmt.trim(text)` | string | A text without the spaces at its ends. | 0.2.22 |
-| `omsi.json.decode(text)` | value, or nil and the reason | Reads JSON text: objects and arrays become tables, `null` nil. | 0.2.22 |
-| `omsi.json.encode(value, [pretty])` | string | A value as JSON text (a list as an array, a table with keys as an object; `pretty`: indented). | 0.2.22 |
-| `omsi.util.date([seconds])` | table | A real time (`util.now()` by default) as `{year, month, day, hour, minute, second, weekday}` in UTC (`weekday` 1 Monday). | 0.2.22 |
-| `omsi.util.ms()` | number | Milliseconds of real time since the game started: for timing a plugin's own work. | 0.2.22 |
-| `omsi.util.now()` | number | The real time: seconds since 1970 (UTC), with fractions. | 0.2.22 |
-| `omsi.util.random([min], [max])` | number | A random number: 0 to 1 without arguments, else a whole number from `min` to `max` (as `math.random`, but not repeating the same row in every plugin). | 0.2.22 |
-| `omsi.vec.angle_diff(a, b)` | number | The turn from heading `a` to heading `b`, -180 to 180 degrees (right positive). | 0.2.22 |
-| `omsi.vec.bearing(x1, y1, x2, y2)` | number | The heading from one map point to another. | 0.2.22 |
-| `omsi.vec.clamp(x, min, max)` | number | `x` held between `min` and `max`. | 0.2.22 |
-| `omsi.vec.distance(x1, y1, x2, y2)` | number | Metres between two map points (on the ground: x and y). | 0.2.22 |
-| `omsi.vec.distance3(x1, y1, z1, x2, y2, z2)` | number | Metres between two points in space. | 0.2.22 |
-| `omsi.vec.dot(x1, y1, x2, y2)` | number | The dot product of two 2D vectors. | 0.2.22 |
-| `omsi.vec.heading(dx, dy)` | number | The heading of a direction on the map, degrees clockwise from north (0 to 360), as the game's headings. | 0.2.22 |
-| `omsi.vec.length(x, y, [z])` | number | The length of a vector (2D, or 3D with `z`). | 0.2.22 |
-| `omsi.vec.lerp(a, b, t)` | number | From `a` to `b` by `t` (0 to 1, not held to it). | 0.2.22 |
-| `omsi.vec.normalize(x, y, [z])` | x, y, z | The vector made 1 long (0 stays 0). | 0.2.22 |
-| `omsi.vec.rotate(x, y, degrees)` | x, y | A vector turned clockwise by `degrees` (as headings turn). | 0.2.22 |
-| `omsi.vec.to_local(x, y, ox, oy, heading)` | right, ahead | A map point seen from a place facing `heading`: metres to the right and ahead of it. | 0.2.22 |
-
-#### Events
-
-| Event | Arguments | When | Since |
-| --- | --- | --- | --- |
-| `start` | - | Right after the plugin was loaded (also after a reload). | 0.1.5 |
-| `vehicle` | `name` | The player got into a vehicle, changed it, or left it (`nil`). | 0.1.5 |
-| `frame` | `dt` | Every frame of the game, after the bus's own scripts; not while paused. `dt` is the frame's seconds of game time. | 0.1.5 |
-| `stop` | - | The game ends, or the plugin is about to be loaded again. | 0.1.5 |
-| `key` | `key`, `down` | A key went down (`true`) or came up: winit's name of it (`"KeyH"`, `"F5"`, `"Numpad8"`). | 0.1.10 |
-| `next_stop` | `new`, `old` | The duty's next stop changed, also to one of the same name (`omsi.info().next_stop_number` tells them apart). | 0.1.10 |
-| `view` | `new`, `old` | The view changed (`"driver"`, `"pax"`, `"outside"`, `"free"`, `"foot"`). | 0.1.10 |
-| `duty` | `line`, `tour` | A line and tour were taken (or given up: `nil`). | 0.1.10 |
-| `crash` | `energy_kj`, `speed_kmh` | The player's bus crashed: every crash, also one the same as the last (the screen's "Crash: 136 kJ"); above 50 kJ it is a heavy one. | 0.2.21 |
-| `pedestrian` | `count` | The bus knocked people down. | 0.2.21 |
-| `stops_skipped` | `count`, `due_at`, `now_at` | The duty jumped ahead: the bus passed stops of its trip without stopping (or was moved) and is now at a later one; the stops are numbered in the trip from 1. | 0.2.21 |
-| `service` | `kind`, `by`, `amount` | The player's bus was serviced or moved. `kind`: `"refuel"` (amount: litres put in), `"wash"` (amount: the dirt left), `"repair"` (amount: the game minutes it took), `"reset"` or `"teleport"`; `by`: `"player"`, `"plugin"`, `"host"` or `"game"`. | 0.2.21 |
-| `trip_done` | `trip`, `how`, `driving`, `comfort`, `tickets` | A trip of the duty ended, once: its number in the duty, `"arrived"`, `"skipped"` or `"given_up"`, then its ratings in per cent (driving, comfort, ticket selling). | 0.2.21 |
-| `jolt` | `along`, `across`, `speed_kmh`, `passengers` | The bus braked, sped up or cornered hard enough to cost driving rating (m/s², signed); at most one a second. | 0.2.21 |
-| `ticket_sold` | `name`, `price` | A ticket was sold at the cash desk: its name and price as the bus's ticket list has them. | 0.2.21 |
-| `ui_click` | `panel`, `element` | A button (or another clickable part) of one of the plugin's panels was clicked; `element` is `nil` for the panel itself. Enter in a text field is a click on it. | 0.2.21 |
-| `menu_item` | `id` | The player chose one of the plugin's lines in the pause menu (`ui.set_menu_item`); the menu has closed. | 0.3.36 |
-| `ui_focus` | `focused` | The panels got the mouse or gave it back (also by Esc, or a menu of the game opening). | 0.2.21 |
-| `ui_change` | `panel`, `element`, `value` | A checkbox (`true`/`false`), slider (its number), text field (its text, at every key) or tabs element (the tab's number from 1) of the plugin's panels was changed by the player. | 0.2.22 |
-| `message` | `from`, `topic`, `data` | Another plugin sent this one a message (`plugin.send`, `plugin.broadcast`): its name, the topic and the data (numbers, texts, tables). | 0.2.22 |
-| `setting` | `key`, `value` | The player changed one of the plugin's settings in its settings panel (`plugin.settings`). | 0.2.22 |
-| `door` | `door`, `open` | A door leaf of the player's bus opened (`true`) or closed: its number from 1, front to back. | 0.2.22 |
-| `doors` | `open` | The bus's doors opened (`true`: one or more open) or were all closed. | 0.2.22 |
-| `engine_start` | - | The player's bus's engine started running. | 0.2.22 |
-| `engine_stop` | - | Its engine stopped. | 0.2.22 |
-| `gear` | `new`, `old` | The gear engaged changed (-1 reverse, 0 neutral), where the bus has a gearbox it shows. | 0.2.22 |
-| `indicator` | `new`, `old` | The indicators changed: `"off"`, `"left"`, `"right"` or `"hazard"`. | 0.2.22 |
-| `headlights` | `new`, `old` | The headlights changed: 0 off, 1 side lights, 2 dipped, 3 high beam. | 0.2.22 |
-| `horn` | `down` | The horn started (`true`) or stopped. | 0.2.22 |
-| `handbrake` | `on` | The parking brake was put on (`true`) or released. | 0.2.22 |
-| `stop_request` | `on` | A passenger asked to stop (`true`), or the request went out. | 0.2.22 |
-| `passengers` | `count`, `old` | The number of passengers aboard the player's bus changed. | 0.2.22 |
-| `passenger_board` | `count`, `stop_id` | People got into the player's bus: how many, and the stop they waited at (its map object id, `nil` when none). | 0.2.22 |
-| `passenger_alight` | `count` | People got out of the player's bus. | 0.2.22 |
-| `passenger_ticket` | `passenger` | Somebody boarding the player's bus has decided about their ticket, on their way to the door - they wait in the doorway for this frame, so it can still change before they get in and ask for it at the cash desk: `{id, age, kind, ticket, name, price, stop, stop_name, destination, stop_number, destination_number}` - `kind` `"none"`, `"stamp"` or `"buy"`, `ticket` the ticket pack's (from 1; 0 none fits their age - the desk then asks for the pack's first) with the `name` and `price` they will ask for, `stop` the map object id they board at and `stop_name` its timetable name, `destination` the stop they ride to, and where both are in the duty's trip (from 1, `nil` where the trip does not have them). `people.set_ticket(id, ...)` changes it. | 0.3 |
-| `stop_arrive` | `name`, `id`, `number`, `delay` | The bus came to the duty's next stop (within 25 m of it): its name, map object id, number in the trip (from 1) and the delay in seconds (late positive). | 0.2.22 |
-| `stop_depart` | `name`, `id`, `number`, `delay` | The bus left the stop it stood at (more than 35 m from it, or the duty moved on): the same values, the delay as it left. | 0.2.22 |
-| `trip_start` | `trip`, `name`, `terminus` | The duty moved on to another trip: its number in the duty (from 1), the timetable's name of the trip and its terminus. | 0.2.22 |
-| `duty_start` | `line`, `tour` | A duty was taken. | 0.2.22 |
-| `duty_end` | `line`, `tour` | The duty was given up (or another taken: `duty_end` of the old one comes first). | 0.2.22 |
-| `destination` | `new`, `old` | The destination the bus shows changed. | 0.2.22 |
-| `coupled` | `parts`, `old` | Something was coupled to or uncoupled from the bus: the parts behind it now. | 0.2.22 |
-| `minute` | `hour`, `minute` | The game's clock reached a new minute (also when it was set). | 0.2.22 |
-| `hour` | `hour` | The game's clock reached a new hour. | 0.2.22 |
-| `day` | `year`, `month`, `day` | The game's date changed. | 0.2.22 |
-| `tile` | `x`, `y`, `old_x`, `old_y` | The player's bus drove onto another tile of the map (numbered as global.cfg's `[map]` list). | 0.2.22 |
-| `weather` | `name` | The weather changed: another weather file, rain or snow beginning or ending, the snow cover, the clouds. | 0.2.22 |
-| `light_ahead` | `aspect`, `distance` | The traffic light ahead of the bus (within 80 m) changed or a new one came: its aspect (`"red"`, `"red_yellow"`, `"green"`, `"green_yellow"`, `"yellow"`, `"dark"`, `nil` when none is ahead any more) and its distance in metres. | 0.2.22 |
-| `red_light` | `speed_kmh` | The bus drove past a traffic light showing red (or red and yellow) at more than 5 km/h. | 0.2.22 |
-| `speed_limit` | `kmh`, `old` | The speed limit of the lane the bus drives on changed. | 0.2.22 |
-| `ai_collision` | `id`, `energy_kj` | The player's bus hit an AI vehicle (its id, as `traffic.list` gives it) with this energy. | 0.2.22 |
-| `pause` | - | The game was paused (the plugins stand still until `resume`; nothing else comes in between). | 0.2.22 |
-| `resume` | - | The game goes on after a pause. | 0.2.22 |
-| `menu_open` | - | The game menu opened. | 0.2.22 |
-| `menu_close` | - | The game menu closed. | 0.2.22 |
-| `screenshot` | `file` | A screenshot was taken: its file. | 0.2.22 |
-| `controller_button` | `device`, `button`, `down` | A button of a steering wheel, joystick or gamepad went down (`true`) or up: the device's name and the button's number. | 0.2.22 |
-| `lan_join` | `id`, `name` | A player joined the LAN session (or came back). | 0.2.22 |
-| `lan_leave` | `id`, `name` | A player left the LAN session. | 0.2.22 |
-| `lan_message` | `from`, `data` | The same plugin on another player's game sent this one a message (`lan.send`): the player's id and the text. | 0.2.22 |
-| `lan_chat` | `name`, `text` | A line was said in the LAN session's chat (by another player or this one). | 0.2.22 |
-| `object_init` | `id`, `type`, `x`, `y`, `z`, `heading` | A scenery object this script drives came within its range (once, again if it leaves and comes back): the map's id of the object, its type (the `.sco` file's name), where it stands and the way it faces. Only a script a `.sco` names with `[lua_script]` hears the `object_*` events. | 0.2.22 |
-| `object_frame` | `id`, `dt` | A frame of an object this script drives, while it is in range; `dt` is the game seconds since the last frame of that object (at the rate of the `.sco`'s `[lua_rate]`, else every game frame). | 0.2.22 |
-| `object_gone` | `id` | An object this script drives left its range or was unloaded with its tile; its state in the script can go. | 0.2.22 |
-| `object_click` | `id`, `event` | The player clicked the `[mouseevent]` of a mesh of an object this script drives. | 0.2.22 |
-
-<!-- api:end -->
-
-## Compiled plugins (`.oop`)
-
-An `.oop` (openOMSI Plugin) is to a plugin what a DLL is to a program, but sandboxed: build
-output, not sources. `oopc build` of the [openOMSI Development
-Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools) makes one from a plugin
-project, and the game loads `plugins/<name>.oop` like the other plugins. Two kinds:
-
-* **Lua**, compiled into one obfuscated chunk (its locals renamed, its strings encoded, its
-  modules bundled): it behaves as the sources did, through the same API, but the sources are
-  not in the file. Compiled Lua *bytecode* is refused - Lua checks no bytecode, and crafted
-  bytecode could break out of the sandbox.
-* **WebAssembly** (`wasm32-unknown-unknown`), usually Rust with the plugin SDK of the
-  Development Tools: the module calls every function of the API by its name here
-  (`openomsi.call("ui.set", ...)`, the SDK wraps them all) and gets the same events, timers
-  and watches. It runs in an interpreter (wasmi) on every platform the game runs on; one call
-  into it that runs too long stops the plugin, not the game, and it may use 256 MB of memory.
-  A callback that the module's own call raises (its `emit` reaching its own handler) runs
-  right after that call returns.
-
-What the game does with an `.oop`:
-
-* It checks the file whole before anything of it runs: a file changed after it was built, cut
-  short or made for a newer plugin API is refused (the log says why).
-* The code stays in memory; the plugin's pictures, sounds and data files go into
-  `plugins/.oop-cache/<name>/`, where its API functions read them.
-* **Permissions.** An `.oop` declares what it may do (`ui`, `storage`, `vehicle_write`,
-  `traffic_write`, `world_write`, `camera`, `audio`, `network_local`, `lan`, `process`); a function
-  that needs another one fails with an error the plugin can catch. Reading the game needs
-  none. (A plain `.lua` file has every permission.)
-* **Signatures.** A signed plugin is logged with its author's key fingerprint
-  (`signed by 3097:e2de:e2cb:4a34`); an unsigned one with a warning that its builder is not
-  known.
-* A `.lua` plugin of the same name wins over an `.oop` (the copy being worked on).
-
-How safe the code is from copying: the file is encrypted, and the key is in the game, so it
-can be decrypted with effort - but what one gets then is the stripped or obfuscated build
-output, never the author's sources, which are not in the file.
-
-## The telemetry file (for programs beside the game)
-
-A program that only wants to follow the player's bus - a fleet map, an in-vehicle
-terminal, a stream overlay - can read `~/.openomsi/telemetry.json` (on Windows
-`%USERPROFILE%\.openomsi\telemetry.json`) instead of being a plugin. The game writes it
-**only while the file exists**: the program (or you) creates it once, empty, and the game
-fills it from then on; deleting it stops the writing. It stays on this computer.
-
-About twice a second the file is replaced as a whole (written beside it and renamed), so a
-reader never sees half of it. It holds (`version` 2): `pid`, `updated` (Unix seconds),
-`paused`; `player` (`null` without a bus): `x`, `y`, `z`, `tile_x`, `tile_y`, `local_x`,
-`local_y`, `heading`, `speed_kmh`, `delay_s`, `passengers`; `duty` (`null` without one):
-`line`, `tour`, `trip`, `trip_index`, `trip_count`, `terminus`, `next_stop_index`,
-`next_stop_id`, `next_stop_name`, `next_stop_dist`, `prev_stop_id`, `at_stop` and `stops`
-(each `object_id`, `name`, `stops`, `arr`, `dep`, `x`, `y`); `ai_buses`, the timetable
-buses on the road (`id`, `line`, `tour`, `trip`, `terminus`, `depart`, `next_stop_id`,
-`at_stop`, `trip_done`, `delay_s`, `x`, `y`, `number`). The stop IDs are the map's, as in
-`omsi.info()`. A file whose `updated` stops moving belongs to a game that ended.
-
-## OMSI plugins (`plugins/*.opl` + DLL)
-
-What OMSI does with plugins, and how
-openOMSI does the same (`crates/omsi-plugin`, driven from `crates/omsi-app/src/plugins.rs`).
-
-### The original
-
-* **Finding them**: every `*.opl` under `<OMSI>\plugins`, recursively
-  (`FindFilesRecursive`). Tags: `[dll]` (a path relative to `plugins\`), `[varlist]`,
-  `[stringvarlist]`, `[systemvarlist]`, `[triggers]` - each a count, then that many names.
-* **Loading**: `LoadLibrary`, then `GetProcAddress` for
-  `PluginStart` and `PluginFinalize` (required - "Could not load plugin …: procedure … not
-  found!") and `AccessVariable`, `AccessTrigger`, `AccessSystemVariable`,
-  `AccessStringVariable` (optional - "Loading plugin …: procedure … not found!"). Then
-  `PluginStart(AOwner)`. `PluginFinalize` runs when the game ends.
-* **Every frame**, plugin by plugin:
-  1. each listed system variable: `AccessSystemVariable(index: Word; var value: Single;
-     var write: Boolean)`; written back when `write` is true;
-  2. with a player vehicle: each listed vehicle variable (`AccessVariable`, same shape);
-  3. each string variable: `AccessStringVariable(index: Word; text: PWideChar;
-     var write: Boolean)` - a buffer of length + 1 wide characters with the text and its
-     terminating zero; read back when `write` is true;
-  4. each trigger: `AccessTrigger(index: Word; var active: Boolean)`, `active` false before
-     the call. A change from the last frame is a key event: down fires the
-     trigger, up fires `<trigger>_off`.
-
-  All `stdcall`; `index` is the position in the plugin's own list. Names the vehicle does
-  not have are skipped.
-
-### openOMSI
-
-* `omsi_plugin::Plugins::load` reads the `plugins` folder of every content root (the
-  first root's copy of an `.opl` wins) and loads each library:
-  * **in-process** when the running program can load it (same system and architecture -
-    a plugin built for openOMSI, or a 32-bit DLL in a 32-bit Windows build);
-  * otherwise in **`omsi-plugin-host32.exe`**, `omsi-plugin-host` built for 32-bit Windows,
-    which loads the DLL and answers over stdin/stdout (one round trip per frame). On
-    Windows it runs directly; on macOS and Linux through Wine (`wine` on the `PATH`, or
-    `OMSI_WINE`). The host is found next to the game (`OMSI_PLUGIN_HOST32` overrides).
-* The system variables are the scripts' (`omsi_script::SysVar`); a plugin's writes to
-  them are not applied (the clock, weather and input stay the game's).
-* **`openomsi_<key>`** in a `[varlist]` or `[stringvarlist]` reads the value `<key>` of
-  `omsi.info()` (see above): numbers and booleans as variables, texts as string variables,
-  while the player drives a bus. A plugin that reads the bus's place, its type or the map
-  out of Omsi.exe's memory at fixed addresses - which cannot work here - lists
-  `openomsi_tile_x`, `openomsi_tile_pos_x`, `openomsi_heading`, `openomsi_map_path`... instead.
-  OMSI has no variables of these names and skips them, so one `.opl` serves both games.
-  Names are matched case-insensitively. Vehicle script variables take precedence over
-  this fallback. Game values are read-only: writing them does not change the game.
-  Boolean values are `0` or `1`; a text requested as a number (or the reverse), an
-  unknown key, or a number not representable as a finite `f32` is unavailable.
-  `destination` is the selected HOF terminus's texture identifier (empty for an all-exit
-  terminus); `passengers` is zero when no passenger simulation is active. `version` is
-  the game's displayed version, rather than the Cargo package version.
-* `OMSI_NO_PLUGINS=1` leaves every plugin out. A plugin whose host stops answering is
-  left out for the rest of the session.
-* `PluginStart` gets a nil owner: there is no Delphi application object. Plugins that
-  open their own windows do so without a parent.
-
-### Script textures (openOMSI only)
-
-OMSI 2 gives plugins no way into the vehicle's `[scripttexture]`s; tools such as OmsiHook
-reach them in Omsi.exe's memory, which does not exist here. openOMSI adds one optional
-procedure and one `.opl` tag for it. OMSI skips both, so one DLL and `.opl` serve both
-games.
-
+```bash
+oopc new hello --lua     # or --rust
+oopc build hello         # writes the .oop into hello/dist/
+oopc check hello         # lint: ids, versions, Lua syntax, permissions
 ```
+
+| Command | What it does |
+| --- | --- |
+| `oopc new <dir> --lua` / `--rust` | start a project from a template |
+| `oopc build [dir]` | compile and pack into `dist/`; `--sign <key>` signs, `-o <file>` names the output |
+| `oopc check [dir]` | lint the project |
+| `oopc keygen` | make a signing key |
+| `oopc sign <file.oop> --key <key>` | sign or re-sign a file |
+| `oopc verify <file.oop> [--key <pub>]` | check the signature |
+| `oopc inspect <file.oop>` | show the header and the file list |
+| `oopc pack <dir>` | pack already prepared files |
+
+A Rust plugin also needs the Rust toolchain and the `wasm32-unknown-unknown` target; the app's **Settings** installs the target.
+
+### A minimal Rust plugin
+
+`Cargo.toml`:
+
+```toml
+[package]
+name = "hello"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+openomsi-plugin-sdk = { git = "https://github.com/openOMSI-org/openOMSI-Development-Tools" }
+
+[workspace]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
+```
+
+`src/lib.rs`:
+
+```rust
+use openomsi_plugin_sdk as omsi;
+
+omsi::plugin!(|| {
+    // When the player gets into a bus, greet them by its name.
+    omsi::on_vehicle(|name| {
+        if let Some(name) = name {
+            let _ = omsi::api::message(&format!("Good morning! Today you drive the {name}"), Some(6.0));
+        }
+    });
+
+    // Once a second, warn if the bus is going too fast.
+    omsi::every(1.0, || {
+        if let Ok(Some(kmh)) = omsi::api::var("Velocity")
+            && kmh > 50.0
+        {
+            let _ = omsi::api::message(&format!("Slow down: {kmh:.0} km/h"), Some(1.0));
+        }
+    });
+});
+```
+
+The SDK's `plugin!` defines the exports the game calls. `omsi::api` has a typed function for every API call; `omsi::call(name, json!([...]))` reaches any function by name, even one newer than the SDK.
+
+### The plugin manifest
+
+A compiled plugin's project has an `openomsi-plugin.toml`. Its `[plugin]` table becomes the `.oop`'s header.
+
+```toml
+[plugin]
+id = "com.author.hello"
+name = "Hello"
+version = "1.0.0"
+kind = "lua"              # or "rust"
+entry = "main.lua"        # Lua only
+authors = ["you"]
+description = "Greets the driver and warns above 50 km/h."
+min_openomsi = "0.2.21"
+permissions = ["ui"]
+license = "MIT"
+homepage = "https://example.org/hello"
+
+[lua]
+obfuscation_level = 2
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `id` | yes | reverse-domain id, `com.author.name` |
+| `name` | yes | display name |
+| `version` | yes | `MAJOR.MINOR.PATCH` |
+| `kind` | yes | `lua` or `rust` |
+| `entry` | no | Lua entry file, default `main.lua` |
+| `authors` | no | list of names |
+| `description` | no | a sentence or two |
+| `min_openomsi` | no | the oldest openOMSI it supports |
+| `permissions` | no | what it may do (see [Permissions](#permissions)) |
+| `license` | no | SPDX licence id |
+| `homepage` | no | a web address |
+
+| `[lua]` option | Meaning |
+| --- | --- |
+| `obfuscation_level` | 0 strips formatting only, 1 renames, 2 (default) also encodes strings and numbers |
+
+| `[rust]` option | Meaning |
+| --- | --- |
+| `features` | extra Cargo features for the build |
+
+A Lua plugin in the [catalog](#distributing-a-plugin) uses a different file, `plugin.json`. A theme uses `theme.json` ([Interface themes](THEMES.md)).
+
+### What the game does with an `.oop`
+
+- It checks the whole file before any of it runs. A file changed after it was built, cut short, larger than 512 MB, or made for a newer plugin API is refused, and the log says why.
+- The code stays in memory. The plugin's pictures, sounds and data files are unpacked to `plugins/.oop-cache/<name>/`, where its API functions read them.
+- It applies the declared permissions.
+- A signed plugin is logged with its author's key fingerprint (`signed by 3097:e2de:e2cb:4a34`). An unsigned one is logged with a warning that its builder is unknown.
+
+The file is encrypted, but the key is in the game, so it can be decrypted with effort. What one gets then is the stripped or obfuscated build output, never the author's sources.
+
+### Signing
+
+1. In the app, open **Signing keys** and press **New key**, once. Keep the secret key private and back it up. The public half (`.oopkey.pub`) is safe to share.
+2. Turn on **Sign this build** when you build. From a terminal: `oopc build --sign <your.oopkey>`.
+3. Publish your key's fingerprint somewhere players trust. They can then confirm in the log that a plugin is yours and unchanged.
+
+## OMSI 2 DLL plugins
+
+openOMSI loads the original game's plugins: every `*.opl` under the `plugins` folder of each content root, searched recursively. The first content root's copy of an `.opl` wins.
+
+### The `.opl` file
+
+| Tag | Contents |
+| --- | --- |
+| `[dll]` | the DLL, relative to `plugins` |
+| `[varlist]` | a count, then that many vehicle variable names |
+| `[stringvarlist]` | a count, then string variable names |
+| `[systemvarlist]` | a count, then system variable names |
+| `[triggers]` | a count, then trigger names |
+| `[scripttexturelist]` | openOMSI only: a count, then script texture numbers |
+
+### The DLL interface
+
+The game loads the DLL and looks up its procedures, all `stdcall`:
+
+| Procedure | Required |
+| --- | --- |
+| `PluginStart(AOwner)` | yes |
+| `PluginFinalize` | yes, runs when the game ends |
+| `AccessVariable`, `AccessStringVariable`, `AccessSystemVariable`, `AccessTrigger` | no |
+| `AccessScriptTexture`, `AccessScriptTexturePointer`, `AccessTicketRequest` | no, openOMSI only |
+
+A missing required procedure gives "Could not load plugin …: procedure … not found!". A missing optional one gives "Loading plugin …: procedure … not found!".
+
+Every frame, plugin by plugin:
+
+1. Each listed system variable: `AccessSystemVariable(index: Word; var value: Single; var write: Boolean)`.
+2. With a player vehicle, each listed vehicle variable: `AccessVariable`, same shape. Written back when `write` is true.
+3. Each string variable: `AccessStringVariable(index: Word; text: PWideChar; var write: Boolean)`. The buffer holds length + 1 wide characters, the text and its terminating zero. Read back when `write` is true.
+4. Each trigger: `AccessTrigger(index: Word; var active: Boolean)`, with `active` false before the call. A change from the last frame is a key event: down fires the trigger, up fires `<trigger>_off`.
+
+`index` is the position in the plugin's own list. Names the vehicle does not have are skipped.
+
+### Differences in openOMSI
+
+- A DLL the game can load directly (same system and architecture, for example a 64-bit DLL in the 64-bit game) runs in-process.
+- Otherwise it runs in `omsi-plugin-host32.exe`, a 32-bit Windows helper that loads the DLL and talks to the game once per frame. On Windows it runs directly; on macOS and Linux through Wine (`wine` on the `PATH`, or the `OMSI_WINE` variable). The game looks for the helper next to itself; `OMSI_PLUGIN_HOST32` overrides the path.
+- A plugin's writes to system variables are not applied: the clock, weather and input stay the game's.
+- `PluginStart` gets a nil owner, since there is no Delphi application object. Plugins that open windows do so without a parent.
+- A plugin whose helper stops answering is left out for the rest of the session.
+- The launcher's **Disable plugins** setting, or `OMSI_NO_PLUGINS=1`, leaves out every plugin.
+
+### Game values as variables
+
+Many OMSI 2 plugins read the bus's position, its type or the map from fixed memory addresses of `Omsi.exe`, which cannot work in openOMSI. Instead, list **`openomsi_<key>`** in `[varlist]` or `[stringvarlist]`, where `<key>` is any key of [`omsi.info()`](PLUGIN_API.md#omsiinfo): `openomsi_tile_x`, `openomsi_tile_pos_x`, `openomsi_heading`, `openomsi_map_path`, and so on. OMSI 2 has no variables by these names and skips them, so one `.opl` serves both games.
+
+- Values are available while the player drives a bus. Numbers and booleans come as variables, texts as string variables.
+- Names are matched without regard to case. A real vehicle script variable of the same name takes precedence.
+- The values are read-only.
+- Booleans are `0` or `1`. A text requested as a number (or the reverse), an unknown key, or a number that is not a finite 32-bit float is unavailable.
+- `destination` is the selected HOF terminus's texture identifier (empty for an all-exit terminus). `passengers` is zero when no passenger simulation runs. `version` is the game's displayed version.
+
+### Script textures
+
+OMSI 2 gives plugins no way into the vehicle's `[scripttexture]`s; tools such as OmsiHook reach them in `Omsi.exe`'s memory. openOMSI adds a tag and a procedure for it. OMSI 2 skips both.
+
+```text
 [scripttexturelist]
 2
 0
 3
 ```
 
-lists the player's vehicle's script textures the plugin draws, by number (0-based, as
-`[useScriptTexture]` and `\S:n` count them). Every frame, after the triggers, the game calls
-for each entry the vehicle has:
+This lists the player vehicle's script textures the plugin draws, by number (0-based, as `[useScriptTexture]` and `\S:n` count them). Every frame, after the triggers, the game calls this for each entry the vehicle has:
 
 ```pascal
 procedure AccessScriptTexture(index: Word; width, height: Integer; pixels: Pointer;
   var write: Boolean); stdcall;
 ```
 
-* `index` is the entry's position in the list (as for the other `Access*` procedures), not
-  the texture's number.
-* `pixels` is `width` x `height` x 4 bytes: RGBA, top row first, rows `width * 4` bytes
-  apart, straight (not premultiplied) alpha. The size is the texture's own (its
-  `[scripttexture]` entry, or what `STLoadTex` made it).
-* The buffer belongs to that entry and keeps what the plugin drew last, so a plugin may
-  redraw only what changed; it starts zeroed and is zeroed again when the texture's size
-  changes. It is valid only during the call.
-* Set `write` to show the buffer: the texture shows it from the next picture on. Leave it
-  false while nothing changed: a written picture is copied, and through
-  `omsi-plugin-host32.exe` it travels over a pipe (a 512 x 256 texture is 512 KiB).
-* A script drawing into the same texture (`STLock` ... `STUnlock`) and the plugin take
-  turns: the last to let go is what shows. Give the plugin textures the scripts leave alone.
-* No player vehicle, or a number the vehicle has no texture for: the entry is skipped.
+- `index` is the entry's position in the list, not the texture's number.
+- `pixels` is `width` × `height` × 4 bytes: RGBA, top row first, rows `width * 4` bytes apart, straight (not premultiplied) alpha. The size is the texture's own (its `[scripttexture]` entry, or what `STLoadTex` made it).
+- The buffer belongs to the entry and keeps what the plugin drew last, so it can redraw only what changed. It starts zeroed and is zeroed again when the texture's size changes. It is valid only during the call.
+- Set `write` to show the buffer from the next picture on. Leave it false when nothing changed: a written picture is copied, and through the 32-bit helper it travels over a pipe (a 512 × 256 texture is 512 KiB).
+- If a script also draws into the texture (`STLock` … `STUnlock`), the last to finish is shown. Give the plugin textures the scripts leave alone.
+- Without a player vehicle, or for a number the vehicle has no texture for, the entry is skipped.
 
-#### The mouse on those textures
+A 64-bit DLL loads in-process in the 64-bit game, without the pipe. Textures go over the pipe only for a library that exports `AccessScriptTexture`. An older `omsi-plugin-host32.exe` without this still serves every other plugin.
+
+#### The mouse on script textures
 
 ```pascal
 procedure AccessScriptTexturePointer(index: Word; kind: Integer; x, y: Single); stdcall;
 ```
 
-A library that also exports this hears the mouse on its `[scripttexturelist]` textures. The
-game finds where a click lands on the bus's meshes the way it does for `[htmltexture]` pages
-(the nearest mesh slot whose material shows the texture with `[useScriptTexture]`) and calls
-it in the next frame, before `AccessScriptTexture`, so the picture drawn then can already
-answer:
+A library that exports this hears the mouse on its `[scripttexturelist]` textures. The game finds where a click lands on the bus's meshes as it does for `[htmltexture]` pages (the nearest mesh whose material shows the texture with `[useScriptTexture]`). It calls the procedure in the next frame, before `AccessScriptTexture`, so the picture drawn then can already respond.
 
-* `kind` 0: the button went down on the texture; 1: the cursor moved while it is held (at
-  most one a frame, the latest); 2: it came up (off the texture: where it was last on it).
-* `x`, `y`: the place in the texture's pixels, from its top left (`0..width`, `0..height`,
-  fractional).
-* `index` is the entry's position in the list, as for `AccessScriptTexture`.
+- `kind`: 0 the button went down on the texture; 1 the cursor moved while held (at most once a frame, the latest); 2 it came up (off the texture: where it last was on it).
+- `x`, `y`: the place in texture pixels from the top left, fractional.
+- `index`: the entry's position in the list.
 
-A press on such a texture is the plugin's: a `[mouseevent]` mesh under it does not fire, as
-for a page. Events are not kept while the game is paused.
+A press on such a texture belongs to the plugin: a `[mouseevent]` mesh under it does not fire. Events are not kept while the game is paused.
 
-A 64-bit DLL loads in-process in the 64-bit game, without the pipe; a 32-bit one runs in
-the host, which keeps the buffers on its side. The textures go over the pipe only for a
-library that exports `AccessScriptTexture`; an older `omsi-plugin-host32.exe` without this
-procedure still serves every other plugin.
-
-### Passengers' tickets (openOMSI only)
+### Passengers' tickets in DLL plugins
 
 ```pascal
 procedure AccessTicketRequest(person: Cardinal; age: Single;
@@ -1363,44 +966,113 @@ procedure AccessTicketRequest(person: Cardinal; age: Single;
   var write: Boolean); stdcall;
 ```
 
-A library that exports this hears every passenger boarding the player's bus once, in the
-frame after they decided about their ticket (the Lua plugins' `passenger_ticket`), and may
-change what they ask for at the cash desk - they wait in the doorway for that frame:
+A library that exports this hears every passenger boarding the player's bus once, in the frame after they decided about their ticket (the Lua `passenger_ticket` event). It may change what they ask for; they wait in the doorway for that frame.
 
-* `person`: the passenger's id (as the Lua plugins' `omsi.people` know it); `age` in years.
-* `stop`, `destination`: the timetable's names of the stop they board at and the one they
-  ride to (`""` when not known); `stopNumber`, `destinationNumber`: where those are in the
-  duty's trip, from 1 (0: not in it).
-* `kind`: 0 nothing to do (a pass), 1 validates a ticket, 2 buys one at the cash desk;
-  `ticket` the ticket pack's (from 1; 0 none fits their age, and the desk then asks for
-  the pack's first, as in OMSI), `price` the price asked. A buyer keeps a ticket of the
-  pack: 0 is not taken for them.
-* `name` is a buffer of 256 wide characters (the terminating zero included) holding the
-  ticket's name; `voice` one as long, empty: a line of the passenger's voice folder said at
-  the desk instead of `Ticket_<n>_<k>` (`Zone_4001` for `Zone_4001.wav`).
-* Set `write` to take what the plugin changed of them: only what differs is applied, the
-  kind only while the passenger is not in the bus yet. The plugin's name (the DLL's) is
-  kept as who changed it.
+- `person`: the passenger's id (as `omsi.people` knows it); `age` in years.
+- `stop`, `destination`: the timetable names of the boarding stop and the stop they ride to (`""` when unknown). `stopNumber`, `destinationNumber`: where those are in the duty's trip, from 1 (0: not in it).
+- `kind`: 0 nothing to do (a pass), 1 validates a ticket, 2 buys one. `ticket`: the pack's ticket from 1 (0: none fits their age, and the desk asks for the pack's first, as in OMSI). `price`: the price asked. A buyer keeps a ticket of the pack: 0 is not taken for them.
+- `name`: a buffer of 256 wide characters (the terminating zero included) with the ticket's name. `voice`: one as long, empty; a line of the passenger's voice folder said at the desk instead of `Ticket_<n>_<k>` (`Zone_4001` for `Zone_4001.wav`).
+- Set `write` to apply the changes. Only what differs is applied, the kind only while the passenger is not yet in the bus. The DLL's name is kept as who changed it.
 
-`omsi-plugin-host32.exe` passes the call through; an older host without it does not, and the
-plugin then does not hear of the passengers.
+An older `omsi-plugin-host32.exe` without this procedure does not pass it on, and the plugin then does not hear of passengers.
 
-### Building the host
+### Building the 32-bit helper
 
 ```bash
 scripts/build-plugin-host.sh
 ```
 
-needs `rustup target add i686-pc-windows-gnu` and MinGW (`brew install mingw-w64`, or
-`apt install mingw-w64`); copy `dist/omsi-plugin-host32.exe` next to the game. The 32-bit build uses
-`panic=abort` and a stand-in `_Unwind_Resume` (Homebrew's i686 MinGW links no unwinder the
-prebuilt standard library can use).
+It needs `rustup target add i686-pc-windows-gnu` and MinGW (`brew install mingw-w64` or `apt install mingw-w64`). Copy `dist/omsi-plugin-host32.exe` next to the game. See [Building from source](BUILDING.md) for building openOMSI itself.
 
-### Tests
+## Distributing a plugin
 
-`cargo test -p omsi-plugin` builds `crates/omsi-plugin/demo` (a plugin with the OMSI
-interface) and drives it in-process and through the host. With
-`OMSI_TEST_WINE_DIR=target/i686-pc-windows-gnu/release` (after building the host and the
-demo for `i686-pc-windows-gnu`) the test `windows_dll_under_wine` runs the real chain: a
-32-bit Windows DLL with Delphi-style undecorated `stdcall` exports, in the 32-bit host,
-under Wine.
+You can share a plugin in two ways:
+
+- **Any file:** send the `.lua`, the plugin folder, or the `.oop`. Players drop it into their `plugins` folder.
+- **The plugin catalog:** the launcher's **Plugins → Browse** tab lists the plugins of [openOMSI-org/openOMSI-Plugins](https://github.com/openOMSI-org/openOMSI-Plugins). Players install and update them with one click.
+
+### Adding a plugin to the catalog
+
+The catalog takes open-source folder plugins (a `main.lua` and its files). A maintainer reads the code before it is merged.
+
+1. Fork the repository and make a folder `plugins/<id>/`. The id is 2 to 40 characters of `a-z`, `0-9` and `-`, not starting with `-`. It becomes the folder name in the game: `plugins/<id>/main.lua`.
+2. Put the plugin in it: `main.lua` and whatever it `require`s or reads. Allowed file types: `.lua`, `.json`, `.txt`, `.md`, `.csv`, `.png`, `.jpg`, `.ogg`, `.wav`, `.ttf`, `.otf`. At most 2 MB per file, 10 MB in all, 200 files. No programs, libraries or archives.
+3. Add `plugins/<id>/plugin.json` (see below).
+4. Run `python3 tools/build_catalog.py` and commit `catalog.json` with the plugin. Check the Lua with `luac -p plugins/<id>/*.lua` (Lua 5.4).
+5. Open a pull request. The checks must pass.
+
+An update is a pull request that changes the files and raises `version`. The launcher offers it to everyone who installed the plugin. Their settings and saved data (`plugins/<id>/data/`) stay.
+
+### `plugin.json`
+
+```json
+{
+  "id": "my-plugin",
+  "name": "My plugin",
+  "author": "Your name",
+  "version": "1.0.0",
+  "description": "One line: what it does for the player.",
+  "license": "MIT",
+  "tags": ["driving"],
+  "homepage": "https://github.com/you/my-plugin",
+  "min_game": "0.3.55"
+}
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `id` | yes | the folder name, as above |
+| `name` | yes | display name, at most 60 characters |
+| `author` | yes | at most 60 characters |
+| `version` | yes | `MAJOR.MINOR.PATCH` |
+| `description` | yes | one line, at most 300 characters |
+| `license` | yes | SPDX id of an open-source licence, at most 40 characters |
+| `tags` | no | a list of words |
+| `homepage` | no | a web address |
+| `min_game` | no | the oldest openOMSI it needs |
+
+### What the catalog does not take
+
+- Code that is hidden (obfuscated, minified, encoded) or downloads code to run.
+- Anything that sends the player's data somewhere without saying so in its description.
+- Content of OMSI 2 or of other people's mods (textures, sounds, scripts) without their permission.
+
+Plugins that only work with paid add-ons are fine; say so in the description.
+
+### How the launcher installs from the catalog
+
+- It installs a plugin as `plugins/<id>/` only when every file's size and SHA-256 match `catalog.json`.
+- It refuses to overwrite a `plugins/<id>/` folder that did not come from the catalog.
+- It offers an update when `version` goes up, and keeps `plugins/<id>/data/` on an update.
+- **Remove** deletes the plugin's files, settings and saved data.
+- An entry that breaks a rule is left out of the list. A catalog newer than the launcher asks you to update openOMSI.
+
+## Debugging
+
+- **Watch `game.log`** (in `~/.openomsi/`) while you work. Every `omsi.log` and `print` line and every error is there, tagged `[lua <name>]`. `omsi.warn`, `omsi.error` and `omsi.debug` write at other levels; debug lines show with `RUST_LOG=debug`.
+- **Save to reload.** The game reloads a changed plugin within a second and says "Lua plugin <name> reloaded". The Development Tools' **Live** switch does the same for a project.
+- **Check the status.** `~/.openomsi/plugins-status.json` and the launcher's **Plugins** page show whether each plugin loaded, failed (with the error) or was switched off.
+- **Find variable names.** The bus's `.osc` scripts list them, and so does `omsi.vars()`. The environment variable `OMSI_WATCH_VARS=Velocity,throttle` logs every change of those variables (see [Environment variables](DEBUG_FLAGS.md)).
+- **Catch expected errors** with `pcall`. A wrong argument is an error that names the function and the argument.
+- **Test for features** with `omsi.game.has("weather.set")` and `omsi.ui.version` when a plugin should run on older versions too.
+- **Rule out plugins.** Turn on **Disable plugins** in the launcher (or set `OMSI_NO_PLUGINS=1`) to check whether a problem comes from a plugin.
+
+Keep plugins light:
+
+- Keep `on_frame` short. Use `omsi.every`, `omsi.watch` and events for everything that does not need every frame.
+- Read only what you need, such as `omsi.bus.velocity()` or `omsi.info_value("delay")`, instead of building whole tables every frame.
+- Use `omsi.ui.update` to change one element; setting the whole panel every frame costs more.
+
+## Example plugins
+
+Complete plugins to start from. Each one runs in the game's tests against a stand-in game.
+
+| Plugin | What it shows |
+| --- | --- |
+| [`trip_panel.lua`](examples/plugins/trip_panel.lua) | a panel with the line, the next stop and a button |
+| [`navigator_map.lua`](examples/plugins/navigator_map.lua) | the navigator's frame with its map and three cards over it: line, next stop, speed |
+| [`dispatcher/`](examples/plugins/dispatcher/main.lua) | a dispatcher and small career: draggable panel with tabs, next stops in a table, a delay chart, pay kept in storage, duties offered and taken with a click, settings, hotkeys |
+| [`telemetry_hud.lua`](examples/plugins/telemetry_hud.lua) | a HUD with speed chart, gear, rpm, fuel, passengers, speed limit and the light ahead; a red-light warning; the values as JSON over UDP |
+| [`passenger_log.lua`](examples/plugins/passenger_log.lua) | every boarding passenger in `game.log`: age, stops, the ticket they will ask for |
+| [`reduced_tickets.lua`](examples/plugins/reduced_tickets.lua) | every adult asks for the reduced fare |
+| [`weather_controller.lua`](examples/plugins/weather_controller.lua) | weather files as tabs, sliders for temperature, visibility and rain, snow cover, clock buttons, a day cycle |

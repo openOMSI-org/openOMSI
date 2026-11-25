@@ -55,13 +55,23 @@ pub(crate) fn note(text: &str) {
     use std::io::Write;
     let path = omsi_platform::recovery::guard_dir().join("guard.log");
     // (kept short: half of it goes once it passes 256 kB)
-    if std::fs::metadata(&path).map(|m| m.len() > 256 * 1024).unwrap_or(false) {
+    if std::fs::metadata(&path)
+        .map(|m| m.len() > 256 * 1024)
+        .unwrap_or(false)
+    {
         if let Ok(t) = std::fs::read_to_string(&path) {
             let _ = std::fs::write(&path, log_tail(&t));
         }
     }
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         let _ = writeln!(f, "[{secs} pid {}] {text}", std::process::id());
     }
 }
@@ -83,9 +93,16 @@ pub fn early() -> Option<i32> {
 /// does not even start, shows here before the update replaces anything.
 fn self_test() -> i32 {
     let version = omsi_platform::VERSION;
-    let ok = !version.is_empty() && std::env::current_exe().ok().and_then(|e| e.parent().map(|d| std::fs::read_dir(d).is_ok())).unwrap_or(false);
+    let ok = !version.is_empty()
+        && std::env::current_exe()
+            .ok()
+            .and_then(|e| e.parent().map(|d| std::fs::read_dir(d).is_ok()))
+            .unwrap_or(false);
     if ok {
-        println!("openomsi {version} build {} self-test ok", omsi_platform::BUILD);
+        println!(
+            "openomsi {version} build {} self-test ok",
+            omsi_platform::BUILD
+        );
         0
     } else {
         println!("openomsi {version}: self-test failed (the program's own folder cannot be read)");
@@ -111,7 +128,9 @@ pub fn apply_safe_mode() {
 /// Whether this program file is a development build (a cargo `target` folder), which the guard
 /// leaves alone unless `OMSI_GUARD_FORCE` is set: it cannot update itself anyway.
 fn dev_build() -> bool {
-    std::env::current_exe().map(|e| omsi_platform::updater::is_dev_build(&e)).unwrap_or(false)
+    std::env::current_exe()
+        .map(|e| omsi_platform::updater::is_dev_build(&e))
+        .unwrap_or(false)
 }
 
 /// The variable that hands the start's state file to the process it watches (and only to it:
@@ -130,7 +149,9 @@ fn own_state() -> Option<PathBuf> {
 /// now, before any window. Call it as early as possible (for the launcher: first thing in
 /// `main`); `false` when this process should end (another one was started in its place).
 pub fn start(kind: Kind) -> bool {
-    if omsi_cfg::flags::OMSI_NO_GUARD.is_set() || (dev_build() && !omsi_cfg::flags::OMSI_GUARD_FORCE.is_set()) {
+    if omsi_cfg::flags::OMSI_NO_GUARD.is_set()
+        || (dev_build() && !omsi_cfg::flags::OMSI_GUARD_FORCE.is_set())
+    {
         return true;
     }
     // (a start the guard already noted: the same process after macOS' restart with its
@@ -169,7 +190,10 @@ pub fn healthy(kind: Kind) {
     if let Some(state) = own_state() {
         let _ = std::fs::write(&state, "healthy");
         journal::update(|j| j.mark_healthy(std::process::id()));
-        note(&format!("{kind:?} of {} started well", omsi_platform::VERSION));
+        note(&format!(
+            "{kind:?} of {} started well",
+            omsi_platform::VERSION
+        ));
     }
     // a version that runs needs no way back any more: the watcher drops it once it knows the
     // project does not list this version as broken; without a watcher it goes now
@@ -182,10 +206,14 @@ pub fn healthy(kind: Kind) {
 /// The process ends on its own (`ok`: without an error): the watcher knows it was no crash.
 pub fn exited(ok: bool) {
     if let Some(state) = own_state() {
-        let healthy = std::fs::read_to_string(&state).map(|s| s.trim() == "healthy").unwrap_or(false);
+        let healthy = std::fs::read_to_string(&state)
+            .map(|s| s.trim() == "healthy")
+            .unwrap_or(false);
         let _ = std::fs::write(&state, if ok { "exited-ok" } else { "exited-error" });
         if !healthy {
-            journal::update(|j| j.end(std::process::id(), if ok { End::Clean } else { End::Error }));
+            journal::update(|j| {
+                j.end(std::process::id(), if ok { End::Clean } else { End::Error })
+            });
         } else {
             journal::update(|j| j.end(std::process::id(), End::Clean));
         }
@@ -199,7 +227,17 @@ pub fn test_break() {
     if !omsi_cfg::flags::OMSI_GUARD_TEST_BREAK.is_set() {
         return;
     }
-    let Some(dir) = omsi_platform::updater::install_place().ok().map(|p| p.dir).or_else(|| std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from))) else { return };
+    let Some(dir) = omsi_platform::updater::install_place()
+        .ok()
+        .map(|p| p.dir)
+        .or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|e| e.parent().map(PathBuf::from))
+        })
+    else {
+        return;
+    };
     let how = std::fs::read_to_string(dir.join("guard-test-break")).unwrap_or_default();
     match how.trim() {
         "panic" => panic!("guard test: this start breaks on purpose"),

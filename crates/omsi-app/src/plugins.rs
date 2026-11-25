@@ -12,6 +12,10 @@ pub(crate) fn load(disabled: bool) -> Plugins {
         if disabled {
             log::info!("plugins disabled for this session (--no-plugins)");
         }
+        // (the launcher's list then shows no plugin as run in the last game; not from tests)
+        if !cfg!(test) {
+            omsi_plugin::status::write_none(omsi_plugin::status::game_data().as_deref());
+        }
         return Plugins::default();
     }
     // (never from content another machine sent: a LAN host's mods are data only)
@@ -876,6 +880,24 @@ impl PluginIo for Io<'_> {
         self.veh().map(|v| {
             let c = &v.physics.controls;
             [c.throttle, c.brake, c.clutch, c.steering]
+        })
+    }
+    fn bus_track(&self) -> Option<op::TrackPos> {
+        let app = self.app()?;
+        let r = app.player.as_ref()?.rail.as_ref()?;
+        let lane = app
+            .session
+            .traffic
+            .as_ref()
+            .and_then(|t| t.net.lanes.get(r.lane));
+        let lane_length = lane.map_or(0.0, |l| l.length());
+        let travelled = r.travelled();
+        Some(op::TrackPos {
+            lane: r.lane,
+            s: r.s,
+            lane_length,
+            forward: r.along,
+            travelled,
         })
     }
     fn bus_cruise(&self) -> Option<f32> {

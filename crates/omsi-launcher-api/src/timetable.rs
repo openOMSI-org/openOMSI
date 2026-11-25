@@ -1,8 +1,8 @@
-use crate::{err, Answer};
+use crate::{Answer, err};
 use omsi_launcher_lib as core;
 use omsi_timetable::{Line, Tour, TourTrip, Trip, TripProfile};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
@@ -92,15 +92,30 @@ fn within(p: &Path, dir: &Path) -> bool {
 impl Place {
     fn of(map: &str) -> Result<Place, String> {
         let global = core::content_path(map).map_err(err)?;
-        let map_dir = global.parent().map(Path::to_path_buf).ok_or_else(|| core::i18n::tr("{map} is not a map file").replace("{map}", &map))?;
-        let rel = PathBuf::from(map.replace('\\', "/")).parent().map(Path::to_path_buf).unwrap_or_default();
-        if rel.as_os_str().is_empty() || !rel.components().all(|c| matches!(c, Component::Normal(_))) {
+        let map_dir = global
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| core::i18n::tr("{map} is not a map file").replace("{map}", &map))?;
+        let rel = PathBuf::from(map.replace('\\', "/"))
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        if rel.as_os_str().is_empty()
+            || !rel.components().all(|c| matches!(c, Component::Normal(_)))
+        {
             return Err(core::i18n::tr("{map} is not a map file").replace("{map}", map));
         }
         let content = core::content_dir().ok_or_else(|| "no content folder".to_string())?;
         let root = core::load_config().root;
-        let omsi = core::root_dir().ok().or_else(|| (!root.trim().is_empty()).then(|| PathBuf::from(root.trim())));
-        Ok(Place { content, omsi, map_dir, rel })
+        let omsi = core::root_dir()
+            .ok()
+            .or_else(|| (!root.trim().is_empty()).then(|| PathBuf::from(root.trim())));
+        Ok(Place {
+            content,
+            omsi,
+            map_dir,
+            rel,
+        })
     }
 
     fn original(&self, p: &Path) -> bool {
@@ -113,7 +128,10 @@ impl Place {
     }
 
     fn folder(&self) -> String {
-        self.map_dir.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default()
+        self.map_dir
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default()
     }
 
     fn copy_dir(&self) -> PathBuf {
@@ -122,7 +140,11 @@ impl Place {
 
     fn layer_copy_dir(&self, layer_tt: &Path) -> PathBuf {
         if let Ok(rel_layer) = layer_tt.strip_prefix(&self.map_dir) {
-            if rel_layer.components().next().is_some_and(|c| c.as_os_str().eq_ignore_ascii_case("Chrono")) {
+            if rel_layer
+                .components()
+                .next()
+                .is_some_and(|c| c.as_os_str().eq_ignore_ascii_case("Chrono"))
+            {
                 return self.content.join(&self.rel).join(rel_layer);
             }
         }
@@ -132,7 +154,10 @@ impl Place {
 
 pub fn load(map: String, date: Option<String>) -> Answer {
     let global = core::content_path(&map).map_err(err)?;
-    let map_dir = global.parent().map(Path::to_path_buf).ok_or_else(|| core::i18n::tr("{map} is not a map file").replace("{map}", &map))?;
+    let map_dir = global
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| core::i18n::tr("{map} is not a map file").replace("{map}", &map))?;
     Ok(read(&map_dir, date.as_deref().unwrap_or("")))
 }
 
@@ -162,10 +187,23 @@ fn read(map_dir: &Path, date: &str) -> Value {
     // every stop the timetable knows (a name stands for one object), and the station links
     // between them (a trip may follow only these): [from, to, metres]
     let mut seen = std::collections::HashSet::new();
-    let stops: Vec<Value> = d.bus_stops.iter().filter(|b| seen.insert(b.object_id)).map(|b| json!({ "id": b.object_id, "name": b.name.trim() })).collect();
+    let stops: Vec<Value> = d
+        .bus_stops
+        .iter()
+        .filter(|b| seen.insert(b.object_id))
+        .map(|b| json!({ "id": b.object_id, "name": b.name.trim() }))
+        .collect();
     let mut linked = std::collections::HashSet::new();
-    let links: Vec<Value> = d.stn_links.iter().filter(|l| linked.insert((l.from_id, l.to_id))).map(|l| json!([l.from_id, l.to_id, l.length.round()])).collect();
-    let folder = map_dir.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+    let links: Vec<Value> = d
+        .stn_links
+        .iter()
+        .filter(|l| linked.insert((l.from_id, l.to_id)))
+        .map(|l| json!([l.from_id, l.to_id, l.length.round()]))
+        .collect();
+    let folder = map_dir
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_default();
     json!({ "folder": folder, "lines": lines, "trips": trips, "stops": stops, "links": links })
 }
 
@@ -194,7 +232,11 @@ fn save_lines_on(place: &Place, edits: Vec<LineEdit>, date: &str) -> Value {
         match save_line(place, &base_tt, &known, e) {
             Ok(()) => saved.push(name),
             Err(why) => {
-                error.get_or_insert(core::i18n::tr("line {name}: {why}").replace("{why}", &why).replace("{name}", &name));
+                error.get_or_insert(
+                    core::i18n::tr("line {name}: {why}")
+                        .replace("{why}", &why)
+                        .replace("{name}", &name),
+                );
             }
         }
     }
@@ -248,41 +290,89 @@ fn write_trip_on(place: &Place, e: TripNew, date: &str) -> Result<String, String
     }
     let data = core::timetable_for_date(&place.map_dir, date);
     if data.trips.iter().any(|t| t.is_named(&name)) {
-        return Err(core::i18n::trf("A trip named {name} is there already", &[("name", &name)]));
+        return Err(core::i18n::trf(
+            "A trip named {name} is there already",
+            &[("name", &name)],
+        ));
     }
-    let name_of = |id: i64| data.bus_stops.iter().find(|b| b.object_id == id).map(|b| b.name.trim().to_string());
+    let name_of = |id: i64| {
+        data.bus_stops
+            .iter()
+            .find(|b| b.object_id == id)
+            .map(|b| b.name.trim().to_string())
+    };
     let mut metres = 0.0;
     for w in e.stops.windows(2) {
-        let Some(link) = data.stn_links.iter().find(|l| l.from_id == w[0] && l.to_id == w[1]) else {
-            let (a, b) = (name_of(w[0]).unwrap_or_else(|| w[0].to_string()), name_of(w[1]).unwrap_or_else(|| w[1].to_string()));
-            return Err(core::i18n::trf("The map has no way from {a} to {b}", &[("a", &a), ("b", &b)]));
+        let Some(link) = data
+            .stn_links
+            .iter()
+            .find(|l| l.from_id == w[0] && l.to_id == w[1])
+        else {
+            let (a, b) = (
+                name_of(w[0]).unwrap_or_else(|| w[0].to_string()),
+                name_of(w[1]).unwrap_or_else(|| w[1].to_string()),
+            );
+            return Err(core::i18n::trf(
+                "The map has no way from {a} to {b}",
+                &[("a", &a), ("b", &b)],
+            ));
         };
         metres += link.length;
     }
-    let minutes = if e.minutes > 0.0 { e.minutes } else { ((metres / SPEED_MPS / 60.0 + DWELL_MIN * (e.stops.len() - 2) as f64).ceil() as f32).max(1.0) };
-    let terminus = if e.terminus.trim().is_empty() { name_of(*e.stops.last().unwrap_or(&0)).unwrap_or_default() } else { e.terminus.trim().to_string() };
+    let minutes = if e.minutes > 0.0 {
+        e.minutes
+    } else {
+        ((metres / SPEED_MPS / 60.0 + DWELL_MIN * (e.stops.len() - 2) as f64).ceil() as f32)
+            .max(1.0)
+    };
+    let terminus = if e.terminus.trim().is_empty() {
+        name_of(*e.stops.last().unwrap_or(&0)).unwrap_or_default()
+    } else {
+        e.terminus.trim().to_string()
+    };
     let trip = Trip {
         terminus,
         line: e.line.trim().to_string(),
         stations: e.stops,
-        profiles: vec![TripProfile { name: "standard".into(), factor: minutes, ..Default::default() }],
+        profiles: vec![TripProfile {
+            name: "standard".into(),
+            factor: minutes,
+            ..Default::default()
+        }],
         ..Default::default()
     };
     let base_tt = omsi_cfg::resolve_path(&place.map_dir, "TTData");
     let chrono = core::chrono_dirs_for_date(&place.map_dir, date);
     let fits = |td: &omsi_timetable::TimetableData| {
-        trip.stations.iter().all(|id| td.bus_stops.iter().any(|b| b.object_id == *id))
-            && trip.stations.windows(2).all(|w| td.stn_links.iter().any(|l| l.from_id == w[0] && l.to_id == w[1]))
+        trip.stations
+            .iter()
+            .all(|id| td.bus_stops.iter().any(|b| b.object_id == *id))
+            && trip.stations.windows(2).all(|w| {
+                td.stn_links
+                    .iter()
+                    .any(|l| l.from_id == w[0] && l.to_id == w[1])
+            })
     };
-    let needed_chrono = if chrono.is_empty() || fits(&omsi_timetable::TimetableData::load(&place.map_dir)) {
-        None
-    } else {
-        (0..chrono.len())
-            .find(|&i| fits(&omsi_timetable::TimetableData::load_with_chrono(&place.map_dir, &chrono[..=i], &[])))
-            .or_else(|| Some(chrono.len() - 1))
-            .map(|i| omsi_cfg::resolve_path(&chrono[i], "TTData"))
-    };
-    let target_name = e.target_line.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let needed_chrono =
+        if chrono.is_empty() || fits(&omsi_timetable::TimetableData::load(&place.map_dir)) {
+            None
+        } else {
+            (0..chrono.len())
+                .find(|&i| {
+                    fits(&omsi_timetable::TimetableData::load_with_chrono(
+                        &place.map_dir,
+                        &chrono[..=i],
+                        &[],
+                    ))
+                })
+                .or_else(|| Some(chrono.len() - 1))
+                .map(|i| omsi_cfg::resolve_path(&chrono[i], "TTData"))
+        };
+    let target_name = e
+        .target_line
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     let line_tt = |line_name: &str| {
         data.lines
             .iter()
@@ -291,8 +381,13 @@ fn write_trip_on(place: &Place, e: TripNew, date: &str) -> Result<String, String
     };
     let layer_tt = match needed_chrono {
         Some(ev_tt) => {
-            if target_name.and_then(line_tt).is_some_and(|dir| dir == base_tt) {
-                return Err(core::i18n::tr("This trip uses a Chrono event stop or link and cannot be added to a base line"));
+            if target_name
+                .and_then(line_tt)
+                .is_some_and(|dir| dir == base_tt)
+            {
+                return Err(core::i18n::tr(
+                    "This trip uses a Chrono event stop or link and cannot be added to a base line",
+                ));
             }
             ev_tt
         }
@@ -310,25 +405,42 @@ fn write_trip_on(place: &Place, e: TripNew, date: &str) -> Result<String, String
         return Err(core::i18n::tr("it would be written into the OMSI 2 folder"));
     }
     if target.exists() {
-        return Err(core::i18n::trf("A trip named {name} is there already", &[("name", &name)]));
+        return Err(core::i18n::trf(
+            "A trip named {name} is there already",
+            &[("name", &name)],
+        ));
     }
     trip.save(&target).map_err(|e| core::i18n::tr(&err(e)))?;
     if in_place && !dir.join(COPY_MARK).is_file() {
         let tracked = dir.join(NEW_TRIPS);
         let mut list = std::fs::read_to_string(&tracked).unwrap_or_default();
-        list.push_str(&format!("{name}.ttp
-"));
+        list.push_str(&format!(
+            "{name}.ttp
+"
+        ));
         std::fs::write(&tracked, list).map_err(err)?;
     }
     Ok(name)
 }
 
 fn file_name_ok(name: &str) -> bool {
-    if name.is_empty() || name.ends_with(['.', ' ']) || name.chars().any(|c| c.is_control() || NOT_IN_NAMES.contains(&c)) {
+    if name.is_empty()
+        || name.ends_with(['.', ' '])
+        || name
+            .chars()
+            .any(|c| c.is_control() || NOT_IN_NAMES.contains(&c))
+    {
         return false;
     }
-    let stem = name.split('.').next().unwrap_or_default().trim_end().to_ascii_uppercase();
-    let numbered = |p: &str| stem.len() == 4 && stem.starts_with(p) && matches!(stem.as_bytes()[3], b'1'..=b'9');
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .trim_end()
+        .to_ascii_uppercase();
+    let numbered = |p: &str| {
+        stem.len() == 4 && stem.starts_with(p) && matches!(stem.as_bytes()[3], b'1'..=b'9')
+    };
     !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL") && !numbered("COM") && !numbered("LPT")
 }
 
@@ -342,15 +454,35 @@ fn save_line(place: &Place, default_tt: &Path, known: &[Line], e: LineEdit) -> R
         let mut trips = Vec::with_capacity(t.trips.len());
         for x in t.trips {
             if !x.departure.is_finite() || x.departure < 0.0 {
-                return Err(core::i18n::tr("tour {tour}: a departure is not a time").replace("{tour}", &t.number));
+                return Err(core::i18n::tr("tour {tour}: a departure is not a time")
+                    .replace("{tour}", &t.number));
             }
-            trips.push(TourTrip { trip: x.trip, profile: x.profile, departure: x.departure });
+            trips.push(TourTrip {
+                trip: x.trip,
+                profile: x.profile,
+                departure: x.departure,
+            });
         }
         trips.sort_by(|a, b| a.departure.total_cmp(&b.departure));
-        tours.push(Tour { number: t.number, ai_group: t.ai_group, extra: t.extra, trips });
+        tours.push(Tour {
+            number: t.number,
+            ai_group: t.ai_group,
+            extra: t.extra,
+            trips,
+        });
     }
-    let path = known.iter().find(|l| l.name.eq_ignore_ascii_case(&name)).map(|l| l.path.clone()).unwrap_or_else(|| default_tt.join(format!("{name}.ttl")));
-    let line = Line { path, name, user_allowed: e.user_allowed, priority: e.priority, tours };
+    let path = known
+        .iter()
+        .find(|l| l.name.eq_ignore_ascii_case(&name))
+        .map(|l| l.path.clone())
+        .unwrap_or_else(|| default_tt.join(format!("{name}.ttl")));
+    let line = Line {
+        path,
+        name,
+        user_allowed: e.user_allowed,
+        priority: e.priority,
+        tours,
+    };
     let target = save_target(place, &line, default_tt)?;
     if place.original(&target) {
         return Err(core::i18n::tr("it would be written into the OMSI 2 folder"));
@@ -376,7 +508,10 @@ fn ensure_writable_tt(place: &Place, layer_tt: &Path) -> Result<(PathBuf, bool),
         if let (Some(src_ev), Some(dst_ev)) = (layer_tt.parent(), dir.parent()) {
             let src_cfg = src_ev.join("Chrono.cfg");
             let dst_cfg = dst_ev.join("Chrono.cfg");
-            if dst_ev != place.content.join(&place.rel) && omsi_cfg::vfs::is_file(&src_cfg) && !dst_cfg.exists() {
+            if dst_ev != place.content.join(&place.rel)
+                && omsi_cfg::vfs::is_file(&src_cfg)
+                && !dst_cfg.exists()
+            {
                 if let Ok(bytes) = omsi_cfg::vfs::read(&src_cfg) {
                     std::fs::write(&dst_cfg, bytes).map_err(err)?;
                     std::fs::write(dst_ev.join(CHRONO_CFG_MARK), b"1").map_err(err)?;
@@ -388,7 +523,11 @@ fn ensure_writable_tt(place: &Place, layer_tt: &Path) -> Result<(PathBuf, bool),
 }
 
 fn save_target(place: &Place, line: &Line, default_tt: &Path) -> Result<PathBuf, String> {
-    let file = line.path.file_name().map(|f| f.to_owned()).unwrap_or_else(|| format!("{}.ttl", line.name).into());
+    let file = line
+        .path
+        .file_name()
+        .map(|f| f.to_owned())
+        .unwrap_or_else(|| format!("{}.ttl", line.name).into());
     let layer_tt = line.path.parent().unwrap_or(default_tt);
     let (dir, in_place) = ensure_writable_tt(place, layer_tt)?;
     if in_place && !dir.is_dir() {
@@ -405,7 +544,10 @@ fn save_target(place: &Place, line: &Line, default_tt: &Path) -> Result<PathBuf,
 }
 
 fn copy_whole(original: &Path, dir: &Path) -> Result<(), String> {
-    let names = omsi_cfg::vfs::list_dir(original).ok_or_else(|| core::i18n::tr("{folder} cannot be read").replace("{folder}", &original.display().to_string()))?;
+    let names = omsi_cfg::vfs::list_dir(original).ok_or_else(|| {
+        core::i18n::tr("{folder} cannot be read")
+            .replace("{folder}", &original.display().to_string())
+    })?;
     let partial = dir.with_file_name(PARTIAL);
     if partial.exists() {
         std::fs::remove_dir_all(&partial).map_err(err)?;
@@ -455,7 +597,11 @@ fn collect_chrono_ttdata(dir: &Path, out: &mut Vec<PathBuf>) {
     if let Ok(rd) = std::fs::read_dir(dir) {
         for e in rd.flatten() {
             let p = e.path();
-            if p.is_dir() && !p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("TTData")) {
+            if p.is_dir()
+                && !p
+                    .file_name()
+                    .is_some_and(|n| n.eq_ignore_ascii_case("TTData"))
+            {
                 collect_chrono_ttdata(&p, out);
             }
         }
@@ -540,7 +686,8 @@ mod tests {
 
     fn dirs_at(name: &str, omsi: &str, content: &str) -> Dirs {
         omsi_launcher_lib::i18n::pin_language("ENG");
-        let top = std::env::temp_dir().join(format!("openomsi-timetable-{name}-{}", std::process::id()));
+        let top =
+            std::env::temp_dir().join(format!("openomsi-timetable-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&top).ok();
         let (omsi, content) = (top.join(omsi), top.join(content));
         std::fs::create_dir_all(&content).unwrap();
@@ -561,12 +708,34 @@ mod tests {
     }
 
     fn place(d: &Dirs, map_dir: &Path) -> Place {
-        Place { content: d.content.clone(), omsi: Some(d.omsi.clone()), map_dir: map_dir.to_path_buf(), rel: PathBuf::from("maps/Grundorf") }
+        Place {
+            content: d.content.clone(),
+            omsi: Some(d.omsi.clone()),
+            map_dir: map_dir.to_path_buf(),
+            rel: PathBuf::from("maps/Grundorf"),
+        }
     }
 
     fn edit(name: &str, departures: &[f32]) -> LineEdit {
-        let trips = departures.iter().map(|d| TripEdit { trip: "A".into(), profile: 0, departure: *d }).collect();
-        LineEdit { name: name.into(), user_allowed: true, priority: 0, tours: vec![TourEdit { number: "1".into(), ai_group: "Busses".into(), extra: "1023".into(), trips }] }
+        let trips = departures
+            .iter()
+            .map(|d| TripEdit {
+                trip: "A".into(),
+                profile: 0,
+                departure: *d,
+            })
+            .collect();
+        LineEdit {
+            name: name.into(),
+            user_allowed: true,
+            priority: 0,
+            tours: vec![TourEdit {
+                number: "1".into(),
+                ai_group: "Busses".into(),
+                extra: "1023".into(),
+                trips,
+            }],
+        }
     }
 
     fn snapshot(dir: &Path) -> Vec<(PathBuf, Vec<u8>)> {
@@ -597,11 +766,24 @@ mod tests {
         assert!(copy.join("A.ttp").is_file());
         assert!(!copy.with_file_name(PARTIAL).exists());
         let one = Line::load(&copy.join("1.ttl")).unwrap();
-        assert_eq!(one.tours[0].trips.iter().map(|t| t.departure).collect::<Vec<_>>(), vec![380.0, 420.0]);
+        assert_eq!(
+            one.tours[0]
+                .trips
+                .iter()
+                .map(|t| t.departure)
+                .collect::<Vec<_>>(),
+            vec![380.0, 420.0]
+        );
         assert!(one.user_allowed);
-        assert_eq!(Line::load(&copy.join("N5.ttl")).unwrap().tours[0].trips[0].departure, 1450.0);
+        assert_eq!(
+            Line::load(&copy.join("N5.ttl")).unwrap().tours[0].trips[0].departure,
+            1450.0
+        );
         assert!(!copy.join("1.ttl.orig").exists());
-        assert_eq!(reset_in(&p).unwrap(), json!({ "folder": "Grundorf", "removed": true, "restored": 0 }));
+        assert_eq!(
+            reset_in(&p).unwrap(),
+            json!({ "folder": "Grundorf", "removed": true, "restored": 0 })
+        );
         assert!(!copy.exists());
         assert_eq!(snapshot(&d.omsi), before);
     }
@@ -609,13 +791,29 @@ mod tests {
     #[test]
     fn a_map_in_a_pack_folder_is_copied_to_the_same_place_in_the_content_folder() {
         let d = dirs("nested");
-        let tt = d.omsi.join("maps").join("Pack").join("Grundorf").join("TTData");
+        let tt = d
+            .omsi
+            .join("maps")
+            .join("Pack")
+            .join("Grundorf")
+            .join("TTData");
         std::fs::create_dir_all(&tt).unwrap();
         std::fs::write(tt.join("A.ttp"), "[trip]\r\n\r\nHauptbahnhof\r\n1\r\n").unwrap();
         let mut p = place(&d, tt.parent().unwrap());
         p.rel = PathBuf::from("maps/Pack/Grundorf");
-        assert_eq!(save_lines(&p, vec![edit("1", &[300.0])])["error"], json!(null));
-        assert!(d.content.join("maps").join("Pack").join("Grundorf").join("TTData").join("1.ttl").is_file());
+        assert_eq!(
+            save_lines(&p, vec![edit("1", &[300.0])])["error"],
+            json!(null)
+        );
+        assert!(
+            d.content
+                .join("maps")
+                .join("Pack")
+                .join("Grundorf")
+                .join("TTData")
+                .join("1.ttl")
+                .is_file()
+        );
     }
 
     #[test]
@@ -625,9 +823,15 @@ mod tests {
         let partial = d.content.join("maps").join("Grundorf").join(PARTIAL);
         std::fs::create_dir_all(&partial).unwrap();
         std::fs::write(partial.join("A.ttp"), "broken").unwrap();
-        assert_eq!(save_lines(&place(&d, &map), vec![edit("1", &[300.0])])["error"], json!(null));
+        assert_eq!(
+            save_lines(&place(&d, &map), vec![edit("1", &[300.0])])["error"],
+            json!(null)
+        );
         let copy = d.content.join("maps").join("Grundorf").join("TTData");
-        assert_eq!(std::fs::read(copy.join("A.ttp")).unwrap(), std::fs::read(map.join("TTData").join("A.ttp")).unwrap());
+        assert_eq!(
+            std::fs::read(copy.join("A.ttp")).unwrap(),
+            std::fs::read(map.join("TTData").join("A.ttp")).unwrap()
+        );
         assert!(!partial.exists());
     }
 
@@ -641,9 +845,15 @@ mod tests {
         save_lines(&p, vec![edit("1", &[300.0])]);
         save_lines(&p, vec![edit("1", &[310.0])]);
         assert_eq!(std::fs::read(tt.join("1.ttl.orig")).unwrap(), first);
-        assert_eq!(Line::load(&tt.join("1.ttl")).unwrap().tours[0].trips[0].departure, 310.0);
+        assert_eq!(
+            Line::load(&tt.join("1.ttl")).unwrap().tours[0].trips[0].departure,
+            310.0
+        );
         assert!(!tt.join(COPY_MARK).exists());
-        assert_eq!(reset_in(&p).unwrap(), json!({ "folder": "Grundorf", "removed": false, "restored": 1 }));
+        assert_eq!(
+            reset_in(&p).unwrap(),
+            json!({ "folder": "Grundorf", "removed": false, "restored": 1 })
+        );
         assert_eq!(std::fs::read(tt.join("1.ttl")).unwrap(), first);
         assert!(!tt.join("1.ttl.orig").exists());
     }
@@ -655,9 +865,19 @@ mod tests {
         std::fs::write(map.join("TTData").join("2.ttl.orig"), "kept").unwrap();
         let p = place(&d, &map);
         let before = snapshot(&d.omsi);
-        assert_eq!(save_lines(&p, vec![edit("1", &[300.0])])["error"], json!(null));
+        assert_eq!(
+            save_lines(&p, vec![edit("1", &[300.0])])["error"],
+            json!(null)
+        );
         assert_eq!(snapshot(&d.omsi), before);
-        assert!(d.content.join("maps").join("Grundorf").join("TTData").join("1.ttl").is_file());
+        assert!(
+            d.content
+                .join("maps")
+                .join("Grundorf")
+                .join("TTData")
+                .join("1.ttl")
+                .is_file()
+        );
         reset_in(&p).unwrap();
         reset_in(&p).unwrap();
         assert_eq!(snapshot(&d.omsi), before);
@@ -669,9 +889,19 @@ mod tests {
         let map = map_at(&d.omsi);
         let p = place(&d, &map);
         let before = snapshot(&map);
-        assert_eq!(save_lines(&p, vec![edit("1", &[300.0])])["error"], json!(null));
+        assert_eq!(
+            save_lines(&p, vec![edit("1", &[300.0])])["error"],
+            json!(null)
+        );
         assert_eq!(snapshot(&map), before);
-        assert!(d.content.join("maps").join("Grundorf").join("TTData").join("1.ttl").is_file());
+        assert!(
+            d.content
+                .join("maps")
+                .join("Grundorf")
+                .join("TTData")
+                .join("1.ttl")
+                .is_file()
+        );
     }
 
     #[cfg(unix)]
@@ -697,10 +927,36 @@ mod tests {
         let d = dirs("names");
         let map = map_at(&d.omsi);
         let p = place(&d, &map);
-        for bad in ["", "  ", "a/b", "..\\x", "c:d", "e*", "f?", "g\"", "h<", "i>", "j|", "CON", "con", "Nul.txt", "com1", "LPT9.a", "tab\there", "dot.", "bell\u{7}"] {
+        for bad in [
+            "",
+            "  ",
+            "a/b",
+            "..\\x",
+            "c:d",
+            "e*",
+            "f?",
+            "g\"",
+            "h<",
+            "i>",
+            "j|",
+            "CON",
+            "con",
+            "Nul.txt",
+            "com1",
+            "LPT9.a",
+            "tab\there",
+            "dot.",
+            "bell\u{7}",
+        ] {
             let answer = save_lines(&p, vec![edit(bad, &[300.0])]);
             assert_eq!(answer["saved"], json!([]), "{bad:?}");
-            assert!(answer["error"].as_str().unwrap().contains("not a file name"), "{bad:?}");
+            assert!(
+                answer["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("not a file name"),
+                "{bad:?}"
+            );
         }
         for good in ["COM0", "CONSOLE", "N5", "Linie 7.1"] {
             assert!(file_name_ok(good), "{good:?}");
@@ -723,7 +979,10 @@ mod tests {
         let map = map_at(&d.omsi);
         std::fs::write(map.join("TTData").join("2.ttl.orig"), "kept").unwrap();
         let before = snapshot(&d.omsi);
-        assert_eq!(reset_in(&place(&d, &map)).unwrap(), json!({ "folder": "Grundorf", "removed": false, "restored": 0 }));
+        assert_eq!(
+            reset_in(&place(&d, &map)).unwrap(),
+            json!({ "folder": "Grundorf", "removed": false, "restored": 0 })
+        );
         assert_eq!(snapshot(&d.omsi), before);
     }
 
@@ -734,7 +993,10 @@ mod tests {
         let v = read(&map, "");
         assert_eq!(v["folder"], json!("Grundorf"));
         assert_eq!(v["lines"][0]["name"], json!("1"));
-        assert_eq!(v["lines"][0]["tours"][0]["trips"][0], json!({ "trip": "A", "profile": 0, "departure": 360.0 }));
+        assert_eq!(
+            v["lines"][0]["tours"][0]["trips"][0],
+            json!({ "trip": "A", "profile": 0, "departure": 360.0 })
+        );
         assert_eq!(v["trips"][0]["terminus"], json!("Hauptbahnhof"));
     }
 
@@ -744,15 +1006,45 @@ mod tests {
         let map = map_at(&d.omsi);
         let ev = map.join("Chrono").join("Fair");
         std::fs::create_dir_all(ev.join("TTData")).unwrap();
-        std::fs::write(ev.join("Chrono.cfg"), "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n[deactivate_lines]\r\n1\r\n1\r\n").unwrap();
+        std::fs::write(
+            ev.join("Chrono.cfg"),
+            "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n[deactivate_lines]\r\n1\r\n1\r\n",
+        )
+        .unwrap();
         std::fs::write(ev.join("TTData").join("S1.ttl"), "[priority]\r\n1\r\n[newtour]\r\n10\r\nBusses\r\n1023\r\n[addtrip]\r\nFairTrip\r\n0\r\n500.000\r\n").unwrap();
-        std::fs::write(ev.join("TTData").join("FairTrip.ttp"), "[trip]\r\n\r\nFairground\r\n1\r\n").unwrap();
+        std::fs::write(
+            ev.join("TTData").join("FairTrip.ttp"),
+            "[trip]\r\n\r\nFairground\r\n1\r\n",
+        )
+        .unwrap();
 
         let off_day = read(&map, "2026-09-10");
-        assert_eq!(off_day["lines"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap()).collect::<Vec<_>>(), ["1"]);
+        assert_eq!(
+            off_day["lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|l| l["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["1"]
+        );
         let active = read(&map, "2026-09-17");
-        assert_eq!(active["lines"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap()).collect::<Vec<_>>(), ["S1"]);
-        assert!(active["trips"].as_array().unwrap().iter().any(|t| t["name"] == "FairTrip" && t["terminus"] == "Fairground"));
+        assert_eq!(
+            active["lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|l| l["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["S1"]
+        );
+        assert!(
+            active["trips"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|t| t["name"] == "FairTrip" && t["terminus"] == "Fairground")
+        );
     }
 
     #[test]
@@ -762,28 +1054,67 @@ mod tests {
         stops_and_links(&map);
         let ev = map.join("Chrono").join("Fair");
         std::fs::create_dir_all(ev.join("TTData")).unwrap();
-        std::fs::write(ev.join("Chrono.cfg"), "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n[deactivate_lines]\r\n1\r\n1\r\n").unwrap();
+        std::fs::write(
+            ev.join("Chrono.cfg"),
+            "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n[deactivate_lines]\r\n1\r\n1\r\n",
+        )
+        .unwrap();
         std::fs::write(ev.join("TTData").join("S1.ttl"), "[priority]\r\n1\r\n[newtour]\r\n10\r\nBusses\r\n1023\r\n[addtrip]\r\nFairTrip\r\n0\r\n500.000\r\n").unwrap();
-        std::fs::write(ev.join("TTData").join("FairTrip.ttp"), "[trip]\r\n\r\nFairground\r\n1\r\n").unwrap();
-        std::fs::write(ev.join("TTData").join("Busstops.cfg"), "[busstop]\r\nFairground\r\n0\r\n901\r\n0\r\n0\r\n0\r\n").unwrap();
-        std::fs::write(ev.join("TTData").join("StnLinks.cfg"), "[StnLink]\r\n400\r\n103\r\n901\r\n0\r\n0\r\n0\r\n0\r\n0\r\n0\r\n").unwrap();
+        std::fs::write(
+            ev.join("TTData").join("FairTrip.ttp"),
+            "[trip]\r\n\r\nFairground\r\n1\r\n",
+        )
+        .unwrap();
+        std::fs::write(
+            ev.join("TTData").join("Busstops.cfg"),
+            "[busstop]\r\nFairground\r\n0\r\n901\r\n0\r\n0\r\n0\r\n",
+        )
+        .unwrap();
+        std::fs::write(
+            ev.join("TTData").join("StnLinks.cfg"),
+            "[StnLink]\r\n400\r\n103\r\n901\r\n0\r\n0\r\n0\r\n0\r\n0\r\n0\r\n",
+        )
+        .unwrap();
 
         let p = place(&d, &map);
         let base_before = snapshot(&map.join("TTData"));
         let s1_before = std::fs::read(ev.join("TTData").join("S1.ttl")).unwrap();
 
-        assert_eq!(save_lines_on(&p, vec![edit("S1", &[620.0])], "2026-09-17")["saved"], json!(["S1"]));
-        assert_eq!(write_trip_on(&p, new_trip("FairShuttle", &[103, 901]), "2026-09-17").unwrap(), "FairShuttle");
+        assert_eq!(
+            save_lines_on(&p, vec![edit("S1", &[620.0])], "2026-09-17")["saved"],
+            json!(["S1"])
+        );
+        assert_eq!(
+            write_trip_on(&p, new_trip("FairShuttle", &[103, 901]), "2026-09-17").unwrap(),
+            "FairShuttle"
+        );
 
         assert_eq!(snapshot(&map.join("TTData")), base_before);
         assert!(ev.join("TTData").join("S1.ttl.orig").is_file());
         assert!(ev.join("TTData").join("FairShuttle.ttp").is_file());
-        assert_eq!(read(&map, "2026-09-10")["lines"].as_array().unwrap().iter().map(|l| l["name"].as_str().unwrap()).collect::<Vec<_>>(), ["1"]);
-        assert_eq!(Line::load(&ev.join("TTData").join("S1.ttl")).unwrap().tours[0].trips[0].departure, 620.0);
+        assert_eq!(
+            read(&map, "2026-09-10")["lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|l| l["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["1"]
+        );
+        assert_eq!(
+            Line::load(&ev.join("TTData").join("S1.ttl")).unwrap().tours[0].trips[0].departure,
+            620.0
+        );
 
         let reset = reset_in(&p).unwrap();
-        assert_eq!(reset, json!({ "folder": "Grundorf", "removed": false, "restored": 2 }));
-        assert_eq!(std::fs::read(ev.join("TTData").join("S1.ttl")).unwrap(), s1_before);
+        assert_eq!(
+            reset,
+            json!({ "folder": "Grundorf", "removed": false, "restored": 2 })
+        );
+        assert_eq!(
+            std::fs::read(ev.join("TTData").join("S1.ttl")).unwrap(),
+            s1_before
+        );
         assert!(!ev.join("TTData").join("S1.ttl.orig").exists());
         assert!(!ev.join("TTData").join("FairShuttle.ttp").exists());
     }
@@ -795,28 +1126,64 @@ mod tests {
         stops_and_links(&map);
         let ev = map.join("Chrono").join("Fair");
         std::fs::create_dir_all(&ev).unwrap();
-        std::fs::write(ev.join("Chrono.cfg"), "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n").unwrap();
+        std::fs::write(
+            ev.join("Chrono.cfg"),
+            "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n",
+        )
+        .unwrap();
         let ev_tt = ev.join("TTData");
 
         let p = place(&d, &map);
         let mut base_trip = new_trip("BaseHop", &[101, 102]);
         base_trip.target_line = Some("1".into());
-        assert_eq!(write_trip_on(&p, base_trip, "2026-09-17").unwrap(), "BaseHop");
+        assert_eq!(
+            write_trip_on(&p, base_trip, "2026-09-17").unwrap(),
+            "BaseHop"
+        );
         assert!(map.join("TTData").join("BaseHop.ttp").is_file());
         assert!(!ev_tt.exists());
         let mut l1 = edit("1", &[540.0]);
         l1.tours[0].trips[0].trip = "BaseHop".into();
         let new_line = edit("N1", &[600.0]);
-        assert_eq!(save_lines_on(&p, vec![l1, new_line], "2026-09-17")["saved"], json!(["1", "N1"]));
+        assert_eq!(
+            save_lines_on(&p, vec![l1, new_line], "2026-09-17")["saved"],
+            json!(["1", "N1"])
+        );
         assert!(map.join("TTData").join("N1.ttl").is_file());
         let off = read(&map, "2026-09-10");
-        assert!(off["lines"].as_array().unwrap().iter().any(|l| l["name"] == "1"));
-        assert!(off["lines"].as_array().unwrap().iter().any(|l| l["name"] == "N1"));
-        assert!(off["trips"].as_array().unwrap().iter().any(|t| t["name"] == "BaseHop"));
+        assert!(
+            off["lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|l| l["name"] == "1")
+        );
+        assert!(
+            off["lines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|l| l["name"] == "N1")
+        );
+        assert!(
+            off["trips"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|t| t["name"] == "BaseHop")
+        );
 
         std::fs::create_dir_all(&ev_tt).unwrap();
-        std::fs::write(ev_tt.join("Busstops.cfg"), "[busstop]\r\nFairground\r\n0\r\n901\r\n0\r\n0\r\n0\r\n").unwrap();
-        std::fs::write(ev_tt.join("StnLinks.cfg"), "[StnLink]\r\n400\r\n103\r\n901\r\n0\r\n0\r\n0\r\n0\r\n0\r\n0\r\n").unwrap();
+        std::fs::write(
+            ev_tt.join("Busstops.cfg"),
+            "[busstop]\r\nFairground\r\n0\r\n901\r\n0\r\n0\r\n0\r\n",
+        )
+        .unwrap();
+        std::fs::write(
+            ev_tt.join("StnLinks.cfg"),
+            "[StnLink]\r\n400\r\n103\r\n901\r\n0\r\n0\r\n0\r\n0\r\n0\r\n0\r\n",
+        )
+        .unwrap();
         let mut bad = new_trip("BadCross", &[103, 901]);
         bad.target_line = Some("1".into());
         assert!(write_trip_on(&p, bad, "2026-09-17").is_err());
@@ -832,7 +1199,12 @@ mod tests {
         assert_eq!(p.layer_copy_dir(&map.join("TTData")), p.copy_dir());
         assert_eq!(
             p.layer_copy_dir(&map.join("Chrono").join("Fair").join("TTData")),
-            d.content.join("maps").join("Grundorf").join("Chrono").join("Fair").join("TTData")
+            d.content
+                .join("maps")
+                .join("Grundorf")
+                .join("Chrono")
+                .join("Fair")
+                .join("TTData")
         );
 
         let c_map = map_at(&d.content);
@@ -853,19 +1225,44 @@ mod tests {
         let map = map_at(&d.omsi);
         let ev = map.join("Chrono").join("Fair");
         std::fs::create_dir_all(ev.join("TTData")).unwrap();
-        std::fs::write(ev.join("Chrono.cfg"), "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n").unwrap();
+        std::fs::write(
+            ev.join("Chrono.cfg"),
+            "[startdate]\r\n20260917\r\n[enddate]\r\n20260920\r\n",
+        )
+        .unwrap();
         std::fs::write(ev.join("TTData").join("S1.ttl"), "[priority]\r\n1\r\n[newtour]\r\n10\r\nBusses\r\n1023\r\n[addtrip]\r\nA\r\n0\r\n500.000\r\n").unwrap();
 
         let p = place(&d, &map);
         let before = snapshot(&d.omsi);
-        assert_eq!(save_lines_on(&p, vec![edit("S1", &[715.0])], "2026-09-17"), json!({ "saved": ["S1"], "error": null }));
+        assert_eq!(
+            save_lines_on(&p, vec![edit("S1", &[715.0])], "2026-09-17"),
+            json!({ "saved": ["S1"], "error": null })
+        );
         assert_eq!(snapshot(&d.omsi), before);
-        assert!(!d.content.join("maps").join("Grundorf").join("TTData").exists());
-        let copy_ev_tt = d.content.join("maps").join("Grundorf").join("Chrono").join("Fair").join("TTData");
+        assert!(
+            !d.content
+                .join("maps")
+                .join("Grundorf")
+                .join("TTData")
+                .exists()
+        );
+        let copy_ev_tt = d
+            .content
+            .join("maps")
+            .join("Grundorf")
+            .join("Chrono")
+            .join("Fair")
+            .join("TTData");
         assert!(copy_ev_tt.join(COPY_MARK).is_file());
-        assert_eq!(Line::load(&copy_ev_tt.join("S1.ttl")).unwrap().tours[0].trips[0].departure, 715.0);
+        assert_eq!(
+            Line::load(&copy_ev_tt.join("S1.ttl")).unwrap().tours[0].trips[0].departure,
+            715.0
+        );
 
-        assert_eq!(reset_in(&p).unwrap(), json!({ "folder": "Grundorf", "removed": true, "restored": 0 }));
+        assert_eq!(
+            reset_in(&p).unwrap(),
+            json!({ "folder": "Grundorf", "removed": true, "restored": 0 })
+        );
         assert!(!copy_ev_tt.exists());
         assert_eq!(snapshot(&d.omsi), before);
     }
@@ -894,7 +1291,10 @@ mod tests {
         stops_and_links(&map);
         let p = place(&d, &map);
         let before = snapshot(&d.omsi);
-        assert_eq!(write_trip(&p, new_trip("Hbf-Depot", &[101, 102, 103])).unwrap(), "Hbf-Depot");
+        assert_eq!(
+            write_trip(&p, new_trip("Hbf-Depot", &[101, 102, 103])).unwrap(),
+            "Hbf-Depot"
+        );
         assert_eq!(snapshot(&d.omsi), before);
         let copy = d.content.join("maps").join("Grundorf").join("TTData");
         let t = Trip::load(&copy.join("Hbf-Depot.ttp")).unwrap();
@@ -902,7 +1302,11 @@ mod tests {
         assert_eq!(t.stations, vec![101, 102, 103]);
         // 950 m at 6.5 m/s is 2.4 min, and a stop in between stands 0.35: three minutes
         assert_eq!(t.profiles[0].factor, 3.0);
-        assert!(write_trip(&p, new_trip("Hbf-Depot", &[101, 102])).unwrap_err().contains("there already"));
+        assert!(
+            write_trip(&p, new_trip("Hbf-Depot", &[101, 102]))
+                .unwrap_err()
+                .contains("there already")
+        );
     }
 
     #[test]

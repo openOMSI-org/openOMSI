@@ -55,30 +55,21 @@ impl TrafficSim {
     }
 
     /// The light program's verdict for car `i`: where it has to stop (distance from its
-    /// origin), or None. A car that can stop comfortably stops at yellow; one too close
-    /// drives on and remembers that it did, so the red that follows does not stop it in the
-    /// middle of the junction. That memory holds only for a car that is really on its way
-    /// through: still moving at `AMBER_KEEP_SPEED` or more, or rolling with its front over
-    /// the line. A car that crept up to the line in a queue stops (it can, and it is not in
-    /// anybody's way yet), and one standing with its nose over the line does not set off at
-    /// red. The first car of the queue, standing at the line when the light went green,
-    /// keeps going once it has moved off: a light that is green for a second a cycle
-    /// (Westcountry's lights on its invisible lanes) would otherwise let nobody through.
-    /// (Omsi.exe brakes for every yellow as for red and drives on once its front is on
-    /// the light's path; the comfortable stop at yellow is our own.)
+    /// origin), or None. As Omsi.exe's path search (0x716970): a light that shows red,
+    /// red-and-yellow or yellow (0x710ee0 marks its path 1, 3 or 4 from the phase byte
+    /// 0x688a58 derives) holds a car whose front has not reached the light's path yet, at
+    /// the path's start; once its front is on the path the light no longer holds it.
+    /// There is no choice at yellow: the car brakes for it as for red, and one too close
+    /// to stop goes on only because its front gets over the line first. (openOMSI had a
+    /// comfortable stop at yellow with a random few going on, a memory that carried a car
+    /// that went on yellow through the red, and a car that could not stop at 6.4 m/s² ran
+    /// the red - AI cars ran red lights, #818.) The light of the lane the car is on does
+    /// not hold it (the search's first segment, 0x716970 `local_1b1`).
     pub fn light_stop(&mut self, i: usize, way: &[(usize, f32)]) -> Option<f32> {
-        let car = &self.cars[i];
-        let st = &car.state;
-        let v = st.speed;
-        let amber_factor = st.amber_factor;
-        let seed = car.seed;
+        let front = self.cars[i].state.front;
         let mut stop = None;
-        let mut amber = car.amber;
-        // (it stood at this light's line when it went green: it was the first in the queue)
-        let mut started = car.amber_start;
-        let waited_here = car.light_hold;
-        let mut current_light = car.current_light;
-        let mut ad = car.amber_decision;
+        // (the light it went over on yellow, for the red-run count of `stats`)
+        let mut amber = self.cars[i].amber;
         for (k, &(_, d)) in way.iter().enumerate().skip(1) {
             if d > 150.0 {
                 break;
@@ -86,59 +77,16 @@ impl TrafficSim {
             let Some((c, li)) = self.light_at_entry(way, k) else {
                 continue;
             };
-            match current_light {
-                Some((cc, cli)) if cc == c && cli == li => {},
-                _ => {
-                    current_light = Some((c, li));
-                    let n = ((c as u64) << 32) | li as u64;
-                    ad = random::draw(seed, n);
-                }
-            }
             let Some(ctl) = self.lights.get(c) else {
                 continue;
             };
-            let gap = d - st.front;
-            let comfortable = v * v / (2.0 * st.decel * 1.4) + 1.0;
-            let possible = v * v / (2.0 * MAX_BRAKE * 0.8);
-            let on_its_way = amber_holds(v, gap) || (started && amber == Some((c, li)) && v > 0.3);
-            let go = match TrafficLightController::aspect(ctl.state(li)) {
-                Aspect::Green | Aspect::GreenYellow | Aspect::Dark => {
-                    // at the line when it showed green: that car goes, whatever comes next
-                    // (a light that is green for a second a cycle - Westcountry's lights on
-                    // its invisible lanes - let nobody through: the first car was still
-                    // taking in the green when it went red again, for ever)
-                    if gap < 3.0 {
-                        if amber != Some((c, li)) {
-                            started = waited_here;
-                        }
-                        amber = Some((c, li));
-                    }
-                    true
-                }
-                Aspect::Yellow => {
-                    if on_its_way && ((amber == Some((c, li)) || gap < comfortable) || ad < amber_factor) {
-                        amber = Some((c, li));
-                        true
-                    } else {
-                        false
-                    }
-                }
-                // decided to go on yellow and too close to stop now, or past stopping at all
-                // (a car that stands cannot fail to stop: with its nose over the line it
-                // stays where it is)
-                Aspect::Red | Aspect::RedYellow => {
-                    let go = (amber == Some((c, li)) && on_its_way && gap < comfortable)
-                        || (v > 1.0 && gap < possible - 0.5);
-                    if !go && amber == Some((c, li)) {
-                        amber = None;
-                        started = false;
-                    }
-                    go
-                }
-            };
-            if !go {
+            let aspect = TrafficLightController::aspect(ctl.state(li));
+            if light_holds(aspect, d - front) {
                 stop = Some(d);
                 break;
+            }
+            if aspect == Aspect::Yellow {
+                amber = Some((c, li));
             }
         }
         // the light the car went through on yellow is behind it
@@ -152,9 +100,6 @@ impl TrafficSim {
             }
         }
         self.cars[i].amber = amber;
-        self.cars[i].amber_start = started && amber.is_some();
-        self.cars[i].current_light = current_light;
-        self.cars[i].amber_decision = ad;
         stop
     }
 
@@ -162,7 +107,11 @@ impl TrafficSim {
     /// with a `[speedlimit]`) while a train's route is about to enter the track its signal
     /// route covers and no other train is on it; otherwise it shows stop (and falls back to
     /// stop behind the train that passed it).
-    pub fn signal_aspects(&mut self, routes: &[omsi_map::ailists::SignalRoute], player_rail: Option<(usize, bool)>) -> hashbrown::HashMap<i64, f32> {
+    pub fn signal_aspects(
+        &mut self,
+        routes: &[omsi_map::ailists::SignalRoute],
+        player_rail: Option<(usize, bool)>,
+    ) -> hashbrown::HashMap<i64, f32> {
         let mut out: hashbrown::HashMap<i64, f32> = hashbrown::HashMap::new();
         if routes.is_empty() {
             return out;
@@ -175,10 +124,25 @@ impl TrafficSim {
         let mut trains: Vec<(i64, Vec<i64>)> = self
             .cars
             .iter()
-            .filter(|c| !c.state.route.is_empty() && self.net.lanes.get(c.state.lane).map(|l| l.kind == crate::traffic::LaneKind::Rail).unwrap_or(false))
+            .filter(|c| {
+                !c.state.route.is_empty()
+                    && self
+                        .net
+                        .lanes
+                        .get(c.state.lane)
+                        .map(|l| l.kind == crate::traffic::LaneKind::Rail)
+                        .unwrap_or(false)
+            })
             .map(|c| {
                 let here = self.net.lanes[c.state.lane].key.map(|k| k.id).unwrap_or(-1);
-                let ahead = c.state.route.iter().skip(c.state.route_index + 1).take(40).filter_map(|&l| self.net.lanes.get(l).and_then(|l| l.key).map(|k| k.id)).collect();
+                let ahead = c
+                    .state
+                    .route
+                    .iter()
+                    .skip(c.state.route_index + 1)
+                    .take(40)
+                    .filter_map(|&l| self.net.lanes.get(l).and_then(|l| l.key).map(|k| k.id))
+                    .collect();
                 (here, ahead)
             })
             .collect();
@@ -192,7 +156,11 @@ impl TrafficSim {
             for _ in 0..6 {
                 let mut next = Vec::new();
                 for l in frontier {
-                    let nb: Vec<usize> = if along { self.net.lanes[l].next.clone() } else { self.net.prev.get(l).cloned().unwrap_or_default() };
+                    let nb: Vec<usize> = if along {
+                        self.net.lanes[l].next.clone()
+                    } else {
+                        self.net.prev.get(l).cloned().unwrap_or_default()
+                    };
                     for n in nb {
                         if let Some(k) = self.net.lanes.get(n).and_then(|x| x.key) {
                             if !ahead.contains(&k.id) {
@@ -212,8 +180,20 @@ impl TrafficSim {
         if omsi_cfg::flags::OMSI_DEBUG_SIGNALS.is_set() {
             // where the player's train stands and which routes it is on or coming to
             if let Some((here, ahead)) = trains.last() {
-                let on: Vec<i64> = routes.iter().filter(|r| r.entries.iter().any(|e| e[0] == *here)).map(|r| r.signal.0).collect();
-                let to: Vec<i64> = routes.iter().filter(|r| r.entries.iter().any(|e| ahead.contains(&e[0]) && e[0] != *here)).map(|r| r.signal.0).collect();
+                let on: Vec<i64> = routes
+                    .iter()
+                    .filter(|r| r.entries.iter().any(|e| e[0] == *here))
+                    .map(|r| r.signal.0)
+                    .collect();
+                let to: Vec<i64> = routes
+                    .iter()
+                    .filter(|r| {
+                        r.entries
+                            .iter()
+                            .any(|e| ahead.contains(&e[0]) && e[0] != *here)
+                    })
+                    .map(|r| r.signal.0)
+                    .collect();
                 thread_local!(static LAST: std::cell::RefCell<(i64, Vec<i64>, Vec<i64>)> = const { std::cell::RefCell::new((i64::MIN, Vec::new(), Vec::new())) });
                 LAST.with(|l| {
                     if *l.borrow() != (*here, on.clone(), to.clone()) {
@@ -226,8 +206,14 @@ impl TrafficSim {
         for r in routes {
             let pieces: hashbrown::HashSet<i64> = r.entries.iter().map(|e| e[0]).collect();
             let occupied = trains.iter().any(|(here, _)| pieces.contains(here));
-            let wanted = trains.iter().any(|(here, ahead)| !pieces.contains(here) && ahead.iter().any(|id| pieces.contains(id)));
-            let aspect = if wanted && !occupied { if r.speed_limit.is_some() { 2.0 } else { 1.0 } } else { 0.0 };
+            let wanted = trains.iter().any(|(here, ahead)| {
+                !pieces.contains(here) && ahead.iter().any(|id| pieces.contains(id))
+            });
+            let aspect = if wanted && !occupied {
+                if r.speed_limit.is_some() { 2.0 } else { 1.0 }
+            } else {
+                0.0
+            };
             let e = out.entry(r.signal.0).or_insert(0.0);
             *e = e.max(aspect);
         }
@@ -241,7 +227,14 @@ impl TrafficSim {
         let mut out = Vec::new();
         for c in &self.cars {
             let st = &c.state;
-            if st.route.is_empty() || self.net.lanes.get(st.lane).map(|l| l.kind != crate::traffic::LaneKind::Rail).unwrap_or(true) {
+            if st.route.is_empty()
+                || self
+                    .net
+                    .lanes
+                    .get(st.lane)
+                    .map(|l| l.kind != crate::traffic::LaneKind::Rail)
+                    .unwrap_or(true)
+            {
                 continue;
             }
             for &l in st.route.iter().skip(st.route_index).take(5) {
@@ -287,7 +280,21 @@ impl TrafficSim {
                 let prev = self.light_prev[ci][li];
                 if s != prev {
                     let h = self.day_time.rem_euclid(86400.0);
-                    log::info!("light {ci}.{li}: {:?} ({s}) at {:02}:{:02}:{:05.2} (cycle {:.2} of {:.0} s{}{})", TrafficLightController::aspect(s), (h / 3600.0) as u32, ((h / 60.0) % 60.0) as u32, h % 60.0, c.time, c.cycle_len(), if c.held { ", held" } else { "" }, if c.request.get(li).copied().unwrap_or(false) { ", requested" } else { "" });
+                    log::info!(
+                        "light {ci}.{li}: {:?} ({s}) at {:02}:{:02}:{:05.2} (cycle {:.2} of {:.0} s{}{})",
+                        TrafficLightController::aspect(s),
+                        (h / 3600.0) as u32,
+                        ((h / 60.0) % 60.0) as u32,
+                        h % 60.0,
+                        c.time,
+                        c.cycle_len(),
+                        if c.held { ", held" } else { "" },
+                        if c.request.get(li).copied().unwrap_or(false) {
+                            ", requested"
+                        } else {
+                            ""
+                        }
+                    );
                     self.light_prev[ci][li] = s;
                 }
             }
@@ -311,7 +318,9 @@ impl TrafficSim {
     /// without one every branch of the track on.
     pub fn train_way(&self, st: &AiState, reach: f32) -> Vec<(usize, f32)> {
         let mut way = self.way_lanes(st, reach);
-        let Some(&(last, d)) = way.last() else { return way };
+        let Some(&(last, d)) = way.last() else {
+            return way;
+        };
         if d + self.net.lanes[last].length() >= reach {
             return way;
         }
@@ -358,7 +367,10 @@ impl TrafficSim {
     /// (0 for the lane it is on): the way straight on and the gentle turns (within 60° of
     /// the lane before), not every branch of a junction.
     pub fn lanes_ahead_of(&self, pos: DVec3, heading: f64, reach: f32) -> Vec<(usize, f32)> {
-        let Some((lane, s, _)) = self.net.lane_along(pos, heading, LaneKind::Street, 4.0, 45.0) else {
+        let Some((lane, s, _)) = self
+            .net
+            .lane_along(pos, heading, LaneKind::Street, 4.0, 45.0)
+        else {
             return Vec::new();
         };
         let mut out = vec![(lane, 0.0f32)];
@@ -467,14 +479,12 @@ pub fn reset_light_runtime(ctl: &mut TrafficLightController, day_time: f64) {
     *ctl = fresh;
 }
 
-/// A car keeps going through a light that turned yellow or red while it was at the line
-/// only while it moves at this speed or more (m/s), or rolls on with its front over the line.
-pub const AMBER_KEEP_SPEED: f32 = 3.0;
-
-/// Whether a car at `v` m/s, its front `gap` m before the line (negative: over it), is on
-/// its way through the light rather than standing or creeping up to it.
-pub fn amber_holds(v: f32, gap: f32) -> bool {
-    v >= AMBER_KEEP_SPEED || (gap < 0.0 && v > 0.3)
+/// Whether a light showing `aspect` holds a car whose front is `gap` m before its line
+/// (negative: over it). Omsi.exe (0x716970) stops an AI vehicle for red, red-and-yellow
+/// and yellow alike while the line is still ahead of its front (`0 < local_194`), and for
+/// nothing else.
+pub fn light_holds(aspect: Aspect, gap: f32) -> bool {
+    matches!(aspect, Aspect::Red | Aspect::RedYellow | Aspect::Yellow) && gap > 0.0
 }
 
 /// The light that holds a car at the start of `way[k]`.
@@ -500,7 +510,10 @@ pub fn entry_light(net: &Network, way: &[(usize, f32)], k: usize) -> Option<(usi
         return Some(light);
     };
     // (only the paths of this object lead onto it: it is no other approach's entry)
-    let inner = net.prev.get(l).is_some_and(|p| !p.is_empty() && p.iter().all(|&x| object(x) == Some(here)));
+    let inner = net
+        .prev
+        .get(l)
+        .is_some_and(|p| !p.is_empty() && p.iter().all(|&x| object(x) == Some(here)));
     for &(p, _) in way[..k].iter().rev() {
         if object(p) != Some(here) {
             break;

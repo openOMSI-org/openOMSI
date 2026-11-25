@@ -26,6 +26,8 @@ pub mod instances;
 pub mod map_uses;
 pub mod mods;
 pub mod optimise;
+pub mod plugin_catalog;
+pub mod plugins;
 pub mod storage;
 pub use graphics_profile_transfer::{export_graphics_profile, import_graphics_profile};
 pub use graphics_profiles::*;
@@ -244,6 +246,12 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     if let Some(d) = o.str("sound_doppler") {
         v["doppler"] = json!(!d.trim().eq_ignore_ascii_case("off"));
     }
+    // (Omsi.exe sets 100 before it reads the file, 0x82f4b4, and `StrToInt`s the line)
+    v["sound_maxcount"] = json!(
+        o.str("sound_maxcount")
+            .and_then(|x| x.trim().parse::<i64>().ok())
+            .unwrap_or(100)
+    );
     if let Some(l) = o.str("language").filter(|l| !l.trim().is_empty()) {
         v["language"] = json!(language_code(l));
     }
@@ -1137,17 +1145,6 @@ pub fn fit_date_to_years(date: &str, span: Option<(i32, i32)>) -> String {
         day
     };
     format!("{year:04}-{month:02}-{day:02}")
-}
-
-/// The `--date` of a duty: the date the player chose as it stands. Only a date taken from
-/// the machine's calendar (`use_real_date`) is fitted to the map's `[years]` - an old saved
-/// duty or a manually picked year must not be moved behind the player's back.
-fn date_for_game(date: &str, real_date: bool, span: Option<(i32, i32)>) -> String {
-    if real_date {
-        fit_date_to_years(date, span)
-    } else {
-        date.to_string()
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -3424,6 +3421,22 @@ pub fn route_arrows_from_text(text: &str) -> (bool, bool) {
 }
 
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
+/// #3124: the door set the passengers board through, as the settings file spells it.
+fn entry_doors_setting(door: Option<&str>) -> &'static str {
+    match door
+        .map(|s| s.trim().to_ascii_lowercase().replace([' ', '-', '/'], "_"))
+        .as_deref()
+    {
+        Some("first") | Some("front") | Some("front_door") | Some("first_door") => "first",
+        Some("first_two") | Some("first2") | Some("front_two") | Some("front2") | Some("both") => {
+            "first_two"
+        }
+        Some("last") | Some("rear") | Some("back") | Some("rear_door") | Some("last_door")
+        | Some("back_door") => "last",
+        _ => "as_bus",
+    }
+}
+
 pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
 }
@@ -3476,6 +3489,8 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["vehicle_smoke"] = json!("all");
 }
 
+// (one setting a line, as the settings file has them: rustfmt would triple it)
+#[rustfmt::skip]
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     graphics_and_interface_defaults(&mut v);
@@ -3555,6 +3570,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     }
     // Human posing; the original OMSI behavior remains the default.
     v["passenger_animation"] = json!("original");
+    // Which doors the passengers get in through (#3124): as the vehicle says
+    v["pax_entry_doors"] = json!("as_bus");
     // A fare paid without a ticket (#2742); off, as OMSI has always sold tickets
     v["pax_no_ticket"] = json!(false);
     v["photo_mode"] = json!("simple");
@@ -3574,6 +3591,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // an early timetable bus waits only at the stops the timetable times (off: at every
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
+    v["ibis_auto_stop"] = json!(false);
     v["pax_bad_driving"] = json!(true);
     v["pax_late_tolerance_min"] = json!(5.0);
     v["pax_free_drive"] = json!("auto");
@@ -3591,6 +3609,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         ("ai_max_parked", json!(0)),
         ("ai_max_humans", json!(200)),
         ("parked_buses_drawn", json!(-1)),
+        ("sound_maxcount", json!(200)),
         ("use_real_time", json!(false)),
         ("use_real_date", json!(false)),
         ("use_real_year", json!(false)),
@@ -3630,6 +3649,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         ("mouse_sens", json!(1.0)),
         ("graphics_api", json!("auto")),
         ("ctrl_off", json!("")),
+        ("ctrl_deadzone_axes", json!("")),
         ("steering_linear", json!(false)),
         ("old_steering", json!(false)),
         ("red_steer_spd", json!(false)),
@@ -3695,6 +3715,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["zoom_hold_amount"] = json!(0.5);
     v["zoom_hold_latch"] = json!(false);
     v["flashlight_cursor"] = json!(false);
+    // (#3154: OMSI 2's own rounding of a stop's passenger numbers until the player asks)
+    v["pax_stop_numbers_exact"] = json!(false);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
     v["ctrl_background"] = json!(false);
@@ -3890,6 +3912,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 ))
             }
             "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x as i64).unwrap_or(0)),
+            "sound_maxcount" => v[&k] = json!(val.trim().parse::<i64>().unwrap_or(200)),
             "max_obj_dist" => {
                 v[&k] = if val.eq_ignore_ascii_case("auto") {
                     json!("auto")
@@ -3934,6 +3957,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "head_movement"
             | "driverview_smooth"
             | "hands_in_cab"
+            | "driver_like_omsi"
             | "alt_view"
             | "precision_zoom" => v[&k] = json!(b(val)),
             "maintenance" | "ai_unsched_factor" | "ai_reaction" | "ai_max_scheduled"
@@ -3995,6 +4019,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     "original"
                 })
             }
+            "pax_entry_doors" => v[&k] = json!(entry_doors_setting(Some(val))),
             "pax_free_drive" => {
                 v[&k] = json!(match val.trim().to_ascii_lowercase().as_str() {
                     "on" | "1" | "yes" | "true" | "always" => "on",
@@ -4011,6 +4036,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             }
             "units" => v[&k] = json!(units_setting(val)),
             "ctrl_off" => v[&k] = json!(val),
+            // the axes with a dead zone of their own (#1344): read by the game with the same parser
+            "ctrl_deadzone_axes" => v[&k] = json!(val.replace(['\n', '\r'], " ").trim()),
             "metar_station" => {
                 v[&k] = json!(
                     val.chars()
@@ -4272,7 +4299,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 )
             }
             "zoom_hold_latch" => v[&k] = json!(b(val)),
-            "flashlight_cursor" => v[&k] = json!(b(val)),
+            "flashlight_cursor" | "pax_stop_numbers_exact" => v[&k] = json!(b(val)),
             "pad_steer_smooth" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4425,7 +4452,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "mirror_shadows"
             | "mirror_particles"
             | "ai_wait_timed_stops_only"
-            | "pax_bad_driving"
+            | "ibis_auto_stop"
             | "pax_bad_driving"
             | "pax_no_ticket"
             | "pax_board_when_stopped"
@@ -4627,6 +4654,8 @@ fn units_setting(v: &str) -> &'static str {
     }
 }
 
+// (one setting a line, as the settings file has them: rustfmt would triple it)
+#[rustfmt::skip]
 pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let b = |k: &str, d: bool| v.get(k).and_then(|x| x.as_bool()).unwrap_or(d) as u8;
     // a number, also as the string a select gives
@@ -4931,16 +4960,16 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     // what the page does not manage (keys of newer games, hand-written ones) stays as it
     // was in the file; other spellings of the keys just written go
     let mut text = text;
+    let dead_axes = v
+        .get("ctrl_deadzone_axes")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .replace(['\n', '\r'], " ");
     text.push_str(&format!(
-        "right_stick_look={}\n",
-        b("right_stick_look", true)
-    ));
-    text.push_str(&format!(
-        "pad_steer_linear={}\n",
-        b("pad_steer_linear", false)
-    ));
-    text.push_str(&format!(
-        "ctrl_background={}\n",
+        "right_stick_look={}\nctrl_deadzone_axes={}\npad_steer_linear={}\nctrl_background={}\n",
+        b("right_stick_look", true),
+        dead_axes.trim(),
+        b("pad_steer_linear", false),
         b("ctrl_background", false)
     ));
     text.push_str(&format!(
@@ -5120,6 +5149,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         "flashlight_cursor={}\n",
         b("flashlight_cursor", false)
     ));
+    text.push_str(&format!(
+        "pax_stop_numbers_exact={}\n",
+        b("pax_stop_numbers_exact", false)
+    ));
     text.push_str(&format!("look_sens={}\nlook_smoothing_ms={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\n", f("look_sens", 1.0).clamp(0.1, 2.0), f("look_smoothing_ms", 0.0).clamp(0.0, 200.0), f("steer_look_angle", 30.0).clamp(0.0, 60.0), f("steer_look_response", 0.25).clamp(0.05, 1.0), f("head_idle", 0.0).clamp(0.0, 1.0), f("head_idle_pace", 1.0).clamp(0.5, 2.0), b("time_sync", false), b("metar_sync", false), v.get("metar_station").and_then(|x| x.as_str()).unwrap_or("").chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()));
     text.push_str(&format!(
         "pad_steer_smooth={}\n",
@@ -5177,6 +5210,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("mirror_particles", false)
     ));
     text.push_str(&format!("mirror_hud={}\n", n("mirror_hud", 0).clamp(0, 7)));
+    // OMSI's [sound_maxcount] (options.cfg; 200 in the one it comes with)
+    text.push_str(&format!("sound_maxcount={}\n", n("sound_maxcount", 200)));
     text.push_str(&format!(
         "standing_chance={}\n",
         n("standing_chance", 5).clamp(0, 100)
@@ -5201,6 +5236,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("trip_summary", true),
         b("full_tank", true)
     ));
+    text.push_str(&format!("ibis_auto_stop={}\n", b("ibis_auto_stop", false)));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
     text.push_str(&format!(
         "pax_late_tolerance_min={}\n",
@@ -5242,8 +5278,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         "pax_short_rides_stand={}\n",
         b("pax_short_rides_stand", false)
     ));
-    text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
-    text.push_str(&format!("pax_no_ticket={}\n", b("pax_no_ticket", false)));
+    let ed = entry_doors_setting(v.get("pax_entry_doors").and_then(|x| x.as_str()));
+    text.push_str(&format!("auto_announce={}\npax_no_ticket={}\npax_entry_doors={ed}\n", b("auto_announce", false), b("pax_no_ticket", false)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),
@@ -5385,313 +5421,8 @@ pub fn bus_preview(bus: &str, paint: &str) -> Result<String> {
     Ok(out.to_string_lossy().to_string())
 }
 
-#[derive(Deserialize, Default, Debug, Clone)]
-pub struct Duty {
-    pub map: String,
-    pub bus: String,
-    pub paint: Option<String>,
-    /// The number plate (registration) the player typed: it wins over the plate the bus's
-    /// `[number]` list or the map's `registrations.txt` gives it (empty: as the content says).
-    #[serde(default)]
-    pub plate: Option<String>,
-    /// The fleet number picked from the bus's `[number]` list (none: its first).
-    #[serde(default)]
-    pub number: Option<String>,
-    /// The variables the player chose for this bus in the launcher - its onboard computer (the
-    /// IBIS unit or ticket printer its repaints name), a door type: set before the scripts'
-    /// `{init}` and kept over the paint scheme's own `[setvar]`s (`--setvar`, #4077).
-    #[serde(default)]
-    pub setvars: Option<std::collections::BTreeMap<String, String>>,
-    pub hof: Option<String>,
-    pub entry: Option<i32>,
-    pub line: Option<String>,
-    pub tour: Option<String>,
-    /// The trip of the tour to start with: its departure (HH:MM) or its place in the tour.
-    #[serde(default)]
-    pub trip: Option<String>,
-    #[serde(default)]
-    pub whole_tour: bool,
-    /// HH:MM
-    pub time: String,
-    /// YYYY-MM-DD
-    pub date: Option<String>,
-    pub weather: Option<String>,
-    pub traffic: Option<u32>,
-    pub passengers: Option<bool>,
-    pub schedule: Option<bool>,
-    pub autostart: Option<bool>,
-    pub comfortable_cabin_on_start: Option<bool>,
-    /// Start as a pedestrian beside the bus (which is then left out): a bus is placed or
-    /// taken over from the game menu later.
-    #[serde(default)]
-    pub on_foot: Option<bool>,
-    pub profile: Option<String>,
-    /// LAN play: "host", or "join:<session code | ip[:port] | port | empty = search>".
-    pub lan: Option<String>,
-    /// The name the other LAN players see (default: the profile).
-    pub lan_name: Option<String>,
-    /// Discovered web gateway to try if the initial UDP join gets no answer (Auto only).
-    pub lan_ws_fallback: Option<String>,
-    /// Explicit per-launch authorization for server-defined vehicle content.
-    #[serde(default)]
-    pub allow_server_fleet: bool,
-    /// Season override: spring / summer / autumn / winter, with a phase `-early` / `-late`
-    /// (`autumn-late`; none = the middle; empty = by date).
-    pub season: Option<String>,
-    /// One of OMSI's tutorials (1..4): its own situation, nothing else of the duty.
-    #[serde(default)]
-    pub tutorial: Option<usize>,
-    /// A situation file to continue (the map's `laststn.osn`): nothing else of the duty.
-    #[serde(default)]
-    pub situation: Option<String>,
-    /// The depot bus driven: it starts with the wear it was left with (see [`depot`]).
-    #[serde(default)]
-    pub depot: Option<String>,
-}
-
-/// The command line a duty becomes.
-pub fn duty_args(d: &Duty) -> Result<Vec<String>> {
-    let root = root()?;
-    duty_args_for_root(d, &root)
-}
-
-// The installation is validated by duty_args; argument tests supply their own path.
-fn duty_args_for_root(d: &Duty, root: &Path) -> Result<Vec<String>> {
-    duty_args_with_settings(d, root, &get_settings().unwrap_or_default())
-}
-
-fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Result<Vec<String>> {
-    let mut start = vec![
-        "--root".into(),
-        root.to_string_lossy().to_string(),
-        "--no-menu".into(),
-    ];
-    if st
-        .get("disable_plugins")
-        .and_then(Value::as_bool)
-        .unwrap_or(true)
-    {
-        start.push("--no-plugins".into());
-    }
-    if let Some(t) = d.tutorial {
-        start.extend(["--tutorial".into(), t.to_string()]);
-        return Ok(start);
-    }
-    if let Some(sit) = d.situation.as_deref().filter(|s| !s.trim().is_empty()) {
-        let mut a = start;
-        a.extend(["--situation".into(), sit.to_string()]);
-        if let Some(p) = d.profile.as_deref().filter(|p| !p.trim().is_empty()) {
-            a.extend(["--driver".into(), format!("Drivers/{}.odr", p.trim())]);
-        }
-        // the traffic and the people as for any other start: a situation file keeps the
-        // vehicles the player placed, not how busy the streets are (OMSI takes that from its
-        // options), and without these a continued session had the timetable buses alone -
-        // no cars, nobody at the stops (#136)
-        a.extend(["--traffic".into(), d.traffic.unwrap_or(30).to_string()]);
-        if d.passengers.unwrap_or(true) {
-            a.push("--passengers".into());
-        }
-        return Ok(a);
-    }
-    let mut a = start;
-    a.extend([
-        "--map".into(),
-        d.map.clone(),
-        "--bus".into(),
-        d.bus.clone(),
-        "--time".into(),
-        if d.time.trim().is_empty() {
-            "09:00".into()
-        } else {
-            d.time.trim().to_string()
-        },
-    ]);
-    if let Some(p) = d.paint.as_deref().filter(|p| !p.trim().is_empty()) {
-        a.extend(["--paint".into(), p.trim().to_string()]);
-    }
-    if let Some(pl) = d.plate.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
-        a.extend(["--plate".into(), pl.to_string()]);
-    }
-    if let Some(n) = d.number.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
-        a.extend(["--number".into(), n.to_string()]);
-    }
-    if let Some(vars) = d.setvars.as_ref().filter(|v| !v.is_empty()) {
-        let list: Vec<String> = vars
-            .iter()
-            .filter(|(k, _)| !k.trim().is_empty())
-            .map(|(k, v)| format!("{}={}", k.trim(), v.trim()))
-            .collect();
-        if !list.is_empty() {
-            a.extend(["--setvar".into(), list.join(",")]);
-        }
-    }
-    if let Some(id) = d.depot.as_deref().map(str::trim).filter(|i| !i.is_empty()) {
-        a.extend(["--depot".into(), id.to_string()]);
-    }
-    // (a vehicle file taken for a depot from a broken ailists.cfg by older launchers is none)
-    if let Some(h) = d.hof.as_deref().filter(|h| {
-        !h.trim().is_empty()
-            && !h.to_ascii_lowercase().contains(".bus")
-            && !h.to_ascii_lowercase().contains(".ovh")
-    }) {
-        a.extend(["--hof".into(), h.trim().to_string()]);
-    }
-    // the entry point's place in the map's list; -1: the one nearest to the duty's first
-    // stop (a free drive takes the list's first then)
-    match d.entry {
-        Some(e) if e < 0 => {
-            if d.line
-                .as_deref()
-                .map(|l| !l.trim().is_empty())
-                .unwrap_or(false)
-            {
-                a.push("--auto-entry".into());
-            }
-        }
-        Some(e) => a.extend(["--entry".into(), e.to_string()]),
-        None => {}
-    }
-    // OMSI's [useActTime] / [useActDate] / [useActYear]: the machine's clock and calendar
-    // instead of the duty's (the year only on its own switch - a map's timetable is for
-    // its years)
-    let on = |k: &str| st.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
-    let now = local_now();
-    if let (true, Some((_, _, _, h, m))) = (on("use_real_time"), now) {
-        if let Some(i) = a.iter().position(|x| x == "--time") {
-            a[i + 1] = format!("{h:02}:{m:02}");
-        }
-        // (a duty picked for later starts now, not ten minutes before its first trip)
-        a.push("--keep-time".into());
-    }
-    let mut date = d
-        .date
-        .as_deref()
-        .map(|x| x.trim().to_string())
-        .filter(|x| !x.is_empty());
-    if let (true, Some((y, mo, dd, _, _))) = (on("use_real_date"), now) {
-        let year = if on("use_real_year") {
-            y
-        } else {
-            date.as_deref()
-                .and_then(|x| x.split('-').next()?.parse::<i32>().ok())
-                .unwrap_or(y)
-        };
-        date = Some(format!("{year:04}-{mo:02}-{dd:02}"));
-    }
-    if let Some(dt) = date {
-        // (only the machine's calendar is fitted to the map's [years], so that its AI lists,
-        // chrono and timetables fit; the date the player chose in the launcher stays)
-        let real_date = on("use_real_date") && !on("use_real_year");
-        let span = if real_date {
-            let file = root.join(&d.map);
-            let file = if file.is_file() {
-                file
-            } else {
-                resolve_content(&d.map).unwrap_or(file)
-            };
-            omsi_map::GlobalCfg::load(&file)
-                .ok()
-                .and_then(|g| year_span_of(&g))
-        } else {
-            None
-        };
-        a.extend(["--date".into(), date_for_game(&dt, real_date, span)]);
-    }
-    if let Some(w) = d.weather.as_deref().filter(|x| !x.trim().is_empty()) {
-        a.extend(["--weather".into(), w.trim().to_string()]);
-    }
-    a.extend(["--traffic".into(), d.traffic.unwrap_or(30).to_string()]);
-    if d.passengers.unwrap_or(true) {
-        a.push("--passengers".into());
-    }
-    // (a duty needs the timetable even with the timetable buses switched off: the game
-    // then runs it for the player alone, #1762)
-    let schedule = d.schedule.unwrap_or(true) || d.line.is_some();
-    if schedule {
-        a.push("--schedule".into());
-        if d.schedule == Some(false) {
-            a.push("--no-timetable-buses".into());
-        }
-    }
-    if let (Some(l), true) = (d.line.as_deref().filter(|x| !x.trim().is_empty()), schedule) {
-        a.extend(["--line".into(), l.trim().to_string()]);
-        if let Some(t) = d.tour.as_deref().filter(|x| !x.trim().is_empty()) {
-            a.extend(["--tour".into(), t.trim().to_string()]);
-            if let Some(tr) = d.trip.as_deref().filter(|x| !x.trim().is_empty()) {
-                a.extend(["--trip".into(), tr.trim().to_string()]);
-                if d.whole_tour {
-                    a.push("--whole-tour".into());
-                }
-            }
-        }
-    }
-    if d.autostart.unwrap_or(false) {
-        a.push("--autostart".into());
-    }
-    if d.comfortable_cabin_on_start.unwrap_or(false) {
-        a.push("--comfortable-cabin-on-start".into());
-    }
-    if d.on_foot.unwrap_or(false) {
-        a.push("--on-foot".into());
-    }
-    let profile = d
-        .profile
-        .clone()
-        .filter(|p| !p.trim().is_empty())
-        .unwrap_or_else(|| load_config().profile);
-    if let Some(season) = d
-        .season
-        .as_deref()
-        .map(str::trim)
-        .filter(|x| !x.is_empty() && !x.eq_ignore_ascii_case("auto"))
-    {
-        a.extend(["--season".into(), season.to_ascii_lowercase()]);
-    }
-    if let Some(lan) = d
-        .lan
-        .as_deref()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.eq_ignore_ascii_case("off"))
-    {
-        if lan.eq_ignore_ascii_case("host") {
-            // 0: the default port, or the next free one when a session runs here already
-            a.extend(["--lan-host".into(), "0".into()]);
-        } else if let Some(target) = lan.strip_prefix("join:") {
-            let target = target.trim();
-            omsi_net::describe_join(target).map_err(|e| anyhow!("LAN join: {e}"))?;
-            a.extend([
-                "--lan-join".into(),
-                if target.is_empty() {
-                    "auto".into()
-                } else {
-                    target.to_string()
-                },
-            ]);
-            if let Some(url) = d.lan_ws_fallback.as_deref().filter(|url| !url.is_empty()) {
-                a.extend(["--lan-ws-fallback".into(), url.to_string()]);
-            }
-            if d.allow_server_fleet {
-                a.push("--allow-server-fleet".into());
-            }
-        } else {
-            return Err(anyhow!(
-                "LAN play: '{lan}' is neither host nor join:<code or address>"
-            ));
-        }
-        let name = d
-            .lan_name
-            .clone()
-            .filter(|n| !n.trim().is_empty())
-            .unwrap_or_else(|| profile.clone());
-        if !name.trim().is_empty() {
-            a.extend(["--lan-name".into(), name.trim().to_string()]);
-        }
-    }
-    if !profile.trim().is_empty() {
-        a.extend(["--driver".into(), format!("Drivers/{}.odr", profile.trim())]);
-    }
-    Ok(a)
-}
+pub mod duty;
+pub use duty::*;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct Launched {

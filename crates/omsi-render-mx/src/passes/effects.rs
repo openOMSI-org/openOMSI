@@ -134,7 +134,7 @@ impl Renderer {
             if let (Some(pipes), Some(ao), Some(cam_bg)) = (
                 self.lights.fog_lamps_pipeline.as_ref(),
                 self.targets.ao.as_ref(),
-                scene.camera_bind_group.as_ref(),
+                scene.camera_heaps.as_ref().map(|c| &c.fog),
             ) {
                 if let Some(fog_bg) = ao.fog_bg.as_ref() {
                     // (how much of the weather's extinction is mist and fog - droplets of some
@@ -212,8 +212,8 @@ impl Renderer {
                             pass.set_scissor_rect(0, size.height - 1, 1, 1);
                         }
                         pass.set_pipeline(&pipes[k]);
-                        pass.set_bind_group(0, cam_bg);
-                        pass.set_bind_group(1, &fog_bg[k]);
+                        cam_bg.set(&mut pass);
+                        fog_bg[k].set(&mut pass);
                         pass.draw(0..3, 0..1);
                     }
                 }
@@ -354,7 +354,6 @@ impl Renderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
             encode_batches(&mut pass, scene, rain_batches, |pipe| &pipes[pipe as usize]);
         }
     }
@@ -392,13 +391,13 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.scale.copy_pipeline);
-            pass.set_bind_group(0, bg);
+            bg.set(&mut pass);
             pass.draw(0..3, 0..1);
             if !overlays.is_empty() && !f.scaled {
                 pass.set_pipeline(&self.overlay_pipeline_1x);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg);
+                        bg.set(&mut pass);
                         pass.draw(0..6, 0..1);
                     }
                 }

@@ -41,6 +41,7 @@ fn the_bus() {
         assert(omsi.bus.steering_angle() == -10)
         assert(omsi.bus.cruise() == nil and not omsi.bus.set_cruise(3) and omsi.bus.set_cruise(50) and omsi.bus.cruise() == 50)
         assert(omsi.bus.set_cruise() and omsi.bus.cruise() == nil)
+        local tr = omsi.bus.track(); assert(tr.lane == 12 and tr.s == 40.5 and tr.lane_length == 120 and tr.forward == true and tr.travelled == 1234.5)
         assert(#omsi.bus.wheels() == 1 and omsi.bus.wheels()[1].radius == 0.5)
         assert(omsi.bus.horn() == false and omsi.bus.sound_horn(true) and omsi.bus.horn() == true)
         assert(omsi.bus.handbrake() == true and omsi.bus.toggle_handbrake())

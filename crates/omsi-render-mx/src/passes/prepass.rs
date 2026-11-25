@@ -60,7 +60,13 @@ impl Renderer {
                 self.temporal_pipes
                     .as_ref()
                     .zip(self.temporal.as_ref())
-                    .and_then(|(p, d)| Some((p, d.targets.as_ref()?, &d.prev_models.as_ref()?.1)))
+                    .and_then(|(p, d)| {
+                        Some((
+                            p,
+                            d.targets.as_ref()?,
+                            d.prev_models.as_ref()?.1.heap(&scene.frame_heap),
+                        ))
+                    })
             } else {
                 None
             };
@@ -95,17 +101,25 @@ impl Renderer {
                     ),
                     occlusion_query_set: None,
                 });
-                pass.set_bind_group(0, scene.camera_bind_group.as_ref().unwrap());
-                if let Some((p, _, bg)) = motion {
+                if let Some((p, _, heap)) = &motion {
                     // (the sky's motion first, where nothing covers it)
-                    pass.set_bind_group(3, bg);
                     pass.set_pipeline(&p.sky);
+                    pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(heap));
                     pass.draw(0..3, 0..1);
                 }
-                encode_batches(&mut pass, scene, prepass_batches, |pipe| match motion {
-                    Some((p, _, _)) => &p.prepass[pipe as usize],
-                    None => &self.prepass_pipelines[pipe as usize],
-                });
+                let heap = motion.as_ref().map_or(scene.frame_heap, |m| m.2);
+                encode_batches_in(
+                    &mut pass,
+                    scene,
+                    &heap,
+                    prepass_batches,
+                    |_| true,
+                    |b| b.pipe as u16,
+                    |pipe| match &motion {
+                        Some((p, _, _)) => &p.prepass[pipe as usize],
+                        None => &self.prepass_pipelines[pipe as usize],
+                    },
+                );
             }
             for (pipe, bg, target, pass_label) in [
                 (
@@ -151,7 +165,7 @@ impl Renderer {
                     occlusion_query_set: None,
                 });
                 pass.set_pipeline(pipe);
-                pass.set_bind_group(0, bg);
+                bg.set(&mut pass);
                 pass.draw(0..3, 0..1);
             }
         }
@@ -254,11 +268,8 @@ impl Renderer {
             if !whole {
                 pass.set_scissor_rect(0, y0, SKY_CUBE_SIZE, rows);
             }
-            pass.set_bind_group(
-                0,
-                &probe.cube_bind_groups[(f * SKY_CUBE_ROUNDS + round) as usize],
-            );
-            pass.set_bind_group(1, sky_bg);
+            probe.cube_bind_groups[(f * SKY_CUBE_ROUNDS + round) as usize].set(&mut pass);
+            sky_bg.set(&mut pass);
             pass.draw(0..3, 0..1);
         }
     }
@@ -309,8 +320,8 @@ impl Renderer {
                         } else {
                             &probe.filter_pipeline
                         });
-                        pass.set_bind_group(0, bg);
-                        pass.set_bind_group(1, sky_bg);
+                        bg.set(&mut pass);
+                        sky_bg.set(&mut pass);
                         pass.draw(0..3, 0..1);
                     }
                 }

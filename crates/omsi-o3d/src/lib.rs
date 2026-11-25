@@ -91,7 +91,13 @@ pub struct Morph {
 
 impl Default for Material {
     fn default() -> Self {
-        Self { diffuse: [1.0; 4], specular: [0.0; 3], emissive: [0.0; 3], specular_power: 1.0, texture: String::new() }
+        Self {
+            diffuse: [1.0; 4],
+            specular: [0.0; 3],
+            emissive: [0.0; 3],
+            specular_power: 1.0,
+            texture: String::new(),
+        }
     }
 }
 
@@ -148,7 +154,8 @@ impl<'a> Cur<'a> {
     fn str8(&mut self) -> Result<String, O3dError> {
         let n = self.u8()? as usize;
         self.need(n)?;
-        let (s, _) = encoding_rs::WINDOWS_1252.decode_without_bom_handling(&self.b[self.p..self.p + n]);
+        let (s, _) =
+            encoding_rs::WINDOWS_1252.decode_without_bom_handling(&self.b[self.p..self.p + n]);
         self.p += n;
         Ok(s.into_owned())
     }
@@ -183,13 +190,21 @@ pub fn parse_o3d(bytes: &[u8]) -> Result<Mesh, O3dError> {
         0
     };
     let wide_count = version >= 3;
-    let mut mesh = Mesh { transform: Mat4::IDENTITY, version, ..Default::default() };
+    let mut mesh = Mesh {
+        transform: Mat4::IDENTITY,
+        version,
+        ..Default::default()
+    };
 
     while c.p < bytes.len() {
         let tag = c.u8()?;
         match tag {
             0x17 => {
-                let n = if wide_count { c.u32()? as usize } else { c.u16()? as usize };
+                let n = if wide_count {
+                    c.u32()? as usize
+                } else {
+                    c.u16()? as usize
+                };
                 c.need(n * 32)?;
                 mesh.vertices.reserve(n);
                 let n16 = (n as i64 % 0xFDE8) as u32;
@@ -206,21 +221,36 @@ pub fn parse_o3d(bytes: &[u8]) -> Result<Mesh, O3dError> {
                         fb = frac_byte(position);
                         unscramble(state, &mut position, &mut normal, &mut uv);
                     }
-                    mesh.vertices.push(Vertex { position, normal, uv });
+                    mesh.vertices.push(Vertex {
+                        position,
+                        normal,
+                        uv,
+                    });
                 }
             }
             0x49 => {
-                let n = if wide_count { c.u32()? as usize } else { c.u16()? as usize };
+                let n = if wide_count {
+                    c.u32()? as usize
+                } else {
+                    c.u16()? as usize
+                };
                 let isz = if long_indices { 4 } else { 2 };
                 c.need(n * (3 * isz + 2))?;
                 mesh.triangles.reserve(n);
                 for _ in 0..n {
                     let mut idx = [0u32; 3];
                     for i in idx.iter_mut() {
-                        *i = if long_indices { c.u32()? } else { c.u16()? as u32 };
+                        *i = if long_indices {
+                            c.u32()?
+                        } else {
+                            c.u16()? as u32
+                        };
                     }
                     let material = c.u16()?;
-                    mesh.triangles.push(Triangle { indices: idx, material });
+                    mesh.triangles.push(Triangle {
+                        indices: idx,
+                        material,
+                    });
                 }
             }
             0x26 => {
@@ -231,7 +261,13 @@ pub fn parse_o3d(bytes: &[u8]) -> Result<Mesh, O3dError> {
                     let emissive = [c.f32()?, c.f32()?, c.f32()?];
                     let specular_power = c.f32()?;
                     let texture = c.str8()?;
-                    mesh.materials.push(Material { diffuse, specular, emissive, specular_power, texture });
+                    mesh.materials.push(Material {
+                        diffuse,
+                        specular,
+                        emissive,
+                        specular_power,
+                        texture,
+                    });
                 }
             }
             0x79 => {
@@ -250,7 +286,11 @@ pub fn parse_o3d(bytes: &[u8]) -> Result<Mesh, O3dError> {
                     let w = c.u16()? as usize;
                     let mut weights = Vec::with_capacity(w);
                     for _ in 0..w {
-                        let vertex = if long_indices { c.u32()? } else { c.u16()? as u32 };
+                        let vertex = if long_indices {
+                            c.u32()?
+                        } else {
+                            c.u16()? as u32
+                        };
                         let weight = c.f32()?;
                         weights.push(BoneWeight { vertex, weight });
                     }
@@ -326,11 +366,17 @@ pub fn load_mesh(path: &Path) -> Result<Mesh, O3dError> {
 /// [`load_mesh`] of a file's bytes; `path` names it (relative textures are looked for
 /// beside it, embedded ones are put there in memory).
 pub fn parse_mesh(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
     if bytes.starts_with(b"glTF") {
         return gltf::parse_glb_or_gltf(bytes, path);
     }
-    if bytes.starts_with(b"Kaydara FBX Binary") || (ext == "fbx" && fbx::looks_like_ascii_fbx(bytes)) {
+    if bytes.starts_with(b"Kaydara FBX Binary")
+        || (ext == "fbx" && fbx::looks_like_ascii_fbx(bytes))
+    {
         return fbx::parse_fbx(bytes, path);
     }
     if bytes.starts_with(b"xof ") {
@@ -359,7 +405,10 @@ impl Mesh {
         let before = self.triangles.len();
         self.triangles.retain(|t| t.indices.iter().all(|&i| i < n));
         if self.triangles.len() != before {
-            log::warn!("mesh: {} triangles name vertices beyond the {n} there are; left out", before - self.triangles.len());
+            log::warn!(
+                "mesh: {} triangles name vertices beyond the {n} there are; left out",
+                before - self.triangles.len()
+            );
         }
     }
 
@@ -432,7 +481,16 @@ mod tests {
             }
         }
         fn vertex(&mut self, v: &Vertex) -> &mut Self {
-            for f in [v.position.x, v.position.y, v.position.z, v.normal.x, v.normal.y, v.normal.z, v.uv.x, v.uv.y] {
+            for f in [
+                v.position.x,
+                v.position.y,
+                v.position.z,
+                v.normal.x,
+                v.normal.y,
+                v.normal.z,
+                v.uv.x,
+                v.uv.y,
+            ] {
                 self.f32(f);
             }
             self
@@ -454,9 +512,21 @@ mod tests {
 
     fn sample_vertices() -> Vec<Vertex> {
         vec![
-            Vertex { position: Vec3::new(1.25, -2.5, 3.75), normal: Vec3::new(0.0, 0.6, 0.8), uv: Vec2::new(0.1, 0.9) },
-            Vertex { position: Vec3::new(10.3, 4.7, -0.9), normal: Vec3::new(1.0, 0.0, 0.0), uv: Vec2::new(0.5, 0.25) },
-            Vertex { position: Vec3::new(-7.11, 0.33, 2.2), normal: Vec3::new(0.0, 0.0, 1.0), uv: Vec2::new(0.75, 0.0) },
+            Vertex {
+                position: Vec3::new(1.25, -2.5, 3.75),
+                normal: Vec3::new(0.0, 0.6, 0.8),
+                uv: Vec2::new(0.1, 0.9),
+            },
+            Vertex {
+                position: Vec3::new(10.3, 4.7, -0.9),
+                normal: Vec3::new(1.0, 0.0, 0.0),
+                uv: Vec2::new(0.5, 0.25),
+            },
+            Vertex {
+                position: Vec3::new(-7.11, 0.33, 2.2),
+                normal: Vec3::new(0.0, 0.0, 1.0),
+                uv: Vec2::new(0.75, 0.0),
+            },
         ]
     }
 
@@ -482,7 +552,13 @@ mod tests {
         w.str8("bus.bmp");
         w.u8(0x79);
         for i in 0..16 {
-            w.f32(if i % 5 == 0 { 1.0 } else if i == 12 { 4.0 } else { 0.0 });
+            w.f32(if i % 5 == 0 {
+                1.0
+            } else if i == 12 {
+                4.0
+            } else {
+                0.0
+            });
         }
         w.u8(0x54).u16(1).str8("bone").u16(1);
         if long_indices {
@@ -495,7 +571,13 @@ mod tests {
 
     fn check_body(m: &Mesh, vertices: &[Vertex]) {
         assert_eq!(m.vertices, vertices);
-        assert_eq!(m.triangles, vec![Triangle { indices: [0, 1, 2], material: 0 }]);
+        assert_eq!(
+            m.triangles,
+            vec![Triangle {
+                indices: [0, 1, 2],
+                material: 0
+            }]
+        );
         assert_eq!(m.materials.len(), 1);
         assert_eq!(m.materials[0].diffuse, [0.5, 0.6, 0.7, 1.0]);
         assert_eq!(m.materials[0].specular, [0.1, 0.2, 0.3]);
@@ -503,7 +585,16 @@ mod tests {
         assert_eq!(m.materials[0].texture, "bus.bmp");
         assert!(m.has_transform);
         assert_eq!(m.origin(), Vec3::new(4.0, 0.0, 0.0));
-        assert_eq!(m.bones, vec![Bone { name: "bone".into(), weights: vec![BoneWeight { vertex: 2, weight: 0.5 }] }]);
+        assert_eq!(
+            m.bones,
+            vec![Bone {
+                name: "bone".into(),
+                weights: vec![BoneWeight {
+                    vertex: 2,
+                    weight: 0.5
+                }]
+            }]
+        );
     }
 
     #[test]
@@ -545,7 +636,10 @@ mod tests {
 
     #[test]
     fn bad_magic() {
-        assert!(matches!(parse_o3d(&[0x84, 0x18, 3, 0]), Err(O3dError::BadMagic)));
+        assert!(matches!(
+            parse_o3d(&[0x84, 0x18, 3, 0]),
+            Err(O3dError::BadMagic)
+        ));
         assert!(matches!(parse_o3d(b"xof 0303txt"), Err(O3dError::BadMagic)));
     }
 
@@ -554,7 +648,10 @@ mod tests {
         // header cut short
         assert!(matches!(parse_o3d(&[]), Err(O3dError::Eof(0))));
         assert!(matches!(parse_o3d(&[0x84, 0x19]), Err(O3dError::Eof(2))));
-        assert!(matches!(parse_o3d(&[0x84, 0x19, 4, 0, 0xFF, 0xFF]), Err(O3dError::Eof(4))));
+        assert!(matches!(
+            parse_o3d(&[0x84, 0x19, 4, 0, 0xFF, 0xFF]),
+            Err(O3dError::Eof(4))
+        ));
         // every cut inside a section is an error, never a panic or a silently shorter section;
         // only a cut right before a section tag leaves a (shorter) valid file
         let mut w = header(3, 0, 0);
@@ -568,7 +665,10 @@ mod tests {
                     assert!(at <= cut, "cut {cut}: eof at {at}");
                     errors += 1;
                 }
-                Ok(_) => assert!(matches!(full[cut], 0x49 | 0x26 | 0x79 | 0x54), "cut {cut} inside a section parsed"),
+                Ok(_) => assert!(
+                    matches!(full[cut], 0x49 | 0x26 | 0x79 | 0x54),
+                    "cut {cut} inside a section parsed"
+                ),
                 Err(e) => panic!("cut {cut}: expected Eof, got {e:?}"),
             }
         }
@@ -589,10 +689,25 @@ mod tests {
         w.u8(0x00).u8(0xAB);
         w.u8(0x17).u32(1).vertex(&sample_vertices()[0]);
         w.u8(0x33);
-        w.u8(0x49).u32(2).u16(0).u16(0).u16(0).u16(0).u16(0).u16(5).u16(0).u16(0);
+        w.u8(0x49)
+            .u32(2)
+            .u16(0)
+            .u16(0)
+            .u16(0)
+            .u16(0)
+            .u16(0)
+            .u16(5)
+            .u16(0)
+            .u16(0);
         let m = parse_o3d(&w.0).unwrap();
         assert_eq!(m.vertices.len(), 1);
-        assert_eq!(m.triangles, vec![Triangle { indices: [0, 0, 0], material: 0 }]);
+        assert_eq!(
+            m.triangles,
+            vec![Triangle {
+                indices: [0, 0, 0],
+                material: 0
+            }]
+        );
     }
 
     #[test]
@@ -668,14 +783,26 @@ mod tests {
         for (x, y) in a.iter().zip(b) {
             assert_eq!(x.position, y.position);
             assert_eq!(x.normal, y.normal);
-            assert!((x.uv - y.uv).abs().max_element() < 1e-5, "{:?} vs {:?}", x.uv, y.uv);
+            assert!(
+                (x.uv - y.uv).abs().max_element() < 1e-5,
+                "{:?} vs {:?}",
+                x.uv,
+                y.uv
+            );
         }
     }
 
     #[test]
     fn scrambled_v4_v5_round_trip() {
         let verts = sample_vertices();
-        for (version, flags, key) in [(4u8, 0u8, 0u32), (4, 2, 0), (4, 0, 12345), (5, 0, 777), (5, 3, 0xDEAD), (6, 2, 40000)] {
+        for (version, flags, key) in [
+            (4u8, 0u8, 0u32),
+            (4, 2, 0),
+            (4, 0, 12345),
+            (5, 0, 777),
+            (5, 3, 0xDEAD),
+            (6, 2, 40000),
+        ] {
             let bytes = scrambled_file(version, flags, key, &verts);
             let m = parse_o3d(&bytes).unwrap();
             assert_close(&m.vertices, &verts);
@@ -772,7 +899,12 @@ mod tests {
         // 30: u -= 30^2/10000 = 0.09, v -= 30^2/2500 = 0.36
         assert!((run(30) - Vec2::new(0.91, 0.64)).abs().max_element() < 1e-6);
         // 1002: v -= (1002 % 50)^2 / 2500 = 4/2500
-        assert!((run(1002) - Vec2::new(1.0, 1.0 - 4.0 / 2500.0)).abs().max_element() < 1e-6);
+        assert!(
+            (run(1002) - Vec2::new(1.0, 1.0 - 4.0 / 2500.0))
+                .abs()
+                .max_element()
+                < 1e-6
+        );
     }
 
     #[test]

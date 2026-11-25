@@ -10,8 +10,10 @@ use std::sync::Arc;
 
 use crate::MeshData;
 
-/// The most flat surfaces kept of one material slot of a mesh (the largest).
-const FLATS_PER_SLOT: usize = 32;
+mod flats;
+mod step;
+pub(crate) use flats::{Flat, mesh_flats};
+
 /// How far a surface's tilt may lift its edge off another's plane and it still lie on it.
 const PLANE_GAP: f32 = 2e-4;
 // Allow tiny display-layer offsets without merging genuinely separate 0.1 mm surfaces.
@@ -27,20 +29,6 @@ const NEAR_GAP: f32 = 5e-4;
 const BOX_GAP: f32 = 1e-3;
 /// The highest step: a surface on a surface on a surface ... is rare beyond that.
 pub(crate) const MAX_LEVEL: u8 = 3;
-
-/// A flat surface of a mesh's material slot: its plane (unit normal, its sign made the same
-/// for both faces, and the plane's offset along it) and the box its triangles lie in.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Flat {
-    pub(crate) slot: u32,
-    pub(crate) normal: Vec3,
-    orientation: f32,
-    pub(crate) offset: f32,
-    pub(crate) lo: Vec3,
-    pub(crate) hi: Vec3,
-    pub(crate) axis: Vec3,
-    pub(crate) half: [f32; 2],
-}
 
 #[derive(Clone, Copy)]
 struct DepthCap {
@@ -93,96 +81,6 @@ fn canonical(n: Vec3, offset: f32) -> (Vec3, f32) {
     } else {
         (n, offset)
     }
-}
-
-/// The flat surfaces of `data`, slot by slot: its triangles grouped by plane, the largest
-/// `FLATS_PER_SLOT` of each slot kept.
-pub(crate) fn mesh_flats(data: &MeshData) -> Vec<Flat> {
-    let mut out = Vec::new();
-    for &(first, count, slot) in &data.ranges {
-        // (plane key -> flat, area)
-        // (a hashbrown map sized ahead, no list per triangle: a GPM street lamp of 150 000 triangles took 23 ms)
-        let end = (first + count).min(data.indices.len() as u32);
-        let mut planes: hashbrown::HashMap<(i32, i32, i32, i32), (Flat, f32, [f32; 4])> =
-            hashbrown::HashMap::with_capacity((end.saturating_sub(first) / 3) as usize);
-        let mut k = first as usize;
-        let at = |i: u32| data.positions.get(i as usize).copied();
-        while k + 2 < end as usize {
-            let idx = [data.indices[k], data.indices[k + 1], data.indices[k + 2]];
-            k += 3;
-            let (Some(a), Some(b), Some(c)) = (at(idx[0]), at(idx[1]), at(idx[2])) else {
-                continue;
-            };
-            let p = [a, b, c];
-            let cross = (p[1] - p[0]).cross(p[2] - p[0]);
-            let area = cross.length() * 0.5;
-            if area < 1e-8 {
-                continue;
-            }
-            let source_normal = cross / (2.0 * area);
-            let (n, offset) = canonical(source_normal, source_normal.dot(p[0]));
-            let key = (
-                (n.x * 1000.0).round() as i32,
-                (n.y * 1000.0).round() as i32,
-                (n.z * 1000.0).round() as i32,
-                (offset / PLANE_GAP).round() as i32,
-            );
-            let (lo, hi) = (p[0].min(p[1]).min(p[2]), p[0].max(p[1]).max(p[2]));
-            let e = planes.entry(key).or_insert_with(|| {
-                let mut edges = [p[1] - p[0], p[2] - p[1], p[0] - p[2]];
-                edges.sort_by(|a, b| a.length_squared().total_cmp(&b.length_squared()));
-                let edge = edges[1];
-                let axis = (edge - n * n.dot(edge))
-                    .try_normalize()
-                    .unwrap_or_else(|| n.any_orthonormal_vector());
-                (
-                    Flat {
-                        slot,
-                        normal: n,
-                        orientation: if n.dot(source_normal) < 0.0 {
-                            -1.0
-                        } else {
-                            1.0
-                        },
-                        offset,
-                        lo,
-                        hi,
-                        axis,
-                        half: [0.0; 2],
-                    },
-                    0.0,
-                    [f32::MAX, f32::MIN, f32::MAX, f32::MIN],
-                )
-            });
-            e.0.lo = e.0.lo.min(lo);
-            e.0.hi = e.0.hi.max(hi);
-            e.1 += area;
-            let across = n.cross(e.0.axis);
-            for point in p {
-                let a = point.dot(e.0.axis);
-                let b = point.dot(across);
-                e.2 = [e.2[0].min(a), e.2[1].max(a), e.2[2].min(b), e.2[3].max(b)];
-            }
-        }
-        let mut flats: Vec<(Flat, f32)> = planes
-            .into_values()
-            .map(|(mut flat, area, extents)| {
-                flat.half = [
-                    (extents[1] - extents[0]) * 0.5,
-                    (extents[3] - extents[2]) * 0.5,
-                ];
-                (flat, area)
-            })
-            .collect();
-        // (the largest picked out before they are sorted: a curved mesh has a plane per triangle)
-        if flats.len() > FLATS_PER_SLOT {
-            flats.select_nth_unstable_by(FLATS_PER_SLOT, |a, b| b.1.total_cmp(&a.1));
-            flats.truncate(FLATS_PER_SLOT);
-        }
-        flats.sort_by(|a, b| b.1.total_cmp(&a.1));
-        out.extend(flats.into_iter().map(|(f, _)| f));
-    }
-    out
 }
 
 /// The object whose meshes are being added: where it stands, the creation order its next
@@ -427,10 +325,19 @@ impl ObjectRun {
         flats: &[Flat],
         slots: usize,
     ) -> (Vec<u8>, Vec<DepthCaps>, Vec<u8>) {
-        self.levels_for_materials(origin, draw_order, mesh, transform, flats, slots, &[])
+        self.levels_for_materials_inner(
+            origin,
+            draw_order,
+            mesh,
+            transform,
+            flats,
+            slots,
+            &[],
+            None,
+        )
     }
 
-    pub(crate) fn levels_for_materials(
+    pub(crate) fn levels_for_materials_with_depth_planes(
         &mut self,
         origin: [u64; 3],
         draw_order: u64,
@@ -439,6 +346,30 @@ impl ObjectRun {
         flats: &[Flat],
         slots: usize,
         alpha: &[crate::AlphaMode],
+        depth_normals: &[Vec3],
+    ) -> (Vec<u8>, Vec<DepthCaps>, Vec<u8>) {
+        self.levels_for_materials_inner(
+            origin,
+            draw_order,
+            mesh,
+            transform,
+            flats,
+            slots,
+            alpha,
+            Some(depth_normals),
+        )
+    }
+
+    fn levels_for_materials_inner(
+        &mut self,
+        origin: [u64; 3],
+        draw_order: u64,
+        mesh: usize,
+        transform: Mat4,
+        flats: &[Flat],
+        slots: usize,
+        alpha: &[crate::AlphaMode],
+        depth_normals: Option<&[Vec3]>,
     ) -> (Vec<u8>, Vec<DepthCaps>, Vec<u8>) {
         if !self.fresh && (origin != self.origin || draw_order != self.next) {
             self.open = false;
@@ -544,6 +475,13 @@ impl ObjectRun {
         let mut background_caps = HashMap::<usize, Vec<DepthCap>>::new();
         for slot in 0..slots {
             let mine: Vec<&Flat> = placed.iter().filter(|f| f.slot as usize == slot).collect();
+            if depth_normals
+                .is_some_and(|normals| normals.get(slot).is_none_or(|normal| *normal == Vec3::ZERO))
+            {
+                // The GPU moves every triangle in a slot together; mixed geometry has no safe shared plane.
+                self.remember_unstepped_flats(&mine, mesh);
+                continue;
+            }
             let mut level = 0u8;
             let mut under: Vec<usize> = Vec::new();
             // (the surfaces lying just off this slot's plane, with their steps)
@@ -856,6 +794,65 @@ mod tests {
             ),
             1
         );
+    }
+
+    #[test]
+    fn a_nonplanar_slot_does_not_step_over_an_earlier_coplanar_label() {
+        let label = quad(0.0, 0.2, 0, false);
+        let mixed = joined_mesh([quad(0.0, 0.4, 0, false), tilted(Vec3::ZERO, 0.2, 15.0)]);
+        let depth_normals = crate::scene::depth_plane::normals(&mixed);
+        assert_eq!(depth_normals, [Vec3::ZERO]);
+
+        let mut run = ObjectRun::default();
+        run.begin(None);
+        run.levels([0; 3], 0, 0, Mat4::IDENTITY, &mesh_flats(&label), 1);
+        let (levels, _, _) = run.levels_for_materials_with_depth_planes(
+            [0; 3],
+            1,
+            1,
+            Mat4::IDENTITY,
+            &mesh_flats(&mixed),
+            1,
+            &[crate::AlphaMode::Opaque],
+            &depth_normals,
+        );
+
+        assert_eq!(levels, [0]);
+    }
+
+    #[test]
+    fn a_planar_slot_keeps_its_draw_order_depth_step() {
+        let support = quad(0.0, 0.4, 0, false);
+        let label = quad(0.0, 0.2, 0, true);
+        let support_normals = crate::scene::depth_plane::normals(&support);
+        let label_normals = crate::scene::depth_plane::normals(&label);
+        assert_eq!(support_normals, [Vec3::Z]);
+        assert_eq!(label_normals, [Vec3::Z]);
+
+        let mut run = ObjectRun::default();
+        run.begin(None);
+        run.levels_for_materials_with_depth_planes(
+            [0; 3],
+            0,
+            0,
+            Mat4::IDENTITY,
+            &mesh_flats(&support),
+            1,
+            &[crate::AlphaMode::Opaque],
+            &support_normals,
+        );
+        let (levels, _, _) = run.levels_for_materials_with_depth_planes(
+            [0; 3],
+            1,
+            1,
+            Mat4::IDENTITY,
+            &mesh_flats(&label),
+            1,
+            &[crate::AlphaMode::Opaque],
+            &label_normals,
+        );
+
+        assert_eq!(levels, [1]);
     }
 
     /// Slots of one mesh: the later one on the earlier one takes the step.
@@ -1485,6 +1482,7 @@ mod tests {
         let flats = mesh_flats(&mesh);
         assert!(duplicate_support_slots(&mesh, &flats).is_empty());
     }
+
     #[test]
     fn mixed_material_slot_is_not_limited_for_only_one_duplicate_plane() {
         let mesh = joined_mesh([

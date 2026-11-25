@@ -70,12 +70,26 @@ pub(crate) struct Milezero {
 
 impl Default for Milezero {
     fn default() -> Self {
-        Self { shared: Default::default(), stop: Arc::new(AtomicBool::new(false)), polling: false, want_play: false, playing: None, level: 0, up_after: UP_AFTER, typing: None, last: Instant::now() }
+        Self {
+            shared: Default::default(),
+            stop: Arc::new(AtomicBool::new(false)),
+            polling: false,
+            want_play: false,
+            playing: None,
+            level: 0,
+            up_after: UP_AFTER,
+            typing: None,
+            last: Instant::now(),
+        }
     }
 }
 
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(6)).timeout_read(Duration::from_secs(10)).user_agent("openOMSI").build()
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(6))
+        .timeout_read(Duration::from_secs(10))
+        .user_agent("openOMSI")
+        .build()
 }
 
 fn get_json(agent: &ureq::Agent, url: &str) -> Option<serde_json::Value> {
@@ -86,10 +100,28 @@ use std::io::Read;
 
 /// The length of a song, from the public iTunes search (the station's own API has none).
 fn itunes_length(agent: &ureq::Agent, artist: &str, title: &str) -> Option<f32> {
-    let enc = |t: &str| t.bytes().map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") }).collect::<String>();
+    let enc = |t: &str| {
+        t.bytes()
+            .map(|b| {
+                if b.is_ascii_alphanumeric() {
+                    (b as char).to_string()
+                } else {
+                    format!("%{b:02X}")
+                }
+            })
+            .collect::<String>()
+    };
     let first = artist.split(',').next().unwrap_or(artist);
-    let v = get_json(agent, &format!("https://itunes.apple.com/search?entity=song&limit=1&term={}", enc(&format!("{first} {title}"))))?;
-    v["results"][0]["trackTimeMillis"].as_f64().map(|ms| ms as f32 / 1000.0)
+    let v = get_json(
+        agent,
+        &format!(
+            "https://itunes.apple.com/search?entity=song&limit=1&term={}",
+            enc(&format!("{first} {title}"))
+        ),
+    )?;
+    v["results"][0]["trackTimeMillis"]
+        .as_f64()
+        .map(|ms| ms as f32 / 1000.0)
 }
 
 fn poll(shared: Arc<Mutex<Shared>>, stop: Arc<AtomicBool>) {
@@ -102,16 +134,36 @@ fn poll(shared: Arc<Mutex<Shared>>, stop: Arc<AtomicBool>) {
             let key = format!("{} - {}", text("artist"), text("title"));
             if np.is_object() && key != last_title {
                 last_title = key.clone();
-                let started = get_json(&agent, &format!("{HUB}/api/public/history?limit=1")).and_then(|h| h[0]["played_at"].as_i64());
+                let started = get_json(&agent, &format!("{HUB}/api/public/history?limit=1"))
+                    .and_then(|h| h[0]["played_at"].as_i64());
                 // (downloaded and decoded in memory here, never on the frame and with no file to share)
-                let cover = np["art"].as_str().filter(|u| u.starts_with("https://")).and_then(|u| {
-                    let mut bytes = Vec::new();
-                    agent.get(u).call().ok()?.into_reader().take(4 << 20).read_to_end(&mut bytes).ok()?;
-                    let img = omsi_texture::decode_bytes(&bytes, std::path::Path::new("cover.jpg")).ok();
-                    img.map(|i| (u.to_string(), Arc::new(i)))
-                });
+                let cover = np["art"]
+                    .as_str()
+                    .filter(|u| u.starts_with("https://"))
+                    .and_then(|u| {
+                        let mut bytes = Vec::new();
+                        agent
+                            .get(u)
+                            .call()
+                            .ok()?
+                            .into_reader()
+                            .take(4 << 20)
+                            .read_to_end(&mut bytes)
+                            .ok()?;
+                        let img =
+                            omsi_texture::decode_bytes(&bytes, std::path::Path::new("cover.jpg"))
+                                .ok();
+                        img.map(|i| (u.to_string(), Arc::new(i)))
+                    });
                 let duration = itunes_length(&agent, &text("artist"), &text("title"));
-                let song = Song { title: text("title"), artist: text("artist"), dj: np["dj"]["display_name"].as_str().unwrap_or("").to_string(), cover, started, duration };
+                let song = Song {
+                    title: text("title"),
+                    artist: text("artist"),
+                    dj: np["dj"]["display_name"].as_str().unwrap_or("").to_string(),
+                    cover,
+                    started,
+                    duration,
+                };
                 // (a poller that was stopped while it downloaded publishes nothing)
                 if stop.load(Ordering::Relaxed) {
                     return;
@@ -136,7 +188,10 @@ impl Milezero {
     /// The seconds the song has played, when the station says when it started.
     pub fn elapsed(&self) -> Option<f32> {
         let started = self.song()?.started?;
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs() as i64;
         Some((now - started).max(0) as f32)
     }
 
@@ -153,12 +208,25 @@ impl Milezero {
     }
 
     pub fn request_status(&self) -> Option<String> {
-        self.shared.lock().unwrap().request.as_ref().filter(|(_, t)| t.elapsed() < Duration::from_secs(6)).map(|(s, _)| s.clone())
+        self.shared
+            .lock()
+            .unwrap()
+            .request
+            .as_ref()
+            .filter(|(_, t)| t.elapsed() < Duration::from_secs(6))
+            .map(|(s, _)| s.clone())
     }
 
     /// Sends the typed request (a song, an artist ... as the station reads it).
     pub fn submit(&mut self) {
-        let Some(text) = self.typing.take().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()) else { return };
+        let Some(text) = self
+            .typing
+            .take()
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+        else {
+            return;
+        };
         let shared = self.shared.clone();
         shared.lock().unwrap().request = Some(("Sending the request ...".into(), Instant::now()));
         let _ = std::thread::Builder::new().name("milezero-request".into()).spawn(move || {
@@ -195,8 +263,16 @@ impl Milezero {
         if self.playing.is_none() {
             self.start(audio, self.level);
         }
-        let Some(p) = self.playing.as_mut() else { return };
-        audio.set_params(p.voice, VoiceParams { gain: 1.0, ..Default::default() });
+        let Some(p) = self.playing.as_mut() else {
+            return;
+        };
+        audio.set_params(
+            p.voice,
+            VoiceParams {
+                gain: 1.0,
+                ..Default::default()
+            },
+        );
         // a connection that cannot keep the buffer filled takes the next worse stream; one that
         // keeps it full for a long time tries the next better one
         let warm = p.since.elapsed().as_secs_f32() > 6.0;
@@ -226,7 +302,9 @@ impl Milezero {
         self.polling = true;
         self.stop = Arc::new(AtomicBool::new(false));
         let (s, st) = (self.shared.clone(), self.stop.clone());
-        let _ = std::thread::Builder::new().name("milezero".into()).spawn(move || poll(s, st));
+        let _ = std::thread::Builder::new()
+            .name("milezero".into())
+            .spawn(move || poll(s, st));
     }
 
     fn stop_poller(&mut self) {
@@ -245,8 +323,21 @@ impl Milezero {
     fn start(&mut self, audio: &AudioEngine, level: usize) {
         log::info!("milezero: stream {}", STREAMS[level].0);
         let buf = omsi_audio::radio::open(STREAMS[level].1);
-        let voice = audio.play_stream(buf.clone(), VoiceParams { gain: 1.0, ..Default::default() });
-        self.playing = Some(Playing { buf, voice, level, since: Instant::now(), bad: 0.0, good: 0.0 });
+        let voice = audio.play_stream(
+            buf.clone(),
+            VoiceParams {
+                gain: 1.0,
+                ..Default::default()
+            },
+        );
+        self.playing = Some(Playing {
+            buf,
+            voice,
+            level,
+            since: Instant::now(),
+            bad: 0.0,
+            good: 0.0,
+        });
     }
 }
 
@@ -268,7 +359,10 @@ mod tests {
         let first = m.stop.clone();
         m.stop_poller();
         m.start_poller();
-        assert!(first.load(Ordering::Relaxed), "the first poller must stay stopped");
+        assert!(
+            first.load(Ordering::Relaxed),
+            "the first poller must stay stopped"
+        );
         assert!(!m.stop.load(Ordering::Relaxed), "the second one runs");
         assert!(!Arc::ptr_eq(&first, &m.stop));
         m.stop_poller();

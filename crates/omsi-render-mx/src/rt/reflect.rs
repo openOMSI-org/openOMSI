@@ -87,79 +87,83 @@ impl Renderer {
                      h12: &mx::TextureView,
                      meta_out: &mx::TextureView,
                      meta_in: &mx::TextureView| {
-            self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("ray-traced reflections"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: rt.params.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::AccelerationStructure(&rt.tlas),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 2,
-                        resource: mx::BindingResource::TextureView(&ao.depth_view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 3,
-                        resource: rt.records_buf.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 4,
-                        resource: rt.tex_avg.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 5,
-                        resource: mx::BindingResource::TextureView(&gbuf[0].1),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 6,
-                        resource: mx::BindingResource::TextureView(&gbuf[1].1),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 7,
-                        resource: mx::BindingResource::TextureView(out),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 8,
-                        resource: mx::BindingResource::Sampler(&self.tone.lin_sampler),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 9,
-                        resource: mx::BindingResource::TextureView(scene),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 10,
-                        resource: mx::BindingResource::TextureView(&probe.view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 11,
-                        resource: self.tone.enh_buf.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 12,
-                        resource: mx::BindingResource::TextureView(h12),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 13,
-                        resource: rt.tex.uvs.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 14,
-                        resource: mx::BindingResource::TextureView(&rt.tex.atlas_view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 15,
-                        resource: mx::BindingResource::TextureView(meta_out),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 16,
-                        resource: mx::BindingResource::TextureView(meta_in),
-                    },
-                ],
-            })
+            HeapGroup::of(
+                super::RT_REFLECT.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("ray-traced reflections"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: rt.params.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::AccelerationStructure(&rt.tlas),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 2,
+                            resource: mx::BindingResource::TextureView(&ao.depth_view),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 3,
+                            resource: rt.records_buf.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 4,
+                            resource: rt.tex_avg.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 5,
+                            resource: mx::BindingResource::TextureView(&gbuf[0].1),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 6,
+                            resource: mx::BindingResource::TextureView(&gbuf[1].1),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 7,
+                            resource: mx::BindingResource::TextureView(out),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 8,
+                            resource: mx::BindingResource::Sampler(&self.tone.lin_sampler),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 9,
+                            resource: mx::BindingResource::TextureView(scene),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 10,
+                            resource: mx::BindingResource::TextureView(&probe.view),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 11,
+                            resource: self.tone.enh_buf.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 12,
+                            resource: mx::BindingResource::TextureView(h12),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 13,
+                            resource: rt.tex.uvs.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 14,
+                            resource: mx::BindingResource::TextureView(&rt.tex.atlas_view),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 15,
+                            resource: mx::BindingResource::TextureView(meta_out),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 16,
+                            resource: mx::BindingResource::TextureView(meta_in),
+                        },
+                    ],
+                },
+            )
         };
         // (no pass's output is among its inputs)
         let key: RtBindKey = (
@@ -199,29 +203,33 @@ impl Renderer {
                 binding,
                 resource: mx::BindingResource::TextureView(v),
             };
-            self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("rt reflections denoiser"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: rt.params.as_entire_binding(),
-                    },
-                    view(5, &rtg.meta),
-                    view(6, cur),
-                    view(7, prev),
-                    view(8, prev_m),
-                    view(9, out),
-                    view(10, out_m),
-                    mx::BindGroupEntry {
-                        binding: 11,
-                        resource: mx::BindingResource::Buffer(mx::BufferBinding {
-                            buffer: &rt.steps,
-                            offset: step * rt.step_stride,
-                            size: Some(16),
-                        }),
-                    },
-                ],
-            })
+            HeapGroup::of(
+                super::RT_DENOISE.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("rt reflections denoiser"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: rt.params.as_entire_binding(),
+                        },
+                        view(5, &rtg.meta),
+                        view(6, cur),
+                        view(7, prev),
+                        view(8, prev_m),
+                        view(9, out),
+                        view(10, out_m),
+                        mx::BindGroupEntry {
+                            binding: 11,
+                            resource: mx::BindingResource::Buffer(mx::BufferBinding {
+                                buffer: &rt.steps,
+                                offset: step * rt.step_stride,
+                                size: Some(16),
+                            }),
+                        },
+                    ],
+                },
+            )
         };
         let dkey: RtBindKey = (
             rt.bind_gen,
@@ -264,7 +272,7 @@ impl Renderer {
             });
             let (gx, gy) = (half.0.div_ceil(8), half.1.div_ceil(8));
             pass.set_pipeline(&rt.reflect);
-            pass.set_bind_group(0, trace_bg);
+            trace_bg.set_compute(&mut pass);
             pass.dispatch_workgroups(gx, gy, 1);
         }
         {
@@ -280,11 +288,11 @@ impl Renderer {
             });
             let (gx, gy) = (half.0.div_ceil(8), half.1.div_ceil(8));
             pass.set_pipeline(&rt.temporal_refl);
-            pass.set_bind_group(0, &dg[parity]);
+            dg[parity].set_compute(&mut pass);
             pass.dispatch_workgroups(gx, gy, 1);
             pass.set_pipeline(&rt.atrous);
             for bg in [&dg[2 + parity], &dg[4 + 2 * parity], &dg[5 + 2 * parity]] {
-                pass.set_bind_group(0, bg);
+                bg.set_compute(&mut pass);
                 pass.dispatch_workgroups(gx, gy, 1);
             }
         }
@@ -303,7 +311,7 @@ impl Renderer {
             occlusion_query_set: None,
         });
         pass.set_pipeline(&rt.composite);
-        pass.set_bind_group(0, composite_bg);
+        composite_bg.set(&mut pass);
         pass.draw(0..3, 0..1);
     }
 }

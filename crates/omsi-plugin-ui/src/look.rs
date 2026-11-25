@@ -2,8 +2,8 @@
 //! (`omsi_ui::theme::th`): openOMSI's dark look as it always was, its light look or an
 //! interface theme's from their colours.
 
-use omsi_ui::theme::Palette;
 use omsi_ui::Color;
+use omsi_ui::theme::Palette;
 
 /// openOMSI's dark look: the card under a notification or a panel, its near black.
 const CARD: Color = Color::rgba(14, 16, 20, 225.0 / 255.0);

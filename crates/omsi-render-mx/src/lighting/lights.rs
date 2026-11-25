@@ -242,6 +242,10 @@ pub struct Corona {
     /// towards the viewer, seen from in front of the light; the angles and the visibility
     /// travel as for a cone.
     pub halo: bool,
+    /// A vehicle's own outside lamp (headlamp, tail, brake, indicator...): the Enhanced
+    /// picture draws its glow at a lamp's size, not at the sprite size Omsi.exe's dim
+    /// sprites were made for (corona.wgsl `VEHICLE_LAMP`).
+    pub vehicle_lamp: bool,
 }
 
 impl Default for Corona {
@@ -262,6 +266,7 @@ impl Default for Corona {
             beam: false,
             beam_width: 0.0,
             halo: false,
+            vehicle_lamp: false,
         }
     }
 }
@@ -602,7 +607,7 @@ impl Renderer {
         // (the player's headlamps, which share a map of their own: see `passes::headlamp_shadow`)
         let own = eye
             .vehicle
-            .filter(|_| lamp_shadows && enhanced)
+            .filter(|_| lamp_shadows && enhanced && eye.level > 0)
             .map(|(b, _)| passes::VehicleBox::new(b, ro));
         self.lights.cookies.begin_frame();
         // The grid is made in a room kept all unused but for the cells the last one filled,
@@ -1007,19 +1012,23 @@ impl Renderer {
     /// brightness is the glow's shape.
     pub fn set_corona_texture(&mut self, id: u16, img: &omsi_texture::Image) {
         let t = upload_texture(&self.device, &self.queue, img, true);
-        let bg = self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("corona picture"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: mx::BindingResource::TextureView(&t.view),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::Sampler(&self.lights.corona_sampler),
-                },
-            ],
-        });
+        let bg = HeapGroup::of(
+            &self.lights.corona_layout,
+            1,
+            &mx::BindGroupDescriptor {
+                label: Some("corona picture"),
+                entries: &[
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: mx::BindingResource::TextureView(&t.view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::Sampler(&self.lights.corona_sampler),
+                    },
+                ],
+            },
+        );
         let i = id as usize;
         if self.lights.corona_textures.len() <= i {
             self.lights.corona_textures.resize_with(i + 1, || None);
@@ -1049,19 +1058,23 @@ impl Renderer {
     /// for every `[smoke]`), alpha as its mask.
     pub fn set_smoke_texture(&mut self, img: &omsi_texture::Image) {
         let t = upload_texture(&self.device, &self.queue, img, true);
-        self.lights.smoke_bind_group = self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("smoke"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: mx::BindingResource::TextureView(&t.view),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::Sampler(&self.lights.corona_sampler),
-                },
-            ],
-        });
+        self.lights.smoke_bind_group = HeapGroup::of(
+            &self.lights.corona_layout,
+            1,
+            &mx::BindGroupDescriptor {
+                label: Some("smoke"),
+                entries: &[
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: mx::BindingResource::TextureView(&t.view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::Sampler(&self.lights.corona_sampler),
+                    },
+                ],
+            },
+        );
     }
 
     /// Upload this frame's coronas.
@@ -1136,7 +1149,7 @@ impl Renderer {
                         } else {
                             c.z_offset
                         },
-                        c.flags as f32,
+                        (c.flags | if c.vehicle_lamp { 16 } else { 0 }) as f32,
                         if c.beam {
                             1.0
                         } else if c.halo {
@@ -1183,18 +1196,23 @@ impl Renderer {
 
 /// The lights' resources beside the scene's grid: coronas, smoke, snowfall, cookies, the tile light maps and the lamps in the fog.
 pub(crate) struct LightRes {
-    pub(crate) corona_bind_group: mx::BindGroup,
+    pub(crate) corona_bind_group: HeapGroup,
+    /// The places in the heap of corona.wgsl's, snow.wgsl's and rain.wgsl's modules (their
+    /// camera groups are made with the scene's: `CameraHeaps`).
+    pub(crate) corona_layout: crate::shaders::HeapLayout,
+    pub(crate) snow_layout: crate::shaders::HeapLayout,
+    pub(crate) rain_layout: crate::shaders::HeapLayout,
     /// The snowfall's parameters (snow.wgsl `SnowParams`) and their bind group.
     pub(crate) snow_buf: mx::Buffer,
-    pub(crate) snow_bind_group: mx::BindGroup,
+    pub(crate) snow_bind_group: HeapGroup,
     /// The rainfall's (rain.wgsl `RainParams`).
     pub(crate) rain_buf: mx::Buffer,
-    pub(crate) rain_bind_group: mx::BindGroup,
+    pub(crate) rain_bind_group: HeapGroup,
     /// The smoke texture (`Texture/rauch.tga`, see [`Renderer::set_smoke_texture`]).
-    pub(crate) smoke_bind_group: mx::BindGroup,
+    pub(crate) smoke_bind_group: HeapGroup,
     /// The coronas' pictures besides the standard glow (index = `Corona::texture`; entry 0
     /// unused).
-    pub(crate) corona_textures: Vec<Option<mx::BindGroup>>,
+    pub(crate) corona_textures: Vec<Option<HeapGroup>>,
     /// How far this renderer has come through the numbered corona and cookie pictures its
     /// caller keeps (see [`Renderer::pictures_taken`]).
     pub(crate) pictures_taken: (usize, usize),
@@ -1205,6 +1223,8 @@ pub(crate) struct LightRes {
     /// OpenGL and without storage buffers), its bind group layout and parameters.
     pub(crate) fog_lamps_pipeline: Option<[mx::RenderPipeline; 2]>,
     pub(crate) fog_lamps_buf: mx::Buffer,
+    /// the lamps in the fog's places in the heap (`FogLamps::layout`)
+    pub(crate) fog_lamps_layout: crate::shaders::HeapLayout,
     /// Enhanced: the volumetric fog (`vol_fog`; none where its pipelines cannot be made).
     pub(crate) vol_fog: Option<crate::vol_fog::VolFog>,
     /// The tile light maps (`.map.LM.bmp`) of the 5x5 tiles around the camera, north up, and

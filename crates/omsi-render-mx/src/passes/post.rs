@@ -38,6 +38,8 @@ impl Renderer {
             m[0],
         );
         m[3] = brighten;
+        let grade =
+            crate::lighting::color_grade(lighting).uniform(crate::lighting::tone_curve_choice());
         let pu = PostUniform {
             // the metering may take a little off a bright picture and add a little to a
             // dark one: a night stays a night, snow stays white
@@ -82,6 +84,9 @@ impl Renderer {
                 }
             },
             e: [shortfall_gain, 0.0, 0.0, 0.0],
+            f: grade[0],
+            g: grade[1],
+            h: grade[2],
         };
         self.queue
             .write_buffer(&self.tone.post_buf, 0, bytemuck::bytes_of(&pu))
@@ -195,7 +200,7 @@ impl Renderer {
             } else {
                 &self.tone.post.tonemap
             });
-            pass.set_bind_group(0, tonemap_bg);
+            tonemap_bg.set(&mut pass);
             pass.draw(0..3, 0..1);
             if fxaa {
                 drop(pass);
@@ -214,14 +219,14 @@ impl Renderer {
                     occlusion_query_set: None,
                 });
                 pass.set_pipeline(&self.tone.post.fxaa);
-                pass.set_bind_group(0, &h.fxaa_bg);
+                h.fxaa_bg.set(&mut pass);
                 pass.draw(0..3, 0..1);
             }
             if !overlays.is_empty() && !f.scaled {
                 pass.set_pipeline(&self.overlay_pipeline_1x);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg);
+                        bg.set(&mut pass);
                         pass.draw(0..6, 0..1);
                     }
                 }
@@ -390,7 +395,7 @@ impl Renderer {
                         pass.set_pipeline(&self.overlay_pipeline_1x);
                         for (k, _) in overlays.iter().enumerate() {
                             if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                                pass.set_bind_group(0, bg);
+                                bg.set(pass);
                                 pass.draw(0..6, 0..1);
                             }
                         }
@@ -422,7 +427,7 @@ impl Renderer {
                     } else {
                         &p.easu
                     });
-                    pass.set_bind_group(0, raw_bg.as_ref().unwrap_or(bg));
+                    (raw_bg.as_ref().unwrap_or(bg)).set(&mut pass);
                     pass.draw(0..3, 0..1);
                     if intermediate.is_none() {
                         draw_overlays(&mut pass);
@@ -449,7 +454,7 @@ impl Renderer {
                         occlusion_query_set: None,
                     });
                     pass.set_pipeline(&self.scale.fsr.as_ref().expect("FSR1 pipelines").rcas);
-                    pass.set_bind_group(0, &intermediate.bind_group);
+                    (&intermediate.bind_group).set(&mut pass);
                     pass.draw(0..3, 0..1);
                     draw_overlays(&mut pass);
                 }
@@ -470,13 +475,13 @@ impl Renderer {
                 occlusion_query_set: None,
             });
             pass.set_pipeline(&self.scale.upscale_pipeline);
-            pass.set_bind_group(0, bg);
+            bg.set(&mut pass);
             pass.draw(0..3, 0..1);
             if !overlays.is_empty() {
                 pass.set_pipeline(&self.overlay_pipeline_1x);
                 for (k, _) in overlays.iter().enumerate() {
                     if let Some((_, _, bg, _)) = scene.overlay_res.get(k) {
-                        pass.set_bind_group(0, bg);
+                        bg.set(&mut pass);
                         pass.draw(0..6, 0..1);
                     }
                 }

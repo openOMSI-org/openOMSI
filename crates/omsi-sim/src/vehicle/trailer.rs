@@ -234,13 +234,7 @@ pub(super) fn joint_load(def: &omsi_vehicle::Vehicle, coupling_y: f32) -> f32 {
     if def.is_rail() || coupling_y <= axle.long + 0.5 {
         return 0.0;
     }
-    let weight = if def.mass < 100.0 {
-        def.mass * 1000.0
-    } else {
-        def.mass
-    }
-    .max(0.0)
-        * 9.81;
+    let weight = def.mass_kg().max(0.0) * 9.81;
     let cog_y = def.cog.map(|c| c[1]).unwrap_or(0.0);
     (weight * (cog_y - axle.long) / (coupling_y - axle.long)).clamp(0.0, weight * 0.5)
 }

@@ -27,7 +27,12 @@ pub fn stretch(w: u32, h: u32, px: &[u8], tw: u32, th: u32) -> Vec<u8> {
 /// Keep bus instances first for wheel animation and avoid moving shared instances twice.
 pub fn motion_parts(bus: &[usize], trailers: &[usize], aboard: &[usize]) -> Vec<usize> {
     let mut seen = std::collections::HashSet::new();
-    bus.iter().chain(trailers).chain(aboard).copied().filter(|i| seen.insert(*i)).collect()
+    bus.iter()
+        .chain(trailers)
+        .chain(aboard)
+        .copied()
+        .filter(|i| seen.insert(*i))
+        .collect()
 }
 
 #[cfg(test)]
@@ -36,7 +41,10 @@ mod tests {
 
     #[test]
     fn a_rolling_shot_moves_the_bus_its_trailers_and_the_riders_once_each_in_that_order() {
-        assert_eq!(motion_parts(&[3, 4, 5], &[9, 10], &[20, 21, 22]), [3, 4, 5, 9, 10, 20, 21, 22]);
+        assert_eq!(
+            motion_parts(&[3, 4, 5], &[9, 10], &[20, 21, 22]),
+            [3, 4, 5, 9, 10, 20, 21, 22]
+        );
         assert_eq!(motion_parts(&[3, 4], &[4, 9], &[9, 20, 3]), [3, 4, 9, 20]);
         assert_eq!(motion_parts(&[1, 2], &[], &[]), [1, 2]);
         assert!(motion_parts(&[], &[], &[]).is_empty());

@@ -12,7 +12,7 @@
 
 use super::Entry;
 use omsi_cfg::vfs::{SealKey, SealedFile};
-use ring::hkdf::{KeyType, Salt, HKDF_SHA256};
+use ring::hkdf::{HKDF_SHA256, KeyType, Salt};
 use ring::hmac;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -44,7 +44,12 @@ fn free_space_impl(p: &Path) -> Option<u64> {
     use std::os::windows::ffi::OsStrExt;
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        fn GetDiskFreeSpaceExW(dir: *const u16, avail: *mut u64, total: *mut u64, free: *mut u64) -> i32;
+        fn GetDiskFreeSpaceExW(
+            dir: *const u16,
+            avail: *mut u64,
+            total: *mut u64,
+            free: *mut u64,
+        ) -> i32;
     }
     let wide: Vec<u16> = p.as_os_str().encode_wide().chain(Some(0)).collect();
     let (mut a, mut t, mut f) = (0u64, 0u64, 0u64);
@@ -91,7 +96,9 @@ impl Store {
                 // (blobs of a key that is gone can never be read again)
                 let removed = remove_blobs(dir);
                 if removed > 0 {
-                    log::info!("LAN mods: the store's key was missing; {removed} files of the old one removed");
+                    log::info!(
+                        "LAN mods: the store's key was missing; {removed} files of the old one removed"
+                    );
                 }
                 let k = omsi_cfg::vfs::random_key().map_err(|e| e.to_string())?;
                 save_key(&key_path, &k).map_err(|e| format!("{}: {e}", key_path.display()))?;
@@ -102,10 +109,16 @@ impl Store {
         let prk = Salt::new(HKDF_SHA256, b"openOMSI LAN store").extract(&master);
         let sub = |what: &[u8]| -> Result<[u8; 32], String> {
             let mut k = [0u8; 32];
-            prk.expand(&[what], Len32).and_then(|o| o.fill(&mut k)).map_err(|_| "no store key".to_string())?;
+            prk.expand(&[what], Len32)
+                .and_then(|o| o.fill(&mut k))
+                .map_err(|_| "no store key".to_string())?;
             Ok(k)
         };
-        Ok(Store { dir: dir.to_path_buf(), key: Arc::new(SealKey::new(&sub(b"blobs")?)), names: hmac::Key::new(hmac::HMAC_SHA256, &sub(b"names")?) })
+        Ok(Store {
+            dir: dir.to_path_buf(),
+            key: Arc::new(SealKey::new(&sub(b"blobs")?)),
+            names: hmac::Key::new(hmac::HMAC_SHA256, &sub(b"names")?),
+        })
     }
 
     pub(crate) fn dir(&self) -> &Path {
@@ -118,8 +131,17 @@ impl Store {
 
     fn file(&self, e: &Entry) -> SealedFile {
         let sha = e.sha256.to_ascii_lowercase();
-        let name: String = hmac::sign(&self.names, sha.as_bytes()).as_ref().iter().map(|b| format!("{b:02x}")).collect();
-        SealedFile { rel: e.path.clone(), blob: self.dir.join(format!("{name}.{BLOB}")), aad: sha.into_bytes(), size: e.size }
+        let name: String = hmac::sign(&self.names, sha.as_bytes())
+            .as_ref()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        SealedFile {
+            rel: e.path.clone(),
+            blob: self.dir.join(format!("{name}.{BLOB}")),
+            aad: sha.into_bytes(),
+            size: e.size,
+        }
     }
 
     /// `e`'s file, if a join before fetched it.
@@ -132,10 +154,15 @@ impl Store {
         // Eviction is oldest-accessed-first, not oldest-downloaded-first:
         // an old bus/map used regularly should not be fetched again unnecessarily.
         // Touch at most once an hour to avoid per-read disk writes.
-        if md.modified().ok().and_then(|t| t.elapsed().ok())
+        if md
+            .modified()
+            .ok()
+            .and_then(|t| t.elapsed().ok())
             .is_none_or(|age| age > std::time::Duration::from_secs(3600))
         {
-            let _ = std::fs::File::options().write(true).open(&f.blob)
+            let _ = std::fs::File::options()
+                .write(true)
+                .open(&f.blob)
                 .and_then(|file| file.set_modified(std::time::SystemTime::now()));
         }
         Some(f)
@@ -143,10 +170,15 @@ impl Store {
 
     /// `e`'s file read back (unsealed and checked: the seal is bound to its SHA-256).
     pub(crate) fn read(&self, e: &Entry) -> std::io::Result<Vec<u8>> {
-        let f = self.has(e).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "not in the store"))?;
+        let f = self
+            .has(e)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "not in the store"))?;
         let plain = omsi_cfg::vfs::unseal(&self.key, &f.aad, std::fs::read(&f.blob)?)?;
         if plain.len() as u64 != e.size {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "another size than its list's"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "another size than its list's",
+            ));
         }
         Ok(plain)
     }
@@ -164,13 +196,18 @@ impl Store {
     /// bound to - that file and that place in it, so no piece passes for another.
     fn piece_file(&self, sha: &str, i: u64) -> (PathBuf, Vec<u8>) {
         let aad = format!("{}:{i}", sha.to_ascii_lowercase()).into_bytes();
-        let name: String = hmac::sign(&self.names, &aad).as_ref().iter().map(|b| format!("{b:02x}")).collect();
+        let name: String = hmac::sign(&self.names, &aad)
+            .as_ref()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         (self.dir.join(format!("{name}.{PIECE}")), aad)
     }
 
     /// Is piece `i` (`len` bytes) of `sha` here?
     pub(crate) fn has_piece(&self, sha: &str, i: u64, len: u64) -> bool {
-        std::fs::metadata(self.piece_file(sha, i).0).is_ok_and(|m| m.len() == omsi_cfg::vfs::sealed_len(len))
+        std::fs::metadata(self.piece_file(sha, i).0)
+            .is_ok_and(|m| m.len() == omsi_cfg::vfs::sealed_len(len))
     }
 
     /// Keep piece `i` of `sha` sealed, as it came (its file is checked once it is whole).
@@ -186,7 +223,10 @@ impl Store {
         let (path, aad) = self.piece_file(sha, i);
         let plain = omsi_cfg::vfs::unseal(&self.key, &aad, std::fs::read(path)?)?;
         if plain.len() as u64 != len {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "a piece of another size"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "a piece of another size",
+            ));
         }
         Ok(plain)
     }
@@ -202,12 +242,22 @@ impl Store {
     /// `vehicles::recompress`): where it is kept, and what its seal is bound to.
     fn packed_file(&self, sha: &str, i: u64) -> (PathBuf, Vec<u8>) {
         let aad = format!("{}:{i}:packed", sha.to_ascii_lowercase()).into_bytes();
-        let name: String = hmac::sign(&self.names, &aad).as_ref().iter().map(|b| format!("{b:02x}")).collect();
+        let name: String = hmac::sign(&self.names, &aad)
+            .as_ref()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         (self.dir.join(format!("{name}.{PACKED}")), aad)
     }
 
     /// Keep piece `i` of `sha` packed (`codec` `-` with no bytes: it goes as it is).
-    pub(crate) fn put_packed(&self, sha: &str, i: u64, codec: char, wire: &[u8]) -> std::io::Result<()> {
+    pub(crate) fn put_packed(
+        &self,
+        sha: &str,
+        i: u64,
+        codec: char,
+        wire: &[u8],
+    ) -> std::io::Result<()> {
         let (path, aad) = self.packed_file(sha, i);
         let mut data = Vec::with_capacity(1 + wire.len());
         data.push(codec as u8);
@@ -240,10 +290,16 @@ impl Store {
     /// checked, so without this a player could fill the disk with them: `make_room` only let
     /// whole buses go.
     pub(crate) fn remove_pieces_for_room(&self, need: u64, grace: std::time::Duration) -> u64 {
-        let Ok(rd) = std::fs::read_dir(&self.dir) else { return 0 };
+        let Ok(rd) = std::fs::read_dir(&self.dir) else {
+            return 0;
+        };
         let mut loose: Vec<(std::time::SystemTime, u64, PathBuf)> = rd
             .flatten()
-            .filter(|e| e.path().extension().is_some_and(|x| x == PIECE || x == "partpiece"))
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .is_some_and(|x| x == PIECE || x == "partpiece")
+            })
             .filter_map(|e| {
                 let m = e.metadata().ok()?;
                 let t = m.modified().ok()?;
@@ -266,10 +322,24 @@ impl Store {
 
     /// Pieces of files left unfinished for longer than `age` go. How many.
     pub(crate) fn remove_stale_pieces(&self, age: std::time::Duration) -> usize {
-        let Ok(rd) = std::fs::read_dir(&self.dir) else { return 0 };
-        let old = |e: &std::fs::DirEntry| e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|d| d > age);
+        let Ok(rd) = std::fs::read_dir(&self.dir) else {
+            return 0;
+        };
+        let old = |e: &std::fs::DirEntry| {
+            e.metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|d| d > age)
+        };
         rd.flatten()
-            .filter(|e| e.path().extension().is_some_and(|x| x == PIECE || x == "partpiece") && old(e) && std::fs::remove_file(e.path()).is_ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .is_some_and(|x| x == PIECE || x == "partpiece")
+                    && old(e)
+                    && std::fs::remove_file(e.path()).is_ok()
+            })
             .count()
     }
 }
@@ -288,7 +358,9 @@ fn temp_of(path: &Path, ext: &str) -> PathBuf {
 /// What a game before the encryption kept in the store: the plain files, named by their
 /// SHA-256, and half-written ones.
 pub(crate) fn remove_legacy(dir: &Path) {
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     let mut n = 0;
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
@@ -303,8 +375,17 @@ pub(crate) fn remove_legacy(dir: &Path) {
 }
 
 fn remove_blobs(dir: &Path) -> usize {
-    let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
-    rd.flatten().filter(|e| e.path().extension().is_some_and(|x| x == BLOB || x == PIECE || x == PACKED) && std::fs::remove_file(e.path()).is_ok()).count()
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    rd.flatten()
+        .filter(|e| {
+            e.path()
+                .extension()
+                .is_some_and(|x| x == BLOB || x == PIECE || x == PACKED)
+                && std::fs::remove_file(e.path()).is_ok()
+        })
+        .count()
 }
 
 fn load_key(path: &Path) -> Option<[u8; 32]> {
@@ -316,7 +397,8 @@ fn load_key(path: &Path) -> Option<[u8; 32]> {
 
 fn save_key(path: &Path, key: &[u8; 32]) -> std::io::Result<()> {
     #[cfg(windows)]
-    let bytes = dpapi(key, true).ok_or_else(|| std::io::Error::other("the system did not protect the key"))?;
+    let bytes = dpapi(key, true)
+        .ok_or_else(|| std::io::Error::other("the system did not protect the key"))?;
     #[cfg(not(windows))]
     let bytes = key.to_vec();
     let tmp = path.with_extension("new");
@@ -332,17 +414,38 @@ fn save_key(path: &Path, key: &[u8; 32]) -> std::io::Result<()> {
 /// Seal (`protect`) or open `data` for this Windows user account.
 #[cfg(windows)]
 fn dpapi(data: &[u8], protect: bool) -> Option<Vec<u8>> {
-    use windows::Win32::Foundation::{LocalFree, HLOCAL};
-    use windows::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
-    let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
+    use windows::Win32::Foundation::{HLOCAL, LocalFree};
+    use windows::Win32::Security::Cryptography::{
+        CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
+    };
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: data.len() as u32,
+        pbData: data.as_ptr() as *mut u8,
+    };
     let mut out = CRYPT_INTEGER_BLOB::default();
     // SAFETY: `input` points at `data` for the call; `out` is the system's buffer, copied
     // and then freed with LocalFree as the documentation asks
     unsafe {
         let r = if protect {
-            CryptProtectData(&input, windows::core::w!("openOMSI LAN store"), None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
+            CryptProtectData(
+                &input,
+                windows::core::w!("openOMSI LAN store"),
+                None,
+                None,
+                None,
+                CRYPTPROTECT_UI_FORBIDDEN,
+                &mut out,
+            )
         } else {
-            CryptUnprotectData(&input, None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut out)
+            CryptUnprotectData(
+                &input,
+                None,
+                None,
+                None,
+                None,
+                CRYPTPROTECT_UI_FORBIDDEN,
+                &mut out,
+            )
         };
         r.ok()?;
         let v = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
@@ -360,7 +463,8 @@ mod tests {
     /// way): a player could otherwise fill the disk with pieces of files never finished.
     #[test]
     fn loose_pieces_go_oldest_first_to_make_room_but_not_recent_ones() {
-        let dir = std::env::temp_dir().join(format!("openomsi-lan-pieces-room-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("openomsi-lan-pieces-room-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let store = Store::open(&dir).unwrap();
@@ -371,8 +475,12 @@ mod tests {
         }
         let now = std::time::SystemTime::now();
         let age = |sha: &str, secs: u64| {
-            let f = std::fs::File::options().write(true).open(store.piece_file(sha, 0).0).unwrap();
-            f.set_modified(now - std::time::Duration::from_secs(secs)).unwrap();
+            let f = std::fs::File::options()
+                .write(true)
+                .open(store.piece_file(sha, 0).0)
+                .unwrap();
+            f.set_modified(now - std::time::Duration::from_secs(secs))
+                .unwrap();
         };
         age(&older, 3 * 3600);
         age(&old, 2 * 3600);
@@ -380,12 +488,21 @@ mod tests {
         let grace = std::time::Duration::from_secs(600);
         // room for one piece: the least lately written goes, the others stay
         assert!(store.remove_pieces_for_room(1, grace) > 0);
-        assert!(!store.has_piece(&older, 0, piece.len() as u64), "the oldest went first");
-        assert!(store.has_piece(&old, 0, piece.len() as u64) && store.has_piece(&young, 0, piece.len() as u64));
+        assert!(
+            !store.has_piece(&older, 0, piece.len() as u64),
+            "the oldest went first"
+        );
+        assert!(
+            store.has_piece(&old, 0, piece.len() as u64)
+                && store.has_piece(&young, 0, piece.len() as u64)
+        );
         // asked for far more: everything past the grace goes, the piece of an upload under way stays
         store.remove_pieces_for_room(u64::MAX, grace);
         assert!(!store.has_piece(&old, 0, piece.len() as u64));
-        assert!(store.has_piece(&young, 0, piece.len() as u64), "a piece written a minute ago is spared");
+        assert!(
+            store.has_piece(&young, 0, piece.len() as u64),
+            "a piece written a minute ago is spared"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -396,21 +513,44 @@ mod tests {
         let store = Store::open(&dir).unwrap();
         let old_data = b"bus file used again";
         let other_data = b"another bus file";
-        let old = Entry { path: "vehicles/old.bus".into(), size: old_data.len() as u64,
-            sha256: super::super::sha256_of(old_data) };
-        let other = Entry { path: "vehicles/other.bus".into(), size: other_data.len() as u64,
-            sha256: super::super::sha256_of(other_data) };
+        let old = Entry {
+            path: "vehicles/old.bus".into(),
+            size: old_data.len() as u64,
+            sha256: super::super::sha256_of(old_data),
+        };
+        let other = Entry {
+            path: "vehicles/other.bus".into(),
+            size: other_data.len() as u64,
+            sha256: super::super::sha256_of(other_data),
+        };
         let old_file = store.put(&old, old_data).unwrap();
         let other_file = store.put(&other, other_data).unwrap();
         let now = std::time::SystemTime::now();
-        std::fs::File::options().write(true).open(&old_file.blob).unwrap()
-            .set_modified(now - std::time::Duration::from_secs(7200)).unwrap();
-        std::fs::File::options().write(true).open(&other_file.blob).unwrap()
-            .set_modified(now - std::time::Duration::from_secs(3700)).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&old_file.blob)
+            .unwrap()
+            .set_modified(now - std::time::Duration::from_secs(7200))
+            .unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&other_file.blob)
+            .unwrap()
+            .set_modified(now - std::time::Duration::from_secs(3700))
+            .unwrap();
         assert!(store.has(&old).is_some());
-        let used = std::fs::metadata(&old_file.blob).unwrap().modified().unwrap();
-        let unused = std::fs::metadata(&other_file.blob).unwrap().modified().unwrap();
-        assert!(used > unused, "recently reused blob must survive before an unused blob");
+        let used = std::fs::metadata(&old_file.blob)
+            .unwrap()
+            .modified()
+            .unwrap();
+        let unused = std::fs::metadata(&other_file.blob)
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert!(
+            used > unused,
+            "recently reused blob must survive before an unused blob"
+        );
         assert_eq!(store.read(&old).unwrap(), old_data);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -423,7 +563,11 @@ mod tests {
         let legacy = dir.join("ab".repeat(32));
         std::fs::write(&legacy, b"old plain").unwrap();
         let marker = b"[name]\nPLAINTEXT-MARKER-store\n".repeat(50);
-        let e = Entry { path: "maps/Secret Map/global.cfg".into(), size: marker.len() as u64, sha256: super::super::sha256_of(&marker) };
+        let e = Entry {
+            path: "maps/Secret Map/global.cfg".into(),
+            size: marker.len() as u64,
+            sha256: super::super::sha256_of(&marker),
+        };
         let store = Store::open(&dir).unwrap();
         assert!(!legacy.exists());
         assert!(store.has(&e).is_none());
@@ -432,23 +576,42 @@ mod tests {
         for p in std::fs::read_dir(&dir).unwrap().flatten() {
             let name = p.file_name().to_string_lossy().to_string();
             let bytes = std::fs::read(p.path()).unwrap();
-            assert!(!bytes.windows(16).any(|w| w == b"PLAINTEXT-MARKER"), "plain text in {name}");
-            assert!(!name.contains(&e.sha256) && !name.to_lowercase().contains("global"), "{name}");
+            assert!(
+                !bytes.windows(16).any(|w| w == b"PLAINTEXT-MARKER"),
+                "plain text in {name}"
+            );
+            assert!(
+                !name.contains(&e.sha256) && !name.to_lowercase().contains("global"),
+                "{name}"
+            );
         }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(dir.join(KEY_FILE)).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                std::fs::metadata(dir.join(KEY_FILE))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
         }
         // the key survives: the same store opens the blob again
         let again = Store::open(&dir).unwrap();
-        assert_eq!(omsi_cfg::vfs::unseal(&again.key, &f.aad, std::fs::read(&f.blob).unwrap()).unwrap(), marker);
+        assert_eq!(
+            omsi_cfg::vfs::unseal(&again.key, &f.aad, std::fs::read(&f.blob).unwrap()).unwrap(),
+            marker
+        );
         // mounted, the engine reads it under its own name
         let mount = dir.join("session");
         omsi_cfg::vfs::mount_sealed(&mount, again.key(), vec![again.has(&e).unwrap()]);
         let cfg = omsi_cfg::resolve_path(&mount, "MAPS\\secret map\\Global.cfg");
         assert_eq!(omsi_cfg::vfs::read(&cfg).unwrap(), marker);
-        assert_eq!(omsi_cfg::vfs::list_dir(&mount.join("maps")).unwrap()[0].0, "Secret Map");
+        assert_eq!(
+            omsi_cfg::vfs::list_dir(&mount.join("maps")).unwrap()[0].0,
+            "Secret Map"
+        );
         omsi_cfg::vfs::unmount_sealed(&mount);
         // a lost key: the blobs go with it
         std::fs::remove_file(dir.join(KEY_FILE)).unwrap();

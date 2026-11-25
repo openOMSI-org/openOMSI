@@ -827,18 +827,17 @@ impl crate::App {
                 (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0)
             });
         }
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "android"))]
         {
+            #[cfg(target_os = "ios")]
             let ok = crate::apple::set_clipboard(&code);
+            #[cfg(target_os = "android")]
+            let ok = crate::android::set_clipboard(&code);
             self.service_msg = Some(if ok {
                 ("Server code copied".into(), 3.0)
             } else {
                 (format!("{}: {code}", omsi_ui::tr("Server code")), 8.0)
             });
-        }
-        #[cfg(target_os = "android")]
-        {
-            self.service_msg = Some((format!("{}: {code}", omsi_ui::tr("Server code")), 8.0));
         }
     }
 

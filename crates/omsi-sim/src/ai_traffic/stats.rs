@@ -126,7 +126,10 @@ impl Counts {
     pub fn head_list(&self) -> String {
         let mut v: Vec<(&&str, &u64)> = self.heads.iter().collect();
         v.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-        v.iter().map(|(k, n)| format!("{k}:{n}")).collect::<Vec<_>>().join(" ")
+        v.iter()
+            .map(|(k, n)| format!("{k}:{n}"))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
@@ -266,14 +269,17 @@ impl TrafficSim {
         let Some(s) = self.stats.as_mut() else { return };
         s.before.clear();
         for c in &self.cars {
-            s.before.insert(c.id, (c.state.lane, c.state.odometer, c.state.acc));
+            s.before
+                .insert(c.id, (c.state.lane, c.state.odometer, c.state.acc));
         }
     }
 
     /// After the cars have moved (`dt` s; `removed` the indices taken off this tick): what
     /// happened, and every `SAMPLE` seconds a look at the whole traffic.
     pub fn stats_after(&mut self, dt: f32, removed: &[usize]) {
-        let Some(mut s) = self.stats.take() else { return };
+        let Some(mut s) = self.stats.take() else {
+            return;
+        };
         s.t += dt;
         s.window.ticks += 1;
         s.window.plan_secs += self.tick_split[0] + self.tick_split[1];
@@ -281,7 +287,9 @@ impl TrafficSim {
             if removed.contains(&i) {
                 continue;
             }
-            let Some(&(lane, odo, acc)) = s.before.get(&c.id) else { continue };
+            let Some(&(lane, odo, acc)) = s.before.get(&c.id) else {
+                continue;
+            };
             s.window.metres += (c.state.odometer - odo).max(0.0) as f64;
             if c.state.emergency_began {
                 s.window.emergency_commands += 1;
@@ -298,7 +306,17 @@ impl TrafficSim {
                     s.window.hard_brakes += 1;
                 }
                 if omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() {
-                    log::info!("stats t={:.1}: car {} brakes {:.1} m/s² at {:.1} m/s on lane {} for {:?} (lead {:?}, junction {})", s.t, c.id, c.state.acc, c.state.speed, c.state.lane, c.why, c.lead_info, c.junction_why);
+                    log::info!(
+                        "stats t={:.1}: car {} brakes {:.1} m/s² at {:.1} m/s on lane {} for {:?} (lead {:?}, junction {})",
+                        s.t,
+                        c.id,
+                        c.state.acc,
+                        c.state.speed,
+                        c.state.lane,
+                        c.why,
+                        c.lead_info,
+                        c.junction_why
+                    );
                 }
             }
             if c.state.lane != lane && self.net.lanes[c.state.lane].kind == LaneKind::Street {
@@ -309,11 +327,19 @@ impl TrafficSim {
                 }
                 if let Some((ci, li)) = entry_light(&self.net, &[(lane, 0.0), (into, 0.0)], 1) {
                     if let Some(ctl) = self.lights.get(ci) {
-                        let red = matches!(TrafficLightController::aspect(ctl.state(li)), Aspect::Red | Aspect::RedYellow);
+                        let red = matches!(
+                            TrafficLightController::aspect(ctl.state(li)),
+                            Aspect::Red | Aspect::RedYellow
+                        );
                         if red && c.amber != Some((ci, li)) && !self.emergency.crawling(c.id) {
                             s.window.red_runs += 1;
                             if omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() {
-                                log::info!("stats t={:.1}: car {} into lane {into} on red (light {ci}/{li}) at {:.1} m/s", s.t, c.id, c.state.speed);
+                                log::info!(
+                                    "stats t={:.1}: car {} into lane {into} on red (light {ci}/{li}) at {:.1} m/s",
+                                    s.t,
+                                    c.id,
+                                    c.state.speed
+                                );
                             }
                         }
                     }
@@ -383,7 +409,12 @@ impl TrafficSim {
         w.stood60 += stood60 as u64;
         w.max_stood60 = w.max_stood60.max(stood60 as u64);
         // the waits-for graph among the cars that stand
-        let index: HashMap<u64, usize> = self.cars.iter().enumerate().map(|(k, c)| (c.id, k)).collect();
+        let index: HashMap<u64, usize> = self
+            .cars
+            .iter()
+            .enumerate()
+            .map(|(k, c)| (c.id, k))
+            .collect();
         let standing = |c: &AiCar| c.stopped.max(c.progress.1) > WAITING;
         let waits: Vec<Option<usize>> = self
             .cars
@@ -392,7 +423,9 @@ impl TrafficSim {
                 if !standing(c) {
                     return None;
                 }
-                c.waits_on.and_then(|id| index.get(&id).copied()).filter(|&k| standing(&self.cars[k]))
+                c.waits_on
+                    .and_then(|id| index.get(&id).copied())
+                    .filter(|&k| standing(&self.cars[k]))
             })
             .collect();
         let cycles = waits_for_cycles(&waits);
@@ -420,18 +453,53 @@ impl TrafficSim {
             };
             *w.heads.entry(reason).or_default() += 1;
             // (the heads of the longest waits, once a minute)
-            if debug && logged < 8 && [90.0, 240.0].iter().any(|t| (c.stopped.max(c.progress.1) - t) >= 0.0 && (c.stopped.max(c.progress.1) - t) < SAMPLE) {
+            if debug
+                && logged < 8
+                && [90.0, 240.0].iter().any(|t| {
+                    (c.stopped.max(c.progress.1) - t) >= 0.0
+                        && (c.stopped.max(c.progress.1) - t) < SAMPLE
+                })
+            {
                 if let Some(h) = chain_head(&waits, k).filter(|&h| h == k) {
                     let head = &self.cars[h];
                     logged += 1;
-                    log::info!("stats t={:.0}: car {} ({}) stood {:.0} s at ({:.1}, {:.1}) lane {}: {:?} waits on {:?} yield_to {:?} junction {} sideways {} (indicator on {:.0} s)", s.t, head.id, if head.is_bus() { "bus" } else { "car" }, head.stopped.max(head.progress.1), head.vehicle.position.x, head.vehicle.position.y, head.state.lane, head.why, head.waits_on, head.yield_to, head.junction_why, head.sideways.why, head.sideways.signalled);
+                    log::info!(
+                        "stats t={:.0}: car {} ({}) stood {:.0} s at ({:.1}, {:.1}) lane {}: {:?} waits on {:?} yield_to {:?} junction {} sideways {} (indicator on {:.0} s)",
+                        s.t,
+                        head.id,
+                        if head.is_bus() { "bus" } else { "car" },
+                        head.stopped.max(head.progress.1),
+                        head.vehicle.position.x,
+                        head.vehicle.position.y,
+                        head.state.lane,
+                        head.why,
+                        head.waits_on,
+                        head.yield_to,
+                        head.junction_why,
+                        head.sideways.why,
+                        head.sideways.signalled
+                    );
                 }
             }
         }
         if debug && !cycles.is_empty() && (s.t / WINDOW).fract() * WINDOW < SAMPLE {
             for cyc in cycles.iter().take(3) {
-                let desc: Vec<String> = cyc.iter().map(|&k| { let c = &self.cars[k]; format!("{} ({} lane {} at {:.0},{:.0})", c.id, c.why.0, c.state.lane, c.vehicle.position.x, c.vehicle.position.y) }).collect();
-                log::info!("stats t={:.0}: waits-for cycle of {}: {}", s.t, cyc.len(), desc.join(" -> "));
+                let desc: Vec<String> = cyc
+                    .iter()
+                    .map(|&k| {
+                        let c = &self.cars[k];
+                        format!(
+                            "{} ({} lane {} at {:.0},{:.0})",
+                            c.id, c.why.0, c.state.lane, c.vehicle.position.x, c.vehicle.position.y
+                        )
+                    })
+                    .collect();
+                log::info!(
+                    "stats t={:.0}: waits-for cycle of {}: {}",
+                    s.t,
+                    cyc.len(),
+                    desc.join(" -> ")
+                );
             }
         }
         // bodies inside each other, or closing fast within half a metre (a grid of 10 m
@@ -448,7 +516,11 @@ impl TrafficSim {
             let (cx, cy) = cell(fa.center);
             for dx in -1..=1 {
                 for dy in -1..=1 {
-                    for &b in grid.get(&(cx + dx, cy + dy)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                    for &b in grid
+                        .get(&(cx + dx, cy + dy))
+                        .map(|v| v.as_slice())
+                        .unwrap_or(&[])
+                    {
                         let fb = &feet[b];
                         if b <= a || fb.car == fa.car || (fa.z - fb.z).abs() > 3.0 {
                             continue;
@@ -474,7 +546,20 @@ impl TrafficSim {
             for p in touching.difference(&s.touching).take(3) {
                 if let (Some(&a), Some(&b)) = (index.get(&p.0), index.get(&p.1)) {
                     let (ca, cb) = (&self.cars[a], &self.cars[b]);
-                    log::info!("stats t={:.0}: overlap of car {} ({} lane {} v {:.1}) and car {} ({} lane {} v {:.1}) at ({:.1}, {:.1})", s.t, ca.id, ca.why.0, ca.state.lane, ca.state.speed, cb.id, cb.why.0, cb.state.lane, cb.state.speed, ca.vehicle.position.x, ca.vehicle.position.y);
+                    log::info!(
+                        "stats t={:.0}: overlap of car {} ({} lane {} v {:.1}) and car {} ({} lane {} v {:.1}) at ({:.1}, {:.1})",
+                        s.t,
+                        ca.id,
+                        ca.why.0,
+                        ca.state.lane,
+                        ca.state.speed,
+                        cb.id,
+                        cb.why.0,
+                        cb.state.lane,
+                        cb.state.speed,
+                        ca.vehicle.position.x,
+                        ca.vehicle.position.y
+                    );
                 }
             }
         }

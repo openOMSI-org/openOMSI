@@ -141,7 +141,8 @@ impl Row {
             x: cm(pos[0]),
             y: cm(pos[1]),
             z: cm(pos[2]),
-            heading: ((heading.rem_euclid(360.0) / 360.0 * HEADING_STEPS as f64).round() as u32 % HEADING_STEPS) as u16,
+            heading: ((heading.rem_euclid(360.0) / 360.0 * HEADING_STEPS as f64).round() as u32
+                % HEADING_STEPS) as u16,
             pitch: q(pitch, ATTITUDE_STEP, -128, 127) as i8,
             bank: q(bank, ATTITUDE_STEP, -128, 127) as i8,
             speed: q(speed, SPEED_STEP, -1023, 1023) as i16,
@@ -151,7 +152,11 @@ impl Row {
     }
 
     pub fn position(&self) -> [f64; 3] {
-        [self.x as f64 * 0.01, self.y as f64 * 0.01, self.z as f64 * 0.01]
+        [
+            self.x as f64 * 0.01,
+            self.y as f64 * 0.01,
+            self.z as f64 * 0.01,
+        ]
     }
 
     pub fn heading_deg(&self) -> f64 {
@@ -208,24 +213,55 @@ mod tests {
 
     #[test]
     fn a_row_keeps_what_the_wire_can_carry() {
-        let r = Row::from_state([892_248.186, 4_196_461.374, 33.214], 271.3, -1.24, 0.4, 13.85, -7.5, 2, true, true, -1);
+        let r = Row::from_state(
+            [892_248.186, 4_196_461.374, 33.214],
+            271.3,
+            -1.24,
+            0.4,
+            13.85,
+            -7.5,
+            2,
+            true,
+            true,
+            -1,
+        );
         assert_eq!((r.x, r.y, r.z), (89_224_819, 419_646_137, 3321));
         assert!((r.heading_deg() - 271.3).abs() < 0.05);
         assert!((r.pitch_deg() + 1.2).abs() < 1e-9 && (r.bank_deg() - 0.4).abs() < 1e-9);
         assert!((r.speed_ms() - 13.85).abs() < 0.026 && (r.steer_deg() + 7.5).abs() < 1e-9);
-        assert_eq!((r.blinker(), r.brake(), r.lights(), r.at_station()), (2, true, true, -1));
+        assert_eq!(
+            (r.blinker(), r.brake(), r.lights(), r.at_station()),
+            (2, true, true, -1)
+        );
         assert!(r.flags < 1 << FLAGS_BITS);
     }
 
     #[test]
     fn nothing_odd_gets_into_a_row() {
-        let r = Row::from_state([f64::NAN, f64::INFINITY, 1e30], f64::NAN, 1e9, -1e9, 1e9, f64::NAN, 9, false, false, 7);
+        let r = Row::from_state(
+            [f64::NAN, f64::INFINITY, 1e30],
+            f64::NAN,
+            1e9,
+            -1e9,
+            1e9,
+            f64::NAN,
+            9,
+            false,
+            false,
+            7,
+        );
         assert_eq!((r.x, r.y), (0, 0));
         assert_eq!(r.z, i32::MAX);
         assert_eq!((r.pitch, r.bank), (127, -128));
         assert_eq!(r.speed, 1023);
-        assert_eq!((r.heading, r.steer, r.blinker(), r.at_station()), (0, 0, 3, 0));
+        assert_eq!(
+            (r.heading, r.steer, r.blinker(), r.at_station()),
+            (0, 0, 3, 0)
+        );
         // 359.99 degrees rounds round to north, not past the end
-        assert_eq!(Row::from_state([0.0; 3], 359.999, 0.0, 0.0, 0.0, 0.0, 0, false, false, 0).heading, 0);
+        assert_eq!(
+            Row::from_state([0.0; 3], 359.999, 0.0, 0.0, 0.0, 0.0, 0, false, false, 0).heading,
+            0
+        );
     }
 }
