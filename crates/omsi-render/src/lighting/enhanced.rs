@@ -426,7 +426,7 @@ pub(crate) fn headlamp_profile(t: Vec3, dir: Vec3, low: bool) -> f32 {
         dir.z / dir.truncate().length().max(1e-3),
     );
     let drop = (tilt - rise) / (1.0 + rise * tilt).max(1e-3);
-    let mut up = (0.06 / drop.abs().max(1e-4)).powf(3.4).min(1.0);
+    let mut up = (0.04 / drop.abs().max(1e-4)).powf(2.2).min(1.0);
     if low {
         up *= atmosphere::smoothstep(-0.012, 0.025, drop);
         return wide * up;

@@ -834,7 +834,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     if (in_cab > 0.5 && camera.lamp_atlas.w > 0.5) {
         cabin_vis = cabin_visibility(in.world, n);
     }
-    let cabin_light = interior_lamps(in.world, n, in.params2.z) * cabin_vis;
+    let cabin_light = interior_lamps_area(in.world, n, in.params2.z) * cabin_vis;
     let cabin = sf_lit.albedo * cabin_light * mix(1.0, ao, 0.85);
     var rgb = (direct + ambient + lamps) * pre + cabin;
     // A material's own emissive colour ([matl_allcolor], an .x's emissive) is the texture at

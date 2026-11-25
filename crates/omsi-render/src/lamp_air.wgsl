@@ -19,10 +19,11 @@ fn headlamp(t: vec3<f32>, dir: vec3<f32>, low: bool) -> f32 {
     let tilt = dir.z / max(length(dir.xy), 1e-3);
     // (the tangent of the angle under that horizon)
     let drop = (tilt - rise) / max(1.0 + rise * tilt, 1e-3);
-    // full out to where the road is 0.06 under the lamp's horizon, then less as the cube of
-    // the drop and a little more: the road is lit evenly from the bumper on, a little
-    // brighter as far as the beam reaches, and not as one hot pool where its axis lands
-    var up = min(1.0, pow(0.06 / max(abs(drop), 1e-4), 3.4));
+    // full out to where the road is 0.04 under the lamp's horizon, less nearer down: with the
+    // distance's square the road is brightest a few metres ahead of the bumper and fades
+    // steadily down the road (as a low beam's isolux plot does: some 30 lux at 10 m, a
+    // tenth of that at 40), not one even sheet of light from the bumper to the cut-off
+    var up = min(1.0, pow(0.04 / max(abs(drop), 1e-4), 2.2));
     if (low) {
         up = up * smoothstep(-0.012, 0.025, drop);
         return wide * up;

@@ -25,6 +25,15 @@ struct PostParams {
     // tunnel, a dark cab) the eye makes up. Nothing anchors it as white anchors a surplus (a
     // snow field stays white), so it follows far more of it than of a surplus.
     e: vec4<f32>,
+    // The colour grade of the moment (lighting/grade.rs `ColorGrade`, from the sun's height and
+    // the weather): f xyz the white balance's gains on the scene light, w the saturation;
+    // g xyz what the shadows are lifted to (display terms: a night's dark keeps a trace of
+    // the sky's blue instead of crushing to black), w the tone curve (0 the old natural
+    // curve, 1 AgX, 2 Khronos PBR Neutral); h xyz the highlights' tint, w how much of the
+    // light beyond white keeps its hue (0: it bleaches as on film)
+    f: vec4<f32>,
+    g: vec4<f32>,
+    h: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> p: PostParams;
 @group(0) @binding(1) var t_src: texture_2d<f32>;
@@ -291,7 +300,96 @@ fn natural_tone(color: vec3<f32>, contrast: f32) -> vec3<f32> {
 
 // Enhanced+'s grade: the natural curve, the light a shade warmer.
 fn filmic_grade(c: vec3<f32>) -> vec3<f32> {
-    return natural_tone(c * vec3<f32>(1.015, 1.0, 0.985), max(p.d.w, 1.0));
+    return tone_curve(c * vec3<f32>(1.015, 1.0, 0.985), max(p.d.w, 1.0));
+}
+
+// AgX (Troy Sobotka; the polynomial fit of Benjamin Wrensch, 2023): the scene light is taken
+// into a log encoding over 16.5 stops in a slightly desaturated ("inset") space, a sigmoid
+// gives it a film's toe and shoulder, and it is taken back out. Bright saturated light - a
+// low sun's sky, a sodium lamp, a red tail lamp - runs smoothly towards white instead of
+// clipping to a flat neon patch per channel, and the middle tones keep their hue.
+fn agx_sigmoid(x: vec3<f32>) -> vec3<f32> {
+    let x2 = x * x;
+    let x4 = x2 * x2;
+    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+}
+fn agx_tone(c: vec3<f32>, contrast: f32) -> vec3<f32> {
+    let inset = mat3x3<f32>(
+        vec3<f32>(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
+        vec3<f32>(0.0784335999999992, 0.878468636469772, 0.0784336),
+        vec3<f32>(0.0792237451477643, 0.0791661274605434, 0.879142973793104));
+    let outset = mat3x3<f32>(
+        vec3<f32>(1.19687900512017, -0.0528968517574562, -0.0529716355144438),
+        vec3<f32>(-0.0980208811401368, 1.15190312990417, -0.0980434501171241),
+        vec3<f32>(-0.0990297440797205, -0.0989611768448433, 1.15107367264116));
+    let lo = -12.47393;
+    let hi = 4.026069;
+    // (the contrast about mid grey, in the log encoding: the same knob as the natural
+    // curve's, a camera's by day and less at night)
+    let mid = log2(0.18);
+    var v = log2(max(inset * max(c, vec3<f32>(0.0)), vec3<f32>(1e-10)));
+    v = mid + (v - vec3<f32>(mid)) * contrast;
+    v = clamp((v - vec3<f32>(lo)) / (hi - lo), vec3<f32>(0.0), vec3<f32>(1.0));
+    v = agx_sigmoid(v);
+    v = outset * v;
+    return pow(clamp(v, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(2.2));
+}
+
+// Khronos PBR Neutral (2024): exactly linear up to 0.76 - a material's colour shows as it is
+// under a light of white - with a short shoulder above that and a desaturation of only what
+// lies far past white.
+fn pbr_neutral(c0: vec3<f32>, contrast: f32) -> vec3<f32> {
+    let c = 0.18 * pow(max(c0, vec3<f32>(0.0)) / 0.18 + vec3<f32>(1e-7), vec3<f32>(contrast));
+    let start = 0.76;
+    let desat = 0.15;
+    let x = min(c.r, min(c.g, c.b));
+    let offset = select(0.04, x - 6.25 * x * x, x < 0.08);
+    var col = c - vec3<f32>(offset);
+    let peak = max(col.r, max(col.g, col.b));
+    if (peak < start) {
+        return col;
+    }
+    let d = 1.0 - start;
+    let np = 1.0 - d * d / (peak + d - start);
+    col = col * (np / peak);
+    let g = 1.0 - 1.0 / (desat * (peak - np) + 1.0);
+    return mix(col, vec3<f32>(np), g);
+}
+
+fn tone_curve(c: vec3<f32>, contrast: f32) -> vec3<f32> {
+    let which = u32(p.g.w + 0.5);
+    if (which == 1u) {
+        // (AgX's toe takes the dark third of a night down further than the eye does: the
+        // shadows keep the natural curve's nearly linear foot, and AgX takes over from the
+        // middle tones up, where its roll-off of bright colour is what it is for)
+        let n = natural_tone(c, contrast);
+        let a = agx_tone(c, contrast);
+        return mix(n, a, smoothstep(0.03, 0.2, luma(n)));
+    }
+    if (which == 2u) {
+        return pbr_neutral(c, contrast);
+    }
+    return natural_tone(c, contrast);
+}
+
+// The scene light graded before the tone curve: the white balance of the moment (a camera
+// and an eye discount part of a sunset's red and a blue hour's blue, not all of it) and the
+// saturation (a grey day and a fog take colour out, a low sun gives some), about each
+// pixel's own luminance so that nothing changes brightness.
+fn grade_scene(c: vec3<f32>) -> vec3<f32> {
+    var x = c * p.f.xyz;
+    let l = luma(x);
+    x = max(vec3<f32>(l) + (x - vec3<f32>(l)) * p.f.w, vec3<f32>(0.0));
+    return x;
+}
+
+// ... and after it, in display terms: the highlights' tint and the shadows' lift (what a
+// night's dark keeps of the sky: a trace of blue rather than a crushed black, which on a
+// screen in a lit room reads as nothing at all).
+fn grade_display(e: vec3<f32>) -> vec3<f32> {
+    let hi = e * mix(vec3<f32>(1.0), p.h.xyz, e * e);
+    let shade = (vec3<f32>(1.0) - hi) * (vec3<f32>(1.0) - hi);
+    return clamp(hi + p.g.xyz * shade, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 // What a misted pane shows of what lies behind it: half the light its film scatters is
@@ -347,15 +445,16 @@ fn graded(in: VsOut) -> vec3<f32> {
     if (p.c.y > 0.0) {
         c = night_vision(c, p.c.y, p.c.z);
     }
+    c = grade_scene(c);
     if (p.d.x > 0.5) {
         c = filmic_grade(c * pow(2.0, ev));
         // the lens: the corners a little darker
         let q = in.uv * 2.0 - vec2<f32>(1.0);
         c = c * (1.0 - p.d.y * pow(clamp(dot(q, q) * 0.5, 0.0, 1.0), 1.6));
     } else {
-        c = natural_tone(c * pow(2.0, ev), max(p.d.w, 1.0));
+        c = tone_curve(c * pow(2.0, ev), max(p.d.w, 0.5));
     }
-    var e = to_srgb(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)));
+    var e = grade_display(to_srgb(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0))));
     // triangular dither of one code value: no bands in the sky's gradient
     // Hash integer pixels so the dither has no repeating diagonal lattice.
     let pixel = vec2<u32>(in.clip.xy);

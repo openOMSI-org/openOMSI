@@ -94,6 +94,39 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
 
 const CABIN_FILL: f32 = 0.2;
 
+// The saloon's lamps in the Enhanced picture. A bus's saloon lights are tubes and long
+// diffusers along the ceiling, not points: a point's inverse square burnt the ceiling round
+// every lamp white and left the seats and the floor a metre and a half below it dim, a
+// lit ceiling over a dark saloon. A line source falls off as 1/d near it and as 1/d² only
+// far away; its light also reaches round onto what faces a little away from it (the tube's
+// length). The classic picture keeps Omsi.exe's point lights (`interior_lamps`).
+fn interior_lamps_area(p: vec3<f32>, n: vec3<f32>, code: f32) -> vec3<f32> {
+    if (code < 1.0) {
+        return vec3<f32>(1.0, 0.96, 0.84) * clamp(code, 0.0, 1.0);
+    }
+    let c = u32(code + 0.5);
+    let first = c >> 6u;
+    let count = c & 63u;
+    var sum = vec3<f32>(0.0);
+    for (var i = 0u; i < count; i = i + 1u) {
+        let l = lights[first + i];
+        let r = l.extra.w;
+        let d = l.pos.xyz - p;
+        let dist2 = max(dot(d, d), 1e-4);
+        if (l.color.w <= 0.0 || dist2 >= r * r) {
+            continue;
+        }
+        let core = max(l.extra.y, 0.01);
+        let dist = sqrt(dist2);
+        let att = 0.5 * core * core / (dist2 + 0.25 * core * core) + 0.5 * core / (dist + 0.5 * core);
+        let ndl = clamp((dot(n, d / dist) + 0.3) / 1.3, 0.0, 1.0);
+        sum = sum + l.color.rgb * l.color.w * att * ndl;
+    }
+    // (a soft knee instead of a hard stop at white: what lies right under a lamp keeps a
+    // trace of its shading)
+    return sum / (vec3<f32>(1.0) + 0.2 * sum);
+}
+
 // How much of the player's saloon lamps' light reaches a point past what stands in it, 1 where
 // nothing does: each lamp that has a shadow map (`camera.cabin_lamps`: the first sixteen, by
 // their records in the light buffer, -1 for none) weighs by what it would give the point
