@@ -715,8 +715,10 @@ impl Host for VehicleHost {
 
     fn sound_trigger_file(&mut self, name: &str, file: &str) {
         // `" " (T.F.ev_nbs_on)` is how the MB_C2 gearbox script says "no sound" (every
-        // frame in neutral, 80 times a minute per bus at Ahlheim): nothing to play
-        if self.remote_sound_triggers || file.trim().is_empty() {
+        // frame in neutral, 80 times a minute per bus at Ahlheim): nothing to play. An empty
+        // name is not that: Omsi.exe (0x74f2e8) plays the entry's sound again with the file
+        // it has, see `SoundSet::play_file_trigger`.
+        if self.remote_sound_triggers || (!file.is_empty() && file.trim().is_empty()) {
             return;
         }
         self.record_network_sound(name, Some(file));
@@ -878,6 +880,18 @@ mod tests {
         assert_eq!(h.falling_precip(), 0.0);
         h.precip_type = 2.0;
         assert_eq!(h.falling_precip(), 0.125);
+    }
+
+    /// `"" (T.F.x)` fires the entry again with the file it has (0x74f2e8); `" " (T.F.x)`
+    /// is no sound.
+    #[test]
+    fn an_empty_file_trigger_is_passed_on_and_a_blank_one_is_not() {
+        let mut h = VehicleHost::default();
+        h.sound_trigger_file("ann", "");
+        h.sound_trigger_file("ann", " ");
+        h.sound_trigger_file("ann", "  ");
+        assert_eq!(h.fired_file_triggers, vec![("ann".into(), String::new())]);
+        assert_eq!(h.file_triggers_fired, 1);
     }
 
     #[test]

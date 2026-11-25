@@ -460,7 +460,10 @@ impl SoundSet {
 
     /// Play the sound of a `(T.F.trigger)` event: the entry listening to `trigger` loads
     /// `file` (relative to the sound folder) into a new buffer and plays it as if its
-    /// trigger had fired (0x74f2e8).
+    /// trigger had fired (0x74f2e8). An empty `file` loads nothing: 0x74f2e8 skips the
+    /// load for an empty string and fires the entry all the same, so it plays again the
+    /// file it already has (its own, or the one the last `(T.F.)` gave it) from the start.
+    /// A name of blanks only names no file that exists: silent.
     pub fn play_file_trigger(
         &mut self,
         engine: &AudioEngine,
@@ -470,7 +473,7 @@ impl SoundSet {
         object_to_world: &Mat4,
     ) {
         if !engine.enabled
-            || file.trim().is_empty()
+            || (!file.is_empty() && file.trim().is_empty())
             || !self.sounds.iter().any(|s| {
                 s.def
                     .triggers
@@ -480,10 +483,15 @@ impl SoundSet {
         {
             return;
         }
-        let path = omsi_cfg::resolve_path(&self.dir, &file_trigger_name(file));
-        let Some(clip) = engine.load_clip(&path) else {
-            warn_missing_once(trigger, &path);
-            return;
+        let loaded = if file.is_empty() {
+            None
+        } else {
+            let path = omsi_cfg::resolve_path(&self.dir, &file_trigger_name(file));
+            let Some(clip) = engine.load_clip(&path) else {
+                warn_missing_once(trigger, &path);
+                return;
+            };
+            Some(clip)
         };
         let ctx = self.ctx(engine);
         for s in self.sounds.iter_mut() {
@@ -498,13 +506,16 @@ impl SoundSet {
             if let Some(id) = s.voice.take() {
                 engine.stop(id);
             }
-            s.clip = Some(clip.clone());
+            if let Some(clip) = &loaded {
+                s.clip = Some(clip.clone());
+            }
+            // (none yet: its own file was not found and no `(T.F.)` gave it one)
+            let Some(clip) = s.clip.clone() else { continue };
             s.last_gain = 1.0;
             s.last_pitch = 1.0;
             let e = ctx.eval(s, var, object_to_world);
             if e.audible && !e.wrong_view {
-                s.voice =
-                    Some(engine.play(clip.clone(), ctx.params(s, &e, false, object_to_world)));
+                s.voice = Some(engine.play(clip, ctx.params(s, &e, false, object_to_world)));
             }
         }
     }
@@ -1263,3 +1274,6 @@ pub(crate) fn outside_vol() -> f32 {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod file_trigger_tests;
