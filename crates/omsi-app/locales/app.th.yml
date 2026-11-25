@@ -239,6 +239,8 @@
 "High (512)": "สูง (512)"
 "Very high (1024)": "สูงมาก (1024)"
 "Boarding": "การขึ้นรถ"
+"Rear door boarding": "ขึ้นรถทางประตูหลัง"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "ผู้โดยสารขึ้นทางประตูหลังและประตูกลางได้ด้วย แต่ละคนจะเดินไปยังประตูที่ใกล้ที่สุดฝั่งของตนแล้วขอยืนยัน แทนที่จะต่อแถวที่ประตูหน้า เปิดประตูนั้นตามปกติ (ปุ่มของประตูนั้น ทั้งหมด หรือปลดล็อกประตู)"
 "Pay and take the ticket": "จ่ายเงินและรับตั๋วเอง"
 "The driver sells the ticket": "คนขับขายตั๋ว"
 "Just walk in": "ขึ้นรถได้เลย"

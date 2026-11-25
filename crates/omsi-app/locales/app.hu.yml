@@ -240,6 +240,8 @@
 "High (512)": "Magas (512)"
 "Very high (1024)": "Nagyon magas (1024)"
 "Boarding": "Felszállás"
+"Rear door boarding": "Felszállás a hátsó ajtón"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "Az utasok a hátsó és középső ajtókon is felszállnak: mindenki a busz saját oldalán lévő legközelebbi ajtóhoz megy és ott kéri az ajtót, ahelyett hogy elöl sorakozna. Ezt az ajtót a szokásos módon nyissa ki (a saját gombjával, az összes ajtóval vagy az ajtófrigövel)"
 "Pay and take the ticket": "Egyszerű jegyeladás"
 "The driver sells the ticket": "Realisztikus/Valós"
 "Just walk in": "Nincs jegyeladás"

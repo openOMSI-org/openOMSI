@@ -3493,6 +3493,7 @@ fn graphics_and_interface_defaults(v: &mut Value) {
 #[rustfmt::skip]
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
+    v["rear_door_boarding"] = json!(false);
     graphics_and_interface_defaults(&mut v);
     if phone {
         for (k, d) in [
@@ -4461,6 +4462,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "passenger_full_bus_reaction"
             | "pax_short_rides_stand"
             | "auto_announce"
+            | "rear_door_boarding"
             | "ambient" => v[&k] = json!(b(val)),
             "pax_late_tolerance_min" => {
                 v[&k] = json!(
@@ -5200,6 +5202,10 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mx_graphics={}\n", b("mx_graphics", false)));
+    text.push_str(&format!(
+        "rear_door_boarding={}\n",
+        b("rear_door_boarding", false)
+    ));
     text.push_str(&format!(
         "mirror_hud_every_frame={}\n",
         b("mirror_hud_every_frame", false)

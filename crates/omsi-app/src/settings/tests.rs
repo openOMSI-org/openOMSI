@@ -423,6 +423,18 @@ fn old_files_board_automatically() {
 }
 
 #[test]
+fn rear_door_boarding_reads_and_writes_back() {
+    // off, as OMSI 2, on a file that says nothing about it
+    assert!(!Settings::from_text("version=4\n").rear_door_boarding);
+    assert!(Settings::from_text("version=4\nrear_door_boarding=1\n").rear_door_boarding);
+    let s = Settings {
+        rear_door_boarding: true,
+        ..Default::default()
+    };
+    assert_eq!(Settings::from_text(&s.to_text()), s);
+}
+
+#[test]
 fn standing_chance_is_a_percentage() {
     assert_eq!(
         Settings::from_text("standing_chance=25\n").standing_chance,

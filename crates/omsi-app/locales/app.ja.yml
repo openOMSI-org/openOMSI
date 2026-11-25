@@ -240,6 +240,8 @@
 "High (512)": "高(512)"
 "Very high (1024)": "非常に高(1024)"
 "Boarding": "乗車"
+"Rear door boarding": "後ろのドアから乗車"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "乗客は後ろと中央のドアからも乗車します。それぞれがバスの自分の側で最も近いドアへ行き、そこでドアを要求します（前に並ぶ代わり）。そのドアはいつもどおり開けてください（ドアのキー、すべてのドア、またはドア解除）"
 "Pay and take the ticket": "支払って乗車券を受け取る"
 "The driver sells the ticket": "運転手が乗車券を販売"
 "Just walk in": "そのまま乗車"

@@ -528,6 +528,7 @@ fn new_humans(
             settings.passenger_full_bus_reaction && settings.passenger_animation == "enhanced";
         h.bad_driving = settings.pax_bad_driving;
         h.boarding = settings.boarding.clone();
+        h.rear_door_boarding = settings.rear_door_boarding;
         h.stand_chance = settings.standing_chance;
         h.short_rides_stand = settings.pax_short_rides_stand;
         h.voices = match settings.pax_voices.as_str() {
