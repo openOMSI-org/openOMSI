@@ -497,7 +497,12 @@ impl WindowWipers {
             // a dry day: the frame leaves such a layer out (`passes/batch.rs`), drawn it ran
             // the rain shader over the whole windscreen for nothing.
             let shows = film.local || film.unwiped > 0.0 || !film.drops.drops.is_empty();
-            alpha[film.slot] = if shows { 1.0 } else { 0.0 };
+            // (a slot the drawn mesh has no triangles of has no alpha of its own: the
+            // instance's list ends at the last slot it draws, while the film's slot comes from
+            // the model's materials - indexing past it ended the game on Android)
+            if let Some(a) = alpha.get_mut(film.slot) {
+                *a = if shows { 1.0 } else { 0.0 };
+            }
             let visible = scene.instances[inst].visible;
             renderer.set_params(
                 scene,

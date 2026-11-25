@@ -117,8 +117,11 @@ impl PassKit<'_> {
                             let Some((i, kind, weather)) = next else {
                                 break;
                             };
-                            // (none while the renderer is gone: nothing left to draw with them)
-                            if Arc::strong_count(&lean) == 1 {
+                            // (none while the renderer is gone: nothing left to draw with them;
+                            // nor on a lost device - every one failed there, and the threads
+                            // held the removed Direct3D 12 device, which the adapter then
+                            // gave back instead of a new one, past the switch to Vulkan)
+                            if Arc::strong_count(&lean) == 1 || device.is_lost() {
                                 break;
                             }
                             let made = optional_pipeline(&device, "a lean scene pipeline", || {
