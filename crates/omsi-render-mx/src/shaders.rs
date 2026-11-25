@@ -246,6 +246,8 @@ mod tests {
             super::SCENE.replace("\r\n", "\n"),
             super::ENHANCED.replace("\r\n", "\n"),
         );
+        // Upstream grew these parts with the classic moon and material parameters after the
+        // sampler fix; keep the checksums of the text that assembles on current main.
         assert_eq!((scene.len(), fnv1a(&scene)), (155145, 4651646224103588283));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),

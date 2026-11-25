@@ -227,6 +227,8 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             // change at our cash desk while we drive (only somebody riding in the bus)
             if let Some(lan) = app.net.lan.as_ref() {
                 let bus = app.player.as_ref().map(|p| &p.vehicle);
+                // (#2859) the two crew labels are player-facing: every language in app.yml
+                // needs them, or a translated player sees the English key instead.
                 if omsi_lan::passenger::aboard_inside(lan, p.id, bus) {
                     out.push(if app.net.crew.is_conductor(p.id) {
                         (
