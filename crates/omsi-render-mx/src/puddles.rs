@@ -50,7 +50,8 @@ pub(super) struct Uniform {
     /// The last frame's camera, moved to this frame's render origin (`History`).
     prev_view_proj: [[f32; 4]; 4],
     prev_inv_view_proj: [[f32; 4]; 4],
-    /// x: 1 when the last frame's reflections may be carried on, y: how much of them is kept.
+    /// x: 1 when the last frame's reflections may be carried on, y: how much of them is kept,
+    /// z: the frame's number (0..1024), which moves the rays' steps on (`fs_trace`).
     history: [f32; 4],
 }
 
@@ -59,7 +60,7 @@ pub(super) struct Uniform {
 /// its steps fall on the screen; alone, every frame's reflection was a little different, and
 /// on the move they shimmered. Kept over some frames (and held near what this frame's rays see
 /// round the pixel), they hold still.
-const HISTORY_KEEP: f32 = 0.85;
+const HISTORY_KEEP: f32 = 0.9;
 
 /// How far the eye may move from one frame to the next for the last frame's reflections to
 /// be carried on (m): further is a cut to another view.
@@ -293,6 +294,8 @@ pub(super) struct Targets {
     history: [mx::TextureView; 2],
     current: usize,
     last: Option<History>,
+    /// frames drawn with these targets (moves the rays' steps on, see `fs_trace`)
+    frame: u32,
     pub(super) view: mx::TextureView,
     trace_bg: HeapGroup,
     blur_x_bg: HeapGroup,
@@ -487,6 +490,7 @@ impl Targets {
             history,
             current: 0,
             last: None,
+            frame: 0,
             view,
             trace_bg,
             blur_x_bg,
@@ -656,6 +660,8 @@ impl Renderer {
                 eye,
             });
             targets.current ^= 1;
+            targets.frame = (targets.frame + 1) % 1024;
+            u.history[2] = targets.frame as f32;
         }
         self.queue
             .write_buffer(

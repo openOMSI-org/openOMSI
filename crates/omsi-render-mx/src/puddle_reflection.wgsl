@@ -22,7 +22,8 @@ struct PuddleParams {
     // the last frame's camera, against this frame's render origin
     prev_view_proj: mat4x4<f32>,
     prev_inv_view_proj: mat4x4<f32>,
-    // x: 1 when the last frame's reflections may be carried on, y: how much of them is kept
+    // x: 1 when the last frame's reflections may be carried on, y: how much of them is kept,
+    // z: the frame's number, which moves the rays' steps on
     history: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> p: PuddleParams;
@@ -229,8 +230,15 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
     let z1 = c1.z / c1.w;
     var previous = 0.0;
     var previous_delta = -1.0;
+    // The steps start at another point of the first one each frame (an interleaved gradient
+    // moved on by the golden ratio). At the same places every frame, a thin pole, a branch or
+    // a gap in the leaves was met or stepped over as the view moved, all at once, and the
+    // reflection flickered between the two; moved on, a ray meets it in a share of the frames
+    // and the history (`fs_accumulate`) averages that out.
+    let ign = fract(52.9829189 * fract(dot(floor(in.clip.xy), vec2<f32>(0.06711056, 0.00583715))));
+    let shift = fract(ign + p.history.z * 0.61803399);
     for (var i = 1; i <= steps; i++) {
-        let t = end * f32(i) / f32(steps);
+        let t = end * (f32(i) - 1.0 + shift) / f32(steps);
         let at = uv0 + duv * t;
         let seen = textureLoad(t_hit_depth, scene_pixel(at), 0);
         let delta = linear_depth(mix(z0, z1, t)) - linear_depth(seen);
