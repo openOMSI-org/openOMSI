@@ -166,7 +166,10 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32, 
                     // out as a coarse checker in the fog round every headlamp.)
                     // A headlamp's narrow cutoff needs finer angular integration.
                     // At a fixed phase, 16 samples turn that cutoff into rings.
-                    let steps = select(16u, 64u, l.extra.z != 0.0);
+                    // (32 for a headlamp: its steps are jittered per pixel and frame and the
+                    // half-size result is blended over frames - the rings of a fixed phase
+                    // do not come back; 64 cost the pass half its time in a fog at night)
+                    let steps = select(16u, 32u, l.extra.z != 0.0);
                     let pa = atan((ta - t0) / hh);
                     let dphi = (atan((tb - t0) / hh) - pa) / f32(steps);
                     let tile_k = beam_tile(li, l);
