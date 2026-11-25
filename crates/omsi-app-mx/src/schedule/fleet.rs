@@ -53,7 +53,7 @@ impl Schedule {
         let t0 = std::time::Instant::now();
         let Some(t) = traffic else { return };
         self.fleet_near = centers.to_vec();
-        let sets = self.upcoming_sets(world, t, day_time);
+        let sets = self.upcoming_sets(world, t, day_time, None);
         // a few sets at a time: read on the workers, uploaded, and the copies let go
         let mut most_held = 0usize;
         let mut shrunk = 0usize;
@@ -176,17 +176,19 @@ impl Schedule {
     }
 
     /// The vehicle sets of the trips on the road at `day_time` and of the departures of the
-    /// next [`FLEET_AHEAD`] seconds.
+    /// next [`FLEET_AHEAD`] seconds that come near the player. The ways of trips not seen yet
+    /// are worked out until `until`; a trip left for later counts as coming near.
     pub(super) fn upcoming_sets(
         &mut self,
         world: &World,
         traffic: &mut Traffic,
         day_time: f64,
+        until: Option<std::time::Instant>,
     ) -> Vec<(Arc<VehicleType>, Option<usize>)> {
         let mut out = Vec::new();
         let mut seen: HashSet<crate::scene::VehicleKey> = HashSet::new();
         for i in self.sim.upcoming(day_time, fleet_ahead()) {
-            if !self.comes_near(i) {
+            if !self.comes_near(i, until) {
                 continue;
             }
             let Some(c) = self.sim.choose(i, &*world.data()) else {
@@ -202,17 +204,29 @@ impl Schedule {
     }
 
     /// Whether the trip of departure `i` comes within [`FLEET_NEAR`] of the player (see
-    /// `fleet_near`); a trip whose way the timetable does not give is taken as coming near.
-    fn comes_near(&mut self, i: usize) -> bool {
+    /// `fleet_near`); a trip whose way the timetable does not give, or whose way is not
+    /// worked out yet and `until` has passed, is taken as coming near.
+    fn comes_near(&mut self, i: usize, until: Option<std::time::Instant>) -> bool {
         if self.fleet_near.is_empty() {
             return true;
         }
         let trip = self.sim.trip_index(i);
-        let sim = &self.sim;
-        let tiles = self
-            .trip_tiles
-            .entry(trip)
-            .or_insert_with(|| sim.trip_tiles(i));
+        if !self.trip_tiles.contains_key(&trip) {
+            if until.is_some_and(|t| std::time::Instant::now() >= t) {
+                return true;
+            }
+            let t0 = std::time::Instant::now();
+            let tiles = self.sim.trip_tiles(i);
+            if omsi_cfg::flags::OMSI_PROFILE.is_set() && t0.elapsed().as_secs_f64() > 0.005 {
+                log::info!(
+                    "timetable fleet: the way of trip {} worked out in {:.1} ms",
+                    self.sim.trip_of(i).name,
+                    t0.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+            self.trip_tiles.insert(trip, tiles);
+        }
+        let tiles = &self.trip_tiles[&trip];
         if tiles.is_empty() {
             return true;
         }
@@ -263,7 +277,10 @@ impl Schedule {
         self.fleet_check = day_time;
         // (the sets a departure found missing go first: they are what the next tries wait for)
         let mut sets = std::mem::take(&mut self.fleet_wanted);
-        sets.extend(self.upcoming_sets(world, traffic, day_time));
+        // (the trips' ways worked out for 2 ms a look at most: a dozen trips coming into the
+        // window at once took a frame of half a second)
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(2);
+        sets.extend(self.upcoming_sets(world, traffic, day_time, Some(until)));
         let keep: HashSet<crate::scene::VehicleKey> = sets
             .iter()
             .map(|(t, s)| (t.def.path.clone(), *s))
