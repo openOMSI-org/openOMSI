@@ -3696,3 +3696,7 @@
 "no plugin is listening for commands": "geen plug-in luistert naar opdrachten"
 "plugin command queue is full": "opdrachtwachtrij van plug-ins is vol"
 
+"Passengers add weight to the bus": "Passagiers maken de bus zwaarder"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Het gewicht van elke passagier, uit zijn .hum-bestand, komt bij de bus waar hij zit of staat: een volle bus trekt op, remt en klimt als het zwaardere voertuig dat hij is; uit: de bus weegt wat zijn bestand zegt"
+"Passenger weight": "Gewicht van een passagier"
+"For passengers whose file gives no weight; default 75 kg": "Voor passagiers wier bestand geen gewicht geeft; standaard 75 kg"

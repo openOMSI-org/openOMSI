@@ -3337,3 +3337,7 @@
 "no plugin is listening for commands": "komutları dinleyen eklenti yok"
 "plugin command queue is full": "eklenti komut kuyruğu dolu"
 
+"Passengers add weight to the bus": "Yolcular otobüsün ağırlığını artırır"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Her yolcunun .hum dosyasındaki ağırlığı, oturduğu ya da durduğu yerde otobüse eklenir: dolu bir otobüs daha ağır bir araç olarak kalkar, fren yapar ve yokuş çıkar; kapalıyken otobüs dosyasında yazan kadar ağırdır"
+"Passenger weight": "Yolcu ağırlığı"
+"For passengers whose file gives no weight; default 75 kg": "Dosyasında ağırlık olmayan yolcular için; varsayılan 75 kg"

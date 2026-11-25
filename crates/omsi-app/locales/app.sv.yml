@@ -3930,3 +3930,7 @@
 "no plugin is listening for commands": "inget insticksprogram lyssnar på kommandon"
 "plugin command queue is full": "insticksprogrammens kommandokö är full"
 
+"Passengers add weight to the bus": "Passagerare gör bussen tyngre"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Varje passagerares vikt, från dess .hum-fil, läggs till bussen där den sitter eller står: en full buss startar, bromsar och klättrar som det tyngre fordon den är; av: bussen väger vad dess fil säger"
+"Passenger weight": "Passagerarvikt"
+"For passengers whose file gives no weight; default 75 kg": "För passagerare vars fil inte anger någon vikt; standard 75 kg"

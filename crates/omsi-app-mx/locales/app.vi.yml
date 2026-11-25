@@ -2963,3 +2963,7 @@
 "Save under a name...": "Lưu với một tên..."
 "No saved situation of this map yet": "Chưa có tình huống nào được lưu cho bản đồ này"
 "Saved as \"{}\"": "Đã lưu thành \"{}\""
+"Passengers add weight to the bus": "Hành khách làm xe buýt nặng thêm"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Cân nặng của mỗi hành khách, lấy từ tệp .hum, được cộng vào xe buýt ở chỗ họ ngồi hoặc đứng: xe đầy khởi hành, phanh và leo dốc như một xe nặng hơn; khi tắt, xe nặng đúng như tệp của nó ghi"
+"Passenger weight": "Cân nặng hành khách"
+"For passengers whose file gives no weight; default 75 kg": "Cho hành khách mà tệp không ghi cân nặng; mặc định 75 kg"

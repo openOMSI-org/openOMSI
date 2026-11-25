@@ -507,6 +507,8 @@ The second column, **Radio stations**, edits your stations (see [Radio](RADIO.md
 | Connection chance (`passenger_transfer_percent`) | 0–100 % | 20 % |
 | Passengers signal approaching buses (`passenger_hailing`) | with natural animations | off |
 | Passengers react to full buses (`passenger_full_bus_reaction`) | | off |
+| Passengers add weight to the bus (`passenger_mass`) | each rider's weight on the bus's physics, see below | off |
+| Passenger weight (`passenger_weight_kg`) | for passengers whose `.hum` gives no `[mass]`, 40–120 kg | 75 kg |
 | Short rides stand by a door (`pax_short_rides_stand`) | | off |
 | Arrival announcements at the stop (`auto_announce`) | depot files with two recordings per stop | off |
 | How many passengers (`pax_density`) | 0–200 % | 100 % |
@@ -662,6 +664,8 @@ menus.
 | `pax_free_drive` | stops fill in free drive: `auto`, `on`, `off` | `auto` |
 | `pax_board_when_stopped` | people walk to the bus only once it stands with a door open | off |
 | `pax_stop_numbers_exact` | a stop's passenger numbers as the map writes them | off |
+| `passenger_weight_fixed` | with `passenger_mass`: everybody weighs `passenger_weight_kg`, whatever their `.hum` says | off |
+| `passenger_weight_spread` | with `passenger_mass`: how much one person's weight varies either way, 0–50 % | 0 |
 | `parked_buses_drawn` | a server's parked buses drawn at most; −1 automatic | −1 |
 | `ctrl_deadzone` | dead zone of set-up controller axes (0–0.3) | 0 |
 | `ctrl_off` | controllers switched off, by name, separated by `\|` | empty |

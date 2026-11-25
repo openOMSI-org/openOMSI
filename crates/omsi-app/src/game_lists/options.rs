@@ -17,6 +17,7 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "traffic" => app.session.traffic.as_ref()?.target as f32,
         "pax" => s.pax_density,
         "passenger_transfer_percent" => s.passenger_transfer_percent,
+        "passenger_weight_kg" => s.passenger_weight_kg,
         "volume" => s.volume,
         "led_glow" => s.led_glow as f32,
         "night_brightness" => s.night_brightness,
@@ -128,6 +129,13 @@ pub(super) fn option_set(
             Some(("pax_density", v.to_string()))
         }
         "passenger_transfer_percent" => set_connection_percent(app, v),
+        "passenger_weight_kg" => {
+            app.settings.passenger_weight_kg = v.clamp(20.0, 200.0);
+            Some((
+                "passenger_weight_kg",
+                app.settings.passenger_weight_kg.to_string(),
+            ))
+        }
         "volume" => {
             app.settings.volume = v;
             Some(("volume", v.to_string()))
@@ -523,6 +531,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
     Some(match id {
         "passenger_connections" => s.passenger_connections,
         "passenger_hailing" => s.passenger_hailing,
+        "passenger_mass" => s.passenger_mass,
         "passenger_full_bus_reaction" => s.passenger_full_bus_reaction,
         "pax_short_rides_stand" => s.pax_short_rides_stand,
         "navigator" => {
@@ -685,6 +694,10 @@ fn toggle_set_gameplay(
                 };
             }
             Some(("passenger_connections", bit))
+        }
+        "passenger_mass" => {
+            app.settings.passenger_mass = on;
+            Some(("passenger_mass", bit))
         }
         "passenger_hailing" => {
             app.settings.passenger_hailing = on;

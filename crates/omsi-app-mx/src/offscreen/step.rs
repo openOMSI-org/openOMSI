@@ -454,6 +454,7 @@ impl Offscreen<'_> {
     pub(super) fn duty_step(&mut self) {
         let (args, dt) = (self.args, self.dt);
         let announce = self.settings.auto_announce;
+        let weight = self.settings.passenger_weight();
         let Self {
             ref mut player,
             ref mut duty,
@@ -488,6 +489,7 @@ impl Offscreen<'_> {
             }
         }
         let riders = humans_off.as_ref().map(|h| h.riding()).unwrap_or(0);
+        steps::passenger_load_step(player, humans_off.as_ref().map(|h| &h.sim), weight);
         let crash = steps::career_step(career, player, riders, duty.is_some(), dt, true);
         if crash > 0.0 {
             log::warn!("crash: {:.0} kJ", crash / 1000.0);

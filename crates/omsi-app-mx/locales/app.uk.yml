@@ -3362,3 +3362,7 @@
 "Save under a name...": "Зберегти під назвою..."
 "No saved situation of this map yet": "Для цієї мапи ще немає збережених ситуацій"
 "Saved as \"{}\"": "Збережено як «{}»"
+"Passengers add weight to the bus": "Пасажири збільшують масу автобуса"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Вага кожного пасажира з його файлу .hum додається до автобуса там, де він сидить або стоїть: повний автобус рушає, гальмує та піднімається в гору як важча машина; вимкнено - автобус важить стільки, скільки вказано в його файлі"
+"Passenger weight": "Вага пасажира"
+"For passengers whose file gives no weight; default 75 kg": "Для пасажирів, у файлі яких вага не вказана; за замовчуванням 75 кг"

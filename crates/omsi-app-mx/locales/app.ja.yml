@@ -3309,3 +3309,7 @@
 "Save under a name...": "名前を付けて保存..."
 "No saved situation of this map yet": "このマップの保存された状況はまだありません"
 "Saved as \"{}\"": "「{}」として保存しました"
+"Passengers add weight to the bus": "乗客の重さをバスに加える"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "各乗客の .hum ファイルの重さを、座っている・立っている位置でバスに加えます。満員のバスは重い車両として発進・制動・登坂します。オフにするとバスはファイルどおりの重さです"
+"Passenger weight": "乗客の体重"
+"For passengers whose file gives no weight; default 75 kg": "ファイルに重さがない乗客の値。既定は 75 kg"

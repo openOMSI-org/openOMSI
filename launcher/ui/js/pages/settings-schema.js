@@ -390,6 +390,8 @@ const gameplay = {
         { type: 'toggle', key: 'pax_bad_driving', label: 'Passengers react to bad driving' },
         { type: 'toggle', key: 'passenger_connections', label: 'Passenger connections between lines', help: 'Optional onward trips in single player only; disabled in multiplayer' },
         { type: 'slider', key: 'passenger_transfer_percent', label: 'Connection chance', min: 0, max: 100, step: 5, def: 20, format: (v) => `${v}%`, when: (s) => !!s.passenger_connections },
+        { type: 'toggle', key: 'passenger_mass', label: 'Passengers add weight to the bus', help: "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says" },
+        { type: 'slider', key: 'passenger_weight_kg', label: 'Passenger weight', help: 'For passengers whose file gives no weight; default 75 kg', min: 40, max: 120, step: 5, def: 75, format: (v) => `${v} kg`, when: (s) => !!s.passenger_mass },
         { type: 'toggle', key: 'passenger_hailing', label: 'Passengers signal approaching buses', help: 'Optional visual hailing; only effective with supported natural animations' },
         { type: 'toggle', key: 'passenger_full_bus_reaction', label: 'Passengers react to full buses', help: 'Optional visual acknowledgement when an approaching compatible bus is at passenger capacity' },
         { type: 'toggle', key: 'pax_short_rides_stand', label: 'Short rides stand by a door', help: 'Passengers with no set stop who ride only a few kilometres take a free standing place near an exit rather than a seat' },

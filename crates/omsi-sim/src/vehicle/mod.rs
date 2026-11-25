@@ -33,6 +33,7 @@ mod drive;
 mod emission;
 mod instance;
 mod light_emitters;
+mod load;
 mod panto;
 mod pose;
 mod program_ids;

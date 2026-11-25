@@ -4485,3 +4485,7 @@
 "no plugin is listening for commands": "nenhum plugin está a escutar comandos"
 "plugin command queue is full": "a fila de comandos dos plugins está cheia"
 
+"Passengers add weight to the bus": "Os passageiros aumentam o peso do autocarro"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "O peso de cada passageiro, do seu ficheiro .hum, soma-se ao autocarro onde vai sentado ou de pé: um autocarro cheio arranca, trava e sobe como o veículo mais pesado que é; desligado, o autocarro pesa o que diz o seu ficheiro"
+"Passenger weight": "Peso do passageiro"
+"For passengers whose file gives no weight; default 75 kg": "Para passageiros cujo ficheiro não indica peso; predefinição 75 kg"

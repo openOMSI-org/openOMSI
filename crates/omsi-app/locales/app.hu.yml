@@ -3325,3 +3325,7 @@
 "no plugin is listening for commands": "egyetlen bővítmény sem fogad parancsokat"
 "plugin command queue is full": "a beépülő modulok parancssora megtelt"
 
+"Passengers add weight to the bus": "Az utasok növelik a busz tömegét"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Minden utas tömege a .hum fájljából hozzáadódik a buszhoz ott, ahol ül vagy áll: a teli busz nehezebb járműként indul, fékez és kapaszkodik; kikapcsolva a busz annyit nyom, amennyit a fájlja mond"
+"Passenger weight": "Utas tömege"
+"For passengers whose file gives no weight; default 75 kg": "Azoknak az utasoknak, akiknek a fájlja nem ad meg tömeget; alapértelmezés 75 kg"

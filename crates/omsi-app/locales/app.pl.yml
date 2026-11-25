@@ -3589,3 +3589,7 @@
 "no plugin is listening for commands": "żadna wtyczka nie nasłuchuje poleceń"
 "plugin command queue is full": "kolejka poleceń wtyczek jest pełna"
 
+"Passengers add weight to the bus": "Pasażerowie zwiększają masę autobusu"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Masa każdego pasażera z jego pliku .hum dodaje się do autobusu tam, gdzie siedzi lub stoi: pełny autobus rusza, hamuje i podjeżdża jak cięższy pojazd; wyłączone - autobus waży tyle, ile podaje jego plik"
+"Passenger weight": "Masa pasażera"
+"For passengers whose file gives no weight; default 75 kg": "Dla pasażerów, których plik nie podaje masy; domyślnie 75 kg"

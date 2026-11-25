@@ -3339,3 +3339,7 @@
 "no plugin is listening for commands": "žádný plugin nenaslouchá příkazům"
 "plugin command queue is full": "fronta příkazů pluginů je plná"
 
+"Passengers add weight to the bus": "Cestující zvyšují hmotnost autobusu"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Hmotnost každého cestujícího z jeho souboru .hum se přičte k autobusu tam, kde sedí nebo stojí: plný autobus se rozjíždí, brzdí a stoupá jako těžší vozidlo; vypnuto - autobus váží tolik, kolik uvádí jeho soubor"
+"Passenger weight": "Hmotnost cestujícího"
+"For passengers whose file gives no weight; default 75 kg": "Pro cestující, jejichž soubor hmotnost neuvádí; výchozí 75 kg"
