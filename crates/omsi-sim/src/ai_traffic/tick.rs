@@ -22,6 +22,10 @@ pub const ROUTE_WAIT_MAX: f32 = 40.0;
 /// this far past the obstacle's rear (m).
 pub const CREEP_PAST: f32 = 2.0;
 pub const PLAYER_AT_LIGHT: f32 = 55.0;
+/// A player's bus this near ahead of a car's front (m) is what holds it.
+const PLAYER_HOLDS_WITHIN: f32 = 20.0;
+/// The room an AI bus keeps behind a player's standing bus (m).
+const PLAYER_PULL_OUT_ROOM: f32 = 9.0;
 
 /// Where every car is (see `Traffic::occupancy`): per lane, (car, distance along the lane,
 /// lateral place, out on that lane passing something).
@@ -973,7 +977,11 @@ impl TrafficSim {
                                 < real + obstacle_len + st.front + 15.0
                     })
                     .unwrap_or(false);
-                let want = if queues {
+                // (a bus does not close up to a player's bus, which may never move on:
+                // from close behind it no bus could pull out round it)
+                let want = if who == Some(usize::MAX) && car.is_bus() {
+                    car.pass_room.max(PLAYER_PULL_OUT_ROOM)
+                } else if queues {
                     st.min_gap + 2.0
                 } else {
                     car.pass_room.max(st.min_gap)
@@ -1194,6 +1202,25 @@ impl TrafficSim {
         (stop_at, why)
     }
 
+    /// Does a player's bus stand just ahead of car `i`, and has for `PLAYER_PATIENCE` -
+    /// not one waiting at a red light?
+    fn held_by_player(&self, i: usize, ts: &TickScene) -> bool {
+        let car = &self.cars[i];
+        let near = |p: &PlayerBox, still: f32| {
+            still.min(car.since_player_at_light) > super::bus_service::PLAYER_PATIENCE
+                && self
+                    .player_in_way(i, p)
+                    .is_some_and(|l| l.gap < PLAYER_HOLDS_WITHIN)
+        };
+        ts.player
+            .as_ref()
+            .is_some_and(|p| near(p, ts.player_standing))
+            || ts
+                .others
+                .iter()
+                .any(|(id, p)| near(p, self.others_still.get(id).copied().unwrap_or(0.0)))
+    }
+
     /// A timetable bus's service (its stops and its place at them); where a car parking
     /// stops beside its space (`park`, from `steer_sideways`).
     #[allow(clippy::too_many_arguments)]
@@ -1213,6 +1240,7 @@ impl TrafficSim {
         } else {
             Default::default()
         };
+        let held_by_player = self.cars[i].is_bus() && self.held_by_player(i, ts);
         let berths = &mut self.berths;
         let car = &mut self.cars[i];
         if let Some(service) = car.bus.as_mut() {
@@ -1237,6 +1265,7 @@ impl TrafficSim {
                 timed_waits_only: self.timed_waits_only,
                 time: self.time,
                 berth,
+                held_by_player,
             };
             if let Some(at) = service.step(&mut car.state, &mut car.vehicle, &ctx, berths) {
                 stop_at = Some(stop_at.map(|x| x.min(at)).unwrap_or(at));

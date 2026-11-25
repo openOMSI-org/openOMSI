@@ -52,6 +52,8 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **AI buses get past your bus** left standing before or at their stop: after 15 seconds
+  they serve the stop from where they are, or go without it, and drive round (#2973).
 - **AI buses no longer stand at their own stop's pole** and then drive through it.
 - **AI traffic amount**: the cars asked for are now the ones driving round you. Cars far
   off no longer count towards the number, so the road near you is no longer half empty
