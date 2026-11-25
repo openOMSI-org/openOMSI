@@ -1003,6 +1003,7 @@ impl TrailerPart {
         let speed = if self.reversed { -speed } else { speed };
         let turned = self.odometer / self.wheel_radius;
         let rolled = (turned - self.turned_put) * self.wheel_radius;
+        let rolled = if self.reversed { -rolled } else { rolled };
         self.turned_put = turned;
         for a in 0..self.axle_count {
             let steer = self.axle_steer(a);

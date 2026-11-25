@@ -1017,3 +1017,42 @@ fn a_road_parts_wheels_turn_at_its_own_speed_over_their_size() {
         assert!((rpm - want).abs() < 0.05, "{side}: {rpm} rpm, want {want}");
     }
 }
+
+/// A part turned round turns its wheels the other way: the angle as well as the speed
+/// (0x7debb0 with the part's +0x4e0), so the animation and the scripts' rpm agree.
+#[test]
+fn a_turned_round_parts_wheels_roll_backwards_in_angle_and_speed() {
+    let base = crate::timetable_run::tests::script_test_vehicle(
+        "{frame}\n{end}\n",
+        "Wheel_RotationSpeed_1_L\nWheel_Rotation_1_L\n",
+        "",
+    );
+    let mut ty = (*base.ty).clone();
+    ty.def.axles = vec![omsi_vehicle::Axle {
+        long: 2.0,
+        wheel_diameter: 1.0,
+        ..Default::default()
+    }];
+    let ty = Arc::new(ty);
+    let mut v = VehicleInstance::new(ty.clone(), VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(ty, true);
+    v.update_visuals(0.02);
+    let start = v.var("Wheel_Rotation_1_L").unwrap();
+    v.physics.speed = 10.0;
+    // (the bus drives on: the part's wheels roll as its pivot moves)
+    for _ in 0..5 {
+        v.position.y += 0.2;
+        v.update_visuals(0.02);
+    }
+    let rpm = v.var("Wheel_RotationSpeed_1_L").unwrap();
+    let turned = v.var("Wheel_Rotation_1_L").unwrap() - start;
+    assert!(
+        rpm.abs() > 1.0 && turned.abs() > 1e-3,
+        "rpm {rpm}, turned {turned}"
+    );
+    assert_eq!(
+        rpm.signum(),
+        turned.signum(),
+        "the wheel turns one way and its rpm says the other: rpm {rpm}, turned {turned}"
+    );
+}
