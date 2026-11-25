@@ -163,23 +163,42 @@ pub fn place() -> std::sync::Arc<SunPlace> {
         .unwrap_or_default()
 }
 
+/// The obliquity of the ecliptic Omsi.exe works with (radians, 23.44 degrees).
+const OMSI_OBLIQUITY: f64 = 0.409_087_723_374_950_9;
+
 /// Sun altitude and azimuth (degrees; azimuth clockwise from north) for the map clock at
-/// `place`.
+/// `place`, placed as Omsi.exe places its sun (THimmel 0x5d8ad0 with TGestirn 0x5d8498),
+/// which is what the `SunAlt` script variable and the envir.cfg lights follow:
+///
+/// - the sidereal time at Greenwich is 6.69 h plus 24 h for every 365 days of the year
+///   (the whole day times 24 divided by 365) plus the clock's UTC hours (the clock less the
+///   map's time zone and summer time), and the map's longitude makes it local;
+/// - the sun runs evenly round the ecliptic from the equinox on day 80; its right ascension
+///   is taken from that longitude over the tilted equator, so the sun stands south up to ten
+///   minutes before or after noon over the year (in early May at about 11:53);
+/// - its declination is the sine of the ecliptic's tilt times the sine of that longitude,
+///   used as an angle in radians: 22.8 degrees at the solstices, not 23.4, so the midsummer
+///   sun stands about 0.65 degrees lower than the real one and the midwinter sun higher.
 pub fn sun_position(clock: &SimClock, place: &SunPlace) -> (f64, f64) {
-    let doy = clock.day_of_year as f64;
-    let decl =
-        (23.44f64).to_radians() * ((2.0 * std::f64::consts::PI * (284.0 + doy) / 365.0).sin());
-    let hour = place.solar_hours(clock);
-    let h = (15.0 * (hour - 12.0)).to_radians();
+    use std::f64::consts::PI;
+    let doy = clock.day_of_year;
+    let gmst_hours = (doy * 24) as f64 / 365.0 + 6.69 + clock.time / 3600.0
+        - place.timezone
+        - place.dst_hours(clock);
+    let local_sidereal = gmst_hours * 2.0 * PI / 24.0 + place.longitude.to_radians();
+    let ecliptic = ((doy - 80) * 2) as f64 * PI / 365.0;
+    let right_ascension = (OMSI_OBLIQUITY.cos() * ecliptic.sin()).atan2(ecliptic.cos());
+    let decl = OMSI_OBLIQUITY.sin() * ecliptic.sin();
+    let h = local_sidereal - right_ascension;
     let lat = place.latitude.to_radians();
-    let sin_alt = lat.sin() * decl.sin() + lat.cos() * decl.cos() * h.cos();
+    let sin_alt = decl.sin() * lat.sin() + decl.cos() * h.cos() * lat.cos();
     let alt = sin_alt.clamp(-1.0, 1.0).asin();
-    let cos_az = (decl.sin() - lat.sin() * sin_alt) / (lat.cos() * alt.cos()).max(1e-6);
-    let mut az = cos_az.clamp(-1.0, 1.0).acos();
-    if h.sin() > 0.0 {
-        az = 2.0 * std::f64::consts::PI - az;
-    }
-    (alt.to_degrees(), az.to_degrees())
+    // (Omsi.exe's azimuth counts from the south towards the west; from the north here)
+    let az_south = h.sin().atan2(h.cos() * lat.sin() - decl.tan() * lat.cos());
+    (
+        alt.to_degrees(),
+        (az_south.to_degrees() + 180.0).rem_euclid(360.0),
+    )
 }
 
 /// The blend of the envir.cfg sky pictures (day, twilight, night) at a sun height of `alt`
@@ -415,6 +434,41 @@ mod tests {
         c.time = 13.12 * 3600.0;
         let (_, az) = sun_position(&c, &SunPlace::default());
         assert!(az > 195.0, "no DST: az {az:.1}");
+    }
+
+    #[test]
+    fn the_sun_runs_as_omsi_runs_it() {
+        // early May at 45 N on the Greenwich meridian: Omsi.exe's sun stands highest at about
+        // 11:53 (its right ascension off the tilted equator), at 90 - 45 + 16.21 degrees
+        let place = SunPlace {
+            latitude: 45.0,
+            longitude: 0.0,
+            timezone: 0.0,
+            dst: Vec::new(),
+        };
+        let at = |doy: i32, minutes: i32| {
+            sun_position(
+                &SimClock {
+                    day_of_year: doy,
+                    time: minutes as f64 * 60.0,
+                    ..Default::default()
+                },
+                &place,
+            )
+        };
+        let (best_min, best_alt) = (600..800)
+            .map(|m| (m, at(126, m).0))
+            .fold((0, f64::MIN), |b, x| if x.1 > b.1 { x } else { b });
+        assert!((712..=714).contains(&best_min), "noon at {best_min} min");
+        assert!((best_alt - 61.22).abs() < 0.02, "alt {best_alt}");
+        let (_, az) = at(126, best_min);
+        assert!((az - 180.0).abs() < 1.0, "az {az}");
+        // midsummer: the declination is sin(23.44) radians, 22.79 degrees
+        let top = (600..840).map(|m| at(171, m).0).fold(f64::MIN, f64::max);
+        assert!((top - (45.0 + 22.79)).abs() < 0.02, "midsummer top {top}");
+        // morning east, afternoon west
+        assert!((90.0..180.0).contains(&at(126, 600).1));
+        assert!((180.0..270.0).contains(&at(126, 840).1));
     }
 
     #[test]
