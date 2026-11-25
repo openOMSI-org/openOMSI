@@ -467,7 +467,9 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // a carriageway under snow that builds up: its own cover, ruts and tracks (road_snow.wgsl)
     let carriageway = !terrain && material.params2.z > 0.0 && road_snow_dynamic();
     var rs = vec3<f32>(0.0);
-    if (SNOW && carriageway && snow_ok > 0.0) {
+    // (not in a plain `LEAN` pipeline: Apple's shader compiler crashed on it there, and a
+    // carriageway is drawn with the full pipelines in a snowy frame, `Lean::PlainRoad`)
+    if (SNOW && (!LEAN || LEAN_GLASS) && carriageway && snow_ok > 0.0) {
         rs = road_snow(in.world);
     }
     // a vehicle's part: the snow its own roof has gathered, where that is kept (another
