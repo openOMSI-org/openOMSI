@@ -27,6 +27,12 @@ pub(super) const FLEET_NEAR: f64 = 3000.0;
 /// minutes wants, leaves the GPU.
 pub(super) const FLEET_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
 
+/// The same while the textures are over their budget (or the card over the video memory):
+/// a set nobody draws goes after a few seconds, before the budget makes the textures of what
+/// is drawn smaller. Kept for 90 s whatever the memory, the sets of the buses gone by held
+/// the card's memory while the scenery round the player lost its detail (#4031).
+pub(super) const FLEET_IDLE_SHORT: std::time::Duration = std::time::Duration::from_secs(5);
+
 impl Schedule {
     /// Upload the vehicles of the buses on the road at `day_time` and of the departures of the
     /// next minutes before the first frame, so that they spawn without a hitch; the rest of
@@ -296,7 +302,11 @@ impl Schedule {
         let idle = omsi_cfg::flags::OMSI_FLEET_IDLE
             .parse::<f32>()
             .map(std::time::Duration::from_secs_f32)
-            .unwrap_or(FLEET_IDLE);
+            .unwrap_or(if world.textures_over_budget() {
+                FLEET_IDLE_SHORT
+            } else {
+                FLEET_IDLE
+            });
         if world.trim_vehicle_sets(renderer, scene, &keep, idle) > 0 {
             crate::release_free_memory();
         }
