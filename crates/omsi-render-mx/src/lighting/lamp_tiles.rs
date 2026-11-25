@@ -158,19 +158,24 @@ impl TileWants {
     ) -> Vec<LampShadow> {
         let mut tiles: Vec<LampShadow> = Vec::new();
         let mut tiled: Vec<(u32, usize)> = Vec::new();
-        let cubed = self.cube_tiles(scene, &mut tiles, &mut tiled);
-        self.world.retain(|w| !cubed.contains(&w.2));
-        self.world_tiles(scene, &mut tiles, &mut tiled);
-        self.vehicle_tiles(eye.cam_rel, own, &mut tiles, &mut tiled);
+        if eye.level > 0 {
+            let cubed = self.cube_tiles(scene, &mut tiles, &mut tiled);
+            self.world.retain(|w| !cubed.contains(&w.2));
+            self.world_tiles(scene, &mut tiles, &mut tiled);
+            self.vehicle_tiles(eye.cam_rel, own, &mut tiles, &mut tiled);
+        }
         for &(idx, slot) in &tiled {
             if let Some(g) = gpu_lights.get_mut(idx as usize) {
                 g.pos[3] = -(-g.pos[3]).max(0.0) - LAMP_MARK * (slot + 1) as f32;
             }
         }
-        if let Some((b, rotation)) = eye
-            .vehicle
-            .filter(|_| !omsi_cfg::flags::OMSI_NO_CABIN_SHADOWS.is_set())
-        {
+        // (the saloon's maps only while the eye is in the saloon: from outside, its shadows
+        // are seen through the windows at most, and every picture of the bus - the puddles'
+        // reflections of it too - paid for their lookups)
+        if let Some((b, rotation)) = eye.vehicle.filter(|(b, _)| {
+            !omsi_cfg::flags::OMSI_NO_CABIN_SHADOWS.is_set()
+                && passes::VehicleBox::new(b, scene.render_origin).contains(eye.cam_rel, 0.3)
+        }) {
             let ro = scene.render_origin;
             // (the world to the frame of the vehicle's body, whose rotation the app gives)
             let to_world =

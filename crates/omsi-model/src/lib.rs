@@ -284,9 +284,33 @@ pub struct MeshDef {
     pub light_enh: Vec<LightEnh>,
     pub light_enh_2: Vec<LightEnh2>,
     pub no_distance_check: bool,
+    /// `[light_emitter_interior]` (openOMSI): the mesh's light-mapped (or night-mapped) parts
+    /// light the saloon - interior lamps are made from where its texture glows
+    /// (omsi-sim `vehicle::light_emitters`).
+    pub light_emitter_interior: Option<LightEmitterInterior>,
     /// Compatibility mirror of the last `[terrainhole]` after this mesh. Use
     /// [`Model::terrain_hole_meshes`] to include model-wide and repeated declarations.
     pub terrain_hole: Option<String>,
+}
+
+/// `[light_emitter_interior]`, with its optional lines: how strong the light is (1: as
+/// bright as the texture shows), how many lamps it may make (4), and the variable that
+/// switches it (else the lightmap's own).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LightEmitterInterior {
+    pub strength: f32,
+    pub max_lamps: u32,
+    pub variable: Option<String>,
+}
+
+impl Default for LightEmitterInterior {
+    fn default() -> Self {
+        LightEmitterInterior {
+            strength: 1.0,
+            max_lamps: 4,
+            variable: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -823,6 +847,7 @@ impl Model {
             "vfdmaxmin" => self.vfd_max_min = Some(r.f32s::<6>()),
             "detail_factor" => self.detail_factor = r.f32(),
             "tex_detail_factor" => self.tex_detail_factor = r.f32(),
+            "light_emitter_interior" => self.read_light_emitter_interior(r),
             "nodistancecheck" => {
                 if let Some(m) = self.cur_mesh() {
                     m.no_distance_check = true;

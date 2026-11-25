@@ -625,11 +625,14 @@ pub(crate) fn lean_scene(src: String) -> String {
 /// The sky dome (both paths) and the enhanced reflection probe.
 pub(crate) fn sky_shader_source() -> String {
     [
-        include_str!("../colour.wgsl"),
-        include_str!("../sky.wgsl"),
-        include_str!("../enhanced_common.wgsl"),
-        include_str!("../sky_enhanced.wgsl"),
-        include_str!("../clouds_ss.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../colour.wgsl"), "colour.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../sky.wgsl"), "sky.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../sky_enhanced.wgsl"), "sky_enhanced.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../clouds_ss.wgsl"), "clouds_ss.wgsl"),
     ]
     .join("\n")
 }
