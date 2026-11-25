@@ -30,6 +30,7 @@ ap.add_argument("--runs", type=int, default=3)
 ap.add_argument("--size", default="1920x1080")
 ap.add_argument("--out", default=None, help="write the raw runs (CSV) here")
 ap.add_argument("--scenes", default=None, help="comma-separated scene numbers (1-based) to run")
+ap.add_argument("--set", default="grundorf", choices=["grundorf", "lighting"], help="the scenes: Grundorf's (default) or Berlin-Spandau's lit by day, by night and in fog (the lighting work)")
 a = ap.parse_args()
 
 if len(a.paths) == 2:
@@ -53,6 +54,16 @@ SCENES = [
     ("Grundorf, MAN SD80 cab (mirrors)", ["--map", "maps/Grundorf/global.cfg", "--bus", "Vehicles/MAN_SD200/MAN_SD80.bus", "--view", "driver"]),
     ("Grundorf, MAN SD80 outside", ["--map", "maps/Grundorf/global.cfg", "--bus", "Vehicles/MAN_SD200/MAN_SD80.bus", "--view", "outside"]),
 ]
+# Berlin-Spandau with the MAN EN92, its headlamps and saloon lamps switched on where it is dark
+# (the switches are script triggers, which fire while the bus is driven: `--drive`)
+SPANDAU = ["--map", "maps/Berlin-Spandau/global.cfg", "--bus", "Vehicles/MAN_NL_NG/MAN_EN92_main.bus", "--entry", "0"]
+LIGHTS = ["--autostart", "--triggers", "kw_scheinwerfer_toggle@0.3,cp_licht_unterdeck_toggle@0.4,cp_licht_oberdeck_toggle@0.5", "--drive", "2"]
+if a.set == "lighting":
+    SCENES = [
+        ("Spandau, day, outside", SPANDAU + ["--view", "outside", "--time", "12:00", "--weather", "Weather/#CAVOK.owt"]),
+        ("Spandau, night, cab, headlamps, traffic", SPANDAU + ["--view", "driver", "--time", "23:00", "--weather", "Weather/#CAVOK.owt", "--traffic", "20"] + LIGHTS),
+        ("Spandau, night fog, bus front lit", SPANDAU + ["--view", "free", "--cam", "892320.1,4196851.9,34.6,127,-4", "--time", "22:30", "--weather", "Weather/Bodennebel.owt"] + LIGHTS),
+    ]
 if a.scenes:
     SCENES = [SCENES[int(i) - 1] for i in a.scenes.split(",")]
 GRAPHICS = ["vanilla_plus", "enhanced"]
