@@ -234,6 +234,7 @@ mod tests {
     /// and the rain and the snow on the panes shared with the classic pictures, the cabin's
     /// reflection probe gone, the traffic's wet windows and the windows lit in a downpour.
     /// And #2687: the sun lights standing cut-outs such as fences from their facing side.
+    /// And the saloon's lamps as line sources, and the height maps' parallax.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
@@ -245,7 +246,7 @@ mod tests {
         assert_eq!((scene.len(), fnv1a(&scene)), (152452, 430776714718153452));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (122218, 5947167113490775340)
+            (126281, 4155396700739699649)
         );
     }
 }

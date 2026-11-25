@@ -231,6 +231,7 @@ mod tests {
     /// reflection probe gone, the traffic's wet windows and the windows lit in a downpour.
     /// And #4153: the drops on the panes read as drops again, prefiltered under a pixel.
     /// And #2687: the sun lights standing cut-outs such as fences from their facing side.
+    /// And the saloon's lamps as line sources, and the height maps' parallax.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
@@ -242,7 +243,7 @@ mod tests {
         assert_eq!((scene.len(), fnv1a(&scene)), (152469, 2025446307441838839));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (121988, 16563956700057204959)
+            (126051, 12431472982276223394)
         );
     }
 }
