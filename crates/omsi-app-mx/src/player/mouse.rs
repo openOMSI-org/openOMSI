@@ -348,6 +348,8 @@ impl Player {
     /// click processed again appended digits twice, `1`→`11`), see `settle_click`.
     /// A cab control's trigger as a click fires it; while a click waits for its frame, it
     /// waits behind that one (see [`UnframedClick`]).
+    // (no key of this app fires a cab control by its trigger yet; its tests do)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn trigger_cab_control(&mut self, ev: &str) -> bool {
         if let Some(click) = self.unframed_click.as_mut() {
             click.queue(ClickTarget::Control(ev.to_string()));
@@ -711,6 +713,7 @@ struct WaitingClick {
 pub(crate) enum ClickTarget {
     Bus(usize),
     Trailer(usize, usize),
+    #[cfg_attr(not(test), allow(dead_code))]
     Control(String),
 }
 

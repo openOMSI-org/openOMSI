@@ -8,6 +8,7 @@ mod doors;
 mod gears;
 mod ibis;
 mod mouse;
+#[cfg(test)]
 pub(crate) use mouse::ClickTarget;
 mod part_sounds;
 mod picking;
