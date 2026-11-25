@@ -1,5 +1,6 @@
 //! `maps/<map>/TTData/*` - bus stops, station links, trips, tracks and lines.
 
+pub mod stop_labels;
 pub mod transit;
 
 use omsi_cfg::CfgFile;
