@@ -3,7 +3,7 @@
 mod common;
 
 use common::{Game, run};
-use omsi_plugin::{AiCar, InfoValue, Light, TicketAsk, TicketKind};
+use omsi_plugin::{AiCar, InfoValue, KeyEvent, Light, TicketAsk, TicketKind};
 
 /// Run `body` (Lua) in a plugin's first frame; it reports with `omsi.message`.
 fn check(tag: &str, body: &str, g: &mut Game) -> Vec<String> {
@@ -245,6 +245,8 @@ fn camera_input_and_sound() {
           assert(omsi.input.bindings()[1].action == "sim_pause" and omsi.input.bindings(true)[1].action == "horn")
           assert(not pcall(omsi.input.hotkey, "Ctrl+", function() end))
           omsi.input.hotkey("Shift+KeyH", function(k) omsi.message("hotkey " .. k) end)
+          omsi.input.hotkey("Ctrl+KeyL", function(k) omsi.message("hotkey " .. k) end)
+          omsi.on("key", function(key, down, combo) omsi.message("key " .. combo) end)
           local id = omsi.audio.play("ding.wav", { volume = 0.5, on_bus = true })
           assert(id and omsi.audio.playing(id) and omsi.audio.set(id, { volume = 1 }))
           local none, why = omsi.audio.play("../ding.wav"); assert(none == nil and why)
@@ -259,13 +261,43 @@ fn camera_input_and_sound() {
         std::fs::write(d.join("media/ding.wav"), b"RIFF").unwrap();
         let mut p = omsi_plugin::Plugins::load(&[d.clone()], &omsi_plugin::HostConfig::default());
         p.frame(&mut g);
-        g.keys = vec![("KeyH".into(), true)];
+        g.key_events = vec![KeyEvent {
+            key: "KeyH".into(),
+            down: true,
+            shift: true,
+            ..Default::default()
+        }];
         p.frame(&mut g);
         g.held.clear();
+        g.key_events = vec![
+            KeyEvent {
+                key: "KeyL".into(),
+                down: true,
+                ctrl: true,
+                ..Default::default()
+            },
+            KeyEvent {
+                key: "KeyM".into(),
+                down: true,
+                ..Default::default()
+            },
+        ];
+        p.frame(&mut g);
+        g.key_events.clear();
         p.frame(&mut g);
         std::mem::take(&mut g.messages)
     };
-    assert_eq!(out, ["ok", "hotkey KeyH"]);
+    assert_eq!(
+        out,
+        [
+            "ok",
+            "hotkey KeyH",
+            "key Shift+KeyH",
+            "hotkey KeyL",
+            "key Ctrl+KeyL",
+            "key KeyM"
+        ]
+    );
     let sounds = g.sounds.borrow();
     assert_eq!(sounds.len(), 1);
     assert!(

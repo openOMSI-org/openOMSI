@@ -10,6 +10,15 @@
 use crate::api::Value;
 use std::path::Path;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyEvent {
+    pub key: String,
+    pub down: bool,
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+}
+
 /// The game's side of a frame.
 pub trait PluginIo {
     /// Snapshot of every parsed field of the player's currently loaded HOF.
@@ -136,6 +145,21 @@ pub trait PluginIo {
     /// Keys pressed (true) and let go since the last frame, by winit's key name.
     fn keys(&self) -> Vec<(String, bool)> {
         Vec::new()
+    }
+    fn key_events(&self) -> Vec<KeyEvent> {
+        let ctrl = self.key_held("ControlLeft") || self.key_held("ControlRight");
+        let shift = self.key_held("ShiftLeft") || self.key_held("ShiftRight");
+        let alt = self.key_held("AltLeft") || self.key_held("AltRight");
+        self.keys()
+            .into_iter()
+            .map(|(key, down)| KeyEvent {
+                key,
+                down,
+                ctrl,
+                shift,
+                alt,
+            })
+            .collect()
     }
     /// The other vehicles within `radius` m of the player's (`omsi.others`): the AI traffic
     /// and the other LAN players' buses.

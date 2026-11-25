@@ -85,6 +85,16 @@ pub(crate) use frame::stages::{WindowStage, FRAME_AFTER, FRAME_BEFORE, FRAME_TIC
 /// How fast a stick turns the head, fully pushed (degrees a second, see `Analog::look`).
 const LOOK_STICK_DEG_S: f32 = 120.0;
 
+fn plugin_key_event(code: KeyCode, pressed: bool, held: &hashbrown::HashSet<KeyCode>) -> omsi_plugin::KeyEvent {
+    omsi_plugin::KeyEvent {
+        key: format!("{code:?}"),
+        down: pressed,
+        ctrl: held.contains(&KeyCode::ControlLeft) || held.contains(&KeyCode::ControlRight),
+        shift: held.contains(&KeyCode::ShiftLeft) || held.contains(&KeyCode::ShiftRight),
+        alt: held.contains(&KeyCode::AltLeft) || held.contains(&KeyCode::AltRight),
+    }
+}
+
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.resumed_impl(event_loop);
@@ -246,7 +256,7 @@ impl ApplicationHandler for App {
                 // (the Lua plugins' `key` event; a key held down repeats nothing)
                 if let (PhysicalKey::Code(code), false) = (event.physical_key, repeat) {
                     if self.integrations.plugin_keys.len() < 64 {
-                        self.integrations.plugin_keys.push((format!("{code:?}"), pressed));
+                        self.integrations.plugin_keys.push(plugin_key_event(code, pressed, &self.input.keys));
                     }
                 }
                 // a phone's back key is Escape (the game menu, out of the city map ...)

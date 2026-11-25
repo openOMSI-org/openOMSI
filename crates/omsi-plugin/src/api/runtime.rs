@@ -688,19 +688,18 @@ fn tick(ctx: &mut Ctx<'_>, dt: f64) -> Result<(), CallError> {
         }
     }
     // the keys pressed since the last frame
-    let keys = ctx.io().keys();
-    for (k, down) in keys {
-        if down && !ctx.state().hotkeys.is_empty() {
-            hotkeys(ctx, &k)?;
+    let keys = ctx.io().key_events();
+    for e in keys {
+        if e.down && !ctx.state().hotkeys.is_empty() {
+            hotkeys(ctx, &e.key, (e.ctrl, e.shift, e.alt))?;
         }
         // (#2536) the combination the key made with the modifiers held, so that a plugin need
         // not read every modifier's own state to know what the player pressed
-        let (ctrl, shift, alt) = modifiers_held(ctx);
-        let combo = crate::api::fns::media::combo(ctrl, shift, alt, &k);
+        let combo = crate::api::fns::media::combo(e.ctrl, e.shift, e.alt, &e.key);
         dispatch(
             ctx,
             "key",
-            vec![Value::Str(k), Value::Bool(down), Value::Str(combo)],
+            vec![Value::Str(e.key), Value::Bool(e.down), Value::Str(combo)],
         )?;
     }
     info_events(ctx)?;
@@ -735,18 +734,11 @@ fn read_watch(ctx: &mut Ctx<'_>, kind: WatchKind, name: &str) -> Value {
 }
 
 /// `input.hotkey`: the combinations that key `k` completes.
-fn modifiers_held(ctx: &mut Ctx<'_>) -> (bool, bool, bool) {
-    let held = |io: &mut dyn PluginIo, a: &str, b: &str| io.key_held(a) || io.key_held(b);
-    let io = ctx.io();
-    (
-        held(io, "ControlLeft", "ControlRight"),
-        held(io, "ShiftLeft", "ShiftRight"),
-        held(io, "AltLeft", "AltRight"),
-    )
-}
-
-fn hotkeys(ctx: &mut Ctx<'_>, k: &str) -> Result<(), CallError> {
-    let (ctrl, shift, alt) = modifiers_held(ctx);
+fn hotkeys(
+    ctx: &mut Ctx<'_>,
+    k: &str,
+    (ctrl, shift, alt): (bool, bool, bool),
+) -> Result<(), CallError> {
     let hits: Vec<u64> = ctx
         .state()
         .hotkeys
