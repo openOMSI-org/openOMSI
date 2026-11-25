@@ -210,6 +210,7 @@ pub(super) fn material_extra(
         led_glow: led_glow_effect(ov),
         pbr: pbr_factors(ov),
         emission: emission_light(ov),
+        no_dirt: ov.iter().any(|o| o.no_dirt),
     }
 }
 

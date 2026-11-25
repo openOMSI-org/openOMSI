@@ -501,6 +501,22 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         f0 = mix(f0, vec3<f32>(0.02), cover);
         metal = metal * (1.0 - cover);
     }
+    // the road dirt on a vehicle's outside (#1386, `road_dirt`): over the paint and the glass,
+    // matt where dry, glossy while wet; a pane dirtied loses its view through it
+    // (not on a slot marked `[matl_nodirt]`: material.params2.w's bit 32)
+    if (enh.dirt_n.x > 0.5 && in.params2.w < -500.0 && !terrain && (u32(material.params2.w + 0.5) & 32u) == 0u) {
+        let dirt = road_dirt(in.world, n, glass);
+        if (dirt.a > 0.0) {
+            albedo = mix(albedo, dirt.rgb, dirt.a);
+            ambient_albedo = mix(ambient_albedo, dirt.rgb, dirt.a);
+            rough = mix(rough, mix(0.9, 0.45, dirt_wet), dirt.a);
+            f0 = mix(f0, vec3<f32>(0.03), dirt.a);
+            metal = metal * (1.0 - dirt.a);
+            if (glass) {
+                alpha = mix(alpha, 1.0, dirt.a * 0.85);
+            }
+        }
+    }
     // specular antialiasing: where the normal turns quickly across a pixel (a low-poly
     // bonnet close up, a curved body far away) the surface cannot reflect sharper than that
     // spread, or the interpolated normals show as bands in a mirror-like finish

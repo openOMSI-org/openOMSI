@@ -31,6 +31,8 @@ mod contact;
 mod coupling;
 mod drive;
 mod emission;
+pub mod road_dirt;
+pub use road_dirt::{DirtWeather, RoadDirt};
 mod instance;
 mod light_emitters;
 mod load;
@@ -200,6 +202,9 @@ pub struct VehicleInstance {
     /// How dirty the body is (0..1). OMSI reports it to the model as `Dirt_Norm`, where
     /// it scales the alpha of the dirt overlay; the bus wash clears it.
     pub dirt: f32,
+    /// The road dirt on the body by where it lands (openOMSI, #1386; see `RoadDirt`): the
+    /// enhanced picture's `procedural_dirt`. The bus wash clears it with `dirt`.
+    pub road_dirt: RoadDirt,
     /// Rigid-body dynamics (player vehicles); None = simple kinematic model.
     pub rigid: Option<crate::rigid::RigidBody>,
     /// The tyre meshes that are seated on their physical hub (see `seat_wheels`): mesh,

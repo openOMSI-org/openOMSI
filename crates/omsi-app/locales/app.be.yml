@@ -3327,3 +3327,5 @@
 "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Вага кожнага пасажыра з яго файла .hum дадаецца да аўтобуса там, дзе ён сядзіць або стаіць: поўны аўтобус рушыць, тармозіць і ўзбіраецца ў гару як больш цяжкі; выключана - аўтобус важыць столькі, колькі ў яго файле"
 "Passenger weight": "Вага пасажыра"
 "For passengers whose file gives no weight; default 75 kg": "Для пасажыраў, у файле якіх вага не пазначана; па змаўчанні 75 кг"
+"Road dirt on the vehicles": "Дарожны бруд на транспарце"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: транспарт збірае дарожны бруд там, куды ён трапляе - пырскі за коламі і на ніжніх баках на мокрай дарозе, налёт ззаду, пыл у суш, слота зімой - а дождж яго змывае; выключана - уласны бруд аўтобуса, як у OMSI 2"

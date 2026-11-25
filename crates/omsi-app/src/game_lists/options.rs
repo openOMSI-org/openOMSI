@@ -620,6 +620,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "rain_lights" => s.rain_lights,
         "detailed_trees" => s.detailed_trees,
         "road_snow" => s.road_snow,
+        "procedural_dirt" => s.procedural_dirt,
         "mirror_hud_every_frame" => s.mirror_hud_every_frame,
         "mirror_shadows" => s.mirror_shadows,
         "mirror_particles" => s.mirror_particles,
@@ -1075,6 +1076,10 @@ fn toggle_set_graphics_and_controls(
             Some(("detailed_trees", bit))
         }
         // (the next picture tells the road snow, see `picture_lighting`)
+        "procedural_dirt" => {
+            app.settings.procedural_dirt = on;
+            Some(("procedural_dirt", bit))
+        }
         "road_snow" => {
             app.settings.road_snow = on;
             Some(("road_snow", bit))

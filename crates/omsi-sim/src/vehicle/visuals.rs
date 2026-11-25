@@ -201,6 +201,9 @@ impl VehicleInstance {
                     &self.state.vars,
                     0.0,
                 )
+            } else if super::road_dirt::procedural_for(&self.ty.def) {
+                // (the road dirt of the enhanced picture takes its place: one or the other)
+                0.0
             } else {
                 self.dirt
             };

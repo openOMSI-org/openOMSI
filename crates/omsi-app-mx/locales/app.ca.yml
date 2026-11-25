@@ -4113,3 +4113,5 @@
 "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "El pes de cada passatger, del seu fitxer .hum, s'afegeix a l'autobús on seu o està dret: un autobús ple arrenca, frena i puja com el vehicle més pesat que és; desactivat, l'autobús pesa el que diu el seu fitxer"
 "Passenger weight": "Pes del passatger"
 "For passengers whose file gives no weight; default 75 kg": "Per als passatgers el fitxer dels quals no indica cap pes; per defecte 75 kg"
+"Road dirt on the vehicles": "Brutícia de la carretera als vehicles"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: els vehicles acumulen brutícia on cau - esquitxades darrere les rodes i als laterals baixos amb la carretera mullada, una capa al darrere, pols en sec, neu fosa a l'hivern - i la pluja la renta; desactivat: la brutícia pròpia de l'autobús, com a OMSI 2"

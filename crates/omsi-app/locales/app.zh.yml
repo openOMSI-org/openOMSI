@@ -3719,3 +3719,5 @@
 "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "每位乘客 .hum 文件中的重量会加在其坐或站的位置上：满载的公交车会像更重的车辆一样起步、制动和爬坡；关闭时，公交车重量与其文件一致"
 "Passenger weight": "乘客重量"
 "For passengers whose file gives no weight; default 75 kg": "用于文件未标明重量的乘客；默认 75 kg"
+"Road dirt on the vehicles": "车辆上的道路污垢"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced：车辆会在污垢落下之处积累道路污垢 - 湿路上车轮后方与车身下侧的溅泥、车尾的污膜、干燥时的灰尘、冬天的雪泥 - 雨水会将其冲刷，洗车可清除；关闭时：公交车自身的污垢，同 OMSI 2"

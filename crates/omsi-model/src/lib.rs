@@ -144,6 +144,9 @@ pub struct MaterialDef {
     /// `[matl_emissive]` and its companions (openOMSI, see [`Emission`]): the slot gives off
     /// light of its own. The classic picture ignores them.
     pub emission: Option<Emission>,
+    /// `[matl_nodirt]` (openOMSI): the slot takes none of the enhanced picture's road dirt -
+    /// a destination display, a chrome strip, a logo. OMSI 2 skips the keyword.
+    pub no_dirt: bool,
 }
 
 impl MaterialDef {
@@ -186,6 +189,7 @@ impl MaterialDef {
             emission
         );
         self.envmap_realtime |= base.envmap_realtime;
+        self.no_dirt |= base.no_dirt;
         if self.tex_address == TexAddress::Wrap {
             self.tex_address = base.tex_address;
             if self.border_color == [0.0; 4] {
@@ -1427,6 +1431,11 @@ impl Model {
                 }
             }
             k if k.starts_with("matl_emissive") && self.read_emission(k, r) => {}
+            "matl_nodirt" => {
+                if let Some(m) = self.cur_matl() {
+                    m.no_dirt = true;
+                }
+            }
             "led_glow_effect" => {
                 // (a value out of 0..1 is taken to the nearer end; a line that is no number
                 // reads as 0, as any number of the format does)
@@ -1912,6 +1921,17 @@ mod tests {
         ));
         let p = &plain.meshes[0].materials[0];
         assert!(p.base_color.is_none() && p.metallic.is_none() && p.roughness.is_none());
+    }
+
+    /// `[matl_nodirt]` (openOMSI) marks its slot; a `[matl_item]` keeps its slot's.
+    #[test]
+    fn matl_nodirt_marks_the_slot() {
+        let m = Model::parse(&omsi_cfg::CfgFile::from_str(
+            "m.cfg",
+            "[mesh]\nm.o3d\n\n[matl]\na.dds\n0\n[matl_nodirt]\n\n[matl]\nb.dds\n0\n",
+        ));
+        assert!(m.meshes[0].materials[0].no_dirt);
+        assert!(!m.meshes[0].materials[1].no_dirt);
     }
 
     /// `[matl_glow] <texture> <value>`: the material is its own light - the picture and the

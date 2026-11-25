@@ -4489,3 +4489,5 @@
 "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "O peso de cada passageiro, do seu arquivo .hum, é somado ao ônibus onde ele está sentado ou em pé: um ônibus cheio arranca, freia e sobe como o veículo mais pesado que é; desligado, o ônibus pesa o que diz o seu arquivo"
 "Passenger weight": "Peso do passageiro"
 "For passengers whose file gives no weight; default 75 kg": "Para passageiros cujo arquivo não informa o peso; padrão 75 kg"
+"Road dirt on the vehicles": "Sujeira da estrada nos veículos"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: os veículos acumulam sujeira onde ela cai - respingos atrás das rodas e nas laterais baixas com a pista molhada, uma película na traseira, poeira no seco, neve lamacenta no inverno - e a chuva a lava; desligado: a sujeira própria do ônibus, como no OMSI 2"

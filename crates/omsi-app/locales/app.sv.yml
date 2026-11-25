@@ -3934,3 +3934,5 @@
 "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Varje passagerares vikt, från dess .hum-fil, läggs till bussen där den sitter eller står: en full buss startar, bromsar och klättrar som det tyngre fordon den är; av: bussen väger vad dess fil säger"
 "Passenger weight": "Passagerarvikt"
 "For passengers whose file gives no weight; default 75 kg": "För passagerare vars fil inte anger någon vikt; standard 75 kg"
+"Road dirt on the vehicles": "Vägsmuts på fordonen"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: fordonen samlar vägsmuts där den hamnar - stänk bakom hjulen och på de nedre sidorna på våt väg, en hinna baktill, damm när det är torrt, snömodd på vintern - och regnet sköljer bort den; av: bussens egen smuts, som i OMSI 2"

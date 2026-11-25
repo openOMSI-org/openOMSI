@@ -310,6 +310,7 @@ lower graphics defaults (2x MSAA, 4x anisotropic, no ambient occlusion, 1024 sha
 | Windy trees (`windy_trees`) | foliage sways in the wind | on |
 | Detailed trees (`detailed_trees`) | no streaky leaves close up, shaded crowns | on |
 | Built-up snow on roads and roofs (`road_snow`) | snow builds up, with ruts and tracks | off |
+| Road dirt on the vehicles (`procedural_dirt`) | Enhanced: road dirt where it lands, washed by rain; off: the bus's own dirt as in OMSI 2 | on |
 
 ### Display
 
