@@ -380,12 +380,13 @@ impl PeopleSim {
             .map(|k| bn.entry_open.get(k).copied().unwrap_or(false))
             .collect();
         let is_buying = p.ticket == TICKET_BUY;
-        let has_ticket_sale = flags
-            .iter()
-            .enumerate()
-            .any(|(k, f)| list[k].is_some() && !f.0);
-        let restrict_noticketsale =
-            is_buying && ((is_player && doors != EntryDoors::AsBus) || has_ticket_sale);
+        // A buyer skips the `{noticketsale}` doors only as `omsi_nearest` does (sub_625b98
+        // asks sub_72506c to avoid them for a passenger in state 3): with every door that sells shut and no
+        // button, Omsi.exe searches again without it and the buyer walks to an open door
+        // that sells none (#3759: they went to the shut front door while the rear stood
+        // open). Only the player's own door set (#3124, not Omsi.exe's) keeps them off
+        // those doors for good.
+        let restrict_noticketsale = is_buying && is_player && doors != EntryDoors::AsBus;
         let search_list: Vec<_> = if restrict_noticketsale {
             list.iter()
                 .enumerate()
