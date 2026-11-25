@@ -277,6 +277,10 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
             "textureSampleBias(t_night, s_tile, uv, camera.lod.x)",
             &clamped("t_night", "camera.lod.x"),
         )
+        .replace(
+            "textureSampleLevel(t_env, s_ao,",
+            "textureSampleLevel(t_env, s_diffuse,",
+        )
         .replace("ao = ao_at(in.clip.xy, in.world);", "ao = 1.0;")
         .replace(
             "let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);",
