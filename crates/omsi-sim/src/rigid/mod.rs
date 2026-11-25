@@ -562,7 +562,8 @@ pub struct RigidBody {
     pub road_s: f64,
     /// The road model of the "Realistic road physics" setting: slip-angle tyres, grip and
     /// roughness by surface, wind. Off, the body is OMSI 2's (follows its wheels until the grip
-    /// is passed, one grip, no unevenness, its old air drag).
+    /// is passed, one grip, no unevenness, no air drag of its own: the vehicle scripts add it to
+    /// their brake force, as in Omsi.exe).
     pub realistic: bool,
 }
 

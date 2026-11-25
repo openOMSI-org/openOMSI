@@ -296,3 +296,33 @@ fn a_held_program_runs_on_when_the_side_road_asks() {
     }
     assert!(c.time > 50.0, "still at {}", c.time);
 }
+
+/// A stop on a light number the crossing does not have (light 2 of two) is a stop on light
+/// 0, as Omsi.exe builds the program (0x687ffc): it runs on when light 0 is asked rather
+/// than wait for good.
+#[test]
+fn a_stop_on_a_light_past_the_last_is_a_stop_on_light_zero() {
+    let mut c = TrafficLightController::from_program(
+        vec![
+            (vec![(6, 20.0), (9, 3.0), (0, 0.0)], None),
+            (vec![(0, 25.0), (6, 10.0), (0, 0.0)], None),
+        ],
+        Some(40.0),
+        &[[2.0, 10.0, 1.0]],
+        &[[-1.0, 30.0, 0.0, 35.0]],
+    );
+    assert_eq!(c.stops[0].light, 0);
+    assert_eq!(c.stops[1].light, 0);
+    c.start(5.0);
+    for _ in 0..500 {
+        c.request.fill(false);
+        c.advance(0.02);
+    }
+    assert!(c.held, "nobody asked light 0: held at {}", c.time);
+    for _ in 0..100 {
+        c.request.fill(false);
+        c.request[0] = true;
+        c.advance(0.02);
+    }
+    assert!(c.time > 11.0, "light 0 asked: still at {}", c.time);
+}

@@ -244,18 +244,17 @@ fn sun_at(year: i32, hours: f64, place: &omsi_sim::daylight::SunPlace) -> (f32, 
     let day = (hours / 24.0).floor();
     let solar = hours - day * 24.0;
     let len = omsi_sim::clock::days_in_year(year) as f64;
-    let doy = (day.rem_euclid(len) + 1.0) as i32;
-    // the clock that shows this solar time at the place
-    let clock_h = solar + place.timezone - place.longitude / 15.0;
-    let mut clock = omsi_sim::SimClock {
-        year,
-        day_of_year: doy,
-        time: clock_h * 3600.0,
-        ..Default::default()
-    };
-    clock.time += place.dst_hours(&clock) * 3600.0;
-    let (alt, _) = omsi_sim::daylight::sun_position(&clock, place);
-    (doy as f32, alt as f32)
+    let doy = day.rem_euclid(len) + 1.0;
+    // Keep the solar geometry the thermal model was calibrated against. The game's
+    // displayed sun follows OMSI compatibility rules, including a seasonal shift in noon.
+    let decl = 23.44_f64.to_radians() * (std::f64::consts::TAU * (284.0 + doy) / 365.0).sin();
+    let hour_angle = (15.0 * (solar - 12.0)).to_radians();
+    let lat = place.latitude.to_radians();
+    let sin_alt = lat.sin() * decl.sin() + lat.cos() * decl.cos() * hour_angle.cos();
+    (
+        doy as f32,
+        sin_alt.clamp(-1.0, 1.0).asin().to_degrees() as f32,
+    )
 }
 
 impl WeatherModel {

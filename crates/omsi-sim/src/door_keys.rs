@@ -48,7 +48,9 @@ pub fn trigger_leaves(program: &omsi_script::Program, name: &str) -> Vec<String>
                         list.push(leaf);
                     }
                 }
-                omsi_script::Op::Macro(m) => walk(program, *m, seen, stored, read),
+                omsi_script::Op::Macro(m) | omsi_script::Op::FallThrough(m) => {
+                    walk(program, *m, seen, stored, read)
+                }
                 _ => {}
             }
         }
@@ -283,7 +285,9 @@ fn trigger_door_numbers(program: &omsi_script::Program, name: &str, targets: boo
                         }
                     }
                 }
-                omsi_script::Op::Macro(m) => walk(program, *m, seen, out, targets),
+                omsi_script::Op::Macro(m) | omsi_script::Op::FallThrough(m) => {
+                    walk(program, *m, seen, out, targets)
+                }
                 _ => {}
             }
         }
@@ -381,9 +385,12 @@ fn door_trigger_closes(program: &omsi_script::Program, name: &str) -> bool {
         return false;
     };
     if b.ops.len() > 6
-        || b.ops
-            .iter()
-            .any(|op| matches!(op, omsi_script::Op::Macro(_)))
+        || b.ops.iter().any(|op| {
+            matches!(
+                op,
+                omsi_script::Op::Macro(_) | omsi_script::Op::FallThrough(_)
+            )
+        })
     {
         return false;
     }
@@ -429,7 +436,7 @@ pub fn door_trigger_target(
                         return Some(*id);
                     }
                 }
-                omsi_script::Op::Macro(m) => {
+                omsi_script::Op::Macro(m) | omsi_script::Op::FallThrough(m) => {
                     if let Some(v) = find(program, *m, seen) {
                         return Some(v);
                     }
