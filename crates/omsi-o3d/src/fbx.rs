@@ -156,6 +156,7 @@ pub fn parse_fbx(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
                     },
                     specular_power: 1.0,
                     texture: tex.map(|t| texture_of(path, t)).unwrap_or_default(),
+                    metallic_roughness: None,
                 }
             }
         };

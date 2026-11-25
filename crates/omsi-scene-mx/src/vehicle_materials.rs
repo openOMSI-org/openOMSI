@@ -208,6 +208,46 @@ pub(super) fn material_extra(
         alpha_cut: false,
         glow: glow_strength(ov),
         led_glow: led_glow_effect(ov),
+        pbr: pbr_factors(ov),
+    }
+}
+
+/// The slot's PBR factors with what its mesh's own material says where the commands do not:
+/// a glTF material's metallic and roughness factors (`omsi_o3d::Material::metallic_roughness`).
+pub(super) fn mesh_pbr(
+    mut pbr: omsi_render::PbrFactors,
+    m: &omsi_o3d::Material,
+) -> omsi_render::PbrFactors {
+    if let Some([metal, rough]) = m.metallic_roughness {
+        pbr.metallic.get_or_insert(metal);
+        pbr.roughness.get_or_insert(rough);
+    }
+    pbr
+}
+
+/// The PBR factors of a slot's commands (openOMSI `[matl_basecolor]`, `[matl_metallic]`,
+/// `[matl_roughness]`, `[matl_normal_strength]`, `[matl_occlusion_strength]`, see
+/// `omsi_render::PbrFactors`): the last of each counts, as with the other commands. The
+/// base colour is written in sRGB, as a colour picker shows it; the renderer takes it linear.
+pub(super) fn pbr_factors(ov: &[&MaterialDef]) -> omsi_render::PbrFactors {
+    let last = |f: fn(&MaterialDef) -> Option<f32>| ov.iter().rev().find_map(|o| f(o));
+    let srgb = |c: f32| {
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    omsi_render::PbrFactors {
+        base_color: ov
+            .iter()
+            .rev()
+            .find_map(|o| o.base_color)
+            .map(|c| c.map(srgb)),
+        metallic: last(|o| o.metallic),
+        roughness: last(|o| o.roughness),
+        normal_strength: last(|o| o.normal_strength),
+        occlusion_strength: last(|o| o.occlusion_strength),
     }
 }
 
