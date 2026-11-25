@@ -23,7 +23,10 @@ pub(super) type Page = (&'static str, Vec<(String, String)>);
 
 /// A row of a settings window (see `ui::MenuKind::Options` for the format).
 pub(crate) fn row(name: &str, kind: char, value: &str, desc: &str, frac: Option<f32>) -> String {
-    format!("{name}\u{1f}{kind}\u{1f}{value}\u{1f}{desc}\u{1f}{}", frac.map(|f| format!("{f:.3}")).unwrap_or_default())
+    format!(
+        "{name}\u{1f}{kind}\u{1f}{value}\u{1f}{desc}\u{1f}{}",
+        frac.map(|f| format!("{f:.3}")).unwrap_or_default()
+    )
 }
 
 /// A row that opens another list.
@@ -64,16 +67,29 @@ pub(crate) fn clear_timetable(v: &mut omsi_sim::VehicleInstance) {
 
 pub(crate) fn switch_row(app: &App, id: &str, name: &str, desc: &str) -> Option<(String, String)> {
     let on = toggle_now(app, id)?;
-    Some((row(name, 's', if on { "on" } else { "off" }, desc, None), id.to_string()))
+    Some((
+        row(name, 's', if on { "on" } else { "off" }, desc, None),
+        id.to_string(),
+    ))
 }
 
 /// A slider row for the setting `id` ("verb" or "verb arg"); `fmt` writes its value.
-pub(crate) fn slider_row(app: &App, id: &str, name: &str, desc: &str, fmt: &dyn Fn(f32) -> String) -> Option<(String, String)> {
+pub(crate) fn slider_row(
+    app: &App,
+    id: &str,
+    name: &str,
+    desc: &str,
+    fmt: &dyn Fn(f32) -> String,
+) -> Option<(String, String)> {
     let (verb, arg) = id.split_once(' ').unwrap_or((id, ""));
     let steps = steps_of(verb)?;
     let now = option_now(app, verb, arg)?;
     let i = nearest(&steps, now);
-    let frac = if steps.len() > 1 { i as f32 / (steps.len() - 1) as f32 } else { 0.0 };
+    let frac = if steps.len() > 1 {
+        i as f32 / (steps.len() - 1) as f32
+    } else {
+        0.0
+    };
     Some((row(name, 'v', &fmt(now), desc, Some(frac)), id.to_string()))
 }
 
@@ -91,9 +107,13 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "vr_nav_tilt" => (-40..=40).map(|v| v as f32 * 2.0).collect(),
         "vr_nav_opacity" => (6..=20).map(|v| v as f32 * 0.05).collect(),
         "speed" => SPEEDS.iter().map(|&v| v as f32).collect(),
-        "traffic" => TRAFFIC.iter().filter(|&&v| !cfg!(any(target_os = "android", target_os = "ios")) || v <= 120).map(|&v| v as f32).collect(),
+        "traffic" => TRAFFIC
+            .iter()
+            .filter(|&&v| !cfg!(any(target_os = "android", target_os = "ios")) || v <= 120)
+            .map(|&v| v as f32)
+            .collect(),
         "pax" => PAX.to_vec(),
-        "passenger_transfer_percent" => (0..=100).map(|n|n as f32).collect(),
+        "passenger_transfer_percent" => (0..=100).map(|n| n as f32).collect(),
         "volume" => VOLUME.to_vec(),
         "led_glow" => (0..16).map(|v| v as f32).collect(),
         "night_brightness" => (0..=12).map(|v| v as f32 * 0.25).collect(),
@@ -105,17 +125,31 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "chat_size" => (5..=30).map(|v| v as f32 * 0.1).collect(),
         "ui_opacity" => (4..=20).map(|v| v as f32 * 0.05).collect(),
         "voice_volume" | "voice_mic_gain" => (0..=40).map(|v| v as f32 * 0.05).collect(),
-        "vol_ai" | "vol_scenery" | "vol_ambient" | "radio_speaker" | "radio_hiss" | "radio_dropouts" => (0..=20).map(|v| v as f32 * 0.05).collect(),
+        "vol_ai" | "vol_scenery" | "vol_ambient" | "radio_speaker" | "radio_hiss"
+        | "radio_dropouts" => (0..=20).map(|v| v as f32 * 0.05).collect(),
         "wheel_range" => (6..=60).map(|v| v as f32 * 30.0).collect(),
-        "cab_wheel_rotation" => std::iter::once(0.0).chain((6..=60).map(|v| v as f32 * 30.0)).collect(),
-        "wheel_lock" => std::iter::once(0.0).chain((2..=60).map(|v| v as f32 * 30.0)).collect(),
-        "fov" => std::iter::once(0.0).chain((20..=120).map(|v| v as f32)).collect(),
+        "cab_wheel_rotation" => std::iter::once(0.0)
+            .chain((6..=60).map(|v| v as f32 * 30.0))
+            .collect(),
+        "wheel_lock" => std::iter::once(0.0)
+            .chain((2..=60).map(|v| v as f32 * 30.0))
+            .collect(),
+        "fov" => std::iter::once(0.0)
+            .chain((20..=120).map(|v| v as f32))
+            .collect(),
         "steer_look_angle" => (0..=60).map(|v| v as f32).collect(),
         "steer_look_response" => (1..=20).map(|v| v as f32 * 0.05).collect(),
         "head_idle" => (0..=20).map(|v| v as f32 * 0.05).collect(),
         "head_idle_pace" => (10..=40).map(|v| v as f32 * 0.05).collect(),
-        "head_tracking_smoothing" | "head_tracking_dead_zone" => (0..=20).map(|v| v as f32 * 0.05).collect(),
-        "head_tracking_yaw_sens" | "head_tracking_pitch_sens" | "head_tracking_roll_sens" | "head_tracking_x_sens" | "head_tracking_y_sens" | "head_tracking_z_sens" => (0..=100).map(|v| v as f32).collect(),
+        "head_tracking_smoothing" | "head_tracking_dead_zone" => {
+            (0..=20).map(|v| v as f32 * 0.05).collect()
+        }
+        "head_tracking_yaw_sens"
+        | "head_tracking_pitch_sens"
+        | "head_tracking_roll_sens"
+        | "head_tracking_x_sens"
+        | "head_tracking_y_sens"
+        | "head_tracking_z_sens" => (0..=100).map(|v| v as f32).collect(),
         "pedal_t" | "pedal_b" => PEDAL.to_vec(),
         "ctrl_deadzone" => (0..=30).map(|v| v as f32 * 0.01).collect(),
         "mouse_sens" => (10..=300).map(|v| v as f32 / 100.0).collect(),
@@ -138,7 +172,13 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
             let mut v: Vec<f32> = (0..=133)
                 .map(|i| {
                     let x = 50.0 * 1000f32.powf(i as f32 / 133.0);
-                    let step = if x < 1000.0 { 10.0 } else if x < 10000.0 { 100.0 } else { 500.0 };
+                    let step = if x < 1000.0 {
+                        10.0
+                    } else if x < 10000.0 {
+                        100.0
+                    } else {
+                        500.0
+                    };
                     (x / step).round() * step
                 })
                 .collect();
@@ -169,16 +209,16 @@ pub(super) fn cloud_index(kind: &str) -> Option<usize> {
 }
 
 /// Set the kind of precipitation (an index of `PRECIP_KINDS`) of the weather set by hand.
-pub(super) fn custom_state(app:&App)->crate::weather_setup::CustomWeather{
-    if let Some(mut c)=crate::weather_setup::custom_weather(app.args.weather.as_deref()){
+pub(super) fn custom_state(app: &App) -> crate::weather_setup::CustomWeather {
+    if let Some(mut c) = crate::weather_setup::custom_weather(app.args.weather.as_deref()) {
         // Wetness keeps evolving while driving; never restore an old serialized value just
         // because another custom field (brightness, humidity, etc.) was edited.
-        c.road_wetness=app.session.wetness;
-        return c
+        c.road_wetness = app.session.wetness;
+        return c;
     }
-    match app.session.weather.as_ref(){
-        Some(w)=>crate::weather_setup::CustomWeather::from_weather(w,1.0,app.session.wetness),
-        None=>crate::weather_setup::CustomWeather::default(),
+    match app.session.weather.as_ref() {
+        Some(w) => crate::weather_setup::CustomWeather::from_weather(w, 1.0, app.session.wetness),
+        None => crate::weather_setup::CustomWeather::default(),
     }
 }
 
@@ -201,7 +241,12 @@ pub(crate) fn is_slider(verb: &str) -> bool {
 
 /// The index of the value in `steps` nearest to `now`.
 pub(super) fn nearest(steps: &[f32], now: f32) -> usize {
-    steps.iter().enumerate().min_by(|a, b| (a.1 - now).abs().total_cmp(&(b.1 - now).abs())).map(|x| x.0).unwrap_or(0)
+    steps
+        .iter()
+        .enumerate()
+        .min_by(|a, b| (a.1 - now).abs().total_cmp(&(b.1 - now).abs()))
+        .map(|x| x.0)
+        .unwrap_or(0)
 }
 
 /// The value of `steps` after moving from `now`.
@@ -218,7 +263,10 @@ pub(super) fn step_move(steps: &[f32], now: f32, mv: Move) -> f32 {
 }
 
 /// Keep the physical triple-screen calibration separate from the single-screen FOV.
-pub(super) fn set_camera_fov(settings: &mut crate::settings::Settings, value: f32) -> (&'static str, String) {
+pub(super) fn set_camera_fov(
+    settings: &mut crate::settings::Settings,
+    value: f32,
+) -> (&'static str, String) {
     let value = if value < 20.0 {
         0.0
     } else {
