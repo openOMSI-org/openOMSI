@@ -473,6 +473,8 @@ impl Streamer {
         if unloaded > 0 {
             // the tiles only they depended on go too
             self.world.trim_staged(&self.requested);
+            // (room under the parked cars' cap: the ones held back come out)
+            self.world.release_held_parked(renderer, scene);
         }
         let t_unload = t0.elapsed();
         // A tile gone must leave the lists at once (they name its instances and materials,

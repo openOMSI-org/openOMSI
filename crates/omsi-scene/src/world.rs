@@ -142,6 +142,8 @@ pub struct World {
     /// Parked cars standing in the loaded tiles, and the options' `[AIMaxCountParked]`
     /// (0 = every space the map fills, -1 = none): past it the spaces stay empty.
     pub parked_live: std::sync::atomic::AtomicUsize,
+    /// The cars the cap held back (see `parked_share::ParkedHold`).
+    pub(crate) parked_held: Mutex<crate::parked_share::ParkedHold>,
     pub parked_max: i64,
     /// The parking spaces of the tiles come in so far and how many tiles those were, and
     /// the map's tiles within the load radius now: the chance of a space getting its car

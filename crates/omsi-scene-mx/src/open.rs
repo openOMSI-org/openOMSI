@@ -234,6 +234,7 @@ impl World {
             light_maps_generation: std::sync::atomic::AtomicU64::new(0),
             light_map_atlas: Mutex::new(None),
             parked_live: std::sync::atomic::AtomicUsize::new(0),
+            parked_held: Mutex::new(Default::default()),
             parked_max: super::host::open_settings().max_parked,
             parked_spaces: std::sync::atomic::AtomicU64::new(0),
             parked_tiles_seen: std::sync::atomic::AtomicU64::new(0),

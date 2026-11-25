@@ -292,13 +292,16 @@ impl World {
             let Some(Pose { pos, rot: xf }) = *fp else {
                 continue;
             };
-            if o.parked
-                && (!crate::parked_share::space_taken(o.key, parked_chance)
-                    || self.parked_max > 0
-                        && self.parked_live.load(std::sync::atomic::Ordering::Relaxed) as i64
-                            >= self.parked_max)
-            {
+            if o.parked && !crate::parked_share::space_taken(o.key, parked_chance) {
                 continue;
+            }
+            // (chosen while the cap is full: placed hidden, it comes out as tiles go)
+            let held = o.parked
+                && self.parked_max > 0
+                && self.parked_live.load(std::sync::atomic::Ordering::Relaxed) as i64
+                    >= self.parked_max;
+            if held {
+                self.parked_held.lock().hold(o.key, key);
             }
             if let (true, Placement::Ground { x, y, .. }) = (debug_float, &o.place) {
                 // how far the object stood off the ground when it was placed before the
@@ -332,12 +335,12 @@ impl World {
             if o.map_object || o.instance == 0 {
                 placed_at.push((o.id, (pos, [heading, 0.0, 0.0])));
             }
-            if o.parked {
+            if o.parked && !held {
                 state.parked_count += 1;
                 self.parked_live
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
-            if o.parked && first_load {
+            if o.parked && !held && first_load {
                 // on the ground: the lane match of the traffic is by distance in 3D
                 parked_cars.push((pos, heading));
             }
@@ -747,11 +750,14 @@ impl World {
                     obb.id = o.key;
                     // (a car that has driven off leaves its space free)
                     let gone = o.parked && self.departed.lock().contains(&o.key);
-                    if !gone {
+                    if o.parked && !gone && self.parked_held.lock().is_held(o.key) {
+                        // (held back by the cap: its box comes with it, see `ParkedHold`)
+                        self.parked_held.lock().add_box(o.key, obb);
+                    } else if !gone {
                         state.obstacles.push(obb);
-                    }
-                    if o.parked && !gone {
-                        state.parked_boxes.push(obb);
+                        if o.parked {
+                            state.parked_boxes.push(obb);
+                        }
                     }
                     if omsi_cfg::flags::OMSI_DEBUG_COLLISION.is_set() {
                         log::info!(
