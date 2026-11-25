@@ -230,8 +230,7 @@ mod tests {
     /// and the rain and the snow on the panes shared with the classic pictures, the cabin's
     /// reflection probe gone, the traffic's wet windows and the windows lit in a downpour.
     /// And #4153: the drops on the panes read as drops again, prefiltered under a pixel.
-    /// And #2687: a cut-out standing level (a fence, a railing) lit by the sun on the side
-    /// it faces alone.
+    /// And #2687: the sun lights standing cut-outs such as fences from their facing side.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
@@ -243,7 +242,7 @@ mod tests {
         assert_eq!((scene.len(), fnv1a(&scene)), (152469, 2025446307441838839));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (121647, 13538800712225589816)
+            (121988, 16563956700057204959)
         );
     }
 }
