@@ -168,6 +168,12 @@ pub struct Renderer {
     temporal_failed: bool,
     temporal_window: bool,
     temporal_kept: Option<temporal::Runtime>,
+    /// The upscaler failed while the card was out of memory: the options it was drawn with,
+    /// tried once more when the texture budget has had its time (`retry_upscaler`), its
+    /// runtime kept meanwhile in `temporal_kept` (Streamline on Vulkan cannot start twice).
+    upscaler_retry: Option<(std::time::Instant, RenderOptions)>,
+    /// That retry was made (there is no second).
+    upscaler_retried: bool,
     /// The window's frame generation, while it has one (`SurfaceState::set_frame_generation`).
     frame_generation: Option<temporal::FrameGeneration>,
     /// The frame's numbers, waiting for `temporal_present` at the end of it.

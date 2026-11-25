@@ -162,6 +162,7 @@ pub(crate) fn try_create_buffer(
     };
     if matches!(e, mx::Error::OutOfMemory(_)) {
         MESH_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
+        crate::pipelines::errors::note_out_of_memory();
     }
     static FAILED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = FAILED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

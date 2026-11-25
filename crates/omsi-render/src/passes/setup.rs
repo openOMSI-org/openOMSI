@@ -81,6 +81,46 @@ impl Renderer {
             && (self.temporal_failed || self.temporal_pipes.is_none())
         {
             self.fall_back_without_upscaler(scene);
+        } else if self
+            .upscaler_retry
+            .is_some_and(|(at, _)| at.elapsed() >= crate::pipelines::errors::OUT_OF_MEMORY_SPELL)
+        {
+            self.retry_upscaler(scene);
+        }
+        // the device turning the frames' work away, frame after frame: a resource of the
+        // renderer's that could not be made is made again, and if that does not help either,
+        // the device is taken for lost (the game starts anew)
+        let refused = self
+            .errors
+            .refused_submits
+            .swap(0, std::sync::atomic::Ordering::Relaxed)
+            > 0;
+        let mut run = self.errors.rejected.get();
+        let verdict = run.frame(refused);
+        self.errors.rejected.set(run);
+        match verdict {
+            crate::pipelines::errors::Rejected::Fine => {}
+            crate::pipelines::errors::Rejected::Rebuild => {
+                log::error!(
+                    "the graphics card refused {} frames in a row: the renderer is built again",
+                    crate::pipelines::errors::REJECTED_FRAMES
+                );
+                self.rebuild_in_place(scene, self.options);
+            }
+            crate::pipelines::errors::Rejected::Lost => {
+                log::error!(
+                    "the graphics card still refuses every frame after the renderer was built again: the device is taken for lost"
+                );
+                *self
+                    .errors
+                    .device_lost
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(format!(
+                    "Unknown: {} frames in a row refused, also after a rebuild",
+                    crate::pipelines::errors::REJECTED_FRAMES
+                ));
+                return false;
+            }
         }
         true
     }
