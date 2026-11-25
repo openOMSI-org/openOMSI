@@ -59,11 +59,7 @@ pub struct VehiclePhysics {
 
 impl VehiclePhysics {
     pub fn from_definition(def: &Vehicle) -> VehiclePhysics {
-        let mass_kg = if def.mass < 100.0 {
-            def.mass * 1000.0
-        } else {
-            def.mass
-        };
+        let mass_kg = def.mass_kg();
         let wheels: Vec<[WheelState; 2]> = def
             .axles
             .iter()

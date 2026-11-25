@@ -541,12 +541,7 @@ impl VehicleInstance {
                 crate::rigid::CoupledPart {
                     point: first.coupling_back,
                     dir,
-                    mass: if def.mass < 100.0 {
-                        def.mass * 1000.0
-                    } else {
-                        def.mass
-                    }
-                    .max(0.0),
+                    mass: def.mass_kg().max(0.0),
                     driven_wheels: driven.len() * 2,
                     radius: driven
                         .first()

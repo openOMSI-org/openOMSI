@@ -246,11 +246,10 @@ impl AiBody {
         } else {
             (rot_long + wheelbase, rot_long)
         };
-        // `[mass]` is in tonnes (a few files give kilograms), `[momentofintertia]` in the
-        // same unit times m²: 1 t and 1.49 for a Golf, 10.9 t and 300 for an SD200
-        let tonnes = def.mass < 100.0;
-        let mass = (if tonnes { def.mass * 1000.0 } else { def.mass }).max(300.0);
-        let unit = if tonnes { 1000.0 } else { 1.0 };
+        // `[mass]` is in tonnes (see `Vehicle::mass_kg`), `[momentofintertia]` in tonnes
+        // times m²: 1 t and 1.49 for a Golf, 10.9 t and 300 for an SD200
+        let mass = def.mass_kg().max(300.0);
+        let unit = 1000.0;
         let heavy = mass > 6000.0;
         // inv_min_turnradius = tan(max angle) / wheelbase
         let max_steer = if def.inv_min_turn_radius > 0.0 {
