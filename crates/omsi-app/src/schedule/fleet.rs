@@ -55,6 +55,7 @@ impl Schedule {
                 world.precache_vehicle(renderer, scene, ty, *scheme);
             }
             shrunk += world.update_texture_budget(renderer, scene, centers, true);
+            renderer.flush_uploads();
         }
         if shrunk > 0 {
             log::info!(

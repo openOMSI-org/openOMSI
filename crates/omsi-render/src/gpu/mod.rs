@@ -669,6 +669,15 @@ impl Renderer {
 
     /// Whether the card ran out of memory since the last call (the game then keeps fewer
     /// textures, before the driver gives up the device).
+    /// Send the uploads written so far (textures, buffers) to the GPU and let go of their
+    /// staging copies once it has them: wgpu keeps every `write_texture` in a staging buffer
+    /// until the next submission, and a loading stage that uploads without drawing (the
+    /// timetable's preloading) held all of it until the first frame.
+    pub fn flush_uploads(&self) {
+        self.queue.submit([]);
+        let _ = self.device.poll(wgpu::PollType::Poll);
+    }
+
     pub fn take_out_of_memory(&self) -> bool {
         let texture = crate::resources::TEXTURE_OUT_OF_MEMORY
             .swap(false, std::sync::atomic::Ordering::Relaxed);
