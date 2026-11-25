@@ -779,6 +779,36 @@ pub(crate) fn open_url(url: &str) {
     });
 }
 
+/// Put `text` on the phone's clipboard (`ClipboardManager.setPrimaryClip` with a plain text
+/// `ClipData`); false when the system's clipboard could not be reached. Without it "Copy
+/// server code" put nothing there and the code could not be pasted anywhere (#3769).
+#[rustfmt::skip]
+pub(crate) fn set_clipboard(text: &str) -> bool {
+    let t = text.to_string();
+    with_activity(|env, activity| {
+        let service = env.new_string("clipboard")?;
+        let manager = env
+            .call_method(activity, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;", &[(&service).into()])?
+            .l()?;
+        if manager.is_null() {
+            return Err(jni::errors::Error::NullPtr("ClipboardManager"));
+        }
+        let label = env.new_string("openOMSI")?;
+        let s = env.new_string(&t)?;
+        let clip = env
+            .call_static_method(
+                "android/content/ClipData",
+                "newPlainText",
+                "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;",
+                &[(&label).into(), (&s).into()],
+            )?
+            .l()?;
+        env.call_method(&manager, "setPrimaryClip", "(Landroid/content/ClipData;)V", &[(&clip).into()])?;
+        Ok(())
+    })
+    .is_some()
+}
+
 /// The media scanner told of a picture at once (`MediaScannerConnection.scanFile`): the
 /// gallery shows it without waiting for the next scan.
 pub(crate) fn scan_media(path: &std::path::Path) {

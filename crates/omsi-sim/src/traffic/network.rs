@@ -810,6 +810,85 @@ impl Network {
         out
     }
 
+    /// The pieces of the lanes that run within `radius` of `p` (on the ground plan): (lane,
+    /// from, to), in metres along the lane, in map order. A lane is in range where it runs,
+    /// not where it starts: chosen by its start, a long spline that passed right by the
+    /// player but began further off than `radius` never had a car put on it (no oncoming
+    /// traffic on a long road, none on a side street whose spline reached beyond its tile,
+    /// #3518), and one that began just inside had cars put anywhere along it, far out of
+    /// range.
+    pub fn lane_spans_within(&self, p: DVec3, radius: f64) -> Vec<(usize, f32, f32)> {
+        let min_x = ((p.x - radius) / GRID_CELL).floor() as i32;
+        let max_x = ((p.x + radius) / GRID_CELL).floor() as i32;
+        let min_y = ((p.y - radius) / GRID_CELL).floor() as i32;
+        let max_y = ((p.y + radius) / GRID_CELL).floor() as i32;
+        let cells = (max_x as i64 - min_x as i64 + 1) * (max_y as i64 - min_y as i64 + 1);
+        let mut near: Vec<usize> = if self.grid.is_empty() || cells > self.grid.len() as i64 * 2 {
+            (0..self.lanes.len()).collect()
+        } else {
+            let mut v = Vec::new();
+            for x in min_x..=max_x {
+                for y in min_y..=max_y {
+                    if let Some(lanes) = self.grid.get(&(x, y)) {
+                        v.extend_from_slice(lanes);
+                    }
+                }
+            }
+            v
+        };
+        near.sort_unstable();
+        near.dedup();
+        let c = p.truncate();
+        let r2 = radius * radius;
+        let mut out: Vec<(usize, f32, f32)> = Vec::new();
+        for i in near {
+            let l = &self.lanes[i];
+            let mut span: Option<(f32, f32)> = None;
+            for k in 0..l.points.len().saturating_sub(1) {
+                // the part of the segment inside the circle: |a + t d - c|² <= r²
+                let (a, b) = (l.points[k].truncate(), l.points[k + 1].truncate());
+                let d = b - a;
+                let f = a - c;
+                let qa = d.length_squared();
+                let qc = f.length_squared() - r2;
+                let (t0, t1) = if qa < 1e-12 {
+                    if qc > 0.0 {
+                        continue;
+                    }
+                    (0.0, 1.0)
+                } else {
+                    let qb = d.dot(f);
+                    let disc = qb * qb - qa * qc;
+                    if disc < 0.0 {
+                        continue;
+                    }
+                    let root = disc.sqrt();
+                    let (t0, t1) = (((-qb - root) / qa).max(0.0), ((-qb + root) / qa).min(1.0));
+                    if t0 > t1 {
+                        continue;
+                    }
+                    (t0, t1)
+                };
+                let (d0, d1) = (l.dist[k], l.dist[k + 1]);
+                let s0 = d0 + (d1 - d0) * t0 as f32;
+                let s1 = d0 + (d1 - d0) * t1 as f32;
+                span = match span {
+                    // (still inside from the segment before: the same piece goes on)
+                    Some((from, to)) if s0 <= to + 1e-3 => Some((from, s1.max(to))),
+                    Some(done) => {
+                        out.push((i, done.0, done.1));
+                        Some((s0, s1))
+                    }
+                    None => Some((s0, s1)),
+                };
+            }
+            if let Some((from, to)) = span {
+                out.push((i, from, to));
+            }
+        }
+        out
+    }
+
     /// The nearest lane of `kind` to `p`: (lane, distance along it, distance to it). With
     /// the grid built, only lanes within about a cell of `p` are considered - enough for
     /// everything that asks where a vehicle or a person stands.

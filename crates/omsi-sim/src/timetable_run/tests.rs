@@ -1132,5 +1132,24 @@ fn people_still_turn_up_for_a_bus_some_minutes_late() {
     assert!(pax_turn_up_for(now - 7.0 * 60.0, now));
     assert!(pax_turn_up_for(now + 10.0 * 60.0, now));
     assert!(!pax_turn_up_for(now - 20.0 * 60.0, now));
+    // (a quarter of an hour ahead the trip asks for nobody yet, 0x61a068)
+    assert!(!pax_turn_up_for(now + 15.0 * 60.0, now));
     assert!(!pax_turn_up_for(now + 20.0 * 60.0, now));
+}
+
+/// Omsi.exe 0x61a068: a trip asks for none of a stop's people a quarter of an hour ahead,
+/// all of them from 4 minutes ahead to 20 minutes late, none again 40 minutes late.
+#[test]
+fn a_trip_asks_for_more_of_a_stops_people_as_it_draws_near() {
+    use crate::timetable_run::sim::pax_share;
+    let near = |a: f32, b: f32| (a - b).abs() < 1e-4;
+    assert_eq!(pax_share(20.0 * 60.0), 0.0);
+    assert_eq!(pax_share(15.0 * 60.0), 0.0);
+    assert!(near(pax_share(9.5 * 60.0), 0.5), "{}", pax_share(570.0));
+    assert_eq!(pax_share(4.0 * 60.0), 1.0);
+    assert_eq!(pax_share(0.0), 1.0);
+    assert_eq!(pax_share(-20.0 * 60.0), 1.0);
+    assert!(near(pax_share(-30.0 * 60.0), 0.5));
+    assert_eq!(pax_share(-40.0 * 60.0), 0.0);
+    assert_eq!(pax_share(-60.0 * 60.0), 0.0);
 }

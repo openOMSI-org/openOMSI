@@ -122,9 +122,9 @@ pub struct VehicleHost {
     pub hof: Option<Arc<Hof>>,
     /// The map's ticket pack for `GetTicketName/Value`.
     pub tickets: Option<Arc<omsi_content::tickets::TicketPack>>,
-    /// Coins the driver handed out with `GiveChangeCoin` (currency coin index, the value the
-    /// cash desk's key names for it or 0), taken by the passenger system.
-    pub change_coins: Vec<(usize, f32)>,
+    /// Coins the driver handed out with `GiveChangeCoin` (the money system's coin index, as
+    /// the script gives it), taken by the passenger system.
+    pub change_coins: Vec<usize>,
     /// The script's `number` string variable (the fleet number): `NrSpecRandom` is
     /// specific to it.
     pub number_var: Option<u32>,

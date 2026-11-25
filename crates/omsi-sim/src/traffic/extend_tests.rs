@@ -378,3 +378,66 @@ fn lane_cells_once_each_in_the_order_reached() {
     assert_eq!(cells.len(), 20_001);
     assert_eq!((cells[0], cells[20_000]), ((0, 0), (0, -20_000)));
 }
+
+/// The traffic is put on the pieces of lane within its radius, wherever their lanes start
+/// (#3518): a long road whose lane begins far behind the player is in range where it runs
+/// past, a lane running out of range is in range only up to where it leaves, a lane that
+/// comes back gives two pieces, and a lane elsewhere none.
+#[test]
+fn lane_spans_within_are_where_the_lanes_run() {
+    let p = |x: f64, y: f64| DVec3::new(x, y, 0.0);
+    let lanes = vec![
+        straight(0.0, -500.0, 500.0, 1, (0, 0)),
+        straight(20.0, 0.0, 1000.0, 2, (0, 0)),
+        straight(1000.0, 0.0, 100.0, 3, (0, 0)),
+        LaneBuilder::polyline(
+            vec![
+                p(-1000.0, 0.0),
+                p(1000.0, 0.0),
+                p(1000.0, 100.0),
+                p(-1000.0, 100.0),
+            ],
+            LaneKind::Street,
+            3.0,
+        ),
+        // (far off, and long enough that the grid is looked in rather than every lane)
+        straight(5000.0, 0.0, 10_000.0, 5, (0, 0)),
+    ];
+    let check = |net: &Network| {
+        let spans = net.lane_spans_within(DVec3::ZERO, 400.0);
+        let of = |i: usize| -> Vec<(f32, f32)> {
+            spans
+                .iter()
+                .filter(|s| s.0 == i)
+                .map(|s| (s.1, s.2))
+                .collect()
+        };
+        let near = |got: Vec<(f32, f32)>, want: &[(f32, f32)]| {
+            got.len() == want.len()
+                && got
+                    .iter()
+                    .zip(want)
+                    .all(|(g, w)| (g.0 - w.0).abs() < 0.1 && (g.1 - w.1).abs() < 0.1)
+        };
+        assert!(near(of(0), &[(100.0, 900.0)]), "{:?}", of(0));
+        let edge = (400.0f32 * 400.0 - 20.0 * 20.0).sqrt();
+        assert!(near(of(1), &[(0.0, edge)]), "{:?}", of(1));
+        assert!(of(2).is_empty(), "{:?}", of(2));
+        let x = (400.0f32 * 400.0 - 100.0 * 100.0).sqrt();
+        assert!(
+            near(of(3), &[(600.0, 1400.0), (3100.0 - x, 3100.0 + x)]),
+            "{:?}",
+            of(3)
+        );
+        assert!(of(4).is_empty(), "{:?}", of(4));
+    };
+    let mut net = Network {
+        lanes,
+        ..Default::default()
+    };
+    // (the same with and without the grid)
+    check(&net);
+    net.link(1.5);
+    assert!(net.grid.len() * 2 > 17 * 17, "{} cells", net.grid.len());
+    check(&net);
+}

@@ -9,7 +9,7 @@ use glam::{DVec3, Mat4, Quat, Vec3, Vec4};
 use hashbrown::HashMap;
 use omsi_geometry::{MeshData, mesh_from_o3d};
 use omsi_model::{MaterialDef, Model};
-use omsi_script::{CompileInput, Program, State, Vm, compile};
+use omsi_script::{CompileInput, Op, Program, State, Vm, compile};
 use omsi_vehicle::Vehicle;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

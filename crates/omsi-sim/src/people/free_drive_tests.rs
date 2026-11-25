@@ -145,7 +145,7 @@ fn populating_stop_in_free_drive_with_no_due_trips_assigns_valid_destination() {
         vec![("Centrum".into(), HashSet::from(["Centrum".into()]))],
     );
     h.stop_targets = Some(targets); // Timetable targets exist, but no trips due at stop 42
-    h.due_dests = Some(HashMap::new()); // Empty: no trips due at stop 42
+    h.due_dests = Some(HashMap::new().into()); // Empty: no trips due at stop 42
 
     let stop = h.stops.get_mut(&42).unwrap();
     h.center = stop.pos;
@@ -186,4 +186,50 @@ fn populating_stop_in_free_drive_with_no_due_trips_assigns_valid_destination() {
         assert_eq!(p.dest.as_deref(), Some("Centrum"));
         assert_eq!(p.line, Some(0));
     }
+}
+
+/// #3506: on a duty a stop fills to the share of its number its trips ask for now (Omsi.exe
+/// 0x61a068 / 0x61bf94) - half of it while the next bus is still some minutes off.
+#[test]
+fn a_worked_timetable_fills_a_stop_to_the_share_its_trips_ask_for() {
+    let (mut h, _) = pax_stops::brt_tests::setup("due-share", None);
+    h.types = vec![h.people[0].ty.clone()];
+    h.pool_types = 1;
+    h.people.clear();
+    h.map_humans_done = true;
+    h.free_drive_fill = FreeDriveFill::Off;
+    h.density = 1.0;
+    let mut targets = HashMap::new();
+    targets.insert(
+        42,
+        vec![("Centrum".into(), HashSet::from(["Centrum".into()]))],
+    );
+    h.stop_targets = Some(targets);
+    let mut due = crate::timetable_run::DueTrips::default();
+    due.dests.insert(42, HashSet::from(["Centrum".to_string()]));
+    due.share.insert(42, 0.5);
+    h.due_dests = Some(due);
+    let stop = h.stops.get_mut(&42).unwrap();
+    h.center = stop.pos;
+    stop.spots = (0..8)
+        .map(|k| WaitSpot {
+            pos: stop.pos + DVec3::X * k as f64,
+            face: 0.0,
+            height: 0.0,
+        })
+        .collect();
+    stop.taken = vec![false; 8];
+    stop.enter_max = 4.0;
+    stop.enter_min = 4.0;
+    stop.factor = 1.0;
+    stop.near = true;
+    stop.dests = vec![("Centrum".into(), 1.0)];
+    stop.lines = vec![("Centrum".into(), HashSet::from(["Centrum".into()]))];
+    let world = FlatWorld::default();
+    h.stops_tick(0.1, &world);
+    assert_eq!(h.stops[&42].want, 2, "half of the stop's 4");
+    // two trips due at once ask for all of it, never more
+    h.due_dests.as_mut().unwrap().share.insert(42, 1.7);
+    h.stops_tick(0.1, &world);
+    assert_eq!(h.stops[&42].want, 4);
 }

@@ -108,11 +108,18 @@ and leaves the string (the chura matrix drops strings itself with `(S.$.t) $leng
 
 Blocks: `{init}`, `{frame}`, `{frame_ai}`, `{macro:name}`, `{trigger:name}` … `{end}`; control flow
 `{if} … {else} … {endif}` on `st[0] != 0` (the condition is *not* popped). Comments start with `'`.
+Only `{end}` ends a block: one without it runs on into the next
+block's code, across script files too (the Opel Manta's `antrieb_frame` into `calc_eng_M`),
+through the words before the next file's first header, at the same macro depth. These words
+are case-sensitive (`{End}` is no `{end}`).
 `%stackdump%` dumps the stack to the log. Macro, trigger and variable names are case-insensitive.
 A trigger or macro defined in two script files is the **later** file's: the O530 Citaro pack's
 `engine.osc` redefines `cp_batterietrennschalter_toggle` of its `cockpit.osc` (the ignition key
 turns one notch per press of E: key in, electrics, ignition, starter while held - the bus could
-not start otherwise), its ALMEX redefines `IBIS_Zahlentasten`. Operator names are compared as
+not start otherwise), its ALMEX redefines `IBIS_Zahlentasten`. A `(M.L.name)` finds only a macro defined
+**below** it in the script files taken in their listed order (Omsi.exe builds the word stream from
+its end); a macro defined above its call, or the macro itself, is `macroinvalid` and the call does
+nothing. Operator names are compared as
 spelled (`Min`, `$CutEnd` are not operators). A `$` word that is not one of the string
 operators compiles to nothing, silently (a lone `$`, `$=>`, `$++`, `$SetLengthM` in mods);
 another unknown word is an error.

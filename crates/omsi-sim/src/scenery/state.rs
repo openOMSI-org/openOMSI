@@ -127,6 +127,8 @@ pub struct SceneryInputs<'a> {
     /// The time of day the buildings' hours and lights go by.
     pub time: f64,
     pub day: DayKind,
+    /// Omsi.exe's daylight sum under the weather (`Daylight::daylight_sum`, weather +0xb0):
+    /// what `NightlightA` switches by (0x6119d8).
     pub brightness: f32,
     /// The listener: the scripts within [`SCRIPT_RANGE`] of it run.
     pub center: DVec3,
@@ -574,8 +576,9 @@ fn gather(
     inputs: &SceneryInputs,
     out: &mut SceneryOutputs,
 ) -> SceneryVars {
-    // the object's own hours ([NightMapMode]): in use, and lit while in use and the
-    // daylight under its own threshold (0.6, or 0.3-0.75 with a [NightMapMode])
+    // the object's own hours ([NightMapMode]): in use, and lit while in use and Omsi.exe's
+    // daylight sum under the weather below its own threshold (0.6, or 0.3-0.75 with a
+    // [NightMapMode]; 0x6119d8)
     let in_use = o.use_.in_use(inputs.time, inputs.day);
     let light = match (o.controller, o.light_parent) {
         (Some(c), _) => Some((c, o.light_index)),
