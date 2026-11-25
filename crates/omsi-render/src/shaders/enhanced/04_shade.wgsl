@@ -550,8 +550,13 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             // light having passed the leaf's colour twice.
             let through = pow(clamp(dot(-v, s), 0.0, 1.0), 3.0);
             let leaf = sf.albedo / PI;
-            direct = e_sun * (leaf * (0.42 + 0.3 * max(nl, 0.0) + 0.08 * max(-nl, 0.0))
-                + leaf * min(sf.albedo * 2.2, vec3<f32>(1.0)) * through * 0.45);
+            let crown_light = leaf * (0.42 + 0.3 * max(nl, 0.0) + 0.08 * max(-nl, 0.0))
+                + leaf * min(sf.albedo * 2.2, vec3<f32>(1.0)) * through * 0.45;
+            // A cut-out whose normal lies level is no crown: a fence, a bridge's railing,
+            // mapped once per side with the normals turned round. Its normal says which way
+            // it faces and the sun lights that side alone, as Omsi.exe's N.L does - lit from
+            // every side, the side turned away from the sun glowed in it (#2687).
+            direct = e_sun * mix(leaf * max(nl, 0.0), crown_light, crown_share(n));
         } else if (nl > 0.0) {
             // the sun is a disc, not a point: no highlight sharper than it
             let a = max(rough * rough, 0.012);
@@ -584,7 +589,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             }
             let leaf = sf.albedo / PI;
             if (thin) {
-                direct = direct + em * ms * leaf * (0.42 + 0.3 * max(nlm, 0.0));
+                direct = direct + em * ms * leaf * mix(max(nlm, 0.0), 0.42 + 0.3 * max(nlm, 0.0), crown_share(n));
             } else {
                 direct = direct + em * ms * nlm * leaf;
             }
