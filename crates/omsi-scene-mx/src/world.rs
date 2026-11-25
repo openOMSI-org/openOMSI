@@ -140,6 +140,12 @@ pub struct World {
     /// (0 = every space the map fills, -1 = none): past it the spaces stay empty.
     pub parked_live: std::sync::atomic::AtomicUsize,
     pub parked_max: i64,
+    /// The parking spaces of the tiles come in so far and how many tiles those were, and
+    /// the map's tiles within the load radius now: the chance of a space getting its car
+    /// under `parked_max` (see `parked_share`).
+    pub parked_spaces: std::sync::atomic::AtomicU64,
+    pub parked_tiles_seen: std::sync::atomic::AtomicU64,
+    pub parked_area: std::sync::atomic::AtomicUsize,
     /// The loaded tiles' night light maps (`.map.LM.bmp`), for the light map atlas.
     pub light_maps: Mutex<HashMap<(i32, i32), Arc<omsi_texture::Image>>>,
     pub(super) light_maps_generation: std::sync::atomic::AtomicU64,

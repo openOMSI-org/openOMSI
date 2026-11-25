@@ -258,7 +258,7 @@ impl Streamer {
     fn missing(&self, centers: &[DVec3]) -> Vec<(f64, (i32, i32, PathBuf))> {
         let loaded: hashbrown::HashSet<(i32, i32)> =
             self.world.loaded_tiles().into_iter().collect();
-        let mut out: Vec<(f64, (i32, i32, PathBuf))> = tile_candidates(
+        let in_range: Vec<&(i32, i32, PathBuf)> = tile_candidates(
             &self.tile_lookup,
             self.tiles.len(),
             centers,
@@ -266,14 +266,19 @@ impl Streamer {
         )
         .into_iter()
         .map(|i| &self.tiles[i])
-        .filter(|t| {
-            !loaded.contains(&(t.0, t.1))
-                && !self.requested.contains(&(t.0, t.1))
-                && !self.failed.contains(&(t.0, t.1))
-        })
-        .map(|t| (Self::nearest(centers, t.0, t.1), t.clone()))
-        .filter(|(d, _)| *d <= self.load_radius)
+        .filter(|t| Self::nearest(centers, t.0, t.1) <= self.load_radius)
         .collect();
+        // (the area the parked cars of the options' cap are spread over)
+        self.world.set_parked_area(in_range.len());
+        let mut out: Vec<(f64, (i32, i32, PathBuf))> = in_range
+            .into_iter()
+            .filter(|t| {
+                !loaded.contains(&(t.0, t.1))
+                    && !self.requested.contains(&(t.0, t.1))
+                    && !self.failed.contains(&(t.0, t.1))
+            })
+            .map(|t| (Self::nearest(centers, t.0, t.1), t.clone()))
+            .collect();
         out.sort_by(|a, b| a.0.total_cmp(&b.0));
         out
     }

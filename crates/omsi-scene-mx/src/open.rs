@@ -235,6 +235,9 @@ impl World {
             light_map_atlas: Mutex::new(None),
             parked_live: std::sync::atomic::AtomicUsize::new(0),
             parked_max: super::host::open_settings().max_parked,
+            parked_spaces: std::sync::atomic::AtomicU64::new(0),
+            parked_tiles_seen: std::sync::atomic::AtomicU64::new(0),
+            parked_area: std::sync::atomic::AtomicUsize::new(0),
             signal_ids: signal_routes
                 .iter()
                 .flat_map(|r| std::iter::once(r.signal.0).chain(r.dist_signal))

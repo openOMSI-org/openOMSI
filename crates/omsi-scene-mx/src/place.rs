@@ -276,6 +276,10 @@ impl World {
             Vec::new()
         };
         let mut parked_cars: Vec<(DVec3, f64)> = Vec::new();
+        // (the options' cap as a chance per space, as Omsi.exe fills its spaces: see
+        // `parked_share`)
+        let parked_chance =
+            self.parked_chance(st.objects.iter().filter(|o| o.parked).count(), first_load);
         let mut objects: Vec<PlacedObject> = Vec::new();
         let mut trees = Vec::new();
         let debug_objects = omsi_cfg::flags::OMSI_DEBUG_OBJECTS.is_set();
@@ -289,9 +293,10 @@ impl World {
                 continue;
             };
             if o.parked
-                && self.parked_max > 0
-                && self.parked_live.load(std::sync::atomic::Ordering::Relaxed) as i64
-                    >= self.parked_max
+                && (!crate::parked_share::space_taken(o.key, parked_chance)
+                    || self.parked_max > 0
+                        && self.parked_live.load(std::sync::atomic::Ordering::Relaxed) as i64
+                            >= self.parked_max)
             {
                 continue;
             }

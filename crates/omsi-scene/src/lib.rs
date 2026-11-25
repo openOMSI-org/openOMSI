@@ -51,6 +51,7 @@ mod batching;
 mod cut_terrain;
 mod lightmaps;
 mod open;
+mod parked_share;
 mod place;
 mod place_step;
 mod props;
