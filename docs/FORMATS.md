@@ -112,7 +112,10 @@ Blocks: `{init}`, `{frame}`, `{frame_ai}`, `{macro:name}`, `{trigger:name}` … 
 A trigger or macro defined in two script files is the **later** file's: the O530 Citaro pack's
 `engine.osc` redefines `cp_batterietrennschalter_toggle` of its `cockpit.osc` (the ignition key
 turns one notch per press of E: key in, electrics, ignition, starter while held - the bus could
-not start otherwise), its ALMEX redefines `IBIS_Zahlentasten`. Operator names are compared as
+not start otherwise), its ALMEX redefines `IBIS_Zahlentasten`. A `(M.L.name)` finds only a macro defined
+**below** it in the script files taken in their listed order (Omsi.exe builds the word stream from
+its end); a macro defined above its call, or the macro itself, is `macroinvalid` and the call does
+nothing. Operator names are compared as
 spelled (`Min`, `$CutEnd` are not operators). A `$` word that is not one of the string
 operators compiles to nothing, silently (a lone `$`, `$=>`, `$++`, `$SetLengthM` in mods);
 another unknown word is an error.
