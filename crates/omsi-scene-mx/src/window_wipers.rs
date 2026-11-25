@@ -65,6 +65,8 @@ struct Film {
     swept: bool,
     image: omsi_texture::Image,
     bounds: [f32; 4],
+    /// Another film's glass lies over this one (`under_layers`): it shows no snow.
+    under: bool,
 }
 
 /// A pane with a rain film and no wetness mask: its layer's material while it rains and the
@@ -74,6 +76,8 @@ struct SnowPane {
     slot: usize,
     rain: MaterialId,
     snow: MaterialId,
+    /// Another film's glass lies over this one (`under_layers`): it shows no snow.
+    under: bool,
 }
 
 /// A slot of the player's bus whose layer is a rain film its script's wetness drives
@@ -85,6 +89,12 @@ fn rain_film_slot(
     slot: usize,
 ) -> bool {
     let vm = &vehicle.ty.meshes[mesh];
+    // (a mesh only the traffic's copies draw, `[viewpoint]` 4: a far LOD of a door; its glass
+    // would lie over the drawn one's in `under_layers`)
+    let viewpoint = vehicle.ty.model.meshes[vm.def_index].viewpoint;
+    if viewpoint != 0 && viewpoint & 3 == 0 {
+        return false;
+    }
     let controlled = vm.overrides.iter().any(|m| {
         omsi_sim::vehicle::override_slot(&vm.materials, m) == Some(slot)
             && m.alphascale.as_deref().is_some_and(|v| {
@@ -276,6 +286,7 @@ impl WindowWipers {
                         swept: false,
                         image,
                         bounds,
+                        under: false,
                     });
                 }
             }
@@ -307,8 +318,38 @@ impl WindowWipers {
                         slot,
                         rain: base,
                         snow,
+                        under: false,
                     });
                 }
+            }
+        }
+        // (the snow panes' glass on the same grid as the films', for `under_layers`)
+        let pane_points: Vec<Option<(Vec<Vec3>, [f32; 4])>> = snow_panes
+            .iter()
+            .map(|p| {
+                vehicle
+                    .ty
+                    .mesh_data(p.mesh)
+                    .and_then(|data| film_points_in_cab(&data, p.slot, None))
+            })
+            .collect();
+        let layers: Vec<(usize, &[Vec3], [f32; 4])> = films
+            .iter()
+            .map(|f| (f.mesh, f.points.as_slice(), f.bounds))
+            .chain(
+                snow_panes
+                    .iter()
+                    .zip(&pane_points)
+                    .filter_map(|(p, pts)| pts.as_ref().map(|(v, b)| (p.mesh, v.as_slice(), *b))),
+            )
+            .collect();
+        let mut under = under_layers(&layers, &vehicle.mesh_transforms).into_iter();
+        for film in &mut films {
+            film.under = under.next().unwrap_or(false);
+        }
+        for (pane, pts) in snow_panes.iter_mut().zip(&pane_points) {
+            if pts.is_some() {
+                pane.under = under.next().unwrap_or(false);
             }
         }
         let count = films.len();
@@ -316,10 +357,12 @@ impl WindowWipers {
             film.paint_phase = first_paint_phase(k, count);
         }
         log::debug!(
-            "window wipers: {} blades, {} wetness masks, {} panes without one",
+            "window wipers: {} blades, {} wetness masks, {} panes without one, {} under another",
             blades.len(),
             films.len(),
-            snow_panes.len()
+            snow_panes.len(),
+            films.iter().filter(|f| f.under).count()
+                + snow_panes.iter().filter(|p| p.under).count()
         );
         Self {
             blades,
@@ -353,13 +396,25 @@ impl WindowWipers {
     ) {
         let liquid = vehicle.host.precip_type != 2.0 || vehicle.host.temperature > 0.0;
         for pane in &self.snow_panes {
+            let inst = instances[pane.mesh];
             let material = if liquid { pane.rain } else { pane.snow };
-            if scene.instances[instances[pane.mesh]]
-                .materials
-                .get(pane.slot)
-                != Some(&material)
-            {
-                renderer.set_material(scene, instances[pane.mesh], pane.slot, material);
+            if scene.instances[inst].materials.get(pane.slot) != Some(&material) {
+                renderer.set_material(scene, inst, pane.slot, material);
+            }
+            // (the snow lies once, on the outer layer: see `under_layers`)
+            if !liquid && pane.under {
+                let mut alpha = scene.instances[inst].slot_alpha.clone();
+                if alpha.get(pane.slot).is_some_and(|a| *a != 0.0) {
+                    alpha[pane.slot] = 0.0;
+                    let visible = scene.instances[inst].visible;
+                    renderer.set_params(
+                        scene,
+                        inst,
+                        &alpha,
+                        visible,
+                        &vehicle.mesh_props[pane.mesh].slot_uv,
+                    );
+                }
             }
         }
         if self.films.is_empty() {
@@ -563,7 +618,8 @@ impl WindowWipers {
             // (dry, no drop on it, nothing wiped) keeps its alpha at 0, as its script had it on
             // a dry day: the frame leaves such a layer out (`passes/batch.rs`), drawn it ran
             // the rain shader over the whole windscreen for nothing.
-            let shows = film.local || film.unwiped > 0.0 || !film.drops.drops.is_empty();
+            let shows = (film.local || film.unwiped > 0.0 || !film.drops.drops.is_empty())
+                && (liquid || !film.under);
             // (a slot the drawn mesh has no triangles of has no alpha of its own: the
             // instance's list ends at the last slot it draws, while the film's slot comes from
             // the model's materials - indexing past it ended the game on Android)
@@ -851,6 +907,69 @@ fn blade_ends(points: &[Vec3]) -> Option<[Vec3; 2]> {
 #[cfg(test)]
 fn film_points(data: &MeshData, slot: usize) -> Option<(Vec<Vec3>, [f32; 4])> {
     film_points_in_cab(data, slot, None)
+}
+
+/// Which of the rain films' layers lie under another one. A bus's glass is often two meshes,
+/// its outer face and its inner one, each with its films, and the two split the glass into
+/// their slots each their own way (the EN92's windscreen: the wipers' fields on the outer
+/// one, a band across on the inner). The rain drawn on both hardly showed it; the snow, a
+/// layer of its own cover on each, was twice as thick where the two overlapped and showed
+/// every edge where they split the glass differently - straight seams over the windscreen.
+/// The snow lies once, on the outer face. A layer is under when most of its glass has
+/// another layer's within five centimetres in front of it (further from the vehicle's
+/// middle along the pane's depth), or at the same depth on a layer listed before it.
+/// `layers`: each one's mesh, its points on the pane's grid and their bounds
+/// (`film_points_in_cab`).
+fn under_layers(layers: &[(usize, &[Vec3], [f32; 4])], transforms: &[glam::Mat4]) -> Vec<bool> {
+    let world = |mesh: usize| {
+        transforms
+            .get(mesh)
+            .copied()
+            .unwrap_or(glam::Mat4::IDENTITY)
+    };
+    layers
+        .iter()
+        .enumerate()
+        .map(|(i, &(mi, pi, bi))| {
+            let to_vehicle = world(mi);
+            let others: Vec<(usize, glam::Mat4, glam::Mat4, &[Vec3], [f32; 4])> = layers
+                .iter()
+                .enumerate()
+                .filter(|&(j, &(_, _, bj))| j != i && (bj[2] < 0.0) == (bi[2] < 0.0))
+                .map(|(j, &(mj, pj, bj))| (j, world(mj).inverse() * to_vehicle, world(mj), pj, bj))
+                .collect();
+            if others.is_empty() {
+                return false;
+            }
+            let (mut glass, mut covered) = (0usize, 0usize);
+            // (every other point of the grid each way: a quarter of them tell it)
+            for y in (0..SIZE).step_by(2) {
+                for x in (0..SIZE).step_by(2) {
+                    let p = pi[y * SIZE + x];
+                    if !p.is_finite() {
+                        continue;
+                    }
+                    glass += 1;
+                    let depth = pane_depth(to_vehicle.transform_point3(p), bi).abs();
+                    let over = others.iter().any(|&(j, to_j, from_j, pj, bj)| {
+                        let q = to_j.transform_point3(p);
+                        let px = pane_pixel(q, bj).floor();
+                        if px.x < 0.0 || px.y < 0.0 || px.x >= SIZE as f32 || px.y >= SIZE as f32 {
+                            return false;
+                        }
+                        let o = pj[px.y as usize * SIZE + px.x as usize];
+                        if !o.is_finite() || (pane_depth(o, bj) - pane_depth(q, bj)).abs() > 0.05 {
+                            return false;
+                        }
+                        let other = pane_depth(from_j.transform_point3(o), bi).abs();
+                        other > depth + 0.003 || (other >= depth - 0.003 && j < i)
+                    });
+                    covered += usize::from(over);
+                }
+            }
+            glass > 0 && covered * 2 > glass
+        })
+        .collect()
 }
 
 fn film_points_in_cab(
