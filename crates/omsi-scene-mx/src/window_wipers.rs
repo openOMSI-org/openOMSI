@@ -67,9 +67,50 @@ struct Film {
     bounds: [f32; 4],
 }
 
+/// A pane with a rain film and no wetness mask: its layer's material while it rains and the
+/// snow variant it wears while it snows (`Renderer::add_window_snow_material`).
+struct SnowPane {
+    mesh: usize,
+    slot: usize,
+    rain: MaterialId,
+    snow: MaterialId,
+}
+
+/// A slot of the player's bus whose layer is a rain film its script's wetness drives
+/// (`Rain_Window_*_Wetness`), not taken over by a material variant or a script texture.
+fn rain_film_slot(
+    vehicle: &VehicleInstance,
+    render: &crate::VehicleRender,
+    mesh: usize,
+    slot: usize,
+) -> bool {
+    let vm = &vehicle.ty.meshes[mesh];
+    let controlled = vm.overrides.iter().any(|m| {
+        omsi_sim::vehicle::override_slot(&vm.materials, m) == Some(slot)
+            && m.alphascale.as_deref().is_some_and(|v| {
+                matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "rain_window_front_wetness"
+                        | "rain_window_wiped_wetness"
+                        | "rain_window_norm_wetness"
+                )
+            })
+    });
+    controlled
+        && !render
+            .variants
+            .iter()
+            .any(|v| v.mesh == mesh && v.slot == slot)
+        && !vm.overrides.iter().any(|m| {
+            omsi_sim::vehicle::override_slot(&vm.materials, m) == Some(slot)
+                && (m.use_script_texture.is_some() || m.use_text_texture.is_some())
+        })
+}
+
 pub struct WindowWipers {
     blades: Vec<Blade>,
     films: Vec<Film>,
+    snow_panes: Vec<SnowPane>,
     time: f64,
     runoff: Vec<f32>,
 }
@@ -133,27 +174,7 @@ impl WindowWipers {
         if !blades.is_empty() {
             for (mesh, vm) in vehicle.ty.meshes.iter().enumerate() {
                 for slot in 0..vm.materials.len() {
-                    let controlled = vm.overrides.iter().any(|m| {
-                        omsi_sim::vehicle::override_slot(&vm.materials, m) == Some(slot)
-                            && m.alphascale.as_deref().is_some_and(|v| {
-                                matches!(
-                                    v.trim().to_ascii_lowercase().as_str(),
-                                    "rain_window_front_wetness"
-                                        | "rain_window_wiped_wetness"
-                                        | "rain_window_norm_wetness"
-                                )
-                            })
-                    });
-                    if !controlled
-                        || render
-                            .variants
-                            .iter()
-                            .any(|v| v.mesh == mesh && v.slot == slot)
-                        || vm.overrides.iter().any(|m| {
-                            omsi_sim::vehicle::override_slot(&vm.materials, m) == Some(slot)
-                                && (m.use_script_texture.is_some() || m.use_text_texture.is_some())
-                        })
-                    {
+                    if !rain_film_slot(vehicle, render, mesh, slot) {
                         continue;
                     }
                     let Some(data) = vehicle.ty.mesh_data(mesh) else {
@@ -259,18 +280,51 @@ impl WindowWipers {
                 }
             }
         }
+        // Every other pane with a rain film (the doors, the opening windows, the side windows
+        // away from the wipers) has no mask: it shows the script's wetness as water drops, and
+        // while it snows the same wetness as settled snow, as the masked panes do.
+        let mut snow_panes = Vec::new();
+        for (mesh, vm) in vehicle.ty.meshes.iter().enumerate() {
+            for slot in 0..vm.materials.len() {
+                if !rain_film_slot(vehicle, render, mesh, slot)
+                    || films.iter().any(|f| f.mesh == mesh && f.slot == slot)
+                {
+                    continue;
+                }
+                let Some(&inst) = instances.get(mesh) else {
+                    continue;
+                };
+                let Some(&base) = scene.instances[inst].materials.get(slot) else {
+                    continue;
+                };
+                // (a custom transmap stays under its script's control, as on the films)
+                if scene.materials[base].transmap.is_some() {
+                    continue;
+                }
+                if let Some(snow) = renderer.add_window_snow_material(scene, base) {
+                    snow_panes.push(SnowPane {
+                        mesh,
+                        slot,
+                        rain: base,
+                        snow,
+                    });
+                }
+            }
+        }
         let count = films.len();
         for (k, film) in films.iter_mut().enumerate() {
             film.paint_phase = first_paint_phase(k, count);
         }
         log::debug!(
-            "window wipers: {} blades, {} wetness masks",
+            "window wipers: {} blades, {} wetness masks, {} panes without one",
             blades.len(),
-            films.len()
+            films.len(),
+            snow_panes.len()
         );
         Self {
             blades,
             films,
+            snow_panes,
             time: vehicle.host.clock.run_time,
             runoff: vec![0.0; SIZE * SIZE],
         }
@@ -284,6 +338,7 @@ impl WindowWipers {
         self.films
             .iter()
             .flat_map(|f| [f.material, f.snow_material])
+            .chain(self.snow_panes.iter().map(|p| p.snow))
     }
 
     /// `rain_quality`: the rain's (see `rain::quality_of`): below high the films are drawn
@@ -296,6 +351,17 @@ impl WindowWipers {
         instances: &[usize],
         rain_quality: u8,
     ) {
+        let liquid = vehicle.host.precip_type != 2.0 || vehicle.host.temperature > 0.0;
+        for pane in &self.snow_panes {
+            let material = if liquid { pane.rain } else { pane.snow };
+            if scene.instances[instances[pane.mesh]]
+                .materials
+                .get(pane.slot)
+                != Some(&material)
+            {
+                renderer.set_material(scene, instances[pane.mesh], pane.slot, material);
+            }
+        }
         if self.films.is_empty() {
             return;
         }
