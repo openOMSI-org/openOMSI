@@ -4491,3 +4491,7 @@
 "For passengers whose file gives no weight; default 75 kg": "Para passageiros cujo ficheiro não indica peso; predefinição 75 kg"
 "Road dirt on the vehicles": "Sujidade da estrada nos veículos"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: os veículos acumulam sujidade onde ela cai - salpicos atrás das rodas e nos lados de baixo com a estrada molhada, uma película atrás, pó com tempo seco, neve lamacenta no inverno - e a chuva lava-a; desligado: a sujidade própria do autocarro, como no OMSI 2"
+"the conductor of my bus": "o cobrador do meu autocarro"
+"the conductor of #{owner}'s bus": "o cobrador do autocarro de #{owner}"
+"No longer the conductor of my bus": "Deixa de ser o cobrador do meu autocarro"
+"Make them the conductor of my bus": "Faz dele o cobrador do meu autocarro"

@@ -3328,3 +3328,7 @@
 "For passengers whose file gives no weight; default 75 kg": "Файлында салмақ көрсетілмеген жолаушылар үшін; әдепкі 75 кг"
 "Road dirt on the vehicles": "Көліктердегі жол кірі"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: көліктерге жол кірі түскен жеріне жиналады - дымқыл жолда дөңгелектердің артында және төменгі бүйірлерде шашырандылар, артында қабат, құрғақта шаң, қыста ылғалды қар - ал жаңбыр оны жуады; өшірулі: OMSI 2-дегідей автобустың өз кірі"
+"the conductor of my bus": "менің автобусымның кондукторы"
+"the conductor of #{owner}'s bus": "#{owner} автобусының кондукторы"
+"No longer the conductor of my bus": "Енді менің автобусымның кондукторы емес"
+"Make them the conductor of my bus": "Оны менің автобусымның кондукторы етіп тағайындау"

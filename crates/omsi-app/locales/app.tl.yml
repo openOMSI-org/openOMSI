@@ -3037,3 +3037,7 @@
 "For passengers whose file gives no weight; default 75 kg": "Para sa mga pasaherong walang bigat sa kanilang file; default na 75 kg"
 "Road dirt on the vehicles": "Dumi ng kalsada sa mga sasakyan"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: nag-iipon ang mga sasakyan ng dumi ng kalsada kung saan ito tumatama - tilamsik sa likod ng mga gulong at sa ibabang gilid sa basang kalsada, patong sa likuran, alikabok kapag tuyo, malabong niyebe sa taglamig - at hinuhugasan ito ng ulan; kapag naka-off: ang sariling dumi ng bus, gaya ng sa OMSI 2"
+"the conductor of my bus": "ang konduktor ng aking bus"
+"the conductor of #{owner}'s bus": "ang konduktor ng bus ni #{owner}"
+"No longer the conductor of my bus": "Hindi na ang konduktor ng aking bus"
+"Make them the conductor of my bus": "Gawin siyang konduktor ng aking bus"

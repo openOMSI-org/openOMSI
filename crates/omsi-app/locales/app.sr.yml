@@ -4489,3 +4489,7 @@
 "For passengers whose file gives no weight; default 75 kg": "Za putnike čija datoteka ne navodi težinu; podrazumevano 75 kg"
 "Road dirt on the vehicles": "Prljavština sa puta na vozilima"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: vozila skupljaju prljavštinu sa puta tamo gde pada - prskanje iza točkova i na donjim bokovima na mokrom putu, sloj pozadi, prašina po suvom, bljuzgavica zimi - a kiša je spira; isključeno: sopstvena prljavština autobusa, kao u OMSI 2"
+"the conductor of my bus": "кондуктор мог аутобуса"
+"the conductor of #{owner}'s bus": "кондуктор аутобуса #{owner}"
+"No longer the conductor of my bus": "Више није кондуктор мог аутобуса"
+"Make them the conductor of my bus": "Постави га за кондуктора мог аутобуса"

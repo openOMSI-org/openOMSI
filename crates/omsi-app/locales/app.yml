@@ -8977,3 +8977,11 @@ _version: 2
 "plugin command queue is full":
   en: "plugin command queue is full"
 
+"the conductor of my bus":
+  en: "the conductor of my bus"
+"the conductor of #{owner}'s bus":
+  en: "the conductor of #{owner}'s bus"
+"No longer the conductor of my bus":
+  en: "No longer the conductor of my bus"
+"Make them the conductor of my bus":
+  en: "Make them the conductor of my bus"

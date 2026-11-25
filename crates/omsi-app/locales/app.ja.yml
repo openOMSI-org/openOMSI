@@ -3383,3 +3383,7 @@
 "For passengers whose file gives no weight; default 75 kg": "ファイルに重さがない乗客の値。既定は 75 kg"
 "Road dirt on the vehicles": "車両に付く路面の汚れ"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: 車両は汚れが当たる場所に路面の汚れを集めます。濡れた路面では車輪の後ろと側面下部に跳ね、後部に膜、乾燥時はほこり、冬はシャーベット状の雪。雨で洗い流されます。オフ: OMSI 2 と同じくバス独自の汚れ"
+"the conductor of my bus": "私のバスの車掌"
+"the conductor of #{owner}'s bus": "#{owner}さんのバスの車掌"
+"No longer the conductor of my bus": "もう私のバスの車掌ではありません"
+"Make them the conductor of my bus": "彼を私のバスの車掌にする"

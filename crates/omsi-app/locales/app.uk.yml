@@ -3436,3 +3436,7 @@
 "For passengers whose file gives no weight; default 75 kg": "Для пасажирів, у файлі яких вага не вказана; за замовчуванням 75 кг"
 "Road dirt on the vehicles": "Дорожній бруд на транспорті"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: на транспорті збирається дорожній бруд там, куди він потрапляє - бризки за колесами й на нижніх бортах на мокрій дорозі, наліт ззаду, пил у суху погоду, сльота взимку - а дощ його змиває; вимкнено - власний бруд автобуса, як в OMSI 2"
+"the conductor of my bus": "кондуктор мого автобуса"
+"the conductor of #{owner}'s bus": "кондуктор автобуса #{owner}"
+"No longer the conductor of my bus": "Більше не кондуктор мого автобуса"
+"Make them the conductor of my bus": "Призначити його кондуктором мого автобуса"

@@ -3331,3 +3331,7 @@
 "For passengers whose file gives no weight; default 75 kg": "Azoknak az utasoknak, akiknek a fájlja nem ad meg tömeget; alapértelmezés 75 kg"
 "Road dirt on the vehicles": "Útszennyeződés a járműveken"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: a járművekre ott rakódik az útszennyeződés, ahová kerül - nedves úton fröccs a kerekek mögött és az oldalak alján, lerakódás hátul, szárazon por, télen latyak - és az eső lemossa; kikapcsolva: a busz saját szennyeződése, mint az OMSI 2-ben"
+"the conductor of my bus": "az én buszom kalauza"
+"the conductor of #{owner}'s bus": "#{owner} buszának kalauza"
+"No longer the conductor of my bus": "Már nem az én buszom kalauza"
+"Make them the conductor of my bus": "Tedd meg az én buszom kalauzává"
