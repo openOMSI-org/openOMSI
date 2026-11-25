@@ -398,3 +398,57 @@ fn a_single_recording_hof_is_reported_without_pretending_a_two_recording_layout(
         Some(announce::QuietReason::SingleRecordingHof)
     );
 }
+
+#[test]
+fn unsupported_and_unavailable_hof_layouts_are_not_reported_as_single_recording() {
+    use omsi_sim::timetable_run::{PlannedStop, PlannedTrip, PlayerDuty, StopDir};
+
+    let stop = |name: &str| PlannedStop {
+        object_id: 1,
+        name: name.into(),
+        arr: 0.0,
+        dep: 0.0,
+        position: None,
+        dir: StopDir::default(),
+        stops: true,
+        closed: None,
+    };
+    let trip = PlannedTrip {
+        name: "Trip 1".into(),
+        line: "100".into(),
+        terminus: "Terminus".into(),
+        departure: 0.0,
+        end: 600.0,
+        stops: vec![stop("Stop A"), stop("Stop B")],
+    };
+    let duty = PlayerDuty::new("100".into(), "1".into(), vec![trip], 0, 0, true);
+
+    let mut unsupported =
+        crate::schedule::tests::script_test_vehicle("", "IBIS_RouteIndex\nIBIS_busstop\n", "");
+    unsupported.set_var("IBIS_RouteIndex", 0.0);
+    unsupported.host.hof = Some(std::sync::Arc::new(omsi_vehicle::Hof {
+        info_busstop_lists: vec![vec![
+            "Terminus".into(),
+            "Start".into(),
+            "Stop A".into(),
+            "Stop A1".into(),
+            "Stop B".into(),
+            "Stop B1".into(),
+        ]],
+        ..Default::default()
+    }));
+    let mut a = AutoAnnounce::new();
+    a.step(&duty, &mut unsupported, 0.0);
+    assert_eq!(a.layout, Some((0, Some(LayoutStatus::Unsupported))));
+    assert_eq!(a.pairs, 0);
+    assert_eq!(a.take_note(), None);
+
+    let mut unavailable =
+        crate::schedule::tests::script_test_vehicle("", "IBIS_RouteIndex\nIBIS_busstop\n", "");
+    unavailable.set_var("IBIS_RouteIndex", 0.0);
+    let mut a = AutoAnnounce::new();
+    a.step(&duty, &mut unavailable, 0.0);
+    assert_eq!(a.layout, Some((0, None)));
+    assert_eq!(a.pairs, 0);
+    assert_eq!(a.take_note(), None);
+}

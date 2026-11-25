@@ -130,9 +130,10 @@ impl AutoAnnounce {
         }
         let at = d.at_stop();
         let left = self.at_stop.replace(at) == Some(true) && !at;
-        let layout = self.layout_of(bus);
+        let status = self.layout_status(bus);
+        let layout = status.and_then(LayoutStatus::two);
         self.pairs = layout.map_or(0, |l| l.pairs);
-        if !self.noted && layout.is_some_and(|l| l.pairs == 0) && route(bus).is_some() {
+        if !self.noted && status == Some(LayoutStatus::Single) && route(bus).is_some() {
             self.noted = true;
             let keys = announce::keys(
                 bus.has_trigger("IBIS_vor"),
@@ -150,12 +151,9 @@ impl AutoAnnounce {
         self.watch_step(bus, now);
     }
 
-    fn layout_of(&mut self, bus: &VehicleInstance) -> Option<TwoRecordings> {
+    fn layout_status(&mut self, bus: &VehicleInstance) -> Option<LayoutStatus> {
         let route = route(bus)?;
-        match self.layout_lookup(route, bus.host.hof.as_deref())? {
-            LayoutStatus::Two(l) => Some(l),
-            LayoutStatus::Single => Some(TwoRecordings { first: 0, pairs: 0 }),
-        }
+        self.layout_lookup(route, bus.host.hof.as_deref())
     }
 
     fn layout_lookup(

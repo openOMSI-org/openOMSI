@@ -22,6 +22,16 @@ pub struct TwoRecordings {
 pub enum LayoutStatus {
     Two(TwoRecordings),
     Single,
+    Unsupported,
+}
+
+impl LayoutStatus {
+    pub fn two(self) -> Option<TwoRecordings> {
+        match self {
+            Self::Two(l) => Some(l),
+            Self::Single | Self::Unsupported => None,
+        }
+    }
 }
 
 /// An ident without what only tells two recordings of one stop apart: the line number in
@@ -60,13 +70,16 @@ pub fn first_preview(list: &[String]) -> Option<usize> {
 pub fn layout_status(hof: &Hof, route: usize) -> Option<LayoutStatus> {
     let list = hof.info_busstop_lists.get(route)?;
     let pairs = list.windows(2).filter(|w| is_pair(&w[0], &w[1])).count();
+    if pairs == 0 {
+        return Some(LayoutStatus::Single);
+    }
     let first = first_preview(list);
     let two = first
         .filter(|f| pairs >= 3 && *f <= 4)
         .map(|first| TwoRecordings { first, pairs });
     Some(match two {
         Some(l) => LayoutStatus::Two(l),
-        None => LayoutStatus::Single,
+        None => LayoutStatus::Unsupported,
     })
 }
 
@@ -75,10 +88,7 @@ pub fn layout_status(hof: &Hof, route: usize) -> Option<LayoutStatus> {
 /// (Spandau, Grundorf and the other German maps), and one whose start holds more than two
 /// entries before its first pair is not built the way the Chinese maps are.
 pub fn layout(hof: &Hof, route: usize) -> Option<TwoRecordings> {
-    match layout_status(hof, route)? {
-        LayoutStatus::Two(l) => Some(l),
-        LayoutStatus::Single => None,
-    }
+    layout_status(hof, route)?.two()
 }
 
 /// The entry that holds the arrival recording of the `k`th stop of a trip (0-based; the first
@@ -306,11 +316,12 @@ mod tests {
     }
 
     #[test]
-    fn a_depot_file_of_one_recording_per_stop_has_no_layout() {
+    fn a_depot_file_of_one_recording_per_stop_is_distinct_from_an_unsupported_layout() {
         let mut hof = Hof::default();
         hof.info_busstop_lists = vec![list(&[
             "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta",
         ])];
+        assert_eq!(layout_status(&hof, 0), Some(LayoutStatus::Single));
         assert_eq!(layout(&hof, 0), None);
         hof.info_busstop_lists = vec![list(&[
             "Start",
@@ -322,9 +333,39 @@ mod tests {
             "DRoad",
             "DRoad1",
         ])];
+        assert_eq!(
+            layout_status(&hof, 0),
+            Some(LayoutStatus::Two(TwoRecordings { first: 2, pairs: 3 }))
+        );
         assert_eq!(layout(&hof, 0), Some(TwoRecordings { first: 2, pairs: 3 }));
         // (a route the depot file has no list for)
+        assert_eq!(layout_status(&hof, 1), None);
         assert_eq!(layout(&hof, 1), None);
+        // (a few pairs, and a first pair too far into the list: not a single-recording file)
+        hof.info_busstop_lists = vec![list(&[
+            "Start",
+            "welcome19",
+            "FRoad",
+            "FRoad1",
+            "GRoad",
+            "GRoad1",
+        ])];
+        assert_eq!(layout_status(&hof, 0), Some(LayoutStatus::Unsupported));
+        hof.info_busstop_lists = vec![list(&[
+            "Start",
+            "welcome19",
+            "Extra",
+            "More",
+            "Else",
+            "FRoad",
+            "FRoad1",
+            "GRoad",
+            "GRoad1",
+            "HRoad",
+            "HRoad1",
+        ])];
+        assert_eq!(layout_status(&hof, 0), Some(LayoutStatus::Unsupported));
+        assert_eq!(layout(&hof, 0), None);
     }
 
     #[test]
