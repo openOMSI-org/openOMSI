@@ -393,12 +393,30 @@ fn a_cut_tile_still_asks_for_its_painted_ground_textures() {
 #[test]
 fn ground_dirs_searches_root_then_map_dir() {
     let fixture = Fixture::new();
-    fixture.write("global.cfg", "[name]\nGround dirs\n");
-    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let map_dir = fixture.0.join("map");
+    std::fs::create_dir_all(&map_dir).unwrap();
+    std::fs::write(map_dir.join("global.cfg"), "[name]\nGround dirs\n").unwrap();
+    let root = fixture.0.join("fake_root");
+    std::fs::create_dir_all(&root).unwrap();
+    let name = "shared_ground.png";
+    for dir in [&root, &map_dir] {
+        image::save_buffer(
+            dir.join(name),
+            &[0, 255, 0, 255],
+            1,
+            1,
+            image::ColorType::Rgba8,
+        )
+        .unwrap();
+    }
+    let world = World::open(&root, &map_dir.join("global.cfg"), 20261001).unwrap();
     let dirs = world.ground_dirs();
     assert_eq!(dirs.len(), 2);
     assert_eq!(dirs[0], world.root);
     assert_eq!(dirs[1], world.map_dir);
+    let dirs: Vec<&Path> = dirs.iter().map(|dir| dir.as_path()).collect();
+    let found = omsi_texture::find_texture(name, &dirs).unwrap();
+    assert_eq!(found, root.join(name));
 }
 
 #[test]
