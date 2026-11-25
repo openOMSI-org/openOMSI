@@ -522,6 +522,11 @@ impl Renderer {
                     if v.overcast { 1.0 } else { 0.0 },
                     ro.z as f32,
                 ],
+                moon: lighting
+                    .moon_dir
+                    .normalize_or_zero()
+                    .extend(crate::lighting::MOON_RADIUS)
+                    .to_array(),
             };
             self.queue
                 .write_buffer(&self.sky.vanilla_sky_buf, 0, bytemuck::bytes_of(&u))
