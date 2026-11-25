@@ -902,6 +902,11 @@ impl App {
                         }
                         Err(e) => log::error!("traffic: {e:#}"),
                     }
+                    crate::perf_report::log_load_memory(
+                        "the first tiles and the traffic",
+                        &renderer,
+                        &scene,
+                    );
                     if self.args.schedule {
                         let mut sch =
                             schedule::Schedule::new(&self.args.root, &w, &start_clock(&self.args));
@@ -917,6 +922,11 @@ impl App {
                             &mut scene,
                             self.session.traffic.as_mut(),
                             parse_time(&self.args.time),
+                        );
+                        crate::perf_report::log_load_memory(
+                            "the timetable's vehicles",
+                            &renderer,
+                            &scene,
                         );
                         if let (Some(line), Some(p)) = (&self.args.line, self.player.as_mut()) {
                             self.session.duty = match sch.player_duty(
