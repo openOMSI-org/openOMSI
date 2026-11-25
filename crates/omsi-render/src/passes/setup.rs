@@ -327,6 +327,17 @@ impl Renderer {
             // the camera bind group must point at the new lighting texture
             scene.camera_bind_group = None;
         }
+        // (experimental: the traced global illumination's textures, made when it is first
+        // asked for; the camera bind group names its result)
+        if rt_frame
+            && self.options.rt_gi
+            && self
+                .rt
+                .as_mut()
+                .is_some_and(|rt| rt.ensure_gi(&self.device, width, height))
+        {
+            scene.camera_bind_group = None;
+        }
         if masked_frame {
             self.hdr_targets(width, height, rt_gbuf() && !eye_color);
         }
@@ -602,7 +613,12 @@ impl Renderer {
                 lighting.cloud_offset[0],
                 lighting.cloud_offset[1],
                 // (2: the traced lighting, full size, see `ao_at`)
-                if rt_frame {
+                if rt_frame
+                    && self.options.rt_gi
+                    && self.rt.as_ref().is_some_and(|r| r.gi_view().is_some())
+                {
+                    3.0
+                } else if rt_frame {
                     2.0
                 } else if ao_on {
                     1.0
@@ -751,7 +767,7 @@ impl Renderer {
                 camera.near,
             );
             self.prepare_ray_tracing(
-                scene, camera, lighting, vp_mat, proj, f.width, f.height, f.dt,
+                scene, camera, lighting, vp_mat, proj, f.width, f.height, f.dt, f.grid,
             );
             clock.stage(self, "ray tracing", "mirror.ray tracing");
         }

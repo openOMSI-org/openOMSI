@@ -134,6 +134,9 @@ pub(crate) struct FrameHeap {
     pub(crate) lmap: u32,
     pub(crate) snow_px: u32,
     pub(crate) snow: u32,
+    /// the traced global illumination at the picture's size (rt/gi.rs; the black texture
+    /// without it)
+    pub(crate) gi: u32,
 }
 
 impl FrameHeap {

@@ -638,6 +638,21 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     }
     var e_amb = mix(sky_e, cab_e * CAB_AMBIENT, 0.6 * in_cab) * ao_bounce(ao, ambient_albedo)
         + flash_irradiance(n) * ao * (1.0 - 0.7 * in_cab);
+    // Experimental (`rt_gi`, camera.clouds.w 3): the traced global illumination in place of
+    // the guesses above. The sky lights the point as far as its rays saw it (within 40 m, not
+    // only the occlusion's two: under a bridge, in a narrow street), and the light the
+    // surfaces round it send back - the sun, the sky, the lamps and the unlit glow on them,
+    // one bounce - takes the place of the multi-bounce fit's brightening. Inside the cab the
+    // even cabin light keeps a smaller share: the rays bring in what the windows let in.
+    var gi = vec4<f32>(0.0, 0.0, 0.0, -1.0);
+    if (screen_ao && camera.clouds.w > 2.5 && !(glass || mode > 1.5)) {
+        gi = gi_at(in.clip.xy, in.world);
+        if (gi.a >= 0.0) {
+            let sky_occ = min(ao, gi.a * pbr_ao);
+            e_amb = mix(sky_e * sky_occ, cab_e * CAB_AMBIENT * ao, GI_CAB_SHARE * in_cab)
+                + gi.rgb * pbr_ao + flash_irradiance(n) * ao * (1.0 - 0.7 * in_cab);
+        }
+    }
 //VK     if (screen_ao && in_cab < 1.0) {
 //VK         e_amb = e_amb + bounce_at(in.clip.xy, in.world) * mix(1.0, ao, 0.5) * (1.0 - in_cab);
 //VK     }
@@ -744,6 +759,13 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // own share.
     let reflects = !thin;
     var refl_f = spec_e.rgb * spec_occ * horizon * select(1.0, mix(1.0, wet_share, wet_road), wet_only);
+    // (the traced global illumination: a rough surface's reflection - the probe's blurred sky
+    // - only as much as its rays saw the sky; under a roof, a bridge or in the saloon it
+    // mirrored the open sky there, a grey sheen over everything; a smooth one's own traced
+    // reflection knows what it mirrors)
+    if (gi.a >= 0.0) {
+        refl_f = refl_f * mix(1.0, clamp(gi.a, 0.0, 1.0), smoothstep(0.15, 0.5, refl_rough));
+    }
     if (!reflects) {
         ambient = e_amb * ambient_albedo / PI;
     }
@@ -954,6 +976,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             case 15: { dc = lamps * pre; }
             case 16: { dc = emit; }
             case 17: { dc = vec3<f32>(rough, f0.g * 10.0, metal); }
+            // (the traced global illumination: the bounced light as it lands, the sky's
+            // visibility; magenta where there is none)
+            case 18: { dc = select(vec3<f32>(1.0, 0.0, 1.0), gi.rgb * ambient_albedo / PI * pre, gi.a >= 0.0); }
+            case 19: { dc = select(vec3<f32>(1.0, 0.0, 1.0), vec3<f32>(gi.a), gi.a >= 0.0); }
             default: { dc = vec3<f32>(alpha, f32(glass), f32(has_env)); }
         }
         return vec4<f32>(dc, 1.0);

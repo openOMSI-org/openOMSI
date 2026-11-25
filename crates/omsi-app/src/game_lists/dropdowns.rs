@@ -708,6 +708,8 @@ pub(super) fn sync_live(app: &mut App) {
         r.options.cloud_shadows = live.cloud_shadows;
         r.options.light_glow = live.light_glow;
         r.options.volumetric_fog = live.volumetric_fog;
+        // (and the traced global illumination, while the ray tracing runs)
+        r.options.rt_gi = live.rt_gi;
     }
     let s = &app.settings;
     if let Some(w) = app.world.as_ref() {

@@ -22,6 +22,10 @@ fn relief_masking(nl: f32, nv: f32, rough: f32, footprint: f32) -> f32 {
 // The light inside a cab relative to the average light outside: a bus's big windows let in
 // most of the sky, and the dashboard lies right under the windscreen.
 const CAB_AMBIENT: f32 = 1.15;
+// With the traced global illumination (`rt_gi`): the even cabin light's share inside the
+// cab (0.6 without it); the rest what the rays bring in through the windows and off the
+// seats, the floor and the walls - at 0.6 the even light hid it.
+const GI_CAB_SHARE: f32 = 0.15;
 
 // How far the puddle threshold drops with the wetness: see the puddle mask in `shade_enhanced`.
 const PUDDLE_SPREAD: f32 = 0.37;

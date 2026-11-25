@@ -8,6 +8,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New and improved
 
+- **Ray-traced global illumination (experimental)**: with Real-Time Ray Tracing on, the new
+  `rt_gi` option traces the light surfaces send to each other. Where a ray meets something the
+  last frame showed, it takes the light the picture had there (lamps with their shadows, lit
+  windows, the light already bounced), so the light bounces on from frame to frame. The sky light
+  and the sky's reflection on rough surfaces are dimmed by how much of the sky each point sees,
+  and the saloon is lit by what comes in through its windows and off its seats. Off by default;
+  see [Graphics](docs/GRAPHICS.md#ray-traced-global-illumination-experimental).
 - **mX Graphics twice as fast on the GPU**: in Enhanced the main pass draws most surfaces with a
   lean pipeline that leaves out the shading they do not use (films, water, LEDs, bump maps, wet or
   snowy roads in dry weather), compiled in the background, and the ground's albedo pass works

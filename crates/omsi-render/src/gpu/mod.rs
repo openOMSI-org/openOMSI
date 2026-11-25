@@ -299,8 +299,8 @@ pub(crate) fn array_layout_entry_on(
 }
 
 /// The camera group's textures only the enhanced path reads: the reflection probe, the sky
-/// table and the window's clouds.
-pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
+/// table, the window's clouds and the traced global illumination.
+pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 4] = [12, 14, 17, 22];
 
 /// wgpu's OpenGL backend has sixteen texture units for a pipeline - for all its groups and
 /// both its shaders together (wgpu-hal's `MAX_TEXTURE_SLOTS`, whatever the chip has) - while
@@ -488,6 +488,20 @@ pub(crate) fn camera_layout_entries(
             wgpu::ShaderStages::FRAGMENT,
             false,
         ));
+    }
+    // the traced global illumination (experimental, `rt_gi`; 02_bindings.wgsl `t_gi`): a
+    // seventeenth texture, only where the device takes it (`gi_binding`)
+    if crate::gi_binding() {
+        camera_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 22,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        });
     }
     if omit_enhanced {
         camera_entries.retain(|e| !ENHANCED_CAMERA_TEXTURES.contains(&e.binding));

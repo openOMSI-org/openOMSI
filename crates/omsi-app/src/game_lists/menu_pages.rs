@@ -67,6 +67,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }).filter(|_| s.temporal_upscaling().is_none()),
         pick("anisotropy", "Anisotropic", later),
         switch_row(app, "ray_tracing", "Real-Time Ray Tracing", "Enhanced: the sun's shadows, the ambient occlusion and the reflections traced with hardware ray queries, where the card has them; the heaviest option (takes effect when the game starts the next time)").filter(|_| shown("ray_tracing")),
+        switch_row(app, "rt_gi", "Ray-traced global illumination (experimental)", "With Real-Time Ray Tracing: the light the surfaces round a point send back to it - a sunlit road brightening a wall, a red bus tinting the pavement, the light through the windows filling the saloon; traced at half size and gathered over a few frames, so it can lag or shimmer in motion").filter(|_| shown("rt_gi")),
         switch_row(app, "shadows", "Sun shadows", "Enables/Disables shadows").filter(|_| shown("shadows")),
         pick("shadow_size", "Shadow map", later).filter(|_| shown("shadow_size")),
         switch_row(app, "ssao", "Ambient occlusion", later).filter(|_| shown("ssao")),
@@ -1046,6 +1047,8 @@ fn shown_in_mode(mode: &str, key: &str) -> bool {
         }
         // (the ray-traced picture has its own occlusion)
         "street_light" | "road_glare" => matches!(mode, "enhanced" | "enhanced_plus"),
+        // (the traced global illumination needs the ray tracing on)
+        "rt_gi" => mode == "enhanced_plus",
         "ray_tracing" | "light_shadows" | "cloud_shadows" | "light_glow" | "volumetric_fog" => {
             matches!(mode, "enhanced" | "enhanced_plus")
         }
