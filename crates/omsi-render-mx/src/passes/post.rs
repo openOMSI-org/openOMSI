@@ -38,6 +38,8 @@ impl Renderer {
             m[0],
         );
         m[3] = brighten;
+        let grade =
+            crate::lighting::color_grade(lighting).uniform(crate::lighting::tone_curve_choice());
         let pu = PostUniform {
             // the metering may take a little off a bright picture and add a little to a
             // dark one: a night stays a night, snow stays white
@@ -82,6 +84,9 @@ impl Renderer {
                 }
             },
             e: [shortfall_gain, 0.0, 0.0, 0.0],
+            f: grade[0],
+            g: grade[1],
+            h: grade[2],
         };
         self.queue
             .write_buffer(&self.tone.post_buf, 0, bytemuck::bytes_of(&pu))

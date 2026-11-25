@@ -84,10 +84,8 @@ pub struct AiState {
     pub min_gap: f32,
     pub accept_gap: f32,
     pub reaction: f32,
-    /// Additional personality settings: how long they wait to honk a horn (relative factor),
-    /// how often they can run a yellow light (probability) when they still can technically stop
+    /// Additional personality setting: how long they wait to honk a horn (relative factor).
     pub honk_factor: f32,
-    pub amber_factor: f32,
     /// From the vehicle's origin (the lane position `s`) to its front and rear bumper (m).
     pub front: f32,
     pub rear: f32,
@@ -423,7 +421,6 @@ impl AiState {
             accept_gap: 4.0,
             reaction: 0.7,
             honk_factor: 1.0,
-            amber_factor: 0.03,
             front: 2.5,
             rear: 2.5,
             held: false,

@@ -199,12 +199,13 @@ impl PeopleSim {
         let id = p.ticket_id as usize;
         // (the pack's ticket, or what a plugin made of it)
         let (name, value) = self.ticket_request(&p);
+        // (half the currency's unit, as 0x7e8900 counts the change - not half its
+        // smallest coin, which let a currency without one-cent coins be short changed)
         let tol = self
             .money
             .as_ref()
-            .map(|m| m.smallest_value())
-            .unwrap_or(0.01)
-            / 2.0;
+            .and_then(|m| m.currency.as_ref())
+            .map_or(0.005, |c| c.tolerance());
         let owed = p.paid - p.price;
         // the change on the tray (sub_7e8900): enough of it, too much, too many coins
         let change = |h: &mut Self| -> (bool, bool, bool) {

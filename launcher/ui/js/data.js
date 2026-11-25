@@ -330,9 +330,10 @@ function clockPatch(c, st) {
   }
   if (st?.use_real_date) {
     const year = st.use_real_year ? now.getFullYear() : parseInt(c.date, 10) || now.getFullYear();
-    // (the computer's date is fitted to the map's [years]; a date the player chose is kept,
-    // see `choose`)
-    const d = fitDateToMap(`${String(year).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`, c.map);
+    // (today's day in the duty's year as it is: Omsi.exe's [useActDate] leaves the year
+    // alone, 0x708780, and fitted to the map's [years] a chosen 2021 went back to 2018 and
+    // that year's chrono scenarios were never reached, #3283)
+    const d = `${String(year).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (c.date !== d) patch.date = d;
   }
   return patch;

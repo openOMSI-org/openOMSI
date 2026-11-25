@@ -247,7 +247,7 @@ fn webview_hint() -> String {
             format!(
                 "{base}\n\n{}",
                 tr(
-                    "SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/USER_GUIDE.md."
+                    "SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/TROUBLESHOOTING.md."
                 )
             )
         } else {

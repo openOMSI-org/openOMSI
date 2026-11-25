@@ -45,14 +45,15 @@ menu (the build warns about, and still publishes, a file that is not listed).
 Old addresses (`https://openomsi.org/#/docs/USER_GUIDE`) are sent to their new pages by
 `assets/js/legacy.js`, which the build writes from the document list.
 
-openMapper's own documents are read from its repository at build time (and cached in `.cache/`).
+openMapper's documents are `docs/MAPPER*.md`, written here like the rest. A renamed or merged document
+keeps its old address: `MOVED_DOCS` and `MOVED_PAGES` in `src/config.mjs` write a redirect page for it.
 
 ## Releases and issues
 
-The Download, Releases and Issues pages and the release notes on the home page are not fetched from
-GitHub by the visitor's browser. The build reads them (`src/github.mjs`: releases with their notes
-rendered, the 100 newest open and closed issues) into `assets/data/`, so the pages fill in at once and
-GitHub's request limit or a bad answer from it cannot break them. The page asks GitHub once in the
-background whether a newer release is out; for issues it asks for the current list and falls back to the
-baked one. The workflow rebuilds the site on every release event and daily. The last good answer is cached in
-`.cache/`, which a build without network access uses.
+The Home, Download, Releases and Issues pages are written complete when the site is built
+(`src/github.mjs` reads releases and the 200 newest issues, `src/releases.mjs` turns them into HTML):
+nothing is fetched or drawn when a page opens. `theme.js` marks the visitor's system on `<html>`
+before the first paint, and the style sheet shows that system's download button. `dynamic.js` only
+asks GitHub in the background whether a release or an issue is newer than the build, and redraws
+what changed. The workflow rebuilds the site on every release event and daily. The last good answer
+from GitHub is cached in `.cache/`, which a build without network access uses.

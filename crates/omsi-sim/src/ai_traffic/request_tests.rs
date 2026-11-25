@@ -141,19 +141,38 @@ fn a_car_standing_at_the_line_asks_a_light_of_no_distance() {
     assert!(!asked(&mut t));
 }
 
+/// A light without `[approachdist]` is asked from 10 m before its line, as Omsi.exe's
+/// `[traffic_light]` default (0x7b4214): not by a car still 30 m off.
 #[test]
-fn a_train_asks_a_crossing_without_a_distance_from_its_braking_distance() {
+fn a_light_without_a_distance_is_asked_from_ten_metres() {
+    let f = Fixture::new();
+    let ty = f.ty.clone();
+    for (gap, expect) in [(30.0, false), (15.0, false), (8.0, true)] {
+        let mut t = traffic(&f, road_to_light(120.0));
+        t.lights = vec![program(None)];
+        place_front(&mut t, &ty, LaneKind::Street, 0, gap, 8.0, 0x35);
+        assert_eq!(asked(&mut t), expect, "driving up {gap} m before the line");
+    }
+}
+
+/// A light on the rails is asked as far ahead as the vehicle's path search runs, whatever
+/// its `[approachdist]` (Omsi.exe 0x716970 marks a type-2 path asked unconditionally): 1500 m
+/// for a train, 500 m for a vehicle of `[type]` 0 (0x7d9128). A crossing set to 120 m was
+/// asked only 120 m before the train, and the barriers came down just in front of it (#4028).
+#[test]
+fn a_rail_light_is_asked_as_far_as_the_path_search_runs() {
     let f = Fixture::new();
     let train = vehicle_type(&f, "railcar.ovh", "[type]\n2\n\n");
     let tram = vehicle_type(&f, "tram.ovh", "");
-    for approach in [None, Some(0.0)] {
-        // a train 450 m off asks; a tram there does not, nor a train 750 m off
+    for approach in [None, Some(0.0), Some(120.0)] {
         for (ty, gap, expect) in [
             (&train, 450.0, true),
-            (&tram, 450.0, false),
-            (&train, 750.0, false),
+            (&train, 1400.0, true),
+            (&train, 1600.0, false),
+            (&tram, 450.0, true),
+            (&tram, 700.0, false),
         ] {
-            let mut t = traffic(&f, track_to_crossing(900.0));
+            let mut t = traffic(&f, track_to_crossing(1800.0));
             t.lights = vec![program(approach)];
             place_front(&mut t, ty, LaneKind::Rail, 0, gap, 20.0, 0x77);
             assert_eq!(
@@ -164,15 +183,21 @@ fn a_train_asks_a_crossing_without_a_distance_from_its_braking_distance() {
             );
         }
     }
-    // a distance the program sets counts for the train as for a car
-    let mut t = traffic(&f, track_to_crossing(900.0));
-    t.lights = vec![program(Some(120.0))];
-    place_front(&mut t, &train, LaneKind::Rail, 0, 450.0, 20.0, 0x78);
-    assert!(!asked(&mut t));
-    let mut t = traffic(&f, track_to_crossing(900.0));
-    t.lights = vec![program(Some(120.0))];
-    place_front(&mut t, &train, LaneKind::Rail, 0, 100.0, 20.0, 0x79);
-    assert!(asked(&mut t));
+}
+
+/// How far each `[type]` searches its way (Omsi.exe 0x7d9128).
+#[test]
+fn the_search_range_follows_the_vehicle_type() {
+    let f = Fixture::new();
+    let range = |head: &str| {
+        let ty = vehicle_type(&f, "v.ovh", head);
+        model::ai_search_range(&ty.def)
+    };
+    assert_eq!(range(""), 500.0);
+    assert_eq!(range("[type]\n1\n\n"), 20.0);
+    assert_eq!(range("[type]\n2\n\n"), 1500.0);
+    assert_eq!(range("[type]\n3\n\n"), 5000.0);
+    assert_eq!(range("[type]\n4\n\n"), 1000.0);
 }
 
 #[test]
@@ -273,11 +298,12 @@ fn the_players_train_asks_the_lights_on_every_branch_ahead() {
         t.tick(0.02, Some((p, 0.0, 10.0, 1.4, speed)));
         (t.lights[0].request[0], t.lights[0].request[1])
     };
-    // a train 450 m off asks both branches' lights
+    // a train or a tram 450 m off asks both branches' lights (rail lights, within the
+    // player's 500 m search, 0x7e2574), 600 m off neither
     assert_eq!(run(250.0, true, true, 15.0), (true, true));
-    // a tram there does not, but does 30 m off (the default distance)
-    assert_eq!(run(250.0, true, false, 8.0), (false, false));
-    assert_eq!(run(660.0, true, false, 8.0), (true, true));
+    assert_eq!(run(250.0, true, false, 8.0), (true, true));
+    assert_eq!(run(100.0, true, true, 15.0), (false, false));
+    assert_eq!(run(685.0, true, false, 8.0), (true, true));
     // backing away from the fork it asks nothing
     assert_eq!(run(660.0, true, false, -2.0), (false, false));
 }

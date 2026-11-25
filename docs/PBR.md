@@ -1,103 +1,115 @@
 # PBR materials
 
-openOMSI can draw OMSI content with physically based materials: a normal map for small
-relief, and roughness, metalness and ambient occlusion maps for how a surface reflects
-light. OMSI 2 itself knows nothing of this, so these maps are purely an addition: a bus, a
-map object or a spline without them looks exactly as it always did, and content with them
-still works in the original OMSI 2 (which ignores the extra files).
+openOMSI can draw content with physically based materials: a normal map for fine relief, and
+roughness, metalness and ambient occlusion maps for how a surface reflects light. This page is
+for modders who want to add these maps to buses, objects and splines.
 
-PBR maps are drawn with the **Enhanced** and **Enhanced+** graphics (launcher → Settings →
-Graphics → Graphics), on every platform.
+The maps are an addition. Content without them looks as it always did, and content with them
+still works in OMSI 2, which ignores the extra files. PBR maps are drawn by the **Enhanced** and
+**Enhanced+** renderers on every platform (see [Graphics](GRAPHICS.md)).
 
-## How maps are found
+## Adding maps to a texture
 
-No config file is changed. The maps lie **next to the diffuse texture** and share its name,
-with a suffix, as the common PBR tools (Substance, Blender, Materialize ...) export them. For
-`Texture/bus.dds`:
+No config file changes. Put the maps **beside the diffuse texture**, with the same name plus a
+suffix, as Substance, Blender, Materialize and similar tools export them.
 
-| Map | File names | Notes |
+1. Take the texture the model uses, for example `Texture/bus.dds`.
+2. Export the maps with the same base name and a suffix from the table below, for example
+   `Texture/bus_nn.png` and `Texture/bus_orm.png`.
+3. Start the game with the Enhanced or Enhanced+ renderer.
+
+| Map | Suffixes | Values |
 |---|---|---|
-| Normal | `bus_nn`, `bus_normal`, `bus_nrm`, `bus_normalmap` | tangent space; Direct3D style (green down) by default, add `_gl` for OpenGL style (green up): `bus_nn_gl`, `bus_normal_gl`, `bus_nrm_gl` |
-| Roughness | `bus_rr`, `bus_rough`, `bus_roughness`, `bus_rgh` | white = rough |
-| Glossiness | `bus_gg`, `bus_gloss`, `bus_glossiness` | the inverse of roughness (used when there is no roughness map) |
-| Metalness | `bus_mm`, `bus_metal`, `bus_metallic`, `bus_metalness`, `bus_mtl` | white = metal |
-| Ambient occlusion | `bus_aa`, `bus_ao`, `bus_occlusion`, `bus_ambient_occlusion` | white = open |
-| Packed | `bus_orm`, `bus_arm` | occlusion, roughness, metalness in red, green, blue |
-| Packed | `bus_mra` | metalness, roughness, occlusion in red, green, blue |
-| Packed | `bus_rma` | roughness, metalness, occlusion in red, green, blue |
+| Normal (Direct3D, green down) | `_nn`, `_normal`, `_nrm`, `_normalmap`, `_normal_dx`, `_nn_dx` | Tangent space |
+| Normal (OpenGL, green up) | `_nn_gl`, `_normal_gl`, `_nrm_gl`, `_normalgl`, `_normal_opengl` | Tangent space |
+| Roughness | `_rr`, `_rough`, `_roughness`, `_rgh` | White = rough |
+| Glossiness | `_gg`, `_gloss`, `_glossiness` | Inverse of roughness; used only without a roughness map |
+| Metalness | `_mm`, `_metal`, `_metallic`, `_metalness`, `_mtl` | White = metal |
+| Ambient occlusion | `_aa`, `_ao`, `_occlusion`, `_ambientocclusion`, `_ambient_occlusion` | White = open |
+| Packed ORM | `_orm`, `_arm` | Red occlusion, green roughness, blue metalness |
+| Packed MRA | `_mra` | Red metalness, green roughness, blue occlusion |
+| Packed RMA | `_rma` | Red roughness, green metalness, blue occlusion |
+| Height (parallax) | `_hh`, `_height`, `_heightmap`, `_disp`, `_displacement`, `_parallax` | White = high; a grey picture |
 
-Each can be `.png`, `.tga`, `.dds`, `.bmp`, `.jpg` or `.jpeg`; case does not matter, and the
-suffix may also follow a `-` (`bus-normal`). The short
-suffixes are **doubled letters** (`_nn`, `_rr`, `_mm`, `_aa`, `_gg`) on purpose: OMSI mods
-already use single letters for other things (`_n` is a night map, `_r` and `_m` mean
-anything), so a single letter is never taken for a PBR map. A normal map must also look like
-one (bluish), or it is ignored.
+- File types: `.png`, `.tga`, `.dds`, `.bmp`, `.jpg`, `.jpeg`.
+- Case does not matter. The suffix may also start with `-` instead of `_` (`bus-normal`).
+- The maps may also lie in the same folder of another content root, for example a mod folder that
+  adds maps to a texture of the OMSI 2 installation.
+- A normal map must look like one (bluish). Otherwise it is ignored.
 
-The separate maps are packed into one occlusion/roughness/metalness picture for the GPU.
-PBR maps are kept at up to 4096 px a side and uncompressed (a normal map does not survive DXT1
-compression), so use them where they are seen up close.
+> **Note:** The short suffixes are **doubled letters** (`_nn`, `_rr`, `_mm`, `_aa`, `_gg`). OMSI
+> mods already use single letters for other purposes (`_n` is often a night map), so a single
+> letter is never taken as a PBR map.
+
+### Size and memory
+
+- PBR maps are kept at up to 4096 pixels per side.
+- They are stored uncompressed, because a normal map does not survive DXT1 compression. Use them
+  where they are seen up close.
+- The separate maps are packed into one occlusion/roughness/metalness texture on the GPU.
+
+## Tips
+
+- Export at the diffuse texture's resolution, or half of it.
+- Prefer one packed `_orm` file to three separate maps: one file is read instead of three.
+- Check the green channel of a normal map. If dents look like bumps, add or remove `_gl`.
+- To import a model with PBR materials, see [Importing models](MAPPER_MODELS.md).
+
+## What the maps do
+
+- The **normal map** bends the surface normal. The tangent frame is computed per pixel, so the
+  `.o3d` needs no tangents.
+- **Roughness** sharpens or blurs the reflections of the environment and the sun's highlight.
+- **Metalness** tints the reflection with the diffuse colour and darkens the diffuse part.
+- **Occlusion** darkens the ambient light only.
+- The **height map** gives the surface relief by parallax occlusion mapping: the texture is
+  looked up where the view ray meets the relief, so cobbles, brick joints and tread plates
+  hide what lies behind them as the view moves. The relief is 2.5 cm deep, whatever the
+  texture's scale. It is stored in the alpha of the occlusion/roughness/metalness map (made
+  for it when there is none).
+- A `[matl_envmap]` strength still scales the reflection.
+- Without a roughness map, the diffuse texture's alpha still works as OMSI's reflection mask.
+
+## Materials without maps
+
+Without maps, the material is derived from OMSI's own files:
+
+| OMSI material | Roughness | Reflectance (F0) |
+|---|---|---|
+| Terrain | 0.92 | 3 % |
+| Object with an `.o3d` specular power *p* | ((2 / (p + 2))^½)^½, clamped to 0.4-0.9 | 4 % |
+| Object without specular power | 0.8 | 4 % |
+| Leaves, fences (alpha-tested) | 0.7, no reflection | 4 % |
+| Paint with `[matl_envmap]` | 0.06 (polished) to 0.8 (satin), from the envmap mask's share | Clear coat matching the share; metal only where its own mask says so |
+| Glass (blended pane) | 0.04 | 4-90 %, from the pane's alpha and envmap factor |
+| Map water | 0.06 plus ripples | 2 % |
+
+## Weather on surfaces
+
+| Weather | Effect |
+|---|---|
+| Rain | Porous (rough) surfaces darken as they soak. Upward faces turn glossy, walls much less. Roads with `[moisture]` go dark and smooth, with puddles in low spots. |
+| Snow | Covers upward faces, matt (roughness 0.95). |
+| Thin cloud or high veil | Part of the sun's light comes from the whole sky. Shadows fade and the light goes flat. |
 
 ## The lighting model
 
-Enhanced draws every surface, with or without these maps, with the usual metal/roughness
+The Enhanced renderers light every surface, with or without maps, with the metal/roughness
 model of current engines:
 
-- specular: GGX microfacets, height-correlated Smith visibility, Schlick's Fresnel with F0 =
-  4 % for a dielectric and the diffuse colour for a metal, and the light a rough surface's
-  microfacets pass on to each other given back (multiple scattering, so a rough metal is not
-  darker than its colour);
-- diffuse: Lambert, with only the share the specular reflection leaves it - a surface never
-  sends out more light than falls on it;
-- the sky and the street round a surface reach it through the split sum (a pre-blurred sky
-  probe and an analytic DFG term), darkened in creases by the ambient occlusion (specular
-  occlusion) and, under a normal map, by the horizon of the real surface;
-- roughness is widened where the normal turns within a pixel (specular antialiasing), so
-  fine relief and curved, polished bodies do not sparkle or crawl;
-- textures are read as sRGB (linear light in the shader); the PBR maps are read as data.
+- **Specular:** GGX microfacets, height-correlated Smith visibility and Schlick's Fresnel. F0 is
+  4 % for a dielectric and the diffuse colour for a metal. Multiple scattering is compensated,
+  so a rough metal is not darker than its colour.
+- **Diffuse:** Lambert, with only the energy the specular reflection leaves. A surface never
+  sends out more light than it receives.
+- **Ambient:** the sky and the street reach a surface through the split-sum approximation (a
+  pre-blurred sky probe and an analytic DFG term). Ambient occlusion and, under a normal map, the
+  horizon of the real surface darken creases.
+- **Specular antialiasing:** roughness is widened where the normal changes within a pixel, so
+  fine relief and polished curves do not sparkle.
+- **Colour:** textures are read as sRGB. PBR maps are read as linear data.
 
-With **Enhanced+** (ray tracing on), the reflections are traced: every surface that reflects
-noticeably sends a ray per pixel along its GGX lobe, a mirror-smooth one along the mirror
-direction, and the rays are gathered over frames and neighbouring pixels. A rough surface
-gets a blurred reflection of the real street, a pane, a chrome rail or a wet road a sharp
-one, and each only as strongly as its Fresnel term says.
-
-## OMSI materials without maps
-
-Without maps, the material is derived from what OMSI's own files say:
-
-| OMSI material | Roughness | F0 / metal |
-|---|---|---|
-| Terrain | 0.92 | 3 % |
-| Plain object with an o3d specular power *p* | ((2 / (p + 2))^½)^½, 0.4 .. 0.9 | 4 % |
-| Plain object without one | 0.8 | 4 % |
-| Leaves, fences (alpha-tested) | 0.7, no reflection | 4 % |
-| Paint with `[matl_envmap]` | from the share the envmap mask lays over it: a polished coat (0.06) at the stock bodies' share, satin down to 0.8 where little is mirrored | a clear coat whose average reflectance matches the share; metal only where a mask of its own says so |
-| Glass (blended pane) | 0.04 | from the pane's alpha and envmap factor (4 .. 90 %) |
-| Map water | 0.06 + ripples | 2 % |
-
-Weather changes the surface:
-
-- **Rain**: water stands on what faces up. Porous surfaces (rough ones: soil, plaster,
-  stone) darken as they soak (Lekner and Dorf); upward faces turn glossy, walls much less
-  (Lagarde). Roads with `[moisture]` go dark and smooth, with puddles in their low spots.
-- **Snow** covers upward faces, matt (roughness 0.95).
-- **Clouds**: under a thin deck or a veil of high cloud part of the sun's light comes from
-  the whole sky instead of as a beam: shadows fade and the light goes flat.
-
-## How they are drawn
-
-- The normal map bends the surface normal (a tangent frame is derived per pixel, so no
-  tangents are needed in the `.o3d` model).
-- Roughness sharpens or blurs the reflections of the environment and the sun's highlight;
-  metalness tints the reflection with the diffuse colour and darkens the diffuse part.
-- Occlusion darkens the ambient light only.
-- An OMSI `[matl_envmap]` strength still scales the reflection, and the diffuse texture's
-  alpha still works as OMSI's reflection mask where no roughness map is given.
-
-## Tips for modders
-
-- Export at the diffuse texture's resolution or half of it.
-- Prefer one packed `_orm` file over three single maps: one file read instead of three.
-- Check the green channel of a normal map: dents that look like bumps mean it needs `_gl`
-  (or the other way round).
-- Source: `crates/omsi-texture/src/pbr.rs`, `crates/omsi-render/src/shaders/enhanced/`.
+With **Enhanced+** (ray tracing on), reflections are traced. Each noticeably reflective pixel
+sends a ray along its GGX lobe, and the rays are gathered over frames and neighbouring pixels.
+A rough surface gets a blurred reflection of the real street; glass, chrome or a wet road gets a
+sharp one, each as strong as its Fresnel term says.

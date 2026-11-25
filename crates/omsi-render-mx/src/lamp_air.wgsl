@@ -32,6 +32,40 @@ fn headlamp(t: vec3<f32>, dir: vec3<f32>, low: bool) -> f32 {
     return wide * up + 6.0 * hot;
 }
 
+// The same lamp's light on the surfaces it reaches (`lamp_light`): a low beam's vertical
+// profile, its strongest light just under the cut-off and falling steeply towards the
+// foreground, so that with the distance's cube the road runs from some twice the 10 m
+// value three metres ahead to a sixth of it at 40 m, as a real beam's isolux plot does.
+// (The light in the air keeps `headlamp`'s even sheet: this profile, integrated along a
+// view ray through a fog, drew rings round the beams' foot.)
+const HEADLAMP_PEAK: f32 = 2.5;
+fn headlamp_road(t: vec3<f32>, dir: vec3<f32>, low: bool) -> f32 {
+    let fwd = normalize(dir.xy + vec2<f32>(1e-6, 0.0));
+    let ahead = dot(t.xy, fwd);
+    if (ahead <= 0.0) {
+        return 0.0;
+    }
+    let across = abs(t.x * fwd.y - t.y * fwd.x) / ahead;
+    let wide = 0.12 * smoothstep(1.0, 0.45, across) + 0.88 * exp(-across * across / 0.06);
+    let rise = t.z / max(length(t.xy), 1e-3);
+    let tilt = dir.z / max(length(dir.xy), 1e-3);
+    // (the tangent of the angle under that horizon)
+    let drop = (tilt - rise) / max(1.0 + rise * tilt, 1e-3);
+    // A low beam's vertical profile: its strongest light just under the cut-off (the
+    // long-range zone a degree or two down), falling steeply towards the foreground - with
+    // the distance's cube on the road the illuminance then runs from some twice the 10 m
+    // value three metres ahead to a sixth of it at 40 m, as a real beam's isolux plot does,
+    // instead of an even sheet from the bumper on or a hot pool at the bumper
+    var up = HEADLAMP_PEAK / (1.0 + pow(abs(drop) / 0.028, 2.8));
+    if (low) {
+        up = up * smoothstep(-0.012, 0.025, drop);
+        return wide * up;
+    }
+    // a full beam reaches far: a narrow, bright core along the lamp's horizon
+    let hot = exp(-across * across / 0.012 - drop * drop / 0.0004);
+    return wide * up + 6.0 * hot;
+}
+
 // The lamps' light the weather's fog scatters towards the camera (radiance, not
 // pre-exposed): single scattering along the view ray from `start` to `len` metres in
 // direction `d` - the glow round a street lamp in the mist, its cone under it, a bus's
@@ -112,7 +146,10 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32, 
                 if (tc < t || tc > t_out) {
                     continue;
                 }
-                let range = l.extra.w;
+                let downlight = l.extra.z == 0.0 && l.dir.z < -0.5;
+                // Keep the atmospheric bloom close to the housing, independent
+                // of the longer range used to illuminate the road.
+                let range = select(l.extra.w, min(l.extra.w, 7.0), downlight);
                 let h = length(to_l - d * t0);
                 if (h >= range) {
                     continue;
@@ -128,13 +165,25 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32, 
                 let s0 = select(sigma0, fog_sigma, beam_lamp);
                 var core = l.extra.y;
                 if (core <= 0.0) {
-                    core = range * 0.125;
+                    core = l.extra.w * 0.125;
                 }
                 // (inside its core a lamp is as bright as at the core's edge)
                 let hh = max(h, select(core * 0.7, 0.4, l.extra.z != 0.0));
                 let w = sqrt(range * range - h * h);
-                let ta = max(start, t0 - w);
-                let tb = min(end, t0 + w);
+                var ta = max(start, t0 - w);
+                var tb = min(end, t0 + w);
+                if (downlight) {
+                    // A downward fixture's housing blocks the upper hemisphere.
+                    // Limit the interval before quadrature so its nodes never
+                    // project a broad glow over the fixture.
+                    if (abs(d.z) < 1e-5) {
+                        if (c.z >= l.pos.z) { continue; }
+                    } else {
+                        let plane = (l.pos.z - c.z) / d.z;
+                        if (d.z > 0.0) { tb = min(tb, plane); }
+                        else { ta = max(ta, plane); }
+                    }
+                }
                 if (tb <= ta) {
                     continue;
                 }
@@ -148,10 +197,13 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32, 
                     // along the way put the few next to the lamp, where nearly all of its
                     // light is, a metre or more apart: the pixels' staggered steps came
                     // out as a coarse checker in the fog round every headlamp.)
+                    // A headlamp's narrow cutoff needs finer angular integration.
+                    // At a fixed phase, 16 samples turn that cutoff into rings.
+                    let steps = select(16u, 64u, l.extra.z != 0.0);
                     let pa = atan((ta - t0) / hh);
-                    let dphi = (atan((tb - t0) / hh) - pa) / 16.0;
+                    let dphi = (atan((tb - t0) / hh) - pa) / f32(steps);
                     let tile_k = beam_tile(li, l);
-                    for (var q = 0u; q < 16u; q = q + 1u) {
+                    for (var q = 0u; q < steps; q = q + 1u) {
                         let tq = t0 + hh * tan(pa + (f32(q) + jitter) * dphi);
                         let to = l.pos.xyz - (c + d * tq);
                         let ld = to * inverseSqrt(max(dot(to, to), 1e-6));
@@ -179,11 +231,15 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32, 
                     for (var q = 0u; q < 5u; q = q + 1u) {
                         let phi = mid + half * gx[q];
                         let tq = t0 + hh * tan(phi);
-                        let ld = normalize(l.pos.xyz - (c + d * tq));
-                        var beam = 1.0;
+                        let to_lamp = l.pos.xyz - (c + d * tq);
+                        let ld = normalize(to_lamp);
+                        // Fade towards the light's range. Cutting off a constant
+                        // contribution at the range draws a sphere in the fog.
+                        let range_fraction = dot(to_lamp, to_lamp) / (range * range);
+                        var beam = 1.0 - smoothstep(0.25, 1.0, range_fraction);
                         if (l.dir.z < -0.5) {
                             // (a lamp in a housing: see `lamp_light`)
-                            beam = 0.05 + 0.95 * smoothstep(-0.1, 0.3, ld.z);
+                            beam *= smoothstep(0.0, 0.35, ld.z);
                         }
                         // (a lamp with a shadow map: what stands between it and the air
                         // keeps its light out of that air, as the headlamps' beams)
@@ -200,7 +256,8 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32, 
                 let sigma = s0 * exp(-enh.fog.y * max(xc.z - enh.fog.z, 0.0));
                 let dl = distance(xc, l.pos.xyz);
                 let atten = exp(-layer_depth(s0, enh.fog.y, c.z - enh.fog.z, xc.z - enh.fog.z, tc - start) - sigma * dl);
-                sum = sum + l.color.rgb * (l.color.w * strength * acc * half / hh * sigma * atten);
+                let scatter = select(1.0, 0.25, downlight);
+                sum = sum + l.color.rgb * (l.color.w * strength * acc * half / hh * sigma * atten * scatter);
             }
         }
         t = t_out;

@@ -13,6 +13,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     if (terrain) {
         duv = in.uv * material.extra.z;
     }
+    // a height map (in the PBR set's ORM alpha, `foo_height`): parallax occlusion mapping
+    if (!LEAN && material.pbr.x > 3.5 && !terrain) {
+        duv = parallax_uv(duv, in.world, safe_normal(in.normal), normalize(eye - in.world));
+    }
     // (without the [texcoordtransX/Y] offset: the transmap, night map and light map stay
     // in place, see fs_main)
     let buv = tex_address(in.uv - in.params.zw);
@@ -278,7 +282,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // 12 % at the normal, and three quarters of that, left the windows showing the
         // saloon where the vanilla picture shows the street.
         let share = clamp(alpha * min(material.params2.y, 1.0), 0.0, 1.0) * camera.cam_pos.w;
-        f0 = vec3<f32>(select(clamp((share - 1.0 / 21.0) * 21.0 / 20.0, 0.04, 0.9), 0.04, probe_only));
+        f0 = vec3<f32>(clamp((share - 1.0 / 21.0) * 21.0 / 20.0, 0.04, select(0.9, 0.12, probe_only)));
     } else if (reflective_env) {
         // Paint reflects its few per cent through a smooth clear coat; much more than a few
         // per cent is polished metal - but only where the model says so with a mask of its
@@ -342,10 +346,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // `foo_orm`: see omsi_texture::pbr): the normal map bends the normal, the packed map
     // gives the occlusion, roughness and metalness in place of the guesses above
     var pbr_ao = 1.0;
-    if (!LEAN && material.pbr.x > 0.5 && !terrain) {
+    if (!LEAN && pbr_normal_flag() > 0.5 && !terrain) {
         var tn = textureSampleBias(t_pbr_normal, s_diffuse, duv, camera.lod.x).xyz * 2.0 - vec3<f32>(1.0);
         // (an OpenGL-style map, green up: `_gl` in its name)
-        if (material.pbr.x > 1.5) {
+        if (pbr_normal_flag() > 1.5) {
             tn.y = -tn.y;
         }
         n = perturb_normal(n, in.world, duv, tn);
@@ -485,8 +489,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     }
     let env_share = select(1.0, camera.cam_pos.w, reflective_env && !glass);
     var sf: Surface;
-    sf.albedo = albedo * (1.0 - metal);
-    ambient_albedo = ambient_albedo * (1.0 - metal);
+    // Translucent panes transmit light through their alpha blend. Lighting their full tint
+    // as diffuse paint adds a grey veil, especially where a bus models both faces of the
+    // glass. Fade the diffuse response with opacity so solid markings retain their colour.
+    let diffuse_share = (1.0 - metal) * select(1.0, alpha, glass);
+    sf.albedo = albedo * diffuse_share;
+    ambient_albedo = ambient_albedo * diffuse_share;
     sf.f0 = f0;
     sf.rough = rough;
     let nv = clamp(mix(face_v, dot(n, v), face_w), 1e-4, 1.0);
@@ -547,8 +555,13 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             // light having passed the leaf's colour twice.
             let through = pow(clamp(dot(-v, s), 0.0, 1.0), 3.0);
             let leaf = sf.albedo / PI;
-            direct = e_sun * (leaf * (0.42 + 0.3 * max(nl, 0.0) + 0.08 * max(-nl, 0.0))
-                + leaf * min(sf.albedo * 2.2, vec3<f32>(1.0)) * through * 0.45);
+            let crown_light = leaf * (0.42 + 0.3 * max(nl, 0.0) + 0.08 * max(-nl, 0.0))
+                + leaf * min(sf.albedo * 2.2, vec3<f32>(1.0)) * through * 0.45;
+            // A cut-out whose normal lies level is no crown: a fence, a bridge's railing,
+            // mapped once per side with the normals turned round. Its normal says which way
+            // it faces and the sun lights that side alone, as Omsi.exe's N.L does - lit from
+            // every side, the side turned away from the sun glowed in it (#2687).
+            direct = e_sun * mix(leaf * max(nl, 0.0), crown_light, crown_share(n));
         } else if (nl > 0.0) {
             // the sun is a disc, not a point: no highlight sharper than it
             let a = max(rough * rough, 0.012);
@@ -581,7 +594,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             }
             let leaf = sf.albedo / PI;
             if (thin) {
-                direct = direct + em * ms * leaf * (0.42 + 0.3 * max(nlm, 0.0));
+                direct = direct + em * ms * leaf * mix(max(nlm, 0.0), 0.42 + 0.3 * max(nlm, 0.0), crown_share(n));
             } else {
                 direct = direct + em * ms * nlm * leaf;
             }
@@ -826,7 +839,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     if (in_cab > 0.5 && camera.lamp_atlas.w > 0.5) {
         cabin_vis = cabin_visibility(in.world, n);
     }
-    let cabin_light = interior_lamps(in.world, n, in.params2.z) * cabin_vis;
+    let cabin_light = interior_lamps_area(in.world, n, in.params2.z) * cabin_vis;
     let cabin = sf_lit.albedo * cabin_light * mix(1.0, ao, 0.85);
     var rgb = (direct + ambient + lamps) * pre + cabin;
     // A material's own emissive colour ([matl_allcolor], an .x's emissive) is the texture at

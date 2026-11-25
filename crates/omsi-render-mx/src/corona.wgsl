@@ -36,7 +36,8 @@ struct CoronaOut {
     // 1 for what is drawn at the scene's level (a precipitation streak, lit fog: a cone or
     // a halo), 0 for a light's glare
     @location(2) kind: f32,
-    // 1 when the light is drawn with a star (`[light_enh_2]` parameter bit 1)
+    // 1 for a vehicle's own outside lamp (a headlamp, a tail or brake lamp, an indicator:
+    // parameter bit 16, `Corona::vehicle_lamp`) in the Enhanced picture
     @location(3) star: f32,
     // 1 for a light's cone in the fog (OMSI's fan, see below)
     @location(4) beam: f32,
@@ -58,22 +59,35 @@ const GLARE_TAIL: f32 = 0.4;
 
 // How many times its sprite a lamp's quad is drawn: `GLARE_K` with *Glow of lights* on (enh.led.z),
 // and in mist, fog and rain (which have a halo of their own, in the bitmap) only the sprite.
-fn glare_scale() -> f32 {
+fn glare_scale(compact: bool) -> f32 {
     let wet = clamp(enh.fog.x * 400.0 + enh.weather.z * 0.7, 0.0, 1.0);
-    return select(1.0, GLARE_K, enh.led.z > 0.5 && wet < 1.0);
+    return select(1.0, GLARE_K, !compact && enh.led.z > 0.5 && wet < 1.0);
 }
+
+const VEHICLE_LAMP: u32 = 16u;
+// The largest a vehicle lamp's glow is drawn in the Enhanced picture (m, its radius). A
+// car's `[light_enh_2]` sizes are made for Omsi.exe's flat sprites, which it draws dim -
+// half a metre to a metre and more for a tail lamp. Drawn as bright as a lamp is in the
+// high-range picture, at that size every car's lamps were balls of light wider than its
+// bumper. A lamp's lens is some ten to twenty centimetres; its glare is the glow pass's.
+const VEHICLE_LAMP_MAX: f32 = 0.22;
+// How much of a directional lamp's light still shows from the side, outside its cone
+// (the lens and the reflector catch it): a headlamp seen from the pavement is a lit lamp,
+// not a dark one that snaps on as the eye crosses its cone's edge.
+const SIDE_GLOW: f32 = 0.07;
 
 @vertex
 fn vs_main(in: CoronaIn) -> CoronaOut {
-    return corona_vertex(in, 1.0);
+    return corona_vertex(in, 1.0, false);
 }
 
 @vertex
 fn vs_enhanced(in: CoronaIn) -> CoronaOut {
-    return corona_vertex(in, glare_scale());
+    let compact = (u32(in.extra.z + 0.5) & VEHICLE_LAMP) != 0u;
+    return corona_vertex(in, glare_scale(compact), true);
 }
 
-fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
+fn corona_vertex(in: CoronaIn, glare: f32, enhanced: bool) -> CoronaOut {
     var out: CoronaOut;
     let corners = array<vec2<f32>, 6>(vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let c = corners[in.vid % 6u];
@@ -217,8 +231,16 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
         let ang = acos(clamp(dot(normalize(in.dir.xyz), view_dir), -1.0, 1.0));
         let outer = acos(clamp(in.dir.w, -1.0, 1.0));
         let inner = select(0.0, acos(clamp(in.extra.x, -1.0, 1.0)), in.extra.x >= -1.0);
-        brightness = brightness * clamp((outer - ang) / max(outer - inner, 0.0001), 0.0, 1.0);
+        let k = clamp((outer - ang) / max(outer - inner, 0.0001), 0.0, 1.0);
+        if (enhanced) {
+            // (smoothly into the cone, and a trace of it outside, in front of the lamp)
+            let front = clamp(1.0 - (ang - outer) / 0.6, 0.0, 1.0) * select(0.0, 1.0, ang < 1.65);
+            brightness = brightness * max(k * k * (3.0 - 2.0 * k), SIDE_GLOW * front);
+        } else {
+            brightness = brightness * k;
+        }
     }
+    let compact = enhanced && (u32(in.extra.z + 0.5) & VEHICLE_LAMP) != 0u && !streak && !flake;
     // the light that reaches the eye through the fog: Beer-Lambert's exp(-density x
     // distance), the same law the scene's own fog follows (`shader.wgsl`). Left out, the
     // street lamps and signals shone at full strength to the end of the view in a fog that
@@ -259,7 +281,18 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
     // 0.9 is measured against Omsi.exe: at the size the game files ask for, every glow reads
     // a shade too wide beside the original, which draws the sprite a little inside the
     // diameter its `size` names. (Streaks keep their size: they are rain, not a light.)
-    let size = select(max(in.size * grow, dist * 0.002) * 0.9 * select(glare, 1.0, flake), in.size, streak);
+    var own = in.size * grow;
+    if (compact) {
+        own = min(own, VEHICLE_LAMP_MAX);
+    }
+    // (Enhanced: a lamp smaller on the screen than the distance floor keeps its light, not
+    // its brightness - spread over the floor's sprite it is dimmer, as a far lamp is a
+    // fainter point, instead of every far car's lamps reading as large as near ones)
+    if (enhanced && !streak && !flake && own < dist * 0.002) {
+        let q = own / (dist * 0.002);
+        brightness = brightness * max(q * q, 0.18);
+    }
+    let size = select(max(own, dist * 0.002) * 0.9 * select(glare, 1.0, flake), in.size, streak);
     let stretch = select(vec2<f32>(1.0, 1.0), vec2<f32>(0.06, 4.0), streak);
     var upv = up;
     if (streak) {
@@ -290,7 +323,7 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
     out.color = vec4<f32>(in.color.rgb, brightness);
     out.kind = select(0.0, 1.0, streak);
     out.wpos = vec4<f32>(in.pos, select(select(0.0, 2.0, flake), 1.0, streak));
-    out.star = 0.0;
+    out.star = select(0.0, 1.0, compact);
     out.beam = 0.0;
     out.cone = vec2<f32>(0.0, 0.0);
     // (not `<= 0.001`: a NaN brightness is not smaller, and Direct3D drew it as a black
@@ -301,24 +334,44 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
     return out;
 }
 
-// The sprite's picture at `uv`, interpolated between its texels with a quintic ease instead
-// of linearly. The pictures are small (light_cone.bmp is 64 x 64) and a lamp's sprite or a
-// fog cone spans hundreds of pixels: a linear blend between texels has a kink at every texel
-// line, and a steep gradient - the cone's bright axis, a glow's rim - shows them as a stair
-// of squares along its edge, in the light of a lamp or a headlight's beam. The eased blend
-// is smooth to the second order and costs the same single fetch.
+// Reconstruct the original bitmap with a cubic B-spline when magnified.
+// Pair adjacent cubic weights so hardware bilinear sampling handles all 16 taps
+// with four reads. Use the original mipmapped sample as the sprite gets smaller.
 fn soft_picture(uv: vec2<f32>) -> vec4<f32> {
     let dims = vec2<f32>(textureDimensions(t_corona));
+    let dx = dpdx(uv);
+    let dy = dpdy(uv);
+    let footprint = max(length(dx * dims), length(dy * dims));
+    if (footprint >= 1.0) {
+        return textureSampleGrad(t_corona, s_corona, uv, dx, dy);
+    }
     let p = uv * dims - vec2<f32>(0.5);
     let i = floor(p);
     let f = p - i;
-    let e = f * f * f * (f * (f * 6.0 - vec2<f32>(15.0)) + vec2<f32>(10.0));
-    // (the level of detail from the true coordinates: the eased ones run slower and faster)
-    return textureSampleGrad(t_corona, s_corona, (i + e + vec2<f32>(0.5)) / dims, dpdx(uv), dpdy(uv));
+    let g = 1.0 - f;
+    let w0 = g * g * g / 6.0;
+    let w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;
+    let w2 = (4.0 - 6.0 * g * g + 3.0 * g * g * g) / 6.0;
+    let w3 = f * f * f / 6.0;
+    let lo_weight = w0 + w1;
+    let hi_weight = w2 + w3;
+    let lo = (i - 0.5 + w1 / lo_weight) / dims;
+    let hi = (i + 1.5 + w3 / hi_weight) / dims;
+    let top = mix(
+        textureSampleLevel(t_corona, s_corona, lo, 0.0),
+        textureSampleLevel(t_corona, s_corona, vec2<f32>(hi.x, lo.y), 0.0),
+        hi_weight.x);
+    let bottom = mix(
+        textureSampleLevel(t_corona, s_corona, vec2<f32>(lo.x, hi.y), 0.0),
+        textureSampleLevel(t_corona, s_corona, hi, 0.0),
+        hi_weight.x);
+    let cubic = mix(top, bottom, hi_weight.y);
+    let filtered = textureSampleGrad(t_corona, s_corona, uv, dx, dy);
+    return mix(cubic, filtered, smoothstep(0.5, 1.0, footprint));
 }
 
 // The sprite's light: the round texture (in its own colours), and for a star light four thin rays across it.
-fn corona_shape(in: CoronaOut) -> vec3<f32> {
+fn corona_shape(in: CoronaOut, enhanced: bool) -> vec3<f32> {
     // (the sprite keeps the bitmap's own colours, modulated by the light's colour)
     // Read the right way up. `in.uv` is built the way the HUD's is (overlay.wgsl), where
     // v = 0 is the picture's *first*, topmost row; but a sprite's corners are placed by its
@@ -343,14 +396,18 @@ fn corona_shape(in: CoronaOut) -> vec3<f32> {
     let tb = soft_picture(fan_uv).r;
     if (in.beam > 0.5) {
         let inside = select(0.0, 1.0, r <= 1.0 && phi <= in.cone.y);
-        return vec3<f32>(tb * inside);
+        // Fade to zero before the fan reaches the edge of its mesh.
+        let radial = 1.0 - smoothstep(0.7, 1.0, r);
+        let angular = 1.0 - smoothstep(in.cone.y * 0.82, max(in.cone.y, 1e-4), phi);
+        let coverage = select(inside, radial * angular, enhanced);
+        return vec3<f32>(tb * coverage);
     }
     return t;
 }
 
 @fragment
 fn fs_main(in: CoronaOut) -> @location(0) vec4<f32> {
-    var shape = corona_shape(in);
+    var shape = corona_shape(in, false);
     if (in.kind < 0.5 && in.beam < 0.5) {
         // A lamp's glare ends softly at its sprite's edge whatever its bitmap does there: a
         // glow picture whose border is not quite black (a model's own, some a few levels
@@ -371,24 +428,35 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
     if (in.wpos.w > 0.5) {
         let to_eye = normalize(camera.cam_pos.xyz - in.wpos.xyz);
         let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);
-        return vec4<f32>(in.color.rgb * corona_shape(in) * in.color.a * l * enh.exposure.x, 1.0);
+        return vec4<f32>(in.color.rgb * corona_shape(in, false) * in.color.a * l * enh.exposure.x, 1.0);
     }
     // (a fog cone is lit fog, not glare: it keeps the scene's level too)
     let scale = select(enh.exposure.w, enh.exposure.y, in.kind > 0.5);
     // (a lamp's quad is `GLARE_K` times its sprite: the sprite's own coordinates are these
     // stretched out from the middle, and the rest of the quad holds the glare)
     let lamp = in.kind < 0.5 && in.beam < 0.5;
+    let compact = in.star > 0.5;
+    let glare = glare_scale(compact);
     var qin = in;
     if (lamp) {
-        qin.uv = (in.uv - vec2<f32>(0.5)) * glare_scale() + vec2<f32>(0.5);
+        qin.uv = (in.uv - vec2<f32>(0.5)) * glare + vec2<f32>(0.5);
     }
-    var shape = corona_shape(qin);
+    var shape = corona_shape(qin, true);
     // (taken here, in uniform control flow: how much of the sprite one pixel spans)
     let r = length(qin.uv - vec2<f32>(0.5)) * 2.0;
     let px = fwidth(r);
+    if (in.kind > 0.5 && in.beam < 0.5) {
+        // This is the pulled-forward fog halo. Compress just its additive light
+        // so the corona core and the volume can still show through it.
+        let radius = 2.0 * length(in.uv - vec2<f32>(0.5));
+        let edge = 1.0 - smoothstep(0.6, 1.0, radius);
+        let light = in.color.rgb * shape * in.color.a * scale * edge;
+        let peak = max(light.r, max(light.g, light.b));
+        return vec4<f32>(light * (0.16 / (0.28 + peak)), 1.0);
+    }
     var tail = 0.0;
     // (only with the glow on: off, a lamp is drawn exactly as it was before the option)
-    if (lamp && glare_scale() > 1.0) {
+    if (lamp && glare > 1.0) {
         // The glare of a lens (and of an eye) round a bright source: a long tail falling as the
         // cube of the distance (the near term of the CIE's glare function, 10 / theta^3), from
         // the sprite's rim out to the quad's edge, where it is let go. Mist, fog and rain
@@ -421,7 +489,14 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // takes the core's HDR peak for the halo)
         let halo = vec3<f32>(tail) * max(lit, vec3<f32>(0.25)) * in.color.a * scale;
         let soft = vec3<f32>(0.9) * (vec3<f32>(1.0) - exp(-halo / vec3<f32>(0.9)));
-        return vec4<f32>(in.color.rgb * (shape * in.color.a * scale + soft), 1.0);
+        var light = in.color.rgb * (shape * in.color.a * scale + soft);
+        if (compact) {
+            // (a vehicle lamp's glow held to a few times white: bright enough that the glow
+            // pass gives it a small halo, not so bright that a tail lamp floods the screen)
+            let peak = max(light.r, max(light.g, light.b));
+            light = light * (2.5 / max(peak, 2.5));
+        }
+        return vec4<f32>(light, 1.0);
     }
     return vec4<f32>(in.color.rgb * shape * in.color.a * scale, 1.0);
 }

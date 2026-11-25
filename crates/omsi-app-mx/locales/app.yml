@@ -7787,8 +7787,8 @@ _version: 2
   en: "Its log is in the openOMSI data folder (launcher.log); Microsoft Edge WebView2 {version} is installed."
 "The launcher's window needs Microsoft Edge WebView2 (part of Windows 10 and 11; for older systems: https://developer.microsoft.com/microsoft-edge/webview2/).":
   en: "The launcher's window needs Microsoft Edge WebView2 (part of Windows 10 and 11; for older systems: https://developer.microsoft.com/microsoft-edge/webview2/)."
-"SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/USER_GUIDE.md.":
-  en: "SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/USER_GUIDE.md."
+"SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/TROUBLESHOOTING.md.":
+  en: "SteamOS does not include it. In Desktop Mode, in Konsole: sudo steamos-readonly disable, then sudo pacman -S webkit2gtk-4.1, then sudo steamos-readonly enable (a SteamOS update can remove it again). See docs/TROUBLESHOOTING.md."
 "this code was made by a game with LAN protocol {}, this one speaks {PROTOCOL} - both players need the same version":
   en: "this code was made by a game with LAN protocol {}, this one speaks {PROTOCOL} - both players need the same version"
 "the number {t} is not a port (1 to 65535)":

@@ -26,8 +26,9 @@ pub(super) fn is_script_block_header(line: &str) -> bool {
     else {
         return false;
     };
-    let body = body.trim().to_ascii_lowercase();
-    matches!(body.as_str(), "init" | "frame" | "frame_ai")
+    // (case-sensitive, as `compile_file` reads headers)
+    let body = body.trim();
+    matches!(body, "init" | "frame" | "frame_ai")
         || body.starts_with("macro:")
         || body.starts_with("trigger:")
 }

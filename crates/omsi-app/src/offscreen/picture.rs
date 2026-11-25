@@ -57,7 +57,12 @@ impl Offscreen<'_> {
         self.settle_scenery(&clock, &daylight);
         self.final_lights(&daylight, &lighting);
         self.final_hud(&clock);
-        checks::road_photo(&mut self.renderer, &mut self.scene, self.traffic.as_ref(), &lighting);
+        checks::road_photo(
+            &mut self.renderer,
+            &mut self.scene,
+            self.traffic.as_ref(),
+            &lighting,
+        );
         self.bench(&lighting);
         self.final_textures(&lighting)?;
         self.final_render(&lighting)
@@ -65,7 +70,10 @@ impl Offscreen<'_> {
 
     /// The street lamps, the lit windows and the lighting at `clock` (the weather the
     /// physical model has then).
-    fn final_lighting(&mut self, clock: &omsi_sim::SimClock) -> (omsi_sim::Daylight, omsi_render::Lighting) {
+    fn final_lighting(
+        &mut self,
+        clock: &omsi_sim::SimClock,
+    ) -> (omsi_sim::Daylight, omsi_render::Lighting) {
         let (args, service_seconds) = (self.args, self.service_seconds);
         let Self {
             ref world,
@@ -84,7 +92,11 @@ impl Offscreen<'_> {
         let daylight = omsi_sim::Daylight::compute(clock, envir.as_ref());
         steps::world_lamps(world, renderer, scene, clock, &daylight, true, true);
         // (the physical model at the map's own place and the picture's moment)
-        *weather = sky.model.as_mut().map(|m| m.refresh(clock)).unwrap_or(std::mem::take(weather));
+        *weather = sky
+            .model
+            .as_mut()
+            .map(|m| m.refresh(clock))
+            .unwrap_or(std::mem::take(weather));
         // (the roads as wet as the run left them: a run starts with them in the state this
         // weather would leave them; OMSI_WETNESS in their place)
         // the player's vehicle has moved into `player_ref` by now (after --drive): without
@@ -106,20 +118,35 @@ impl Offscreen<'_> {
         );
         // OMSI_CONDENSATION=<minutes>,<people>[,engine 0/1]: the cabin air and the condensation
         // on the player's glass after that long with that many aboard
-        if let (Some(spec), Some(p)) = (omsi_cfg::flags::OMSI_CONDENSATION.var(), player_ref.as_ref().or(player.as_ref())) {
-            let mut it = spec.split(',').map(|x| x.trim().parse::<f32>().unwrap_or(0.0));
-            let (minutes, people, engine) = (it.next().unwrap_or(15.0), it.next().unwrap_or(30.0) as usize, it.next().unwrap_or(1.0) > 0.5);
+        if let (Some(spec), Some(p)) = (
+            omsi_cfg::flags::OMSI_CONDENSATION.var(),
+            player_ref.as_ref().or(player.as_ref()),
+        ) {
+            let mut it = spec
+                .split(',')
+                .map(|x| x.trim().parse::<f32>().unwrap_or(0.0));
+            let (minutes, people, engine) = (
+                it.next().unwrap_or(15.0),
+                it.next().unwrap_or(30.0) as usize,
+                it.next().unwrap_or(1.0) > 0.5,
+            );
             let mut ci = crate::condensation::inputs_for(&p.vehicle, weather, people, 0);
             ci.engine = engine;
             let mut cabin = crate::condensation::CabinAir::new();
             for _ in 0..(minutes * 60.0) as usize {
                 cabin.step(1.0, &ci);
             }
-            log::info!("condensation after {minutes} min, {people} aboard: {cabin:?} -> {:?}", cabin.appearance());
+            log::info!(
+                "condensation after {minutes} min, {people} aboard: {cabin:?} -> {:?}",
+                cabin.appearance()
+            );
             lighting.condensation = cabin.appearance();
         }
         // OMSI_GLASS_WIND=<m/s>: the rain on the glass as the bus would meet it at that speed
-        if let (Some(v), Some(p)) = (omsi_cfg::flags::OMSI_GLASS_WIND.parse::<f32>(), player_ref.as_ref().or(player.as_ref())) {
+        if let (Some(v), Some(p)) = (
+            omsi_cfg::flags::OMSI_GLASS_WIND.parse::<f32>(),
+            player_ref.as_ref().or(player.as_ref()),
+        ) {
             let h = p.vehicle.heading.to_radians();
             lighting.glass_wind = glam::Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * v;
         }
@@ -166,7 +193,7 @@ impl Offscreen<'_> {
                     scene,
                     dt,
                     camera.position,
-                    daylight.brightness,
+                    daylight.daylight_sum,
                     &phase,
                     None,
                     false,
@@ -198,8 +225,19 @@ impl Offscreen<'_> {
             ..
         } = *self;
         {
-            let vehicles = steps::light_vehicles(player_ref.as_ref(), traffic.as_ref(), remotes_off);
-            world_lights(renderer, world, scene, weather, daylight, camera.position, &vehicles, &settings.vehicle_smoke, player_ref.is_some());
+            let vehicles =
+                steps::light_vehicles(player_ref.as_ref(), traffic.as_ref(), remotes_off);
+            world_lights(
+                renderer,
+                world,
+                scene,
+                weather,
+                daylight,
+                camera.position,
+                &vehicles,
+                &settings.vehicle_smoke,
+                player_ref.is_some(),
+            );
             if omsi_cfg::flags::OMSI_FLASHLIGHT.is_set() {
                 lights::flashlight_ahead(scene, &camera);
             }
@@ -214,7 +252,10 @@ impl Offscreen<'_> {
             rn.set(kind, rate, world.settings.rain_quality());
             rn.set_temperature(weather.temp.0);
             // ([wind] direction (deg) and speed (m/s), as the window's frame takes it)
-            let carried = player_ref.as_ref().map(|p| crate::lights::vehicle_velocity(&p.vehicle)).unwrap_or_default();
+            let carried = player_ref
+                .as_ref()
+                .map(|p| crate::lights::vehicle_velocity(&p.vehicle))
+                .unwrap_or_default();
             rn.tick(1.0 / 30.0, carried, rain::weather_wind(weather), scene);
             // the tyres' spray as the drive left it (OMSI_DRIVE_V0=S moves the bus without a
             // full engine-start sequence)
@@ -244,7 +285,11 @@ impl Offscreen<'_> {
             );
             {
                 let mut near: Vec<&omsi_render::PointLight> = scene.lights.iter().collect();
-                near.sort_by(|a, b| (a.position - camera.position).length().total_cmp(&(b.position - camera.position).length()));
+                near.sort_by(|a, b| {
+                    (a.position - camera.position)
+                        .length()
+                        .total_cmp(&(b.position - camera.position).length())
+                });
                 for l in near.iter().take(4) {
                     log::info!(
                         "  light {:.0} m away: colour {:?} radius {:.1} intensity {:.2}",
@@ -317,7 +362,11 @@ impl Offscreen<'_> {
             scene.shift_overlays(overlay_start, viewport[0]);
             // the navigator, as the window shows it (its camera settled first)
             if settings.navigator {
-                let mut nav = navigator::Navigator::new(true, settings.ui_opacity, &settings.navigator_corner);
+                let mut nav = navigator::Navigator::new(
+                    true,
+                    settings.ui_opacity,
+                    &settings.navigator_corner,
+                );
                 nav.set_screen(navigator::Screen::of_vehicle(&p.vehicle, &p.render));
                 nav.schedule = omsi_cfg::flags::OMSI_NAV_SCHEDULE.is_set();
                 nav.show_ai = settings.nav_ai;
@@ -335,13 +384,22 @@ impl Offscreen<'_> {
                     nav.toggle_map();
                 }
                 if traffic.is_none() {
-                    nav.add_lanes(world.traffic_inbox.peek(omsi_sim::world_data::TrafficArrivals::lanes_of));
+                    nav.add_lanes(
+                        world
+                            .traffic_inbox
+                            .peek(omsi_sim::world_data::TrafficArrivals::lanes_of),
+                    );
                 }
                 nav.set_map(world.navigation_map());
                 nav.set_surface(omsi_map::package::Package::open(&world.map_dir));
                 nav.set_layers(world.map_layers());
                 nav.show_contours = omsi_cfg::flags::OMSI_NAV_CONTOURS.is_set();
-                nav.orient = match omsi_cfg::flags::OMSI_NAV_ORIENT.var().as_deref().map(str::to_ascii_lowercase).as_deref() {
+                nav.orient = match omsi_cfg::flags::OMSI_NAV_ORIENT
+                    .var()
+                    .as_deref()
+                    .map(str::to_ascii_lowercase)
+                    .as_deref()
+                {
                     Some("north") => 1,
                     Some("heading") => 2,
                     _ => 0,
@@ -359,18 +417,32 @@ impl Offscreen<'_> {
                     nav.set_route(&key, lanes, true, g);
                 }
                 if let Some(sch) = schedule.as_ref() {
-                    let cars: Vec<(glam::DVec3, String)> = traffic.as_ref().map(|t| t.cars.iter().filter(|c| !c.gone && c.bus.is_some()).map(|c| (c.vehicle.position, c.vehicle.host.tt_line.clone())).collect()).unwrap_or_default();
+                    let cars: Vec<(glam::DVec3, String)> = traffic
+                        .as_ref()
+                        .map(|t| {
+                            t.cars
+                                .iter()
+                                .filter(|c| !c.gone && c.bus.is_some())
+                                .map(|c| (c.vehicle.position, c.vehicle.host.tt_line.clone()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     let ground = world.data();
                     // (a few trips' routes a call: called until they all are there)
                     for _ in 0..80 {
-                        nav.update_live(sch, clock.time, 0.6, &cars, &|p| ground.has_ground(p.x, p.y));
+                        nav.update_live(sch, clock.time, 0.6, &cars, &|p| {
+                            ground.has_ground(p.x, p.y)
+                        });
                     }
                 }
                 let (outside_temp, inside_temp) = crate::app_events::vehicle_temperatures(p);
                 let frame = navigator::NavFrame {
                     traffic: traffic.as_deref(),
                     touch: crate::platform::touch_controls(),
-                    players: lan_off.as_ref().map(|l| lan::nav_players(remotes_off, l.my_id)).unwrap_or_default(),
+                    players: lan_off
+                        .as_ref()
+                        .map(|l| lan::nav_players(remotes_off, l.my_id))
+                        .unwrap_or_default(),
                     bus: p.vehicle.position,
                     heading: p.vehicle.heading,
                     speed_kmh: p.vehicle.physics.velocity_kmh(),
@@ -429,8 +501,7 @@ impl Offscreen<'_> {
         // OMSI_BENCH=n: the final picture drawn n more times as a window frame would be (one
         // mirror, then the view), with the median CPU time of the drawing calls and of the wait
         // for the GPU - medians shrug off what else the machine is doing
-        if let Some(n) = omsi_cfg::flags::OMSI_BENCH.parse::<usize>()
-        {
+        if let Some(n) = omsi_cfg::flags::OMSI_BENCH.parse::<usize>() {
             let target = renderer.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("bench"),
                 size: wgpu::Extent3d {
@@ -487,11 +558,29 @@ impl Offscreen<'_> {
             for k in 0..n {
                 let t = Instant::now();
                 if let Some(p) = player_ref.as_ref() {
-                    render_mirrors(renderer, scene, world, p, lighting, MirrorPick::Turn(k, &[]), None, &[]);
+                    render_mirrors(
+                        renderer,
+                        scene,
+                        world,
+                        p,
+                        lighting,
+                        MirrorPick::Turn(k, &[]),
+                        None,
+                        &[],
+                    );
                 }
                 if let Some(right) = &right_view {
                     for (eye, target) in [&view, right].into_iter().enumerate() {
-                        renderer.render_xr_eye(scene, target, w, h, &cameras[eye], lighting, projections[eye], eye == 1);
+                        renderer.render_xr_eye(
+                            scene,
+                            target,
+                            w,
+                            h,
+                            &cameras[eye],
+                            lighting,
+                            projections[eye],
+                            eye == 1,
+                        );
                     }
                 } else {
                     renderer.render(scene, &view, w, h, camera, lighting);
@@ -502,7 +591,11 @@ impl Offscreen<'_> {
                 cpu.push(drawn * 1000.0);
                 gpu.push(t.elapsed().as_secs_f64() * 1000.0);
                 if omsi_cfg::flags::OMSI_BENCH_FRAMES.is_set() {
-                    log::info!("bench frame {k}: drawing {:.2} ms, GPU wait {:.2} ms", drawn * 1000.0, gpu[k]);
+                    log::info!(
+                        "bench frame {k}: drawing {:.2} ms, GPU wait {:.2} ms",
+                        drawn * 1000.0,
+                        gpu[k]
+                    );
                 }
             }
             let median = |v: &mut Vec<f64>| {
@@ -547,11 +640,14 @@ impl Offscreen<'_> {
         // (OMSI_BUDGET_FROM=x,y[,MB]: the budget is met from there first, as if the camera had
         // been there, then - with the budget raised to MB - the textures that come near again
         // with the camera are read back)
-        if omsi_cfg::flags::OMSI_TEXTURE_MEMORY.is_set() || omsi_cfg::flags::OMSI_VIDEO_MEMORY.is_set() {
+        if omsi_cfg::flags::OMSI_TEXTURE_MEMORY.is_set()
+            || omsi_cfg::flags::OMSI_VIDEO_MEMORY.is_set()
+        {
             let video = video_memory_limit(settings);
             world.set_texture_budget(texture_budget(video));
             world.set_video_memory_limit(video);
-            let from: Vec<f64> = omsi_cfg::flags::OMSI_BUDGET_FROM.var()
+            let from: Vec<f64> = omsi_cfg::flags::OMSI_BUDGET_FROM
+                .var()
                 .unwrap_or_default()
                 .split(',')
                 .filter_map(|v| v.trim().parse::<f64>().ok())
@@ -579,7 +675,9 @@ impl Offscreen<'_> {
             let mut it = v.split(',').map(|x| x.trim().parse::<f64>().unwrap_or(0.0));
             (it.next().unwrap_or(0.0), it.next().unwrap_or(0.0))
         });
-        let warm = omsi_cfg::flags::OMSI_WARM_FRAMES.parse::<usize>().unwrap_or(0);
+        let warm = omsi_cfg::flags::OMSI_WARM_FRAMES
+            .parse::<usize>()
+            .unwrap_or(0);
         for k in 0..warm {
             let mut cam = *camera;
             if let Some((yaw, jump)) = sweep {
@@ -609,10 +707,21 @@ impl Offscreen<'_> {
         } = *self;
         let t0 = Instant::now();
         if let Some(p) = player_ref.as_ref() {
-            render_mirrors(renderer, scene, world, p, lighting, MirrorPick::All(&[]), None, &[]);
+            render_mirrors(
+                renderer,
+                scene,
+                world,
+                p,
+                lighting,
+                MirrorPick::All(&[]),
+                None,
+                &[],
+            );
         }
         if let Some(p) = player_ref.as_ref() {
-            let mode = omsi_cfg::flags::OMSI_MIRROR_HUD.parse::<u8>().unwrap_or(settings.mirror_hud);
+            let mode = omsi_cfg::flags::OMSI_MIRROR_HUD
+                .parse::<u8>()
+                .unwrap_or(settings.mirror_hud);
             let mut panels = crate::mirror_hud::MirrorHud::default();
             steps::mirror_hud_sync(&mut panels, world, p, mode);
             if mode != 0 {

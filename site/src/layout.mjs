@@ -66,7 +66,15 @@ function header(pagePath = "/") {
     <a class="toplink" href="https://github.com/${REPO}">GitHub</a>
     <a class="toplink" href="${DISCORD}">Discord</a>
     <button class="theme-btn" type="button" data-theme-cycle aria-label="Colour theme"><span class="theme-dot" aria-hidden="true"></span></button>
+    <button class="menu-btn" type="button" data-menu-toggle aria-expanded="false" aria-controls="site-menu" aria-label="Menu"><span aria-hidden="true"></span></button>
   </div>
+  <nav class="site-menu" id="site-menu" aria-label="Site">
+    ${NAV.map((n) => `<a href="${u(n.href)}"${pagePath.startsWith(n.match) ? ' aria-current="page"' : ""}>${n.label}</a>`).join("")}
+    <a href="${u("docs/getting-started/")}">Getting started</a>
+    <a href="${u("docs/mapper/")}">openMapper</a>
+    <a href="https://github.com/${REPO}">GitHub</a>
+    <a href="${DISCORD}">Discord</a>
+  </nav>
 </header>`;
 }
 
@@ -86,7 +94,7 @@ function footer() {
       <div>
         <h2>Documentation</h2>
         <ul>
-          <li><a href="${u("docs/user-guide/")}">User guide</a></li>
+          <li><a href="${u("docs/getting-started/")}">Getting started</a></li>
           <li><a href="${u("docs/modding/")}">Modding</a></li>
           <li><a href="${u("docs/plugins/")}">Plugins</a></li>
           <li><a href="${u("docs/formats/")}">File formats</a></li>
@@ -95,7 +103,7 @@ function footer() {
       <div>
         <h2>Family</h2>
         <ul>
-          <li><a href="${u("docs/openmapper/")}">openMapper</a></li>
+          <li><a href="${u("docs/mapper/")}">openMapper</a></li>
           <li><a href="https://github.com/openOMSI-org/openOMSI-Plugins">Plugin catalog</a></li>
           <li><a href="https://github.com/openOMSI-org/openOMSI-Development-Tools">Development Tools</a></li>
         </ul>

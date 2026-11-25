@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { MAPPER_DOCS, MAPPER_REPO, PLATFORMS, SERVERS, SITE_URL, LEGACY_ROUTES } from "./src/config.mjs";
+import { MAPPER_DOCS, MAPPER_REPO, MOVED_DOCS, REPO, MOVED_PAGES, PLATFORMS, SERVERS, SITE_URL, LEGACY_ROUTES } from "./src/config.mjs";
 import { loadDocs } from "./src/docs.mjs";
 import { cleanHtml, loadGithub } from "./src/github.mjs";
 import { createMarkdown } from "./src/md.mjs";
@@ -76,16 +76,30 @@ const ctx = { v, groups };
 console.log("Reading releases and issues from GitHub…");
 const gh = await loadGithub(cacheDir);
 if (gh) {
-  const notes = createMarkdown({ resolveLink: (href) => ({ href, external: /^https?:/.test(href) }) });
+  // release notes link the repository's files: a document goes to its page here (its anchors are
+  // dropped, the document may have been rewritten since), anything else to GitHub
+  const byFile = new Map(docs.map((d) => [d.file, d]));
+  const notes = createMarkdown({
+    resolveLink: (href) => {
+      if (/^(https?:|mailto:|#)/.test(href)) return { href, external: /^https?:/.test(href) };
+      const m = href.match(/^(?:\.\.\/|\.\/)*docs\/([A-Za-z0-9_-]+)\.md(?:#.*)?$/);
+      const doc = m && (byFile.get(m[1]) || docs.find((d) => d.slug === MOVED_DOCS[m[1].toLowerCase().replace(/_/g, "-")]));
+      if (doc) return { href: u(doc.url) };
+      return { href: `https://github.com/${REPO}/blob/main/${href.replace(/^(\.\.\/|\.\/)+/, "")}`, external: true };
+    },
+  });
   notes.set({ linkify: true });
+  const full = [];
   const releases = gh.releases.map((r) => {
-    write(`assets/data/releases/${r.tag_name}.json`, JSON.stringify({
-      html_url: r.html_url, assets: r.assets, body_html: cleanHtml(notes.render(r.body, { doc: null })),
-    }));
+    const body_html = cleanHtml(notes.render(r.body, { doc: null }));
+    write(`assets/data/releases/${r.tag_name}.json`, JSON.stringify({ html_url: r.html_url, assets: r.assets, body_html }));
     const { body, assets, ...meta } = r;
+    full.push({ ...meta, assets, body_html });
     return meta;
   });
   write("assets/data/github.json", JSON.stringify({ generated: gh.fetched, latest: gh.latest, releases, issues: gh.issues }));
+  // the pages are written with all of it in place: nothing is waited for when a page opens
+  ctx.gh = { generated: gh.fetched, latest: gh.latest, releases: full, issues: gh.issues };
 }
 
 // ---- pages
@@ -103,6 +117,14 @@ emit("/issues/", issuesPage(ctx));
 emit("/docs/", docsIndexPage(groups, ctx));
 for (const p of order) emit(p.url, docPage(p, ctx));
 
+// documents that were renamed or merged: their old addresses (and the old chapters under them) lead on
+const redirect = (to) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Moved</title><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0; url=${to}"><link rel="canonical" href="${SITE_URL}${to}"></head><body><p>This page moved to <a href="${to}">${to}</a>.</p></body></html>\n`;
+for (const [from, to] of Object.entries(MOVED_DOCS)) {
+  const target = u(`docs/${to}/`);
+  write(`docs/${from}/index.html`, redirect(target));
+}
+for (const [from, to] of Object.entries(MOVED_PAGES)) write(`docs/${from}/index.html`, redirect(u(`docs/${to}/`)));
+
 // the privacy policy: its own text, in the site's frame
 const privacySrc = fs.readFileSync(path.join(here, "privacy/index.html"), "utf8");
 const inner = privacySrc.match(/<main>([\s\S]*)<\/main>/)[1].replace(/^\s*<p><a href="\.\.\/">openOMSI<\/a><\/p>\s*/, "");
@@ -118,6 +140,8 @@ for (const d of docs) {
   legacy.docs[d.remote === "mapper" ? `mapper/${d.file}` : d.file] = d.url;
   if (d.pages.length > 1) for (const [id, p] of d.anchors) if (id && p.url !== d.url) (legacy.anchors[d.remote === "mapper" ? `mapper/${d.file}` : d.file] ??= {})[id] = p.url;
 }
+for (const [file, slug] of Object.entries({ USER_GUIDE: "user-guide", NVIDIA_DLSS: "nvidia-dlss", WEATHER_REGIONS: "weather-regions", OPENMAPPER: "openmapper", "mapper/TUTORIAL": "mapper-tutorial", "mapper/FEATURES": "mapper-features", "mapper/ROADMAP": "mapper-roadmap" }))
+  legacy.docs[file] ??= `/docs/${MOVED_DOCS[slug]}/`;
 write("assets/js/legacy.js", `// (generated) #/docs/NAME#anchor and the other old hash addresses lead to their new pages
 (function () {
   var h = location.hash;
@@ -163,7 +187,7 @@ for (const f of htmlFiles) {
   for (const m of html.matchAll(/<a [^>]*href="([^"]+)"/g)) {
     const href = m[1];
     if (/^(https?:|mailto:|javascript:)/.test(href)) continue;
-    const [p0, anchor] = href.split("#");
+    const [p0, anchor] = href.replace(/\?[^#]*/, "").split("#");
     let target;
     if (!p0) target = f;
     else {

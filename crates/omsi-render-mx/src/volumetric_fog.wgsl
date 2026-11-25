@@ -53,6 +53,8 @@ struct VolFogParams {
 // across and up. The offsets the Rust side passes are taken within these periods.
 const VF_BANKS: vec3<f32> = vec3<f32>(260.0, 260.0, 70.0);
 const VF_EDDIES: vec3<f32> = vec3<f32>(52.0, 52.0, 26.0);
+// how fast the ground haze thins upwards (m, its scale height)
+const HAZE_HEIGHT: f32 = 40.0;
 
 struct VfVsOut {
     @builtin(position) clip: vec4<f32>,
@@ -180,7 +182,13 @@ fn vf_march(c: vec3<f32>, d: vec3<f32>, reach: f32, clear: f32, cab: vec2<f32>, 
         }
         let x = c + d * t;
         let h = max(x.z - enh.fog.z, 0.0);
-        let s_fog = enh.fog.x * exp(-enh.fog.y * h) * vf_density(x);
+        let dn = vf_density(x);
+        // the weather's fog and the low haze over the ground (`vol_fog.w`, vol_fog.rs
+        // `ground_haze`), both droplets: thicker and thinner in the same banks
+        var s_fog = enh.fog.x * exp(-enh.fog.y * h) * dn;
+        if (enh.vol_fog.w > 0.0) {
+            s_fog = s_fog + enh.vol_fog.w * exp(-h / HAZE_HEIGHT) * mix(1.0, dn, 0.7);
+        }
         let s_air = enh.fog.w * exp(-h / 1500.0);
         let s_ext = s_fog + s_air * clear;
         var vis = 1.0;

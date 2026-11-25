@@ -118,13 +118,9 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
             *cx.traffic.traffic_heavy_frame = true;
         }
         // the AI's lights (and a bus's saloon lamps, which its scripts switch with
-        // them): by the time of day, and by day in fog, rain, snow or under a
-        // closed cloud cover as drivers do
-        let gloomy = steps::gloomy_weather(cx.weather.weather.as_ref());
-        // Omsi switches the AI's lights on below a light value of 0.75, before
-        // the street lamps (0.6), and off after them in the morning
+        // them): by Omsi.exe's daylight under the weather, below 0.75 (0x7d9128)
         let daylight = omsi_sim::Daylight::compute(&*cx.clock.clock, cx.weather.envir.as_ref());
-        steps::set_ai_daylight(t, daylight, gloomy);
+        steps::set_ai_daylight(t, daylight);
         let __t2 = Instant::now();
         let rail = cx
             .player

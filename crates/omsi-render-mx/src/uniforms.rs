@@ -105,6 +105,11 @@ pub(crate) struct PostUniform {
     /// x how much of a metered shortfall (a picture darker than the light model expects: a
     /// tunnel, a dark cab) the eye makes up, the rest as post.wgsl's `c.x` does for a surplus
     pub(crate) e: [f32; 4],
+    /// The colour grade of the moment (lighting/grade.rs `ColorGrade::uniform`): white
+    /// balance and saturation, the shadows' lift and the tone curve, the highlights' tint.
+    pub(crate) f: [f32; 4],
+    pub(crate) g: [f32; 4],
+    pub(crate) h: [f32; 4],
 }
 
 /// The enhanced lighting (enhanced_common.wgsl `Enhanced`).
