@@ -767,6 +767,8 @@ fn new_player(
         occlude_controls: false,
         drawn_outside: false,
         startup: None,
+        cruise: None,
+        cruise_note: None,
         startup_at: None,
         give_ticket: false,
         give_change: false,

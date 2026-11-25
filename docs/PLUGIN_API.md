@@ -102,6 +102,14 @@ What the bus drives with now: the pedals (0 to 1) and the steering (-1 left to 1
 
 *Since 0.2.22.*
 
+### omsi.bus.cruise
+
+`omsi.bus.cruise()` → number or nil
+
+The speed the cruise control holds, km/h (`nil` while it is off). The player switches it with Num0.
+
+*Since 0.3.55.*
+
 ### omsi.bus.damage
 
 `omsi.bus.damage()` → table or nil
@@ -380,6 +388,14 @@ The engine's revolutions per minute.
 Tickets sold this session and the money taken (the game knows no currency).
 
 *Since 0.2.22.*
+
+### omsi.bus.set_cruise
+
+`omsi.bus.set_cruise([kmh])` → boolean
+
+Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). Like Num0, it is refused (false) while the bus goes slower than 5 km/h. It works the throttle and the brake the bus's scripts read, which a plugin's `set_var("Throttle")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held.
+
+*Since 0.3.55. Permission: `vehicle_write`.*
 
 ### omsi.bus.set_destination
 
