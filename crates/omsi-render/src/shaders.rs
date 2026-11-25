@@ -233,6 +233,7 @@ mod tests {
     /// And #2687: the sun lights standing cut-outs such as fences from their facing side.
     /// And the saloon's lamps as line sources, the height maps' parallax, and normal maps
     /// turned the right way (the tangent frame's handedness).
+    /// And #4258: the wet panes' blur through a plain sampler, a drop's view kept near it.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
@@ -241,7 +242,7 @@ mod tests {
             super::SCENE.replace("\r\n", "\n"),
             super::ENHANCED.replace("\r\n", "\n"),
         );
-        assert_eq!((scene.len(), fnv1a(&scene)), (152469, 2025446307441838839));
+        assert_eq!((scene.len(), fnv1a(&scene)), (153869, 16444914524467745854));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
             (128683, 11712419932608701645)
