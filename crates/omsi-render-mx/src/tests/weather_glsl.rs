@@ -66,14 +66,13 @@ fn the_rain_and_snow_shaders_translate_to_glsl_with_a_float_roof_map() {
         rain_shader_source(),
         snow_shader_source(),
         lean_rain(rain_shader_source()),
+        lean_snow(snow_shader_source()),
     ]
     .map(depth)
     {
-        assert!(
-            glsl_of(&src).is_err_and(|e| e.contains("epth")),
-            "{:?}",
-            glsl_of(&src)
-        );
+        // (mX's naga loads a depth texture in GLSL too since mX 650b244; the float roof map
+        // stays the form the GL devices draw with)
+        glsl_of(&src).unwrap();
         glsl_of(&roof_as_float(src)).unwrap();
     }
 }

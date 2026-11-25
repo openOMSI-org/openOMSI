@@ -4,10 +4,14 @@
 /// to another key than OMSI's own file does; `None` for the stock key or no key at all.
 pub fn rebound_key(bindings: &[omsi_content::KeyBinding], action: &str) -> Option<String> {
     use omsi_content::input::KEY_HOLD;
-    let b = bindings.iter().find(|b| b.action.eq_ignore_ascii_case(action) && b.scan_code != 0)?;
-    let stock = crate::stock_keys::STOCK_KEYS
+    let b = bindings
         .iter()
-        .any(|(a, s, m)| a.eq_ignore_ascii_case(action) && *s == b.scan_code && (m & !KEY_HOLD) == (b.modifier & !KEY_HOLD));
+        .find(|b| b.action.eq_ignore_ascii_case(action) && b.scan_code != 0)?;
+    let stock = crate::stock_keys::STOCK_KEYS.iter().any(|(a, s, m)| {
+        a.eq_ignore_ascii_case(action)
+            && *s == b.scan_code
+            && (m & !KEY_HOLD) == (b.modifier & !KEY_HOLD)
+    });
     (!stock).then(|| crate::keys::key_name(b.scan_code as i64, b.modifier as i64))
 }
 
@@ -15,7 +19,10 @@ pub fn rebound_key(bindings: &[omsi_content::KeyBinding], action: &str) -> Optio
 /// first (empty when it moves or nothing is pressed). The window's HUD shows them, an
 /// offscreen run logs them. `key(action)` names the player's own key for an action of
 /// `Inputs/keyboard.cfg` when it is not the stock one (see [`rebound_key`]).
-pub fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str) -> Option<String>) -> Vec<String> {
+pub fn standing_reasons(
+    v: &omsi_sim::VehicleInstance,
+    key: &dyn Fn(&str) -> Option<String>,
+) -> Vec<String> {
     let mut lines = Vec::new();
     let throttle = v.var("throttle").unwrap_or(0.0) > 0.05;
     let slow = v.physics.velocity_kmh().abs() < 3.0;
@@ -30,7 +37,10 @@ pub fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str) -> Opt
     } else if v
         .var("antrieb_getr_gangwahl")
         .map(|g| (g - 1.0).abs() < 0.1)
-        .or_else(|| v.var("cockpit_gangwahltaster").map(|g| (g - 1.0).abs() < 0.1))
+        .or_else(|| {
+            v.var("cockpit_gangwahltaster")
+                .map(|g| (g - 1.0).abs() < 0.1)
+        })
         .unwrap_or(false)
     {
         // gear position 1 is N in the stock gearboxes and the mods built on them
@@ -38,13 +48,19 @@ pub fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str) -> Opt
         lines.push(format!("The gearbox is in N: press {d}, or click it. Buses like the Citaro take D only with the brake held"));
     } else if v.var("antrieb_getr_gangwahl").is_none()
         && v.var("cockpit_gangwahltaster").is_none()
-        && v.var("antrieb_getr_gang").map(|g| g.abs() < 0.1).unwrap_or(false)
+        && v.var("antrieb_getr_gang")
+            .map(|g| g.abs() < 0.1)
+            .unwrap_or(false)
     {
         // a manual gearbox (the stock F90 and T3, the Sprinters, PAZ and LAZ mods): gear 0 is
         // neutral, and the keyboard's `kw_s_1` … are the digit keys
         lines.push("Manual gearbox in neutral: 1-5 select a gear (R reverse, N neutral); the clutch works itself unless auto_clutch=0".to_string());
     }
-    let parking = v.var("bremse_feststell").or_else(|| v.var("parking_brake")).unwrap_or(0.0) > 0.5;
+    let parking = v
+        .var("bremse_feststell")
+        .or_else(|| v.var("parking_brake"))
+        .unwrap_or(0.0)
+        > 0.5;
     if parking {
         let k = key("parking_brake_toggle").unwrap_or_else(|| ".".into());
         lines.push(format!("Parking brake is on  ({k} releases it)"));
@@ -60,7 +76,9 @@ pub fn standing_reasons(v: &omsi_sim::VehicleInstance, key: &dyn Fn(&str) -> Opt
         let fba_val = air("bremse_p_Brzyl_FBA").or_else(|| air("spring_brake_pressure"));
         if let Some(fba) = fba_val.filter(|p| *p < 6.0e5) {
             let tanks: Vec<f32> = (1..=4)
-                .filter_map(|i| air(&format!("bremse_p_Tank0{i}")).or_else(|| air(&format!("air_tank_{i}"))))
+                .filter_map(|i| {
+                    air(&format!("bremse_p_Tank0{i}")).or_else(|| air(&format!("air_tank_{i}")))
+                })
                 .collect();
             let low = tanks.iter().copied().fold(f32::MAX, f32::min);
             // (with the tanks full the spring brake is held by the bus's own parking brake,
@@ -150,14 +168,24 @@ pub fn log_physics(v: &omsi_sim::VehicleInstance, t: f32) {
         .as_ref()
         .filter(|rb| rb.velocity.truncate().length() > 1.0)
         .map(|rb| {
-            let d = (rb.velocity.x as f64).atan2(rb.velocity.y as f64).to_degrees() - v.heading;
+            let d = (rb.velocity.x as f64)
+                .atan2(rb.velocity.y as f64)
+                .to_degrees()
+                - v.heading;
             let d = (d + 540.0).rem_euclid(360.0) - 180.0;
-            let d = if d.abs() > 90.0 { (d + 360.0).rem_euclid(360.0) - 180.0 } else { d };
+            let d = if d.abs() > 90.0 {
+                (d + 360.0).rem_euclid(360.0) - 180.0
+            } else {
+                d
+            };
             format!(" slip {d:+.2}")
         })
         .unwrap_or_default();
     let joints = (0..2)
-        .filter_map(|i| v.var(&format!("articulation_{i}_alpha")).map(|a| format!(" joint{i} {:+.2}", a)))
+        .filter_map(|i| {
+            v.var(&format!("articulation_{i}_alpha"))
+                .map(|a| format!(" joint{i} {:+.2}", a))
+        })
         .collect::<String>();
     log::info!(
         "physics t={t:5.2} pos ({:.2}, {:.2}, {:.3}) hdg {:.1}{slip}{joints} pitch {:+.2} bank {:+.2} v {:+.2} km/h wheels [{wheels}] crashes {} last {:.1} kJ gear {:?} n {:?} M_Wheel {:?} brake {:?} pedal {:?} abs {:?} rpm {:?}",
@@ -186,18 +214,44 @@ mod tests {
     use omsi_content::KeyBinding;
 
     fn bind(action: &str, scan_code: i32, modifier: i32) -> KeyBinding {
-        KeyBinding { action: action.into(), scan_code, modifier }
+        KeyBinding {
+            action: action.into(),
+            scan_code,
+            modifier,
+        }
     }
 
     #[test]
     fn hint_names_the_players_own_key_only() {
         // the stock D (scan 32) keeps the hint's own wording; Ctrl+D is named (#461)
-        assert_eq!(rebound_key(&[bind("automatic_D", 32, 0)], "automatic_D"), None);
-        assert_eq!(rebound_key(&[bind("automatic_D", 32, 4)], "automatic_D").as_deref(), Some("Ctrl+D"));
-        assert_eq!(rebound_key(&[bind("automatic_D", 0, 0)], "automatic_D"), None);
+        assert_eq!(
+            rebound_key(&[bind("automatic_D", 32, 0)], "automatic_D"),
+            None
+        );
+        assert_eq!(
+            rebound_key(&[bind("automatic_D", 32, 4)], "automatic_D").as_deref(),
+            Some("Ctrl+D")
+        );
+        assert_eq!(
+            rebound_key(&[bind("automatic_D", 0, 0)], "automatic_D"),
+            None
+        );
         assert_eq!(rebound_key(&[], "automatic_D"), None);
         // the electrics' key: E is the stock one, a moved one is named
-        assert_eq!(rebound_key(&[bind("cp_batterietrennschalter_toggle", 18, 0)], "cp_batterietrennschalter_toggle"), None);
-        assert_eq!(rebound_key(&[bind("cp_batterietrennschalter_toggle", 18, 4)], "cp_batterietrennschalter_toggle").as_deref(), Some("Ctrl+E"));
+        assert_eq!(
+            rebound_key(
+                &[bind("cp_batterietrennschalter_toggle", 18, 0)],
+                "cp_batterietrennschalter_toggle"
+            ),
+            None
+        );
+        assert_eq!(
+            rebound_key(
+                &[bind("cp_batterietrennschalter_toggle", 18, 4)],
+                "cp_batterietrennschalter_toggle"
+            )
+            .as_deref(),
+            Some("Ctrl+E")
+        );
     }
 }

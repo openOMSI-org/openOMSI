@@ -50,8 +50,14 @@ fn perturb_normal(n: vec3<f32>, p: vec3<f32>, uv: vec2<f32>, tn: vec3<f32>) -> v
     let duv2 = dpdy(uv);
     let dp2perp = cross(dp2, n);
     let dp1perp = cross(n, dp1);
-    let t = dp2perp * duv1.x + dp1perp * duv2.x;
-    let b = dp2perp * duv1.y + dp1perp * duv2.y;
+    // (the frame's handedness from the screen's: these are the uv's gradients times the
+    // determinant of the screen-to-surface map, whose sign is the screen's y axis - down in
+    // Direct3D, Metal and Vulkan. Normalised without it, both tangents came out reversed and
+    // every normal map lit its bumps from the wrong side)
+    let det = dot(dp1, dp2perp);
+    let sgn = select(-1.0, 1.0, det >= 0.0);
+    let t = (dp2perp * duv1.x + dp1perp * duv2.x) * sgn;
+    let b = (dp2perp * duv1.y + dp1perp * duv2.y) * sgn;
     let m = max(dot(t, t), dot(b, b));
     if (m < 1e-20) {
         return n;
@@ -158,11 +164,8 @@ fn matl_glow_light(buv: vec2<f32>, col: vec3<f32>) -> vec3<f32> {
     return col * dot(gm.rgb, vec3<f32>(0.299, 0.587, 0.114)) * material.glow.x * max(enh.exposure.z * 2.0, 0.8);
 }
 
-// How much of the light crossing the player's bus's pane at `world` its condensation
-// scatters (0..1): 1 - e^-depth of the windscreen's, the side windows' or the rear
-// window's film (enh.condensation, optical depths from omsi-app condensation.rs), the film
-// heavier low down, where the glass is coldest, and in patches; on the windscreen cleared
-// in a widening fan above the defroster.
+// How much of the light crossing the player's bus's pane its condensation scatters (0..1,
+// 07_glass.wgsl `glass_condensation`), for the screen mask.
 var<private> glass_fog: f32;
 // The screen mask's r for a pane scattering all the light (post.wgsl `MIST_MASK`).
 const MIST_MASK: f32 = 0.24;
@@ -177,45 +180,62 @@ fn pane_local(world: vec3<f32>) -> vec3<f32> {
     let b = vec3<f32>(p.x * t.w - p.z * t.z, p.y, p.z * t.w + p.x * t.z);
     return b - camera.inside_c.xyz;
 }
-fn pane_condensation(world: vec3<f32>) -> f32 {
-    let l = pane_local(world);
-    let h = camera.inside_b.yzw;
-    if (camera.inside_c.w < 0.5 || any(abs(l) >= h + vec3<f32>(0.25))) {
-        return 0.0;
+
+
+// Parallax occlusion mapping (a PBR set's height map, `foo_height`: in the ORM map's alpha,
+// white high): the uv the view ray meets the relief at, marched down into it from the
+// surface. The tangent frame and the texture's scale in the world come from the pixel's
+// derivatives (OMSI's meshes have no tangents); the relief is `POM_DEPTH` metres deep, so a
+// cobble or a brick joint is as deep on a coarse texture as on a fine one.
+const POM_DEPTH: f32 = 0.025;
+fn parallax_uv(uv: vec2<f32>, p: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec2<f32> {
+    let dp1 = dpdx(p);
+    let dp2 = dpdy(p);
+    let duv1 = dpdx(uv);
+    let duv2 = dpdy(uv);
+    let dp2perp = cross(dp2, n);
+    let dp1perp = cross(n, dp1);
+    let det = dot(dp1, dp2perp);
+    if (abs(det) < 1e-12) {
+        return uv;
     }
-    let fy = l.y / max(h.y, 0.1);
-    let fz = l.z / max(h.z, 0.1);
-    let fx = l.x / max(h.x, 0.1);
-    // (the panes in the body's skin only - not the instruments' glass behind the windscreen
-    // or a partition in the saloon)
-    var f = 0.0;
-    var front = false;
-    if (fy > 0.96) {
-        f = enh.condensation.x;
-        front = true;
-    } else if (fy < -0.96) {
-        f = enh.condensation.z;
-    } else if (abs(fx) > 0.8) {
-        f = enh.condensation.y;
+    // the uv's gradient in the world (how far u and v move per metre along the surface)
+    let gu = (dp2perp * duv1.x + dp1perp * duv2.x) / det;
+    let gv = (dp2perp * duv1.y + dp1perp * duv2.y) / det;
+    let vn = dot(v, n);
+    if (vn <= 0.05) {
+        return uv;
     }
-    if (f <= 0.001) {
-        return 0.0;
+    // (per metre down into the relief, the ray moves this far over the uv; grazing views
+    // are held so that the march does not smear the texture along the surface)
+    let slide = -(v - n * vn) / max(vn, 0.25);
+    let per_m = vec2<f32>(dot(slide, gu), dot(slide, gv));
+    let steps = mix(24.0, 8.0, vn);
+    let dz = POM_DEPTH / steps;
+    var depth = 0.0;
+    var q = uv;
+    var prev_gap = 0.0;
+    var prev_q = uv;
+    for (var i = 0; i < 24; i = i + 1) {
+        if (f32(i) >= steps) {
+            break;
+        }
+        let h = textureSampleGrad(t_pbr_orm, s_diffuse, q, duv1, duv2).a;
+        let gap = (1.0 - h) * POM_DEPTH - depth;
+        if (gap <= 0.0) {
+            // between the last step above the relief and this one under it
+            let t = prev_gap / max(prev_gap - gap, 1e-6);
+            return mix(prev_q, q, t);
+        }
+        prev_gap = gap;
+        prev_q = q;
+        depth = depth + dz;
+        q = uv + per_m * depth;
     }
-    // (cold low down and along the frames; patches of a hand's breadth)
-    let low = mix(1.2, 0.8, clamp(fz * 0.5 + 0.5, 0.0, 1.0));
-    let q = select(vec2<f32>(l.y, l.z), vec2<f32>(l.x, l.z), front || fy < -0.96) * 4.0;
-    let cq = floor(q);
-    let fq = q - cq;
-    let w = fq * fq * (3.0 - 2.0 * fq);
-    let hh = fract(sin(vec4<f32>(dot(cq, vec2<f32>(12.9898, 78.233)), dot(cq + vec2<f32>(1.0, 0.0), vec2<f32>(12.9898, 78.233)), dot(cq + vec2<f32>(0.0, 1.0), vec2<f32>(12.9898, 78.233)), dot(cq + vec2<f32>(1.0, 1.0), vec2<f32>(12.9898, 78.233)))) * 43758.547);
-    let patchy = mix(mix(hh.x, hh.y, w.x), mix(hh.z, hh.w, w.x), w.y);
-    var amount = 1.0 - exp(-f * low * (0.75 + 0.5 * patchy));
-    if (front) {
-        // the defroster's warm air clears a fan from the bottom of the windscreen
-        let d = length(vec2<f32>(l.x / max(h.x, 0.1), (fz + 0.2) * 1.6));
-        let clear = 1.0 - smoothstep(enh.condensation.w * 1.3 - 0.25, enh.condensation.w * 1.3, d);
-        amount = amount * (1.0 - clear * step(0.02, enh.condensation.w));
-    }
-    return amount;
+    return q;
 }
 
+// The PBR set's normal map flag without the height map's mark (see omsi_texture::pbr).
+fn pbr_normal_flag() -> f32 {
+    return select(material.pbr.x, material.pbr.x - 4.0, material.pbr.x > 3.5);
+}

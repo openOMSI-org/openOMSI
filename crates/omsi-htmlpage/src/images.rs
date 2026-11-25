@@ -39,7 +39,11 @@ pub(crate) struct ImageStore {
 impl ImageStore {
     /// `dirs` are searched in order for a relative path (the page's folder first).
     pub(crate) fn new(dirs: Vec<PathBuf>) -> ImageStore {
-        ImageStore { dirs, files: Mutex::new(HashMap::new()), scaled: Mutex::new(Scaled::default()) }
+        ImageStore {
+            dirs,
+            files: Mutex::new(HashMap::new()),
+            scaled: Mutex::new(Scaled::default()),
+        }
     }
 
     /// The picture behind `src`, `None` when there is none.
@@ -48,7 +52,10 @@ impl ImageStore {
             return hit.clone();
         }
         let loaded = self.load(src);
-        self.files.lock().unwrap().insert(src.to_string(), loaded.clone());
+        self.files
+            .lock()
+            .unwrap()
+            .insert(src.to_string(), loaded.clone());
         loaded
     }
 
@@ -61,7 +68,11 @@ impl ImageStore {
         if rel.is_empty() || rel.contains("://") || rel.starts_with("data:") {
             return None;
         }
-        let path = self.dirs.iter().map(|d| omsi_cfg::resolve_path(d, rel)).find(|p| omsi_cfg::vfs::is_file(p));
+        let path = self
+            .dirs
+            .iter()
+            .map(|d| omsi_cfg::resolve_path(d, rel))
+            .find(|p| omsi_cfg::vfs::is_file(p));
         let Some(path) = path else {
             log::debug!("htmltexture: image {rel} not found");
             return None;
@@ -75,12 +86,27 @@ impl ImageStore {
         };
         let px = img.width as u64 * img.height as u64;
         if px == 0 || px > MAX_SRC_PX || img.rgba.len() as u64 != px * 4 {
-            log::warn!("htmltexture: image {} has an unusable size {}x{}", path.display(), img.width, img.height);
+            log::warn!(
+                "htmltexture: image {} has an unusable size {}x{}",
+                path.display(),
+                img.width,
+                img.height
+            );
             return None;
         }
         let alpha = img.has_alpha && img.rgba.chunks_exact(4).any(|p| p[3] != 255);
-        log::debug!("htmltexture: image {rel} -> {} ({}x{})", path.display(), img.width, img.height);
-        Some(Arc::new(Img { w: img.width, h: img.height, rgba: img.rgba, alpha }))
+        log::debug!(
+            "htmltexture: image {rel} -> {} ({}x{})",
+            path.display(),
+            img.width,
+            img.height
+        );
+        Some(Arc::new(Img {
+            w: img.width,
+            h: img.height,
+            rgba: img.rgba,
+            alpha,
+        }))
     }
 
     /// The picture resized to `w` x `h` (the picture itself when it already has that size).
@@ -166,7 +192,12 @@ fn halve(cur: &Img, hx: bool, hy: bool) -> Img {
             }
         }
     }
-    Img { w: nw, h: nh, rgba: out, alpha: cur.alpha }
+    Img {
+        w: nw,
+        h: nh,
+        rgba: out,
+        alpha: cur.alpha,
+    }
 }
 
 /// (first index, second index, weight of the second) of every output row/column.
@@ -191,8 +222,18 @@ fn bilinear(cur: &Img, w: u32, h: u32) -> Img {
     let mut o = 0;
     for &(y0, y1, fy) in &ys {
         for &(x0, x1, fx) in &xs {
-            let wt = [(1.0 - fx) * (1.0 - fy), fx * (1.0 - fy), (1.0 - fx) * fy, fx * fy];
-            let ix = [(y0 * cw + x0) * 4, (y0 * cw + x1) * 4, (y1 * cw + x0) * 4, (y1 * cw + x1) * 4];
+            let wt = [
+                (1.0 - fx) * (1.0 - fy),
+                fx * (1.0 - fy),
+                (1.0 - fx) * fy,
+                fx * fy,
+            ];
+            let ix = [
+                (y0 * cw + x0) * 4,
+                (y0 * cw + x1) * 4,
+                (y1 * cw + x0) * 4,
+                (y1 * cw + x1) * 4,
+            ];
             if cur.alpha {
                 let (mut r, mut g, mut b, mut a) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
                 for k in 0..4 {
@@ -225,5 +266,10 @@ fn bilinear(cur: &Img, w: u32, h: u32) -> Img {
             o += 4;
         }
     }
-    Img { w, h, rgba: out, alpha: cur.alpha }
+    Img {
+        w,
+        h,
+        rgba: out,
+        alpha: cur.alpha,
+    }
 }

@@ -1050,11 +1050,16 @@ fn shaders_validate_and_match_the_uniforms() {
         ("sky", sky_shader_source()),
         ("corona", corona_shader_source()),
         ("fog lamps", fog_lamps_shader_source()),
+        ("volumetric fog", crate::vol_fog::shader_source()),
         ("snow", snow_shader_source()),
         ("rain", rain_shader_source()),
         (
             "rain basic",
             lean_rain(precip_shader_source(include_str!("../rain.wgsl"))),
+        ),
+        (
+            "snow basic",
+            lean_snow(precip_shader_source(include_str!("../snow.wgsl"))),
         ),
         ("post", include_str!("../post.wgsl").to_string()),
         ("ssao", include_str!("../ssao.wgsl").to_string()),
@@ -1070,6 +1075,7 @@ fn shaders_validate_and_match_the_uniforms() {
         ),
         ("ray-traced lighting", rt::lighting_source()),
         ("ray-traced reflections", rt::reflect_source()),
+        ("ray-traced reflections denoiser", rt::denoise_source()),
         ("texture means", include_str!("../rt_avg.wgsl").to_string()),
         (
             "rt texture coordinates",
@@ -1084,6 +1090,10 @@ fn shaders_validate_and_match_the_uniforms() {
         ("Enhanced", std::mem::size_of::<EnhancedUniform>()),
         ("PostParams", std::mem::size_of::<PostUniform>()),
         ("FogLampParams", std::mem::size_of::<FogLampUniform>()),
+        (
+            "VolFogParams",
+            std::mem::size_of::<crate::vol_fog::VolFogUniform>(),
+        ),
         ("SnowParams", std::mem::size_of::<SnowUniform>()),
         ("RainParams", std::mem::size_of::<RainUniform>()),
         ("PuddleParams", std::mem::size_of::<puddles::Uniform>()),
@@ -1096,6 +1106,10 @@ fn shaders_validate_and_match_the_uniforms() {
         ("Camera", std::mem::size_of::<CameraUniform>()),
         ("MaterialParams", std::mem::size_of::<MaterialUniform>()),
         ("Motion", std::mem::size_of::<MotionUniform>()),
+        (
+            "CloudView",
+            std::mem::size_of::<crate::cloud_pass::CloudView>(),
+        ),
         ("RtParams", rt::PARAMS_SIZE),
         ("Record", rt::RECORD_SIZE),
     ];
@@ -1395,8 +1409,9 @@ fn the_scene_shader_reads_its_arrays_from_textures_without_vertex_storage() {
                 && !src.contains("inst_params[")
                 && !src.contains("draw_list[")
         );
+        // (the point lights stay a storage array where the fragment stage has storage)
         assert_eq!(
-            src.contains("var<storage"),
+            src.contains("v: array<PointLight>"),
             path == ArrayPath::VertexTextures,
             "{path:?}"
         );
@@ -1479,7 +1494,8 @@ fn the_scene_groups_fit_the_sixteen_texture_units_of_opengl() {
                      stage: crate::gpu::schema::ShaderStages| {
         e.iter()
             .filter(|e| {
-                matches!(e.ty, crate::gpu::schema::BindingType::Texture { .. })
+                e.binding != 22
+                    && matches!(e.ty, crate::gpu::schema::BindingType::Texture { .. })
                     && e.visibility.contains(stage)
             })
             .count()
@@ -2120,17 +2136,20 @@ fn a_texture_the_card_refuses_is_drawn_plain_without_cutting_the_texture_budget(
 #[test]
 fn the_lamps_light_the_scene_from_textures_where_storage_buffers_carry_nothing() {
     let storage = scene_shader_for(false, ArrayPath::Storage);
-    assert_eq!(storage, scene_shader_text(false));
+    assert_eq!(storage, frame_from_heap(&scene_shader_text(false)));
     assert_eq!(
         scene_shader_for(true, ArrayPath::Storage),
-        scene_shader_text(true)
+        frame_from_heap(&scene_shader_text(true))
     );
     let lamps = scene_shader_for(true, ArrayPath::LightTextures);
     let none = scene_shader_for(true, ArrayPath::NoStorage);
-    assert!(lamps.contains("@group(0) @binding(3) var lights_tex: texture_2d<f32>;"));
-    assert!(lamps.contains("@group(0) @binding(4) var grid_tex: texture_2d<u32>;"));
+    // (read from the heap: `frame_from_heap`)
+    assert!(lamps.contains("textureLoad(mx_tex2d[mx_mat.lights]"));
+    assert!(lamps.contains("textureLoad(mx_tex2d_u32[mx_mat.grid]"));
     assert!(
-        !lamps.contains("lights[") && !lamps.contains("grid[") && !lamps.contains("var<storage")
+        !lamps.contains("lights[")
+            && !lamps.contains("grid[")
+            && !lamps.contains("array<PointLight>")
     );
     assert!(none.contains("return 0xffffffffu;") && !none.contains("lights_tex"));
     assert_eq!(
@@ -2531,6 +2550,8 @@ fn the_reflection_strength_scales_what_an_envmapped_surface_mirrors() {
 #[test]
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn envmapped_paint_with_normals_off_its_faces_mirrors_no_more_than_with_sound_ones() {
+    // (the reflection's own strength, not the tone curve's roll-off of it)
+    let _neutral = crate::lighting::neutral_for_tests();
     let camera = Camera {
         position: DVec3::ZERO,
         yaw: 0.0,

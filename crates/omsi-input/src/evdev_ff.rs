@@ -39,33 +39,53 @@ pub struct Wheel {
 impl Wheel {
     pub fn open(name: &str) -> Option<Wheel> {
         let dir = std::fs::read_dir("/sys/class/input").ok()?;
-        let mut nodes: Vec<String> = dir.filter_map(|e| e.ok()?.file_name().into_string().ok()).filter(|n| n.starts_with("event")).collect();
+        let mut nodes: Vec<String> = dir
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .filter(|n| n.starts_with("event"))
+            .collect();
         nodes.sort();
         for node in nodes {
             let sys = format!("/sys/class/input/{node}/device");
-            let Ok(dev_name) = std::fs::read_to_string(format!("{sys}/name")) else { continue };
+            let Ok(dev_name) = std::fs::read_to_string(format!("{sys}/name")) else {
+                continue;
+            };
             if !crate::controllers::names_match(dev_name.trim(), name) {
                 continue;
             }
-            let caps = std::fs::read_to_string(format!("{sys}/capabilities/ff")).unwrap_or_default();
+            let caps =
+                std::fs::read_to_string(format!("{sys}/capabilities/ff")).unwrap_or_default();
             if !has_bit(&caps, FF_CONSTANT) {
                 continue;
             }
-            let file = match OpenOptions::new().read(true).write(true).open(format!("/dev/input/{node}")) {
+            let file = match OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(format!("/dev/input/{node}"))
+            {
                 Ok(f) => f,
                 Err(e) => {
-                    log::warn!("force feedback: {name} (/dev/input/{node}) cannot be opened for writing: {e}");
+                    log::warn!(
+                        "force feedback: {name} (/dev/input/{node}) cannot be opened for writing: {e}"
+                    );
                     continue;
                 }
             };
-            let mut wheel = Wheel { name: name.to_string(), file, id: -1, level: None, sent: Instant::now() - Duration::from_secs(1) };
+            let mut wheel = Wheel {
+                name: name.to_string(),
+                file,
+                id: -1,
+                level: None,
+                sent: Instant::now() - Duration::from_secs(1),
+            };
             wheel.send(FF_GAIN, 0xFFFF);
             if wheel.upload(0) {
                 wheel.send(wheel.id as u16, 1);
                 log::info!("force feedback: {name} on /dev/input/{node} (constant force)");
                 return Some(wheel);
             }
-            log::warn!("force feedback: {name} (/dev/input/{node}) refused the constant force effect");
+            log::warn!(
+                "force feedback: {name} (/dev/input/{node}) refused the constant force effect"
+            );
         }
         None
     }
@@ -92,10 +112,21 @@ impl Wheel {
     }
 
     fn upload_for(&mut self, level: i16, milliseconds: u16) -> bool {
-        let mut effect = FfEffect { kind: FF_CONSTANT as u16, id: self.id, direction: 0x4000, ..Default::default() };
+        let mut effect = FfEffect {
+            kind: FF_CONSTANT as u16,
+            id: self.id,
+            direction: 0x4000,
+            ..Default::default()
+        };
         effect.replay[0] = milliseconds;
         effect.params[0] = level as u16 as u64;
-        let r = unsafe { libc::ioctl(self.file.as_raw_fd(), EVIOCSFF as _, &mut effect as *mut FfEffect) };
+        let r = unsafe {
+            libc::ioctl(
+                self.file.as_raw_fd(),
+                EVIOCSFF as _,
+                &mut effect as *mut FfEffect,
+            )
+        };
         self.sent = Instant::now();
         if r < 0 {
             return false;
@@ -106,8 +137,21 @@ impl Wheel {
     }
 
     fn send(&mut self, code: u16, value: i32) -> bool {
-        let ev = InputEvent { time: libc::timeval { tv_sec: 0, tv_usec: 0 }, kind: EV_FF, code, value };
-        let bytes = unsafe { std::slice::from_raw_parts(&ev as *const InputEvent as *const u8, std::mem::size_of::<InputEvent>()) };
+        let ev = InputEvent {
+            time: libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            },
+            kind: EV_FF,
+            code,
+            value,
+        };
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                &ev as *const InputEvent as *const u8,
+                std::mem::size_of::<InputEvent>(),
+            )
+        };
         self.file.write_all(bytes).is_ok()
     }
 }
@@ -116,24 +160,36 @@ impl Drop for Wheel {
     fn drop(&mut self) {
         if self.id >= 0 {
             self.send(self.id as u16, 0);
-            unsafe { libc::ioctl(self.file.as_raw_fd(), EVIOCRMFF as _, self.id as libc::c_int) };
+            unsafe {
+                libc::ioctl(
+                    self.file.as_raw_fd(),
+                    EVIOCRMFF as _,
+                    self.id as libc::c_int,
+                )
+            };
         }
     }
 }
 
 fn constant_force_device(name: Option<&str>) -> bool {
-    let Ok(dir) = std::fs::read_dir("/sys/class/input") else { return false };
-    dir.filter_map(|e| e.ok()).filter(|e| e.file_name().to_string_lossy().starts_with("event")).any(|e| {
-        let device = e.path().join("device");
-        if let Some(name) = name {
-            let Ok(device_name) = std::fs::read_to_string(device.join("name")) else { return false };
-            if !crate::controllers::names_match(device_name.trim(), name) {
-                return false;
+    let Ok(dir) = std::fs::read_dir("/sys/class/input") else {
+        return false;
+    };
+    dir.filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().starts_with("event"))
+        .any(|e| {
+            let device = e.path().join("device");
+            if let Some(name) = name {
+                let Ok(device_name) = std::fs::read_to_string(device.join("name")) else {
+                    return false;
+                };
+                if !crate::controllers::names_match(device_name.trim(), name) {
+                    return false;
+                }
             }
-        }
-        let caps = std::fs::read_to_string(device.join("capabilities/ff")).unwrap_or_default();
-        has_bit(&caps, FF_CONSTANT)
-    })
+            let caps = std::fs::read_to_string(device.join("capabilities/ff")).unwrap_or_default();
+            has_bit(&caps, FF_CONSTANT)
+        })
 }
 
 /// A device with a constant force is connected (a wheel: openOMSI drives its forces itself).
@@ -149,8 +205,14 @@ pub fn wheel_named(name: &str) -> bool {
 }
 
 fn has_bit(bitmap: &str, bit: usize) -> bool {
-    let words: Vec<u64> = bitmap.split_whitespace().rev().filter_map(|w| u64::from_str_radix(w, 16).ok()).collect();
-    words.get(bit / 64).is_some_and(|w| w >> (bit % 64) & 1 != 0)
+    let words: Vec<u64> = bitmap
+        .split_whitespace()
+        .rev()
+        .filter_map(|w| u64::from_str_radix(w, 16).ok())
+        .collect();
+    words
+        .get(bit / 64)
+        .is_some_and(|w| w >> (bit % 64) & 1 != 0)
 }
 
 #[cfg(test)]

@@ -44,9 +44,20 @@ fn main() {
     }
     // (the window's `update_relaunch`)
     let place = omsi_platform::updater::install_place().expect("install place");
-    let game = place.exe.with_file_name(if cfg!(windows) { "openomsi.exe" } else { "openomsi" });
-    let program = if game.is_file() { game } else { place.exe.clone() };
+    let game = place.exe.with_file_name(if cfg!(windows) {
+        "openomsi.exe"
+    } else {
+        "openomsi"
+    });
+    let program = if game.is_file() {
+        game
+    } else {
+        place.exe.clone()
+    };
     println!("relaunch: {}", program.display());
-    let status = std::process::Command::new(&program).current_dir(&place.dir).status().expect("start");
+    let status = std::process::Command::new(&program)
+        .current_dir(&place.dir)
+        .status()
+        .expect("start");
     println!("the new program ended with {status}");
 }

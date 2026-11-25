@@ -8,7 +8,9 @@ fn main() {
     for dir in ["material", "custom"] {
         let d = assets.join(dir);
         println!("cargo:rerun-if-changed={}", d.display());
-        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
         for e in rd.flatten() {
             let p = e.path();
             if p.extension().and_then(|x| x.to_str()) == Some("svg") {
@@ -21,7 +23,12 @@ fn main() {
     names.dedup_by(|a, b| a.0 == b.0);
     let mut out = String::from("pub(crate) static ICONS: &[(&str, &str)] = &[\n");
     for (n, p) in &names {
-        writeln!(out, "    ({n:?}, include_str!({:?})),", p.to_string_lossy().replace('\\', "/")).unwrap();
+        writeln!(
+            out,
+            "    ({n:?}, include_str!({:?})),",
+            p.to_string_lossy().replace('\\', "/")
+        )
+        .unwrap();
     }
     out.push_str("];\n");
     let dest = PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("icons.rs");

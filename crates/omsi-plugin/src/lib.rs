@@ -51,11 +51,12 @@ pub mod api;
 pub mod data;
 pub mod io;
 pub mod lua;
-pub mod ui;
 pub mod oop;
+mod remote;
+pub mod status;
+pub mod ui;
 pub mod wasm;
 pub mod wasm_plugin;
-mod remote;
 
 pub use io::*;
 pub use remote::Remote;
@@ -95,7 +96,10 @@ pub fn parse_opl(text: &str) -> Opl {
             "[scripttexturelist]" => &mut o.script_textures,
             _ => continue,
         };
-        let n: usize = lines.next().and_then(|c| c.trim().parse().ok()).unwrap_or(0);
+        let n: usize = lines
+            .next()
+            .and_then(|c| c.trim().parse().ok())
+            .unwrap_or(0);
         for _ in 0..n {
             match lines.next() {
                 Some(name) => list.push(name.trim().to_string()),
@@ -110,9 +114,15 @@ pub fn parse_opl(text: &str) -> Opl {
 /// case - the order FindFilesRecursive gives).
 pub fn find_opls(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(dir) else { return out };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return out;
+    };
     let mut entries: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
-    entries.sort_by_key(|p| p.file_name().map(|n| n.to_string_lossy().to_uppercase()).unwrap_or_default());
+    entries.sort_by_key(|p| {
+        p.file_name()
+            .map(|n| n.to_string_lossy().to_uppercase())
+            .unwrap_or_default()
+    });
     for p in entries.iter().filter(|p| p.is_dir()) {
         out.extend(find_opls(p));
     }
@@ -134,19 +144,46 @@ pub fn resolve_path(base: &Path, rel: &str) -> Option<PathBuf> {
             cur = direct;
             continue;
         }
-        let found = std::fs::read_dir(&cur).ok()?.flatten().map(|e| e.path()).find(|p| {
-            p.file_name().is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(part))
-        })?;
+        let found = std::fs::read_dir(&cur)
+            .ok()?
+            .flatten()
+            .map(|e| e.path())
+            .find(|p| {
+                p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case(part))
+            })?;
         cur = found;
     }
     Some(cur)
 }
 
+/// The file name of the DLL an `.opl` names, in lower case; None when it cannot be read.
+pub(crate) fn opl_dll(o: &Path) -> Option<String> {
+    std::fs::read(o).ok().map(|t| {
+        parse_opl(&String::from_utf8_lossy(&t))
+            .dll
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase()
+    })
+}
+
 fn plugin_opls(dirs: &[PathBuf]) -> Vec<(PathBuf, &PathBuf)> {
-    let name = |o: &Path| (o.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()), std::fs::read(o).ok().map(|t| parse_opl(&String::from_utf8_lossy(&t)).dll.rsplit(['\\', '/']).next().unwrap_or("").trim().to_ascii_lowercase()));
+    let name = |o: &Path| {
+        (
+            o.file_name()
+                .map(|n| n.to_string_lossy().to_ascii_lowercase()),
+            opl_dll(o),
+        )
+    };
     let (mut earlier, mut out) = (std::collections::HashSet::new(), Vec::new());
     for dir in dirs {
-        let found: Vec<PathBuf> = find_opls(dir).into_iter().filter(|o| !earlier.contains(&name(o))).collect();
+        let found: Vec<PathBuf> = find_opls(dir)
+            .into_iter()
+            .filter(|o| !earlier.contains(&name(o)))
+            .collect();
         earlier.extend(found.iter().map(|o| name(o)));
         out.extend(found.into_iter().map(|o| (o, dir)));
     }
@@ -241,10 +278,15 @@ impl TicketCall {
     /// What the answer changes: only what differs from the call (a voice when one is given).
     pub fn change(&self, a: &TicketAnswer) -> TicketChange {
         TicketChange {
-            kind: (a.kind != self.kind).then(|| TicketKind::from_code(a.kind)).flatten(),
-            ticket: (a.ticket != self.ticket).then(|| u8::try_from(a.ticket).ok()).flatten(),
+            kind: (a.kind != self.kind)
+                .then(|| TicketKind::from_code(a.kind))
+                .flatten(),
+            ticket: (a.ticket != self.ticket)
+                .then(|| u8::try_from(a.ticket).ok())
+                .flatten(),
             name: (a.name != self.name).then(|| a.name.clone()),
-            price: (a.price.to_bits() != self.price.to_bits() && a.price.is_finite()).then_some(a.price.max(0.0)),
+            price: (a.price.to_bits() != self.price.to_bits() && a.price.is_finite())
+                .then_some(a.price.max(0.0)),
             voice: (!a.voice.trim().is_empty()).then(|| a.voice.clone()),
             tag: None,
             payment: None,
@@ -276,7 +318,12 @@ impl TexturePointer {
         if !self.pages.contains(&page) {
             return false;
         }
-        if kind == POINTER_MOVE && self.pending.last().is_some_and(|l| l.0 == page && l.1 == POINTER_MOVE) {
+        if kind == POINTER_MOVE
+            && self
+                .pending
+                .last()
+                .is_some_and(|l| l.0 == page && l.1 == POINTER_MOVE)
+        {
             self.pending.pop();
         }
         if self.pending.len() < 256 || kind == POINTER_UP {
@@ -317,11 +364,25 @@ pub struct Procs {
 impl Procs {
     /// As the host reports them after `START`.
     pub fn flags(&self) -> u8 {
-        self.variable as u8 | (self.trigger as u8) << 1 | (self.system as u8) << 2 | (self.string as u8) << 3 | (self.texture as u8) << 4 | (self.pointer as u8) << 5 | (self.ticket as u8) << 6
+        self.variable as u8
+            | (self.trigger as u8) << 1
+            | (self.system as u8) << 2
+            | (self.string as u8) << 3
+            | (self.texture as u8) << 4
+            | (self.pointer as u8) << 5
+            | (self.ticket as u8) << 6
     }
 
     pub fn from_flags(flags: u8) -> Procs {
-        Procs { variable: flags & 1 != 0, trigger: flags & 2 != 0, system: flags & 4 != 0, string: flags & 8 != 0, texture: flags & 16 != 0, pointer: flags & 32 != 0, ticket: flags & 64 != 0 }
+        Procs {
+            variable: flags & 1 != 0,
+            trigger: flags & 2 != 0,
+            system: flags & 4 != 0,
+            string: flags & 8 != 0,
+            texture: flags & 16 != 0,
+            pointer: flags & 32 != 0,
+            ticket: flags & 64 != 0,
+        }
     }
 }
 
@@ -332,7 +393,20 @@ type AccessStringFn = unsafe extern "system" fn(u16, *mut u16, *mut u8);
 type AccessTriggerFn = unsafe extern "system" fn(u16, *mut u8);
 type AccessTextureFn = unsafe extern "system" fn(u16, i32, i32, *mut u8, *mut u8);
 type AccessPointerFn = unsafe extern "system" fn(u16, i32, f32, f32);
-type AccessTicketFn = unsafe extern "system" fn(u32, f32, *const u16, *const u16, i32, i32, *mut i32, *mut i32, *mut f32, *mut u16, *mut u16, *mut u8);
+type AccessTicketFn = unsafe extern "system" fn(
+    u32,
+    f32,
+    *const u16,
+    *const u16,
+    i32,
+    i32,
+    *mut i32,
+    *mut i32,
+    *mut f32,
+    *mut u16,
+    *mut u16,
+    *mut u8,
+);
 
 /// The largest script texture side handed to a plugin (a bad size must not allocate
 /// gigabytes, here or in the host).
@@ -367,21 +441,66 @@ impl Library {
             }
         })?;
         unsafe {
-            let start = *lib.get::<StartFn>(b"PluginStart\0").map_err(|_| "procedure \"PluginStart\" not found".to_string())?;
-            let finalize = *lib.get::<FinalizeFn>(b"PluginFinalize\0").map_err(|_| "procedure \"PluginFinalize\" not found".to_string())?;
-            let variable = lib.get::<AccessFloatFn>(b"AccessVariable\0").ok().map(|s| *s);
-            let trigger = lib.get::<AccessTriggerFn>(b"AccessTrigger\0").ok().map(|s| *s);
-            let system = lib.get::<AccessFloatFn>(b"AccessSystemVariable\0").ok().map(|s| *s);
-            let string = lib.get::<AccessStringFn>(b"AccessStringVariable\0").ok().map(|s| *s);
-            let texture = lib.get::<AccessTextureFn>(b"AccessScriptTexture\0").ok().map(|s| *s);
-            let pointer = lib.get::<AccessPointerFn>(b"AccessScriptTexturePointer\0").ok().map(|s| *s);
-            let ticket = lib.get::<AccessTicketFn>(b"AccessTicketRequest\0").ok().map(|s| *s);
-            Ok(Library { _lib: lib, start, finalize, variable, trigger, system, string, texture, pointer, ticket, buffers: Vec::new() })
+            let start = *lib
+                .get::<StartFn>(b"PluginStart\0")
+                .map_err(|_| "procedure \"PluginStart\" not found".to_string())?;
+            let finalize = *lib
+                .get::<FinalizeFn>(b"PluginFinalize\0")
+                .map_err(|_| "procedure \"PluginFinalize\" not found".to_string())?;
+            let variable = lib
+                .get::<AccessFloatFn>(b"AccessVariable\0")
+                .ok()
+                .map(|s| *s);
+            let trigger = lib
+                .get::<AccessTriggerFn>(b"AccessTrigger\0")
+                .ok()
+                .map(|s| *s);
+            let system = lib
+                .get::<AccessFloatFn>(b"AccessSystemVariable\0")
+                .ok()
+                .map(|s| *s);
+            let string = lib
+                .get::<AccessStringFn>(b"AccessStringVariable\0")
+                .ok()
+                .map(|s| *s);
+            let texture = lib
+                .get::<AccessTextureFn>(b"AccessScriptTexture\0")
+                .ok()
+                .map(|s| *s);
+            let pointer = lib
+                .get::<AccessPointerFn>(b"AccessScriptTexturePointer\0")
+                .ok()
+                .map(|s| *s);
+            let ticket = lib
+                .get::<AccessTicketFn>(b"AccessTicketRequest\0")
+                .ok()
+                .map(|s| *s);
+            Ok(Library {
+                _lib: lib,
+                start,
+                finalize,
+                variable,
+                trigger,
+                system,
+                string,
+                texture,
+                pointer,
+                ticket,
+                buffers: Vec::new(),
+            })
         }
     }
 
     pub fn procs(&self) -> Procs {
-        Procs { variable: self.variable.is_some(), trigger: self.trigger.is_some(), system: self.system.is_some(), string: self.string.is_some(), texture: self.texture.is_some(), pointer: self.pointer.is_some(), ticket: self.ticket.is_some() }
+        Procs {
+            variable: self.variable.is_some(),
+            trigger: self.trigger.is_some(),
+            system: self.system.is_some(),
+            string: self.string.is_some(),
+            texture: self.texture.is_some(),
+            pointer: self.pointer.is_some(),
+            ticket: self.ticket.is_some(),
+        }
     }
 
     /// `PluginStart(AOwner)`; there is no Delphi application to own the plugin's forms here.
@@ -432,7 +551,9 @@ impl Library {
             .triggers
             .iter()
             .map(|&i| {
-                let Some(func) = self.trigger else { return false };
+                let Some(func) = self.trigger else {
+                    return false;
+                };
                 let mut active = 0u8;
                 unsafe { func(i, &mut active) };
                 active != 0
@@ -469,7 +590,11 @@ impl Library {
                 (write != 0).then(|| buf.clone())
             })
             .collect();
-        r.tickets = f.tickets.iter().map(|t| self.ticket.and_then(|func| call_ticket(func, t))).collect();
+        r.tickets = f
+            .tickets
+            .iter()
+            .map(|t| self.ticket.and_then(|func| call_ticket(func, t)))
+            .collect();
         r
     }
 }
@@ -483,15 +608,38 @@ fn call_ticket(func: AccessTicketFn, t: &TicketCall) -> Option<TicketAnswer> {
         b.resize(TICKET_TEXT, 0);
         b
     };
-    let read = |b: &[u16]| String::from_utf16_lossy(&b[..b.iter().position(|&c| c == 0).unwrap_or(b.len())]);
+    let read = |b: &[u16]| {
+        String::from_utf16_lossy(&b[..b.iter().position(|&c| c == 0).unwrap_or(b.len())])
+    };
     let (stop, dest) = (wide(&t.stop), wide(&t.destination));
     let (mut name, mut voice) = (buffer(&t.name), buffer(""));
     let (mut kind, mut ticket, mut price, mut write) = (t.kind, t.ticket, t.price, 0u8);
-    unsafe { func(t.person, t.age, stop.as_ptr(), dest.as_ptr(), t.stop_number, t.destination_number, &mut kind, &mut ticket, &mut price, name.as_mut_ptr(), voice.as_mut_ptr(), &mut write) };
+    unsafe {
+        func(
+            t.person,
+            t.age,
+            stop.as_ptr(),
+            dest.as_ptr(),
+            t.stop_number,
+            t.destination_number,
+            &mut kind,
+            &mut ticket,
+            &mut price,
+            name.as_mut_ptr(),
+            voice.as_mut_ptr(),
+            &mut write,
+        )
+    };
     // (the last character stays the terminating zero whatever the plugin wrote)
     name[TICKET_TEXT - 1] = 0;
     voice[TICKET_TEXT - 1] = 0;
-    (write != 0).then(|| TicketAnswer { kind, ticket, price, name: read(&name), voice: read(&voice) })
+    (write != 0).then(|| TicketAnswer {
+        kind,
+        ticket,
+        price,
+        name: read(&name),
+        voice: read(&voice),
+    })
 }
 
 /// Wide characters a plugin's string variable buffer has at least (see `frame`).
@@ -560,7 +708,12 @@ pub mod wire {
     /// keeps working for every plugin without the procedure.
     ///
     /// The mouse events likewise only when `pointer` (`AccessScriptTexturePointer`).
-    pub fn put_frame(w: &mut impl Write, f: &Frame, textures: bool, pointer: bool) -> std::io::Result<()> {
+    pub fn put_frame(
+        w: &mut impl Write,
+        f: &Frame,
+        textures: bool,
+        pointer: bool,
+    ) -> std::io::Result<()> {
         put_u16(w, f.system.len() as u16)?;
         for (i, v) in &f.system {
             put_u16(w, *i)?;
@@ -621,7 +774,8 @@ pub mod wire {
         }
         if pointer {
             for _ in 0..get_u16(r)? {
-                f.pointer.push((get_u16(r)?, get_u8(r)?, get_f32(r)?, get_f32(r)?));
+                f.pointer
+                    .push((get_u16(r)?, get_u8(r)?, get_f32(r)?, get_f32(r)?));
             }
         }
         Ok(f)
@@ -693,7 +847,10 @@ pub mod wire {
     }
 
     /// The answers, one per passenger of the frame, after the reply.
-    pub fn put_ticket_answers(w: &mut impl Write, a: &[Option<TicketAnswer>]) -> std::io::Result<()> {
+    pub fn put_ticket_answers(
+        w: &mut impl Write,
+        a: &[Option<TicketAnswer>],
+    ) -> std::io::Result<()> {
         for t in a {
             match t {
                 Some(t) => {
@@ -710,13 +867,22 @@ pub mod wire {
         Ok(())
     }
 
-    pub fn get_ticket_answers(r: &mut impl Read, n: usize) -> std::io::Result<Vec<Option<TicketAnswer>>> {
+    pub fn get_ticket_answers(
+        r: &mut impl Read,
+        n: usize,
+    ) -> std::io::Result<Vec<Option<TicketAnswer>>> {
         (0..n)
             .map(|_| {
                 if get_u8(r)? == 0 {
                     return Ok(None);
                 }
-                Ok(Some(TicketAnswer { kind: get_u32(r)? as i32, ticket: get_u32(r)? as i32, price: get_f32(r)?, name: get_str(r)?, voice: get_str(r)? }))
+                Ok(Some(TicketAnswer {
+                    kind: get_u32(r)? as i32,
+                    ticket: get_u32(r)? as i32,
+                    price: get_f32(r)?,
+                    name: get_str(r)?,
+                    voice: get_str(r)?,
+                }))
             })
             .collect()
     }
@@ -724,7 +890,16 @@ pub mod wire {
     pub fn get_reply(rd: &mut impl Read, f: &Frame, textures: bool) -> std::io::Result<Reply> {
         let mut r = Reply::default();
         let mut float = |n: usize| -> std::io::Result<Vec<Option<f32>>> {
-            (0..n).map(|_| Ok(if get_u8(rd)? != 0 { Some(get_f32(rd)?) } else { get_f32(rd)?; None })).collect()
+            (0..n)
+                .map(|_| {
+                    Ok(if get_u8(rd)? != 0 {
+                        Some(get_f32(rd)?)
+                    } else {
+                        get_f32(rd)?;
+                        None
+                    })
+                })
+                .collect()
         };
         r.system = float(f.system.len())?;
         r.vars = float(f.vars.len())?;
@@ -746,7 +921,10 @@ pub mod wire {
                 // (exactly the size asked: anything else is a broken host, and its length
                 // must not decide how much is allocated)
                 if tw > MAX_TEXTURE_SIDE || th > MAX_TEXTURE_SIDE || n != (tw * th * 4) as usize {
-                    return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "script texture of the wrong size"));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "script texture of the wrong size",
+                    ));
                 }
                 let mut px = vec![0u8; n];
                 rd.read_exact(&mut px)?;
@@ -796,7 +974,9 @@ struct Asked {
 const PATCHES_OMSI_EXE: &[&str] = &["omsipresentationtools.dll"];
 
 fn patches_omsi_exe(dll: &Path) -> bool {
-    dll.file_name().is_some_and(|n| PATCHES_OMSI_EXE.contains(&n.to_string_lossy().to_ascii_lowercase().as_str()))
+    dll.file_name().is_some_and(|n| {
+        PATCHES_OMSI_EXE.contains(&n.to_string_lossy().to_ascii_lowercase().as_str())
+    })
 }
 
 /// Where to look for the out-of-process host and what runs it.
@@ -806,42 +986,65 @@ pub struct HostConfig {
     pub host32: Option<PathBuf>,
     /// The program that runs Windows executables here (`wine`); none on Windows.
     pub runner: Option<PathBuf>,
+    /// Plugins the player switched off in the launcher, by [`status::plugin_key`] or
+    /// [`status::opl_key`] (#3919).
+    pub off: Vec<String>,
+    /// Where the session's [`status::Report`] goes (None: nowhere).
+    pub status_file: Option<PathBuf>,
 }
 
 impl HostConfig {
-    /// The host next to the running program and, off Windows, `wine` from the path.
+    /// The host next to the running program and, off Windows, `wine` from the path; the
+    /// plugins switched off in the launcher and where the session's status goes, both in
+    /// `~/.openomsi` (`omsi_lan::data_dir`, the launcher's `data_dir`).
     pub fn detect() -> HostConfig {
-        let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
-        let host32 = omsi_cfg::flags::OMSI_PLUGIN_HOST32.live_os()
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(Path::to_path_buf));
+        let host32 = omsi_cfg::flags::OMSI_PLUGIN_HOST32
+            .live_os()
             .map(PathBuf::from)
             .or_else(|| exe_dir.map(|d| d.join("omsi-plugin-host32.exe")))
             .filter(|p| p.is_file());
         let runner = if cfg!(windows) {
             None
         } else {
-            omsi_cfg::flags::OMSI_WINE.live_os().map(PathBuf::from).or_else(|| {
-                // the path, then where Homebrew and the Wine app bundles put it (a game
-                // started from Finder gets a path without /opt/homebrew/bin)
-                let from_path: Vec<PathBuf> = std::env::var_os("PATH")
-                    .map(|paths| std::env::split_paths(&paths).map(|d| d.join("wine")).collect())
-                    .unwrap_or_default();
-                from_path
-                    .into_iter()
-                    .chain(
-                        [
-                            "/opt/homebrew/bin/wine",
-                            "/usr/local/bin/wine",
-                            "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine",
-                            "/Applications/Wine Devel.app/Contents/Resources/wine/bin/wine",
-                            "/Applications/Wine Staging.app/Contents/Resources/wine/bin/wine",
-                            "/usr/bin/wine",
-                        ]
-                        .map(PathBuf::from),
-                    )
-                    .find(|p| p.is_file())
-            })
+            omsi_cfg::flags::OMSI_WINE
+                .live_os()
+                .map(PathBuf::from)
+                .or_else(|| {
+                    // the path, then where Homebrew and the Wine app bundles put it (a game
+                    // started from Finder gets a path without /opt/homebrew/bin)
+                    let from_path: Vec<PathBuf> = std::env::var_os("PATH")
+                        .map(|paths| {
+                            std::env::split_paths(&paths)
+                                .map(|d| d.join("wine"))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    from_path
+                        .into_iter()
+                        .chain(
+                            [
+                                "/opt/homebrew/bin/wine",
+                                "/usr/local/bin/wine",
+                                "/Applications/Wine Stable.app/Contents/Resources/wine/bin/wine",
+                                "/Applications/Wine Devel.app/Contents/Resources/wine/bin/wine",
+                                "/Applications/Wine Staging.app/Contents/Resources/wine/bin/wine",
+                                "/usr/bin/wine",
+                            ]
+                            .map(PathBuf::from),
+                        )
+                        .find(|p| p.is_file())
+                })
         };
-        HostConfig { host32, runner }
+        let data = status::game_data();
+        HostConfig {
+            host32,
+            runner,
+            off: data.as_deref().map(status::read_off).unwrap_or_default(),
+            status_file: data.map(|d| d.join(status::STATUS_FILE)),
+        }
     }
 }
 
@@ -854,7 +1057,8 @@ impl Plugin {
         if opl.dll.is_empty() {
             return Err("no [dll]".into());
         }
-        let dll = library_path(opl_path, plugins_dir, &opl.dll).ok_or_else(|| format!("{} not found", opl.dll))?;
+        let dll = library_path(opl_path, plugins_dir, &opl.dll)
+            .ok_or_else(|| format!("{} not found", opl.dll))?;
         if patches_omsi_exe(&dll) {
             return Err("it patches the code of OMSI.exe, which openOMSI does not run".into());
         }
@@ -866,10 +1070,14 @@ impl Plugin {
             }
             Err(local) => {
                 let Some(host) = &hosts.host32 else {
-                    return Err(format!("{local}; a 32-bit Windows plugin needs omsi-plugin-host32.exe next to the game"));
+                    return Err(format!(
+                        "{local}; a 32-bit Windows plugin needs omsi-plugin-host32.exe next to the game"
+                    ));
                 };
                 if !cfg!(windows) && hosts.runner.is_none() {
-                    return Err(format!("{local}; a Windows plugin needs Wine here (or OMSI_WINE)"));
+                    return Err(format!(
+                        "{local}; a Windows plugin needs Wine here (or OMSI_WINE)"
+                    ));
                 }
                 let root = plugins_dir.parent().unwrap_or(plugins_dir);
                 let r = Remote::spawn(hosts.runner.as_deref(), host, &dll, root)?;
@@ -877,13 +1085,29 @@ impl Plugin {
                 (Backend::Remote(r), p)
             }
         };
-        for (has, name) in [(procs.variable, "AccessVariable"), (procs.trigger, "AccessTrigger"), (procs.system, "AccessSystemVariable"), (procs.string, "AccessStringVariable")] {
+        for (has, name) in [
+            (procs.variable, "AccessVariable"),
+            (procs.trigger, "AccessTrigger"),
+            (procs.system, "AccessSystemVariable"),
+            (procs.string, "AccessStringVariable"),
+        ] {
             if !has {
-                log::warn!("Loading plugin {}: procedure \"{name}\" not found!", opl.dll);
+                log::warn!(
+                    "Loading plugin {}: procedure \"{name}\" not found!",
+                    opl.dll
+                );
             }
         }
         let n = opl.triggers.len();
-        Ok(Plugin { opl_path: opl_path.to_path_buf(), opl, backend, procs, trigger_state: vec![false; n], failed: false, owed: None })
+        Ok(Plugin {
+            opl_path: opl_path.to_path_buf(),
+            opl,
+            backend,
+            procs,
+            trigger_state: vec![false; n],
+            failed: false,
+            owed: None,
+        })
     }
 
     pub fn procs(&self) -> Procs {
@@ -907,15 +1131,32 @@ impl Plugin {
                         if let Some(mut asked) = self.owed.take() {
                             let now = io.has_vehicle().then(|| io.bus_ident()).flatten();
                             if asked.vehicle != now {
-                                log::info!("plugin {}: its late answer was for another bus; only its system variables are taken", self.opl.dll);
-                                asked = Asked { frame: Frame { system: asked.frame.system, ..Default::default() }, vehicle: None, system: asked.system, vars: Vec::new(), strings: Vec::new(), triggers: Vec::new(), textures: Vec::new() };
+                                log::info!(
+                                    "plugin {}: its late answer was for another bus; only its system variables are taken",
+                                    self.opl.dll
+                                );
+                                asked = Asked {
+                                    frame: Frame {
+                                        system: asked.frame.system,
+                                        ..Default::default()
+                                    },
+                                    vehicle: None,
+                                    system: asked.system,
+                                    vars: Vec::new(),
+                                    strings: Vec::new(),
+                                    triggers: Vec::new(),
+                                    textures: Vec::new(),
+                                };
                             }
                             self.take_reply(io, &asked, &reply);
                         }
                     }
                     Ok(None) => return,
                     Err(e) => {
-                        log::warn!("plugin {}: the host stopped answering ({e}); it is left out from now on", self.opl.dll);
+                        log::warn!(
+                            "plugin {}: the host stopped answering ({e}); it is left out from now on",
+                            self.opl.dll
+                        );
                         self.failed = true;
                         return;
                     }
@@ -933,7 +1174,8 @@ impl Plugin {
             }
         }
         let vehicle = io.has_vehicle();
-        let (mut var_names, mut str_names, mut trig_idx, mut tex_idx) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut var_names, mut str_names, mut trig_idx, mut tex_idx) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         if vehicle {
             if self.procs.variable {
                 for (i, n) in self.opl.vars.iter().enumerate() {
@@ -996,23 +1238,47 @@ impl Plugin {
             Backend::Remote(r) => match r.frame(&f) {
                 Ok(r) => r,
                 Err(e) => {
-                    log::warn!("plugin {}: the host stopped answering ({e}); it is left out from now on", self.opl.dll);
+                    log::warn!(
+                        "plugin {}: the host stopped answering ({e}); it is left out from now on",
+                        self.opl.dll
+                    );
                     self.failed = true;
                     return;
                 }
             },
         };
-        let asked = Asked { frame: f, vehicle: None, system: sys_names, vars: var_names, strings: str_names, triggers: trig_idx, textures: tex_idx };
+        let asked = Asked {
+            frame: f,
+            vehicle: None,
+            system: sys_names,
+            vars: var_names,
+            strings: str_names,
+            triggers: trig_idx,
+            textures: tex_idx,
+        };
         match reply {
             Some(reply) => self.take_reply(io, &asked, &reply),
             // (busy in its own code: the game goes on, the answer is taken when it comes)
-            None => self.owed = Some(Asked { vehicle: vehicle.then(|| io.bus_ident()).flatten(), ..asked }),
+            None => {
+                self.owed = Some(Asked {
+                    vehicle: vehicle.then(|| io.bus_ident()).flatten(),
+                    ..asked
+                })
+            }
         }
     }
 
     /// What the plugin wrote in its answer to `asked`.
     fn take_reply(&mut self, io: &mut dyn PluginIo, asked: &Asked, reply: &Reply) {
-        let Asked { frame: f, system: sys_names, vars: var_names, strings: str_names, triggers: trig_idx, textures: tex_idx, .. } = asked;
+        let Asked {
+            frame: f,
+            system: sys_names,
+            vars: var_names,
+            strings: str_names,
+            triggers: trig_idx,
+            textures: tex_idx,
+            ..
+        } = asked;
         for (n, v) in sys_names.iter().zip(&reply.system) {
             if let Some(v) = v {
                 io.set_system(n, *v);
@@ -1041,9 +1307,16 @@ impl Plugin {
         }
         for (call, answer) in f.tickets.iter().zip(&reply.tickets) {
             let Some(answer) = answer else { continue };
-            let by = Path::new(&self.opl.dll.replace('\\', "/")).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let by = Path::new(&self.opl.dll.replace('\\', "/"))
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
             if let Err(why) = io.people_set_ticket(call.person, &call.change(answer), &by) {
-                log::info!("plugin {}: the ticket of passenger {} was not changed: {why}", self.opl.dll, call.person);
+                log::info!(
+                    "plugin {}: the ticket of passenger {} was not changed: {why}",
+                    self.opl.dll,
+                    call.person
+                );
             }
         }
     }
@@ -1066,10 +1339,18 @@ pub const OBJECT_PREFIX: &str = "object:";
 /// path, so `Objects/A/gate.lua` and `Objects/B/gate.lua` are two scripts. The game loads a
 /// script and routes its events by this name alone.
 pub fn object_script_name(path: &Path) -> String {
-    let stem = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "script".into());
+    let stem = path
+        .file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "script".into());
     // FNV-1a over the path as written, with one kind of separator and no letter case
     let mut h: u32 = 0x811c_9dc5;
-    for b in path.to_string_lossy().replace('\\', "/").to_ascii_lowercase().bytes() {
+    for b in path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase()
+        .bytes()
+    {
         h = (h ^ u32::from(b)).wrapping_mul(0x0100_0193);
     }
     format!("{OBJECT_PREFIX}{stem}-{h:08x}")
@@ -1100,42 +1381,120 @@ impl Plugins {
         Self::load_with_process_grants(dirs, hosts, api::process::ProcessGrants::from_env())
     }
 
-    pub fn load_with_process_grants(dirs: &[PathBuf], hosts: &HostConfig, process_grants: api::process::ProcessGrants) -> Plugins {
+    pub fn load_with_process_grants(
+        dirs: &[PathBuf],
+        hosts: &HostConfig,
+        process_grants: api::process::ProcessGrants,
+    ) -> Plugins {
         Self::load_process_host(dirs, hosts, process_grants, None)
     }
 
     /// Interactive game hosts supply a broker whose requests only their trusted UI can answer.
-    pub fn load_with_process_permissions(dirs: &[PathBuf], hosts: &HostConfig, process_grants: api::process::ProcessGrants, permissions: std::sync::Arc<api::process::ProcessPermissions>) -> Plugins {
+    pub fn load_with_process_permissions(
+        dirs: &[PathBuf],
+        hosts: &HostConfig,
+        process_grants: api::process::ProcessGrants,
+        permissions: std::sync::Arc<api::process::ProcessPermissions>,
+    ) -> Plugins {
         Self::load_process_host(dirs, hosts, process_grants, Some(permissions))
     }
 
-    fn load_process_host(dirs: &[PathBuf], hosts: &HostConfig, process_grants: api::process::ProcessGrants, process_permissions: Option<std::sync::Arc<api::process::ProcessPermissions>>) -> Plugins {
+    fn load_process_host(
+        dirs: &[PathBuf],
+        hosts: &HostConfig,
+        process_grants: api::process::ProcessGrants,
+        process_permissions: Option<std::sync::Arc<api::process::ProcessPermissions>>,
+    ) -> Plugins {
         let mut loaded: Vec<Plugin> = Vec::new();
+        let mut status = status::Status::new(hosts.status_file.clone());
+        let off = |name: &str, stem: &str| status::is_off(&hosts.off, name, stem);
+        let mut taken = std::collections::HashSet::new();
         for (opl, dir) in plugin_opls(dirs) {
-            match Plugin::load(&opl, dir, hosts) {
+            let name = status::opl_name(&opl, dir, opl_dll(&opl), &mut taken);
+            if off(&name, &name) {
+                log::info!(
+                    "plugin {} left off (switched off in the launcher)",
+                    opl.display()
+                );
+                status.add(&name, &opl, "opl", "off", "");
+                continue;
+            }
+            let loaded_now = Plugin::load(&opl, dir, hosts);
+            status.add(
+                &name,
+                &opl,
+                "opl",
+                if loaded_now.is_ok() {
+                    "loaded"
+                } else {
+                    "failed"
+                },
+                &loaded_now
+                    .as_ref()
+                    .err()
+                    .map(|e| e.to_string())
+                    .unwrap_or_default(),
+            );
+            match loaded_now {
                 Ok(p) => {
-                    log::info!("plugin {} loaded ({} variables, {} strings, {} system variables, {} triggers, {} script textures{})", p.opl.dll, p.opl.vars.len(), p.opl.string_vars.len(), p.opl.system_vars.len(), p.opl.triggers.len(), if p.procs.texture { p.opl.script_textures.len() } else { 0 }, if p.procs.ticket { ", passengers' tickets" } else { "" });
+                    log::info!(
+                        "plugin {} loaded ({} variables, {} strings, {} system variables, {} triggers, {} script textures{})",
+                        p.opl.dll,
+                        p.opl.vars.len(),
+                        p.opl.string_vars.len(),
+                        p.opl.system_vars.len(),
+                        p.opl.triggers.len(),
+                        if p.procs.texture {
+                            p.opl.script_textures.len()
+                        } else {
+                            0
+                        },
+                        if p.procs.ticket {
+                            ", passengers' tickets"
+                        } else {
+                            ""
+                        }
+                    );
                     loaded.push(p);
                 }
                 Err(e) => log::warn!("Could not load plugin {}: {e}", opl.display()),
             }
         }
         let mut lua = Vec::new();
-        let hub = std::rc::Rc::new(api::runtime::Hub { process_grants: std::sync::Arc::new(process_grants), process_permissions, ..Default::default() });
+        let hub = std::rc::Rc::new(api::runtime::Hub {
+            process_grants: std::sync::Arc::new(process_grants),
+            process_permissions,
+            ..Default::default()
+        });
         let ui = hub.ui.clone();
         let mut seen = std::collections::HashSet::new();
         for dir in dirs {
             for path in lua::find_lua(dir) {
-                let key = path.strip_prefix(dir).unwrap_or(&path).to_string_lossy().to_ascii_lowercase();
+                let key = path
+                    .strip_prefix(dir)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .to_ascii_lowercase();
                 if !seen.insert(key) {
                     continue;
                 }
-                match lua::LuaPlugin::start_spec(lua::LuaSpec::disk(&path), &path, &mut lua::NoVehicle, hub.clone()) {
+                let spec = lua::LuaSpec::disk(&path);
+                let name = status::plugin_key(&path, dir);
+                if off(&name, &spec.name) {
+                    log::info!("Lua plugin {name} left off (switched off in the launcher)");
+                    status.add(&name, &path, "lua", "off", "");
+                    continue;
+                }
+                match lua::LuaPlugin::start_spec(spec, &path, &mut lua::NoVehicle, hub.clone()) {
                     Ok(p) => {
                         log::info!("Lua plugin {} loaded ({})", p.name, path.display());
+                        status.add(&name, &path, "lua", "loaded", "");
                         lua.push(p);
                     }
-                    Err(e) => log::warn!("Could not load Lua plugin {}: {e}", path.display()),
+                    Err(e) => {
+                        log::warn!("Could not load Lua plugin {}: {e}", path.display());
+                        status.add(&name, &path, "lua", "failed", &e.to_string());
+                    }
                 }
             }
         }
@@ -1143,31 +1502,77 @@ impl Plugins {
         let mut wasm = Vec::new();
         for dir in dirs {
             for path in oop::find_oop(dir) {
-                let name = path.file_stem().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-                if lua.iter().any(|p: &lua::LuaPlugin| p.name.eq_ignore_ascii_case(&name)) || wasm.iter().any(|p: &wasm_plugin::WasmHost| p.name.eq_ignore_ascii_case(&name)) {
-                    log::warn!("plugin {} left out: a plugin of that name is loaded already", path.display());
+                let stem = path
+                    .file_stem()
+                    .map(|n| n.to_string_lossy().to_ascii_lowercase())
+                    .unwrap_or_default();
+                if lua
+                    .iter()
+                    .any(|p: &lua::LuaPlugin| p.name.eq_ignore_ascii_case(&stem))
+                    || wasm
+                        .iter()
+                        .any(|p: &wasm_plugin::WasmHost| p.name.eq_ignore_ascii_case(&stem))
+                {
+                    log::warn!(
+                        "plugin {} left out: a plugin of that name is loaded already",
+                        path.display()
+                    );
                     continue;
                 }
+                let name = status::plugin_key(&path, dir);
+                if off(&name, &stem) {
+                    log::info!(
+                        "plugin {} left off (switched off in the launcher)",
+                        path.display()
+                    );
+                    status.add(&name, &path, "oop", "off", "");
+                    continue;
+                }
+                let failed = |status: &mut status::Status, e: &dyn std::fmt::Display| {
+                    log::warn!("Could not load plugin {}: {e}", path.display());
+                    status.add(&name, &path, "oop", "failed", &e.to_string());
+                };
                 match oop::load(&path) {
-                    Ok(oop::Loaded::Lua(spec)) => match lua::LuaPlugin::start_spec(spec, &path, &mut lua::NoVehicle, hub.clone()) {
+                    Ok(oop::Loaded::Lua(spec)) => match lua::LuaPlugin::start_spec(
+                        spec,
+                        &path,
+                        &mut lua::NoVehicle,
+                        hub.clone(),
+                    ) {
                         Ok(p) => {
                             log::info!("Lua plugin {} loaded ({})", p.name, path.display());
+                            status.add(&name, &path, "oop", "loaded", "");
                             lua.push(p);
                         }
-                        Err(e) => log::warn!("Could not load plugin {}: {e}", path.display()),
+                        Err(e) => failed(&mut status, &e),
                     },
-                    Ok(oop::Loaded::Wasm(spec)) => match wasm_plugin::WasmHost::start(spec, &path, &mut lua::NoVehicle, hub.clone()) {
+                    Ok(oop::Loaded::Wasm(spec)) => match wasm_plugin::WasmHost::start(
+                        spec,
+                        &path,
+                        &mut lua::NoVehicle,
+                        hub.clone(),
+                    ) {
                         Ok(p) => {
                             log::info!("WASM plugin {} loaded ({})", p.name, path.display());
+                            status.add(&name, &path, "oop", "loaded", "");
                             wasm.push(p);
                         }
-                        Err(e) => log::warn!("Could not load plugin {}: {e}", path.display()),
+                        Err(e) => failed(&mut status, &e),
                     },
-                    Err(e) => log::warn!("Could not load plugin {}: {e}", path.display()),
+                    Err(e) => failed(&mut status, &e),
                 }
             }
         }
-        Plugins { loaded, lua, wasm, ui, hub, pointer: Vec::new() }
+        status.write();
+        *hub.status.borrow_mut() = status;
+        Plugins {
+            loaded,
+            lua,
+            wasm,
+            ui,
+            hub,
+            pointer: Vec::new(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -1179,7 +1584,14 @@ impl Plugins {
     /// native programs are for the player's own plugins. A vehicle is content from anywhere, and
     /// a `.oop` that asks for more keeps only these.
     pub fn vehicle_script_permissions() -> std::collections::HashSet<api::Perm> {
-        [api::Perm::Ui, api::Perm::Storage, api::Perm::VehicleWrite, api::Perm::Audio].into_iter().collect()
+        [
+            api::Perm::Ui,
+            api::Perm::Storage,
+            api::Perm::VehicleWrite,
+            api::Perm::Audio,
+        ]
+        .into_iter()
+        .collect()
     }
 
     /// Start the scripts of a vehicle (its `[vehicle_script]` files) as plugins named
@@ -1190,8 +1602,14 @@ impl Plugins {
         let allowed = Self::vehicle_script_permissions();
         let mut started = 0;
         for path in files {
-            let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-            let stem = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "script".into());
+            let ext = path
+                .extension()
+                .map(|e| e.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
+            let stem = path
+                .file_stem()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "script".into());
             let name = format!("{VEHICLE_PREFIX}{stem}");
             let narrow = |declared: Option<std::collections::HashSet<api::Perm>>| -> Option<std::collections::HashSet<api::Perm>> {
                 Some(match declared {
@@ -1204,18 +1622,31 @@ impl Plugins {
                     let mut spec = lua::LuaSpec::disk(path);
                     spec.name = name.clone();
                     spec.perms = narrow(None);
-                    lua::LuaPlugin::start_spec(spec, path, &mut lua::NoVehicle, self.hub.clone()).map(|p| self.lua.push(p))
+                    lua::LuaPlugin::start_spec(spec, path, &mut lua::NoVehicle, self.hub.clone())
+                        .map(|p| self.lua.push(p))
                 }
                 "oop" => match oop::load(path) {
                     Ok(oop::Loaded::Lua(mut spec)) => {
                         spec.name = name.clone();
                         spec.perms = narrow(spec.perms.take());
-                        lua::LuaPlugin::start_spec(spec, path, &mut lua::NoVehicle, self.hub.clone()).map(|p| self.lua.push(p))
+                        lua::LuaPlugin::start_spec(
+                            spec,
+                            path,
+                            &mut lua::NoVehicle,
+                            self.hub.clone(),
+                        )
+                        .map(|p| self.lua.push(p))
                     }
                     Ok(oop::Loaded::Wasm(mut spec)) => {
                         spec.name = name.clone();
                         spec.perms = narrow(spec.perms.take());
-                        wasm_plugin::WasmHost::start(spec, path, &mut lua::NoVehicle, self.hub.clone()).map(|p| self.wasm.push(p))
+                        wasm_plugin::WasmHost::start(
+                            spec,
+                            path,
+                            &mut lua::NoVehicle,
+                            self.hub.clone(),
+                        )
+                        .map(|p| self.wasm.push(p))
                     }
                     Err(e) => Err(e),
                 },
@@ -1241,25 +1672,38 @@ impl Plugins {
         if self.has(&name) {
             return Some(name);
         }
-        let allowed: std::collections::HashSet<api::Perm> = [api::Perm::Audio].into_iter().collect();
-        let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        let allowed: std::collections::HashSet<api::Perm> =
+            [api::Perm::Audio].into_iter().collect();
+        let ext = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default();
         let result: Result<(), String> = match ext.as_str() {
             "lua" => {
                 let mut spec = lua::LuaSpec::disk(path);
                 spec.name = name.clone();
                 spec.perms = Some(allowed);
-                lua::LuaPlugin::start_spec(spec, path, &mut lua::NoVehicle, self.hub.clone()).map(|p| self.lua.push(p))
+                lua::LuaPlugin::start_spec(spec, path, &mut lua::NoVehicle, self.hub.clone())
+                    .map(|p| self.lua.push(p))
             }
             "oop" => match oop::load(path) {
                 Ok(oop::Loaded::Lua(mut spec)) => {
                     spec.name = name.clone();
-                    spec.perms = Some(spec.perms.take().map_or_else(|| allowed.clone(), |d| d.intersection(&allowed).copied().collect()));
-                    lua::LuaPlugin::start_spec(spec, path, &mut lua::NoVehicle, self.hub.clone()).map(|p| self.lua.push(p))
+                    spec.perms = Some(spec.perms.take().map_or_else(
+                        || allowed.clone(),
+                        |d| d.intersection(&allowed).copied().collect(),
+                    ));
+                    lua::LuaPlugin::start_spec(spec, path, &mut lua::NoVehicle, self.hub.clone())
+                        .map(|p| self.lua.push(p))
                 }
                 Ok(oop::Loaded::Wasm(mut spec)) => {
                     spec.name = name.clone();
-                    spec.perms = Some(spec.perms.take().map_or_else(|| allowed.clone(), |d| d.intersection(&allowed).copied().collect()));
-                    wasm_plugin::WasmHost::start(spec, path, &mut lua::NoVehicle, self.hub.clone()).map(|p| self.wasm.push(p))
+                    spec.perms = Some(spec.perms.take().map_or_else(
+                        || allowed.clone(),
+                        |d| d.intersection(&allowed).copied().collect(),
+                    ));
+                    wasm_plugin::WasmHost::start(spec, path, &mut lua::NoVehicle, self.hub.clone())
+                        .map(|p| self.wasm.push(p))
                 }
                 Err(e) => Err(e),
             },
@@ -1316,7 +1760,10 @@ impl Plugins {
 
     /// An event for one plugin only (by its name), in its next frame: a LAN message for it.
     pub fn post(&self, plugin: &str, event: &'static str, args: Vec<api::Value>) {
-        self.hub.direct.borrow_mut().push((plugin.to_string(), event, args));
+        self.hub
+            .direct
+            .borrow_mut()
+            .push((plugin.to_string(), event, args));
     }
 
     /// Whether a plugin listens to `event` (its comparison or bookkeeping can be left out
@@ -1339,7 +1786,12 @@ impl Plugins {
             .loaded
             .iter()
             .filter(|p| p.procs.pointer && !p.failed)
-            .flat_map(|p| p.opl.script_textures.iter().filter_map(|n| n.trim().parse().ok()))
+            .flat_map(|p| {
+                p.opl
+                    .script_textures
+                    .iter()
+                    .filter_map(|n| n.trim().parse().ok())
+            })
             .collect();
         out.sort_unstable();
         out.dedup();
@@ -1348,7 +1800,11 @@ impl Plugins {
 
     /// Whether a Lua plugin of this name is loaded.
     pub fn has(&self, plugin: &str) -> bool {
-        self.lua.iter().any(|p| p.name.eq_ignore_ascii_case(plugin)) || self.wasm.iter().any(|p| p.name.eq_ignore_ascii_case(plugin))
+        self.lua.iter().any(|p| p.name.eq_ignore_ascii_case(plugin))
+            || self
+                .wasm
+                .iter()
+                .any(|p| p.name.eq_ignore_ascii_case(plugin))
     }
 
     pub fn finalize(&mut self) {
@@ -1374,127 +1830,4 @@ impl Drop for Plugins {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_library_beside_its_opl_in_a_subfolder_is_found() {
-        let dir = std::env::temp_dir().join(format!("omsi-opl-lib-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join("Pablo")).unwrap();
-        for f in ["Pablo/MBASNE.dll", "top.dll"] { std::fs::write(dir.join(f), b"x").unwrap(); }
-        let opl = dir.join("Pablo/MBAS.opl");
-        assert_eq!(library_path(&opl, &dir, "MBASNE.dll"), Some(dir.join("Pablo/MBASNE.dll")));
-        assert_eq!(library_path(&opl, &dir, "top.dll"), Some(dir.join("top.dll")));
-        assert_eq!(library_path(&opl, &dir, "none.dll"), None);
-        let other = std::env::temp_dir().join(format!("omsi-opl-lib-b-{}", std::process::id()));
-        std::fs::create_dir_all(&other).unwrap();
-        for (f, dll) in [(&opl, "MBASNE.dll"), (&other.join("mbas.opl"), "x\\MBASNE.dll"), (&dir.join("Pablo/Config.opl"), "a.dll"), (&other.join("Config.opl"), "b.dll")] {
-            std::fs::write(f, format!("[dll]\r\n{dll}\r\n")).unwrap();
-        }
-        let mut found: Vec<PathBuf> = plugin_opls(&[other.clone(), dir.clone()]).into_iter().map(|(p, _)| p).collect();
-        found.sort();
-        assert_eq!(found, vec![dir.join("Pablo/Config.opl"), other.join("Config.opl"), other.join("mbas.opl")], "a later folder's copy of the same plugin is not loaded again");
-        let _ = (std::fs::remove_dir_all(&dir), std::fs::remove_dir_all(&other));
-    }
-
-    #[test]
-    fn opl_lists() {
-        let o = parse_opl("[dll]\r\nsub\\my.dll\r\n\r\n[varlist]\r\n2\r\nVelocity\r\nthrottle\r\n[systemvarlist]\r\n1\r\nTime\r\n[stringvarlist]\r\n1\r\nIBIS_terminus_name\r\n[triggers]\r\n1\r\nbus_doorfront0\r\n[scripttexturelist]\r\n2\r\n0\r\n3\r\n");
-        assert_eq!(o.dll, "sub\\my.dll");
-        assert_eq!(o.vars, ["Velocity", "throttle"]);
-        assert_eq!(o.system_vars, ["Time"]);
-        assert_eq!(o.string_vars, ["IBIS_terminus_name"]);
-        assert_eq!(o.triggers, ["bus_doorfront0"]);
-        assert_eq!(o.script_textures, ["0", "3"]);
-    }
-
-    #[test]
-    fn wire_round_trip() {
-        let f = Frame { system: vec![(0, 1.5)], vars: vec![(1, 2.0), (3, -1.0)], strings: vec![(0, "Zoo €".into())], triggers: vec![0, 2], ..Default::default() };
-        let mut buf = Vec::new();
-        wire::put_frame(&mut buf, &f, false, false).unwrap();
-        assert_eq!(wire::get_frame(&mut buf.as_slice(), false, false).unwrap(), f);
-        let r = Reply { system: vec![None], vars: vec![Some(3.0), None], strings: vec![Some("ab".into())], triggers_active: vec![true, false], textures: vec![], tickets: vec![] };
-        let mut buf = Vec::new();
-        wire::put_reply(&mut buf, &r, false).unwrap();
-        assert_eq!(wire::get_reply(&mut buf.as_slice(), &f, false).unwrap(), r);
-    }
-
-    #[test]
-    fn wire_round_trip_textures() {
-        let f = Frame { vars: vec![(0, 1.0)], textures: vec![(0, 2, 1), (1, 4, 4)], pointer: vec![(1, POINTER_DOWN, 1.5, 2.25), (1, POINTER_UP, 3.0, 0.0)], ..Default::default() };
-        let mut buf = Vec::new();
-        wire::put_frame(&mut buf, &f, true, true).unwrap();
-        assert_eq!(wire::get_frame(&mut buf.as_slice(), true, true).unwrap(), f);
-        // without the pointer procedure the events stay off the wire
-        let mut buf = Vec::new();
-        wire::put_frame(&mut buf, &f, true, false).unwrap();
-        assert_eq!(wire::get_frame(&mut buf.as_slice(), true, false).unwrap(), Frame { pointer: vec![], ..f.clone() });
-        let r = Reply { vars: vec![None], textures: vec![Some(vec![1, 2, 3, 4, 5, 6, 7, 8]), None], ..Default::default() };
-        let mut buf = Vec::new();
-        wire::put_reply(&mut buf, &r, true).unwrap();
-        assert_eq!(wire::get_reply(&mut buf.as_slice(), &f, true).unwrap(), r);
-        // a picture of another size than asked is refused, not believed
-        let bad = Reply { vars: vec![None], textures: vec![Some(vec![0; 4]), None], ..Default::default() };
-        let mut buf = Vec::new();
-        wire::put_reply(&mut buf, &bad, true).unwrap();
-        assert!(wire::get_reply(&mut buf.as_slice(), &f, true).is_err());
-    }
-
-    #[test]
-    fn pointer_events_for_listened_textures_only() {
-        let mut tp = TexturePointer { pages: vec![2], ..Default::default() };
-        assert!(!tp.push(0, POINTER_DOWN, 0.1, 0.1), "no plugin listens to texture 0");
-        assert!(tp.push(2, POINTER_DOWN, 0.1, 0.2));
-        assert!(tp.push(2, POINTER_MOVE, 0.3, 0.3));
-        assert!(tp.push(2, POINTER_MOVE, 0.4, 0.4));
-        assert!(tp.push(2, POINTER_UP, 0.5, 0.5));
-        // the second move replaced the first one
-        assert_eq!(tp.pending, [(2, POINTER_DOWN, 0.1, 0.2), (2, POINTER_MOVE, 0.4, 0.4), (2, POINTER_UP, 0.5, 0.5)]);
-    }
-
-    #[test]
-    fn wire_round_trip_tickets() {
-        let calls = vec![
-            TicketCall { person: 7, age: 34.0, stop: "Střížkov".into(), destination: "Nový Bor, aut.st.".into(), stop_number: 1, destination_number: 12, kind: 2, ticket: 1, price: 30.0, name: "Plnocenná".into() },
-            TicketCall { person: 9, age: 10.0, ..Default::default() },
-        ];
-        let mut buf = Vec::new();
-        wire::put_tickets(&mut buf, &calls).unwrap();
-        assert_eq!(wire::get_tickets(&mut buf.as_slice()).unwrap(), calls);
-        let answers = vec![Some(TicketAnswer { kind: 2, ticket: 1, price: 64.0, name: "IDOL 4001".into(), voice: "Zone_4001".into() }), None];
-        let mut buf = Vec::new();
-        wire::put_ticket_answers(&mut buf, &answers).unwrap();
-        assert_eq!(wire::get_ticket_answers(&mut buf.as_slice(), 2).unwrap(), answers);
-    }
-
-    #[test]
-    fn ticket_answer_changes_only_what_differs() {
-        let call = TicketCall { person: 7, kind: 2, ticket: 1, price: 30.0, name: "Plnocenná".into(), ..Default::default() };
-        let same = TicketAnswer { kind: 2, ticket: 1, price: 30.0, name: "Plnocenná".into(), voice: String::new() };
-        assert_eq!(call.change(&same), TicketChange::default());
-        let other = TicketAnswer { kind: 0, ticket: 3, price: 64.0, name: "IDOL".into(), voice: "Zone_4001".into() };
-        let c = call.change(&other);
-        assert_eq!(c.kind, Some(TicketKind::None));
-        assert_eq!(c.ticket, Some(3));
-        assert_eq!(c.price, Some(64.0));
-        assert_eq!(c.name.as_deref(), Some("IDOL"));
-        assert_eq!(c.voice.as_deref(), Some("Zone_4001"));
-        // (a kind or ticket number out of range is left as it was)
-        let bad = TicketAnswer { kind: 7, ticket: -1, ..same };
-        assert_eq!(call.change(&bad), TicketChange::default());
-    }
-
-    #[test]
-    fn omsi_exe_patchers_left_out() {
-        assert!(patches_omsi_exe(Path::new("plugins/OMSIPresentationTools.dll")));
-        assert!(!patches_omsi_exe(Path::new("plugins/Demo/demo.dll")));
-    }
-
-    #[test]
-    fn procs_flags() {
-        for flags in 0..128u8 {
-            assert_eq!(Procs::from_flags(flags).flags(), flags);
-        }
-    }
-}
+mod tests;

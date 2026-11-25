@@ -9,7 +9,7 @@
 //! No window, no graphics device: a modder sees what is wrong with their work in seconds.
 
 use rayon::prelude::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -35,7 +35,12 @@ impl log::Log for Capture {
     fn log(&self, r: &log::Record) {
         if self.enabled(r.metadata()) {
             let part = PART.with(|p| p.borrow().clone());
-            self.0.lock().unwrap_or_else(|e| e.into_inner()).push((r.level(), r.target().to_string(), r.args().to_string(), part));
+            self.0.lock().unwrap_or_else(|e| e.into_inner()).push((
+                r.level(),
+                r.target().to_string(),
+                r.args().to_string(),
+                part,
+            ));
         }
     }
     fn flush(&self) {}
@@ -55,7 +60,10 @@ impl Report {
         if let Some(h) = hint {
             f["hint"] = json!(h);
         }
-        self.findings.lock().unwrap_or_else(|e| e.into_inner()).push(f);
+        self.findings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(f);
     }
     fn warn(&self, what: &str, text: String, hint: Option<String>, part: &str) {
         self.add("warn", what, text, hint, part);
@@ -75,12 +83,17 @@ struct Counts {
 }
 
 fn name_of(p: &Path) -> String {
-    p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default()
+    p.file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_default()
 }
 
 /// A path as the player knows it: from the content folder it lies in.
 fn short(p: &Path, root: &Path) -> String {
-    for r in omsi_cfg::content_roots().iter().chain(std::iter::once(&root.to_path_buf())) {
+    for r in omsi_cfg::content_roots()
+        .iter()
+        .chain(std::iter::once(&root.to_path_buf()))
+    {
         if let Ok(rel) = p.strip_prefix(r) {
             return rel.to_string_lossy().replace('\\', "/");
         }
@@ -92,27 +105,56 @@ fn short(p: &Path, root: &Path) -> String {
 /// a finding for each that is not there. (As the scene decides it: a slot whose picture is
 /// made at run time - a text texture, a script texture, a [matl_freetex], a texture-change
 /// master - and a null texture are not files that should be there.)
-fn check_textures(ty: &omsi_sim::VehicleType, root: &Path, part: &str, report: &Report, counts: &mut Counts) {
+fn check_textures(
+    ty: &omsi_sim::VehicleType,
+    root: &Path,
+    part: &str,
+    report: &Report,
+    counts: &mut Counts,
+) {
     let dirs = ty.texture_dirs(root);
     let dir_refs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
     let mut seen = HashSet::new();
     counts.meshes += ty.meshes.len();
     for vm in &ty.meshes {
-        let file = vm.file.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+        let file = vm
+            .file
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
         for (slot, m) in vm.materials.iter().enumerate() {
             counts.materials += 1;
             let t = m.texture.trim();
             if t.is_empty() || crate::is_null_texture(t) || !seen.insert(t.to_ascii_lowercase()) {
                 continue;
             }
-            let ov: Vec<&omsi_model::MaterialDef> = vm.overrides.iter().filter(|o| omsi_sim::vehicle::override_slot(&vm.materials, o) == Some(slot)).collect();
-            let generated = ov.iter().any(|o| o.use_text_texture.is_some() || o.use_script_texture.is_some() || o.freetex.is_some()) || ty.texchange(t).is_some();
+            let ov: Vec<&omsi_model::MaterialDef> = vm
+                .overrides
+                .iter()
+                .filter(|o| omsi_sim::vehicle::override_slot(&vm.materials, o) == Some(slot))
+                .collect();
+            let generated = ov.iter().any(|o| {
+                o.use_text_texture.is_some()
+                    || o.use_script_texture.is_some()
+                    || o.freetex.is_some()
+            }) || ty.texchange(t).is_some();
             if generated {
                 continue;
             }
             if omsi_texture::find_texture(t, &dir_refs).is_none() {
                 counts.missing += 1;
-                report.warn("texture", format!("the texture {t} was not found (mesh {file})"), Some(format!("looked in {} and it is not there", dirs.iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", "))), part);
+                report.warn(
+                    "texture",
+                    format!("the texture {t} was not found (mesh {file})"),
+                    Some(format!(
+                        "looked in {} and it is not there",
+                        dirs.iter()
+                            .map(|d| d.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                    part,
+                );
             }
         }
     }
@@ -131,13 +173,19 @@ fn check_vehicle(root: &Path, bus: &Path, report: &Report) -> (bool, Value) {
         Ok(ty) => {
             check_textures(&ty, root, &part, report, &mut counts);
             parts.push(part);
-            let name = format!("{} {}", ty.def.manufacturer.trim(), ty.def.type_name.trim()).trim().to_string();
+            let name = format!("{} {}", ty.def.manufacturer.trim(), ty.def.type_name.trim())
+                .trim()
+                .to_string();
             let (schemes, vars) = (ty.paint_schemes.len(), ty.program.var_names().len());
             let mut lead = std::sync::Arc::new(ty);
             let mut lead_rev = false;
             let mut seen = vec![lead.def.path.clone()];
             for _ in 0..omsi_vehicle::vehicle::MAX_COUPLED_PARTS {
-                let Some((path, reversed)) = omsi_vehicle::vehicle::next_coupled(&lead.def, lead_rev, true) else { break };
+                let Some((path, reversed)) =
+                    omsi_vehicle::vehicle::next_coupled(&lead.def, lead_rev, true)
+                else {
+                    break;
+                };
                 if omsi_vehicle::vehicle::chain_has_part(&seen, &path) {
                     break;
                 }
@@ -152,7 +200,14 @@ fn check_vehicle(root: &Path, bus: &Path, report: &Report) -> (bool, Value) {
                         lead_rev = reversed;
                     }
                     Err(e) => {
-                        report.error("load", format!("the vehicle coupled behind {} cannot load: {e:#}", name_of(&lead.def.path)), &part);
+                        report.error(
+                            "load",
+                            format!(
+                                "the vehicle coupled behind {} cannot load: {e:#}",
+                                name_of(&lead.def.path)
+                            ),
+                            &part,
+                        );
                         break;
                     }
                 }
@@ -189,23 +244,51 @@ fn mesh_path(model_dir: &Path, file: &str) -> PathBuf {
 }
 
 /// A model's meshes (every detail level) loaded and their textures looked for in `dirs`.
-fn check_model(model: &omsi_model::Model, model_dir: &Path, dirs: &[PathBuf], part: &str, report: &Report, counts: &mut Counts) {
+fn check_model(
+    model: &omsi_model::Model,
+    model_dir: &Path,
+    dirs: &[PathBuf],
+    part: &str,
+    report: &Report,
+    counts: &mut Counts,
+) {
     let dir_refs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
     // the slots whose picture the game makes: not files that should be there
     let generated: HashSet<String> = model
         .meshes
         .iter()
         .flat_map(|m| m.materials.iter())
-        .filter(|o| o.use_text_texture.is_some() || o.use_script_texture.is_some() || o.freetex.is_some())
+        .filter(|o| {
+            o.use_text_texture.is_some() || o.use_script_texture.is_some() || o.freetex.is_some()
+        })
         .map(|o| o.texture.trim().to_ascii_lowercase())
-        .chain(model.texchanges.iter().map(|t| t.trim().to_ascii_lowercase()))
-        .chain(model.ctc_textures.iter().map(|(t, _)| t.trim().to_ascii_lowercase()))
+        .chain(
+            model
+                .texchanges
+                .iter()
+                .map(|t| t.trim().to_ascii_lowercase()),
+        )
+        .chain(
+            model
+                .ctc_textures
+                .iter()
+                .map(|(t, _)| t.trim().to_ascii_lowercase()),
+        )
         .collect();
     let mut seen = HashSet::new();
     for md in &model.meshes {
         let path = mesh_path(model_dir, &md.file);
         if !omsi_cfg::vfs::is_file(&path) {
-            report.add("error", "mesh", format!("the mesh {} was not found", md.file.trim()), Some(format!("looked in {} and it is not there", model_dir.display())), part);
+            report.add(
+                "error",
+                "mesh",
+                format!("the mesh {} was not found", md.file.trim()),
+                Some(format!(
+                    "looked in {} and it is not there",
+                    model_dir.display()
+                )),
+                part,
+            );
             continue;
         }
         match omsi_o3d::load_mesh(&path) {
@@ -214,34 +297,70 @@ fn check_model(model: &omsi_model::Model, model_dir: &Path, dirs: &[PathBuf], pa
                 for mat in &m.materials {
                     counts.materials += 1;
                     let t = mat.texture.trim();
-                    if t.is_empty() || crate::is_null_texture(t) || generated.contains(&t.to_ascii_lowercase()) || !seen.insert(t.to_ascii_lowercase()) {
+                    if t.is_empty()
+                        || crate::is_null_texture(t)
+                        || generated.contains(&t.to_ascii_lowercase())
+                        || !seen.insert(t.to_ascii_lowercase())
+                    {
                         continue;
                     }
                     if omsi_texture::find_texture(t, &dir_refs).is_none() {
                         counts.missing += 1;
-                        report.warn("texture", format!("the texture {t} was not found (mesh {})", md.file.trim()), Some(format!("looked in {} and it is not there", dirs.iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", "))), part);
+                        report.warn(
+                            "texture",
+                            format!("the texture {t} was not found (mesh {})", md.file.trim()),
+                            Some(format!(
+                                "looked in {} and it is not there",
+                                dirs.iter()
+                                    .map(|d| d.display().to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )),
+                            part,
+                        );
                     }
                 }
             }
-            Err(e) => report.error("mesh", format!("the mesh {} cannot be read: {e}", md.file.trim()), part),
+            Err(e) => report.error(
+                "mesh",
+                format!("the mesh {} cannot be read: {e}", md.file.trim()),
+                part,
+            ),
         }
     }
     counts.textures += seen.len();
 }
 
 /// The script files a scenery object names: there, and compiled as the game compiles them.
-fn check_scripts(root: &Path, sco: &omsi_scenery::SceneryObject, part: &str, report: &Report) -> usize {
+fn check_scripts(
+    root: &Path,
+    sco: &omsi_scenery::SceneryObject,
+    part: &str,
+    report: &Report,
+) -> usize {
     let s = &sco.scripts;
-    for f in s.varlists.iter().chain(&s.stringvarlists).chain(&s.scripts).chain(&s.constfiles) {
+    for f in s
+        .varlists
+        .iter()
+        .chain(&s.stringvarlists)
+        .chain(&s.scripts)
+        .chain(&s.constfiles)
+    {
         if !omsi_cfg::vfs::is_file(f) {
-            report.error("script", format!("the script {} was not found", short(f, root)), part);
+            report.error(
+                "script",
+                format!("the script {} was not found", short(f, root)),
+                part,
+            );
         }
     }
     if s.scripts.is_empty() && s.varlists.is_empty() && s.stringvarlists.is_empty() {
         return 0;
     }
     // (the compiler's own errors come through the log as warnings)
-    omsi_sim::scenery::compile_scenery(root, s).var_names().len()
+    omsi_sim::scenery::compile_scenery(root, s)
+        .var_names()
+        .len()
 }
 
 /// A scenery object: the .sco, its model, meshes, textures, scripts and sound file.
@@ -256,7 +375,13 @@ fn check_object(root: &Path, path: &Path, report: &Report) -> (bool, Value) {
         }
     };
     for (k, n) in &sco.unknown_keywords {
-        report.add("info", "keyword", format!("the keyword [{k}] is not known (line {n})"), None, &part);
+        report.add(
+            "info",
+            "keyword",
+            format!("the keyword [{k}] is not known (line {n})"),
+            None,
+            &part,
+        );
     }
     let sco_dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
     let (model, model_dir) = match &sco.model_file {
@@ -282,7 +407,12 @@ fn check_object(root: &Path, path: &Path, report: &Report) -> (bool, Value) {
     for snd in sco.sound.iter().chain(&sco.sound_ai) {
         let p = omsi_cfg::resolve_path(&sco_dir, snd);
         if !omsi_cfg::vfs::is_file(&p) {
-            report.warn("sound", format!("the sound {snd} was not found"), None, &part);
+            report.warn(
+                "sound",
+                format!("the sound {snd} was not found"),
+                None,
+                &part,
+            );
         }
     }
     (
@@ -312,7 +442,13 @@ fn check_spline(root: &Path, path: &Path, report: &Report) -> (bool, Value) {
         }
     };
     for (k, n) in &def.unknown_keywords {
-        report.add("info", "keyword", format!("the keyword [{k}] is not known (line {n})"), None, &part);
+        report.add(
+            "info",
+            "keyword",
+            format!("the keyword [{k}] is not known (line {n})"),
+            None,
+            &part,
+        );
     }
     let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
     let dirs = crate::texture_dirs(root, &dir);
@@ -325,11 +461,27 @@ fn check_spline(root: &Path, path: &Path, report: &Report) -> (bool, Value) {
         }
         if omsi_texture::find_texture(name, &dir_refs).is_none() {
             missing += 1;
-            report.warn("texture", format!("the texture {name} was not found"), Some(format!("looked in {} and it is not there", dirs.iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", "))), &part);
+            report.warn(
+                "texture",
+                format!("the texture {name} was not found"),
+                Some(format!(
+                    "looked in {} and it is not there",
+                    dirs.iter()
+                        .map(|d| d.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )),
+                &part,
+            );
         }
     }
     if def.profiles.is_empty() && def.paths.is_empty() && !def.only_editor {
-        report.warn("spline", "no [profile] and no [path]: the spline draws nothing and carries nothing".into(), None, &part);
+        report.warn(
+            "spline",
+            "no [profile] and no [path]: the spline draws nothing and carries nothing".into(),
+            None,
+            &part,
+        );
     }
     (
         true,
@@ -360,10 +512,17 @@ fn check_human(root: &Path, path: &Path, report: &Report) -> (bool, Value) {
                 let dirs = crate::texture_dirs(root, &model_dir);
                 check_model(&model, &model_dir, &dirs, &part, report, &mut counts);
             }
-            Err(e) => report.error("model", format!("the model {} cannot be read: {e}", h.model.trim()), &part),
+            Err(e) => report.error(
+                "model",
+                format!("the model {} cannot be read: {e}", h.model.trim()),
+                &part,
+            ),
         }
     }
-    (true, json!({"kind": "human", "meshes": counts.meshes, "textures": counts.textures, "textures_missing": counts.missing, "height": h.height}))
+    (
+        true,
+        json!({"kind": "human", "meshes": counts.meshes, "textures": counts.textures, "textures_missing": counts.missing, "height": h.height}),
+    )
 }
 
 /// A weather file.
@@ -384,7 +543,10 @@ fn check_mesh(path: &Path, report: &Report) -> (bool, Value) {
     let part = name_of(path);
     set_part(&part);
     match omsi_o3d::load_mesh(path) {
-        Ok(m) => (true, json!({"kind": "mesh", "materials": m.materials.len(), "vertices": m.vertices.len()})),
+        Ok(m) => (
+            true,
+            json!({"kind": "mesh", "materials": m.materials.len(), "vertices": m.vertices.len()}),
+        ),
         Err(e) => {
             report.error("mesh", format!("{e}"), &part);
             (false, json!({"kind": "mesh"}))
@@ -415,7 +577,12 @@ fn check_map(root: &Path, global_path: &Path, deep: bool, report: &Report) -> (b
                 continue;
             }
             if omsi_texture::find_texture(t, &[root, &map_dir]).is_none() {
-                report.warn("ground texture", format!("the texture {t} was not found"), None, &part);
+                report.warn(
+                    "ground texture",
+                    format!("the texture {t} was not found"),
+                    None,
+                    &part,
+                );
             }
         }
     }
@@ -429,21 +596,41 @@ fn check_map(root: &Path, global_path: &Path, deep: bool, report: &Report) -> (b
         } else {
             missing_tiles += 1;
             if missing_tiles <= 50 {
-                report.warn("tile", format!("the tile file {} was not found (tile {},{})", t.file.trim(), t.x, t.y), None, &part);
+                report.warn(
+                    "tile",
+                    format!(
+                        "the tile file {} was not found (tile {},{})",
+                        t.file.trim(),
+                        t.x,
+                        t.y
+                    ),
+                    None,
+                    &part,
+                );
             }
         }
     }
     if missing_tiles > 50 {
-        report.warn("tile", format!("and {} more tile files were not found", missing_tiles - 50), None, &part);
+        report.warn(
+            "tile",
+            format!("and {} more tile files were not found", missing_tiles - 50),
+            None,
+            &part,
+        );
     }
     // what the tiles place: (file lower-case) -> (as written, kind, first tile, uses)
-    let used: Mutex<BTreeMap<String, (String, &'static str, String, usize)>> = Mutex::new(BTreeMap::new());
+    let used: Mutex<BTreeMap<String, (String, &'static str, String, usize)>> =
+        Mutex::new(BTreeMap::new());
     tile_paths.par_iter().for_each(|(x, y, p)| {
         set_part(&format!("tile {x},{y}"));
         let tile = match omsi_map::tile::Tile::load(p) {
             Ok(t) => t,
             Err(e) => {
-                report.error("tile", format!("the tile {} cannot be read: {e}", name_of(p)), &part);
+                report.error(
+                    "tile",
+                    format!("the tile {} cannot be read: {e}", name_of(p)),
+                    &part,
+                );
                 return;
             }
         };
@@ -453,7 +640,9 @@ fn check_map(root: &Path, global_path: &Path, deep: bool, report: &Report) -> (b
             if f.is_empty() {
                 return;
             }
-            let e = u.entry(f.to_ascii_lowercase().replace('\\', "/")).or_insert_with(|| (f.to_string(), kind, format!("{x},{y}"), 0));
+            let e = u
+                .entry(f.to_ascii_lowercase().replace('\\', "/"))
+                .or_insert_with(|| (f.to_string(), kind, format!("{x},{y}"), 0));
             e.3 += 1;
         };
         for o in tile.objects.iter().chain(&tile.attach_objects) {
@@ -472,16 +661,29 @@ fn check_map(root: &Path, global_path: &Path, deep: bool, report: &Report) -> (b
         if omsi_cfg::vfs::is_file(&p) {
             present.push((p, kind));
         } else {
-            let addon = written.replace('\\', "/").split('/').take(2).collect::<Vec<_>>().join("/");
-            by_addon.entry(addon).or_default().push(format!("{kind} {written} (first on tile {tile}, used {uses} times)"));
+            let addon = written
+                .replace('\\', "/")
+                .split('/')
+                .take(2)
+                .collect::<Vec<_>>()
+                .join("/");
+            by_addon.entry(addon).or_default().push(format!(
+                "{kind} {written} (first on tile {tile}, used {uses} times)"
+            ));
         }
     }
     let missing_files: usize = by_addon.values().map(Vec::len).sum();
     for (addon, list) in &by_addon {
         report.warn(
             "not installed",
-            format!("not installed: {} files the map uses from {addon}", list.len()),
-            Some(list.iter().take(30).cloned().collect::<Vec<_>>().join("; ") + if list.len() > 30 { "; ..." } else { "" }),
+            format!(
+                "not installed: {} files the map uses from {addon}",
+                list.len()
+            ),
+            Some(
+                list.iter().take(30).cloned().collect::<Vec<_>>().join("; ")
+                    + if list.len() > 30 { "; ..." } else { "" },
+            ),
             &part,
         );
     }
@@ -493,11 +695,15 @@ fn check_map(root: &Path, global_path: &Path, deep: bool, report: &Report) -> (b
             ("spline", true) => check_spline(root, p, report).0,
             ("object", false) => {
                 set_part(&name_of(p));
-                omsi_scenery::SceneryObject::load(p).map_err(|e| report.error("load", format!("{e}"), &name_of(p))).is_ok()
+                omsi_scenery::SceneryObject::load(p)
+                    .map_err(|e| report.error("load", format!("{e}"), &name_of(p)))
+                    .is_ok()
             }
             _ => {
                 set_part(&name_of(p));
-                omsi_scenery::Spline::load(p).map_err(|e| report.error("load", format!("{e}"), &name_of(p))).is_ok()
+                omsi_scenery::Spline::load(p)
+                    .map_err(|e| report.error("load", format!("{e}"), &name_of(p)))
+                    .is_ok()
             }
         };
         if !ok {
@@ -510,11 +716,22 @@ fn check_map(root: &Path, global_path: &Path, deep: bool, report: &Report) -> (b
     let timetable = omsi_cfg::vfs::is_dir(&tt);
     let ailists = omsi_cfg::resolve_path(&map_dir, "ailists.cfg");
     if !omsi_cfg::vfs::is_file(&ailists) {
-        report.add("info", "ailists", "no ailists.cfg: no AI traffic on this map".into(), None, &part);
+        report.add(
+            "info",
+            "ailists",
+            "no ailists.cfg: no AI traffic on this map".into(),
+            None,
+            &part,
+        );
     } else {
         if let Ok(lists) = omsi_map::ailists::AiLists::load(&ailists) {
             let mut missing = BTreeMap::new();
-            let files = lists.groups.iter().flat_map(|g| g.vehicles.iter().map(|v| &v.file).chain(g.typgroups.iter().map(|t| &t.file)));
+            let files = lists.groups.iter().flat_map(|g| {
+                g.vehicles
+                    .iter()
+                    .map(|v| &v.file)
+                    .chain(g.typgroups.iter().map(|t| &t.file))
+            });
             for v in files {
                 let v = v.trim();
                 if !v.is_empty() && !omsi_cfg::vfs::is_file(&omsi_cfg::resolve_path(root, v)) {
@@ -524,15 +741,30 @@ fn check_map(root: &Path, global_path: &Path, deep: bool, report: &Report) -> (b
             if !missing.is_empty() {
                 report.warn(
                     "ailists",
-                    format!("not installed: {} AI vehicles in ailists.cfg", missing.len()),
-                    Some(missing.keys().take(30).cloned().collect::<Vec<_>>().join("; ")),
+                    format!(
+                        "not installed: {} AI vehicles in ailists.cfg",
+                        missing.len()
+                    ),
+                    Some(
+                        missing
+                            .keys()
+                            .take(30)
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    ),
                     &part,
                 );
             }
         }
     }
     if global.entry_points.is_empty() {
-        report.warn("entry points", "the map has no entry point: a drive cannot start on it".into(), None, &part);
+        report.warn(
+            "entry points",
+            "the map has no entry point: a drive cannot start on it".into(),
+            None,
+            &part,
+        );
     }
     let objects = used.values().filter(|v| v.1 == "object").count();
     (
@@ -556,9 +788,16 @@ fn check_map(root: &Path, global_path: &Path, deep: bool, report: &Report) -> (b
 /// What `path` is, by its name (or for a folder, by what is in it).
 fn kind_of(path: &Path) -> &'static str {
     if omsi_cfg::vfs::is_dir(path) {
-        return if omsi_cfg::vfs::is_file(&path.join("global.cfg")) { "map" } else { "folder" };
+        return if omsi_cfg::vfs::is_file(&path.join("global.cfg")) {
+            "map"
+        } else {
+            "folder"
+        };
     }
-    let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
     match ext.as_str() {
         "bus" | "ovh" => "vehicle",
         "sco" => "object",
@@ -598,7 +837,12 @@ fn check_folder(root: &Path, dir: &Path, deep: bool, report: &Report) -> (bool, 
     let total = items.len();
     const MAX_ITEMS: usize = 3000;
     if total > MAX_ITEMS {
-        report.warn("folder", format!("only the first {MAX_ITEMS} of {total} files are checked"), None, &name_of(dir));
+        report.warn(
+            "folder",
+            format!("only the first {MAX_ITEMS} of {total} files are checked"),
+            None,
+            &name_of(dir),
+        );
         items.truncate(MAX_ITEMS);
     }
     let results: Vec<Value> = items
@@ -613,9 +857,17 @@ fn check_folder(root: &Path, dir: &Path, deep: bool, report: &Report) -> (bool, 
         *by_kind.entry(k).or_default() += 1;
     }
     if total == 0 {
-        report.warn("folder", "no vehicle, scenery object, spline, human, weather or map found in it".into(), None, &name_of(dir));
+        report.warn(
+            "folder",
+            "no vehicle, scenery object, spline, human, weather or map found in it".into(),
+            None,
+            &name_of(dir),
+        );
     }
-    (true, json!({"kind": "folder", "name": name_of(dir), "items": results, "counts": by_kind}))
+    (
+        true,
+        json!({"kind": "folder", "name": name_of(dir), "items": results, "counts": by_kind}),
+    )
 }
 
 fn check_one(root: &Path, path: &Path, kind: &str, deep: bool, report: &Report) -> (bool, Value) {
@@ -626,10 +878,23 @@ fn check_one(root: &Path, path: &Path, kind: &str, deep: bool, report: &Report) 
         "human" => check_human(root, path, report),
         "weather" => check_weather(path, report),
         "mesh" => check_mesh(path, report),
-        "map" => check_map(root, &if omsi_cfg::vfs::is_dir(path) { path.join("global.cfg") } else { path.to_path_buf() }, deep, report),
+        "map" => check_map(
+            root,
+            &if omsi_cfg::vfs::is_dir(path) {
+                path.join("global.cfg")
+            } else {
+                path.to_path_buf()
+            },
+            deep,
+            report,
+        ),
         "folder" => check_folder(root, path, deep, report),
         _ if !omsi_cfg::vfs::is_file(path) && !omsi_cfg::vfs::is_dir(path) => {
-            report.error("arguments", format!("the file {} was not found", path.display()), &name_of(path));
+            report.error(
+                "arguments",
+                format!("the file {} was not found", path.display()),
+                &name_of(path),
+            );
             (false, json!({"kind": "unknown"}))
         }
         _ => {
@@ -656,10 +921,15 @@ pub fn run(args: &[String], find_root: fn() -> Option<PathBuf>) -> anyhow::Resul
         }
     }
     if files.is_empty() {
-        println!("{}", json!({"ok": false, "findings": [{"level": "error", "what": "arguments", "text": "nothing to check given"}]}));
+        println!(
+            "{}",
+            json!({"ok": false, "findings": [{"level": "error", "what": "arguments", "text": "nothing to check given"}]})
+        );
         return Ok(());
     }
-    let root = root.or_else(find_root).unwrap_or_else(|| PathBuf::from("."));
+    let root = root
+        .or_else(find_root)
+        .unwrap_or_else(|| PathBuf::from("."));
     // the content roots the game reads: its own folder (mods), the archives, the installation
     if let Some(c) = omsi_cfg::content_dir() {
         if omsi_cfg::vfs::is_dir(&c) {
@@ -669,15 +939,28 @@ pub fn run(args: &[String], find_root: fn() -> Option<PathBuf>) -> anyhow::Resul
     }
     omsi_cfg::add_content_root(root.clone());
     // (a mod's paths are given relative to the content folder, which is searched first)
-    let resolve = |f: &PathBuf| if f.is_absolute() { f.clone() } else { omsi_cfg::resolve_path(&root, &f.to_string_lossy()) };
+    let resolve = |f: &PathBuf| {
+        if f.is_absolute() {
+            f.clone()
+        } else {
+            omsi_cfg::resolve_path(&root, &f.to_string_lossy())
+        }
+    };
     let mut targets: Vec<PathBuf> = files.iter().map(resolve).collect();
     // a zip (a mod not installed yet, an archive read in place): read where it lies
     for target in targets.iter_mut() {
-        if target.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) && omsi_cfg::vfs::is_file(target) {
+        if target
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+            && omsi_cfg::vfs::is_file(target)
+        {
             match omsi_cfg::vfs::add_content_zip(target) {
                 Ok(m) => *target = m,
                 Err(e) => {
-                    println!("{}", json!({"ok": false, "file": target.display().to_string(), "errors": 1, "findings": [{"level": "error", "what": "zip", "text": format!("{e}")}]}));
+                    println!(
+                        "{}",
+                        json!({"ok": false, "file": target.display().to_string(), "errors": 1, "findings": [{"level": "error", "what": "zip", "text": format!("{e}")}]})
+                    );
                     return Ok(());
                 }
             }
@@ -699,21 +982,32 @@ pub fn run(args: &[String], find_root: fn() -> Option<PathBuf>) -> anyhow::Resul
                 let (ok, summary) = check_one(&root, p, k, deep, &report);
                 match summary.get("items").and_then(Value::as_array) {
                     Some(inner) if k == "folder" => inner.clone(),
-                    _ => vec![json!({"file": short(p, &root), "kind": k, "ok": ok, "summary": summary})],
+                    _ => vec![
+                        json!({"file": short(p, &root), "kind": k, "ok": ok, "summary": summary}),
+                    ],
                 }
             })
             .collect();
         let ok = items.iter().all(|i| i["ok"] == true);
         let mut counts: BTreeMap<String, usize> = BTreeMap::new();
         for i in &items {
-            *counts.entry(i["kind"].as_str().unwrap_or("").to_string()).or_default() += 1;
+            *counts
+                .entry(i["kind"].as_str().unwrap_or("").to_string())
+                .or_default() += 1;
         }
-        ("folder", ok, json!({"kind": "folder", "items": items, "counts": counts}))
+        (
+            "folder",
+            ok,
+            json!({"kind": "folder", "items": items, "counts": counts}),
+        )
     };
     let target = targets[0].clone();
     // the loaders' own warnings and errors, on the part they were loading
     let log = CAPTURE.0.lock().unwrap_or_else(|e| e.into_inner());
-    let mut findings = report.findings.into_inner().unwrap_or_else(|e| e.into_inner());
+    let mut findings = report
+        .findings
+        .into_inner()
+        .unwrap_or_else(|e| e.into_inner());
     for (level, target, text, part) in log.iter() {
         if *level <= log::Level::Warn {
             findings.push(json!({"level": level.to_string().to_lowercase(), "what": target.rsplit("::").next().unwrap_or(target), "text": text, "part": part}));

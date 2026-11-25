@@ -146,14 +146,40 @@ pub fn classify(ip: Ipv4Addr, interface: &str) -> AddrKind {
     // bridges of virtual machines and containers (Docker, VirtualBox, VMware, Parallels,
     // Hyper-V/WSL, libvirt, macOS's own VM bridges)
     let virtual_names = [
-        "docker", "br-", "veth", "vboxnet", "virtualbox", "vmnet", "vmware", "vethernet",
-        "hyper-v", "virbr", "lxc", "lxd", "podman", "cni", "flannel", "bridge1", "vnic",
-        "parallels", "wsl",
+        "docker",
+        "br-",
+        "veth",
+        "vboxnet",
+        "virtualbox",
+        "vmnet",
+        "vmware",
+        "vethernet",
+        "hyper-v",
+        "virbr",
+        "lxc",
+        "lxd",
+        "podman",
+        "cni",
+        "flannel",
+        "bridge1",
+        "vnic",
+        "parallels",
+        "wsl",
     ];
     if virtual_names.iter().any(|v| name.starts_with(v) || has(v)) {
         return AddrKind::Virtual;
     }
-    let tunnel = ["utun", "tun", "tap", "wg", "ppp", "ipsec", "wireguard", "openvpn", "vpn"];
+    let tunnel = [
+        "utun",
+        "tun",
+        "tap",
+        "wg",
+        "ppp",
+        "ipsec",
+        "wireguard",
+        "openvpn",
+        "vpn",
+    ];
     if tunnel.iter().any(|t| name.starts_with(t) || has(t)) {
         return AddrKind::Vpn;
     }
@@ -340,9 +366,15 @@ pub fn parse_ipconfig(text: &str) -> Vec<LocalAddr> {
 }
 
 pub fn is_local_peer(addr: std::net::SocketAddr) -> bool {
-    let std::net::SocketAddr::V4(a) = addr else { return false };
+    let std::net::SocketAddr::V4(a) = addr else {
+        return false;
+    };
     let ip = *a.ip();
-    ip.is_loopback() || classify(ip, "") != AddrKind::Public || local_addresses().iter().any(|l| l.ip.octets()[..3] == ip.octets()[..3])
+    ip.is_loopback()
+        || classify(ip, "") != AddrKind::Public
+        || local_addresses()
+            .iter()
+            .any(|l| l.ip.octets()[..3] == ip.octets()[..3])
 }
 
 /// The addresses another player may join at, best first: those of `local_addresses` a
@@ -378,7 +410,9 @@ impl DirectChoice {
 pub fn direct_choice(own: Option<Ipv4Addr>, seen: Option<Ipv4Addr>) -> Option<DirectChoice> {
     let cgnat = |ip: &Ipv4Addr| ip.octets()[0] == 100 && (64..128).contains(&ip.octets()[1]);
     let own = own.filter(|ip| !cgnat(ip));
-    own.map(DirectChoice::Own).or(seen.filter(|ip| !ip.is_private() && !ip.is_loopback() && !cgnat(ip)).map(DirectChoice::Seen))
+    own.map(DirectChoice::Own).or(seen
+        .filter(|ip| !ip.is_private() && !ip.is_loopback() && !cgnat(ip))
+        .map(DirectChoice::Seen))
 }
 
 /// The web port of a dedicated server whose direct address is found by itself (`auto_direct`).
@@ -404,25 +438,36 @@ pub fn find_direct(lan: &crate::LanSession, tell: fn(&str)) {
     if DIRECT_STARTED.load(Ordering::Relaxed) {
         return;
     }
-    let own = local_addresses().into_iter().find(|a| a.kind == AddrKind::Public).map(|a| a.ip);
+    let own = local_addresses()
+        .into_iter()
+        .find(|a| a.kind == AddrKind::Public)
+        .map(|a| a.ip);
     let seen = lan.public_addr().and_then(|a| match a.ip() {
         std::net::IpAddr::V4(ip) => Some(ip),
         std::net::IpAddr::V6(_) => None,
     });
-    let Some(choice) = direct_choice(own, seen) else { return };
+    let Some(choice) = direct_choice(own, seen) else {
+        return;
+    };
     DIRECT_STARTED.store(true, Ordering::Relaxed);
     let addr = std::net::SocketAddr::from((choice.ip(), port));
     if let DirectChoice::Own(_) = choice {
-        log::info!("server: players joining through the tunnel try this machine's address {addr} first (public_address = off: never)");
+        log::info!(
+            "server: players joining through the tunnel try this machine's address {addr} first (public_address = off: never)"
+        );
         tell(&addr.to_string());
         return;
     }
     std::thread::spawn(move || {
         if crate::ws::reachable(&format!("http://{addr}"), Duration::from_secs(3)) {
-            log::info!("server: reached itself at {addr}: players joining through the tunnel try it first (public_address = off: never)");
+            log::info!(
+                "server: reached itself at {addr}: players joining through the tunnel try it first (public_address = off: never)"
+            );
             tell(&addr.to_string());
         } else {
-            log::info!("server: not reached at {addr}, the address the internet sees (no forwarding of the web port, or a carrier's NAT): players join through the tunnel; public_address in server.cfg can name another");
+            log::info!(
+                "server: not reached at {addr}, the address the internet sees (no forwarding of the web port, or a carrier's NAT): players join through the tunnel; public_address in server.cfg can name another"
+            );
         }
     });
 }
@@ -438,11 +483,27 @@ mod direct_tests {
     fn the_machines_own_address_first_the_seen_one_only_tried() {
         let own = Ipv4Addr::new(203, 0, 113, 7);
         let seen = Ipv4Addr::new(198, 51, 100, 9);
-        assert_eq!(direct_choice(Some(own), Some(seen)), Some(DirectChoice::Own(own)));
-        assert_eq!(direct_choice(None, Some(seen)), Some(DirectChoice::Seen(seen)));
-        assert_eq!(direct_choice(Some(Ipv4Addr::new(100, 72, 1, 2)), Some(seen)), Some(DirectChoice::Seen(seen)), "a CGNAT adapter is no internet address");
-        assert_eq!(direct_choice(None, Some(Ipv4Addr::new(100, 72, 1, 2))), None);
-        assert_eq!(direct_choice(None, Some(Ipv4Addr::new(192, 168, 1, 5))), None);
+        assert_eq!(
+            direct_choice(Some(own), Some(seen)),
+            Some(DirectChoice::Own(own))
+        );
+        assert_eq!(
+            direct_choice(None, Some(seen)),
+            Some(DirectChoice::Seen(seen))
+        );
+        assert_eq!(
+            direct_choice(Some(Ipv4Addr::new(100, 72, 1, 2)), Some(seen)),
+            Some(DirectChoice::Seen(seen)),
+            "a CGNAT adapter is no internet address"
+        );
+        assert_eq!(
+            direct_choice(None, Some(Ipv4Addr::new(100, 72, 1, 2))),
+            None
+        );
+        assert_eq!(
+            direct_choice(None, Some(Ipv4Addr::new(192, 168, 1, 5))),
+            None
+        );
         assert_eq!(direct_choice(None, None), None);
     }
 }

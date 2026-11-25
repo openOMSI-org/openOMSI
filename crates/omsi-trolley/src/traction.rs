@@ -61,8 +61,17 @@ pub struct TractionOut {
 
 #[derive(Debug, Clone)]
 enum Kind {
-    Rheostat { def: RheostatDef, notch: u32, timer: f32, i_motor: f32 },
-    Async { def: AsyncDef, force: f32, tripped: bool },
+    Rheostat {
+        def: RheostatDef,
+        notch: u32,
+        timer: f32,
+        i_motor: f32,
+    },
+    Async {
+        def: AsyncDef,
+        force: f32,
+        tripped: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -95,7 +104,10 @@ impl RheostatDef {
         if n <= self.steps {
             1.0
         } else {
-            self.field_steps.get((n - self.steps - 1) as usize).copied().unwrap_or(1.0)
+            self.field_steps
+                .get((n - self.steps - 1) as usize)
+                .copied()
+                .unwrap_or(1.0)
         }
     }
 
@@ -127,11 +139,24 @@ impl RheostatDef {
 impl Traction {
     pub fn new(drive: &DriveKind, battery: Option<BatteryDef>) -> Traction {
         let kind = match drive {
-            DriveKind::Rheostat(d) => Kind::Rheostat { def: d.clone(), notch: 0, timer: 0.0, i_motor: 0.0 },
-            DriveKind::Async(d) => Kind::Async { def: d.clone(), force: 0.0, tripped: false },
+            DriveKind::Rheostat(d) => Kind::Rheostat {
+                def: d.clone(),
+                notch: 0,
+                timer: 0.0,
+                i_motor: 0.0,
+            },
+            DriveKind::Async(d) => Kind::Async {
+                def: d.clone(),
+                force: 0.0,
+                tripped: false,
+            },
         };
         let kwh = battery.as_ref().map_or(0.0, |b| b.kwh * 0.7);
-        Traction { kind, battery, battery_kwh: kwh }
+        Traction {
+            kind,
+            battery,
+            battery_kwh: kwh,
+        }
     }
 
     pub fn notch(&self) -> u32 {
@@ -146,12 +171,19 @@ impl Traction {
         let v = i.speed.abs();
         let r = i.wheel_radius.max(0.2);
         match &mut self.kind {
-            Kind::Rheostat { def, notch, timer, i_motor } => {
+            Kind::Rheostat {
+                def,
+                notch,
+                timer,
+                i_motor,
+            } => {
                 let positions = def.positions();
                 o.notches = positions as f32;
                 // the line contactor drops out under-voltage, and over a motor's speed limit
                 let w_m = i.speed * i.dir.signum() / r * def.gear_ratio;
-                let live = i.volts >= 0.55 * i.nominal.max(1.0) && w_m.abs() < def.overspeed_rad && i.dir != 0.0;
+                let live = i.volts >= 0.55 * i.nominal.max(1.0)
+                    && w_m.abs() < def.overspeed_rad
+                    && i.dir != 0.0;
                 let before = *notch;
                 *timer += i.dt;
                 let braking = i.brake > 0.02 && live && def.brake_current > 0.0 && v > 0.8;
@@ -164,10 +196,13 @@ impl Traction {
                         *notch -= 1;
                         *timer = 0.0;
                     }
-                    let cur = def.motor_current(i.volts, w_m, *notch).min(def.current_max * 1.25);
+                    let cur = def
+                        .motor_current(i.volts, w_m, *notch)
+                        .min(def.current_max * 1.25);
                     *i_motor = cur;
                     let torque = def.motor_torque(cur, *notch) * def.motors as f32;
-                    o.wheel_force = i.dir.signum() * torque * def.gear_ratio * def.gear_efficiency / r;
+                    o.wheel_force =
+                        i.dir.signum() * torque * def.gear_ratio * def.gear_efficiency / r;
                     o.line_amps = cur * def.motors as f32;
                     o.heat_kw = cur * cur * def.external_ohm(*notch) * def.motors as f32 * 1e-3;
                     o.powered = true;
@@ -198,7 +233,11 @@ impl Traction {
                 o.notch = *notch as f32;
                 o.clicks = before.abs_diff(*notch);
             }
-            Kind::Async { def, force, tripped } => {
+            Kind::Async {
+                def,
+                force,
+                tripped,
+            } => {
                 let connected = i.volts > 0.0;
                 if connected {
                     if i.volts < def.v_trip {
@@ -208,7 +247,11 @@ impl Traction {
                     }
                 }
                 let ok = connected && !*tripped && i.dir != 0.0;
-                let derate = if i.volts >= def.v_min { 1.0 } else { ((i.volts - def.v_trip) / (def.v_min - def.v_trip).max(1.0)).clamp(0.0, 1.0) };
+                let derate = if i.volts >= def.v_min {
+                    1.0
+                } else {
+                    ((i.volts - def.v_trip) / (def.v_min - def.v_trip).max(1.0)).clamp(0.0, 1.0)
+                };
                 let f_avail = def.max_force.min(def.max_power_kw * 1e3 / v.max(0.5)) * derate;
                 let aux = if connected { i.aux_kw } else { 0.0 };
                 let mut p_el_kw = aux;
@@ -219,7 +262,11 @@ impl Traction {
                 if i.brake <= 0.02 && i.pedal > 0.02 && i.dir != 0.0 {
                     if ok {
                         cmd = i.pedal * f_avail;
-                    } else if let Some(b) = self.battery.as_ref().filter(|b| self.battery_kwh > 0.01 && v * 3.6 < b.max_kmh) {
+                    } else if let Some(b) = self
+                        .battery
+                        .as_ref()
+                        .filter(|b| self.battery_kwh > 0.01 && v * 3.6 < b.max_kmh)
+                    {
                         // away from the wire: the battery drives, up to its power and speed
                         on_battery = true;
                         cmd = i.pedal * (def.max_force * 0.5).min(b.kw * 1e3 / v.max(0.5));
@@ -251,32 +298,49 @@ impl Traction {
                             o.heat_kw = (p_reg_kw - accept.min(p_reg_kw)).max(0.0);
                         } else {
                             let allowed = accept.min(p_reg_kw);
-                            f_reg *= if p_reg_kw > 0.0 { allowed / p_reg_kw } else { 0.0 };
+                            f_reg *= if p_reg_kw > 0.0 {
+                                allowed / p_reg_kw
+                            } else {
+                                0.0
+                            };
                         }
                     }
-                    let p_back = (f_reg * v * 1e-3 * def.efficiency).min(accept.max(0.0)).max(0.0);
+                    let p_back = (f_reg * v * 1e-3 * def.efficiency)
+                        .min(accept.max(0.0))
+                        .max(0.0);
                     p_el_kw -= p_back;
                     o.electric_brake = f_reg;
                     *force = 0.0;
                     o.wheel_force = 0.0;
                 }
                 o.mech_brake = (demand - o.electric_brake).max(0.0);
-                o.line_amps = if i.volts > 1.0 { p_el_kw * 1e3 / i.volts } else { 0.0 };
+                o.line_amps = if i.volts > 1.0 {
+                    p_el_kw * 1e3 / i.volts
+                } else {
+                    0.0
+                };
                 o.powered = ok && (i.pedal > 0.02 || o.electric_brake > 0.0);
                 o.on_battery = on_battery;
                 // battery: spends while it drives, charges from the line at what the line can spare
                 if let Some(b) = self.battery.as_ref() {
                     self.battery_kwh -= p_batt_kw * i.dt / 3600.0;
                     if ok && self.battery_kwh < b.kwh {
-                        let charge_kw = 12.0f32.min((b.kwh - self.battery_kwh) * 3600.0 / i.dt.max(1e-3)) .min(12.0);
-                        self.battery_kwh = (self.battery_kwh + charge_kw * i.dt / 3600.0).min(b.kwh);
+                        let charge_kw = 12.0f32
+                            .min((b.kwh - self.battery_kwh) * 3600.0 / i.dt.max(1e-3))
+                            .min(12.0);
+                        self.battery_kwh =
+                            (self.battery_kwh + charge_kw * i.dt / 3600.0).min(b.kwh);
                         if i.volts > 1.0 {
                             o.charge_amps = charge_kw * 1e3 / i.volts;
                             o.line_amps += o.charge_amps;
                         }
                     }
                     self.battery_kwh = self.battery_kwh.max(0.0);
-                    o.battery_soc = if b.kwh > 0.0 { self.battery_kwh / b.kwh } else { 0.0 };
+                    o.battery_soc = if b.kwh > 0.0 {
+                        self.battery_kwh / b.kwh
+                    } else {
+                        0.0
+                    };
                 }
                 o.clicks = u32::from((before_force == 0.0) != (*force == 0.0));
                 let _ = before_force;
@@ -295,7 +359,16 @@ mod tests {
     }
 
     fn input(speed: f32, pedal: f32) -> TractionIn {
-        TractionIn { dt: 1.0 / 60.0, volts: 600.0, nominal: 600.0, pedal, speed, dir: 1.0, wheel_radius: 0.5, ..Default::default() }
+        TractionIn {
+            dt: 1.0 / 60.0,
+            volts: 600.0,
+            nominal: 600.0,
+            pedal,
+            speed,
+            dir: 1.0,
+            wheel_radius: 0.5,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -341,7 +414,11 @@ mod tests {
         let a = o.wheel_force / 16_000.0;
         assert!(a > 0.7 && a < 1.8, "a {a}");
         // the line current at the start is some hundreds of amps, not thousands
-        assert!(o.line_amps > 100.0 && o.line_amps < 420.0, "{}", o.line_amps);
+        assert!(
+            o.line_amps > 100.0 && o.line_amps < 420.0,
+            "{}",
+            o.line_amps
+        );
     }
 
     #[test]
@@ -371,7 +448,14 @@ mod tests {
     }
 
     fn inverter() -> Traction {
-        Traction::new(&DriveKind::Async(AsyncDef::default()), Some(BatteryDef { kwh: 4.0, kw: 30.0, max_kmh: 15.0 }))
+        Traction::new(
+            &DriveKind::Async(AsyncDef::default()),
+            Some(BatteryDef {
+                kwh: 4.0,
+                kw: 30.0,
+                max_kmh: 15.0,
+            }),
+        )
     }
 
     #[test]
@@ -386,7 +470,11 @@ mod tests {
         let p = o.wheel_force * 15.0;
         assert!((p - 170_000.0).abs() < 8_000.0, "{p}");
         // the line carries that over the efficiency
-        assert!(o.line_amps > 250.0 && o.line_amps < 340.0, "{}", o.line_amps);
+        assert!(
+            o.line_amps > 250.0 && o.line_amps < 340.0,
+            "{}",
+            o.line_amps
+        );
     }
 
     #[test]
@@ -436,7 +524,12 @@ mod tests {
         let mut t = inverter();
         let o = t.step(&input(8.0, 0.0));
         assert!(o.charge_amps > 15.0, "{}", o.charge_amps);
-        assert!((o.line_amps - o.charge_amps).abs() < 1.0, "{} {}", o.line_amps, o.charge_amps);
+        assert!(
+            (o.line_amps - o.charge_amps).abs() < 1.0,
+            "{} {}",
+            o.line_amps,
+            o.charge_amps
+        );
     }
 
     #[test]

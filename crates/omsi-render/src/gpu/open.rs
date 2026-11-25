@@ -4,6 +4,14 @@ use super::upscaler_device;
 use crate::*;
 
 /// The chosen MSAA is being tried again after a remembered fallback (see `build_with_fallbacks`).
+/// How many times this thread published the adapter's state, its texture options and
+/// its memory and name (tests: other tests open
+/// renderers on their own threads at the same time, so the global value alone races).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static ADAPTER_PUBLISHED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 static MSAA_RETRY: super::auxiliary::AdapterBool = super::auxiliary::AdapterBool::new(5);
 
 impl Renderer {
@@ -265,6 +273,8 @@ impl Renderer {
         };
         log::info!("graphics device opened; compiling renderer pipelines");
         if auxiliary_context().is_none() {
+            #[cfg(test)]
+            ADAPTER_PUBLISHED.with(|n| n.set(n.get() + 1));
             ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
             ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
             *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.clone());
@@ -339,6 +349,8 @@ impl Renderer {
         let halve = halves_plain(adapter.features(), &options);
         if auxiliary_context().is_none() {
             omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
+            #[cfg(test)]
+            ADAPTER_PUBLISHED.with(|n| n.set(n.get() + 1));
             omsi_texture::gpu::set_halve_plain(halve);
         }
         log_device_options(&info, format, &options, adapter_table, bc, compress, halve);
@@ -675,7 +687,7 @@ impl Opened {
             }
             if basic_pipelines() && rainfall_pipeline() {
                 log::warn!(
-                    "{}: the graphics device was lost while the basic pipelines were made ({why}); opening it again without the rainfall",
+                    "{}: the graphics device was lost while the basic pipelines were made ({why}); opening it again without the rainfall and the snowfall",
                     info.name
                 );
                 RAINFALL_LEFT_OUT.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -815,10 +827,12 @@ impl Renderer {
                             "{}: drawing with {}x MSAA{}",
                             info.name,
                             msaa,
-                            match (basic, rainfall_pipeline()) {
-                                (true, true) =>
+                            match (basic, rainfall_pipeline(), snowfall_pipeline()) {
+                                (true, true, true) =>
+                                    ", without the lamps in the fog and the street lamps' shadows",
+                                (true, true, false) =>
                                     ", without the snowfall, the lamps in the fog and the street lamps' shadows",
-                                (true, false) =>
+                                (true, false, _) =>
                                     ", without the snowfall, the rainfall, the lamps in the fog and the street lamps' shadows",
                                 _ => "",
                             }
@@ -883,8 +897,9 @@ impl Renderer {
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
-        let snow = coronas::Precip::snow(&device, &scene.camera_layout, &precip.view);
-        let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view);
+        let flakes = crate::precip::FlakeAtlas::new(&device, &queue);
+        let snow = coronas::Precip::snow(&device, &scene.camera_layout, &precip.view, &flakes);
+        let rain = coronas::Precip::rain(&device, &scene.camera_layout, &precip.view, &flakes);
         drop(corona_texture);
         let sky = sky::SkyBase::new(&device, &queue, &scene.camera_layout, !leave_out_enhanced);
         let sky_pipelines = sky.pipeline_base();
@@ -949,6 +964,7 @@ impl Renderer {
                 scale_targets: HashMap::new(),
                 triple_targets: None,
                 glass_picture: None,
+                glass_mips: None,
                 target_use: HashMap::new(),
                 evicted_at: std::time::Instant::now(),
                 hdr_targets: HashMap::new(),
@@ -986,6 +1002,7 @@ impl Renderer {
                 cloud_detail_view: sky.cloud_detail_view,
                 cloud_sampler: sky.cloud_sampler,
                 cloud_shape_cpu: sky.cloud_shape_cpu,
+                cloud_view_buf: sky.cloud_view_buf,
                 cloud_sun: None,
                 sky_mesh,
             },
@@ -1002,6 +1019,17 @@ impl Renderer {
                 fog_lamps_pipeline: fog_lamps.pipeline,
                 fog_lamps_layout: fog_lamps.layout,
                 fog_lamps_buf: fog_lamps.buf,
+                vol_fog: (!leave_out_enhanced)
+                    .then(|| {
+                        crate::vol_fog::VolFog::new(
+                            &device,
+                            &queue,
+                            &scene.camera_layout,
+                            hdr_format,
+                            gl,
+                        )
+                    })
+                    .flatten(),
                 corona_bind_group: coronas.bind_group,
                 snow_buf: snow.buf,
                 snow_bind_group: snow.bind_group,

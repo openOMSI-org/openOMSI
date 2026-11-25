@@ -20,9 +20,17 @@ fn ray_segment(o: DVec3, d: DVec3, a: DVec3, b: DVec3) -> (f64, f64) {
     let (uu, uv, vv) = (u.dot(u), u.dot(v), v.dot(v));
     let (uw, vw) = (u.dot(w), v.dot(w));
     let den = uu * vv - uv * uv;
-    let mut s = if den.abs() < 1e-9 { 0.0 } else { (uv * vw - vv * uw) / den };
+    let mut s = if den.abs() < 1e-9 {
+        0.0
+    } else {
+        (uv * vw - vv * uw) / den
+    };
     s = s.max(0.0);
-    let t = if vv < 1e-12 { 0.0 } else { ((uv * s + vw) / vv).clamp(0.0, 1.0) };
+    let t = if vv < 1e-12 {
+        0.0
+    } else {
+        ((uv * s + vw) / vv).clamp(0.0, 1.0)
+    };
     // (the ray's parameter again for the clamped point on the segment)
     let p = a + v * t;
     let s2 = ((p - o).dot(u) / uu).max(0.0);
@@ -38,7 +46,11 @@ impl App {
         let (o, d, _) = self.cursor_ray_now()?;
         let d = d.as_dvec3().normalize_or_zero();
         let (pos, m, _) = p.vehicle.trolley_frame();
-        let rot = DMat3::from_cols(m.x_axis.truncate().as_dvec3(), m.y_axis.truncate().as_dvec3(), m.z_axis.truncate().as_dvec3());
+        let rot = DMat3::from_cols(
+            m.x_axis.truncate().as_dvec3(),
+            m.y_axis.truncate().as_dvec3(),
+            m.z_axis.truncate().as_dvec3(),
+        );
         let mut best: Option<(usize, f64)> = None;
         for (k, pole) in g.rig.poles.iter().enumerate() {
             if p.vehicle.trolley_rope_scripted(k) {
@@ -60,9 +72,17 @@ impl App {
     /// from the driver's seat, where the cab's own switches are under the cursor). True when
     /// the press was the pole's.
     pub(crate) fn trolley_mouse_click(&mut self) -> bool {
-        let holding = self.player.as_ref().and_then(|p| p.vehicle.trolley.as_deref()).is_some_and(|g| g.grab.is_some() && !g.grab_by_script);
+        let holding = self
+            .player
+            .as_ref()
+            .and_then(|p| p.vehicle.trolley.as_deref())
+            .is_some_and(|g| g.grab.is_some() && !g.grab_by_script);
         if holding {
-            if let Some(g) = self.player.as_mut().and_then(|p| p.vehicle.trolley.as_deref_mut()) {
+            if let Some(g) = self
+                .player
+                .as_mut()
+                .and_then(|p| p.vehicle.trolley.as_deref_mut())
+            {
                 g.grab = None;
             }
             return true;
@@ -70,8 +90,14 @@ impl App {
         if matches!(self.view.as_str(), "driver" | "pax") {
             return false;
         }
-        let Some(k) = self.trolley_pole_under_cursor() else { return false };
-        if let Some(g) = self.player.as_mut().and_then(|p| p.vehicle.trolley.as_deref_mut()) {
+        let Some(k) = self.trolley_pole_under_cursor() else {
+            return false;
+        };
+        if let Some(g) = self
+            .player
+            .as_mut()
+            .and_then(|p| p.vehicle.trolley.as_deref_mut())
+        {
             g.grab = Some(k);
             g.grab_fresh = true;
             g.grab_manual = true;
@@ -82,19 +108,41 @@ impl App {
 
     /// While a pole is in the hand: the cursor's ray, every frame.
     pub(crate) fn trolley_mouse_feed(&mut self) {
-        if self.player.as_ref().is_none_or(|p| p.vehicle.trolley.is_none()) {
+        if self
+            .player
+            .as_ref()
+            .is_none_or(|p| p.vehicle.trolley.is_none())
+        {
             return;
         }
-        let ray = self.cursor_ray_now().map(|(o, d, _)| (o, d.as_dvec3().normalize_or_zero()));
-        let right = ray.map(|(_, d)| d.cross(DVec3::Z).normalize_or_zero()).unwrap_or(DVec3::X);
-        let bus_x = self.player.as_ref().map(|p| p.vehicle.trolley_frame().1.x_axis.truncate().as_dvec3()).unwrap_or(DVec3::X);
+        let ray = self
+            .cursor_ray_now()
+            .map(|(o, d, _)| (o, d.as_dvec3().normalize_or_zero()));
+        let right = ray
+            .map(|(_, d)| d.cross(DVec3::Z).normalize_or_zero())
+            .unwrap_or(DVec3::X);
+        let bus_x = self
+            .player
+            .as_ref()
+            .map(|p| p.vehicle.trolley_frame().1.x_axis.truncate().as_dvec3())
+            .unwrap_or(DVec3::X);
         let side = if right.dot(bus_x) >= 0.0 { 1.0 } else { -1.0 };
         // (from the driver's seat the poles are behind the head and the wire is out of the cursor's
         // reach: the motor raises the pole to the wire by itself)
         let from_cab = matches!(self.view.as_str(), "driver" | "pax");
         let cursor = self.input.cursor;
-        let scale = self.window.as_ref().map_or(1.0, |w| w.scale_factor() as f32).max(0.1);
-        let Some(g) = self.player.as_mut().and_then(|p| p.vehicle.trolley.as_deref_mut()) else { return };
+        let scale = self
+            .window
+            .as_ref()
+            .map_or(1.0, |w| w.scale_factor() as f32)
+            .max(0.1);
+        let Some(g) = self
+            .player
+            .as_mut()
+            .and_then(|p| p.vehicle.trolley.as_deref_mut())
+        else {
+            return;
+        };
         g.rope_side = side;
         if g.grab.is_none() {
             return;
@@ -109,7 +157,10 @@ impl App {
             g.grab_fresh = true;
         }
         if self.service_msg.is_none() && !from_cab {
-            self.service_msg = Some(("Move the mouse to put the pole on the wire, click to let it go".into(), 0.6));
+            self.service_msg = Some((
+                "Move the mouse to put the pole on the wire, click to let it go".into(),
+                0.6,
+            ));
         }
     }
 }

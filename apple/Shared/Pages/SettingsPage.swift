@@ -158,11 +158,13 @@ struct SettingsPage: View {
                 SettingSelect(label: "Light has shadows", key: "light_shadows", options: [("off", "Off"), ("street", "Street lamps and vehicles"), ("all", "Every light")])
                 SettingToggle(label: "Cloud shadows and light shafts", key: "cloud_shadows", fallback: true)
                 SettingToggle(label: "Glow of lights", key: "light_glow", fallback: true)
+                SettingToggle(label: "Volumetric fog", key: "volumetric_fog", fallback: true)
             }
             SettingSelect(label: "Vehicle smoke", key: "vehicle_smoke", options: [("all", "All vehicles"), ("player", "Player only"), ("off", "Off")], help: "Controls the vehicles' smoke particles, not scenery effects or glowing particles.")
             if (store.setting("reflections")?.double ?? 1) > 0.005 {
                 SettingSelect(label: enhanced ? "Real-Time Reflections" : "Puddles", key: "puddles", options: [("high", "High"), ("low", "Low"), ("off", "Off")])
             }
+            SettingToggle(label: "Lights on in a downpour", key: "rain_lights", fallback: true, help: "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on")
             SettingToggle(label: "Windy trees", key: "windy_trees", fallback: true)
             SettingToggle(label: "Detailed trees", key: "detailed_trees", fallback: true, help: "Close up, the trees' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time")
             if !classic {

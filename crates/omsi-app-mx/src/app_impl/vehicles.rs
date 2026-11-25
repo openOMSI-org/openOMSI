@@ -127,6 +127,7 @@ impl App {
                     &t.ty,
                     scheme.filter(|i| k < own && *i < t.ty.paint_schemes.len()),
                     &render,
+                    p.vehicle.mirror_base(k),
                 )
             })
             .collect();
@@ -690,6 +691,7 @@ pub(crate) fn placement_args(
         situation: None,
         situation_vars: Vec::new(),
         situation_strvars: Vec::new(),
+        situation_cars: Vec::new(),
         situation_odometer_km: None,
         situation_others: Vec::new(),
         line: None,

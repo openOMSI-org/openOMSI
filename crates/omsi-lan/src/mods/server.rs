@@ -126,11 +126,19 @@ fn serve_with_accept(
                     }
                     connections.insert(peer, socket);
                 }
-                let (ready, key, state, fleet_cache, root) = (ready.clone(), key.clone(), serving.clone(), fleet_cache.clone(), fleet_root.clone());
+                let (ready, key, state, fleet_cache, root) = (
+                    ready.clone(),
+                    key.clone(),
+                    serving.clone(),
+                    fleet_cache.clone(),
+                    fleet_root.clone(),
+                );
                 let spawned = std::thread::Builder::new()
                     .name("lan-mods-conn".into())
                     .spawn(move || {
-                        if let Err(e) = handle(stream, &key, &ready, &state.stopped, &fleet_cache, &root) {
+                        if let Err(e) =
+                            handle(stream, &key, &ready, &state.stopped, &fleet_cache, &root)
+                        {
                             log::info!("LAN mods: connection from {peer} ended: {e}");
                         }
                         state

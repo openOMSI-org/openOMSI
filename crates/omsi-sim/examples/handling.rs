@@ -27,8 +27,14 @@ fn main() {
             _ => files.push(a.into()),
         }
     }
-    let flat = |_x: f64, _y: f64, _t: f64| GroundProbe { below: Some(0.0), above: None };
-    println!("{:<34} {:>6} {:>7} {:>7} {:>7} {:>7} {:>7} {:>6} {:>6}", "bus", "yaw/k", "t90 s", "slip°", "roll°", "peak°", "roll Hz", "swings", "settle");
+    let flat = |_x: f64, _y: f64, _t: f64| GroundProbe {
+        below: Some(0.0),
+        above: None,
+    };
+    println!(
+        "{:<34} {:>6} {:>7} {:>7} {:>7} {:>7} {:>7} {:>6} {:>6}",
+        "bus", "yaw/k", "t90 s", "slip°", "roll°", "peak°", "roll Hz", "swings", "settle"
+    );
     for f in files {
         let def = match Vehicle::load(&f) {
             Ok(d) => d,
@@ -51,15 +57,31 @@ fn main() {
         for w in rb.wheels.iter_mut() {
             w.spin = v_target / w.radius;
         }
-        let r_drive = rb.wheels.iter().find(|w| w.driven).map(|w| w.radius).unwrap_or(0.5);
-        let hold_speed = |rb: &RigidBody| -> f32 { ((v_target - rb.forward_speed()) * rb.mass * 2.0 + rb.rolling_resistance + 0.36 * rb.forward_speed().powi(2) * (rb.mass / 2200.0).clamp(2.0, 8.5)) * r_drive };
+        let r_drive = rb
+            .wheels
+            .iter()
+            .find(|w| w.driven)
+            .map(|w| w.radius)
+            .unwrap_or(0.5);
+        let hold_speed = |rb: &RigidBody| -> f32 {
+            ((v_target - rb.forward_speed()) * rb.mass * 2.0
+                + rb.rolling_resistance
+                // (only the realistic model has an air drag of its own to hold against)
+                + if rb.realistic {
+                    0.36 * rb.forward_speed().powi(2) * (rb.mass / 2200.0).clamp(2.0, 8.5)
+                } else {
+                    0.0
+                })
+                * r_drive
+        };
         for _ in 0..180 {
             let m = hold_speed(&rb);
             rb.step(dt, m, &brakes, 0.0, &flat);
         }
         // the step: the steering geometry's own yaw rate is v * curvature
         let kappa = steer * def.inv_min_turn_radius;
-        let (mut t90, mut yaw_ss, mut slip_ss, mut roll_ss, mut roll_peak) = (None, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        let (mut t90, mut yaw_ss, mut slip_ss, mut roll_ss, mut roll_peak) =
+            (None, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
         let secs = 8.0;
         let n = (secs / dt) as usize;
         let mut yaw_trace = Vec::with_capacity(n);
@@ -101,9 +123,37 @@ fn main() {
                 crossings.push(i as f32 * dt);
             }
         }
-        let freq = if crossings.len() >= 3 { (crossings.len() - 1) as f32 / 2.0 / (crossings[crossings.len() - 1] - crossings[0]).max(1e-3) } else { 0.0 };
-        let settle = rolls.iter().rposition(|r| (r - mean).abs() > 0.05).map(|i| i as f32 * dt).unwrap_or(0.0);
-        let name = format!("{}/{}", f.parent().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().to_string()).unwrap_or_default(), f.file_name().unwrap().to_string_lossy());
-        println!("{:<34} {:>6.2} {:>7.2} {:>7.2} {:>7.2} {:>7.2} {:>7.2} {:>6} {:>5.1}s", name.chars().take(34).collect::<String>(), ratio, t90.unwrap_or(f32::NAN), slip_ss, roll_ss, roll_peak, freq, crossings.len() / 2, settle);
+        let freq = if crossings.len() >= 3 {
+            (crossings.len() - 1) as f32
+                / 2.0
+                / (crossings[crossings.len() - 1] - crossings[0]).max(1e-3)
+        } else {
+            0.0
+        };
+        let settle = rolls
+            .iter()
+            .rposition(|r| (r - mean).abs() > 0.05)
+            .map(|i| i as f32 * dt)
+            .unwrap_or(0.0);
+        let name = format!(
+            "{}/{}",
+            f.parent()
+                .and_then(|p| p.file_name())
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            f.file_name().unwrap().to_string_lossy()
+        );
+        println!(
+            "{:<34} {:>6.2} {:>7.2} {:>7.2} {:>7.2} {:>7.2} {:>7.2} {:>6} {:>5.1}s",
+            name.chars().take(34).collect::<String>(),
+            ratio,
+            t90.unwrap_or(f32::NAN),
+            slip_ss,
+            roll_ss,
+            roll_peak,
+            freq,
+            crossings.len() / 2,
+            settle
+        );
     }
 }

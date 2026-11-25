@@ -48,7 +48,11 @@ pub(crate) struct Turn {
 impl Default for Turn {
     /// The usual side mirror: u runs to the left, v down.
     fn default() -> Self {
-        Turn { transposed: false, x_reversed: true, y_reversed: false }
+        Turn {
+            transposed: false,
+            x_reversed: true,
+            y_reversed: false,
+        }
     }
 }
 
@@ -57,17 +61,32 @@ impl Turn {
     /// position moves with u (`du`) and v (`dv`), all in the bus's frame (x right, y forward,
     /// z up). The viewer's up is the bus's up across the line of sight.
     fn of(eye: Vec3, centre: Vec3, du: Vec3, dv: Vec3) -> Turn {
-        let Some(sight) = (centre - eye).try_normalize() else { return Turn::default() };
-        let Some(up) = (Vec3::Z - sight * sight.z).try_normalize() else { return Turn::default() };
+        let Some(sight) = (centre - eye).try_normalize() else {
+            return Turn::default();
+        };
+        let Some(up) = (Vec3::Z - sight * sight.z).try_normalize() else {
+            return Turn::default();
+        };
         let right = sight.cross(up);
-        let (du, dv) = (du.try_normalize().unwrap_or(Vec3::ZERO), dv.try_normalize().unwrap_or(Vec3::ZERO));
+        let (du, dv) = (
+            du.try_normalize().unwrap_or(Vec3::ZERO),
+            dv.try_normalize().unwrap_or(Vec3::ZERO),
+        );
         let (ur, uu, vr, vu) = (du.dot(right), du.dot(up), dv.dot(right), dv.dot(up));
         if ur.abs() >= uu.abs() {
             // u across, v down the picture (the top row is v 0)
-            Turn { transposed: false, x_reversed: ur < 0.0, y_reversed: vu > 0.0 }
+            Turn {
+                transposed: false,
+                x_reversed: ur < 0.0,
+                y_reversed: vu > 0.0,
+            }
         } else {
             // u up or down, v across
-            Turn { transposed: true, x_reversed: vr < 0.0, y_reversed: uu > 0.0 }
+            Turn {
+                transposed: true,
+                x_reversed: vr < 0.0,
+                y_reversed: uu > 0.0,
+            }
         }
     }
 }
@@ -179,7 +198,8 @@ impl MirrorHud {
 
     /// The mirror the panel under the cursor shows.
     pub fn cam_under(&self, cursor: (f32, f32), size: (f32, f32)) -> Option<usize> {
-        self.hit(cursor.0, cursor.1, size.0, size.1).map(|i| self.panels[i].cam)
+        self.hit(cursor.0, cursor.1, size.0, size.1)
+            .map(|i| self.panels[i].cam)
     }
 
     pub fn dragging(&self) -> bool {
@@ -191,13 +211,24 @@ impl MirrorHud {
     pub fn sync(&mut self, p: &Player, setting: u8) {
         if !self.glass.is_empty() {
             let rot = p.vehicle.body_rotation().inverse();
-            let eye = rot.transform_vector3((crate::camera_util::driver_eye(p) - p.vehicle.position).as_vec3());
+            let eye = rot.transform_vector3(
+                (crate::camera_util::driver_eye(p) - p.vehicle.position).as_vec3(),
+            );
             self.turns.clear();
-            self.turns.extend(self.glass.iter().map(|g| g.map(|g| Turn::of(eye, g.centre, g.du, g.dv)).unwrap_or_default()));
+            self.turns.extend(self.glass.iter().map(|g| {
+                g.map(|g| Turn::of(eye, g.centre, g.du, g.dv))
+                    .unwrap_or_default()
+            }));
         }
         let path = p.vehicle.ty.def.path.to_string_lossy();
         // (compared without making the key anew every frame)
-        if self.key.len() == path.len() && self.key.bytes().zip(path.bytes()).all(|(k, c)| k == c.to_ascii_lowercase()) {
+        if self.key.len() == path.len()
+            && self
+                .key
+                .bytes()
+                .zip(path.bytes())
+                .all(|(k, c)| k == c.to_ascii_lowercase())
+        {
             return;
         }
         let path = path.into_owned();
@@ -257,7 +288,11 @@ impl MirrorHud {
             self.arrows = [false; 8];
         }
         self.save();
-        if self.enabled { "Mirror panels on (Ctrl+M: off, Ctrl+Shift+M: edit)".into() } else { "Mirror panels off (Ctrl+M)".into() }
+        if self.enabled {
+            "Mirror panels on (Ctrl+M: off, Ctrl+Shift+M: edit)".into()
+        } else {
+            "Mirror panels off (Ctrl+M)".into()
+        }
     }
 
     /// Ctrl+Shift+M: the editor on or off.
@@ -281,7 +316,13 @@ impl MirrorHud {
     }
 
     /// The editor's keys; `Some(message)` when the key was one of them (and is taken).
-    pub fn key(&mut self, code: KeyCode, p: &Player, cursor: (f32, f32), size: (f32, f32)) -> Option<String> {
+    pub fn key(
+        &mut self,
+        code: KeyCode,
+        p: &Player,
+        cursor: (f32, f32),
+        size: (f32, f32),
+    ) -> Option<String> {
         if !self.editing() {
             return None;
         }
@@ -296,7 +337,9 @@ impl MirrorHud {
                 Some(format!("Mirror panel added ({} in all)", self.panels.len()))
             }
             KeyCode::Delete | KeyCode::Backspace => {
-                let i = self.hit(cursor.0, cursor.1, size.0, size.1).or(self.panels.len().checked_sub(1))?;
+                let i = self
+                    .hit(cursor.0, cursor.1, size.0, size.1)
+                    .or(self.panels.len().checked_sub(1))?;
                 self.panels.remove(i);
                 self.drag = None;
                 self.save();
@@ -304,11 +347,16 @@ impl MirrorHud {
             }
             KeyCode::KeyC => {
                 let n = p.vehicle.ty.def.cameras_reflexion.len();
-                let i = self.hit(cursor.0, cursor.1, size.0, size.1).or(self.panels.len().checked_sub(1))?;
+                let i = self
+                    .hit(cursor.0, cursor.1, size.0, size.1)
+                    .or(self.panels.len().checked_sub(1))?;
                 let used: Vec<usize> = self.panels.iter().map(|q| q.cam).collect();
                 let cur = self.panels[i].cam;
                 // the next mirror after this one that no other panel shows (else the next)
-                let next = (1..=n).map(|d| (cur + d) % n).find(|c| !used.contains(c)).unwrap_or((cur + 1) % n);
+                let next = (1..=n)
+                    .map(|d| (cur + d) % n)
+                    .find(|c| !used.contains(c))
+                    .unwrap_or((cur + 1) % n);
                 let (aspect, _) = self.shape(p, next);
                 self.panels[i].cam = next;
                 self.panels[i].aspect = aspect;
@@ -332,17 +380,35 @@ impl MirrorHud {
             return;
         }
         // prefer the main side mirrors, then the rest in the order the bus lists them
-        let mut order: Vec<usize> = [side_mirror(p, true), side_mirror(p, false), front_mirror(p)].into_iter().flatten().collect();
+        let mut order: Vec<usize> = [side_mirror(p, true), side_mirror(p, false), front_mirror(p)]
+            .into_iter()
+            .flatten()
+            .collect();
         let rest: Vec<usize> = (0..n).filter(|i| !order.contains(i)).collect();
         order.extend(rest);
-        let Some(cam) = order.into_iter().find(|c| !self.panels.iter().any(|q| q.cam == *c)) else { return };
+        let Some(cam) = order
+            .into_iter()
+            .find(|c| !self.panels.iter().any(|q| q.cam == *c))
+        else {
+            return;
+        };
         let (aspect, right) = self.shape(p, cam);
         let h = 0.30;
         // stacked down the edge of the side the mirror is on, below the ones already there
         let on_side = self.panels.iter().filter(|q| (q.x > 0.5) == right).count() as f32;
         let y = (0.12 + 0.02 * on_side + on_side * h).min(1.0 - h - MARGIN);
-        let x = if right { 1.0 - MARGIN - h * aspect * 0.5625 } else { MARGIN };
-        self.panels.push(Panel { cam, x, y, h, aspect });
+        let x = if right {
+            1.0 - MARGIN - h * aspect * 0.5625
+        } else {
+            MARGIN
+        };
+        self.panels.push(Panel {
+            cam,
+            x,
+            y,
+            h,
+            aspect,
+        });
     }
 
     fn default_panels(&self, p: &Player, setting: u8) -> Vec<Panel> {
@@ -351,17 +417,35 @@ impl MirrorHud {
             if !wanted {
                 continue;
             }
-            let Some(cam) = side_mirror(p, right) else { continue };
+            let Some(cam) = side_mirror(p, right) else {
+                continue;
+            };
             let (aspect, _) = self.shape(p, cam);
             let h = 0.30;
-            let x = if right { 1.0 - MARGIN - h * aspect * 0.5625 } else { MARGIN };
-            out.push(Panel { cam, x, y: 0.28, h, aspect });
+            let x = if right {
+                1.0 - MARGIN - h * aspect * 0.5625
+            } else {
+                MARGIN
+            };
+            out.push(Panel {
+                cam,
+                x,
+                y: 0.28,
+                h,
+                aspect,
+            });
         }
         if let Some(cam) = front_mirror(p).filter(|_| setting & FRONT != 0) {
             let (aspect, _) = self.shape(p, cam);
             let h = 0.22;
             let x = (0.5 - h * aspect * 0.5625 * 0.5).max(MARGIN);
-            out.push(Panel { cam, x, y: MARGIN, h, aspect });
+            out.push(Panel {
+                cam,
+                x,
+                y: MARGIN,
+                h,
+                aspect,
+            });
         }
         out
     }
@@ -398,7 +482,9 @@ impl MirrorHud {
         if !self.editing() {
             return false;
         }
-        let Some(i) = self.hit(cursor.0, cursor.1, size.0, size.1) else { return false };
+        let Some(i) = self.hit(cursor.0, cursor.1, size.0, size.1) else {
+            return false;
+        };
         let r = Self::rect(&self.panels[i], size.0, size.1);
         // on top of the others from now on
         let q = self.panels.remove(i);
@@ -409,8 +495,12 @@ impl MirrorHud {
 
     /// The cursor moved: a panel being dragged follows.
     pub fn moved(&mut self, cursor: (f32, f32), size: (f32, f32)) -> bool {
-        let Some((i, dx, dy)) = self.drag else { return false };
-        let Some(q) = self.panels.get_mut(i) else { return false };
+        let Some((i, dx, dy)) = self.drag else {
+            return false;
+        };
+        let Some(q) = self.panels.get_mut(i) else {
+            return false;
+        };
         let ph = q.h * size.1;
         let pw = ph * q.aspect;
         q.x = ((cursor.0 - dx) / size.0).clamp(0.0, ((size.0 - pw) / size.0).max(0.0));
@@ -420,12 +510,25 @@ impl MirrorHud {
 
     /// The wheel over a panel makes it larger or smaller (with Shift wider or narrower);
     /// true when one was under the cursor. Only with the editor on.
-    pub fn wheel(&mut self, amount: f32, shift: bool, cursor: (f32, f32), size: (f32, f32)) -> bool {
+    pub fn wheel(
+        &mut self,
+        amount: f32,
+        shift: bool,
+        cursor: (f32, f32),
+        size: (f32, f32),
+    ) -> bool {
         if !self.editing() {
             return false;
         }
-        let Some(i) = self.hit(cursor.0, cursor.1, size.0, size.1) else { return false };
-        self.resize(i, if shift { amount } else { 0.0 }, if shift { 0.0 } else { amount }, size);
+        let Some(i) = self.hit(cursor.0, cursor.1, size.0, size.1) else {
+            return false;
+        };
+        self.resize(
+            i,
+            if shift { amount } else { 0.0 },
+            if shift { 0.0 } else { amount },
+            size,
+        );
         true
     }
 
@@ -455,7 +558,10 @@ impl MirrorHud {
         if !self.editing() {
             return false;
         }
-        if let Some(i) = self.hit(cursor.0, cursor.1, size.0, size.1).or(self.panels.len().checked_sub(1)) {
+        if let Some(i) = self
+            .hit(cursor.0, cursor.1, size.0, size.1)
+            .or(self.panels.len().checked_sub(1))
+        {
             self.resize(i, dw, dh, size);
         }
         true
@@ -470,8 +576,20 @@ impl MirrorHud {
             let q = &self.panels[i];
             let r = Self::rect(q, size.0, size.1);
             let x = mirrors.get(q.cam).map(|c| c.pos[0]).unwrap_or(0.0);
-            let side = if x > 0.3 { "right" } else if x < -0.3 { "left" } else { "inside" };
-            out.push(format!("Panel under the cursor: mirror {} of {} ({side}), {:.0} x {:.0} px", q.cam + 1, mirrors.len(), r[2] - r[0], r[3] - r[1]));
+            let side = if x > 0.3 {
+                "right"
+            } else if x < -0.3 {
+                "left"
+            } else {
+                "inside"
+            };
+            out.push(format!(
+                "Panel under the cursor: mirror {} of {} ({side}), {:.0} x {:.0} px",
+                q.cam + 1,
+                mirrors.len(),
+                r[2] - r[0],
+                r[3] - r[1]
+            ));
         }
         out.push("Drag: move - wheel: height - Shift+wheel: width - [ ]: narrower, wider - ; ': shorter, taller".into());
         out.push("Arrows: aim the mirror - Alt+arrows, PgUp/PgDn: shift it - - +: field of view - R: reset (Shift+R: all)".into());
@@ -482,7 +600,12 @@ impl MirrorHud {
     /// The editor's frame colour, made once.
     pub fn ensure_frame(&mut self, r: &Renderer, scene: &mut Scene) {
         if self.frame.is_none() && self.editing() {
-            let image = omsi_texture::Image { width: 1, height: 1, rgba: vec![255, 200, 0, 255], has_alpha: false };
+            let image = omsi_texture::Image {
+                width: 1,
+                height: 1,
+                rgba: vec![255, 200, 0, 255],
+                has_alpha: false,
+            };
             self.frame = Some(r.add_texture(scene, &image, false));
         }
     }
@@ -495,20 +618,40 @@ impl MirrorHud {
             return;
         }
         let textures = world.mirror_textures.lock();
-        let under = if self.editing() { self.hit(cursor.0, cursor.1, w, h) } else { None };
+        let under = if self.editing() {
+            self.hit(cursor.0, cursor.1, w, h)
+        } else {
+            None
+        };
         for (i, q) in self.panels.iter().enumerate() {
-            let Some(tex) = textures.get(q.cam).copied().flatten() else { continue };
+            let Some(tex) = textures.get(q.cam).copied().flatten() else {
+                continue;
+            };
             let r = Self::rect(q, w, h);
             // in the editor each panel has a frame, the one under the cursor a thicker one
             if let (true, Some(f)) = (self.editing(), self.frame) {
-                let t = if under == Some(i) || self.drag.is_some_and(|d| d.0 == i) { 5.0 } else { 2.0 };
-                scene.overlays.push((f, [r[0] - t, r[1] - t, r[2] + t, r[3] + t]));
+                let t = if under == Some(i) || self.drag.is_some_and(|d| d.0 == i) {
+                    5.0
+                } else {
+                    2.0
+                };
+                scene
+                    .overlays
+                    .push((f, [r[0] - t, r[1] - t, r[2] + t, r[3] + t]));
             }
             // (laid out the way the glass's mesh lays the picture on it - over left to right
             // for the usual side mirror - so that the panel shows what the glass shows)
             let t = self.turns.get(q.cam).copied().unwrap_or_default();
-            let (x0, x1) = if t.x_reversed { (r[2], r[0]) } else { (r[0], r[2]) };
-            let (y0, y1) = if t.y_reversed { (r[3], r[1]) } else { (r[1], r[3]) };
+            let (x0, x1) = if t.x_reversed {
+                (r[2], r[0])
+            } else {
+                (r[0], r[2])
+            };
+            let (y0, y1) = if t.y_reversed {
+                (r[3], r[1])
+            } else {
+                (r[1], r[3])
+            };
             if t.transposed {
                 scene.transposed.insert(tex);
             } else {
@@ -528,8 +671,19 @@ pub(crate) fn side_mirror(p: &Player, right: bool) -> Option<usize> {
 fn side_of(cams: &[omsi_vehicle::Camera], right: bool) -> Option<usize> {
     cams.iter()
         .enumerate()
-        .filter(|(_, c)| if right { c.pos[0] > 0.3 } else { c.pos[0] < -0.3 })
-        .max_by(|a, b| a.1.pos[0].abs().partial_cmp(&b.1.pos[0].abs()).unwrap_or(std::cmp::Ordering::Equal))
+        .filter(|(_, c)| {
+            if right {
+                c.pos[0] > 0.3
+            } else {
+                c.pos[0] < -0.3
+            }
+        })
+        .max_by(|a, b| {
+            a.1.pos[0]
+                .abs()
+                .partial_cmp(&b.1.pos[0].abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|(i, _)| i)
 }
 
@@ -539,18 +693,37 @@ pub(crate) fn front_mirror(p: &Player) -> Option<usize> {
 
 fn front_of(cams: &[omsi_vehicle::Camera]) -> Option<usize> {
     let sides = [side_of(cams, true), side_of(cams, false)];
-    let reach = sides.iter().flatten().filter_map(|&i| cams.get(i)).map(|c| c.pos[1]).fold(f32::INFINITY, f32::min) - 1.0;
+    let reach = sides
+        .iter()
+        .flatten()
+        .filter_map(|&i| cams.get(i))
+        .map(|c| c.pos[1])
+        .fold(f32::INFINITY, f32::min)
+        - 1.0;
     cams.iter()
         .enumerate()
-        .filter(|(i, c)| !c.fixed && !sides.contains(&Some(*i)) && (!reach.is_finite() || c.pos[1] >= reach))
-        .max_by(|a, b| a.1.pos[1].partial_cmp(&b.1.pos[1]).unwrap_or(std::cmp::Ordering::Equal))
+        .filter(|(i, c)| {
+            !c.fixed && !sides.contains(&Some(*i)) && (!reach.is_finite() || c.pos[1] >= reach)
+        })
+        .max_by(|a, b| {
+            a.1.pos[1]
+                .partial_cmp(&b.1.pos[1])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|(i, _)| i)
 }
 
 /// Width / height a mirror's panel starts with, and whether it sits on the right: the main
 /// side mirrors are tall, those in the middle (the inside mirror) wide.
 fn shape(p: &Player, cam: usize) -> (f32, bool) {
-    let x = p.vehicle.ty.def.cameras_reflexion.get(cam).map(|c| c.pos[0]).unwrap_or(0.0);
+    let x = p
+        .vehicle
+        .ty
+        .def
+        .cameras_reflexion
+        .get(cam)
+        .map(|c| c.pos[0])
+        .unwrap_or(0.0);
     let right = x >= 0.0;
     let aspect = if x.abs() > 0.3 { 0.55 } else { 2.2 };
     (aspect, right)
@@ -567,15 +740,22 @@ fn load(bus: &str) -> Option<(bool, Vec<Panel>)> {
     let mut enabled = None;
     let mut panels = Vec::new();
     for line in text.lines() {
-        let Some((head, value)) = line.split_once('=') else { continue };
-        let Some((path, what)) = head.rsplit_once('|') else { continue };
+        let Some((head, value)) = line.split_once('=') else {
+            continue;
+        };
+        let Some((path, what)) = head.rsplit_once('|') else {
+            continue;
+        };
         if path.trim().to_ascii_lowercase() != key {
             continue;
         }
         match what.trim() {
             "on" => enabled = Some(value.trim() != "0"),
             "panel" => {
-                let v: Vec<f32> = value.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                let v: Vec<f32> = value
+                    .split(',')
+                    .filter_map(|s| s.trim().parse().ok())
+                    .collect();
                 if v.len() == 5 {
                     panels.push(Panel {
                         cam: v[0].max(0.0) as usize,
@@ -597,13 +777,20 @@ fn store(key: &str, layout: Option<(bool, &[Panel])>) {
     let text = std::fs::read_to_string(&p).unwrap_or_default();
     let mut lines: Vec<String> = text
         .lines()
-        .filter(|l| l.rsplit_once('=').and_then(|(k, _)| k.rsplit_once('|')).is_none_or(|(f, _)| f.trim().to_ascii_lowercase() != key))
+        .filter(|l| {
+            l.rsplit_once('=')
+                .and_then(|(k, _)| k.rsplit_once('|'))
+                .is_none_or(|(f, _)| f.trim().to_ascii_lowercase() != key)
+        })
         .map(str::to_string)
         .collect();
     if let Some((enabled, panels)) = layout {
         lines.push(format!("{key}|on={}", enabled as u8));
         for q in panels {
-            lines.push(format!("{key}|panel={},{:.4},{:.4},{:.4},{:.3}", q.cam, q.x, q.y, q.h, q.aspect));
+            lines.push(format!(
+                "{key}|panel={},{:.4},{:.4},{:.4},{:.3}",
+                q.cam, q.x, q.y, q.h, q.aspect
+            ));
         }
     }
     if let Some(d) = p.parent() {
@@ -617,25 +804,50 @@ mod tests {
     use super::*;
 
     fn editing(panels: Vec<Panel>) -> MirrorHud {
-        MirrorHud { enabled: true, edit: true, panels, ..Default::default() }
+        MirrorHud {
+            enabled: true,
+            edit: true,
+            panels,
+            ..Default::default()
+        }
     }
 
     #[test]
     fn a_panel_keeps_its_place_inside_the_window() {
-        let mut m = editing(vec![Panel { cam: 0, x: 0.9, y: 0.9, h: 0.3, aspect: 0.5 }]);
-        assert!(m.wheel(5.0, false, (0.9 * 1600.0 + 5.0, 0.9 * 900.0 + 5.0), (1600.0, 900.0)));
+        let mut m = editing(vec![Panel {
+            cam: 0,
+            x: 0.9,
+            y: 0.9,
+            h: 0.3,
+            aspect: 0.5,
+        }]);
+        assert!(m.wheel(
+            5.0,
+            false,
+            (0.9 * 1600.0 + 5.0, 0.9 * 900.0 + 5.0),
+            (1600.0, 900.0)
+        ));
         let r = MirrorHud::rect(&m.panels[0], 1600.0, 900.0);
         assert!(r[2] <= 1600.5 && r[3] <= 900.5, "{r:?}");
     }
 
     #[test]
     fn dragging_moves_the_grabbed_corner_with_the_cursor() {
-        let mut m = editing(vec![Panel { cam: 0, x: 0.1, y: 0.1, h: 0.3, aspect: 1.0 }]);
+        let mut m = editing(vec![Panel {
+            cam: 0,
+            x: 0.1,
+            y: 0.1,
+            h: 0.3,
+            aspect: 1.0,
+        }]);
         let size = (1000.0, 1000.0);
         assert!(m.press(true, (150.0, 150.0), size));
         assert!(m.moved((350.0, 250.0), size));
         let q = m.panels[0];
-        assert!((q.x - 0.3).abs() < 1e-4 && (q.y - 0.2).abs() < 1e-4, "{q:?}");
+        assert!(
+            (q.x - 0.3).abs() < 1e-4 && (q.y - 0.2).abs() < 1e-4,
+            "{q:?}"
+        );
         // letting go ends the drag; the cursor then moves nothing
         assert!(m.press(false, (350.0, 250.0), size));
         assert!(!m.moved((900.0, 900.0), size));
@@ -643,38 +855,80 @@ mod tests {
 
     #[test]
     fn the_mouse_does_nothing_to_the_panels_outside_the_editor() {
-        let mut m = editing(vec![Panel { cam: 0, x: 0.1, y: 0.1, h: 0.3, aspect: 1.0 }]);
+        let mut m = editing(vec![Panel {
+            cam: 0,
+            x: 0.1,
+            y: 0.1,
+            h: 0.3,
+            aspect: 1.0,
+        }]);
         m.edit = false;
         let size = (1000.0, 1000.0);
-        assert!(!m.press(true, (150.0, 150.0), size), "a click is left to the cab");
-        assert!(!m.wheel(1.0, false, (150.0, 150.0), size), "the wheel is left to the zoom");
+        assert!(
+            !m.press(true, (150.0, 150.0), size),
+            "a click is left to the cab"
+        );
+        assert!(
+            !m.wheel(1.0, false, (150.0, 150.0), size),
+            "the wheel is left to the zoom"
+        );
         assert!(!m.dragging());
     }
 
     #[test]
     fn the_arrows_are_the_editors_only_while_it_is_on() {
-        let mut m = editing(vec![Panel { cam: 3, x: 0.1, y: 0.1, h: 0.3, aspect: 1.0 }]);
+        let mut m = editing(vec![Panel {
+            cam: 3,
+            x: 0.1,
+            y: 0.1,
+            h: 0.3,
+            aspect: 1.0,
+        }]);
         let size = (1000.0, 1000.0);
         assert!(m.arrow(KeyCode::ArrowLeft, true), "a press is taken");
-        assert_eq!(m.turning(), Some([true, false, false, false, false, false, false, false]));
+        assert_eq!(
+            m.turning(),
+            Some([true, false, false, false, false, false, false, false])
+        );
         assert_eq!(m.cam_under((150.0, 150.0), size), Some(3));
         assert_eq!(m.cam_under((900.0, 900.0), size), None);
-        assert!(!m.arrow(KeyCode::ArrowLeft, false), "a release goes on to the game");
+        assert!(
+            !m.arrow(KeyCode::ArrowLeft, false),
+            "a release goes on to the game"
+        );
         assert_eq!(m.turning(), None);
         m.edit = false;
-        assert!(!m.arrow(KeyCode::ArrowRight, true), "outside the editor the key is the game's");
+        assert!(
+            !m.arrow(KeyCode::ArrowRight, true),
+            "outside the editor the key is the game's"
+        );
         assert_eq!(m.turning(), None);
         assert!(!m.arrow(KeyCode::KeyA, true));
         m.edit = true;
-        assert!(m.arrow(KeyCode::PageUp, true), "Page Up shifts the mirror forward");
-        assert_eq!(m.turning(), Some([false, false, false, false, true, false, false, false]));
-        assert!(m.arrow(KeyCode::Equal, true), "plus widens the field of view");
+        assert!(
+            m.arrow(KeyCode::PageUp, true),
+            "Page Up shifts the mirror forward"
+        );
+        assert_eq!(
+            m.turning(),
+            Some([false, false, false, false, true, false, false, false])
+        );
+        assert!(
+            m.arrow(KeyCode::Equal, true),
+            "plus widens the field of view"
+        );
         assert_eq!(m.turning().map(|a| a[7]), Some(true));
     }
 
     #[test]
     fn only_a_click_on_a_panel_is_taken() {
-        let mut m = editing(vec![Panel { cam: 0, x: 0.1, y: 0.1, h: 0.3, aspect: 1.0 }]);
+        let mut m = editing(vec![Panel {
+            cam: 0,
+            x: 0.1,
+            y: 0.1,
+            h: 0.3,
+            aspect: 1.0,
+        }]);
         assert!(!m.press(true, (900.0, 900.0), (1000.0, 1000.0)));
         assert!(!m.dragging());
     }
@@ -682,8 +936,20 @@ mod tests {
     #[test]
     fn the_panel_picked_up_comes_to_the_top() {
         let mut m = editing(vec![
-            Panel { cam: 0, x: 0.1, y: 0.1, h: 0.3, aspect: 1.0 },
-            Panel { cam: 1, x: 0.5, y: 0.5, h: 0.3, aspect: 1.0 },
+            Panel {
+                cam: 0,
+                x: 0.1,
+                y: 0.1,
+                h: 0.3,
+                aspect: 1.0,
+            },
+            Panel {
+                cam: 1,
+                x: 0.5,
+                y: 0.5,
+                h: 0.3,
+                aspect: 1.0,
+            },
         ]);
         assert!(m.press(true, (150.0, 150.0), (1000.0, 1000.0)));
         assert_eq!(m.panels.last().map(|q| q.cam), Some(0));
@@ -693,9 +959,27 @@ mod tests {
     #[test]
     fn the_panels_name_each_of_their_mirrors_once() {
         let m = editing(vec![
-            Panel { cam: 2, x: 0.1, y: 0.1, h: 0.3, aspect: 1.0 },
-            Panel { cam: 0, x: 0.5, y: 0.5, h: 0.3, aspect: 1.0 },
-            Panel { cam: 2, x: 0.7, y: 0.1, h: 0.2, aspect: 1.0 },
+            Panel {
+                cam: 2,
+                x: 0.1,
+                y: 0.1,
+                h: 0.3,
+                aspect: 1.0,
+            },
+            Panel {
+                cam: 0,
+                x: 0.5,
+                y: 0.5,
+                h: 0.3,
+                aspect: 1.0,
+            },
+            Panel {
+                cam: 2,
+                x: 0.7,
+                y: 0.1,
+                h: 0.2,
+                aspect: 1.0,
+            },
         ]);
         let mut cams = vec![9];
         m.cams_into(&mut cams);
@@ -704,32 +988,77 @@ mod tests {
 
     #[test]
     fn the_size_keys_change_the_panel_under_the_cursor() {
-        let mut m = editing(vec![Panel { cam: 0, x: 0.1, y: 0.1, h: 0.3, aspect: 1.0 }]);
+        let mut m = editing(vec![Panel {
+            cam: 0,
+            x: 0.1,
+            y: 0.1,
+            h: 0.3,
+            aspect: 1.0,
+        }]);
         let at = (0.1 * 1600.0 + 5.0, 0.1 * 900.0 + 5.0);
-        assert!(m.size_key(KeyCode::BracketRight, at, (1600.0, 900.0)), "] widens");
+        assert!(
+            m.size_key(KeyCode::BracketRight, at, (1600.0, 900.0)),
+            "] widens"
+        );
         assert!(m.panels[0].aspect > 1.0 && m.panels[0].h == 0.3);
-        assert!(m.size_key(KeyCode::Quote, at, (1600.0, 900.0)), "' makes it taller");
+        assert!(
+            m.size_key(KeyCode::Quote, at, (1600.0, 900.0)),
+            "' makes it taller"
+        );
         assert!(m.panels[0].h > 0.3);
         assert!(m.size_key(KeyCode::Semicolon, at, (1600.0, 900.0)));
         assert!(m.size_key(KeyCode::BracketLeft, at, (1600.0, 900.0)));
-        assert!((m.panels[0].h - 0.3).abs() < 0.01 && (m.panels[0].aspect - 1.0).abs() < 0.01, "a step each way ends about where it began");
+        assert!(
+            (m.panels[0].h - 0.3).abs() < 0.01 && (m.panels[0].aspect - 1.0).abs() < 0.01,
+            "a step each way ends about where it began"
+        );
         assert!(!m.size_key(KeyCode::KeyA, at, (1600.0, 900.0)));
-        let mut off = MirrorHud { enabled: true, panels: m.panels.clone(), ..Default::default() };
-        assert!(!off.size_key(KeyCode::BracketRight, at, (1600.0, 900.0)), "outside the editor the key is the game's");
+        let mut off = MirrorHud {
+            enabled: true,
+            panels: m.panels.clone(),
+            ..Default::default()
+        };
+        assert!(
+            !off.size_key(KeyCode::BracketRight, at, (1600.0, 900.0)),
+            "outside the editor the key is the game's"
+        );
     }
 
     fn mirrors(at: &[[f32; 2]]) -> Vec<omsi_vehicle::Camera> {
-        at.iter().map(|&[x, y]| omsi_vehicle::Camera { pos: [x, y, 2.0], ..Default::default() }).collect()
+        at.iter()
+            .map(|&[x, y]| omsi_vehicle::Camera {
+                pos: [x, y, 2.0],
+                ..Default::default()
+            })
+            .collect()
     }
 
     #[test]
     fn the_front_mirror_is_the_foremost_one_besides_the_side_mirrors() {
-        let lions_city = mirrors(&[[-1.391, 5.491], [1.383, 6.027], [-0.005, 5.2], [1.331, 6.029], [-0.574, -3.437], [-0.574, 0.993]]);
-        assert_eq!((side_of(&lions_city, false), side_of(&lions_city, true)), (Some(0), Some(1)));
+        let lions_city = mirrors(&[
+            [-1.391, 5.491],
+            [1.383, 6.027],
+            [-0.005, 5.2],
+            [1.331, 6.029],
+            [-0.574, -3.437],
+            [-0.574, 0.993],
+        ]);
+        assert_eq!(
+            (side_of(&lions_city, false), side_of(&lions_city, true)),
+            (Some(0), Some(1))
+        );
         assert_eq!(front_of(&lions_city), Some(3));
         let sd200 = mirrors(&[[-1.332, 5.327], [1.312, 5.769], [0.218, 5.415]]);
-        assert_eq!(front_of(&sd200), Some(2), "without a front mirror, the one over the windscreen");
-        assert_eq!(front_of(&mirrors(&[[-1.3, 5.3], [1.3, 5.7], [0.4, -0.6]])), None, "a camera far back in the bus is no front mirror");
+        assert_eq!(
+            front_of(&sd200),
+            Some(2),
+            "without a front mirror, the one over the windscreen"
+        );
+        assert_eq!(
+            front_of(&mirrors(&[[-1.3, 5.3], [1.3, 5.7], [0.4, -0.6]])),
+            None,
+            "a camera far back in the bus is no front mirror"
+        );
         assert_eq!(front_of(&mirrors(&[[-1.3, 5.3], [1.3, 5.7]])), None);
     }
 
@@ -738,13 +1067,41 @@ mod tests {
         let (eye, centre) = (Vec3::ZERO, Vec3::new(0.0, 5.0, 0.0));
         let turn = |du, dv| Turn::of(eye, centre, du, dv);
         // seen from the front: right is +x, up is +z
-        assert_eq!(turn(Vec3::X, -Vec3::Z), Turn { transposed: false, x_reversed: false, y_reversed: false });
+        assert_eq!(
+            turn(Vec3::X, -Vec3::Z),
+            Turn {
+                transposed: false,
+                x_reversed: false,
+                y_reversed: false
+            }
+        );
         // the usual side mirror: the picture runs to the left
         assert_eq!(turn(-Vec3::X, -Vec3::Z), Turn::default());
         // v up the glass: the picture upside down
-        assert_eq!(turn(Vec3::X, Vec3::Z), Turn { transposed: false, x_reversed: false, y_reversed: true });
+        assert_eq!(
+            turn(Vec3::X, Vec3::Z),
+            Turn {
+                transposed: false,
+                x_reversed: false,
+                y_reversed: true
+            }
+        );
         // on its side: u up the glass, v across it
-        assert_eq!(turn(Vec3::Z, Vec3::X), Turn { transposed: true, x_reversed: false, y_reversed: true });
-        assert_eq!(turn(-Vec3::Z, -Vec3::X), Turn { transposed: true, x_reversed: true, y_reversed: false });
+        assert_eq!(
+            turn(Vec3::Z, Vec3::X),
+            Turn {
+                transposed: true,
+                x_reversed: false,
+                y_reversed: true
+            }
+        );
+        assert_eq!(
+            turn(-Vec3::Z, -Vec3::X),
+            Turn {
+                transposed: true,
+                x_reversed: true,
+                y_reversed: false
+            }
+        );
     }
 }

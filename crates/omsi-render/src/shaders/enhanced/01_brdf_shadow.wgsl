@@ -1,8 +1,15 @@
-// Enhanced graphics: the main pass's own lighting model. Energy-conserving Lambert diffuse
-// and GGX specular with Fresnel, lit by the sun (soft shadows whose penumbra grows with the
-// distance to the blocker), the sky and the ground (spherical harmonics, occluded by the
-// SSAO), a reflection probe of the sky for the reflections, point and spot lights falling
-// off with the square of the distance, and the air in between. OMSI's material data
+// Enhanced graphics: the main pass's own lighting model, the usual metal/roughness one:
+// GGX (Trowbridge-Reitz) microfacets with height-correlated Smith visibility and Schlick's
+// Fresnel (F0 4 % for a dielectric, its colour for a metal), their multiple scattering given
+// back (Fdez-Aguera), and Lambert diffuse with the share the specular part leaves it, so that
+// nothing sends out more light than falls on it. Lit by the sun (soft shadows whose penumbra
+// grows with the distance to the blocker; what the clouds scatter of it as a shadowless light
+// of the sky's kind), the sky and the ground (spherical harmonics, occluded by the SSAO or
+// the traced occlusion), a reflection probe of the sky for the reflections (the split sum
+// with Karis' analytic DFG, occluded by the AO as Lagarde has it and by the horizon of a
+// normal map), point and spot lights falling off with the square of the distance, and the
+// air in between. Roughness is widened by the normal's spread across the pixel (specular
+// antialiasing) and held off zero for the sun's disc. OMSI's material data
 // decides the surface: [matl_envmap] factor x mask is how much it reflects and how smooth
 // it is, the o3d specular power how rough a surface without one is, [matl_bumpmap] bends
 // the normal. Everything is drawn pre-exposed into the high-range target.
@@ -50,14 +57,74 @@ fn f_schlick(f0: vec3<f32>, c: f32) -> vec3<f32> {
     return f0 + (vec3<f32>(1.0) - f0) * f;
 }
 
-// The split-sum environment term (Karis' analytic fit).
-fn env_brdf(f0: vec3<f32>, rough: f32, nv: f32) -> vec3<f32> {
+// The split-sum's integral of the GGX lobe over the hemisphere for a white and a black F0
+// (Karis' analytic fit of the DFG table): the reflectance is f0 * x + y.
+fn dfg_ab(rough: f32, nv: f32) -> vec2<f32> {
     let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
     let c1 = vec4<f32>(1.0, 0.0425, 1.04, -0.04);
     let r = c0 * rough + c1;
     let a004 = min(r.x * r.x, pow(2.0, -9.28 * nv)) * r.x + r.y;
-    let ab = vec2<f32>(-1.04, 1.04) * a004 + r.zw;
+    return vec2<f32>(-1.04, 1.04) * a004 + r.zw;
+}
+
+// The split-sum environment term, single scattering only.
+fn env_brdf(f0: vec3<f32>, rough: f32, nv: f32) -> vec3<f32> {
+    let ab = dfg_ab(rough, nv);
     return f0 * ab.x + vec3<f32>(ab.y);
+}
+
+// What a surface reflects specularly towards the eye of light from every direction, with the
+// light its microfacets pass on to each other before it leaves (Fdez-Aguera 2019, after
+// Kulla and Conty): rgb that reflectance (the probe's weight; one minus it is what is left
+// for the diffuse part, so the two never add up to more than came in), w the factor by which
+// the single-scattering lobe of a direct light falls short of it. Without the multiple
+// scattering a rough metal lost up to half its light and went dark grey.
+fn spec_ms(f0: vec3<f32>, rough: f32, nv: f32) -> vec4<f32> {
+    let ab = dfg_ab(rough, nv);
+    let ess = clamp(ab.x + ab.y, 0.05, 1.0);
+    let fss = f0 * ab.x + vec3<f32>(ab.y);
+    let ems = 1.0 - ess;
+    let favg = f0 + (vec3<f32>(1.0) - f0) / 21.0;
+    let fms = fss * favg / (vec3<f32>(1.0) - ems * favg);
+    let comp = 1.0 + dot(f0, vec3<f32>(0.2126, 0.7152, 0.0722)) * (1.0 / ess - 1.0);
+    return vec4<f32>(min(fss + fms * ems, vec3<f32>(1.0)), comp);
+}
+
+// Specular antialiasing (Tokuyoshi and Kaplanyan 2019): the spread of the normal across the
+// pixel widens the lobe, so that a mirror-smooth finish on a curved, faceted or normal-mapped
+// surface does not sparkle and crawl where it is smaller than a pixel. Returns the
+// perceptual roughness.
+fn rough_aa(rough: f32, n: vec3<f32>) -> f32 {
+    let dx = dpdx(n);
+    let dy = dpdy(n);
+    let variance = 0.25 * (dot(dx, dx) + dot(dy, dy));
+    let kernel = min(2.0 * variance, 0.18);
+    let a = rough * rough;
+    return sqrt(sqrt(clamp(a * a + kernel, 0.0, 1.0)));
+}
+
+// Horizon occlusion (Jimenez et al. 2016): a normal map can turn a reflection below the
+// surface the geometry really has; that part of the lobe sees the surface itself, not the sky.
+fn horizon_occlusion(r: vec3<f32>, geo_n: vec3<f32>) -> f32 {
+    let h = clamp(1.0 + 1.3 * dot(r, geo_n), 0.0, 1.0);
+    return h * h;
+}
+
+// The sun's light through the clouds that is no longer a beam (`enh.pbr_ext.x` the beam's
+// share, lighting/enhanced.rs `sun_directness`): what a veil or a thin deck scatters round the
+// sun lies on the street as a bright dome overhead with a glow towards the sun, casting no
+// shadow. It is the flux the beam would have brought to the ground (its share on a horizontal
+// surface), spread so: a cloudy day's light is flat, not a weaker sun with sharp shadows.
+fn sun_scattered(n: vec3<f32>, e: vec3<f32>) -> vec3<f32> {
+    let s = camera.sun_dir.xyz;
+    let dome = 0.5 + 0.5 * n.z;
+    let lobe = (1.0 + dot(n, s)) / (1.0 + max(s.z, 0.0));
+    return e * max(s.z, 0.0) * mix(dome, lobe, 0.4);
+}
+
+// The beam's share of the sun's light (1 under a clear sky; 0 while the pass has not set it).
+fn sun_beam_share() -> f32 {
+    return select(1.0, clamp(enh.pbr_ext.x, 0.0, 1.0), enh.pbr_ext.y > 0.5);
 }
 
 // Ambient occlusion that lets bright surfaces bounce some light back into their own
@@ -74,13 +141,22 @@ fn to_cube(d: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(d.x, d.z, d.y);
 }
 
-// What a raindrop on a pane shows (`rain_light`): the sky probe that way, blurred a little
+// What a raindrop on a pane shows (`glass_film`): the sky probe that way, blurred a little
 // by the drop's small lens, and low down the street's light in place of the probe's
 // horizon (see the reflections in `shade_enhanced`).
 fn rain_env_enhanced(d: vec3<f32>, lod: f32) -> vec3<f32> {
     let e = textureSampleLevel(t_probe, s_lin, to_cube(d), lod).rgb * enh.fog_color.w;
     let surround = enh.fog_color.rgb * (0.25 / 0.9);
     return mix(surround, e, smoothstep(-0.05, 0.35, d.z));
+}
+
+// How much of a foliage crown a cut-out is (0..1), by its normal. OMSI points a tree's
+// normals straight up only to light it evenly: one whose normal stands up is lit by the sun
+// from every side (`thin` in `shade`). One whose normal lies level - a fence, a railing,
+// a cut-out mapped once per side with the normals turned round - faces one way and is lit
+// on that side alone, as Omsi.exe's N.L lights it (#2687).
+fn crown_share(n: vec3<f32>) -> f32 {
+    return smoothstep(0.35, 0.75, n.z);
 }
 
 // A fixed, deterministic PCF kernel (shader.wgsl's `shadow_tent`). The old PCSS blocker

@@ -1,8 +1,8 @@
-//! The reference part of docs/PLUGINS.md, written from the registry: a table per group of
-//! functions and one of the events. A test keeps the file's copy the same as this
-//! (`OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest` writes it).
+//! A Markdown reference written from the registry: a table per group of functions and one of
+//! the events. docs/PLUGIN_API.md is the published reference; the `api_manifest` test checks it
+//! names every function and event of the registry.
 
-use super::{events, registry, ApiFn, Perm};
+use super::{ApiFn, Perm, events, registry};
 
 /// The groups in the order of the documentation, with their headings.
 pub const GROUPS: &[(&str, &str)] = &[
@@ -31,7 +31,7 @@ pub const GROUPS: &[(&str, &str)] = &[
     ("util", "Helpers"),
 ];
 
-/// Where the generated part starts and ends in docs/PLUGINS.md.
+/// Where a generated part starts and ends in a Markdown file (see `splice`).
 pub const BEGIN: &str = "<!-- api:begin (written from the registry: OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest) -->";
 pub const END: &str = "<!-- api:end -->";
 
@@ -40,7 +40,17 @@ fn cell(s: &str) -> String {
 }
 
 fn signature(f: &ApiFn) -> String {
-    let params: Vec<String> = f.params.iter().map(|p| if p.optional { format!("[{}]", p.name) } else { p.name.to_string() }).collect();
+    let params: Vec<String> = f
+        .params
+        .iter()
+        .map(|p| {
+            if p.optional {
+                format!("[{}]", p.name)
+            } else {
+                p.name.to_string()
+            }
+        })
+        .collect();
     format!("`omsi.{}({})`", f.name, params.join(", "))
 }
 
@@ -56,15 +66,42 @@ pub fn markdown() -> String {
         }
         out.push_str(&format!("#### {title}\n\n| Function | Returns | What it does | Since |\n| --- | --- | --- | --- |\n"));
         for f in fns {
-            let perm = if f.perm == Perm::None { String::new() } else { format!(" *Permission: `{}`.*", f.perm.as_str()) };
-            out.push_str(&format!("| {} | {} | {}{} | {} |\n", signature(f), cell(f.returns), cell(f.doc), perm, f.since));
+            let perm = if f.perm == Perm::None {
+                String::new()
+            } else {
+                format!(" *Permission: `{}`.*", f.perm.as_str())
+            };
+            out.push_str(&format!(
+                "| {} | {} | {}{} | {} |\n",
+                signature(f),
+                cell(f.returns),
+                cell(f.doc),
+                perm,
+                f.since
+            ));
         }
         out.push('\n');
     }
-    out.push_str("#### Events\n\n| Event | Arguments | When | Since |\n| --- | --- | --- | --- |\n");
+    out.push_str(
+        "#### Events\n\n| Event | Arguments | When | Since |\n| --- | --- | --- | --- |\n",
+    );
     for e in events::EVENTS {
-        let args = if e.args.is_empty() { "-".to_string() } else { e.args.iter().map(|a| format!("`{a}`")).collect::<Vec<_>>().join(", ") };
-        out.push_str(&format!("| `{}` | {} | {} | {} |\n", e.name, args, cell(e.doc), e.since));
+        let args = if e.args.is_empty() {
+            "-".to_string()
+        } else {
+            e.args
+                .iter()
+                .map(|a| format!("`{a}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        out.push_str(&format!(
+            "| `{}` | {} | {} | {} |\n",
+            e.name,
+            args,
+            cell(e.doc),
+            e.since
+        ));
     }
     out.push('\n');
     out.push_str(END);

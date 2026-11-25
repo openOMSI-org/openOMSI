@@ -37,11 +37,18 @@ pub(super) fn card_near_room(video_limit: u64, card: omsi_render::GpuMemory) -> 
     }
 }
 
-pub(super) fn card_hard_over(card: omsi_render::GpuMemory, video_limit: u64, card_over: u64, step: u64) -> u64 {
+pub(super) fn card_hard_over(
+    card: omsi_render::GpuMemory,
+    video_limit: u64,
+    card_over: u64,
+    step: u64,
+) -> u64 {
     match (card.budget, video_limit) {
         (None, _) => card_over,
         (Some(budget), 0) => (card.total().saturating_sub(budget) / step * step).min(card_over),
-        (Some(budget), limit) => (card.total().saturating_sub(budget.min(limit)) / step * step).min(card_over),
+        (Some(budget), limit) => {
+            (card.total().saturating_sub(budget.min(limit)) / step * step).min(card_over)
+        }
     }
 }
 
@@ -95,7 +102,9 @@ pub(super) fn queue_near_restores(
         if *d >= near || queued >= 24 || pending.contains(p) || gpu.wants_restore.contains(p) {
             continue;
         }
-        let Some(e) = gpu.textures.get_mut(p) else { continue };
+        let Some(e) = gpu.textures.get_mut(p) else {
+            continue;
+        };
         if e.dropped == 0 || e.retry_after.is_some_and(|t| t > t0) {
             continue;
         }

@@ -27,7 +27,10 @@ fn smooth(lo: f32, hi: f32, x: f32) -> f32 {
 /// enlargement and their widest radius.
 fn look(rain: f32) -> [f32; 2] {
     let r = rain.clamp(0.0, 1.0);
-    [DRIZZLE_SCALE + (DROP_SCALE - DRIZZLE_SCALE) * smooth(0.1, 0.8, r), DROP_CAP * (1.0 + HEAVY_CAP * smooth(0.5, 1.0, r))]
+    [
+        DRIZZLE_SCALE + (DROP_SCALE - DRIZZLE_SCALE) * smooth(0.1, 0.8, r),
+        DROP_CAP * (1.0 + HEAVY_CAP * smooth(0.5, 1.0, r)),
+    ]
 }
 
 #[derive(Clone)]
@@ -283,11 +286,28 @@ impl Canvas {
         for pixel in image.rgba.chunks_exact_mut(4) {
             pixel[..2].fill(128);
         }
-        Self { look: [DROP_SCALE, DROP_CAP], size, dirty: Vec::with_capacity(MAP * MAP / 8), bands: [[u16::MAX, 0]; MAP / BAND], image }
+        Self {
+            look: [DROP_SCALE, DROP_CAP],
+            size,
+            dirty: Vec::with_capacity(MAP * MAP / 8),
+            bands: [[u16::MAX, 0]; MAP / BAND],
+            image,
+        }
     }
 
     pub fn take(&mut self) -> Canvas {
-        let empty = Self { look: self.look, size: self.size, dirty: Vec::new(), bands: [[u16::MAX, 0]; MAP / BAND], image: omsi_texture::Image { width: 0, height: 0, rgba: Vec::new(), has_alpha: true } };
+        let empty = Self {
+            look: self.look,
+            size: self.size,
+            dirty: Vec::new(),
+            bands: [[u16::MAX, 0]; MAP / BAND],
+            image: omsi_texture::Image {
+                width: 0,
+                height: 0,
+                rgba: Vec::new(),
+                has_alpha: true,
+            },
+        };
         std::mem::replace(self, empty)
     }
 
@@ -296,7 +316,18 @@ impl Canvas {
     }
 
     pub fn changed(&self) -> impl Iterator<Item = [u32; 4]> + '_ {
-        self.bands.iter().enumerate().filter(|(_, b)| b[0] <= b[1]).map(|(k, b)| [b[0] as u32, (k * BAND) as u32, (b[1] - b[0] + 1) as u32, BAND as u32])
+        self.bands
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b[0] <= b[1])
+            .map(|(k, b)| {
+                [
+                    b[0] as u32,
+                    (k * BAND) as u32,
+                    (b[1] - b[0] + 1) as u32,
+                    BAND as u32,
+                ]
+            })
     }
 
     fn mark(&mut self, i: usize) {
@@ -424,7 +455,13 @@ mod tests {
                 let mut start = pos;
                 for (k, &end) in tail.iter().enumerate() {
                     if start.distance_squared(end) > 1e-10 {
-                        stamp_every_pixel(drops, start, end, radius * (1.0 - k as f32 / TRAIL as f32), true);
+                        stamp_every_pixel(
+                            drops,
+                            start,
+                            end,
+                            radius * (1.0 - k as f32 / TRAIL as f32),
+                            true,
+                        );
                     }
                     start = end;
                 }
@@ -436,8 +473,12 @@ mod tests {
     fn stamp_every_pixel(drops: &mut Drops, a: Vec2, b: Vec2, radius: f32, trail: bool) {
         let scale = Vec2::splat(MAP as f32) / drops.size;
         let aa = (drops.size / MAP as f32).max_element() * 0.6;
-        let lo = ((a.min(b) - Vec2::splat(radius + aa)) * scale).floor().max(Vec2::ZERO);
-        let hi = ((a.max(b) + Vec2::splat(radius + aa)) * scale).ceil().min(Vec2::splat((MAP - 1) as f32));
+        let lo = ((a.min(b) - Vec2::splat(radius + aa)) * scale)
+            .floor()
+            .max(Vec2::ZERO);
+        let hi = ((a.max(b) + Vec2::splat(radius + aa)) * scale)
+            .ceil()
+            .min(Vec2::splat((MAP - 1) as f32));
         let edge = b - a;
         let inverse_length = edge.length_squared().max(1e-10).recip();
         let water_radius = if trail { radius * 0.25 } else { radius };
@@ -447,10 +488,15 @@ mod tests {
                 let t = ((pos - a).dot(edge) * inverse_length).clamp(0.0, 1.0);
                 let offset = pos - a.lerp(b, t);
                 let distance = offset.length();
-                let coverage = ((radius + aa - distance) / (2.0 * aa)).clamp(0.0, 1.0) * (radius / aa).min(1.0);
-                let track = if trail { (coverage * 255.0 + 0.5) as u8 } else { 0 };
-                let water_coverage =
-                    ((water_radius + aa - distance) / (2.0 * aa)).clamp(0.0, 1.0) * (water_radius / aa).min(1.0);
+                let coverage = ((radius + aa - distance) / (2.0 * aa)).clamp(0.0, 1.0)
+                    * (radius / aa).min(1.0);
+                let track = if trail {
+                    (coverage * 255.0 + 0.5) as u8
+                } else {
+                    0
+                };
+                let water_coverage = ((water_radius + aa - distance) / (2.0 * aa)).clamp(0.0, 1.0)
+                    * (water_radius / aa).min(1.0);
                 let alpha = (water_coverage * 255.0 + 0.5) as u8;
                 if alpha == 0 && track == 0 {
                     continue;
@@ -510,7 +556,11 @@ mod tests {
 
     #[test]
     fn painted_drops_match_a_drop_painted_over_its_whole_square() {
-        for (size, seed) in [(Vec2::new(2.4, 1.2), 7u32), (Vec2::new(0.6, 0.9), 11), (Vec2::new(1.1, 0.5), 3)] {
+        for (size, seed) in [
+            (Vec2::new(2.4, 1.2), 7u32),
+            (Vec2::new(0.6, 0.9), 11),
+            (Vec2::new(1.1, 0.5), 3),
+        ] {
             let mut fast = Drops::new(size, 0.7, seed);
             let mut whole = Drops::new(size, 0.7, seed);
             for step in 0..400 {
@@ -520,8 +570,14 @@ mod tests {
                 if step % 2 == 0 {
                     fast.paint();
                     paint_every_pixel(&mut whole);
-                    assert!(fast.canvas.image.rgba == whole.canvas.image.rgba, "seed {seed} step {step}");
-                    assert_eq!(fast.canvas.dirty, whole.canvas.dirty, "seed {seed} step {step}");
+                    assert!(
+                        fast.canvas.image.rgba == whole.canvas.image.rgba,
+                        "seed {seed} step {step}"
+                    );
+                    assert_eq!(
+                        fast.canvas.dirty, whole.canvas.dirty,
+                        "seed {seed} step {step}"
+                    );
                 }
             }
         }
@@ -539,10 +595,20 @@ mod tests {
                 let before = drops.canvas.image.rgba.clone();
                 drops.paint();
                 let bands: Vec<_> = drops.canvas.changed().collect();
-                for (i, (a, b)) in before.chunks_exact(4).zip(drops.canvas.image.rgba.chunks_exact(4)).enumerate() {
+                for (i, (a, b)) in before
+                    .chunks_exact(4)
+                    .zip(drops.canvas.image.rgba.chunks_exact(4))
+                    .enumerate()
+                {
                     if a != b {
                         let (x, y) = ((i % MAP) as u32, (i / MAP) as u32);
-                        assert!(bands.iter().any(|r| x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3]), "seed {seed} step {step} pixel {x},{y}");
+                        assert!(
+                            bands.iter().any(|r| x >= r[0]
+                                && x < r[0] + r[2]
+                                && y >= r[1]
+                                && y < r[1] + r[3]),
+                            "seed {seed} step {step} pixel {x},{y}"
+                        );
                     }
                 }
             }
@@ -601,13 +667,17 @@ mod tests {
     #[test]
     fn a_runner_clears_a_wider_channel_than_its_thin_water_filament() {
         let mut drops = Drops::new(Vec2::ONE, 0.0, 1);
-        drops.canvas.stamp(Vec2::new(0.5, 0.3), Vec2::new(0.5, 0.7), 0.0022, true);
-        assert!(drops
+        drops
             .canvas
-            .image
-            .rgba
-            .chunks_exact(4)
-            .any(|p| p[2] > 150 && p[3] < 100));
+            .stamp(Vec2::new(0.5, 0.3), Vec2::new(0.5, 0.7), 0.0022, true);
+        assert!(
+            drops
+                .canvas
+                .image
+                .rgba
+                .chunks_exact(4)
+                .any(|p| p[2] > 150 && p[3] < 100)
+        );
     }
 
     #[test]
@@ -654,10 +724,12 @@ mod tests {
             drops.advance(0.05, 1.0, -Vec2::Y, Vec2::ZERO, 0.0, |_| 1.0);
         }
         assert!(drops.drops.len() <= LIMIT);
-        assert!(drops
-            .drops
-            .iter()
-            .all(|d| d.pos.is_finite() && d.water.is_finite()));
+        assert!(
+            drops
+                .drops
+                .iter()
+                .all(|d| d.pos.is_finite() && d.water.is_finite())
+        );
         assert!(!drops.drops.iter().any(|d| d.pos == original));
         assert!(drops.drops.iter().any(|d| d.velocity.y < -0.02));
         assert!(drops.arrivals < 1.0);

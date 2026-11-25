@@ -394,6 +394,41 @@ pub(crate) fn line_suffix_from_text(line: &str) -> u32 {
     }
 }
 
+/// The line as text for the IBIS's number `line` and letter code `suffix`
+/// (`IBIS_LinieKurs`, `IBIS_Linie_Suffix`): the exact inverse of [`line_suffix_from_text`],
+/// so that the text set again gives the same `IBIS_Linie_Complex`. A destination picked by
+/// hand keeps the line the IBIS has; given as its bare number it set the suffix to 0, and
+/// the stock matrix scripts, which draw the number again whenever `IBIS_Linie_Complex`
+/// changes (MAN_NL_NG/Script/Matrix_D.osc, "Nr-Matrix"), replaced the route number shown -
+/// 6E, or the 6a a driver typed for the display - by a plain 6 about a second later
+/// (#2369). None for no line, or a code no letter stands for.
+pub fn line_text_from_code(line: u32, suffix: u32) -> Option<String> {
+    if line == 0 {
+        return None;
+    }
+    let before = |c: char| Some(format!("{c}{line}"));
+    let after = |c: char| Some(format!("{line}{c}"));
+    match suffix {
+        0 => Some(line.to_string()),
+        1 => before('E'),
+        5 => before('S'),
+        6 => before('A'),
+        11 => before('D'),
+        12 => before('C'),
+        13 => before('B'),
+        25 => before('U'),
+        28 => before('M'),
+        35 => before('N'),
+        36 => before('X'),
+        10 => after('E'),
+        31 => after('U'),
+        4 => after('N'),
+        23 => after('S'),
+        32 => after('M'),
+        _ => None,
+    }
+}
+
 /// The numeric part of a HOF line code is the line; its route suffix is a
 /// separate route selector, not automatically a display-letter code. For a
 /// timetable line such as `5E`, the display suffix must therefore come from

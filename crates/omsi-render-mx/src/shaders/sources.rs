@@ -26,20 +26,20 @@ pub(crate) fn scene_shader_with(gl: bool, extra: &str) -> String {
     );
     let path = array_path();
     let src = arrays_as_textures(&materials_from_heap(&joined), path);
-    if gl && path.no_storage() {
+    frame_from_heap(&if gl && path.no_storage() {
         compares_without_gather(&src)
     } else {
         src
-    }
+    })
 }
 
 pub(crate) fn scene_shader_for(gl: bool, path: ArrayPath) -> String {
     let src = arrays_as_textures(&scene_shader_text(gl), path);
-    if gl && path.no_storage() {
+    frame_from_heap(&if gl && path.no_storage() {
         compares_without_gather(&src)
     } else {
         src
-    }
+    })
 }
 
 fn without_tree_fade(src: &str) -> String {
@@ -52,6 +52,11 @@ fn without_tree_fade(src: &str) -> String {
 }
 
 fn stub_fn(src: &str, head: &str, value: &str) -> String {
+    stub_body(src, head, &format!("return {value};"))
+}
+
+/// `head`'s function with `body` for all it does.
+fn stub_body(src: &str, head: &str, body: &str) -> String {
     let start = src
         .find(head)
         .unwrap_or_else(|| panic!("scene shader: {head} not found"));
@@ -60,11 +65,7 @@ fn stub_fn(src: &str, head: &str, value: &str) -> String {
             .find("\n}")
             .unwrap_or_else(|| panic!("scene shader: {head} has no end"))
         + 2;
-    format!(
-        "{}{head}\n    return {value};\n}}{}",
-        &src[..start],
-        &src[close..]
-    )
+    format!("{}{head}\n    {body}\n}}{}", &src[..start], &src[close..])
 }
 
 /// The sun's shadow tent with each gather of four depth comparisons taken as four single
@@ -288,7 +289,8 @@ pub(crate) fn materials_from_heap(src: &str) -> String {
         &format!(
             "{decl}
 // (the material's textures and samplers by their places in the heap, see `materials_from_heap`)
-struct MxMaterial {{ row: u32, diffuse: u32, sampler: u32, trans: u32, night: u32, light: u32, env: u32, envmask: u32, bump: u32, pbr_normal: u32, pbr_orm: u32, tile_sampler: u32 }};
+// (and after them the frame's places, set once a pass: `FrameHeap`)
+struct MxMaterial {{ row: u32, diffuse: u32, sampler: u32, trans: u32, night: u32, light: u32, env: u32, envmask: u32, bump: u32, pbr_normal: u32, pbr_orm: u32, tile_sampler: u32, ground: u32 }};
 var<immediate> mx_mat: MxMaterial;"
         ),
     );
@@ -343,7 +345,9 @@ pub(crate) fn glsl_through_mx(
             m
         }
     };
-    let s = glsl::stage(&m, stage, Some(entry), constants).map_err(|e| e.to_string())?;
+    // (as on a device whose stage has no storage buffers: the frame's read-only views as
+    // uniform blocks, `views_as_uniforms`)
+    let s = glsl::stage_with(&m, stage, Some(entry), constants, true).map_err(|e| e.to_string())?;
     let layout = glsl::Layout::for_pipeline(&[&s])?;
     let options = glsl::Options {
         version,
@@ -356,6 +360,149 @@ pub(crate) fn glsl_through_mx(
 }
 
 /// `src` with every whole word `word` (not part of a longer name) replaced by `with`.
+/// The scene shader's frame (the camera group's textures, samplers and buffers), its material
+/// table row and the vehicle reflection's uniform read from mX's heap: no bind group but group
+/// 3's (the multisampled pane depth, the temporal motion; the heap has no multisampled
+/// textures). Each declaration of groups 0 to 2 goes; its texture or sampler is read from the
+/// heap array of its kind, its buffer through a typed view of the heap (`@group(7)`, a
+/// binding a type), all at the places the draw's immediates carry after the material's
+/// (`FrameHeap`). The last step of the scene shader's forms: the others match the bound names.
+pub(crate) fn frame_from_heap(src: &str) -> String {
+    // (the variable, the immediates' field it is read at)
+    const FIELDS: [(&str, &str); 29] = [
+        ("vehicle_reflection", "ground"),
+        ("t_shadow", "shadow"),
+        ("t_shadow_far", "shadow_far"),
+        ("t_ao", "ao"),
+        ("t_probe", "probe"),
+        ("t_sky_lut", "sky_lut"),
+        ("t_lmap", "lmap_tex"),
+        ("s_shadow", "s_shadow"),
+        ("s_ao", "s_ao"),
+        ("s_lin", "s_lin"),
+        ("camera", "camera"),
+        ("models", "models"),
+        ("models_tex", "models"),
+        ("inst_params", "inst_params"),
+        ("inst_params_tex", "inst_params"),
+        ("draw_list", "draw_list"),
+        ("draw_list_tex", "draw_list"),
+        ("lights", "lights"),
+        ("lights_tex", "lights"),
+        ("grid", "grid"),
+        ("grid_tex", "grid"),
+        ("enh", "enh"),
+        ("lmap", "lmap"),
+        ("snow_track_px", "snow_px"),
+        ("snow_track", "snow"),
+        ("material", "row"),
+        // (the motion pipelines', temporal/motion.wgsl: they read no lights)
+        ("motion", "lights"),
+        ("prev_models", "grid"),
+        // (the masked prefill's, `encode_masked`: it reads no ground picture)
+        ("t_pane_depth", "ground"),
+    ];
+    let mut out = src.replace('\r', "");
+    let mut views: Vec<(String, String)> = Vec::new(); // (type, view array)
+    let mut decls = String::new();
+    let lines: Vec<String> = out.lines().map(str::to_string).collect();
+    let mut kept = Vec::with_capacity(lines.len());
+    let mut swaps: Vec<(String, String)> = Vec::new();
+    for line in lines {
+        let t = line.trim_start();
+        let group = ["@group(0)", "@group(1)", "@group(2)", "@group(3)"]
+            .iter()
+            .any(|g| t.starts_with(g));
+        let Some(var) = t.find(" var").filter(|_| group) else {
+            kept.push(line);
+            continue;
+        };
+        let decl = t[var + 4..].trim_end().trim_end_matches(';');
+        let (space, rest) = match decl.strip_prefix('<') {
+            Some(r) => {
+                let close = r.find('>').expect("scene shader: a var's space");
+                (r[..close].trim(), r[close + 1..].trim())
+            }
+            None => ("", decl.trim()),
+        };
+        let (name, ty) = rest.split_once(':').expect("scene shader: a var's type");
+        let (name, ty) = (name.trim(), ty.trim());
+        let field = FIELDS
+            .iter()
+            .find(|f| f.0 == name)
+            .unwrap_or_else(|| panic!("scene shader: {name} has no place in the frame's heap"))
+            .1;
+        let place = format!("mx_mat.{field}");
+        let read = match (space, ty) {
+            ("", "texture_2d<f32>") => format!("mx_tex2d[{place}]"),
+            ("", "texture_2d<u32>") => format!("mx_tex2d_u32[{place}]"),
+            ("", "texture_depth_2d") => format!("mx_texdepth[{place}]"),
+            ("", "texture_depth_multisampled_2d") => format!("mx_texdepth_ms[{place}]"),
+            ("", "texture_cube<f32>") => format!("mx_texcube[{place}]"),
+            ("", "sampler") => format!("mx_samplers[{place}]"),
+            ("", "sampler_comparison") => format!("mx_samplers_cmp[{place}]"),
+            (_, _) => {
+                // a buffer: a typed view of its type (a struct, as views must be)
+                let k = views.iter().position(|v| v.0 == ty).unwrap_or_else(|| {
+                    let k = views.len();
+                    let binding = 16 + k;
+                    let array = format!("mx_view{k}");
+                    let wrapped = !ty.starts_with(char::is_uppercase);
+                    if wrapped {
+                        decls.push_str(&format!("struct MxView{k} {{ v: {ty} }};\n"));
+                    }
+                    decls.push_str(&format!(
+                        "@group(7) @binding({binding}) var<storage, read> {array}: binding_array<{}>;\n",
+                        if wrapped { format!("MxView{k}") } else { ty.to_string() }
+                    ));
+                    views.push((ty.to_string(), array));
+                    k
+                });
+                let wrapped = !ty.starts_with(char::is_uppercase);
+                format!("{}[{place}]{}", views[k].1, if wrapped { ".v" } else { "" })
+            }
+        };
+        swaps.push((name.to_string(), read));
+    }
+    out = kept.join("\n");
+    for (name, read) in &swaps {
+        out = replace_ident(&out, name, read);
+    }
+    // the frame's places after the material's in the draw's immediates (`FrameHeap`)
+    let head = "tile_sampler: u32, ground: u32 }";
+    assert!(out.contains(head), "scene shader: the immediates' struct");
+    out = out.replacen(
+        head,
+        "tile_sampler: u32, ground: u32, shadow: u32, shadow_far: u32, ao: u32, probe: u32, sky_lut: u32, lmap_tex: u32, s_shadow: u32, s_ao: u32, s_lin: u32, camera: u32, models: u32, inst_params: u32, draw_list: u32, lights: u32, grid: u32, enh: u32, lmap: u32, snow_px: u32, snow: u32 }",
+        1,
+    );
+    format!("{decls}{out}")
+}
+
+/// `replace_word` for a variable: not where the word is a member (`enh.lights`) or declares
+/// one (`lights: vec4<f32>,` in a struct).
+pub(crate) fn replace_ident(src: &str, word: &str, with: &str) -> String {
+    let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(src.len());
+    let mut rest = src;
+    while let Some(k) = rest.find(word) {
+        let before = rest[..k].chars().next_back();
+        let member = rest[..k].trim_end().ends_with('.');
+        let after_text = rest[k + word.len()..].trim_start();
+        let declares = after_text.starts_with(':') && !after_text.starts_with("::");
+        let after = rest[k + word.len()..].chars().next();
+        out.push_str(&rest[..k]);
+        if before.is_some_and(is_name) || after.is_some_and(is_name) || member || declares {
+            out.push_str(word);
+        } else {
+            out.push_str(with);
+        }
+        rest = &rest[k + word.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn replace_word(src: &str, word: &str, with: &str) -> String {
     let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
     let mut out = String::with_capacity(src.len());
@@ -378,7 +525,7 @@ fn replace_word(src: &str, word: &str, with: &str) -> String {
 fn scene_shader_bound_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
     let src = [
         include_str!("../colour.wgsl"),
-        shaders::SCENE,
+        shaders::scene_part(),
         if road_snow_supported_on(
             gl,
             omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(),
@@ -392,7 +539,7 @@ fn scene_shader_bound_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bo
         include_str!("../puddle_common.wgsl"),
         include_str!("../beam_shadow_none.wgsl"),
         include_str!("../lamp_air.wgsl"),
-        shaders::ENHANCED,
+        shaders::enhanced_part(),
     ]
     .join("\n");
     // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
@@ -465,16 +612,27 @@ pub(crate) fn lean_scene(src: String) -> String {
         );
     debug_assert_eq!(out.matches("sun_shadow_soft(in.world").count(), 1);
     debug_assert!(!out.contains("* lamp_shadow_at("));
-    out
+    // and no drops on the panes, only their film and blur: FXC unrolls the drops' cell
+    // loops into each of the shader's glass paths, and Direct3D 11 on WARP spent over two
+    // minutes on the scene pipelines (the ANGLE startup check timed out)
+    stub_body(
+        &out,
+        "fn glass_drops(a: ptr<function, DropAcc>, b: PaneBase, p: PaneProj, w: f32, wet: f32, heavy: f32, bank: f32, size: f32, world: vec3<f32>, t: f32) {",
+        "",
+    )
 }
 
 /// The sky dome (both paths) and the enhanced reflection probe.
 pub(crate) fn sky_shader_source() -> String {
     [
-        include_str!("../colour.wgsl"),
-        include_str!("../sky.wgsl"),
-        include_str!("../enhanced_common.wgsl"),
-        include_str!("../sky_enhanced.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../colour.wgsl"), "colour.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../sky.wgsl"), "sky.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../sky_enhanced.wgsl"), "sky_enhanced.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../clouds_ss.wgsl"), "clouds_ss.wgsl"),
     ]
     .join("\n")
 }
@@ -482,7 +640,21 @@ pub(crate) fn sky_shader_source() -> String {
 /// The snowfall (snow.wgsl), with the lamps the enhanced picture lights it by (none
 /// without storage buffers).
 pub(crate) fn snow_shader_source() -> String {
-    precip_shader_source(include_str!("../snow.wgsl"))
+    let src = precip_shader_source(include_str!("../snow.wgsl"));
+    if basic_pipelines() {
+        lean_snow(src)
+    } else {
+        src
+    }
+}
+
+/// The snowfall as the basic set makes it: lit without the loop over the lamps (one more
+/// thing a phone's compiler can fail on, see `lean_scene`), by the sky's light from above.
+pub(crate) fn lean_snow(src: String) -> String {
+    // (no line end in the pattern: a Windows checkout turns the file's into CRLF)
+    const LAMPS: &str = "l = (precip_light(in.pos, to_eye, true) + up) * 0.5 * 0.85";
+    debug_assert_eq!(src.matches(LAMPS).count(), 1);
+    src.replace(LAMPS, "l = (up + up) * 0.5 * 0.85")
 }
 
 /// The rainfall (rain.wgsl), as the snowfall.
@@ -496,7 +668,9 @@ pub(crate) fn rain_shader_source() -> String {
 }
 
 pub(crate) fn lean_rain(src: String) -> String {
-    const LAMPS: &str = "precip_light(in.pos, to_eye, false) * 0.3 + ";
+    // (no line end in the pattern: a Windows checkout turns the file's into CRLF)
+    const LAMPS: &str =
+        "l = max(precip_light(in.pos, to_eye, true) - round, vec3<f32>(0.0)) * 1.5 + l;";
     debug_assert_eq!(src.matches(LAMPS).count(), 1);
     src.replace(LAMPS, "")
 }
@@ -548,6 +722,9 @@ pub(crate) struct SnowUniform {
     /// The roof map's matrix, and x 1 when there is one (`passes::PrecipMap::uniform`).
     pub(crate) roof: [[f32; 4]; 4],
     pub(crate) roof_on: [f32; 4],
+    /// Enhanced: where the veil's panels begin, how many, the gusts' strength, the picture's
+    /// height (px).
+    pub(crate) ext: [f32; 4],
 }
 
 /// The snowfall's flakes for a snowfall of strength `s` (0..1): how many each layer of
@@ -575,6 +752,15 @@ pub(crate) struct RainUniform {
     pub(crate) view: [f32; 4],
     pub(crate) roof: [[f32; 4]; 4],
     pub(crate) roof_on: [f32; 4],
+    /// Enhanced: where the veil's panels begin, how many, the gusts' strength, the quality.
+    pub(crate) ext: [f32; 4],
+}
+
+/// The enhanced rain's and snow's far veil (rain.wgsl, snow.wgsl `veil_corner`): twelve
+/// panels a ring, one ring on the `rain_quality` setting's low, two on medium, three on
+/// high.
+pub(crate) fn veil_panels(quality: u8) -> u32 {
+    12 * (quality.min(2) as u32 + 1)
 }
 
 /// How many drops each layer of rain.wgsl holds in a rain of strength `r` (0..1) at the
@@ -597,7 +783,7 @@ pub(crate) fn rainfall_drops(r: f32, quality: u8) -> [u32; 4] {
 /// without storage buffers, where there are no lamps).
 pub(crate) fn fog_lamps_shader_source() -> String {
     [
-        include_str!("../fog_lamps.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../fog_lamps.wgsl"), "fog_lamps.wgsl"),
         include_str!("../enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
         if omsi_cfg::flags::OMSI_NO_BEAM_SHADOWS.is_set() {
@@ -605,7 +791,7 @@ pub(crate) fn fog_lamps_shader_source() -> String {
         } else {
             include_str!("../beam_shadow.wgsl")
         },
-        include_str!("../lamp_air.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
     ]
     .join("\n")
 }
@@ -626,7 +812,7 @@ const CELL_CAP: u32 = 32u;
 /// The light coronas (both paths).
 pub(crate) fn corona_shader_source() -> String {
     let src = [
-        include_str!("../corona.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../corona.wgsl"), "corona.wgsl"),
         include_str!("../enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
         include_str!("../beam_shadow_none.wgsl"),

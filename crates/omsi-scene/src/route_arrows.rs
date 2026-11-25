@@ -28,13 +28,23 @@ fn sco(kind: &str) -> &'static str {
 
 impl RouteArrows {
     /// Twice a second: the arrows of the route ahead stand, the others go.
-    pub fn tick(&mut self, dt: f32, world: &World, renderer: &Renderer, scene: &mut Scene, spots: &[(u64, DVec3, f64, &'static str, String)]) {
+    pub fn tick(
+        &mut self,
+        dt: f32,
+        world: &World,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        spots: &[(u64, DVec3, f64, &'static str, String)],
+    ) {
         self.wait -= dt;
         if self.wait > 0.0 {
             return;
         }
         self.wait = 0.5;
-        let wanted: Vec<u64> = spots.iter().map(|s| s.0 ^ (s.3.len() as u64) << 56).collect();
+        let wanted: Vec<u64> = spots
+            .iter()
+            .map(|s| s.0 ^ (s.3.len() as u64) << 56)
+            .collect();
         // gone: behind the bus, or the route changed
         let mut kept = Vec::with_capacity(self.placed.len());
         for (k, tg) in self.placed.drain(..) {
@@ -52,14 +62,37 @@ impl RouteArrows {
             let (_, pos, heading, kind, text) = s;
             // (on the road surface there, not the lane's own height: a lane may lie a few
             // centimetres off it; a stop's helper stands where the stop object stands)
-            let z = if *kind == "busstop" { pos.z } else { world.walk_height(pos.x, pos.y).filter(|z| (z - pos.z).abs() < 1.5).unwrap_or(pos.z) };
-            if let Some(tg) = world.add_helper_object(renderer, scene, sco(kind), DVec3::new(pos.x, pos.y, z), *heading, std::slice::from_ref(text)) {
+            let z = if *kind == "busstop" {
+                pos.z
+            } else {
+                world
+                    .walk_height(pos.x, pos.y)
+                    .filter(|z| (z - pos.z).abs() < 1.5)
+                    .unwrap_or(pos.z)
+            };
+            if let Some(tg) = world.add_helper_object(
+                renderer,
+                scene,
+                sco(kind),
+                DVec3::new(pos.x, pos.y, z),
+                *heading,
+                std::slice::from_ref(text),
+            ) {
                 if omsi_cfg::flags::OMSI_DEBUG_NAV.is_set() {
-                    log::info!("route arrow {kind} '{text}' at ({:.1}, {:.1}, {:.2}) heading {:.0}", pos.x, pos.y, z, heading);
+                    log::info!(
+                        "route arrow {kind} '{text}' at ({:.1}, {:.1}, {:.2}) heading {:.0}",
+                        pos.x,
+                        pos.y,
+                        z,
+                        heading
+                    );
                 }
                 self.placed.push((key, tg));
             } else {
-                log::warn!("route arrow {}: the object could not be put down", sco(kind));
+                log::warn!(
+                    "route arrow {}: the object could not be put down",
+                    sco(kind)
+                );
             }
         }
     }
@@ -73,7 +106,10 @@ impl RouteArrows {
     /// then, so those standing would stay where they were for good).
     pub fn clear(&mut self, world: &World, renderer: &Renderer, scene: &mut Scene) {
         if omsi_cfg::flags::OMSI_DEBUG_NAV.is_set() {
-            log::info!("route arrows: the {} standing taken away", self.placed.len());
+            log::info!(
+                "route arrows: the {} standing taken away",
+                self.placed.len()
+            );
         }
         for (_, tg) in self.placed.drain(..) {
             world.remove_helper_object(renderer, scene, tg);

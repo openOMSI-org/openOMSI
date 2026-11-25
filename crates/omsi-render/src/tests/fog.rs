@@ -9,14 +9,17 @@ fn the_fog_gather_skips_only_when_all_sixteen_rays_are_dark() {
         let (mut sum, mut wsum) = (0.0f32, 0.0f32);
         for k in 0..16 {
             let (ox, oy) = ((k & 3) - 1, (k >> 2) - 1);
-            let bil = (1.0 - (ox as f32 - f.0).abs() * 0.5).max(0.0) * (1.0 - (oy as f32 - f.1).abs() * 0.5).max(0.0);
+            let bil = (1.0 - (ox as f32 - f.0).abs() * 0.5).max(0.0)
+                * (1.0 - (oy as f32 - f.1).abs() * 0.5).max(0.0);
             let w = bil + 1e-3;
             sum += light(ox, oy) * w;
             wsum += w;
         }
         sum / wsum
     };
-    let edge = tent((0.25, 0.25), &|x, y| if (x, y) == (-1, 0) { 1.0 } else { 0.0 });
+    let edge = tent((0.25, 0.25), &|x, y| {
+        if (x, y) == (-1, 0) { 1.0 } else { 0.0 }
+    });
     assert!((edge - 0.082).abs() < 0.01, "{edge}");
     assert_eq!(tent((0.25, 0.25), &|_, _| 0.0), 0.0);
     // the shader scans every one of the sixteen taps before it returns zero
@@ -24,6 +27,12 @@ fn the_fog_gather_skips_only_when_all_sixteen_rays_are_dark() {
     let gather = &src[src.find("fn gathered_air_light").unwrap()..];
     let scan = &gather[..gather.find("if (!lit)").unwrap()];
     assert_eq!(scan.matches("for (var k = 0; k < 16;").count(), 1);
-    assert!(scan.contains("lit = lit || any(textureLoad(t_fog, clamp(base + o,"), "{scan}");
-    assert!(!scan.contains("2e-4"), "no threshold: any light at all keeps the sum");
+    assert!(
+        scan.contains("lit = lit || any(textureLoad(t_fog, clamp(base + o,"),
+        "{scan}"
+    );
+    assert!(
+        !scan.contains("2e-4"),
+        "no threshold: any light at all keeps the sum"
+    );
 }

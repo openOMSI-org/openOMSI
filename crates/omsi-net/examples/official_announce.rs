@@ -12,7 +12,9 @@ fn latest_tunnel(log: &str) -> Option<String> {
     let mut found = None;
     for (i, _) in s.match_indices("https://") {
         let rest = &s[i..];
-        let end = rest.find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, ':' | '/' | '.' | '-'))).unwrap_or(rest.len());
+        let end = rest
+            .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, ':' | '/' | '.' | '-')))
+            .unwrap_or(rest.len());
         let url = &rest[..end];
         if url.ends_with(".trycloudflare.com") && !url.contains("api.trycloudflare") {
             found = Some(url.to_string());
@@ -31,7 +33,9 @@ fn main() {
     let mut last: Option<(String, Instant)> = None;
     loop {
         if let Some(url) = latest_tunnel(&log) {
-            let due = last.as_ref().is_none_or(|(u, t)| *u != url || t.elapsed() > Duration::from_secs(300));
+            let due = last
+                .as_ref()
+                .is_none_or(|(u, t)| *u != url || t.elapsed() > Duration::from_secs(300));
             if due {
                 match omsi_net::official::announce(&url, &key) {
                     Ok(()) => println!("announced {url}"),

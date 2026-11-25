@@ -48,6 +48,8 @@ pub(crate) struct GamePanels {
     pub(crate) remote: Option<remote_panel::RemotePanel>,
     /// Where the map camera's click asks to move the bus to.
     pub(crate) move_to: Option<glam::DVec3>,
+    /// The phone's keyboard was asked up for a field of the panels or the LAN chat line.
+    keyboard: bool,
 }
 
 impl GamePanels {
@@ -368,6 +370,20 @@ impl crate::App {
                 None => {
                     gp.ui.remove(GAME, id);
                 }
+            }
+        }
+        // A phone has no keys but its on-screen keyboard: it comes up while a field of the
+        // panels (the multiplayer join code) or the LAN chat line takes the keys and goes
+        // when they stop. Nothing asked for it, so neither could be typed into (#3769).
+        // The keyboard is shared with the menus' search lines and the pause menu's search:
+        // it is put away only when none of those is being typed into either.
+        let typing = gp.ui.typing().is_some() || crate::lan::chat_open(&self.net.remotes);
+        if typing != gp.keyboard {
+            gp.keyboard = typing;
+            let elsewhere =
+                self.menus.menu_edit.is_some() || crate::shell::pause::search::focused(&self.shell);
+            if typing || !elsewhere {
+                crate::platform::phone_keyboard(self.window.as_deref(), typing);
             }
         }
         let clean = self.clean_screen_shown();

@@ -101,23 +101,6 @@ pub(crate) fn deliver_player_impacts(p: &mut Player, traffic: Option<&mut traffi
     }
 }
 
-/// Rain, snow, fog or a closed cloud cover: the AI drives with its lights on by day.
-pub(crate) fn gloomy_weather(weather: Option<&omsi_content::weather::Weather>) -> bool {
-    weather
-        .map(|w| {
-            let (kind, rate) = precip_of(w);
-            w.fog.0 < 600.0
-                || (kind != 0 && rate > 0.05)
-                || w.clouds
-                    .0
-                    .trim()
-                    .as_bytes()
-                    .get(..8)
-                    .is_some_and(|p| p.eq_ignore_ascii_case(b"overcast"))
-        })
-        .unwrap_or(false)
-}
-
 /// Supply date, game time and weather before either spawning or running AI scripts.
 pub(crate) fn set_ai_environment(
     t: &mut traffic::Traffic,
@@ -133,9 +116,8 @@ pub(crate) fn set_ai_environment(
     host.clock.paused = paused;
     host.auto_clutch = if auto_clutch { 1.0 } else { 0.0 };
     if let Some(w) = weather {
-        let (kind, rate) = precip_of(w);
-        host.precip_type = kind as f32;
-        host.precip_rate = rate;
+        host.precip_type = precip_of(w).0 as f32;
+        host.precip_rate = omsi_weather::conditions::precip_strength(w);
         host.temperature = w.temp.0;
         host.abs_humidity = w.temp.1;
         host.wind = crate::rain::weather_wind(w);
@@ -144,15 +126,11 @@ pub(crate) fn set_ai_environment(
     t.set_script_environment(host.system_values(), host.wind, host.street_cond);
 }
 
-/// The AI's lights (and a bus's saloon lamps, which its scripts switch with them): Omsi
-/// switches them on below a light value of 0.75, before the street lamps (0.6), and off
-/// after them in the morning - and by day when it is `gloomy`.
-pub(crate) fn set_ai_daylight(
-    t: &mut traffic::Traffic,
-    daylight: omsi_sim::Daylight,
-    gloomy: bool,
-) {
-    t.night = daylight.brightness < 0.75 || gloomy;
+/// The AI's lights (and a bus's saloon lamps, which its scripts switch with them): on while
+/// Omsi.exe's daylight sum under the weather is below 0.75 (0x7d9128), before the street
+/// lamps (0.6) - and so by day under an overcast deck, in fog, rain or snow.
+pub(crate) fn set_ai_daylight(t: &mut traffic::Traffic, daylight: omsi_sim::Daylight) {
+    t.night = daylight.daylight_sum < 0.75;
     t.daylight = Some(daylight);
 }
 
@@ -203,7 +181,7 @@ pub(crate) fn world_lamps(
         w.set_lamps(r, scene, daylight.lamps_on);
     }
     if night_modes {
-        w.update_night_modes(r, scene, clock, daylight.brightness);
+        w.update_night_modes(r, scene, clock, daylight.daylight_sum);
     }
 }
 
@@ -300,14 +278,10 @@ pub(crate) fn cabin_air_step(
     cabin.step(dt, &ci);
 }
 
-/// The [wind] at the height of the tyres' spray: direction (deg) and speed (m/s) in the lee
-/// of the street.
+/// The [wind] at the height of the tyres' spray (m/s, world) in the lee of the street: the
+/// weather's air (`rain::weather_wind`, blowing from its direction), slowed.
 pub(crate) fn spray_wind(weather: &omsi_content::weather::Weather) -> Vec3 {
-    Vec3::new(
-        weather.wind.0.to_radians().sin() * weather.wind.1,
-        weather.wind.0.to_radians().cos() * weather.wind.1,
-        0.0,
-    ) * puddles::GROUND_WIND
+    crate::rain::weather_wind(weather) * puddles::GROUND_WIND
 }
 
 /// The people's step, and what it means for the buses: the validators used (the bus's
@@ -634,6 +608,9 @@ pub(crate) fn picture_lighting(
     animation_time: f32,
     sky: &crate::weather_setup::SkyState,
 ) -> omsi_render::Lighting {
+    // the session's weather for Omsi.exe's daylight (the lamps, `Envir_Brightness`)
+    let sky_weather = weather.map(omsi_weather::conditions::daylight_weather);
+    omsi_sim::daylight::set_sky_weather(sky_weather.unwrap_or_default());
     let mut lighting = match weather {
         Some(w) => weather_lighting(
             daylight,
@@ -661,6 +638,7 @@ pub(crate) fn picture_lighting(
         - weather.map(crate::rain::weather_wind).unwrap_or_default();
     lighting.animation_time = Some(animation_time);
     lighting.condensation = condensation;
+    lighting.cabin_light = inside.map(|v| v.interior_light()).unwrap_or(0.0);
     // an LED panel's dots burn this much above their own colour (16 levels,
     // see `Settings::led_glow`); the panel's picture and its mask are held at
     // this mip level at most (`Settings::led_mips`)
@@ -718,6 +696,9 @@ pub(crate) fn dress_lighting(
         .collect();
     lighting.detail = settings.detail_textures;
     lighting.windy_trees = settings.windy_trees();
+    if !settings.rain_lights {
+        lighting.rain_lights = 0.0;
+    }
     lighting.night_brightness = settings.night_brightness;
     lighting.reflection_strength = settings.reflections;
     lighting.road_glare = settings.road_glare;

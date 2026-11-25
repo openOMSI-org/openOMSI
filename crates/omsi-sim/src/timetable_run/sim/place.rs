@@ -33,7 +33,10 @@ impl ScheduleSim {
         let trip = &self.data.trips[self.departures[i].trip];
         let trip_name = trip.name.clone();
         // a trip of a transport route has no track until the map's network has been read
-        if self.transit_unrouted.contains(&trip_name.to_ascii_lowercase()) {
+        if self
+            .transit_unrouted
+            .contains(&trip_name.to_ascii_lowercase())
+        {
             return Err(Placed::Wait);
         }
         // (the [station] records of a type-1 trip as well: Novi Sad's buses have no others,
@@ -137,13 +140,41 @@ impl ScheduleSim {
             self.retry_at.insert(i, retry);
             return Err(Placed::Wait);
         }
-        Ok(OnRoute { trip_name, stations, departure, tt, leave, steps, track, station_steps, slots, leg, frac, at, offset })
+        Ok(OnRoute {
+            trip_name,
+            stations,
+            departure,
+            tt,
+            leave,
+            steps,
+            track,
+            station_steps,
+            slots,
+            leg,
+            frac,
+            at,
+            offset,
+        })
     }
 
     /// The part of the route around the bus that the network has, with the trip's stops
     /// placed on it.
     fn route_section(world: &dyn TimetableWorld, traffic: &mut TrafficSim, r: OnRoute) -> Placing {
-        let OnRoute { trip_name, stations, departure, tt, leave, steps, track, station_steps, slots, leg, frac, at, offset } = r;
+        let OnRoute {
+            trip_name,
+            stations,
+            departure,
+            tt,
+            leave,
+            steps,
+            track,
+            station_steps,
+            slots,
+            leg,
+            frac,
+            at,
+            offset,
+        } = r;
         // the part of the route around the bus that the network has
         let (start, end) = section_around(&slots, at);
         let whole = start == 0 && end == slots.len();
@@ -195,7 +226,14 @@ impl ScheduleSim {
                     Some((ri, ss, lat)) => {
                         from = ri;
                         served[si] = true;
-                        stops.push((ri, ss, bay_offset(lat), leave[si], *sid, world.stop_side(*sid)));
+                        stops.push((
+                            ri,
+                            ss,
+                            bay_offset(lat),
+                            leave[si],
+                            *sid,
+                            world.stop_side(*sid),
+                        ));
                     }
                     None => log::debug!("station {sid}: not near the route"),
                 },
@@ -205,9 +243,36 @@ impl ScheduleSim {
         stops.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
         if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
             let len: f32 = section.iter().map(|&l| net.lanes[l].length()).sum();
-            log::info!("trip {trip_name}: {} stations {:?}, route {} of {} steps ({} lanes, {len:.0} m) from step {start}, bus on step {at} (leg {leg}, {:.0} %), stops {:?}", stations.len(), stations, end - start, steps.len(), section.len(), frac * 100.0, stops);
+            log::info!(
+                "trip {trip_name}: {} stations {:?}, route {} of {} steps ({} lanes, {len:.0} m) from step {start}, bus on step {at} (leg {leg}, {:.0} %), stops {:?}",
+                stations.len(),
+                stations,
+                end - start,
+                steps.len(),
+                section.len(),
+                frac * 100.0,
+                stops
+            );
         }
-        Placing { trip_name, stations, departure, leave, steps, station_steps, slots, leg, frac, at, start, end, section, start_index, s, stops, served }
+        Placing {
+            trip_name,
+            stations,
+            departure,
+            leave,
+            steps,
+            station_steps,
+            slots,
+            leg,
+            frac,
+            at,
+            start,
+            end,
+            section,
+            start_index,
+            s,
+            stops,
+            served,
+        }
     }
 }
 

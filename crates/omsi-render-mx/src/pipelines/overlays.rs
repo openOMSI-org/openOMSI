@@ -24,7 +24,10 @@ impl Overlays {
             device,
             mx::ShaderModuleDescriptor {
                 label: Some("overlay"),
-                source: &*(include_str!("../overlay.wgsl")),
+                source: &picture_wgsl(crate::shaders::hot_wgsl(
+                    include_str!("../overlay.wgsl"),
+                    "overlay.wgsl",
+                )),
             },
         );
         let overlay_pipeline = no_vertex_pipeline(
@@ -56,7 +59,10 @@ impl Overlays {
             device,
             mx::ShaderModuleDescriptor {
                 label: Some("OpenXR spatial UI"),
-                source: &*(include_str!("../xr_ui.wgsl")),
+                source: &picture_wgsl(crate::shaders::hot_wgsl(
+                    include_str!("../xr_ui.wgsl"),
+                    "xr_ui.wgsl",
+                )),
             },
         );
         let xr_ui_pipeline =

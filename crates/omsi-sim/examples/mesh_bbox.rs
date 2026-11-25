@@ -9,12 +9,16 @@ fn main() {
     let content = PathBuf::from(&a[1]);
     omsi_cfg::add_content_root(content.clone());
     omsi_cfg::vfs::mount_dir_zips(&content.join("Archives"));
-    let orig = omsi_cfg::flags::OMSI_ROOT.live_var().map(PathBuf::from).unwrap_or(content.clone());
+    let orig = omsi_cfg::flags::OMSI_ROOT
+        .live_var()
+        .map(PathBuf::from)
+        .unwrap_or(content.clone());
     omsi_cfg::add_content_root(orig.clone());
     let bus = omsi_cfg::resolve_path(&orig, &a[2]);
     let filter = a.get(3).map(|s| s.to_ascii_lowercase());
     let vt = std::sync::Arc::new(omsi_sim::VehicleType::load(&orig, &bus).unwrap());
-    let mut v = omsi_sim::VehicleInstance::new(vt.clone(), omsi_sim::VehicleHost::new(Default::default()));
+    let mut v =
+        omsi_sim::VehicleInstance::new(vt.clone(), omsi_sim::VehicleHost::new(Default::default()));
     // MESH_BBOX_SET=var=value,... sets variables first (an opened window, a door)
     if let Ok(set) = std::env::var("MESH_BBOX_SET") {
         for kv in set.split(',') {
@@ -42,7 +46,16 @@ fn main() {
         }
         println!(
             "{:3} {:40} x {:6.2}..{:6.2}  y {:6.2}..{:6.2}  z {:5.2}..{:5.2}  anims {} visible {}",
-            i, def.file, lo.x, hi.x, lo.y, hi.y, lo.z, hi.z, def.animations.len(), v.mesh_props[i].visible
+            i,
+            def.file,
+            lo.x,
+            hi.x,
+            lo.y,
+            hi.y,
+            lo.z,
+            hi.z,
+            def.animations.len(),
+            v.mesh_props[i].visible
         );
     }
 }
@@ -50,6 +63,11 @@ fn main() {
 /// The game's picture decoder for the simulation (as omsi-app registers it at start).
 fn decode_picture(path: &std::path::Path) -> Result<omsi_sim::image_decode::DecodedImage, String> {
     omsi_texture::decode_file(path)
-        .map(|i| omsi_sim::image_decode::DecodedImage { width: i.width, height: i.height, rgba: i.rgba, has_alpha: i.has_alpha })
+        .map(|i| omsi_sim::image_decode::DecodedImage {
+            width: i.width,
+            height: i.height,
+            rgba: i.rgba,
+            has_alpha: i.has_alpha,
+        })
         .map_err(|e| e.to_string())
 }

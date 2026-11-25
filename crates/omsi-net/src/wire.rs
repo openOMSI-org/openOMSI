@@ -27,6 +27,7 @@
 //!   doors 3 + 4 each                opening /15
 //!   wheels 4 + 7 each               suspension travel, 5 mm (±0.32 m)
 //!   rear sections 2 + 60 each       dx, dy 16 (cm from the front origin), dz 12 (cm), heading 16
+//!                                   (the first three; the others in the tail)
 //!   lamps 7 + 2 each                /3 (the vehicle's lamp variables, see the game's sync table)
 //!   switches 5 + 4 each             small integers −8 … 7 (`[visible]` variables)
 //!   values 6 + 16 each              IEEE half floats (sound and moving-part variables)
@@ -59,7 +60,10 @@ const FLAG_BITS: u32 = 10;
 
 pub const MAX_DOORS: usize = 7;
 pub const MAX_WHEELS: usize = 15;
-pub const MAX_REAR: usize = 3;
+/// Rear sections in the state's body; the rest of them follow in its tail.
+pub const MAX_REAR_BODY: usize = 3;
+/// A tram whose bogies and joints are coupled parts of their own (the NF6D has 11).
+pub const MAX_REAR: usize = 15;
 pub const MAX_LAMPS: usize = 127;
 pub const MAX_SWITCHES: usize = 31;
 pub const MAX_VALUES: usize = 63;
@@ -284,26 +288,10 @@ pub fn encode_state(pose: &Pose, protocol: u8, seq: u16) -> Vec<u8> {
     for s in wheels {
         w.put_fixed(*s as f64, 0.005, 7);
     }
-    // the rear sections from where the receiver will put the front (its rounded position)
-    let rounded = |v: f64| {
-        if v.is_finite() {
-            (v / 0.01).round() * 0.01
-        } else {
-            0.0
-        }
-    };
-    let rear = &pose.rear[..pose.rear.len().min(MAX_REAR)];
+    let rear = &pose.rear[..pose.rear.len().min(MAX_REAR_BODY)];
     w.put(rear.len() as u64, 2);
     for r in rear {
-        w.put_fixed(r.x - rounded(pose.x), 0.01, 16);
-        w.put_fixed(r.y - rounded(pose.y), 0.01, 16);
-        w.put_fixed(r.z - rounded(pose.z), 0.01, 12);
-        let h = if r.heading.is_finite() {
-            r.heading.rem_euclid(360.0)
-        } else {
-            0.0
-        };
-        w.put((h as f64 / 360.0 * 65536.0).round() as u64 % 65536, 16);
+        put_part(&mut w, pose, r);
     }
     let lamps = &pose.lamps[..pose.lamps.len().min(MAX_LAMPS)];
     w.put(lamps.len() as u64, 7);
@@ -372,16 +360,8 @@ pub fn decode_state(data: &[u8], protocol: u8) -> Option<(u32, u16, Pose)> {
         .collect::<Option<_>>()?;
     let n = r.get(2)? as usize;
     for _ in 0..n {
-        let dx = r.get_fixed(0.01, 16)?;
-        let dy = r.get_fixed(0.01, 16)?;
-        let dz = r.get_fixed(0.01, 12)?;
-        let h = (r.get(16)? as f64 * 360.0 / 65536.0) as f32;
-        p.rear.push(PartPose {
-            x: p.x + dx,
-            y: p.y + dy,
-            z: p.z + dz,
-            heading: h,
-        });
+        let part = get_part(&mut r, &p)?;
+        p.rear.push(part);
     }
     let n = r.get(7)? as usize;
     p.lamps = (0..n).map(|_| r.get_unit(2)).collect::<Option<_>>()?;
@@ -432,7 +412,11 @@ fn put_tail(w: &mut BitWriter, pose: &Pose) {
     match pose.walker {
         Some(k) => {
             w.put(1, 1);
-            let c = if k.course.is_finite() { k.course.rem_euclid(360.0) } else { k.heading.rem_euclid(360.0) };
+            let c = if k.course.is_finite() {
+                k.course.rem_euclid(360.0)
+            } else {
+                k.heading.rem_euclid(360.0)
+            };
             w.put((c as f64 / 360.0 * 65536.0).round() as u64 % 65536, 16);
         }
         None => w.put(0, 1),
@@ -440,6 +424,47 @@ fn put_tail(w: &mut BitWriter, pose: &Pose) {
     // later still: the bus radio key (map-wide voice while held; older games end before it)
     w.put(1, 1);
     w.put(pose.radio_keyed as u64, 1);
+    // later still: the rear sections after the first three (an older game drew a tram's
+    // further cars and bogies where its own copy dragged them, off the rails)
+    w.put(1, 1);
+    let more = &pose.rear[pose.rear.len().min(MAX_REAR_BODY)..pose.rear.len().min(MAX_REAR)];
+    w.put(more.len() as u64, 4);
+    for r in more {
+        put_part(w, pose, r);
+    }
+}
+
+/// A rear section from where the receiver will put the front (its rounded position).
+fn put_part(w: &mut BitWriter, pose: &Pose, r: &PartPose) {
+    let rounded = |v: f64| {
+        if v.is_finite() {
+            (v / 0.01).round() * 0.01
+        } else {
+            0.0
+        }
+    };
+    w.put_fixed(r.x - rounded(pose.x), 0.01, 16);
+    w.put_fixed(r.y - rounded(pose.y), 0.01, 16);
+    w.put_fixed(r.z - rounded(pose.z), 0.01, 12);
+    let h = if r.heading.is_finite() {
+        r.heading.rem_euclid(360.0)
+    } else {
+        0.0
+    };
+    w.put((h as f64 / 360.0 * 65536.0).round() as u64 % 65536, 16);
+}
+
+fn get_part(r: &mut BitReader, p: &Pose) -> Option<PartPose> {
+    let dx = r.get_fixed(0.01, 16)?;
+    let dy = r.get_fixed(0.01, 16)?;
+    let dz = r.get_fixed(0.01, 12)?;
+    let h = (r.get(16)? as f64 * 360.0 / 65536.0) as f32;
+    Some(PartPose {
+        x: p.x + dx,
+        y: p.y + dy,
+        z: p.z + dz,
+        heading: h,
+    })
 }
 
 fn get_tail(r: &mut BitReader, p: &mut Pose) {
@@ -452,8 +477,16 @@ fn get_tail(r: &mut BitReader, p: &mut Pose) {
     if has_aboard == 1 {
         let aboard = (|| {
             let owner = r.get(16)? as u32;
-            let local = [r.get_fixed(0.005, 14)? as f32, r.get_fixed(0.005, 14)? as f32, r.get_fixed(0.005, 14)? as f32];
-            let seat = if r.get(1)? == 1 { Some(r.get(10)? as u16) } else { None };
+            let local = [
+                r.get_fixed(0.005, 14)? as f32,
+                r.get_fixed(0.005, 14)? as f32,
+                r.get_fixed(0.005, 14)? as f32,
+            ];
+            let seat = if r.get(1)? == 1 {
+                Some(r.get(10)? as u16)
+            } else {
+                None
+            };
             Some(Aboard { owner, local, seat })
         })();
         let Some(aboard) = aboard else { return };
@@ -478,6 +511,19 @@ fn get_tail(r: &mut BitReader, p: &mut Pose) {
         return;
     }
     p.radio_keyed = r.get(1).unwrap_or(0) == 1;
+    if r.get(1).unwrap_or(0) == 0 {
+        return;
+    }
+    let Some(n) = r.get(4) else { return };
+    if p.rear.len() < MAX_REAR_BODY {
+        return;
+    }
+    let more: Option<Vec<PartPose>> = (0..(n as usize).min(MAX_REAR - MAX_REAR_BODY))
+        .map(|_| get_part(r, p))
+        .collect();
+    if let Some(more) = more {
+        p.rear.extend(more);
+    }
 }
 
 fn put_walker(w: &mut BitWriter, walker: Option<Walker>) {
@@ -487,7 +533,11 @@ fn put_walker(w: &mut BitWriter, walker: Option<Walker>) {
             w.put_fixed(k.x, 0.01, 32);
             w.put_fixed(k.y, 0.01, 32);
             w.put_fixed(k.z, 0.01, 24);
-            let h = if k.heading.is_finite() { k.heading.rem_euclid(360.0) } else { 0.0 };
+            let h = if k.heading.is_finite() {
+                k.heading.rem_euclid(360.0)
+            } else {
+                0.0
+            };
             w.put((h as f64 / 360.0 * 65536.0).round() as u64 % 65536, 16);
             w.put_fixed(k.speed as f64, 0.05, 9);
             w.put(k.seated as u64, 1);
@@ -699,8 +749,25 @@ mod tests {
         p.lamps = vec![0.5; MAX_LAMPS];
         p.switches = vec![3.0; MAX_SWITCHES];
         p.values = (0..MAX_VALUES).map(|k| k as f32).collect();
-        p.rear = vec![PartPose { x: 1.0, y: -12.0, z: 0.0, heading: 5.0 }; MAX_REAR];
-        p.walker = Some(Walker { x: 1.0, y: 2.0, z: 3.0, heading: 10.0, speed: 1.4, course: 100.0, seated: false, aboard: None });
+        p.rear = vec![
+            PartPose {
+                x: 1.0,
+                y: -12.0,
+                z: 0.0,
+                heading: 5.0
+            };
+            MAX_REAR
+        ];
+        p.walker = Some(Walker {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+            heading: 10.0,
+            speed: 1.4,
+            course: 100.0,
+            seated: false,
+            aboard: None,
+        });
         let data = encode_state(&p, 6, 0);
         assert!(data.len() <= MAX_STATE_BYTES, "{} bytes", data.len());
         let (_, _, q) = decode_state(&data, 6).unwrap();
@@ -713,7 +780,16 @@ mod tests {
     fn doors_are_fine_and_walkers_keep_their_course() {
         let mut p = bus();
         p.doors = vec![0.37, 0.5, 1.0];
-        p.walker = Some(Walker { x: 1.0, y: 2.0, z: 3.0, heading: 10.0, speed: 1.4, course: 100.0, seated: false, aboard: None });
+        p.walker = Some(Walker {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+            heading: 10.0,
+            speed: 1.4,
+            course: 100.0,
+            seated: false,
+            aboard: None,
+        });
         p.sent_ms = 1234;
         p.radio_keyed = true;
         let (_, _, q) = decode_state(&encode_state(&p, 3, 0), 3).unwrap();
@@ -726,6 +802,30 @@ mod tests {
         assert!(q.radio_keyed);
     }
 
+    /// The NF6D: its eleven coupled parts all reach the others' games (the first three were
+    /// all that did, and the B car and the bogies behind them stood off the rails).
+    #[test]
+    fn every_rear_part_of_a_long_tram_comes_through() {
+        let mut p = bus();
+        p.rear = (0..11)
+            .map(|k| PartPose {
+                x: p.x - 1.5 * k as f64,
+                y: p.y + 0.25,
+                z: p.z - 0.5,
+                heading: 90.0 + k as f32,
+            })
+            .collect();
+        let (_, _, q) = decode_state(&encode_state(&p, 3, 0), 3).unwrap();
+        assert_eq!(q.rear.len(), 11);
+        for (a, b) in q.rear.iter().zip(&p.rear) {
+            assert!(
+                (a.x - b.x).abs() < 0.011 && (a.y - b.y).abs() < 0.011,
+                "{a:?} vs {b:?}"
+            );
+            assert!((a.heading - b.heading).abs() < 0.01);
+        }
+    }
+
     #[test]
     fn garbage_is_not_a_state() {
         let good = encode_state(&bus(), 3, 5);
@@ -733,7 +833,9 @@ mod tests {
         // (the sender's clock at the end is optional: an older game's state ends before it;
         // so are the fine door openings and the walker's course after it)
         let b = bus();
-        let optional = 5 + (2 + b.doors.len().min(MAX_DOORS) * 8 + if b.walker.is_some() { 16 } else { 0 }).div_ceil(8);
+        let optional = 5
+            + (2 + b.doors.len().min(MAX_DOORS) * 8 + if b.walker.is_some() { 16 } else { 0 })
+                .div_ceil(8);
         for cut in 0..good.len() - optional {
             assert!(decode_state(&good[..cut], 3).is_none(), "cut at {cut}");
         }

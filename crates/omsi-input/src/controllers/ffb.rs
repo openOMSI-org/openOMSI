@@ -90,7 +90,14 @@ impl ScriptVib {
     /// avoid. It shows on the DirectInput path, where a zero amplitude stops the periodic
     /// effect outright, and on the fallback, whose shake is worked out of the same
     /// amplitude. The fade at zero stops the shake where it stands, as it always did.
-    pub(super) fn step(&mut self, on: bool, incoming: f32, period: f32, fade: f32, dt: f32) -> (f32, f32) {
+    pub(super) fn step(
+        &mut self,
+        on: bool,
+        incoming: f32,
+        period: f32,
+        fade: f32,
+        dt: f32,
+    ) -> (f32, f32) {
         let incoming = if on { incoming.clamp(0.0, 1.0) } else { 0.0 };
         if incoming > 0.004 {
             self.amp = incoming;
@@ -146,7 +153,16 @@ impl Micro {
     /// `engine` are the settings' strengths (0 = neither); the rest is what the bus is
     /// doing - `kmh`, the road's `street_cond` (0 dry, 1 wet, 2 snow), the engine's rpm and
     /// how hard it is working.
-    pub(super) fn sample(&mut self, dt: f32, kmh: f32, street_cond: f32, rpm: f32, load: f32, road: f32, engine: f32) -> f32 {
+    pub(super) fn sample(
+        &mut self,
+        dt: f32,
+        kmh: f32,
+        street_cond: f32,
+        rpm: f32,
+        load: f32,
+        road: f32,
+        engine: f32,
+    ) -> f32 {
         let dt = dt.clamp(0.0, 0.1);
         // The grain of the road: nothing at all at a standstill, all of it by 30 km/h, and
         // a wet or snowy road hums under the tyres more than dry asphalt does.
@@ -154,7 +170,7 @@ impl Micro {
         let drive = (v / 8.5).min(1.0);
         let rough = 0.6 + 0.25 * street_cond.clamp(0.0, 2.0);
         self.roll += v * dt;
-// The road, read along the distance: mostly its ride - the shapes the whole bus is
+        // The road, read along the distance: mostly its ride - the shapes the whole bus is
         // being carried over - and only a seventh its grain. A wheel is told one force at a
         // time, and the difference the driver feels between a bus that feels heavy and one
         // whose wheel rattles is whether that force lines up with itself. Noise never does:
@@ -169,7 +185,9 @@ impl Micro {
         // told about it (a hundred times a second, so the 0.1 m grain is let go above 40 Hz,
         // where the 0.9 m one carries the surface on its own).
         let fine = 1.0 - (v / 0.4 / 40.0).clamp(0.0, 1.0);
-        let shape = ride(self.roll / 6.0) * 0.34 + ride(self.roll / 2.2 + 5.3) * 0.26 + ride(self.roll / 0.9 + 11.9) * 0.4;
+        let shape = ride(self.roll / 6.0) * 0.34
+            + ride(self.roll / 2.2 + 5.3) * 0.26
+            + ride(self.roll / 0.9 + 11.9) * 0.4;
         let surface = grain(self.roll / 0.25) * 0.55 + grain(self.roll / 0.1 + 31.7) * 0.45 * fine;
         let tarmac = (shape * 0.85 + surface * 0.15) * drive * rough * 0.25 * road;
         // The engine's buzz, each part on the rate it really runs at: the crankshaft
@@ -180,7 +198,9 @@ impl Micro {
         // and what is left is the low rumble.
         let turn = std::f32::consts::TAU * dt;
         self.rpm += (rpm.clamp(0.0, 4500.0) - self.rpm) * (dt / 0.08).min(1.0);
-        let spin = |p: &mut f32, per_turn: f32| *p = (*p + self.rpm / per_turn * turn).rem_euclid(std::f32::consts::TAU);
+        let spin = |p: &mut f32, per_turn: f32| {
+            *p = (*p + self.rpm / per_turn * turn).rem_euclid(std::f32::consts::TAU)
+        };
         // a wheel is told its force once a frame, so nothing above about 28 Hz can be
         // carried at all and each part is let go over the last stretch before that
         let room = |f: f32| 1.0 - ((f - 28.0) / 7.0).clamp(0.0, 1.0);
@@ -191,7 +211,9 @@ impl Micro {
         // an engine working against its mounts twists harder than one idling
         let mount = 0.7 + 0.6 * load.clamp(0.0, 1.0);
         let lump = 0.6 + 0.4 * (self.rpm / 2400.0).clamp(0.0, 1.0);
-        let hum = running * mount * lump
+        let hum = running
+            * mount
+            * lump
             * (self.crank.sin() * room(self.rpm / 60.0) * 0.03
                 + self.firing.sin() * room(self.rpm / 30.0) * 0.02
                 + self.mass.sin() * (self.rpm / 2400.0).min(1.0) * 0.055)
@@ -236,17 +258,32 @@ fn lattice(i: i32) -> f32 {
 /// reaches it through the bus body at a lower strength.
 impl Controllers {
     /// The wheels' jolt this frame (None: not driving, the travel is settled anew on return).
-    pub fn wheel_bump(&mut self, body: Option<&omsi_sim::rigid::RigidBody>, kmh: f32, dt: f32) -> f32 {
+    pub fn wheel_bump(
+        &mut self,
+        body: Option<&omsi_sim::rigid::RigidBody>,
+        kmh: f32,
+        dt: f32,
+    ) -> f32 {
         let Some(body) = body else {
             self.settled.clear();
             return 0.0;
         };
         let travel: Vec<f32> = body.wheels.iter().map(|w| w.compression).collect();
         let ripples = settle(&mut self.settled, &travel, dt);
-        body.wheels.iter().zip(ripples).enumerate().map(|(i, (w, ripple))| {
-            let impact_speed = body.wheel_impacts.iter().filter(|hit| hit.obstacle == i).map(|hit| hit.speed).fold(0.0, f32::max);
-            bump_strength(ripple, impact_speed, kmh) * if w.steered { 1.0 } else { 0.55 }
-        }).fold(0.0, f32::max)
+        body.wheels
+            .iter()
+            .zip(ripples)
+            .enumerate()
+            .map(|(i, (w, ripple))| {
+                let impact_speed = body
+                    .wheel_impacts
+                    .iter()
+                    .filter(|hit| hit.obstacle == i)
+                    .map(|hit| hit.speed)
+                    .fold(0.0, f32::max);
+                bump_strength(ripple, impact_speed, kmh) * if w.steered { 1.0 } else { 0.55 }
+            })
+            .fold(0.0, f32::max)
     }
 }
 
@@ -256,11 +293,15 @@ fn settle(settled: &mut Vec<f32>, travel: &[f32], dt: f32) -> Vec<f32> {
         *settled = travel.to_vec();
     }
     let k = 1.0 - (-dt.max(0.0) / 0.1).exp();
-    travel.iter().zip(settled.iter_mut()).map(|(t, s)| {
-        let ripple = t - *s;
-        *s += ripple * k;
-        ripple
-    }).collect()
+    travel
+        .iter()
+        .zip(settled.iter_mut())
+        .map(|(t, s)| {
+            let ripple = t - *s;
+            *s += ripple * k;
+            ripple
+        })
+        .collect()
 }
 
 fn bump_strength(ripple: f32, impact_speed: f32, kmh: f32) -> f32 {
@@ -297,17 +338,30 @@ pub struct FfTune {
 
 impl Default for FfTune {
     fn default() -> Self {
-        Self { centring: 1.0, damping: 1.0, parking: 1.0, min_force: 0.0, smoothing: 0.0 }
+        Self {
+            centring: 1.0,
+            damping: 1.0,
+            parking: 1.0,
+            min_force: 0.0,
+            smoothing: 0.0,
+        }
     }
 }
 
 impl FfTune {
     /// Each value's range, in the order of the file's lines.
-    pub const RANGES: [(f32, f32); 5] = [(0.0, 2.0), (0.0, 3.0), (0.0, 2.0), (0.0, 0.2), (0.0, 0.05)];
+    pub const RANGES: [(f32, f32); 5] =
+        [(0.0, 2.0), (0.0, 3.0), (0.0, 2.0), (0.0, 0.2), (0.0, 0.05)];
 
     /// The values in the order the file keeps them.
     pub fn values(&self) -> [f32; 5] {
-        [self.centring, self.damping, self.parking, self.min_force, self.smoothing]
+        [
+            self.centring,
+            self.damping,
+            self.parking,
+            self.min_force,
+            self.smoothing,
+        ]
     }
 
     /// From the file's order, each value brought into its range (a value that is no number
@@ -317,9 +371,19 @@ impl FfTune {
         let v: [f32; 5] = std::array::from_fn(|i| {
             let (lo, hi) = FfTune::RANGES[i];
             // (+ 0.0: a -0 is written "-0.000", which is no default to the file)
-            values.get(i).copied().filter(|v| !v.is_nan()).map_or(d[i], |v| v.clamp(lo, hi) + 0.0)
+            values
+                .get(i)
+                .copied()
+                .filter(|v| !v.is_nan())
+                .map_or(d[i], |v| v.clamp(lo, hi) + 0.0)
         });
-        FfTune { centring: v[0], damping: v[1], parking: v[2], min_force: v[3], smoothing: v[4] }
+        FfTune {
+            centring: v[0],
+            damping: v[1],
+            parking: v[2],
+            min_force: v[3],
+            smoothing: v[4],
+        }
     }
 
     /// The same tuning with every value in its range.
@@ -331,8 +395,24 @@ impl FfTune {
 /// The force on a wheel as the bus feels it, with the stock tuning and no smoothing (the
 /// tests' way into `tuned_wheel_force`).
 #[cfg(test)]
-pub(super) fn wheel_force(f: &FfInput, x: f32, x0: f32, t: &mut f32, k_springs: f32, k_effects: f32) -> f32 {
-    tuned_wheel_force(f, x, x0, t, &mut 0.0, k_springs, k_effects, &FfTune::default())
+pub(super) fn wheel_force(
+    f: &FfInput,
+    x: f32,
+    x0: f32,
+    t: &mut f32,
+    k_springs: f32,
+    k_effects: f32,
+) -> f32 {
+    tuned_wheel_force(
+        f,
+        x,
+        x0,
+        t,
+        &mut 0.0,
+        k_springs,
+        k_effects,
+        &FfTune::default(),
+    )
 }
 
 /// The force on a wheel standing at `x` (-1 full left .. 1), `x0` the frame before: -1..1.
@@ -346,7 +426,16 @@ pub(super) fn wheel_force(f: &FfInput, x: f32, x0: f32, t: &mut f32, k_springs: 
 /// default tuning the force is the very same as it was before the tuning existed: every
 /// weight is a multiplication by one, which changes no bit of a float.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn tuned_wheel_force(f: &FfInput, x: f32, x0: f32, t: &mut f32, smoothed: &mut f32, k_springs: f32, k_effects: f32, tune: &FfTune) -> f32 {
+pub(super) fn tuned_wheel_force(
+    f: &FfInput,
+    x: f32,
+    x0: f32,
+    t: &mut f32,
+    smoothed: &mut f32,
+    k_springs: f32,
+    k_effects: f32,
+    tune: &FfTune,
+) -> f32 {
     let dt = f.dt.max(1e-3);
     let v = f.kmh.abs();
     let x = x.clamp(-1.0, 1.0);
@@ -372,7 +461,8 @@ pub(super) fn tuned_wheel_force(f: &FfInput, x: f32, x0: f32, t: &mut f32, smoot
     // The tyre cannot self-align the steering while the bus is stationary. Preserve
     // parking drag against wheel movement, and bring the spring back as it rolls.
     let spring = -(spring_strength * x / (0.5 + 1.15 * x.abs()) + centre_return) * rolling;
-    let road_align = -(f.lateral_accel / 9.81).clamp(-0.45, 0.45) * 0.25 * (v / 5.0).clamp(0.0, 1.0) * rolling;
+    let road_align =
+        -(f.lateral_accel / 9.81).clamp(-0.45, 0.45) * 0.25 * (v / 5.0).clamp(0.0, 1.0) * rolling;
     // Assisted steering should not demand ever more hand force near full lock.
     let lock_assist = 1.0 / (1.0 + 0.55 * x * x);
     let turning_speed = ((x - x0) / dt).clamp(-4.0, 4.0);
@@ -396,16 +486,26 @@ pub(super) fn tuned_wheel_force(f: &FfInput, x: f32, x0: f32, t: &mut f32, smoot
     // degrees of a return are left to the centring, which a wheel's own friction would
     // otherwise stop short)
     let back = ((0.03 - x * turning_speed.signum()) / 0.06).clamp(0.0, 1.0);
-    let fast_back = 0.35 * (turning_speed.abs() - 0.15).max(0.0) * turning_speed.signum() * back * back * (3.0 - 2.0 * back);
+    let fast_back = 0.35
+        * (turning_speed.abs() - 0.15).max(0.0)
+        * turning_speed.signum()
+        * back
+        * back
+        * (3.0 - 2.0 * back);
     let damping = -(0.03 * turning_speed + fast_back) * rolling;
     *t += dt;
     let period = (f.vib_period * 0.01).max(0.02);
     let shake = f.vib_amp.clamp(0.0, 1.0) * VIB_SHARE * (std::f32::consts::TAU * *t / period).sin();
     // Preserve small road details while softening kerb-sized peaks. One short
     // kick and rebound feels less like a continuously shaking wheel mount.
-    let bump = f.wheel_bump.clamp(0.0, 1.0).sqrt() * 0.46 * (std::f32::consts::TAU * f.wheel_bump_age * 6.5).cos();
+    let bump = f.wheel_bump.clamp(0.0, 1.0).sqrt()
+        * 0.46
+        * (std::f32::consts::TAU * f.wheel_bump_age * 6.5).cos();
     let tune = tune.clamped();
-    let mut steering = ((spring + road_align) * tune.centring * lock_assist * assist + drag * tune.parking) * moving_steering_gain + damping * tune.damping;
+    let mut steering = ((spring + road_align) * tune.centring * lock_assist * assist
+        + drag * tune.parking)
+        * moving_steering_gain
+        + damping * tune.damping;
     // A belt- or gear-driven wheel loses the first few per cent of its force in its own
     // friction, so the last degrees of a return and the light pull of a gentle curve never
     // reach the hands. Lift every force past that by `min_force`, eased in over the first
@@ -423,7 +523,8 @@ pub(super) fn tuned_wheel_force(f: &FfInput, x: f32, x0: f32, t: &mut f32, smoot
     };
     *smoothed = steering;
     let micro = f.micro.clamp(-1.0, 1.0);
-    (steering * k_springs.clamp(0.0, 2.0) + (shake + bump + micro) * k_effects.clamp(0.0, 2.0)).clamp(-1.0, 1.0)
+    (steering * k_springs.clamp(0.0, 2.0) + (shake + bump + micro) * k_effects.clamp(0.0, 2.0))
+        .clamp(-1.0, 1.0)
 }
 
 #[cfg(test)]

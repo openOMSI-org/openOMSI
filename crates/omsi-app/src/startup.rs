@@ -209,13 +209,29 @@ pub(crate) fn find_root() -> Option<PathBuf> {
 /// own graphics library (the `*-mx` crates, `openomsi_game_mx`), and wgpu is never started;
 /// off, the game runs on wgpu alone and nothing of mX is started. Read once at the start.
 pub fn mx_graphics() -> bool {
-    settings::Settings::load().mx_graphics
+    mx_asked().unwrap_or_else(|| settings::Settings::load().mx_graphics)
+}
+
+/// `OMSI_MX` for this run, over the setting: on (1, true) starts the game on mX, off (0,
+/// false) on wgpu; unset, the setting decides.
+fn mx_asked() -> Option<bool> {
+    let asked = omsi_cfg::flags::OMSI_MX
+        .var()
+        .map(|v| v.trim().to_ascii_lowercase());
+    match asked.as_deref() {
+        Some("1" | "on" | "true" | "yes") => Some(true),
+        Some("0" | "off" | "false" | "no") => Some(false),
+        _ => None,
+    }
 }
 
 /// [`mx_graphics`], from the settings under `home` (the phones' entry points ask before they
 /// set HOME, which the mX game sets again in its own).
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn mx_graphics_in(home: &std::path::Path) -> bool {
+    if let Some(asked) = mx_asked() {
+        return asked;
+    }
     let text =
         std::fs::read_to_string(home.join(".openomsi").join("settings.cfg")).unwrap_or_default();
     settings::Settings::from_text(&text).mx_graphics
@@ -837,12 +853,14 @@ pub(crate) struct SessionSettings {
     pub(crate) sound_scenery: f32,
     pub(crate) mirror_size: u32,
     pub(crate) rain_quality: u8,
+    /// The `pax_stop_numbers_exact` setting (#3154), read when the map index is built.
+    pub(crate) pax_stop_numbers_exact: bool,
 }
 
 #[rustfmt::skip]
 impl Default for SessionSettings {
     fn default() -> SessionSettings {
-        SessionSettings { enhanced_plus: false, enhanced: false, classic: false, clouds: true, sound_scenery: 1.0, mirror_size: 256, rain_quality: 2 }
+        SessionSettings { enhanced_plus: false, enhanced: false, classic: false, clouds: true, sound_scenery: 1.0, mirror_size: 256, rain_quality: 2, pax_stop_numbers_exact: false }
     }
 }
 
@@ -861,6 +879,7 @@ impl SessionSettings {
             sound_scenery: settings.vol_scenery,
             mirror_size: settings.mirror_size,
             rain_quality: crate::rain::quality_of(&settings.rain_quality),
+            pax_stop_numbers_exact: settings.pax_stop_numbers_exact,
         }
     }
 
@@ -892,6 +911,7 @@ impl SessionSettings {
         world.settings.set_sound_scenery(self.sound_scenery);
         world.settings.set_mirror_size(self.mirror_size);
         world.settings.set_rain_quality(self.rain_quality);
+        world.settings.set_stop_numbers_exact(self.pax_stop_numbers_exact);
     }
 
     /// The scene's graphics kind (Vanilla before Enhanced, as the showroom may ask both).

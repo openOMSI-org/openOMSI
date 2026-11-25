@@ -56,7 +56,7 @@ impl SceneBase {
                 view_formats: &[],
             })
             .expect("mX: a texture");
-        let lm_uniform = uniform_buffer(device, "light map atlas place", 16);
+        let lm_uniform = frame_buffer(device, "light map atlas place", 16);
         let snow_track = device
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("snow track field"),
@@ -67,7 +67,7 @@ impl SceneBase {
                 usage: mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
             })
             .expect("mX: a buffer");
-        let snow_track_uniform = uniform_buffer(device, "snow track field place", 32);
+        let snow_track_uniform = frame_buffer(device, "snow track field place", 32);
         // coronas: camera group + a corona texture group
         let vertex_layout = mx::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,
@@ -105,6 +105,8 @@ impl SceneBase {
         terrain_paint: bool,
         samples: u32,
         surfaces: bool,
+        lean: Lean,
+        weather: usize,
     ) -> mx::RenderPipeline {
         let use_alpha_to_coverage = alpha_to_coverage && samples > 1;
         let constants: Vec<(&str, f64)> = [
@@ -114,6 +116,24 @@ impl SceneBase {
                 if use_alpha_to_coverage { 1.0 } else { 0.0 },
             ),
             ("TERRAIN_PAINT", if terrain_paint { 1.0 } else { 0.0 }),
+            ("LEAN", if lean != Lean::No { 1.0 } else { 0.0 }),
+            ("LEAN_GLASS", if lean == Lean::Glass { 1.0 } else { 0.0 }),
+            (
+                "WET",
+                if lean == Lean::No || weather & 1 != 0 {
+                    1.0
+                } else {
+                    0.0
+                },
+            ),
+            (
+                "SNOW",
+                if lean == Lean::No || weather & 2 != 0 {
+                    1.0
+                } else {
+                    0.0
+                },
+            ),
         ]
         .into_iter()
         .chain(self.trees.iter().copied())
@@ -181,7 +201,7 @@ impl SceneBase {
 
     /// The ground albedo pass's pipelines (`fs_ground`): the terrain's opaque base (0 to 3:
     /// two-sided or culled, without or with the surface bias) and its paint layers blended
-    /// over it (4 to 7). Depth is only tested, against the depth prepass's.
+    /// over it (4 to 7), into a depth of the terrain's own (see `encode_ground`).
     pub(crate) fn ground_pipeline_at(
         &self,
         device: &mx::Device,
@@ -214,9 +234,10 @@ impl SceneBase {
                     buffers: &[self.vertex_layout.clone()],
                 },
                 primitive: one_sided_primitive(cull),
+                // (the terrain's own depth: the base writes it, its paint is tested against it)
                 depth_stencil: Some(mx::DepthStencilState {
                     format: DEPTH_FORMAT,
-                    depth_write_enabled: false,
+                    depth_write_enabled: !paint,
                     depth_compare: mx::CompareFunction::GreaterEqual,
                     stencil: Default::default(),
                     bias: mx::DepthBiasState {
@@ -254,6 +275,8 @@ impl SceneBase {
         samples: u32,
         index: usize,
         surfaces: bool,
+        lean: Lean,
+        weather: usize,
     ) -> mx::RenderPipeline {
         let kind = (index / 4) as u8;
         let (cull, surface) = (index & 2 != 0, index & 1 != 0);
@@ -276,6 +299,8 @@ impl SceneBase {
             kind == PIPE_TERRAIN_PAINT && fs.starts_with("fs_enhanced"),
             samples,
             surfaces,
+            lean,
+            weather,
         )
     }
 }
