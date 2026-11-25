@@ -785,9 +785,6 @@ impl OmsiFrames {
     }
 }
 
-/// The body-frame acceleration the scripts see as `A_Trans_*` (Omsi.exe 0x7d5124: the
-/// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
-/// an accelerometer would read, less gravity's share in the body frame.
 /// `n_Wheel` (rpm) of a vehicle the AI moves along its path: Omsi.exe (0x7debb0) takes it
 /// straight from the speed, 60·v / (π·d) with `d` the first axle's wheel size, the rpm a
 /// wheel of that size turns at rolling straight ahead - whichever axle drives and however
@@ -813,6 +810,9 @@ pub(super) fn ai_wheel_rpm(speed: f32, diameter: f32) -> f32 {
     }
 }
 
+/// The body-frame acceleration the scripts see as `A_Trans_*` (Omsi.exe 0x7d5124: the
+/// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
+/// an accelerometer would read, less gravity's share in the body frame.
 pub(super) fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
     accel_body - orientation.inverse().mul_vec3(Vec3::new(0.0, 0.0, 9.81))
 }

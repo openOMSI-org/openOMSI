@@ -4659,6 +4659,22 @@ fn units_setting(v: &str) -> &'static str {
 }
 
 // (one setting a line, as the settings file has them: rustfmt would triple it)
+/// The `rain_quality`, `vehicle_smoke` and `puddles` lines of the settings file.
+fn weather_effects_text(v: &Value) -> String {
+    let s = |key: &str, default: &'static str| -> String {
+        v.get(key)
+            .and_then(|x| x.as_str())
+            .unwrap_or(default)
+            .to_string()
+    };
+    format!(
+        "rain_quality={}\nvehicle_smoke={}\npuddles={}\n",
+        rain_quality(&s("rain_quality", "high")),
+        vehicle_smoke(&s("vehicle_smoke", "all")),
+        puddles(&s("puddles", "high"))
+    )
+}
+
 pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let b = |k: &str, d: bool| v.get(k).and_then(|x| x.as_bool()).unwrap_or(d) as u8;
     // a number, also as the string a select gives
@@ -5102,26 +5118,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("light_glow", false),
         b("volumetric_fog", true)
     ));
-    text.push_str(&format!(
-        "rain_quality={}\n",
-        rain_quality(
-            v.get("rain_quality")
-                .and_then(|x| x.as_str())
-                .unwrap_or("high")
-        )
-    ));
-    text.push_str(&format!(
-        "vehicle_smoke={}\n",
-        vehicle_smoke(
-            v.get("vehicle_smoke")
-                .and_then(|x| x.as_str())
-                .unwrap_or("all")
-        )
-    ));
-    text.push_str(&format!(
-        "puddles={}\n",
-        puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))
-    ));
+    text.push_str(&weather_effects_text(v));
     text.push_str(&format!(
         "road_glare={}\ntraffic_headlights={}\n",
         f("road_glare", 1.0).clamp(0.0, 2.0),

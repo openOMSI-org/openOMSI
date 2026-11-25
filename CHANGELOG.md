@@ -32,11 +32,22 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   ([#3593](https://github.com/openOMSI-org/openOMSI/pull/3593)).
 - **Scripts read the track**: `omsi.bus.track()`, a first step towards a rail simulation
   ([#4051](https://github.com/openOMSI-org/openOMSI/pull/4051)).
+- **Cruise control on Num0**: it holds the speed the bus has when it is switched on, by
+  working the pedals the bus's scripts read; the brake pedal or key switches it off
+  ([#4043](https://github.com/openOMSI-org/openOMSI/pull/4043)).
+- **Enhanced lighting and colour grade**: curved clouds in Vanilla, `[light_emitter_interior]`,
+  height maps for PBR materials, and inverted normal maps drawn the right way round
+  ([#4241](https://github.com/openOMSI-org/openOMSI/pull/4241)).
+- **The launcher's add-on list is read from the add-ons-list repository** each time the page
+  opens, so a new add-on shows up without a new release ([#4260](https://github.com/openOMSI-org/openOMSI/pull/4260)).
 
 ### Multiplayer
 
 - **A hosted LAN session sets the buses its players drive**
   ([#4100](https://github.com/openOMSI-org/openOMSI/pull/4100)).
+
+- **The public server list keeps its listings** when Cloudflare moves or restarts the list
+  between two heartbeats ([#4206](https://github.com/openOMSI-org/openOMSI/pull/4206)).
 
 - **Rail points lie the same way for every player**: the hosting game's points go to each
   player's game with the traffic lights (those within 600 m of its vehicle, once a second), and
@@ -50,8 +61,58 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   bogies stood off the rails or across the track in the other players' games. A game of the
   previous release still draws the first three.
 
+### As in OMSI 2
+
+What Omsi.exe does, read from the game itself, where openOMSI did something of its own:
+
+- **Weather**: `.owt` files are read with Omsi.exe's defaults and its short `[precip]` block;
+  the wind blows from its direction at Omsi.exe's angle; `PrecipRate` is the strength whatever
+  falls; the windscreen wets at Omsi.exe's rate in rain and dries in twenty seconds after it;
+  the sun stands where Omsi.exe puts it ([#4218](https://github.com/openOMSI-org/openOMSI/pull/4218), [#4231](https://github.com/openOMSI-org/openOMSI/pull/4231), [#4232](https://github.com/openOMSI-org/openOMSI/pull/4232), [#4233](https://github.com/openOMSI-org/openOMSI/pull/4233), [#4220](https://github.com/openOMSI-org/openOMSI/pull/4220), [#4217](https://github.com/openOMSI-org/openOMSI/pull/4217)).
+- **Street lamps, the AI's lights and `Envir_Brightness`** follow Omsi.exe's daylight sum
+  under the weather: under an overcast deck, in fog, rain or snow the lamps come on by day
+  ([#4219](https://github.com/openOMSI-org/openOMSI/pull/4219)).
+- **Traffic lights**: AI cars stop for red, red-and-yellow and yellow alike and go on only
+  once their front is over the line; a light without `[approachdist]` is asked from 10 m;
+  lights on rails are asked as far ahead as the path search runs; a program point on a light
+  number the crossing does not have waits on light 0; `if_request` is set by any line but
+  "0" ([#4235](https://github.com/openOMSI-org/openOMSI/pull/4235), [#4209](https://github.com/openOMSI-org/openOMSI/pull/4209), [#4246](https://github.com/openOMSI-org/openOMSI/pull/4246), [#4210](https://github.com/openOMSI-org/openOMSI/pull/4210), [#4234](https://github.com/openOMSI-org/openOMSI/pull/4234)).
+- **AI cars spawn on the lanes that run past the player**, not only on those that start near
+  ([#4200](https://github.com/openOMSI-org/openOMSI/pull/4200)).
+- **Physics**: `[mass]` is tonnes however large; the body has no air drag of its own and no
+  rolling resistance unless the file gives `[rollwiderstand]` (the scripts add both, as in
+  OMSI 2); `n_Wheel` is the mean of the driven wheels, an AI vehicle's its speed over the
+  first wheel; `Velocity` is 0 without a driven axle; AI vehicles' and coupled parts' wheels
+  turn at their own speed over their own size ([#4238](https://github.com/openOMSI-org/openOMSI/pull/4238), [#4207](https://github.com/openOMSI-org/openOMSI/pull/4207), [#4208](https://github.com/openOMSI-org/openOMSI/pull/4208), [#4237](https://github.com/openOMSI-org/openOMSI/pull/4237), [#4236](https://github.com/openOMSI-org/openOMSI/pull/4236), [#4247](https://github.com/openOMSI-org/openOMSI/pull/4247)).
+- **Scripts**: a block without `{end}` runs on into the next; a macro call finds only a
+  macro defined below it; only the first `{init}`, `{frame}` and `{frame_ai}` run;
+  `(T.F.x)` leaves the file name on the string stack, an empty name plays the entry's own
+  file again and a blank one stops the entry ([#4215](https://github.com/openOMSI-org/openOMSI/pull/4215), [#4214](https://github.com/openOMSI-org/openOMSI/pull/4214), [#4242](https://github.com/openOMSI-org/openOMSI/pull/4242), [#4216](https://github.com/openOMSI-org/openOMSI/pull/4216), [#4240](https://github.com/openOMSI-org/openOMSI/pull/4240), [#4248](https://github.com/openOMSI-org/openOMSI/pull/4248)).
+- **Sound**: `[onlyone]` sounds play once, from the nearest object; `[sound_maxcount]` (from
+  OMSI's options.cfg, 200 by default) silences whole sound packs, the farthest first
+  ([#4213](https://github.com/openOMSI-org/openOMSI/pull/4213), [#4239](https://github.com/openOMSI-org/openOMSI/pull/4239)).
+- **Passengers**: stops fill bit by bit as a scheduled bus draws near and stop filling for a
+  bus that has passed; passengers choose their entry door, pay with coins and notes drawn as
+  Omsi.exe draws them, and count the change to half the currency's unit; the cash desk's change
+  keys give the coin the script names ([#4211](https://github.com/openOMSI-org/openOMSI/pull/4211), [#4230](https://github.com/openOMSI-org/openOMSI/pull/4230), [#4249](https://github.com/openOMSI-org/openOMSI/pull/4249), [#4245](https://github.com/openOMSI-org/openOMSI/pull/4245), [#4212](https://github.com/openOMSI-org/openOMSI/pull/4212), [#4198](https://github.com/openOMSI-org/openOMSI/pull/4198)).
+- **Full Tank charges an electric bus's battery too** ([#4199](https://github.com/openOMSI-org/openOMSI/pull/4199)).
+
 ### Fixes
 
+- **Enhanced graphics**: far lamps are round points of light instead of torn squares, the
+  shaded parts of the clouds have no grid of diamonds, bus windows are no longer grey, fences
+  and railings are lit by the sun on their facing side only, wet road reflections have no grid,
+  and rain, sky and night lighting are cleaned up ([#4259](https://github.com/openOMSI-org/openOMSI/pull/4259), [#4262](https://github.com/openOMSI-org/openOMSI/pull/4262), [#4224](https://github.com/openOMSI-org/openOMSI/pull/4224), [#4205](https://github.com/openOMSI-org/openOMSI/pull/4205), [#4192](https://github.com/openOMSI-org/openOMSI/pull/4192), [#4193](https://github.com/openOMSI-org/openOMSI/pull/4193)).
+- **A Direct3D 12 device lost to ray tracing** no longer ends the game, and the Vulkan device
+  the game goes on with keeps its full pipelines ([#4226](https://github.com/openOMSI-org/openOMSI/pull/4226)).
+- **The IBIS keeps its line letter** when a destination is picked by hand ([#4253](https://github.com/openOMSI-org/openOMSI/pull/4253)).
+- **A duty started on today's date keeps its year** ([#4251](https://github.com/openOMSI-org/openOMSI/pull/4251)).
+- **Bus Company Simulator's `--paint`** is kept for a situation in the default paint
+  ([#4203](https://github.com/openOMSI-org/openOMSI/pull/4203)).
+- **A latching switch flipped in the pause menu** takes effect when the menu closes
+  ([#4202](https://github.com/openOMSI-org/openOMSI/pull/4202)).
+- **Android**: "Copy server code" puts the code on the clipboard, and the keyboard opens for the
+  join code and the chat ([#4204](https://github.com/openOMSI-org/openOMSI/pull/4204)).
 - **Far sounds no longer stutter**: with more sounds around than `[sound_maxcount]` allows,
   distant cars started their loops over several times a second, a mush of repeats.
 - **mX Graphics on OpenGL (ANGLE on macOS)**: blending works again - the interface's text and
