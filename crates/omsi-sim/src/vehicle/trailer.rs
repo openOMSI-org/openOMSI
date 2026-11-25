@@ -99,6 +99,9 @@ pub struct TrailerPart {
     pub(super) rest: Vec<(f32, f32, f32)>,
     /// The share of its weight the part hangs on its coupling with (N; see `joint_load`).
     pub(super) joint_load: f32,
+    /// The weight of the people aboard this part (kg, the `passenger_mass` setting; see
+    /// `VehicleInstance::set_passenger_load`).
+    pub load_kg: f32,
     /// `Axle_Brakeforce_<axle>_L/R` of this part's axles, in the leading vehicle's scripts.
     pub(super) v_brakes: Vec<Option<omsi_script::VarId>>,
     /// How far the part's origin stands above the ground under its axles (m).
@@ -424,6 +427,7 @@ impl TrailerPart {
             turned_put: 0.0,
             remote: false,
             reversed,
+            load_kg: 0.0,
             text_textures: Vec::new(),
             axle_ids: AxleVarIds::default(),
             skin_rest: Vec::new(),

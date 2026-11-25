@@ -3032,3 +3032,7 @@
 "no plugin is listening for commands": "tidak ada plugin yang mendengarkan perintah"
 "plugin command queue is full": "antrean perintah plugin penuh"
 
+"Passengers add weight to the bus": "Penumpang menambah berat bus"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Berat setiap penumpang, dari berkas .hum-nya, ditambahkan ke bus di tempat ia duduk atau berdiri: bus penuh berangkat, mengerem, dan menanjak sebagai kendaraan yang lebih berat; jika mati, berat bus sesuai berkasnya"
+"Passenger weight": "Berat penumpang"
+"For passengers whose file gives no weight; default 75 kg": "Untuk penumpang yang berkasnya tidak mencantumkan berat; bawaan 75 kg"

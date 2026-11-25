@@ -1883,3 +1883,27 @@ fn nan_obstacle_leaves_the_bus_alone() {
         rb.position
     );
 }
+
+/// #4014: with the people aboard as its load, a bus pulls away more slowly on the same drive.
+#[test]
+fn a_loaded_body_pulls_away_more_slowly() {
+    let speed_after = |loaded: bool| {
+        let mut rb = RigidBody::from_definition(&bus(), &[]);
+        rb.place(DVec3::ZERO, 0.0);
+        let g = road(1e9, 0.0);
+        run(&mut rb, 1.0, 0.0, 0.0, &g);
+        if loaded {
+            // 60 riders of 75 kg along the saloon
+            let loads: Vec<(f32, Vec3)> = (0..60)
+                .map(|k| (75.0, Vec3::new(0.0, -4.5 + k as f32 * 0.15, 1.2)))
+                .collect();
+            rb.set_load(&loads);
+            run(&mut rb, 1.0, 0.0, 0.0, &g);
+        }
+        run(&mut rb, 5.0, 3000.0, 0.0, &g);
+        rb.velocity.length()
+    };
+    let (empty, full) = (speed_after(false), speed_after(true));
+    assert!(empty > 1.0, "{empty}");
+    assert!(full < empty * 0.9, "empty {empty} m/s, full {full} m/s");
+}

@@ -315,7 +315,8 @@ Whether the bus kneels.
 
 `omsi.bus.mass()` → number or nil
 
-The bus's mass in kg.
+The bus's mass in kg. With **Passengers add weight to the bus** (`passenger_mass`) on, the weight
+of the riders in its front section is included (see [Passenger weight](DRIVING.md#passenger-weight)).
 
 *Since 0.2.22.*
 

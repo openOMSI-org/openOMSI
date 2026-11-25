@@ -2963,3 +2963,7 @@
 "Save under a name...": "บันทึกโดยตั้งชื่อ..."
 "No saved situation of this map yet": "ยังไม่มีสถานการณ์ที่บันทึกไว้ของแผนที่นี้"
 "Saved as \"{}\"": "บันทึกเป็น \"{}\" แล้ว"
+"Passengers add weight to the bus": "ผู้โดยสารเพิ่มน้ำหนักให้รถบัส"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "น้ำหนักของผู้โดยสารแต่ละคนจากไฟล์ .hum จะถูกเพิ่มให้รถบัสตรงที่เขานั่งหรือยืน: รถบัสที่เต็มจะออกตัว เบรก และขึ้นเนินเหมือนรถที่หนักกว่า; ปิดไว้ รถบัสหนักเท่าที่ไฟล์ระบุ"
+"Passenger weight": "น้ำหนักผู้โดยสาร"
+"For passengers whose file gives no weight; default 75 kg": "สำหรับผู้โดยสารที่ไฟล์ไม่ระบุน้ำหนัก; ค่าเริ่มต้น 75 kg"

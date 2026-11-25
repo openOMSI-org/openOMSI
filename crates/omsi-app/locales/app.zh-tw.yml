@@ -4483,3 +4483,7 @@
 "no plugin is listening for commands": "沒有外掛程式在監聽指令"
 "plugin command queue is full": "外掛程式指令佇列已滿"
 
+"Passengers add weight to the bus": "乘客增加公車重量"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "每位乘客 .hum 檔案中的重量，會加在他坐或站的位置上：滿載的公車會像較重的車輛一樣起步、煞車和爬坡；關閉時，公車重量與其檔案相同"
+"Passenger weight": "乘客重量"
+"For passengers whose file gives no weight; default 75 kg": "用於檔案未標明重量的乘客；預設 75 kg"

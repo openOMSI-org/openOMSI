@@ -2962,3 +2962,7 @@
 "Save under a name...": "I-save sa isang pangalan..."
 "No saved situation of this map yet": "Wala pang naka-save na sitwasyon ng mapang ito"
 "Saved as \"{}\"": "Na-save bilang \"{}\""
+"Passengers add weight to the bus": "Nagdaragdag ng bigat sa bus ang mga pasahero"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Idinaragdag sa bus ang bigat ng bawat pasahero, mula sa kanilang .hum file, kung saan sila nakaupo o nakatayo: ang punong bus ay umaandar, pumepreno at umaakyat bilang mas mabigat na sasakyan; kapag naka-off, ang bigat ng bus ay ayon sa file nito"
+"Passenger weight": "Bigat ng pasahero"
+"For passengers whose file gives no weight; default 75 kg": "Para sa mga pasaherong walang bigat sa kanilang file; default na 75 kg"

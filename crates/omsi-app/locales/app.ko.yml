@@ -3083,3 +3083,7 @@
 "no plugin is listening for commands": "명령을 수信 대기 중인 플러그인이 없습니다"
 "plugin command queue is full": "플러그인 명령 대기열이 가득 찼습니다"
 
+"Passengers add weight to the bus": "승객 무게를 버스에 더하기"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "각 승객의 .hum 파일 무게가 앉거나 선 위치에서 버스에 더해집니다. 꽉 찬 버스는 더 무거운 차량처럼 출발하고 제동하고 오르막을 오릅니다. 끄면 버스 무게는 파일에 적힌 그대로입니다"
+"Passenger weight": "승객 무게"
+"For passengers whose file gives no weight; default 75 kg": "파일에 무게가 없는 승객에게 적용; 기본값 75 kg"

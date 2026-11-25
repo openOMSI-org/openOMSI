@@ -78,6 +78,8 @@ pub mod tick;
 pub mod walk;
 #[rustfmt::skip]
 pub mod report;
+pub mod load;
+pub use load::{PassengerWeight, SectionLoads};
 #[rustfmt::skip]
 pub mod avatar;
 #[rustfmt::skip]

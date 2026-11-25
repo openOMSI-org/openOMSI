@@ -3254,3 +3254,7 @@
 "Save under a name...": "Атаумен сақтау..."
 "No saved situation of this map yet": "Бұл картаның сақталған жағдайы әзірге жоқ"
 "Saved as \"{}\"": "«{}» ретінде сақталды"
+"Passengers add weight to the bus": "Жолаушылар автобустың салмағын арттырады"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Әр жолаушының .hum файлындағы салмағы автобусқа ол отырған не тұрған жерде қосылады: толы автобус ауыр көлік ретінде қозғалады, тежейді және өрге шығады; өшірулі болса, автобус файлындағыдай салмақта"
+"Passenger weight": "Жолаушы салмағы"
+"For passengers whose file gives no weight; default 75 kg": "Файлында салмақ көрсетілмеген жолаушылар үшін; әдепкі 75 кг"

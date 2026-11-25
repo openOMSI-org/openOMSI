@@ -4109,3 +4109,7 @@
 "Save under a name...": "Desa amb un nom..."
 "No saved situation of this map yet": "Encara no hi ha cap situació desada d'aquest mapa"
 "Saved as \"{}\"": "Desat com a «{}»"
+"Passengers add weight to the bus": "Els passatgers afegeixen pes a l'autobús"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "El pes de cada passatger, del seu fitxer .hum, s'afegeix a l'autobús on seu o està dret: un autobús ple arrenca, frena i puja com el vehicle més pesat que és; desactivat, l'autobús pesa el que diu el seu fitxer"
+"Passenger weight": "Pes del passatger"
+"For passengers whose file gives no weight; default 75 kg": "Per als passatgers el fitxer dels quals no indica cap pes; per defecte 75 kg"

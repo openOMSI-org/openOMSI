@@ -2963,3 +2963,7 @@
 "Save under a name...": "Simpan dengan nama..."
 "No saved situation of this map yet": "Belum ada situasi tersimpan untuk peta ini"
 "Saved as \"{}\"": "Disimpan sebagai \"{}\""
+"Passengers add weight to the bus": "Penumpang menambah berat bas"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Berat setiap penumpang, daripada fail .hum mereka, ditambah kepada bas di tempat mereka duduk atau berdiri: bas penuh bergerak, membrek dan mendaki sebagai kenderaan yang lebih berat; jika dimatikan, berat bas mengikut failnya"
+"Passenger weight": "Berat penumpang"
+"For passengers whose file gives no weight; default 75 kg": "Untuk penumpang yang failnya tiada berat; lalai 75 kg"

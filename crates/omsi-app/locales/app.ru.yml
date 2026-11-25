@@ -4482,3 +4482,7 @@
 "no plugin is listening for commands": "ни один плагин не слушает команды"
 "plugin command queue is full": "очередь команд плагинов заполнена"
 
+"Passengers add weight to the bus": "Пассажиры увеличивают массу автобуса"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Вес каждого пассажира из его файла .hum добавляется к автобусу там, где он сидит или стоит: полный автобус трогается, тормозит и поднимается в гору как более тяжёлая машина; выключено - автобус весит столько, сколько указано в его файле"
+"Passenger weight": "Вес пассажира"
+"For passengers whose file gives no weight; default 75 kg": "Для пассажиров, в файле которых вес не указан; по умолчанию 75 кг"

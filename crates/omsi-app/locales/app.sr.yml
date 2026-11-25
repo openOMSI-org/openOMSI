@@ -4483,3 +4483,7 @@
 "no plugin is listening for commands": "nijedan dodatak ne sluša komande"
 "plugin command queue is full": "ред команди додатака је пун"
 
+"Passengers add weight to the bus": "Putnici povećavaju masu autobusa"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Težina svakog putnika iz njegove .hum datoteke dodaje se autobusu tamo gde sedi ili stoji: pun autobus kreće, koči i penje se kao teže vozilo; isključeno - autobus je težak koliko piše u njegovoj datoteci"
+"Passenger weight": "Težina putnika"
+"For passengers whose file gives no weight; default 75 kg": "Za putnike čija datoteka ne navodi težinu; podrazumevano 75 kg"

@@ -3647,3 +3647,7 @@
 "Save under a name...": "以名称保存..."
 "No saved situation of this map yet": "这张地图还没有已保存的场景"
 "Saved as \"{}\"": "已保存为“{}”"
+"Passengers add weight to the bus": "乘客增加公交车重量"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "每位乘客 .hum 文件中的重量会加在其坐或站的位置上：满载的公交车会像更重的车辆一样起步、制动和爬坡；关闭时，公交车重量与其文件一致"
+"Passenger weight": "乘客重量"
+"For passengers whose file gives no weight; default 75 kg": "用于文件未标明重量的乘客；默认 75 kg"

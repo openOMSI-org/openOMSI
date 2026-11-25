@@ -3464,6 +3464,11 @@ fn passenger_defaults(v: &mut Value) {
     v["passenger_hailing"] = json!(false);
     v["passenger_full_bus_reaction"] = json!(false);
     v["pax_short_rides_stand"] = json!(false);
+    // (#4014: the riders' weight on the bus's physics, off by default)
+    v["passenger_mass"] = json!(false);
+    v["passenger_weight_kg"] = json!(75.0);
+    v["passenger_weight_fixed"] = json!(false);
+    v["passenger_weight_spread"] = json!(0.0);
 }
 
 /// Initial values shared by desktop and phone, kept outside the long settings parser.
@@ -4004,6 +4009,20 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     "simple"
                 })
             }
+            "passenger_weight_kg" | "passenger_weight_spread" => {
+                let (def, lo, hi) = if k == "passenger_weight_kg" {
+                    (75.0, 20.0, 200.0)
+                } else {
+                    (0.0, 0.0, 50.0)
+                };
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(def)
+                        .clamp(lo, hi)
+                )
+            }
             "passenger_transfer_percent" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4462,6 +4481,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "passenger_connections"
             | "passenger_hailing"
             | "passenger_full_bus_reaction"
+            | "passenger_mass"
+            | "passenger_weight_fixed"
             | "pax_short_rides_stand"
             | "auto_announce"
             | "rear_door_boarding"
@@ -5278,6 +5299,13 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!(
         "passenger_full_bus_reaction={}\n",
         b("passenger_full_bus_reaction", false)
+    ));
+    text.push_str(&format!(
+        "passenger_mass={}\npassenger_weight_kg={}\npassenger_weight_fixed={}\npassenger_weight_spread={}\n",
+        b("passenger_mass", false),
+        f("passenger_weight_kg", 75.0).clamp(20.0, 200.0),
+        b("passenger_weight_fixed", false),
+        f("passenger_weight_spread", 0.0).clamp(0.0, 50.0)
     ));
     text.push_str(&format!(
         "pax_short_rides_stand={}\n",

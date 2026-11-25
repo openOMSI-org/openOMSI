@@ -4416,3 +4416,7 @@
 "Save under a name...": "Salvar com um nome..."
 "No saved situation of this map yet": "Ainda não há situações salvas deste mapa"
 "Saved as \"{}\"": "Salvo como \"{}\""
+"Passengers add weight to the bus": "Os passageiros aumentam o peso do ônibus"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "O peso de cada passageiro, do seu arquivo .hum, é somado ao ônibus onde ele está sentado ou em pé: um ônibus cheio arranca, freia e sobe como o veículo mais pesado que é; desligado, o ônibus pesa o que diz o seu arquivo"
+"Passenger weight": "Peso do passageiro"
+"For passengers whose file gives no weight; default 75 kg": "Para passageiros cujo arquivo não informa o peso; padrão 75 kg"

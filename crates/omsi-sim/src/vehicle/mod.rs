@@ -32,6 +32,7 @@ mod coupling;
 mod drive;
 mod instance;
 mod light_emitters;
+mod load;
 mod panto;
 mod pose;
 mod program_ids;
