@@ -325,6 +325,7 @@ flags! {
     OMSI_GPU_LIMITS: Text, Test, Use, "-", "default or downlevel: request only the WebGPU default (or downlevel) limits. Set by the small_chip test.";
     OMSI_GPU_TIMERS: Bool, Debug, Use, "off", "Measure GPU time per pass with timestamp queries.";
     OMSI_GPU_TIMERS_RAW: Bool, Debug, Use, "off", "With OMSI_GPU_TIMERS: the passes in the order the GPU finished them.";
+    OMSI_GRADE: Text, Tuning, Once, "on", "0: Enhanced draws without its colour grade (white balance, saturation, the shadows' lift by the sun's height and the weather), for comparisons.";
     OMSI_GRAPHICS: Text, Tuning, Use, "settings", "vanilla, vanilla_plus or enhanced: another renderer for one run.";
     OMSI_GROUND_GAP: Text, Debug, Use, "-", "Offscreen CSV (or -): how far every drawn tyre stands over or sinks into the ground.";
     OMSI_GROUND_GAP_RADIUS: Num, Debug, Use, "150", "With OMSI_GROUND_GAP: the radius in metres.";
@@ -528,6 +529,7 @@ flags! {
     OMSI_TOMORROW_API_KEY: Text, Setup, Use, "private key file", "Private Tomorrow.io API key for map-selected weather; never include it in map configs or logs.";
     OMSI_TOMORROW_CACHE_DIR: Text, Setup, Use, "settings/weather-cache", "Private Tomorrow.io response cache and shared request-budget directory.";
     OMSI_TOMORROW_KEY_FILE: Text, Setup, Use, "settings/tomorrow-api-key.txt", "Private text file containing the player's Tomorrow.io API key.";
+    OMSI_TONEMAP: Text, Tuning, Once, "agx", "natural, agx or neutral: Enhanced's tone curve (the old natural curve, AgX, Khronos PBR Neutral).";
     OMSI_TONE_CONTRAST: Text, Tuning, Once, "1", "day[,night]: tone mapping contrast.";
     OMSI_TOUCH: Bool, Test, Use, "off", "The on-screen touch controls on a computer.";
     OMSI_TRACE_AI: Text, Debug, Use, "-", "CSV: every AI car's pose, steering and speed every frame.";

@@ -195,6 +195,7 @@ impl App {
             }
             "screenshot" => self.take_screenshot(),
             "flashlight" => self.toggle_flashlight(),
+            "cruise_control" => self.toggle_cruise(),
             "clean_screen" => self.toggle_clean_screen(),
             "get_up" => {
                 if self
@@ -621,6 +622,12 @@ impl App {
         if self.settings.info_bar != on {
             self.settings.info_bar = on;
             crate::game_lists::remember_setting("info_bar", if on { "1" } else { "0" });
+        }
+    }
+
+    pub(crate) fn toggle_cruise(&mut self) {
+        if let Some(p) = self.player.as_mut() {
+            self.service_msg = Some((p.toggle_cruise(), 2.5));
         }
     }
 

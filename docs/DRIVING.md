@@ -65,6 +65,7 @@ means the numeric keypad. A bus can use only some of them, and a mod bus may add
 | `R` / `N` | manual gearbox: reverse / neutral |
 | `Ctrl+Up` / `Ctrl+Down` | manual gearbox: gear up / down |
 | `[` / `/` | sequential gearbox: up / down (OMSI's `kw_s_plus` / `kw_s_minus`) |
+| `Num 0` | cruise control: holds the speed you drive at (above 5 km/h) by working the pedals; the brake switches it off, the throttle pressed further wins while held. Buses that use `Num 0` themselves keep it |
 
 ### Lights and indicators
 

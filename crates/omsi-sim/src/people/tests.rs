@@ -1792,10 +1792,11 @@ fn the_terminus_shown_is_the_display_scripts_row_before_the_ibis_row() {
     assert_eq!(shown_terminus_row(&termini, None, None, None), None);
 }
 
-/// With a door open, a shut door with a button draws nobody -
-/// people walk to the open one; with every door shut, the button door is the one to wait at.
+/// A shut door with a button (`{withbutton}`) counts as Omsi.exe counts it (sub_72506c,
+/// 0x7251f5): with every door shut it is the one to wait at, and with another door open it
+/// still draws the people nearest it, who ask for it; a shut door without one draws nobody.
 #[test]
-fn a_shut_button_door_draws_nobody_while_another_door_is_open() {
+fn a_shut_button_door_draws_the_people_nearest_it_as_in_omsi() {
     let dir = std::env::temp_dir().join(format!("omsi-button-door-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let write = |name: &str, text: &str| std::fs::write(dir.join(name), text).unwrap();
@@ -1865,7 +1866,8 @@ fn a_shut_button_door_draws_nobody_while_another_door_is_open() {
         ),
         Some(2)
     );
-    // the front open, the rear shut with its button: the front, even from the rear
+    // the front open, the rear shut with its button: the rear from the rear, the front
+    // from the front
     assert_eq!(
         cabin.omsi_nearest(
             near_rear,
@@ -1875,7 +1877,30 @@ fn a_shut_button_door_draws_nobody_while_another_door_is_open() {
             Some(&flags),
             Some(&[true, false])
         ),
+        Some(2)
+    );
+    assert_eq!(
+        cabin.omsi_nearest(
+            near_front,
+            &entries,
+            false,
+            false,
+            Some(&flags),
+            Some(&[true, false])
+        ),
         Some(0)
+    );
+    // the front shut (no button), the rear open: the rear, even from the front
+    assert_eq!(
+        cabin.omsi_nearest(
+            near_front,
+            &entries,
+            false,
+            false,
+            Some(&flags),
+            Some(&[false, true])
+        ),
+        Some(2)
     );
     // both open: the nearest
     assert_eq!(

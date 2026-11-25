@@ -239,6 +239,8 @@
 "High (512)": "Tinggi (512)"
 "Very high (1024)": "Sangat tinggi (1024)"
 "Boarding": "Cara menaiki bas"
+"Rear door boarding": "Naik melalui pintu belakang"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "Penumpang juga masuk melalui pintu belakang dan tengah: setiap orang menuju pintu terdekat di sisinya bas dan memintanya, bukan berbaris di hadapan. Buka pintu itu seperti biasa (kuncinya, semua pintu, atau pelepas pintu)"
 "Pay and take the ticket": "Bayar dan ambil tiket"
 "The driver sells the ticket": "Pemandu menjual tiket"
 "Just walk in": "Terus naik"
@@ -2928,6 +2930,9 @@
 "At most 5": "Maksimum 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Folder objek dan spline yang tidak digunakan oleh peta lain turut dipadam: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Folder objek dan spline yang masih digunakan oleh peta lain kekal: {n}."
+"Cruise control: {} km/h": "Kawalan pelayaran: {} km/j"
+"Cruise control off": "Kawalan pelayaran dimatikan"
+"Cruise control works above {} km/h": "Kawalan pelayaran berfungsi melebihi {} km/j"
 "Lighting": "Pencahayaan"
 "Weather & effects": "Cuaca dan kesan"
 "Mouse": "Tetikus"
@@ -3010,3 +3015,17 @@
 "Save under a name...": "Simpan dengan nama..."
 "No saved situation of this map yet": "Belum ada situasi tersimpan untuk peta ini"
 "Saved as \"{}\"": "Disimpan sebagai \"{}\""
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Pengumuman otomatis: HOF rute ini memiliki satu rekaman per halte, jadi tidak ada tombol yang perlu ditekan."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Pengumuman otomatis: bus ini tidak memiliki tombol IBIS \"halte berikutnya\", sehingga pengumumannya tetap mandiri."
+"Automatic announcements are off.": "Pengumuman otomatis nonaktif."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+
+"Draw other players' buses in less detail when far away": "Lukis bas pemain lain dengan kurang terperinci apabila jauh"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Pemain berganda: melangkaui 120 m dan di bawah 20 FPS, bas pemain lain mengekalkan badan tetapi menyembunyikan pemandu dan paparan destinasi; kembali penuh melebihi 26 FPS"
+
+"sent to the plugins": "dihantar ke pemalam"
+"no plugin is listening for commands": "tiada pemalam yang mendengar perintah"
+"plugin command queue is full": "barisan perintah pemalam penuh"
+

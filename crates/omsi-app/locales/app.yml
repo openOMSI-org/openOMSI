@@ -561,6 +561,10 @@ _version: 2
   en: "The driver sells the ticket"
 "Just walk in":
   en: "Just walk in"
+"Rear door boarding":
+  en: "Rear door boarding"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)":
+  en: "Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)"
 "Passengers pay the exact fare":
   en: "Passengers pay the exact fare"
 "Passengers react to bad driving":
@@ -8767,6 +8771,12 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
+"Cruise control: {} km/h":
+  en: "Cruise control: {} km/h"
+"Cruise control off":
+  en: "Cruise control off"
+"Cruise control works above {} km/h":
+  en: "Cruise control works above {} km/h"
 "Lighting":
   en: "Lighting"
 "Weather & effects":
@@ -8927,3 +8937,25 @@ _version: 2
   en: "No saved situation of this map yet"
 "Saved as \"{}\"":
   en: "Saved as \"{}\""
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.":
+  en: "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.":
+  en: "Automatic announcements are off."
+
+"Draw other players' buses in less detail when far away":
+  en: "Draw other players' buses in less detail when far away"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps":
+  en: "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps"
+
+"sent to the plugins":
+  en: "sent to the plugins"
+"no plugin is listening for commands":
+  en: "no plugin is listening for commands"
+"plugin command queue is full":
+  en: "plugin command queue is full"
+

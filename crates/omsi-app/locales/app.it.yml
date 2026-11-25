@@ -240,6 +240,8 @@
 "High (512)": "Alta (512)"
 "Very high (1024)": "Molto alta (1024)"
 "Boarding": "Salita a bordo"
+"Rear door boarding": "Salita dalla porta posteriore"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "I passeggeri salgono anche dalle porte posteriori e centrali: ognuno va alla porta più vicina sul proprio lato del bus e la richiede, invece di mettersi in fila davanti. Apri quella porta come al solito (il suo tasto, tutte le porte o lo sblocco porte)"
 "Pay and take the ticket": "Paga e ritira il biglietto"
 "The driver sells the ticket": "Il conducente vende il biglietto"
 "Just walk in": "Sali e basta"
@@ -3238,6 +3240,9 @@
 "At most 5": "Al massimo 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Le cartelle di oggetti e spline che nessun'altra mappa usa vengono eliminate insieme: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Le cartelle di oggetti e spline che un'altra mappa usa ancora vengono mantenute: {n}."
+"Cruise control: {} km/h": "Cruise control: {} km/h"
+"Cruise control off": "Cruise control disattivato"
+"Cruise control works above {} km/h": "Il cruise control funziona sopra i {} km/h"
 "Lighting": "Illuminazione"
 "Weather & effects": "Meteo ed effetti"
 "Mouse": "Mouse"
@@ -3320,3 +3325,17 @@
 "Save under a name...": "Salva con un nome..."
 "No saved situation of this map yet": "Ancora nessuna situazione salvata di questa mappa"
 "Saved as \"{}\"": "Salvato come «{}»"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Annunci automatici: il file HOF di questo percorso ha una registrazione per fermata, quindi non serve premere nulla."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Annunci automatici: questo autobus non ha il tasto IBIS \"prossima fermata\", quindi i suoi annunci restano autonomi."
+"Automatic announcements are off.": "Gli annunci automatici sono disattivati."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+
+"Draw other players' buses in less detail when far away": "Disegna gli autobus degli altri giocatori con meno dettagli da lontano"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multigiocatore: oltre i 120 m e sotto i 20 FPS, gli autobus degli altri giocatori mantengono la carrozzeria ma nascondono autista e display di destinazione; tornano completi sopra i 26 FPS"
+
+"sent to the plugins": "inviato ai plugin"
+"no plugin is listening for commands": "nessun plugin è in ascolto dei comandi"
+"plugin command queue is full": "la coda dei comandi dei plugin è piena"
+

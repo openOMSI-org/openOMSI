@@ -50,8 +50,14 @@ fn perturb_normal(n: vec3<f32>, p: vec3<f32>, uv: vec2<f32>, tn: vec3<f32>) -> v
     let duv2 = dpdy(uv);
     let dp2perp = cross(dp2, n);
     let dp1perp = cross(n, dp1);
-    let t = dp2perp * duv1.x + dp1perp * duv2.x;
-    let b = dp2perp * duv1.y + dp1perp * duv2.y;
+    // (the frame's handedness from the screen's: these are the uv's gradients times the
+    // determinant of the screen-to-surface map, whose sign is the screen's y axis - down in
+    // Direct3D, Metal and Vulkan. Normalised without it, both tangents came out reversed and
+    // every normal map lit its bumps from the wrong side)
+    let det = dot(dp1, dp2perp);
+    let sgn = select(-1.0, 1.0, det >= 0.0);
+    let t = (dp2perp * duv1.x + dp1perp * duv2.x) * sgn;
+    let b = (dp2perp * duv1.y + dp1perp * duv2.y) * sgn;
     let m = max(dot(t, t), dot(b, b));
     if (m < 1e-20) {
         return n;
@@ -175,3 +181,61 @@ fn pane_local(world: vec3<f32>) -> vec3<f32> {
     return b - camera.inside_c.xyz;
 }
 
+
+// Parallax occlusion mapping (a PBR set's height map, `foo_height`: in the ORM map's alpha,
+// white high): the uv the view ray meets the relief at, marched down into it from the
+// surface. The tangent frame and the texture's scale in the world come from the pixel's
+// derivatives (OMSI's meshes have no tangents); the relief is `POM_DEPTH` metres deep, so a
+// cobble or a brick joint is as deep on a coarse texture as on a fine one.
+const POM_DEPTH: f32 = 0.025;
+fn parallax_uv(uv: vec2<f32>, p: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec2<f32> {
+    let dp1 = dpdx(p);
+    let dp2 = dpdy(p);
+    let duv1 = dpdx(uv);
+    let duv2 = dpdy(uv);
+    let dp2perp = cross(dp2, n);
+    let dp1perp = cross(n, dp1);
+    let det = dot(dp1, dp2perp);
+    if (abs(det) < 1e-12) {
+        return uv;
+    }
+    // the uv's gradient in the world (how far u and v move per metre along the surface)
+    let gu = (dp2perp * duv1.x + dp1perp * duv2.x) / det;
+    let gv = (dp2perp * duv1.y + dp1perp * duv2.y) / det;
+    let vn = dot(v, n);
+    if (vn <= 0.05) {
+        return uv;
+    }
+    // (per metre down into the relief, the ray moves this far over the uv; grazing views
+    // are held so that the march does not smear the texture along the surface)
+    let slide = -(v - n * vn) / max(vn, 0.25);
+    let per_m = vec2<f32>(dot(slide, gu), dot(slide, gv));
+    let steps = mix(24.0, 8.0, vn);
+    let dz = POM_DEPTH / steps;
+    var depth = 0.0;
+    var q = uv;
+    var prev_gap = 0.0;
+    var prev_q = uv;
+    for (var i = 0; i < 24; i = i + 1) {
+        if (f32(i) >= steps) {
+            break;
+        }
+        let h = textureSampleGrad(t_pbr_orm, s_diffuse, q, duv1, duv2).a;
+        let gap = (1.0 - h) * POM_DEPTH - depth;
+        if (gap <= 0.0) {
+            // between the last step above the relief and this one under it
+            let t = prev_gap / max(prev_gap - gap, 1e-6);
+            return mix(prev_q, q, t);
+        }
+        prev_gap = gap;
+        prev_q = q;
+        depth = depth + dz;
+        q = uv + per_m * depth;
+    }
+    return q;
+}
+
+// The PBR set's normal map flag without the height map's mark (see omsi_texture::pbr).
+fn pbr_normal_flag() -> f32 {
+    return select(material.pbr.x, material.pbr.x - 4.0, material.pbr.x > 3.5);
+}

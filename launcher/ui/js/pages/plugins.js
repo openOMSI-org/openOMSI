@@ -99,7 +99,7 @@ function Browse({ onChanged }) {
     }
     setBusy((b) => ({ ...b, [p.id]: false }));
   };
-  const shown = (list || []).filter((p) => !q || `${p.name} ${p.author} ${p.description} ${(p.tags || []).join(' ')}`.toLowerCase().includes(q.toLowerCase()));
+  const shown = (list || []).filter((p) => !q || `${p.name} ${p.author || ''} ${p.description || ''} ${(p.tags || []).join(' ')}`.toLowerCase().includes(q.toLowerCase()));
   return html`
     <${Card} title="Browse" hint="Reviewed, open source plugins of the openOMSI plugin catalog." actions=${html`<div style="width:220px;max-width:100%"><${Search} value=${q} onInput=${setQ} /></div>`}>
       ${error && html`<${Notice} kind="danger"><span class="selectable">${t(error)}</span> <${Button} small kind="ghost" icon="refresh" label="Refresh" onClick=${read} /></${Notice}>`}
@@ -110,15 +110,17 @@ function Browse({ onChanged }) {
           : html`<div class="list" style="margin:0 -8px">${shown.map((p) => html`<div class="list-item" key=${p.id}>
               <${Icon} name="puzzle" />
               <div class="grow" style="min-width:0">
-                <div class="title">${p.name} <span class="muted small">${p.version}</span></div>
-                <div class="sub">${[p.author, p.license, ...(p.tags || [])].join(' - ')}</div>
-                <div class="small dim" style="margin-top:2px">${p.description}</div>
+                <div class="title">${p.name} <span class="muted small">${p.version || p.installed}</span></div>
+                ${!p.removed && html`<div class="sub">${[p.author, p.license, ...(p.tags || [])].filter(Boolean).join(' - ')}</div>`}
+                <div class="small dim" style="margin-top:2px">${p.removed ? t('This plugin was taken out of the catalog. It stays in your game until you remove it.') : p.description}</div>
                 ${p.update && html`<div style="margin-top:4px"><${Tag} kind="warn">${t('Update available')}: ${p.installed} → ${p.version}</${Tag}></div>`}
               </div>
               ${busy[p.id] && html`<${Spinner} />`}
-              <${Button} small kind="ghost" icon="external" title="Read the code" onClick=${() => source(p)} />
+              ${p.source && html`<${Button} small kind="ghost" icon="external" title="Read the code" onClick=${() => source(p)} />`}
               ${p.installed && html`<${Button} small kind="ghost" icon="trash" title="Remove" disabled=${!!busy[p.id]} onClick=${() => remove(p)} />`}
-              ${!p.installed
+              ${p.removed
+                ? html`<${Tag} kind="warn">${t('No longer in the catalog')}</${Tag}>`
+                : !p.installed
                 ? html`<${Button} small kind="primary" icon="download" label="Install" disabled=${!!busy[p.id]} onClick=${() => install(p)} />`
                 : p.update
                   ? html`<${Button} small kind="primary" icon="download" label="Update" disabled=${!!busy[p.id]} onClick=${() => install(p)} />`

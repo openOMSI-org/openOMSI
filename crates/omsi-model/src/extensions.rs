@@ -1,7 +1,7 @@
 //! openOMSI's own additions to the model vocabulary that need more than a line of the
 //! keyword handler: `[spotlight_cookie]`, and the tidying of `[illumination_interior]`.
 
-use super::Model;
+use super::{LightEmitterInterior, Model};
 use omsi_cfg::CfgReader;
 
 /// `[spotlight_cookie]` (openOMSI): a lamp whose beam is a picture - how strong and in what
@@ -112,6 +112,47 @@ impl Model {
                 "{}: [illumination_interior] of {bad_meshes} mesh(es) names lamps that do not exist or names one twice (first {file}: {list:?}, {n} [interiorlight]s); those entries are left out",
                 self.path.display()
             );
+        }
+    }
+}
+
+impl Model {
+    /// `[light_emitter_interior]` with its optional lines (see [`LightEmitterInterior`]): a
+    /// number for the strength, a whole number for the most lamps, a name for the variable;
+    /// a blank line, a free text line or the next keyword ends it.
+    pub(crate) fn read_light_emitter_interior(&mut self, r: &mut CfgReader) {
+        // (every line optional: a number for the strength, a whole number for the
+        // most lamps, a name for the variable; the next keyword ends it)
+        let mut e = LightEmitterInterior::default();
+        for k in 0..3 {
+            let save = r.pos();
+            let t = r.str().trim();
+            if t.is_empty() || omsi_cfg::keyword_of(t).is_some() {
+                r.seek(save);
+                break;
+            }
+            let num = t.replace(',', ".").parse::<f32>();
+            match (k, num) {
+                (0, Ok(v)) => e.strength = v.max(0.0),
+                (1, Ok(v)) => e.max_lamps = (v as u32).clamp(1, 16),
+                // (a free text line - a comment - is no variable name)
+                (_, Err(_))
+                    if t.chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                        && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') =>
+                {
+                    e.variable = Some(t.to_string());
+                    break;
+                }
+                _ => {
+                    r.seek(save);
+                    break;
+                }
+            }
+        }
+        if let Some(m) = self.cur_mesh() {
+            m.light_emitter_interior = Some(e);
         }
     }
 }

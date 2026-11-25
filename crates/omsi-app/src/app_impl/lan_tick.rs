@@ -233,6 +233,8 @@ impl App {
             self.renderer.as_ref(),
             self.scene.as_mut(),
         ) {
+            self.gfx.sim_view.lan.fps = self.perf.fps;
+            self.gfx.sim_view.lan.others_detail = self.settings.others_detail;
             crate::view_sync::apply_lan(
                 &mut self.net.remotes,
                 &mut self.gfx.sim_view.lan,

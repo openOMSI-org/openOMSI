@@ -1125,7 +1125,7 @@ pub(crate) fn shortfall_adaptation(log2_pre: f32, brighten: f32, gain: f32) -> (
 pub(crate) const ADAPT_TO_DARK_S: f32 = 3.0;
 pub(crate) const ADAPT_TO_LIGHT_S: f32 = 0.9;
 /// The tone curve's contrast about mid grey by day and at night (see `tone_contrast`).
-pub(crate) const TONE_CONTRAST_DAY: f32 = 1.22;
+pub(crate) const TONE_CONTRAST_DAY: f32 = 1.3;
 pub(crate) const TONE_CONTRAST_NIGHT: f32 = 0.94;
 /// How far night vision takes the colour out of a dark scene (post.wgsl `night_vision`).
 pub(crate) const NIGHT_VISION: f32 = 0.3;

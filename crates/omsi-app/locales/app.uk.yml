@@ -240,6 +240,8 @@
 "High (512)": "Висока (512)"
 "Very high (1024)": "Дуже висока (1024)"
 "Boarding": "Посадка"
+"Rear door boarding": "Посадка через задні двері"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "Пасажири заходять і через задні та середні двері: кожен іде до найближчих дверей зі свого боку автобуса й просить їх відчинити, а не стоїть у черзі спереду. Відчиняйте ці двері як завжди (їхньою клавішею, усіма дверима або розблокуванням дверей)"
 "Pay and take the ticket": "Платити й брати квиток"
 "The driver sells the ticket": "Водій продає квиток"
 "Just walk in": "Просто заходити"
@@ -3327,6 +3329,9 @@
 "At most 5": "Не більше 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Теки об'єктів і сплайнів, які не використовує жодна інша мапа, видаляються разом із ним: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Теки об'єктів і сплайнів, які ще використовує інша мапа, залишаються: {n}."
+"Cruise control: {} km/h": "Круїз-контроль: {} км/год"
+"Cruise control off": "Круїз-контроль вимкнено"
+"Cruise control works above {} km/h": "Круїз-контроль працює на швидкості понад {} км/год"
 "Lighting": "Освітлення"
 "Weather & effects": "Погода й ефекти"
 "Mouse": "Миша"
@@ -3409,3 +3414,16 @@
 "Save under a name...": "Зберегти під назвою..."
 "No saved situation of this map yet": "Для цієї мапи ще немає збережених ситуацій"
 "Saved as \"{}\"": "Збережено як «{}»"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Автоматичні оголошення: HOF-файл цього маршруту містить один запис на зупинку, натискати нічого не потрібно."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Автоматичні оголошення: цей автобус не має клавіші IBIS «наступна зупинка», тому його оголошення залишаються власними."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.": "Автоматичні оголошення вимкнено."
+
+"Draw other players' buses in less detail when far away": "Менше деталей в автобусах інших гравців здалеку"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Мережева гра: далі 120 м та при FPS нижче 20 автобуси інших гравців зберігають кузов, але приховують водіїв і покажчики маршруту; при понад 26 кадр/с деталі повертаються"
+
+"sent to the plugins": "надіслано плагінам"
+"no plugin is listening for commands": "жоден плагін не слухає команди"
+"plugin command queue is full": "черга команд плагінів заповнена"
+

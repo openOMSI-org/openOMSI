@@ -269,6 +269,8 @@
 "High (512)": "Hög (512)"
 "Very high (1024)": "Mycket hög (1024)"
 "Boarding": "Påstigning"
+"Rear door boarding": "Påstigning bak"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "Passagerare stiger även på vid de bakre och mellersta dörrarna: var och en går till närmaste dörr på sin sida av bussen och begär den, i stället för att köa framme. Öppna den dörren som vanligt (dess knapp, alla dörrar eller dörrfrigivningen)"
 "Pay and take the ticket": "Betala och ta biljetten"
 "The driver sells the ticket": "Föraren säljer biljetten"
 "Just walk in": "Gå bara på"
@@ -3826,6 +3828,9 @@
 "At most 5": "Högst 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Mappar med objekt och splines som ingen annan karta använder tas bort samtidigt: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Mappar med objekt och splines som en annan karta fortfarande använder blir kvar: {n}."
+"Cruise control: {} km/h": "Farthållare: {} km/h"
+"Cruise control off": "Farthållaren av"
+"Cruise control works above {} km/h": "Farthållaren fungerar över {} km/h"
 "Lighting": "Belysning"
 "Weather & effects": "Väder och effekter"
 "Mouse": "Mus"
@@ -3908,3 +3913,17 @@
 "Save under a name...": "Spara med ett namn..."
 "No saved situation of this map yet": "Ingen sparad situation för den här kartan än"
 "Saved as \"{}\"": "Sparat som ”{}”"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Automatiska utrop: denna linjes HOF-fil har en inspelning per hållplats, så det finns inget att trycka för."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Automatiska utrop: denna buss saknar IBIS-\"nästa hållplats\"-tangent, så dess utrop förblir dess egna."
+"Automatic announcements are off.": "Automatiska utrop är avstängda."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+
+"Draw other players' buses in less detail when far away": "Rita andra spelares bussar med mindre detalj på långt håll"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Flerspelarläge: bortom 120 m och vid under 20 FPS behåller andra bussar sin kaross men döljer förare och destinationsskyltar; de återgår helt över 26 FPS"
+
+"sent to the plugins": "skickat till insticksprogrammen"
+"no plugin is listening for commands": "inget insticksprogram lyssnar på kommandon"
+"plugin command queue is full": "insticksprogrammens kommandokö är full"
+

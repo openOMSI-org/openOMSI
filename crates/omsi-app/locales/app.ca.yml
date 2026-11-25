@@ -276,6 +276,8 @@
 "High (512)": "Alta (512)"
 "Very high (1024)": "Molt alta (1024)"
 "Boarding": "Embarcament"
+"Rear door boarding": "Pujada per la porta del darrere"
+"Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)": "Els passatgers també pugen per les portes del darrere i del mig: cadascun va a la porta més propera del seu costat de l'autobús i la demana, en comptes de fer cua al davant. Obriu aquella porta com sempre (la seva tecla, totes les portes o el desbloqueig de portes)"
 "Pay and take the ticket": "Paga i recull el bitllet"
 "The driver sells the ticket": "El conductor ven el bitllet"
 "Just walk in": "Entrada directa"
@@ -4074,6 +4076,9 @@
 "At most 5": "Com a màxim 5"
 "Folders of objects and splines that no other map uses go with it: {n}, {size}.": "Les carpetes d'objectes i splines que cap altre mapa no fa servir se suprimeixen amb ell: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.": "Les carpetes d'objectes i splines que un altre mapa encara fa servir es conserven: {n}."
+"Cruise control: {} km/h": "Control de creuer: {} km/h"
+"Cruise control off": "Control de creuer desactivat"
+"Cruise control works above {} km/h": "El control de creuer funciona per sobre de {} km/h"
 "Lighting": "Il·luminació"
 "Weather & effects": "Temps i efectes"
 "Mouse": "Ratolí"
@@ -4156,3 +4161,17 @@
 "Save under a name...": "Desa amb un nom..."
 "No saved situation of this map yet": "Encara no hi ha cap situació desada d'aquest mapa"
 "Saved as \"{}\"": "Desat com a «{}»"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Anuncis automàtics: el fitxer HOF d'aquesta ruta té un enregistrament per parada, no cal prémer res."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Anuncis automàtics: aquest autobús no té tecla IBIS de \"següent parada\", per tant manté els seus propis anuncis."
+"Automatic announcements are off.": "Els anuncis automàtics estan desactivats."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+
+"Draw other players' buses in less detail when far away": "Dibuixa els autobusos dels altres jugadors amb menys detall de lluny"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multijugador: més enllà de 120 m i sota 20 FPS, els autobusos d'altres jugadors mantenen la carrosseria però oculten conductors i rètols; es recuperen completament per sobre de 26 FPS"
+
+"sent to the plugins": "enviat als connectors"
+"no plugin is listening for commands": "cap connector no escolta ordres"
+"plugin command queue is full": "la cua d'ordres dels connectors és plena"
+

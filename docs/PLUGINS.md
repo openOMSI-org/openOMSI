@@ -1044,7 +1044,9 @@ Plugins that only work with paid add-ons are fine; say so in the description.
 - It installs a plugin as `plugins/<id>/` only when every file's size and SHA-256 match `catalog.json`.
 - It refuses to overwrite a `plugins/<id>/` folder that did not come from the catalog.
 - It offers an update when `version` goes up, and keeps `plugins/<id>/data/` on an update.
+- It reads `catalog.json` each time **Browse** opens: a plugin added to the catalog shows up at once, without a new openOMSI version.
 - **Remove** deletes the plugin's files, settings and saved data.
+- A plugin taken out of the catalog stays in the game of those who installed it (with its saved data); **Browse** marks it *No longer in the catalog* and offers **Remove**.
 - An entry that breaks a rule is left out of the list. A catalog newer than the launcher asks you to update openOMSI.
 
 ## Debugging

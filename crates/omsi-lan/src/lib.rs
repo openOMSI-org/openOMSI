@@ -21,6 +21,7 @@ mod join;
 pub mod map_pack;
 pub mod mirror;
 pub mod mods;
+pub mod others;
 pub mod parked;
 pub mod passenger;
 pub mod public_list;
