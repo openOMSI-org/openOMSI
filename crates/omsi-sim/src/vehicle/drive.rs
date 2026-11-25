@@ -27,6 +27,25 @@ pub(super) fn driven_wheels_speed(wheels: impl Iterator<Item = (f32, f32, bool)>
     (n > 0).then(|| sum / n as f32)
 }
 
+/// `n_Wheel` (rpm) as Omsi.exe works it out (0x7e2574, before it sets `Velocity`): each
+/// driven axle's two wheels' rpm times that axle's diameter, summed and divided by twice the
+/// driven axles times the diameter of the first axle - the mean turning of all driven
+/// wheels, as the first axle's wheel would turn at their speed. Each item is a wheel's
+/// (rpm, radius, driven); `first_radius` is the first axle's. `None` without driven wheels.
+/// (The first driven wheel's own rpm, read before, swung with the side of the bend it was on
+/// and with that one wheel spinning.)
+pub(super) fn driven_wheels_rpm(
+    wheels: impl Iterator<Item = (f32, f32, bool)>,
+    first_radius: f32,
+) -> Option<f32> {
+    let (sum, n) = wheels
+        .filter(|w| w.2)
+        .fold((0.0f32, 0u32), |(sum, n), (rpm, radius, _)| {
+            (sum + rpm * radius, n + 1)
+        });
+    (n > 0 && first_radius > 0.0).then(|| sum / (n as f32 * first_radius))
+}
+
 /// How far either side of the track's middle a rail vehicle meets scenery under its body
 /// (m): just over the gauge.
 const RAIL_STRIP: f64 = 0.7;
@@ -431,14 +450,16 @@ impl VehicleInstance {
         let v = script_speed(self.physics.velocity_kmh());
         self.put(self.v_velocity, v);
         self.put(self.v_velocity_ground, v);
-        let n_wheel = self
-            .physics
-            .wheels
-            .iter()
-            .find(|w| w[0].driven)
-            .or(self.physics.wheels.first())
-            .map(|w| w[0].rpm)
-            .unwrap_or(0.0);
+        let n_wheel = driven_wheels_rpm(
+            self.physics
+                .wheels
+                .iter()
+                .flatten()
+                .map(|w| (w.rpm, w.radius, w.driven)),
+            self.physics.wheels.first().map_or(0.0, |a| a[0].radius),
+        )
+        .or_else(|| self.physics.wheels.first().map(|w| w[0].rpm))
+        .unwrap_or(0.0);
         self.put(self.v_n_wheel, n_wheel);
         let a = self.physics.accel;
         self.physics.a_trans = a;
@@ -739,13 +760,12 @@ impl VehicleInstance {
         };
         self.put(self.v_velocity, v);
         self.put(self.v_velocity_ground, ground);
-        let n_wheel = rb
-            .wheels
-            .iter()
-            .find(|w| w.driven)
-            .or(rb.wheels.first())
-            .map(|w| w.rpm)
-            .unwrap_or(0.0);
+        let n_wheel = driven_wheels_rpm(
+            rb.wheels.iter().map(|w| (w.rpm, w.radius, w.driven)),
+            rb.wheels.first().map_or(0.0, |w| w.radius),
+        )
+        .or_else(|| rb.wheels.first().map(|w| w.rpm))
+        .unwrap_or(0.0);
         self.put(self.v_n_wheel, n_wheel);
         // `A_Trans_*` as Omsi.exe has them (0x7d5124): the change of the body's velocity
         // over the frame, turned into the body frame - its acceleration, not what an

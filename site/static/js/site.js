@@ -19,14 +19,30 @@
   $$("[data-theme-cycle]").forEach((b) => b.addEventListener("click", () => setTheme({ "": "light", light: "dark", dark: "" }[root.dataset.theme || ""])));
   setTheme(root.dataset.theme || "");
 
+  // ---- the site menu on a phone
+  const menuBtn = $("[data-menu-toggle]");
+  if (menuBtn) {
+    const setMenu = (open) => {
+      document.body.classList.toggle("menu-open", open);
+      menuBtn.setAttribute("aria-expanded", String(open));
+    };
+    menuBtn.addEventListener("click", () => setMenu(!document.body.classList.contains("menu-open")));
+    addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
+    $$("#site-menu a").forEach((a) => a.addEventListener("click", () => setMenu(false)));
+  }
+
   // ---- docs menu on a narrow screen
   const toggle = $("[data-nav-toggle]");
   if (toggle) {
     toggle.hidden = false;
-    toggle.addEventListener("click", () => {
-      const open = document.body.classList.toggle("nav-open");
+    const setNav = (open) => {
+      document.body.classList.toggle("nav-open", open);
       toggle.setAttribute("aria-expanded", String(open));
-    });
+      if (open) $("#docs-nav [aria-current=page]")?.scrollIntoView({ block: "center" });
+    };
+    toggle.addEventListener("click", () => setNav(!document.body.classList.contains("nav-open")));
+    $$("[data-nav-close]").forEach((b) => b.addEventListener("click", () => setNav(false)));
+    addEventListener("keydown", (e) => { if (e.key === "Escape") setNav(false); });
   }
 
   // ---- copy buttons on code

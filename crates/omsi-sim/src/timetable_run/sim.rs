@@ -101,13 +101,63 @@ struct RunningTrip {
     station_steps: Vec<Option<usize>>,
 }
 
-/// How long before a trip is due at a stop the people for it turn up there (s).
+/// How long before a trip is due at a stop the people for it begin to turn up there (s).
 pub const PAX_SPAWN_AHEAD: f64 = 15.0 * 60.0;
 
+/// How long after a trip was due at a stop it still brings people there (s). Omsi.exe keeps
+/// a late trip up to 40 minutes (see [`pax_share`]), but it also drops a trip from a stop as
+/// soon as the trip's bus has passed there (0x61a068 asks the tour's vehicle how far it has
+/// got); openOMSI does not know that here, and kept for 40 minutes a trip would fill the
+/// stops its bus has already served again (#3506) - so a quarter of an hour, as before.
 pub const PAX_LATE_WAIT: f64 = 15.0 * 60.0;
 
+/// How much of a stop's number of waiting people a trip due there `ahead` seconds from now
+/// asks for (a late trip: `ahead` < 0). Omsi.exe's station manager (0x61a068) gives each
+/// trip of the stop's timetable two straight lines through 0x7f07b4 and keeps the lower,
+/// in 0..1: nothing a quarter of an hour ahead, rising to all of it 4 minutes ahead, all of
+/// it until 20 minutes late, nothing again 40 minutes late. 0x61bf94 then takes the stop's
+/// number times the sum of its trips' shares, at most 1 - so the people turn up bit by bit
+/// as the bus draws near instead of all of them the moment a trip is a quarter hour off.
+pub fn pax_share(ahead: f64) -> f32 {
+    let rising = (15.0 * 60.0 - ahead) / ((15.0 - 4.0) * 60.0);
+    let falling = (ahead + 40.0 * 60.0) / ((40.0 - 20.0) * 60.0);
+    rising.min(falling).clamp(0.0, 1.0) as f32
+}
+
 pub(crate) fn pax_turn_up_for(due: f64, tod: f64) -> bool {
-    (tod - PAX_LATE_WAIT..=tod + PAX_SPAWN_AHEAD).contains(&due)
+    due >= tod - PAX_LATE_WAIT && pax_share(due - tod) > 0.0
+}
+
+/// The trips due at the stops about now ([`ScheduleSim::due_destinations`]): per bus stop
+/// the destinations of those trips, and the sum of their [`pax_share`]s. Reads as the map
+/// of destinations.
+#[derive(Debug, Clone, Default)]
+pub struct DueTrips {
+    pub dests: HashMap<i64, HashSet<String>>,
+    pub share: HashMap<i64, f32>,
+}
+
+impl DueTrips {
+    /// The part of stop `id`'s number of people its trips ask for now (0..1).
+    pub fn share_of(&self, id: i64) -> f32 {
+        self.share.get(&id).copied().unwrap_or(0.0).min(1.0)
+    }
+}
+
+impl std::ops::Deref for DueTrips {
+    type Target = HashMap<i64, HashSet<String>>;
+    fn deref(&self) -> &Self::Target {
+        &self.dests
+    }
+}
+
+impl From<HashMap<i64, HashSet<String>>> for DueTrips {
+    fn from(dests: HashMap<i64, HashSet<String>>) -> Self {
+        DueTrips {
+            dests,
+            share: HashMap::new(),
+        }
+    }
 }
 
 /// How far from a route a bus stop may stand when the route is only a part of the trip (a

@@ -2,6 +2,7 @@
 //! are, the clouds' drift with the wind, and how fast a vehicle meets the air.
 
 use omsi_content::weather::Weather;
+use std::path::Path;
 
 /// The classic sky's cloud tiling (m): the same as `omsi_render::VANILLA_CLOUD_PERIOD`, which
 /// this crate cannot see (a test in omsi-app holds the two together).
@@ -63,6 +64,104 @@ pub fn precip_of(w: &Weather) -> (i32, f32) {
     (kind, rate)
 }
 
+/// What of this weather Omsi.exe's daylight takes in (the street lamps, the AI's lights,
+/// the `[NightMapMode]` night textures, `Envir_Brightness`): its `[fog]`, what falls, and
+/// its clouds - `overcast` is whether the clouds.cfg type it names is an `ovc` deck, `None`
+/// when it names none (`-1`) or one clouds.cfg lacks. Clouds that are only drawn
+/// (`decorative_clouds`) are no clouds here.
+pub fn sky_weather(w: &Weather, overcast: Option<bool>) -> omsi_sim::daylight::SkyWeather {
+    let kind = w.precip.first().copied().unwrap_or(0.0) as i32;
+    omsi_sim::daylight::SkyWeather {
+        visibility: w.fog.0,
+        fog_density: w.fog.1,
+        precip_kind: kind,
+        precip_strength: w.precip.get(1).copied().unwrap_or(0.0).clamp(0.0, 255.0),
+        clouds: overcast.filter(|_| !w.decorative_clouds && !w.clouds.0.trim().starts_with("-1")),
+    }
+}
+
+/// [`sky_weather`] with the cloud type looked up in the game's `Weather\clouds.cfg` (see
+/// [`overcast`]): what the weather says, whatever the renderer drew of it.
+pub fn daylight_weather(w: &Weather) -> omsi_sim::daylight::SkyWeather {
+    let ovc = if w.decorative_clouds {
+        None
+    } else {
+        overcast(&w.clouds.0)
+    };
+    sky_weather(w, ovc)
+}
+
+/// A `[cloudtype]` of `Weather/clouds.cfg`: its texture (under `Texture\`), the metres of
+/// ground a tile of it covers, and whether it is an `ovc` deck (else `sct`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CloudType {
+    pub texture: String,
+    pub size: f32,
+    pub overcast: bool,
+}
+
+/// The `[cloudtype]` entry named `kind` (`-1` or empty: none) of `root`'s clouds.cfg, read
+/// as Omsi.exe reads it (0x754664): name, texture, size, then `ovc` or `sct`.
+pub fn cloud_type(root: &Path, kind: &str) -> Option<CloudType> {
+    if kind.is_empty() || kind.starts_with("-1") {
+        return None;
+    }
+    let cfg = omsi_cfg::vfs::read(&root.join("Weather").join("clouds.cfg")).ok()?;
+    cloud_type_in(&omsi_cfg::codepage::decode(&cfg), kind)
+}
+
+/// The `[cloudtype]` named `kind` in the text of a clouds.cfg.
+pub fn cloud_type_in(text: &str, kind: &str) -> Option<CloudType> {
+    let lines: Vec<&str> = text.lines().map(|l| l.trim()).collect();
+    (0..lines.len()).find_map(|i| {
+        if !lines[i].eq_ignore_ascii_case("[cloudtype]")
+            || !lines
+                .get(i + 1)
+                .is_some_and(|n| n.eq_ignore_ascii_case(kind))
+        {
+            return None;
+        }
+        Some(CloudType {
+            texture: lines.get(i + 2)?.to_string(),
+            size: lines
+                .get(i + 3)
+                .and_then(|v| v.parse::<f32>().ok())
+                .filter(|v| *v > 0.0)
+                .unwrap_or(2000.0),
+            overcast: lines
+                .get(i + 4)
+                .is_some_and(|v| v.eq_ignore_ascii_case("ovc")),
+        })
+    })
+}
+
+/// Whether the cloud type `kind` is an `ovc` deck (`None`: no clouds, or a type clouds.cfg
+/// lacks), from the `Weather\clouds.cfg` of the first content root that has one. Each type
+/// is read once while the content stays the same: the daylight asks every frame.
+pub fn overcast(kind: &str) -> Option<bool> {
+    type Seen = (u64, Vec<(String, Option<bool>)>);
+    static SEEN: std::sync::Mutex<Option<Seen>> = std::sync::Mutex::new(None);
+    let kind = kind.trim();
+    if kind.is_empty() || kind.starts_with("-1") {
+        return None;
+    }
+    let generation = omsi_cfg::content_generation();
+    let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+    if seen.as_ref().is_none_or(|(g, _)| *g != generation) {
+        *seen = Some((generation, Vec::new()));
+    }
+    let (_, known) = seen.as_mut()?;
+    if let Some((_, o)) = known.iter().find(|(k, _)| k.eq_ignore_ascii_case(kind)) {
+        return *o;
+    }
+    let o = omsi_cfg::find_in_roots("Weather\\clouds.cfg")
+        .and_then(|(_, path)| omsi_cfg::vfs::read(&path).ok())
+        .and_then(|cfg| cloud_type_in(&omsi_cfg::codepage::decode(&cfg), kind))
+        .map(|t| t.overcast);
+    known.push((kind.to_string(), o));
+    o
+}
+
 /// The road under the wheels as the scripts and the sound configurations read it
 /// (`StreetCond`): 0 dry, 1 wet, 2 covered in snow. A snowfall (or a weather with
 /// `[snowOnRoad]`) puts it into the upper half, everything else follows the water film.
@@ -92,4 +191,57 @@ pub fn initial_wetness(w: &Weather) -> f32 {
 pub fn vehicle_velocity(v: &omsi_sim::VehicleInstance) -> glam::Vec3 {
     let h = v.heading.to_radians();
     glam::Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * v.physics.speed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cloud_types_are_read_as_omsi_reads_them() {
+        let cfg = "\tHier werden alle Wolkentypen definiert:\n\n\t[cloudtype]\n\tname\n\ttexture\n\n[cloudtype]\nCumulus 2\nCumulus_2.tga\n2000\nsct\n\n[cloudtype]\nOvercast 1\nOVC_1.bmp\n1000\novc\n";
+        assert_eq!(
+            cloud_type_in(cfg, "cumulus 2"),
+            Some(CloudType {
+                texture: "Cumulus_2.tga".into(),
+                size: 2000.0,
+                overcast: false
+            })
+        );
+        assert_eq!(
+            cloud_type_in(cfg, "Overcast 1"),
+            Some(CloudType {
+                texture: "OVC_1.bmp".into(),
+                size: 1000.0,
+                overcast: true
+            })
+        );
+        assert_eq!(cloud_type_in(cfg, "Cumulus 9"), None);
+    }
+
+    #[test]
+    fn the_daylight_sees_the_weathers_clouds_not_the_drawn_ones() {
+        let mut w = Weather {
+            fog: (8000.0, 0.9),
+            clouds: ("Overcast 1".into(), 300.0),
+            precip: vec![1.0, 120.0, 0.0, 0.0, 0.0],
+            ..Default::default()
+        };
+        let s = sky_weather(&w, Some(true));
+        assert_eq!(s.clouds, Some(true));
+        assert_eq!((s.visibility, s.fog_density), (8000.0, 0.9));
+        assert_eq!((s.precip_kind, s.precip_strength), (1, 120.0));
+        // no clouds named, or a clouds.cfg without the type: a clear sky
+        assert_eq!(sky_weather(&w, None).clouds, None);
+        w.clouds.0 = "-1".into();
+        assert_eq!(sky_weather(&w, Some(false)).clouds, None);
+        // openOMSI's fair-weather cumulus in a sky without a weather are only drawn
+        w.clouds.0 = "Cumulus 1".into();
+        w.decorative_clouds = true;
+        assert_eq!(sky_weather(&w, Some(false)).clouds, None);
+        assert_eq!(daylight_weather(&w).clouds, None);
+        // and a sky without clouds needs no clouds.cfg
+        assert_eq!(overcast("-1"), None);
+        assert_eq!(overcast(""), None);
+    }
 }

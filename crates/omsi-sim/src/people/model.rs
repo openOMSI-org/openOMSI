@@ -403,8 +403,9 @@ pub struct PeopleSim {
     pub stop_targets: Option<HashMap<i64, Vec<(String, HashSet<String>)>>>,
     /// Per bus stop, the destinations of the trips due there soon (`Schedule::
     /// due_destinations`, made anew every game minute): the people turning up draw theirs
-    /// from these alone. None: from all of the stop's (no timetable).
-    pub due_dests: Option<HashMap<i64, HashSet<String>>>,
+    /// from these alone, and the stop fills to the share of its number those trips ask for
+    /// (`DueTrips::share_of`). None: from all of the stop's (no timetable).
+    pub due_dests: Option<crate::timetable_run::DueTrips>,
     /// Game time `due_dests` was made at.
     pub due_at: f64,
     /// The timetable's name of each stop object (`Schedule::stop_names`), the names the

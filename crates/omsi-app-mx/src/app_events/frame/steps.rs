@@ -101,23 +101,6 @@ pub(crate) fn deliver_player_impacts(p: &mut Player, traffic: Option<&mut traffi
     }
 }
 
-/// Rain, snow, fog or a closed cloud cover: the AI drives with its lights on by day.
-pub(crate) fn gloomy_weather(weather: Option<&omsi_content::weather::Weather>) -> bool {
-    weather
-        .map(|w| {
-            let (kind, rate) = precip_of(w);
-            w.fog.0 < 600.0
-                || (kind != 0 && rate > 0.05)
-                || w.clouds
-                    .0
-                    .trim()
-                    .as_bytes()
-                    .get(..8)
-                    .is_some_and(|p| p.eq_ignore_ascii_case(b"overcast"))
-        })
-        .unwrap_or(false)
-}
-
 /// Supply date, game time and weather before either spawning or running AI scripts.
 pub(crate) fn set_ai_environment(
     t: &mut traffic::Traffic,
@@ -144,15 +127,11 @@ pub(crate) fn set_ai_environment(
     t.set_script_environment(host.system_values(), host.wind, host.street_cond);
 }
 
-/// The AI's lights (and a bus's saloon lamps, which its scripts switch with them): Omsi
-/// switches them on below a light value of 0.75, before the street lamps (0.6), and off
-/// after them in the morning - and by day when it is `gloomy`.
-pub(crate) fn set_ai_daylight(
-    t: &mut traffic::Traffic,
-    daylight: omsi_sim::Daylight,
-    gloomy: bool,
-) {
-    t.night = daylight.brightness < 0.75 || gloomy;
+/// The AI's lights (and a bus's saloon lamps, which its scripts switch with them): on while
+/// Omsi.exe's daylight sum under the weather is below 0.75 (0x7d9128), before the street
+/// lamps (0.6) - and so by day under an overcast deck, in fog, rain or snow.
+pub(crate) fn set_ai_daylight(t: &mut traffic::Traffic, daylight: omsi_sim::Daylight) {
+    t.night = daylight.daylight_sum < 0.75;
     t.daylight = Some(daylight);
 }
 
@@ -203,7 +182,7 @@ pub(crate) fn world_lamps(
         w.set_lamps(r, scene, daylight.lamps_on);
     }
     if night_modes {
-        w.update_night_modes(r, scene, clock, daylight.brightness);
+        w.update_night_modes(r, scene, clock, daylight.daylight_sum);
     }
 }
 
@@ -634,6 +613,9 @@ pub(crate) fn picture_lighting(
     animation_time: f32,
     sky: &crate::weather_setup::SkyState,
 ) -> omsi_render::Lighting {
+    // the session's weather for Omsi.exe's daylight (the lamps, `Envir_Brightness`)
+    let sky_weather = weather.map(omsi_weather::conditions::daylight_weather);
+    omsi_sim::daylight::set_sky_weather(sky_weather.unwrap_or_default());
     let mut lighting = match weather {
         Some(w) => weather_lighting(
             daylight,

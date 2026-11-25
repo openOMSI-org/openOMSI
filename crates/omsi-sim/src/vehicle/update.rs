@@ -71,15 +71,14 @@ impl VehicleInstance {
         self.set_engine_ev(Ev::DirtNorm, self.dirt);
         // spray off a wet road, dust off a dry one
         self.set_engine_ev(Ev::DirtRate, speed * (1.5e-4 + 6.0e-3 * rain));
-        // rain soaks the glass in a few seconds; without it the film dries in about a minute.
+        // rain soaks the glass in a few seconds; without it the film dries in twenty seconds.
         // Snow builds the film up the same way: `rain.osc` only ever adds `PrecipRate *
         // Timegap` and clamps at 1 - it never asks what is falling - so in the original the
         // glass gets as covered in a snowfall as in a shower and the wipers clear it. (The
         // film wears snow crystals then, see `rain::snow_on_glass`.) Held to a fifth for a
         // "haze", the panes stayed clear in the thickest snowfall and the wipers had
         // nothing to do (#883).
-        let rate = if rain > 0.0 { rain * 0.25 } else { -0.02 };
-        self.set_engine_ev(Ev::PrecipRate, rate);
+        self.set_engine_ev(Ev::PrecipRate, glass_precip_rate(rain));
         // the state of the road, for the tyre sounds and the wheel spray
         self.set_engine_ev(Ev::StreetCond, self.host.street_cond);
         // what is coupled to this vehicle (the train scripts light their ends by it: a head
@@ -780,4 +779,22 @@ impl OmsiFrames {
 /// an accelerometer would read, less gravity's share in the body frame.
 pub(super) fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
     accel_body - orientation.inverse().mul_vec3(Vec3::new(0.0, 0.0, 9.81))
+}
+
+/// What a road vehicle's `PrecipRate` says, from what falls (`rain`, its strength 0..1):
+/// while it rains or snows the glass wets (see `update_dirt`); while nothing falls Omsi.exe
+/// sets -0.05 (0x7d22d8: every road vehicle's rate, -0.05 whenever the weather's kind or
+/// strength is 0), so `rain.osc` dries a wet pane in twenty seconds. (openOMSI had -0.02:
+/// fifty seconds, and the wipers' interval scripts saw a wetter screen for longer.)
+fn glass_precip_rate(rain: f32) -> f32 {
+    if rain > 0.0 { rain * 0.25 } else { -0.05 }
+}
+
+#[cfg(test)]
+mod glass_rate_tests {
+    #[test]
+    fn dry_glass_dries_at_omsis_rate() {
+        assert_eq!(super::glass_precip_rate(0.0), -0.05);
+        assert!(super::glass_precip_rate(0.5) > 0.0);
+    }
 }
