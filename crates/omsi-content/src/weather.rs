@@ -76,12 +76,13 @@ impl Weather {
 /// its block after the strength with a blank line; read as five values regardless, a block
 /// like it took the next keyword (`[groundwet]`, say) for a number and lost that block.
 fn read_precip(r: &mut omsi_cfg::CfgReader<'_>) -> Vec<f32> {
-    let mut p = vec![r.f32(), r.f32()];
-    let third = r.str();
+    let read = |r: &mut omsi_cfg::CfgReader<'_>| omsi_cfg::parse_f32(r.param_line());
+    let mut p = vec![read(r), read(r)];
+    let third = r.param_line();
     if third.trim().is_empty() {
         p.extend([0.0; 3]);
     } else {
-        p.extend([omsi_cfg::parse_f32(third), r.f32(), r.f32()]);
+        p.extend([omsi_cfg::parse_f32(third), read(r), read(r)]);
     }
     p
 }
@@ -280,9 +281,16 @@ mod owt_tests {
 
     #[test]
     fn a_short_precip_block_leaves_the_next_block_alone() {
-        let w = parse("[precip]\r\n1\r\n120\r\n\r\n[groundwet]\r\n80\r\n255\r\n30\r\n");
-        assert_eq!(w.precip, vec![1.0, 120.0, 0.0, 0.0, 0.0]);
-        assert_eq!(w.ground_wet, [80.0, 255.0, 30.0]);
+        for separator in ["", "\r\n"] {
+            let w = parse(&format!(
+                "[precip]\r\n1\r\n120\r\n{separator}[groundwet]\r\n80\r\n255\r\n30\r\n"
+            ));
+            assert_eq!(w.precip, vec![1.0, 120.0, 0.0, 0.0, 0.0]);
+            assert_eq!(w.ground_wet, [80.0, 255.0, 30.0]);
+        }
+        let w = parse("[precip]\r\n1\r\n120\r\n5\r\n[snow]\r\n");
+        assert_eq!(w.precip, vec![1.0, 120.0, 5.0, 0.0, 0.0]);
+        assert!(w.snow);
         let w = parse("[precip]\r\n0\r\n32\r\n0\r\n-2\r\n0\r\n\r\n[snow]\r\n");
         assert_eq!(w.precip, vec![0.0, 32.0, 0.0, -2.0, 0.0]);
         assert!(w.snow);
