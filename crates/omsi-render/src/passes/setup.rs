@@ -346,8 +346,16 @@ impl Renderer {
             scene.camera_bind_group = None;
             self.targets.hdr_targets.clear();
         }
-        // (the window's clouds at its size: the camera group reads them)
-        if enhanced && lead_view && self.ensure_cloud_targets(width, height) {
+        // (the window's clouds at its size: the camera group reads them. With an upscaler
+        // they are traced from the window's size, not from the smaller picture it is given:
+        // DLSS Balanced drew a 1680x1050 window at 974x609, and the clouds marched at a
+        // quarter of that, 244x153, came out blurred on top of the upscaler's own blur)
+        let cloud_size = if temporal_frame {
+            (full_w, full_h)
+        } else {
+            (width, height)
+        };
+        if enhanced && lead_view && self.ensure_cloud_targets(cloud_size.0, cloud_size.1) {
             scene.camera_bind_group = None;
         }
         // (the ground albedo picture only while that pass can run)
