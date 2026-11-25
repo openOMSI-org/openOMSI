@@ -78,9 +78,40 @@ impl Renderer {
             .await
     }
 
+    /// [`Renderer::new_on`] again on the adapter whose device was just lost, keeping what the
+    /// loss took off (the basic pipelines, the rainfall, the MSAA retry): `open_on` starts a
+    /// new adapter or interface without them.
+    async fn reopen_on(
+        adapter: mx::Adapter,
+        format: mx::TextureFormat,
+        options: RenderOptions,
+    ) -> Result<Renderer> {
+        Self::open_device(adapter, None, Some(format), options)
+            .await?
+            .finish()
+            .await
+    }
+
     /// The graphics device for a renderer on this adapter, its pipelines not built yet: see
     /// [`Opened`].
     pub async fn open_on(
+        adapter: mx::Adapter,
+        surface: Option<&mx::Surface<'_>>,
+        format: Option<mx::TextureFormat>,
+        options: RenderOptions,
+    ) -> Result<Opened> {
+        // What one device had to do without is that device's: the flags are process-wide, and
+        // Direct3D 12 losing its device to ray tracing set the basic pipelines for the Vulkan
+        // device the game went on with - drawn at 1x MSAA, without the snowfall, the lamps in
+        // the fog and the street lamps' shadows, and remembered so for Vulkan as well.
+        // (What worked on this adapter before comes back from `fallback_load`.)
+        BASIC_PIPELINES.store(false, std::sync::atomic::Ordering::Relaxed);
+        RAINFALL_LEFT_OUT.store(false, std::sync::atomic::Ordering::Relaxed);
+        MSAA_RETRY.store(false, std::sync::atomic::Ordering::Relaxed);
+        Self::open_device(adapter, surface, format, options).await
+    }
+
+    async fn open_device(
         adapter: mx::Adapter,
         surface: Option<&mx::Surface<'_>>,
         format: Option<mx::TextureFormat>,
@@ -487,8 +518,7 @@ impl Opened {
                     "{}: the graphics device was lost while the chosen MSAA was tried again ({why}); keeping to what worked before",
                     info.name
                 );
-                return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options))
-                    .await;
+                return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
             }
             if basic_pipelines() && rainfall_pipeline() {
                 log::warn!(
@@ -497,8 +527,7 @@ impl Opened {
                 );
                 RAINFALL_LEFT_OUT.store(true, std::sync::atomic::Ordering::Relaxed);
                 fallback_store(&name, Some((1, true)));
-                return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options))
-                    .await;
+                return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
             }
             if basic_pipelines() {
                 return Err(anyhow!(
@@ -513,7 +542,7 @@ impl Opened {
             // (and so from the start next time, see `fallback_load`)
             fallback_store(&name, Some((1, true)));
             // (the format chosen for the window before: the same the surface would give)
-            return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options)).await;
+            return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
         }
         // (the retry is over; a device lost later in the run takes the usual way)
         MSAA_RETRY.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -655,6 +684,16 @@ impl Renderer {
                         if basic { ", basic pipelines" } else { "" }
                     );
                     made = Err(anyhow!("renderer pipelines: {e}"));
+                    // (a removed device fails every build after it the same way: the next
+                    // graphics interface is tried at once, rather than the basic pipelines on
+                    // the dead device - which took the reduction to that interface too)
+                    if device.is_lost() {
+                        log::error!(
+                            "{}: the graphics device was lost while the pipelines were made",
+                            info.name
+                        );
+                        break;
+                    }
                 }
             }
         }
