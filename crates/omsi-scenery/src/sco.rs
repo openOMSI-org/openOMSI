@@ -379,19 +379,11 @@ impl SceneryObject {
                         t.approach_dist = Some(d);
                     }
                 }
-                "traffic_light_stop" => {
-                    let light = r.f32();
-                    let time = r.f32();
-                    let if_request = request_flag(r.line());
-                    o.traffic_light_stop.push([light, time, if_request]);
-                }
+                "traffic_light_stop" => o.traffic_light_stop.push(light_point(&mut r)),
                 "traffic_light_jump" => {
-                    let light = r.f32();
-                    let time = r.f32();
-                    let if_request = request_flag(r.line());
-                    let jump_to = r.f32();
+                    let [light, time, if_request] = light_point(&mut r);
                     o.traffic_light_jump
-                        .push([light, time, if_request, jump_to]);
+                        .push([light, time, if_request, r.f32()]);
                 }
                 "splinehelper" => {
                     let spline = r.str().to_string();
@@ -571,6 +563,14 @@ pub const ATTACH_TOKENS: &[&str] = &[
 /// `-1`, `0.0`, a word - sets the flag.
 fn request_flag(line: &str) -> f32 {
     if line == "0" { 0.0 } else { 1.0 }
+}
+
+/// The light, the time and the `if_request` flag a `[traffic_light_stop]` or
+/// `[traffic_light_jump]` starts with.
+fn light_point(r: &mut omsi_cfg::CfgReader<'_>) -> [f32; 3] {
+    let light = r.f32();
+    let time = r.f32();
+    [light, time, request_flag(r.line())]
 }
 
 #[cfg(test)]

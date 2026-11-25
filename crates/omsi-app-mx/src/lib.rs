@@ -874,6 +874,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             note_watch: Default::default(),
             loading: Default::default(),
             menu_edit: None,
+            load_request: None,
             menu_edit_icao: false,
             menu_edit_number: false,
             menu_edit_ident: false,
