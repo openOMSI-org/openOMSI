@@ -37,6 +37,8 @@ pub(crate) struct VanillaSkyUniform {
     pub(crate) cloud: [f32; 4],
     /// fog range, visibility, 1 for an overcast type, the render origin's height
     pub(crate) haze: [f32; 4],
+    /// towards the moon (world space), w its angular radius
+    pub(crate) moon: [f32; 4],
 }
 
 /// The enhanced clouds' noise textures (clouds.rs), made once, with their mip chains: the
@@ -45,7 +47,6 @@ pub(crate) struct VanillaSkyUniform {
 /// worked out from. Without `enhanced_noise` (the launcher's preview, which draws no
 /// enhanced sky) each is a texel, and nothing is generated.
 pub(crate) struct CloudTextures {
-    pub moon: wgpu::TextureView,
     pub weather: wgpu::TextureView,
     pub detail: wgpu::TextureView,
     pub base: wgpu::TextureView,
@@ -57,7 +58,7 @@ pub(crate) struct CloudTextures {
 /// Edge of `assets/moon.png` in texels.
 const MOON_MAP_SIZE: u32 = 512;
 
-/// The moon's face (sky_enhanced.wgsl `t_moon`) and its mip levels, level 0 first.
+/// The moon's face (sky.wgsl `t_moon`) and its mip levels, level 0 first.
 fn moon_map() -> Vec<Vec<u8>> {
     let png = include_bytes!("../assets/moon.png");
     let face = image::load_from_memory_with_format(png, image::ImageFormat::Png)
@@ -80,6 +81,47 @@ fn moon_map() -> Vec<Vec<u8>> {
         size = half;
     }
     levels
+}
+
+/// The moon's face as a texture, for both skies.
+pub(crate) fn moon_texture(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::TextureView {
+    let tex = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("moon"),
+        size: wgpu::Extent3d {
+            width: MOON_MAP_SIZE,
+            height: MOON_MAP_SIZE,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: MOON_MAP_SIZE.ilog2() + 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    for (level, data) in moon_map().iter().enumerate() {
+        let edge = MOON_MAP_SIZE >> level;
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &tex,
+                mip_level: level as u32,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(edge),
+                rows_per_image: Some(edge),
+            },
+            wgpu::Extent3d {
+                width: edge,
+                height: edge,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+    tex.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
 pub(crate) fn cloud_noise_textures(
@@ -192,20 +234,7 @@ pub(crate) fn cloud_noise_textures(
     } else {
         Default::default()
     };
-    let moon = make(
-        "moon",
-        MOON_MAP_SIZE,
-        D2,
-        R8Unorm,
-        1,
-        &if enhanced_noise {
-            moon_map()
-        } else {
-            vec![vec![0]]
-        },
-    );
     CloudTextures {
-        moon,
         weather,
         detail,
         base,

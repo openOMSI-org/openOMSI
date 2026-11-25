@@ -85,7 +85,7 @@ impl SkyBase {
             cloud_base_view: clouds.base,
             cloud_curl_view: clouds.curl,
             cloud_sampler: clouds.sampler,
-            moon_view: clouds.moon,
+            moon_view: crate::sky::moon_texture(device, queue),
             cloud_shape_cpu: clouds.cpu,
             cloud_view_buf,
             vanilla_buf,

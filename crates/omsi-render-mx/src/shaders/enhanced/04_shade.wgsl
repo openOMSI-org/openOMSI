@@ -708,8 +708,8 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         // (with the mip level its footprint needs on top of the blur: a fixed level showed
         // the photo's trees as contour lines across a car's curved bonnet close up, and
         // paint takes it as blurred as the vanilla path does)
-        let photo = textureSampleBias(t_env, s_diffuse, env_uv, max(rough * 16.0, select(2.0, 0.0, glass))).rgb;
-        let photo_avg = textureSampleLevel(t_env, s_diffuse, vec2<f32>(0.5, 0.5), 12.0).rgb;
+        let photo = textureSampleBias(t_env, s_ao, env_uv, max(rough * 16.0, select(2.0, 0.0, glass))).rgb;
+        let photo_avg = textureSampleLevel(t_env, s_ao, vec2<f32>(0.5, 0.5), 12.0).rgb;
         let lum_avg = max(dot(photo_avg, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.02);
         // (a tint, not a picture: an unbounded ratio drew the photo's trees as bands)
         // (the photo's own contrast, as the vanilla picture shows it, held only off black
