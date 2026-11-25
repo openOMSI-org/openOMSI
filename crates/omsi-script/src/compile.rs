@@ -205,7 +205,7 @@ impl Program {
             for op in &block.ops {
                 match op {
                     Op::Store(v) if *v == var => return true,
-                    Op::Macro(m) => todo.push(*m),
+                    Op::Macro(m) | Op::FallThrough(m) => todo.push(*m),
                     _ => {}
                 }
             }
@@ -281,7 +281,7 @@ impl Program {
                 let value = b.ops[..i].iter().rev().find(|o| !matches!(o, Op::Store(_)));
                 !matches!(value, Some(Op::Push(x)) if *x == 0.0)
             }
-            Op::Macro(m) => self.block_sets_rec(*m, var, seen),
+            Op::Macro(m) | Op::FallThrough(m) => self.block_sets_rec(*m, var, seen),
             _ => false,
         })
     }
@@ -306,7 +306,7 @@ impl Program {
         };
         b.ops.iter().any(|op| match op {
             Op::Load(v) => *v == var,
-            Op::Macro(m) => self.block_reads_rec(*m, var, seen),
+            Op::Macro(m) | Op::FallThrough(m) => self.block_reads_rec(*m, var, seen),
             _ => false,
         })
     }
@@ -524,9 +524,16 @@ pub fn compile(input: &CompileInput) -> Program {
         missing_curve: None,
         declare_unknown: input.declare_unknown,
         file_frames: (0, 0),
+        reached: 0,
     };
     for f in &files {
         c.compile_file(f);
+    }
+    // (the last block of the last file has no block to run on into)
+    if c.reached != 0
+        && let Some(op) = p.blocks.last_mut().and_then(|b| b.ops.last_mut())
+    {
+        *op = Op::Jump(u32::MAX);
     }
     p.consts = consts;
     // Resolve macro calls. Omsi.exe sub_5d1db8 reads all script files as one stream of words
@@ -564,6 +571,9 @@ struct Compiler<'a> {
     missing_curve: Option<u32>,
     declare_unknown: bool,
     file_frames: (usize, usize),
+    /// Not 0 when the last block runs on into the next (0x80), with the entry kinds (1 init,
+    /// 2 frame, 4 frame_ai) whose code runs on into it.
+    reached: u8,
 }
 
 #[derive(PartialEq)]
@@ -586,7 +596,19 @@ impl<'a> Compiler<'a> {
 
     fn compile_file(&mut self, f: &CfgFile) {
         self.file_frames = (self.p.frame.len(), self.p.frame_ai.len());
-        let mut cur: Option<(Vec<BlockKind>, Block, Vec<(usize, bool)>)> = None; // kinds (aliases), block, if-stack: (jump op index, has_else)
+        // kinds (aliases), block, if-stack: (jump op index, has_else). When the last block of
+        // the file before runs on into this one, so do the words before this file's first
+        // header: Omsi.exe chains the words of all files, so they run between the two blocks.
+        let mut cur: Option<(Vec<BlockKind>, Block, Vec<(usize, bool)>)> = (self.reached != 0)
+            .then(|| {
+                let block = Block {
+                    name: format!("(start of {})", f.path.display()),
+                    file: f.path.clone(),
+                    line: 1,
+                    ..Default::default()
+                };
+                (Vec::new(), block, Vec::new())
+            });
         // the jumps of `{else}`s after an `{if}`'s first, with the depth of their `{if}` in
         // the if-stack: in OMSI every `{else}` reached goes on at the `{endif}`, so
         // `{if} X {else} Y {else} Z {endif}` never runs Z (DBC Chicago Citybus
@@ -603,35 +625,23 @@ impl<'a> Compiler<'a> {
         let mut lines = f.lines.iter().enumerate().peekable();
         while let Some((ln, raw)) = lines.next() {
             let line_no = ln + 1;
-            let mut logical_line = raw.clone();
-            let mut unterminated = false;
-            while has_unclosed_string(&logical_line) {
-                let Some((_, next)) = lines.peek() else {
-                    unterminated = true;
-                    break;
-                };
-                // Keep the next block available for normal parsing if a quote never closed.
-                if is_script_block_header(next.as_str()) {
-                    unterminated = true;
-                    break;
-                }
-                let (_, next) = lines.next().unwrap();
-                logical_line.push_str(next.trim_start_matches('\t'));
-            }
-            if unterminated {
+            let Some(logical_line) = logical_script_line(raw, &mut lines) else {
                 self.err(
                     &f.path,
                     line_no,
                     "SC_ErrorInCommand: unterminated string literal".into(),
                 );
                 continue;
-            }
+            };
             let toks = tokenize(&logical_line);
             for t in toks {
                 match t {
                     Tok::Brace(b) => {
-                        let bl = b.to_ascii_lowercase();
-                        match bl.as_str() {
+                        // (case-sensitive: Omsi.exe sub_5d1db8 compares each word with
+                        // `{end}`, `{frame}` … and the first letters with `{macro:` and
+                        // `{trigger:` exactly, so a mod's `{End}` does not end its block)
+                        let bl = b.as_str();
+                        match bl {
                             "init" | "frame" | "frame_ai" | _
                                 if bl == "init"
                                     || bl == "frame"
@@ -639,10 +649,10 @@ impl<'a> Compiler<'a> {
                                     || bl.starts_with("macro:")
                                     || bl.starts_with("trigger:") =>
                             {
-                                let (kind, name) = match bl.as_str() {
-                                    "init" => (BlockKind::Init, bl.clone()),
-                                    "frame" => (BlockKind::Frame, bl.clone()),
-                                    "frame_ai" => (BlockKind::FrameAi, bl.clone()),
+                                let (kind, name) = match bl {
+                                    "init" => (BlockKind::Init, b.clone()),
+                                    "frame" => (BlockKind::Frame, b.clone()),
+                                    "frame_ai" => (BlockKind::FrameAi, b.clone()),
                                     _ => {
                                         let name = b[b.find(':').unwrap() + 1..].trim().to_string();
                                         let kind = if bl.starts_with("macro:") {
@@ -658,10 +668,16 @@ impl<'a> Compiler<'a> {
                                     // makes both names refer to the same body - stock scripts
                                     // stack `{trigger:a}` `{trigger:b}` this way.
                                     Some((kinds, block, _)) if block.ops.is_empty() => {
+                                        if kinds.is_empty() {
+                                            // (nothing before this file's first header)
+                                            block.name = name;
+                                            block.line = line_no;
+                                        }
                                         kinds.push(kind)
                                     }
                                     Some(_) => {
                                         let (kinds, mut block, _) = cur.take().unwrap();
+                                        self.fall_through(&mut block);
                                         let end = block.ops.len() as u32;
                                         for idx in orphan_elses
                                             .drain(..)
@@ -671,12 +687,12 @@ impl<'a> Compiler<'a> {
                                             patch(&mut block.ops[idx], end);
                                         }
                                         log::debug!(
-                                            "{}:{}: {{{b}}} starts while block {} is open (implicit end)",
+                                            "{}:{}: {{{b}}} starts while block {} is open (it runs on into this one)",
                                             f.path.display(),
                                             line_no,
                                             block.name
                                         );
-                                        self.finish_block(kinds, block);
+                                        self.finish_block(kinds, block, true);
                                         cur = Some((
                                             vec![kind],
                                             Block {
@@ -728,7 +744,7 @@ impl<'a> Compiler<'a> {
                                     for (_, op) in extra_elses.drain(..) {
                                         patch(&mut block.ops[op], end);
                                     }
-                                    self.finish_block(kinds, block);
+                                    self.finish_block(kinds, block, false);
                                 } else {
                                     // Surplus {end} tokens are common in stock content; ignored.
                                     log::debug!(
@@ -861,6 +877,7 @@ impl<'a> Compiler<'a> {
             }
         }
         if let Some((kinds, mut block, _)) = cur.take() {
+            self.fall_through(&mut block); // (into the next file's first block)
             let end = block.ops.len() as u32;
             for idx in orphan_elses
                 .drain(..)
@@ -870,7 +887,7 @@ impl<'a> Compiler<'a> {
                 patch(&mut block.ops[idx], end);
             }
             log::debug!("{}: missing {{end}} at end of file", f.path.display());
-            self.finish_block(kinds, block);
+            self.finish_block(kinds, block, true);
         }
     }
 
@@ -880,13 +897,36 @@ impl<'a> Compiler<'a> {
         self.pending.push((block_idx, op_idx, name));
     }
 
-    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block) {
+    /// A block without its `{end}` runs on into the next block (the next to finish; `compile`
+    /// takes it back past the last). Omsi.exe sub_5d1db8 links the words of all script files
+    /// into one chain: a header marks where a block starts in it, only `{end}` cuts it (the
+    /// Opel Manta's `antrieb_frame` runs on into `calc_eng_M`). A [`Op::FallThrough`], not a
+    /// macro call: the VM goes on in the next block at the same depth. Called before the jumps
+    /// are patched, so a `{end}` inside an `{if}` still leaves the block.
+    fn fall_through(&mut self, block: &mut Block) {
+        let next = self.p.blocks.len() as BlockId + 1;
+        block.ops.push(Op::FallThrough(next));
+    }
+
+    fn finish_block(&mut self, mut kinds: Vec<BlockKind>, block: Block, falls: bool) {
         let id = self.p.blocks.len() as BlockId;
         self.p.blocks.push(block);
         kinds.dedup();
+        let mut own = 0;
         for kind in kinds {
-            self.register(kind, id);
+            let bit = match kind {
+                BlockKind::Init => 1,
+                BlockKind::Frame => 2,
+                BlockKind::FrameAi => 4,
+                _ => 0,
+            };
+            own |= bit;
+            // a `{frame}` the `{frame}` above runs on into runs there, not twice a frame
+            if bit & self.reached == 0 {
+                self.register(kind, id);
+            }
         }
+        self.reached = if falls { 0x80 | self.reached | own } else { 0 };
     }
 
     #[rustfmt::skip]
@@ -1203,6 +1243,23 @@ impl<'a> Compiler<'a> {
     }
 }
 
+fn logical_script_line<'a>(
+    raw: &str,
+    lines: &mut std::iter::Peekable<impl Iterator<Item = (usize, &'a String)>>,
+) -> Option<String> {
+    let mut line = raw.to_owned();
+    while has_unclosed_string(&line) {
+        let (_, next) = lines.peek()?;
+        // Leave the next block available if the quote never closed.
+        if is_script_block_header(next) {
+            return None;
+        }
+        let (_, next) = lines.next()?;
+        line.push_str(next.trim_start_matches('\t'));
+    }
+    Some(line)
+}
+
 fn patch(op: &mut Op, target: u32) {
     match op {
         Op::JumpIfZero(t) | Op::Jump(t) => *t = target,
@@ -1211,278 +1268,8 @@ fn patch(op: &mut Op, target: u32) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn program_of(script: &str) -> Program {
-        let dir = std::env::temp_dir().join(format!(
-            "omsi_gearbox_{}_{}",
-            std::process::id(),
-            script.len()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let osc = dir.join("g.osc");
-        std::fs::write(&osc, script).unwrap();
-        // (the script's own variables are in a varlist, as a bus has them: a store to an
-        // undeclared variable compiles to nothing)
-        let mut locals: Vec<&str> = ["(L.L.", "(S.L."]
-            .iter()
-            .flat_map(|p| script.split(p).skip(1))
-            .filter_map(|t| t.split(')').next())
-            .filter(|n| *n != "Clutch")
-            .collect();
-        locals.sort_unstable();
-        locals.dedup();
-        let vars = dir.join("vars.txt");
-        std::fs::write(&vars, locals.join("\n")).unwrap();
-        let p = compile(&CompileInput {
-            builtin_vars: vec!["Clutch".into()],
-            varlists: vec![vars],
-            scripts: vec![osc],
-            ..Default::default()
-        });
-        let _ = std::fs::remove_dir_all(&dir);
-        p
-    }
-
-    #[test]
-    fn a_manual_gearbox_is_told_from_an_automatic_with_gate_keys() {
-        // the LiAZ KPP: gates, the first one asks for the clutch
-        let kpp = program_of(
-            "{trigger:kw_s_1} (L.L.Clutch) 1 = {if} 1 (S.L.g) {endif} {end}\n{trigger:kw_s_2} 2 (S.L.g) {end}\n",
-        );
-        assert!(kpp.manual_gearbox());
-        // a manual bus can share cockpit code that also exposes automatic R/N/D. Its gear
-        // triggers select the actual gear directly, while the clutch is read later in the
-        // gearbox frame instead of inside kw_s_1.
-        let shared = program_of(
-            "{trigger:automatic_D} 1 (S.L.d) {end}\n{trigger:automatic_N} 0 (S.L.d) {end}\n{trigger:automatic_R} -1 (S.L.d) {end}\n{trigger:kw_s_1} 1 (S.L.antrieb_getr_gang) {end}\n{trigger:kw_s_2} 2 (S.L.antrieb_getr_gang) {end}\n{macro:gearbox_frame} (L.L.Clutch) (S.L.clutch_now) {end}\n",
-        );
-        assert!(shared.manual_gearbox());
-        // an automatic with gear-hold keys and a torque converter's clutch elsewhere
-        let auto = program_of(
-            "{trigger:automatic_D} 1 (S.L.d) {end}\n{trigger:kw_s_1} 1 (S.L.hold) {end}\n{trigger:kw_s_2} 2 (S.L.hold) {end}\n{macro:conv} (L.L.Clutch) (S.L.c) {end}\n",
-        );
-        assert!(!auto.manual_gearbox());
-        // gates and no automatic at all
-        let plain =
-            program_of("{trigger:kw_s_1} 1 (S.L.g) {end}\n{trigger:kw_s_2} 2 (S.L.g) {end}\n");
-        assert!(plain.manual_gearbox());
-        // a stock automatic: no gates
-        assert!(!program_of("{trigger:automatic_D} 1 (S.L.d) {end}\n").manual_gearbox());
-    }
-
-    #[test]
-    fn an_end_inside_an_if_keeps_the_else_branch() {
-        // Valiant Citybus doors: `{if} {end} {else} ... {endif}` - the else code must exist
-        let prog = program_of(
-            "{trigger:a}\n1 {if}\n{end}\n{else}\n2 (S.L.x)\n{endif}\n{end}\n{trigger:b} 3 (S.L.y) {end}\n",
-        );
-        let id = *prog.triggers.get("a").unwrap();
-        assert!(
-            prog.blocks[id as usize].ops.len() >= 6,
-            "else branch was cut: {:?}",
-            prog.blocks[id as usize].ops
-        );
-        assert!(prog.triggers.contains_key("b"));
-    }
-
-    #[test]
-    fn tokens() {
-        let t = tokenize(r#"(L.L.a) 0.5 > {if} "Krueger 7x6" (M.V.GetFontIndex) $+ 'comment (x)"#);
-        assert_eq!(
-            t,
-            vec![
-                Tok::Paren("L.L.a".into()),
-                Tok::Word("0.5".into()),
-                Tok::Word(">".into()),
-                Tok::Brace("if".into()),
-                Tok::Str("Krueger 7x6".into()),
-                Tok::Paren("M.V.GetFontIndex".into()),
-                Tok::Word("$+".into()),
-            ]
-        );
-        let t = tokenize(
-            "\"churafont CE (8-1)x3\" (M.V.GetFontIndex) (S.L.Font_(8-1)x3) (L.L.a)(L.L.b) ( L.L.c )",
-        );
-        assert_eq!(
-            t,
-            vec![
-                Tok::Str("churafont CE (8-1)x3".into()),
-                Tok::Paren("M.V.GetFontIndex".into()),
-                Tok::Paren("S.L.Font_(8-1)x3".into()),
-                Tok::Paren("L.L.a".into()),
-                Tok::Paren("L.L.b".into()),
-                Tok::Paren("L.L.c".into()),
-            ]
-        );
-    }
-
-    #[test]
-    fn multiline_string_literals_compile_as_one_token() {
-        let dir =
-            std::env::temp_dir().join(format!("omsi-script-multiline-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let osc = dir.join("display.osc");
-        std::fs::write(
-            &osc,
-            "{init}\n\"Diagnostics 1/5\n\t@Fault Diagnostics\n\t@Cluster Selftest\n\" (S.$.screen)\n{end}\n",
-        )
-        .unwrap();
-        let p = compile(&CompileInput {
-            builtin_str_vars: vec!["screen".into()],
-            scripts: vec![osc],
-            ..Default::default()
-        });
-        let _ = std::fs::remove_dir_all(dir);
-
-        assert!(p.errors.is_empty(), "{:?}", p.errors);
-        assert!(
-            p.strings
-                .iter()
-                .any(|s| s == "Diagnostics 1/5@Fault Diagnostics@Cluster Selftest")
-        );
-    }
-
-    #[test]
-    fn unterminated_multiline_string_reports_an_error_and_keeps_later_blocks() {
-        let p = program_of("{init}\n\"unterminated\n{frame}\n1 (S.L.x)\n{end}\n");
-
-        assert!(
-            p.errors
-                .iter()
-                .any(|e| e.message.contains("unterminated string"))
-        );
-        assert_eq!(p.frame.len(), 1);
-    }
-
-    /// Omsi.exe sub_5d1db8 finds a `(M.L.name)` only among the macros defined below the call:
-    /// one defined above it, or the macro itself, is `macroinvalid` and the call does nothing.
-    #[test]
-    fn a_macro_call_finds_only_a_macro_defined_below_it() {
-        let p = program_of(
-            "{macro:above}\n1 (S.L.a)\n{end}\n{frame}\n(M.L.above) (M.L.below)\n{end}\n{macro:below}\n(M.L.below) 2 (S.L.b)\n{end}\n",
-        );
-        let frame = &p.blocks[p.frame[0] as usize].ops;
-        let below = p.macro_block("below").unwrap();
-        assert!(!matches!(frame[0], Op::Macro(_)), "{frame:?}");
-        assert_eq!(frame[1], Op::Macro(below));
-        let body = &p.blocks[below as usize].ops;
-        assert!(!matches!(body[0], Op::Macro(_)), "{body:?}");
-        let msgs: Vec<&str> = p.errors.iter().map(|e| e.message.as_str()).collect();
-        assert_eq!(msgs.len(), 2, "{msgs:?}");
-        assert!(
-            msgs[0].contains("macroinvalid: macro \"above\""),
-            "{msgs:?}"
-        );
-        assert!(
-            msgs[1].contains("macroinvalid: macro \"below\""),
-            "{msgs:?}"
-        );
-    }
-
-    #[test]
-    fn a_file_deduplicates_identical_frame_blocks_and_keeps_distinct_ones() {
-        let dup = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.a)\n{end}\n");
-        assert_eq!(dup.frame.len(), 1);
-        let distinct = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n2 (S.L.b)\n{end}\n");
-        assert_eq!(distinct.frame.len(), 2);
-        let stacked = program_of("{frame}\n{frame}\n3 (S.L.c)\n{end}\n");
-        assert_eq!(stacked.frame.len(), 1);
-        let cut_short = program_of("{frame}\n1 (S.L.a)\n{frame}\n2 (S.L.b)\n{end}\n");
-        assert_eq!(
-            cut_short.frame.len(),
-            2,
-            "a frame block without its end, cut short by the next header, still runs"
-        );
-    }
-
-    #[test]
-    #[rustfmt::skip]
-    fn frame_blocks_compare_pending_macro_calls_before_deduplicating() {
-        for kind in ["frame", "frame_ai"] {
-            let p = program_of(&format!("{{{kind}}}\n(M.L.first)\n{{end}}\n{{{kind}}}\n(M.L.second)\n{{end}}\n{{{kind}}}\n(M.L.first)\n{{end}}\n{{macro:first}}\n1 (S.L.a)\n{{end}}\n{{macro:second}}\n2 (S.L.b)\n{{end}}\n"));
-            let frames = match kind { "frame" => &p.frame, _ => &p.frame_ai };
-            assert_eq!(frames.len(), 2, "{kind}");
-            let (f0, f1) = (frames[0] as usize, frames[1] as usize);
-            assert_ne!(p.blocks[f0].ops, p.blocks[f1].ops);
-
-            let p_str = program_of(&format!("{{{kind}}}\n\"x\" (S.$.name)\n{{end}}\n{{{kind}}}\n\"x\" (S.$.name)\n{{end}}\n{{{kind}}}\n\"y\" (S.$.name)\n{{end}}\n"));
-            let s_frames = match kind { "frame" => &p_str.frame, _ => &p_str.frame_ai };
-            assert_eq!(s_frames.len(), 2, "string literals {kind}");
-        }
-    }
-
-    #[test]
-    #[rustfmt::skip]
-    fn script_vars_track_varlists_distinct_from_builtins() {
-        let dir = std::env::temp_dir().join(format!("omsi-script-test-vars-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let vl = dir.join("varlist.txt");
-        std::fs::write(&vl, "door_0\nPAX_Entry0_Open\n").unwrap();
-        let p = compile(&CompileInput {
-            builtin_vars: vec!["PAX_Exit0_Open".into(), "Velocity".into()],
-            varlists: vec![vl],
-            ..Default::default()
-        });
-        std::fs::remove_dir_all(&dir).ok();
-        assert!(p.has_script_var("door_0"));
-        assert!(p.has_script_var("PAX_Entry0_Open"));
-        assert!(!p.has_script_var("PAX_Exit0_Open"));
-        assert!(!p.has_script_var("Velocity"));
-        assert!(p.var("PAX_Exit0_Open").is_some());
-    }
-
-    /// `stores`/`reads` answer from the bits made once as the whole bytecode scan did, and
-    /// a block added afterwards (programs put together by hand) is still seen.
-    #[test]
-    fn stores_and_reads_answer_as_the_bytecode_scan() {
-        let mut p = program_of("{frame}\n(L.L.a) (S.L.b)\n(L.L.c) 1 + (S.L.c)\n{end}\n");
-        let scan = |p: &Program, store: bool, var: VarId| {
-            p.blocks.iter().flat_map(|b| &b.ops).any(|op| matches!(op, Op::Store(v) | Op::Load(v) if *v == var && matches!(op, Op::Store(_)) == store))
-        };
-        let names = ["a", "b", "c", "Clutch"];
-        for n in names {
-            let v = p.var(n).unwrap();
-            assert_eq!(p.stores(v), scan(&p, true, v), "stores {n}");
-            assert_eq!(p.reads(v), scan(&p, false, v), "reads {n}");
-        }
-        assert!(
-            p.stores(p.var("b").unwrap())
-                && !p.stores(p.var("a").unwrap())
-                && p.reads(p.var("c").unwrap())
-        );
-        // (a variable past every one the bits hold)
-        assert!(!p.stores(4000) && !p.reads(4000));
-        let clutch = p.var("Clutch").unwrap();
-        p.blocks.push(Block {
-            ops: vec![Op::Push(1.0), Op::Store(clutch)],
-            ..Default::default()
-        });
-        assert!(p.stores(clutch));
-    }
-
-    /// `reads_sys` answers from the same bits as the scan, and still sees a block added later.
-    #[test]
-    fn reads_sys_answers_as_the_bytecode_scan() {
-        let mut p = program_of("{frame}\n(L.S.Timegap) (L.S.AutoClutch) + (S.L.a)\n{end}\n");
-        let scan = |p: &Program, sys: SysVar| {
-            p.blocks
-                .iter()
-                .flat_map(|b| &b.ops)
-                .any(|op| matches!(op, Op::LoadSys(v) if *v == sys))
-        };
-        for sys in SysVar::ALL {
-            assert_eq!(p.reads_sys(sys), scan(&p, sys), "{sys:?}");
-        }
-        assert!(p.reads_sys(SysVar::AutoClutch) && !p.reads_sys(SysVar::SunAlt));
-        p.blocks.push(Block {
-            ops: vec![Op::LoadSys(SysVar::SunAlt)],
-            ..Default::default()
-        });
-        assert!(p.reads_sys(SysVar::SunAlt));
-    }
-}
+#[path = "compile_tests.rs"]
+mod tests;
 
 pub fn with_lower<R>(name: &str, f: impl FnOnce(&str) -> R) -> R {
     let mut buf = [0u8; 64];

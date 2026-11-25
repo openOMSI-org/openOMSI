@@ -335,7 +335,8 @@ impl Vm {
             return;
         }
         self.depth += 1;
-        let ops = &p.blocks[block as usize].ops;
+        let mut block = block;
+        let mut ops = &p.blocks[block as usize].ops;
         let mut pc = 0usize;
         while pc < ops.len() {
             if self.budget == 0 {
@@ -355,6 +356,17 @@ impl Vm {
                 Op::Macro(b) => {
                     let b = *b;
                     self.run_block(p, b, state, host);
+                }
+                // (a block without its `{end}` goes on with the next block's code at this
+                // depth, as Omsi.exe follows its word chain: 40 macros without their `{end}`
+                // called a few levels down are not cut off by `MAX_DEPTH`)
+                Op::FallThrough(b) => {
+                    let Some(next) = p.blocks.get(*b as usize) else {
+                        break;
+                    };
+                    block = *b;
+                    ops = &next.ops;
+                    pc = 0;
                 }
                 Op::Random => {
                     // `Random(Abs(Round(x)))` in the exe: a whole number in [0, n). Scripts
@@ -485,7 +497,7 @@ fn exec_hot(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut 
 #[inline(never)]
 fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut dyn Host) {
     match op {
-        Op::Macro(_) | Op::Random | Op::JumpIfZero(_) | Op::Jump(_) => {
+        Op::Macro(_) | Op::FallThrough(_) | Op::Random | Op::JumpIfZero(_) | Op::Jump(_) => {
             unreachable!("handled by run_block")
         }
         Op::Callback(n) => host.callback(p.name(*n), *n, s, state),
