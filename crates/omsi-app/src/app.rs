@@ -916,12 +916,15 @@ impl App {
                                 lan::population_seed(lan) ^ 0x746f_7572_5f62_7573,
                             );
                         }
+                        let centers: Vec<glam::DVec3> =
+                            self.player.as_ref().map(|p| p.vehicle.position).into_iter().collect();
                         sch.precache(
                             &w,
                             &renderer,
                             &mut scene,
                             self.session.traffic.as_mut(),
                             parse_time(&self.args.time),
+                            &centers,
                         );
                         crate::perf_report::log_load_memory(
                             "the timetable's vehicles",

@@ -144,6 +144,20 @@ impl ScheduleSim {
         out
     }
 
+    /// The map tiles the trip of departure `i` runs over, from its track or the links between
+    /// its stations (each tile once); empty where the timetable gives no way for it. A bus is
+    /// only ever put on loaded tiles, so the fleet reads ahead the vehicles of the trips that
+    /// come near the player (omsi-app's `Schedule::upcoming_sets`).
+    pub fn trip_tiles(&self, i: usize) -> Vec<(i32, i32)> {
+        let trip = &self.data.trips[self.departures[i].trip];
+        let (steps, _) = self.steps_of(&trip.name, &trip_stations(trip));
+        let mut tiles: Vec<(i32, i32)> =
+            steps.iter().filter_map(|s| s.key.map(|k| k.tile)).collect();
+        tiles.sort_unstable();
+        tiles.dedup();
+        tiles
+    }
+
     /// The depot vehicles of every AI group.
     pub fn depot_vehicles(&self) -> impl Iterator<Item = &DepotVehicle> {
         self.depots.values().flatten()
