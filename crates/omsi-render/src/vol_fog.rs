@@ -506,7 +506,13 @@ pub(crate) fn slots(
     };
     let reach = march_reach(weather_fog, lighting.cloud_density > 0.0 && cloud_shadows);
     (
-        [1.0, 0.85 * droplets, reach, ground_haze(lighting)],
+        [
+            1.0,
+            0.85 * droplets,
+            reach,
+            // (the haze is lost in a thick fog of the weather's own: none to march there)
+            ground_haze(lighting) * (1.0 - weather_fog / HAZE_FOG_OUT).clamp(0.0, 1.0),
+        ],
         [banks.x, banks.y, banks.z, 0.0],
     )
 }
@@ -540,6 +546,8 @@ pub(crate) fn ground_haze(lighting: &Lighting) -> f32 {
 const HAZE_LOW_SUN: f32 = 0.0035;
 const HAZE_NOON: f32 = 0.00045;
 const HAZE_NIGHT: f32 = 0.0009;
+/// The weather's fog (1/m) at which the ground haze is gone in it.
+const HAZE_FOG_OUT: f32 = 0.004;
 
 /// How far the air is marched (m): in a thick fog only as far as anything shows through it
 /// (all the steps where they are seen), in clear air or a mist as far as `REACH`, under a

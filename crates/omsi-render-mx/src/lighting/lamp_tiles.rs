@@ -169,10 +169,13 @@ impl TileWants {
                 g.pos[3] = -(-g.pos[3]).max(0.0) - LAMP_MARK * (slot + 1) as f32;
             }
         }
-        if let Some((b, rotation)) = eye
-            .vehicle
-            .filter(|_| !omsi_cfg::flags::OMSI_NO_CABIN_SHADOWS.is_set())
-        {
+        // (the saloon's maps only while the eye is in the saloon: from outside, its shadows
+        // are seen through the windows at most, and every picture of the bus - the puddles'
+        // reflections of it too - paid for their lookups)
+        if let Some((b, rotation)) = eye.vehicle.filter(|(b, _)| {
+            !omsi_cfg::flags::OMSI_NO_CABIN_SHADOWS.is_set()
+                && passes::VehicleBox::new(b, scene.render_origin).contains(eye.cam_rel, 0.3)
+        }) {
             let ro = scene.render_origin;
             // (the world to the frame of the vehicle's body, whose rotation the app gives)
             let to_world =

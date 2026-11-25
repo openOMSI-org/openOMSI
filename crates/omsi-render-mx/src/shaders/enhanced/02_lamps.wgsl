@@ -95,7 +95,7 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
 const CABIN_FILL: f32 = 0.2;
 // Past this distance (m) a saloon lamp's light is weak against the nearer ones' and its
 // shadow is not looked up: it counts as unshadowed.
-const CABIN_SHADOW_REACH: f32 = 4.5;
+const CABIN_SHADOW_REACH: f32 = 3.5;
 
 // How a saloon lamp's light reaches a surface turned at `c` (the cosine) to it: a tube's
 // length lights what faces a little away from its middle too.
@@ -172,7 +172,9 @@ fn cabin_lamp_shadow(li: u32, p: vec3<f32>, n: vec3<f32>) -> f32 {
 fn cabin_visibility(p: vec3<f32>, n: vec3<f32>) -> f32 {
     var open_light = 0.0;
     var seen_light = 0.0;
-    for (var i = 0u; i < 16u; i = i + 1u) {
+    // (the first eight: the strongest by the camera, see `cabin_tiles`; the rest light the
+    // far end of a long saloon, where the near ones' shadows are what is seen)
+    for (var i = 0u; i < 8u; i = i + 1u) {
         let at = camera.cabin_lamps[i / 4u][i % 4u];
         if (at < 0.0) {
             break;

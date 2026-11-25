@@ -185,7 +185,10 @@ fn vf_march(c: vec3<f32>, d: vec3<f32>, reach: f32, clear: f32, cab: vec2<f32>, 
         let dn = vf_density(x);
         // the weather's fog and the low haze over the ground (`vol_fog.w`, vol_fog.rs
         // `ground_haze`), both droplets: thicker and thinner in the same banks
-        let s_fog = enh.fog.x * exp(-enh.fog.y * h) * dn + enh.vol_fog.w * exp(-h / HAZE_HEIGHT) * mix(1.0, dn, 0.7);
+        var s_fog = enh.fog.x * exp(-enh.fog.y * h) * dn;
+        if (enh.vol_fog.w > 0.0) {
+            s_fog = s_fog + enh.vol_fog.w * exp(-h / HAZE_HEIGHT) * mix(1.0, dn, 0.7);
+        }
         let s_air = enh.fog.w * exp(-h / 1500.0);
         let s_ext = s_fog + s_air * clear;
         var vis = 1.0;
