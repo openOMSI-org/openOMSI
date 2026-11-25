@@ -426,7 +426,8 @@ impl VehicleInstance {
         };
         // `steer_deg` is the front wheel angle of a bicycle model turning about the
         // `[rot_pnt_long]` line: every axle ahead of that line points at the common turning
-        // centre, and every wheel rolls as far as its own track through the bend is long
+        // centre. The wheels turn as the speed over their own axle's size, both sides alike
+        // and whatever the bend (Omsi.exe 0x7debb0, see `ai_wheel_rpm`)
         let (rot, wheelbase) = crate::ai_motion::rotation_point(&self.ty.def);
         let k = ai.steer_deg.to_radians().tan() / wheelbase;
         for ai_idx in 0..self.v_wheels.len() {
@@ -436,7 +437,6 @@ impl VehicleInstance {
                     continue;
                 };
                 let arm = ws.long - rot;
-                let across = 1.0 - ws.lat * k;
                 // (the axle's angle, the same for both sides, as Omsi.exe hands it to the
                 // scripts: see `RigidBody::axle_steer`)
                 let steer = if arm > 0.5 {
@@ -444,12 +444,10 @@ impl VehicleInstance {
                 } else {
                     0.0
                 };
-                let travel = (across * across + (arm * k) * (arm * k)).sqrt();
                 let r = ws.radius.max(0.05);
-                ws.rotation_deg =
-                    (ws.rotation_deg + (ds * travel / r).to_degrees()).rem_euclid(360.0);
-                ws.turned += ds * travel / r;
-                ws.rpm = ai.speed * travel / (std::f32::consts::TAU * r) * 60.0;
+                ws.rotation_deg = (ws.rotation_deg + (ds / r).to_degrees()).rem_euclid(360.0);
+                ws.turned += ds / r;
+                ws.rpm = ai_wheel_rpm(ai.speed, 2.0 * r);
                 let (rpm, suspension) = (ws.rpm, ws.suspension);
                 self.put_turn(w[0], ai_idx, si);
                 self.put(w[1], rpm);
@@ -798,8 +796,20 @@ impl OmsiFrames {
 /// already the vehicle's own, backwards negative.)
 pub(super) fn ai_n_wheel(speed: f32, first_diameter: Option<f32>) -> f32 {
     match first_diameter {
-        Some(d) if d > 0.0 => 60.0 * speed / (std::f32::consts::PI * d),
+        Some(d) if d > 0.0 => ai_wheel_rpm(speed, d),
         _ => 0.0,
+    }
+}
+
+/// A wheel's rpm (`Wheel_RotationSpeed_*`) on a vehicle the AI moves, or on a coupled part
+/// that follows one: Omsi.exe (0x7debb0) gives both wheels of every axle 2·v/d rad/s, `d`
+/// that axle's wheel size and `v` the vehicle's speed, and shows it as 60·ω/2π - the same
+/// on the inner and the outer wheel of a bend.
+pub(super) fn ai_wheel_rpm(speed: f32, diameter: f32) -> f32 {
+    if diameter > 0.0 {
+        60.0 * speed / (std::f32::consts::PI * diameter)
+    } else {
+        0.0
     }
 }
 

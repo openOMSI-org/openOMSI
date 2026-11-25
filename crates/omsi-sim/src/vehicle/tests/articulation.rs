@@ -978,3 +978,81 @@ fn a_skin_plan_moves_the_vertices_as_the_weighted_bones_do() {
     // (vertices 4, 5 and 6: held by a missing bone, too little, by nothing - where they were)
     assert_eq!(&pos[4..], &vm.data.positions[4..]);
 }
+
+/// A road part's wheels turn at the speed it rolls along its own line - the vehicle's times
+/// the cosine of the joint's angle (Omsi.exe 0x7de798) - over their own axle's size
+/// (0x7debb0), not at the vehicle's speed.
+#[test]
+fn a_road_parts_wheels_turn_at_its_own_speed_over_their_size() {
+    let base = crate::timetable_run::tests::script_test_vehicle(
+        "{frame}\n{end}\n",
+        "Wheel_RotationSpeed_0_L\nWheel_RotationSpeed_1_L\nWheel_RotationSpeed_1_R\narticulation_0_alpha\n",
+        "",
+    );
+    let mut front = (*base.ty).clone();
+    front.def.axles = vec![omsi_vehicle::Axle {
+        long: 2.0,
+        wheel_diameter: 1.0,
+        ..Default::default()
+    }];
+    let mut rear = front.clone();
+    rear.def.axles = vec![omsi_vehicle::Axle {
+        long: -4.0,
+        wheel_diameter: 0.8,
+        ..Default::default()
+    }];
+    let mut v = VehicleInstance::new(Arc::new(front), VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(Arc::new(rear), false);
+    v.update_visuals(0.02);
+    // the front swings 50 degrees round while the rear part still lies the old way
+    v.heading = 50.0;
+    v.physics.speed = 10.0;
+    v.update_visuals(0.02);
+    let alpha = v.var("articulation_0_alpha").unwrap();
+    assert!(alpha.abs() > 20.0, "joint at {alpha}");
+    let pi = std::f32::consts::PI;
+    let want = 600.0 * alpha.to_radians().cos() / (pi * 0.8);
+    for side in ["L", "R"] {
+        let rpm = v.var(&format!("Wheel_RotationSpeed_1_{side}")).unwrap();
+        assert!((rpm - want).abs() < 0.05, "{side}: {rpm} rpm, want {want}");
+    }
+}
+
+/// A part turned round turns its wheels the other way: the angle as well as the speed
+/// (0x7debb0 with the part's +0x4e0), so the animation and the scripts' rpm agree.
+#[test]
+fn a_turned_round_parts_wheels_roll_backwards_in_angle_and_speed() {
+    let base = crate::timetable_run::tests::script_test_vehicle(
+        "{frame}\n{end}\n",
+        "Wheel_RotationSpeed_1_L\nWheel_Rotation_1_L\n",
+        "",
+    );
+    let mut ty = (*base.ty).clone();
+    ty.def.axles = vec![omsi_vehicle::Axle {
+        long: 2.0,
+        wheel_diameter: 1.0,
+        ..Default::default()
+    }];
+    let ty = Arc::new(ty);
+    let mut v = VehicleInstance::new(ty.clone(), VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(ty, true);
+    v.update_visuals(0.02);
+    let start = v.var("Wheel_Rotation_1_L").unwrap();
+    v.physics.speed = 10.0;
+    // (the bus drives on: the part's wheels roll as its pivot moves)
+    for _ in 0..5 {
+        v.position.y += 0.2;
+        v.update_visuals(0.02);
+    }
+    let rpm = v.var("Wheel_RotationSpeed_1_L").unwrap();
+    let turned = v.var("Wheel_Rotation_1_L").unwrap() - start;
+    assert!(
+        rpm.abs() > 1.0 && turned.abs() > 1e-3,
+        "rpm {rpm}, turned {turned}"
+    );
+    assert_eq!(
+        rpm.signum(),
+        turned.signum(),
+        "the wheel turns one way and its rpm says the other: rpm {rpm}, turned {turned}"
+    );
+}
