@@ -167,6 +167,73 @@ impl TrafficSim {
         }
     }
 
+    /// The random cars asked for within `spawn_radius` of `center`: the setting, scaled by
+    /// the map's traffic of the hour and by how much road there is around.
+    pub fn street_target(&self, center: DVec3) -> usize {
+        // the map's traffic density by hour (and group) scales the street traffic ...
+        let density = self.street_density();
+        // ... and so does how much road there is around: the same number of cars looks
+        // empty on a six-lane Berlin junction and crowded on a village lane, so the count
+        // asked for is per a neighbourhood of about 250 lanes; and as Omsi spawns on each
+        // path at a rate of its [rule] trafficdensity, paths of low density bring fewer cars
+        // and those of density 0 (or kept clear of cars) none
+        let near_density: Vec<f32> = self
+            .net
+            .lanes_starting_near(center, self.spawn_radius)
+            .into_iter()
+            .map(|i| &self.net.lanes[i])
+            .filter(|l| {
+                l.kind == LaneKind::Street
+                    && l.points
+                        .first()
+                        .map(|p| (*p - center).length() < self.spawn_radius)
+                        .unwrap_or(false)
+            })
+            .map(|l| {
+                if l.no_cars {
+                    0.0
+                } else {
+                    l.density.clamp(0.0, 4.0)
+                }
+            })
+            .collect();
+        (self.target as f32 * density * road_scale(&near_density)).round() as usize
+    }
+
+    /// The player's place and those of the other players of a LAN session, one for each
+    /// neighbourhood (players within `spawn_radius` of one another share theirs), each with
+    /// the cars asked for there: by its own roads, not those round the first player.
+    pub fn neighbourhoods(&self, center: DVec3) -> Vec<Neighbourhood> {
+        let mut out: Vec<Neighbourhood> = Vec::new();
+        for c in std::iter::once(center).chain(self.lan_centers.iter().copied()) {
+            if !out
+                .iter()
+                .any(|n| (n.center - c).truncate().length() < self.spawn_radius)
+            {
+                out.push(Neighbourhood {
+                    center: c,
+                    target: self.street_target(c),
+                });
+            }
+        }
+        out
+    }
+
+    /// The random street cars awake on the road.
+    pub fn awake_street_cars(&self) -> usize {
+        self.cars
+            .iter()
+            .filter(|c| {
+                !c.is_bus()
+                    && self
+                        .net
+                        .lanes
+                        .get(c.state.lane)
+                        .is_some_and(|l| l.kind == LaneKind::Street)
+            })
+            .count()
+    }
+
     /// A random vehicle type for a lane of `kind`: on a street `lane`, of the groups that
     /// lane carries, as much as it carries of each.
     pub fn pick_type(&mut self, kind: LaneKind, lane: Option<usize>) -> Option<Arc<VehicleType>> {
@@ -233,6 +300,27 @@ impl TrafficSim {
             .next_back()
             .map(|t| t.0.clone())
     }
+}
+
+/// Random street cars awake at once, as a multiple of the number asked for round a player.
+pub const CROWD_FACTOR: f32 = 1.3;
+
+/// The surroundings of a player (or of players close together) and the random street cars
+/// asked for there.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Neighbourhood {
+    pub center: glam::DVec3,
+    pub target: usize,
+}
+
+/// The most random street cars awake at once, near the players and on their way out of
+/// range: without a limit, replacing every car that drove off grew the town's traffic
+/// until it locked solid.
+pub fn street_cap(neighbourhoods: &[Neighbourhood]) -> usize {
+    neighbourhoods
+        .iter()
+        .map(|n| (n.target as f32 * CROWD_FACTOR).ceil() as usize)
+        .sum()
 }
 
 /// The least `spawn_density` of a lane open to some random traffic.

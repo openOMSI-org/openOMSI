@@ -5,6 +5,7 @@ use super::*;
 use crate::scene::World;
 use omsi_sim::ai_traffic::admission::{Budgets, Class, Denial, Retry, Verdict, decide_batch};
 use omsi_sim::ai_traffic::control::Removal;
+use omsi_sim::ai_traffic::density::{Neighbourhood, street_cap};
 use omsi_sim::ai_traffic::viewer::NEVER_VANISH_WITHIN;
 
 /// A car that gave up and has stood this long (s) held by nothing anybody can see goes even
@@ -49,9 +50,6 @@ pub(super) fn terrain_height(world: &World, x: f64, y: f64) -> Option<f64> {
 /// camera (m, see `Traffic::hidden`): a tunnel's roof and the ground over it, not a cutting
 /// or an underpass a few metres down.
 const BURIED: f64 = 6.0;
-
-/// Random street cars awake at once, as a multiple of the number asked for round a player.
-const CROWD_FACTOR: f32 = 1.3;
 
 /// How far beyond the counted radius new cars may appear, as a multiple of it.
 const SPAWN_REACH: f64 = 1.3;
@@ -256,10 +254,9 @@ impl Traffic {
         // more cars awake than the whole neighbourhood may hold: those out of the counted
         // radius go to sleep early (where nobody sees it), so that the road near a player
         // can be filled again
-        let crowded = self.sim.target > 0 && {
-            let cap = self.street_cap(self.street_target(center), center);
-            self.awake_street_cars() > cap
-        };
+        let neighbourhoods = self.sim.neighbourhoods(center);
+        let cap = street_cap(&neighbourhoods);
+        let crowded = self.sim.target > 0 && self.sim.awake_street_cars() > cap;
         // the cars somebody stands behind
         let queued: std::collections::HashSet<u64> = self
             .sim
@@ -443,12 +440,12 @@ impl Traffic {
         }
         // aircraft: a few on the flight paths, independent of the street target
         let has_air = self.sim.types.iter().any(|t| t.2 == LaneKind::Air);
-        let street_target = self.street_target(center);
+        let street_target = neighbourhoods[0].target;
         // the cars that come into range again, where they have got to
-        self.wake_dormant(world, center, street_target);
-        // the whole map's population: as dense as around the player, on every street the
-        // map has shown so far (sleeping where the player is not)
-        self.fill_map(center, street_target);
+        self.wake_dormant(world, center, &neighbourhoods);
+        // the whole map's population: as dense as around the players, on every street the
+        // map has shown so far (sleeping where nobody is)
+        self.fill_map(&neighbourhoods);
         for (kind, target) in [
             (LaneKind::Street, street_target),
             (LaneKind::Air, if has_air { 3 } else { 0 }),
@@ -460,9 +457,9 @@ impl Traffic {
             if kind == LaneKind::Street {
                 self.sim.count_near = Some((center, self.sim.spawn_radius));
             }
-            self.populate_kind(world, center, kind, target);
+            self.populate_kind(world, center, kind, target, cap);
         }
-        self.populate_lan_centers(world, center, street_target);
+        self.populate_lan_centers(world, &neighbourhoods, cap);
         if !self.sim.initial {
             self.pull_out_parked(world, center);
             self.park_in(world, center);
@@ -484,78 +481,6 @@ impl Traffic {
         self.sim.initial = false;
     }
 
-    /// The random cars asked for within `spawn_radius` of `center`: the setting, scaled by
-    /// the map's traffic of the hour and by how much road there is around.
-    pub(super) fn street_target(&self, center: DVec3) -> usize {
-        // the map's traffic density by hour (and group) scales the street traffic ...
-        let density = self.street_density();
-        // ... and so does how much road there is around: the same number of cars looks
-        // empty on a six-lane Berlin junction and crowded on a village lane, so the count
-        // asked for is per a neighbourhood of about 250 lanes; and as Omsi spawns on each
-        // path at a rate of its [rule] trafficdensity, paths of low density bring fewer cars
-        // and those of density 0 (or kept clear of cars) none
-        let near_density: Vec<f32> = self
-            .sim
-            .net
-            .lanes_starting_near(center, self.sim.spawn_radius)
-            .into_iter()
-            .map(|i| &self.sim.net.lanes[i])
-            .filter(|l| {
-                l.kind == LaneKind::Street
-                    && l.points
-                        .first()
-                        .map(|p| (*p - center).length() < self.sim.spawn_radius)
-                        .unwrap_or(false)
-            })
-            .map(|l| {
-                if l.no_cars {
-                    0.0
-                } else {
-                    l.density.clamp(0.0, 4.0)
-                }
-            })
-            .collect();
-        (self.sim.target as f32 * density * road_scale(&near_density)).round() as usize
-    }
-
-    /// The player's place and those of the other players of a LAN session, one for each
-    /// neighbourhood: players within `spawn_radius` of one another share theirs.
-    pub(super) fn neighbourhoods(&self, center: DVec3) -> Vec<DVec3> {
-        let mut out = vec![center];
-        for &c in &self.sim.lan_centers {
-            if !out
-                .iter()
-                .any(|d| (*d - c).truncate().length() < self.sim.spawn_radius)
-            {
-                out.push(c);
-            }
-        }
-        out
-    }
-
-    /// The most random street cars awake at once, near the players and on their way out of
-    /// range: without a limit, replacing every car that drove off grew the town's traffic
-    /// until it locked solid.
-    pub(super) fn street_cap(&self, target: usize, center: DVec3) -> usize {
-        (target as f32 * CROWD_FACTOR).ceil() as usize * self.neighbourhoods(center).len()
-    }
-
-    pub(super) fn awake_street_cars(&self) -> usize {
-        self.sim
-            .cars
-            .iter()
-            .filter(|c| {
-                !c.is_bus()
-                    && self
-                        .sim
-                        .net
-                        .lanes
-                        .get(c.state.lane)
-                        .is_some_and(|l| l.kind == LaneKind::Street)
-            })
-            .count()
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(super) fn populate_kind(
         &mut self,
@@ -563,6 +488,7 @@ impl Traffic {
         center: DVec3,
         kind: LaneKind,
         target: usize,
+        cap: usize,
     ) {
         // (once the world is there, new cars may also come from a little beyond the counted
         // radius, where far more places are out of everybody's sight)
@@ -650,10 +576,7 @@ impl Traffic {
             .count();
         let mut want = target.saturating_sub(unscheduled);
         if kind == LaneKind::Street {
-            want = want.min(
-                self.street_cap(target, center)
-                    .saturating_sub(self.awake_street_cars()),
-            );
+            want = want.min(cap.saturating_sub(self.sim.awake_street_cars()));
         }
         let class = if kind == LaneKind::Air {
             Class::Aircraft
@@ -786,13 +709,23 @@ impl Traffic {
     /// nobody sees it happen, in the order they went to sleep, up to a little over the number
     /// asked for around the player; one whose ground is not loaded stays asleep, and none
     /// wakes onto another (`admission::decide_batch`).
-    pub(super) fn wake_dormant(&mut self, world: &World, center: DVec3, target: usize) {
+    pub(super) fn wake_dormant(
+        &mut self,
+        world: &World,
+        center: DVec3,
+        neighbourhoods: &[Neighbourhood],
+    ) {
         if self.sim.dormant.is_empty() || self.sim.mirror {
             return;
         }
         // each neighbourhood has its own room: counted over the whole map, the cars round
         // one player left none for another's, whose sleeping cars then never woke
-        for near in self.neighbourhoods(center) {
+        let cap = street_cap(neighbourhoods);
+        for &Neighbourhood {
+            center: near,
+            target,
+        } in neighbourhoods
+        {
             // (those that gave up and still stand on the road count, see `populate_kind`)
             let active = self
                 .sim
@@ -802,9 +735,7 @@ impl Traffic {
                     !c.is_bus() && (c.vehicle.position - near).length() < self.sim.spawn_radius
                 })
                 .count();
-            let room = self
-                .street_cap(target, center)
-                .saturating_sub(self.awake_street_cars());
+            let room = cap.saturating_sub(self.sim.awake_street_cars());
             let budget = ((target as f32 * 1.25).ceil() as usize)
                 .saturating_sub(active)
                 .min(room);
@@ -1108,21 +1039,18 @@ impl Traffic {
     }
 
     /// Street traffic around the other players of a LAN session too (host): each of them
-    /// gets its own share of cars where no other player's share lies already.
-    pub(super) fn populate_lan_centers(&mut self, world: &World, center: DVec3, target: usize) {
-        let centers = self.sim.lan_centers.clone();
-        let mut done = vec![center];
-        for c in centers {
-            if done
-                .iter()
-                .any(|d| (*d - c).truncate().length() < self.sim.spawn_radius)
-            {
-                continue;
-            }
-            self.sim.count_near = Some((c, self.sim.spawn_radius));
-            self.populate_kind(world, c, LaneKind::Street, target);
+    /// gets its own share of cars where no other player's share lies already (the first
+    /// neighbourhood is the host's own, filled already).
+    pub(super) fn populate_lan_centers(
+        &mut self,
+        world: &World,
+        neighbourhoods: &[Neighbourhood],
+        cap: usize,
+    ) {
+        for n in neighbourhoods.iter().skip(1) {
+            self.sim.count_near = Some((n.center, self.sim.spawn_radius));
+            self.populate_kind(world, n.center, LaneKind::Street, n.target, cap);
             self.sim.count_near = None;
-            done.push(c);
         }
     }
 }

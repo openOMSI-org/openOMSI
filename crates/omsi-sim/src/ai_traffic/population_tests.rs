@@ -276,3 +276,52 @@ fn the_ai_paints_are_drawn_from_every_scheme_of_the_type() {
         "the same on 32 and 64 bits: the hash is reduced as a u64"
     );
 }
+
+/// A host on a quiet road and a player far off in town: each neighbourhood asks for the cars
+/// its own roads carry. With the host's number for both, the town got a village's traffic.
+#[test]
+fn each_players_neighbourhood_asks_for_its_own_roads_traffic() {
+    use crate::ai_traffic::density::{Neighbourhood, street_cap};
+    let f = super::service_tests::Fixture::new();
+    let lane = |x: f64, density: f32| {
+        let mut l = crate::traffic::LaneBuilder::arc(
+            DVec3::new(x, 0.0, 0.0),
+            0.0,
+            300.0,
+            0.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        );
+        l.density = density;
+        l
+    };
+    let mut t = super::service_tests::road(&f);
+    t.net = Network {
+        lanes: vec![lane(0.0, 0.1), lane(5000.0, 1.0)],
+        ..Default::default()
+    };
+    t.net.build_grid();
+    t.target = 100;
+    let (host, town) = (DVec3::ZERO, DVec3::new(5000.0, 0.0, 0.0));
+    let alone = t.neighbourhoods(host);
+    assert_eq!(alone.len(), 1);
+    assert_eq!(alone[0].target, 10);
+    // somebody beside the host shares its neighbourhood
+    t.lan_centers = vec![DVec3::new(50.0, 0.0, 0.0), town];
+    let both = t.neighbourhoods(host);
+    assert_eq!(
+        both,
+        [
+            Neighbourhood {
+                center: host,
+                target: 10
+            },
+            Neighbourhood {
+                center: town,
+                target: 100
+            }
+        ]
+    );
+    assert_eq!(street_cap(&both), 13 + 130);
+}
