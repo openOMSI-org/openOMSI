@@ -978,3 +978,42 @@ fn a_skin_plan_moves_the_vertices_as_the_weighted_bones_do() {
     // (vertices 4, 5 and 6: held by a missing bone, too little, by nothing - where they were)
     assert_eq!(&pos[4..], &vm.data.positions[4..]);
 }
+
+/// A road part's wheels turn at the speed it rolls along its own line - the vehicle's times
+/// the cosine of the joint's angle (Omsi.exe 0x7de798) - over their own axle's size
+/// (0x7debb0), not at the vehicle's speed.
+#[test]
+fn a_road_parts_wheels_turn_at_its_own_speed_over_their_size() {
+    let base = crate::timetable_run::tests::script_test_vehicle(
+        "{frame}\n{end}\n",
+        "Wheel_RotationSpeed_0_L\nWheel_RotationSpeed_1_L\nWheel_RotationSpeed_1_R\narticulation_0_alpha\n",
+        "",
+    );
+    let mut front = (*base.ty).clone();
+    front.def.axles = vec![omsi_vehicle::Axle {
+        long: 2.0,
+        wheel_diameter: 1.0,
+        ..Default::default()
+    }];
+    let mut rear = front.clone();
+    rear.def.axles = vec![omsi_vehicle::Axle {
+        long: -4.0,
+        wheel_diameter: 0.8,
+        ..Default::default()
+    }];
+    let mut v = VehicleInstance::new(Arc::new(front), VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(Arc::new(rear), false);
+    v.update_visuals(0.02);
+    // the front swings 50 degrees round while the rear part still lies the old way
+    v.heading = 50.0;
+    v.physics.speed = 10.0;
+    v.update_visuals(0.02);
+    let alpha = v.var("articulation_0_alpha").unwrap();
+    assert!(alpha.abs() > 20.0, "joint at {alpha}");
+    let pi = std::f32::consts::PI;
+    let want = 600.0 * alpha.to_radians().cos() / (pi * 0.8);
+    for side in ["L", "R"] {
+        let rpm = v.var(&format!("Wheel_RotationSpeed_1_{side}")).unwrap();
+        assert!((rpm - want).abs() < 0.05, "{side}: {rpm} rpm, want {want}");
+    }
+}

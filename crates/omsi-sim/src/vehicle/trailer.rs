@@ -988,14 +988,32 @@ impl TrailerPart {
         if let Some(id) = self.v_beta {
             main.state.vars[id as usize] = beta as f32;
         }
-        let rpm =
-            main.physics.velocity_kmh() / 3.6 / (2.0 * std::f32::consts::PI * self.wheel_radius)
-                * 60.0;
+        // A road part rolls at the speed of the vehicle times the cosine of the joint's
+        // angle, a train's car at the leading one's, and each axle's wheels turn by that over
+        // their own size: Omsi.exe 0x7de798 gives a coupled road part that speed (+0x30c),
+        // 0x7def5c a train's car the head's, then 0x7debb0 the wheels 2·v/d. (They all
+        // turned at the vehicle's speed over the part's first axle.)
+        let lead_speed = main.physics.velocity_kmh() / 3.6;
+        let speed = if main.ty.def.is_rail() {
+            lead_speed
+        } else {
+            part_speed(lead_speed, alpha as f32)
+        };
+        // (turned round, its wheels turn the other way, +0x4e0)
+        let speed = if self.reversed { -speed } else { speed };
         let turned = self.odometer / self.wheel_radius;
-        let step = turned - self.turned_put;
+        let rolled = (turned - self.turned_put) * self.wheel_radius;
         self.turned_put = turned;
         for a in 0..self.axle_count {
             let steer = self.axle_steer(a);
+            let diameter = self
+                .ty
+                .def
+                .axles
+                .get(a)
+                .map_or(2.0 * self.wheel_radius, |x| x.wheel_diameter.max(0.2));
+            let rpm = super::update::ai_wheel_rpm(speed, diameter);
+            let step = rolled / (diameter / 2.0);
             for side in 0..2 {
                 if let (Some(Some(id)), Some(s)) =
                     (self.axle_ids.steering.get(a).map(|s| s[side]), steer)
@@ -1125,4 +1143,11 @@ impl TrailerPart {
             }
         }
     }
+}
+
+/// The speed (m/s) a coupled road part rolls at: the vehicle's `speed` times the cosine of
+/// the joint's angle `alpha_deg` (Omsi.exe 0x7de798 sets the part's +0x30c so, which its
+/// wheels then turn by, 0x7debb0).
+pub(super) fn part_speed(speed: f32, alpha_deg: f32) -> f32 {
+    speed * alpha_deg.to_radians().cos()
 }
