@@ -16,6 +16,13 @@ pub(super) fn fleet_ahead() -> f64 {
         .unwrap_or(FLEET_AHEAD)
 }
 
+/// How near the player a trip's way must come for its vehicles to be read ahead: the tiles
+/// are loaded to about 1.2 km round the player (a bus is only put on loaded tiles), and the
+/// rest gives the reading and uploading time while the player drives towards the trip.
+/// Every trip of the map was read ahead before: 131 vehicle sets, 108 s of the loading and
+/// more graphics memory than an 8 GB card has, on a map of 1971 tiles.
+pub(super) const FLEET_NEAR: f64 = 3000.0;
+
 /// A vehicle set nobody has drawn for this long, and that no departure of the next
 /// minutes wants, leaves the GPU.
 pub(super) const FLEET_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
@@ -45,6 +52,7 @@ impl Schedule {
     ) {
         let t0 = std::time::Instant::now();
         let Some(t) = traffic else { return };
+        self.fleet_near = centers.to_vec();
         let sets = self.upcoming_sets(world, t, day_time);
         // a few sets at a time: read on the workers, uploaded, and the copies let go
         let mut most_held = 0usize;
@@ -178,6 +186,9 @@ impl Schedule {
         let mut out = Vec::new();
         let mut seen: HashSet<crate::scene::VehicleKey> = HashSet::new();
         for i in self.sim.upcoming(day_time, fleet_ahead()) {
+            if !self.comes_near(i) {
+                continue;
+            }
             let Some(c) = self.sim.choose(i, &*world.data()) else {
                 continue;
             };
@@ -188,6 +199,32 @@ impl Schedule {
             }
         }
         out
+    }
+
+    /// Whether the trip of departure `i` comes within [`FLEET_NEAR`] of the player (see
+    /// `fleet_near`); a trip whose way the timetable does not give is taken as coming near.
+    fn comes_near(&mut self, i: usize) -> bool {
+        if self.fleet_near.is_empty() {
+            return true;
+        }
+        let trip = self.sim.trip_index(i);
+        let sim = &self.sim;
+        let tiles = self
+            .trip_tiles
+            .entry(trip)
+            .or_insert_with(|| sim.trip_tiles(i));
+        if tiles.is_empty() {
+            return true;
+        }
+        let ts = omsi_map::tile_size();
+        tiles.iter().any(|&(x, y)| {
+            let (x0, y0) = (x as f64 * ts, y as f64 * ts);
+            self.fleet_near.iter().any(|c| {
+                let dx = (x0 - c.x).max(c.x - (x0 + ts)).max(0.0);
+                let dy = (y0 - c.y).max(c.y - (y0 + ts)).max(0.0);
+                dx * dx + dy * dy <= FLEET_NEAR * FLEET_NEAR
+            })
+        })
     }
 
     /// Keep the GPU's fleet to the vehicles of the next minutes: read the sets of the
