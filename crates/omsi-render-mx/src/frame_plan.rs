@@ -576,7 +576,7 @@ pub(crate) fn material_lean(m: &MaterialUniform) -> Lean {
         // (a base colour alone is drawn by the lean pipelines; the other PBR factors not)
         && m.base_color[3] < 1.5
         && m.emission[3] <= 0.0
-        && !(m.wipe_bounds[2] != 0.0 && m.wipe_bounds[3] < 0.0);
+        && m.wipe_bounds[3] >= 0.0;
     if !plain_branches {
         Lean::No
     } else if m.params[0] < 1.5 || terrain {

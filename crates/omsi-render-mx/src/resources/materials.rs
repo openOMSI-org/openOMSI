@@ -784,7 +784,23 @@ impl Renderer {
         } else {
             bounds[3].abs()
         };
-        self.copy_material(scene, base, texture, Some((mask, drops, bounds)))
+        self.copy_material(scene, base, texture, Some((Some((mask, drops)), bounds)))
+    }
+
+    /// The snow variant of a rain film's layer on a pane without a wiper mask of its own (a
+    /// door, an opening window, a side window away from the wipers): the pane of glass that
+    /// shows settled snow while it snows, as `add_window_wetness_material`'s snow variant
+    /// does, its cover the layer's own wetness (`window_wetness` without a mask). Without it
+    /// such a pane kept drawing the rain film's water drops in a snowfall.
+    pub fn add_window_snow_material(
+        &self,
+        scene: &mut Scene,
+        base: MaterialId,
+    ) -> Option<MaterialId> {
+        let texture = scene.materials.get(base)?.texture;
+        // (no mask: `wipe_bounds.z` 0, the vertex stage lays no `wipe_uv`; `w` below zero
+        // marks the snow variant, `is_snow_pane`)
+        self.copy_material(scene, base, texture, Some((None, [0.0, 0.0, 0.0, -1.0])))
     }
 
     pub(crate) fn copy_material(
@@ -792,7 +808,7 @@ impl Renderer {
         scene: &mut Scene,
         base: MaterialId,
         texture: Option<TextureId>,
-        wetness: Option<(TextureId, TextureId, [f32; 4])>,
+        wetness: Option<(Option<(TextureId, TextureId)>, [f32; 4])>,
     ) -> Option<MaterialId> {
         let (
             alpha,
@@ -832,11 +848,13 @@ impl Renderer {
                 src.uniform,
             )
         };
-        if let Some((mask, drops, bounds)) = wetness {
-            transmap = Some((mask, true));
-            bump = Some((drops, 0.0));
+        if let Some((maps, bounds)) = wetness {
+            if let Some((mask, drops)) = maps {
+                transmap = Some((mask, true));
+                bump = Some((drops, 0.0));
+                uniform.params[2] = 0.0;
+            }
             uniform.wipe_bounds = bounds;
-            uniform.params[2] = 0.0;
             // the snow variant is a pane of glass, not the film of water (`emissive.w` 2)
             if bounds[3] < 0.0 && uniform.emissive[3] > 1.5 {
                 uniform.emissive[3] = 1.0;
