@@ -160,7 +160,7 @@ impl Renderer {
                 mb(m.budget_bytes)
             );
         }
-        let options = intel_vulkan_profile(&info, options);
+        let (options, intel_vulkan_safe) = intel_vulkan_profile(&info, options);
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(
             info.backend == mx::Backend::Gl,
@@ -1017,8 +1017,9 @@ impl Renderer {
 }
 
 /// The options an adapter opens with: an Intel one on Vulkan under Windows gets the
-/// conservative profile (see the comment inside), any other the options as they are.
-fn intel_vulkan_profile(info: &mx::AdapterInfo, options: RenderOptions) -> RenderOptions {
+/// conservative profile (see the comment inside), any other the options as they are; and
+/// whether it got the profile.
+fn intel_vulkan_profile(info: &mx::AdapterInfo, options: RenderOptions) -> (RenderOptions, bool) {
     // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
     // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
     // violation, so wgpu cannot turn it into a recoverable error. Start those adapters
@@ -1033,14 +1034,15 @@ fn intel_vulkan_profile(info: &mx::AdapterInfo, options: RenderOptions) -> Rende
             "Intel Vulkan adapter detected ({}): using the stable driver profile (1x MSAA, 1x anisotropy, SSAO and runtime texture compression off); set OMSI_INTEL_FULL_GPU=1 after updating the Intel driver to retry the requested settings",
             info.name
         );
-        RenderOptions {
+        let options = RenderOptions {
             msaa: 1,
             anisotropy: 1,
             ssao: false,
             compress_textures: false,
             ..options
-        }
+        };
+        (options, true)
     } else {
-        options
+        (options, false)
     }
 }
