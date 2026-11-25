@@ -22,6 +22,28 @@ const STALE_TEMP: Duration = Duration::from_secs(600);
 const ENTRY_EXT: &str = "tex";
 const TEMP_EXT: &str = "tmp";
 
+/// What the cache did since the game started (`DiskCache::stats`): whether a map's textures
+/// come from it at the second start, or the cache throws out at every start what the same
+/// start reads again later (its cap is 700 MB, a large map's textures several GB).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DiskCacheStats {
+    pub hits: u64,
+    pub misses: u64,
+    pub stored: u64,
+    pub stored_bytes: u64,
+    /// Textures not stored: the cache was full of this start's own.
+    pub refused: u64,
+    /// Entries of earlier starts removed to make room, and their bytes.
+    pub evicted: u64,
+    pub evicted_bytes: u64,
+}
+
+static STATS: [AtomicU64; 7] = [const { AtomicU64::new(0) }; 7];
+
+fn count(i: usize, n: u64) {
+    STATS[i].fetch_add(n, Ordering::Relaxed);
+}
+
 pub struct DiskCache {
     dir: PathBuf,
     cap: u64,
@@ -94,11 +116,31 @@ impl DiskCache {
             .as_ref()
     }
 
+    /// What every cache did since the game started.
+    pub fn stats() -> DiskCacheStats {
+        let g = |i: usize| STATS[i].load(Ordering::Relaxed);
+        DiskCacheStats {
+            hits: g(0),
+            misses: g(1),
+            stored: g(2),
+            stored_bytes: g(3),
+            refused: g(4),
+            evicted: g(5),
+            evicted_bytes: g(6),
+        }
+    }
+
     pub fn dir(&self) -> &Path {
         &self.dir
     }
 
     pub(crate) fn load(&self, key: &Key) -> Option<Entry> {
+        let entry = self.load_entry(key);
+        count(if entry.is_some() { 0 } else { 1 }, 1);
+        entry
+    }
+
+    fn load_entry(&self, key: &Key) -> Option<Entry> {
         let path = self.dir.join(&key.name);
         let file = File::open(&path).ok()?;
         let md = file.metadata().ok()?;
@@ -124,6 +166,7 @@ impl DiskCache {
 
     pub(crate) fn store(&self, key: &Key, t: &TextureData, info: Prepared) {
         if self.full.load(Ordering::Relaxed) {
+            count(4, 1);
             return;
         }
         let Some(body) = serialise(key, t, info) else {
@@ -134,6 +177,7 @@ impl DiskCache {
         }
         let len = body.len() as u64;
         if !self.admit(len) {
+            count(4, 1);
             return;
         }
         #[cfg(test)]
@@ -159,6 +203,8 @@ impl DiskCache {
         }
         budget.pending -= len;
         if stored {
+            count(2, 1);
+            count(3, len);
             budget.on_disk = Some((budget.on_disk.unwrap_or(0) + len).saturating_sub(replaced));
         }
     }
@@ -212,6 +258,8 @@ impl DiskCache {
             }
             if std::fs::remove_file(&path).is_ok() {
                 total -= len;
+                count(5, 1);
+                count(6, len);
             }
         }
         total

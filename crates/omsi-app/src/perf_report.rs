@@ -298,4 +298,15 @@ pub(crate) fn log_load_memory(
     if let Some(a) = renderer.allocator_summary() {
         log::info!("load memory after {stage}, allocations: {a}");
     }
+    let c = omsi_texture::disk_cache::DiskCache::stats();
+    log::info!(
+        "texture disk cache after {stage}: {} hits, {} misses, {} stored ({:.0} MB), {} not stored (full), {} of earlier starts removed ({:.0} MB)",
+        c.hits,
+        c.misses,
+        c.stored,
+        mb(c.stored_bytes),
+        c.refused,
+        c.evicted,
+        mb(c.evicted_bytes)
+    );
 }
