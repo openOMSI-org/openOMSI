@@ -270,6 +270,10 @@ pub trait PluginIo {
     fn bus_controls(&self) -> Option<[f32; 4]> {
         None
     }
+    /// Where the player's rail vehicle is on its track (None: not on rails).
+    fn bus_track(&self) -> Option<TrackPos> {
+        None
+    }
     /// The front wheels' angle and the most they turn, degrees (right +).
     fn bus_steer(&self) -> Option<(f32, f32)> {
         None
@@ -769,6 +773,19 @@ pub struct AiCar {
     /// The heading the box's axes follow (the body's; the path's `heading` + 180 for a
     /// vehicle driven backwards along its file's axis).
     pub box_heading: f64,
+}
+
+/// Where a rail vehicle is on its track, along the track rather than in x and y (#3969).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TrackPos {
+    /// An index into the map's lanes.
+    pub lane: usize,
+    pub s: f32,
+    pub lane_length: f32,
+    pub forward: bool,
+    /// Net metres along the tracks since it was put on them: backing up takes them off,
+    /// below zero too.
+    pub travelled: f64,
 }
 
 /// A timetable bus on the road.

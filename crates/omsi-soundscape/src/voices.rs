@@ -44,7 +44,15 @@ pub struct Layer {
 
 impl Layer {
     pub fn new(slot: &'static str) -> Layer {
-        Layer { slot, gain: 0.0, target: 0.0, placing: Placing::default(), playing: Vec::new(), last_take: None, waiting: None }
+        Layer {
+            slot,
+            gain: 0.0,
+            target: 0.0,
+            placing: Placing::default(),
+            playing: Vec::new(),
+            last_take: None,
+            waiting: None,
+        }
     }
 
     pub fn gain(&self) -> f32 {
@@ -57,7 +65,15 @@ impl Layer {
 
     /// One frame: `now` is the ambience's own clock (s), `level` the slot's loudness in
     /// LUFS at a target of 1, `rng` a fresh random number 0 … 1.
-    pub fn tick(&mut self, engine: &AudioEngine, pack: &Pack, now: f64, dt: f32, level: f32, rng: f32) {
+    pub fn tick(
+        &mut self,
+        engine: &AudioEngine,
+        pack: &Pack,
+        now: f64,
+        dt: f32,
+        level: f32,
+        rng: f32,
+    ) {
         let k = 1.0 - (-dt / GLIDE).exp();
         self.gain += (self.target - self.gain) * k;
         if self.target <= 1.0e-4 && self.gain < 2.0e-4 {
@@ -83,9 +99,14 @@ impl Layer {
             return;
         }
         // the next take: when nothing plays, or the last one is into its crossfade
-        let due = self.playing.last().is_none_or(|p| now - p.started >= p.seconds - CROSSFADE);
+        let due = self
+            .playing
+            .last()
+            .is_none_or(|p| now - p.started >= p.seconds - CROSSFADE);
         if due {
-            let i = *self.waiting.get_or_insert_with(|| pick(takes.len(), self.last_take, rng));
+            let i = *self
+                .waiting
+                .get_or_insert_with(|| pick(takes.len(), self.last_take, rng));
             let take = &takes[i];
             if engine.clips_ready(std::slice::from_ref(&take.path)) {
                 self.waiting = None;
@@ -93,7 +114,12 @@ impl Layer {
                     let seconds = (clip.frames() as f64 / clip.sample_rate.max(1) as f64).max(1.0);
                     let trim = trim(take, level);
                     let id = engine.play(clip, self.params(0.0));
-                    self.playing.push(Playing { id, started: now, seconds, trim });
+                    self.playing.push(Playing {
+                        id,
+                        started: now,
+                        seconds,
+                        trim,
+                    });
                     self.last_take = Some(i);
                 }
             }
@@ -104,7 +130,8 @@ impl Layer {
             // (equal power: two takes crossing keep the layer's loudness)
             let up = (t / fade).clamp(0.0, 1.0);
             let down = ((p.seconds - t) / fade).clamp(0.0, 1.0);
-            let env = ((up * std::f64::consts::FRAC_PI_2).sin() * (down * std::f64::consts::FRAC_PI_2).sin()) as f32;
+            let env = ((up * std::f64::consts::FRAC_PI_2).sin()
+                * (down * std::f64::consts::FRAC_PI_2).sin()) as f32;
             engine.set_params(p.id, self.params(self.gain * p.trim * env));
         }
     }
@@ -116,7 +143,11 @@ impl Layer {
             looping: false,
             position: self.placing.at.map(|p| p.as_vec3()),
             doppler: false,
-            range: if self.placing.at.is_some() { self.placing.range.max(0.1) } else { 1.0 },
+            range: if self.placing.at.is_some() {
+                self.placing.range.max(0.1)
+            } else {
+                1.0
+            },
             lowpass_hz: self.placing.lowpass,
             important: false,
         }
@@ -150,7 +181,16 @@ pub fn pick(n: usize, last: Option<usize>, rng: f32) -> usize {
 
 /// Play one take of `slot` once, at `level` LUFS (times `gain`), where `placing` says. The
 /// clip is read in the background the first time: `false` until it is there.
-pub fn one_shot(engine: &AudioEngine, pack: &Pack, slot: &str, level: f32, gain: f32, placing: Placing, rng: f32, last: &mut hashbrown::HashMap<String, usize>) -> bool {
+pub fn one_shot(
+    engine: &AudioEngine,
+    pack: &Pack,
+    slot: &str,
+    level: f32,
+    gain: f32,
+    placing: Placing,
+    rng: f32,
+    last: &mut hashbrown::HashMap<String, usize>,
+) -> bool {
     let takes = pack.takes(slot);
     if takes.is_empty() {
         return true;
@@ -160,7 +200,9 @@ pub fn one_shot(engine: &AudioEngine, pack: &Pack, slot: &str, level: f32, gain:
     if !engine.clips_ready(std::slice::from_ref(&take.path)) {
         return false;
     }
-    let Some(clip) = engine.load_clip(&take.path) else { return true };
+    let Some(clip) = engine.load_clip(&take.path) else {
+        return true;
+    };
     last.insert(slot.to_string(), i);
     engine.play(
         clip,
@@ -192,7 +234,11 @@ mod tests {
 
     #[test]
     fn a_quiet_take_is_brought_up_to_its_slot() {
-        let t = super::Take { path: Default::default(), lufs: -33.0, region: None };
+        let t = super::Take {
+            path: Default::default(),
+            lufs: -33.0,
+            region: None,
+        };
         assert!((super::trim(&t, -27.0) - 2.0).abs() < 0.01);
     }
 }

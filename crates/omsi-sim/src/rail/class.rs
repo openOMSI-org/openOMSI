@@ -53,9 +53,27 @@ impl RailClass {
     /// brake), a Berlin A3 metro car, an S-Bahn BR 481 quarter train (1.0 m/s²).
     pub fn performance(self) -> Performance {
         match self {
-            RailClass::Tram => Performance { kw_per_tonne: 14.0, start_accel: 1.2, service_brake: 1.3, emergency_brake: 2.8, top_speed: 19.5 },
-            RailClass::Metro => Performance { kw_per_tonne: 14.0, start_accel: 1.1, service_brake: 1.2, emergency_brake: 1.8, top_speed: 22.0 },
-            RailClass::Train => Performance { kw_per_tonne: 9.0, start_accel: 0.9, service_brake: 0.9, emergency_brake: 1.3, top_speed: 44.0 },
+            RailClass::Tram => Performance {
+                kw_per_tonne: 14.0,
+                start_accel: 1.2,
+                service_brake: 1.3,
+                emergency_brake: 2.8,
+                top_speed: 19.5,
+            },
+            RailClass::Metro => Performance {
+                kw_per_tonne: 14.0,
+                start_accel: 1.1,
+                service_brake: 1.2,
+                emergency_brake: 1.8,
+                top_speed: 22.0,
+            },
+            RailClass::Train => Performance {
+                kw_per_tonne: 9.0,
+                start_accel: 0.9,
+                service_brake: 0.9,
+                emergency_brake: 1.3,
+                top_speed: 44.0,
+            },
         }
     }
 
@@ -130,24 +148,66 @@ mod tests {
     use omsi_vehicle::vehicle::Axle;
 
     fn rail(mass: f32, length: f32, driven_axles: usize) -> Vehicle {
-        let axle = |driven| Axle { long: 0.0, max_width: 1.4, min_width: 1.4, wheel_diameter: 0.7, spring: 100.0, max_force: 100.0, damper: 10.0, driven, inertia_inv: 0.0 };
-        Vehicle { mass, boogies: Some(5.0), axles: (0..4).map(|i| axle(i < driven_axles)).collect(), bounding_box: Some([2.4, length, 3.4, 0.0, 0.0, 0.0]), ..Default::default() }
+        let axle = |driven| Axle {
+            long: 0.0,
+            max_width: 1.4,
+            min_width: 1.4,
+            wheel_diameter: 0.7,
+            spring: 100.0,
+            max_force: 100.0,
+            damper: 10.0,
+            driven,
+            inertia_inv: 0.0,
+        };
+        Vehicle {
+            mass,
+            boogies: Some(5.0),
+            axles: (0..4).map(|i| axle(i < driven_axles)).collect(),
+            bounding_box: Some([2.4, length, 3.4, 0.0, 0.0, 0.0]),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn a_road_vehicle_has_no_rail_class() {
-        assert_eq!(RailClass::of(&Vehicle { mass: 12.0, ..Default::default() }), None);
+        assert_eq!(
+            RailClass::of(&Vehicle {
+                mass: 12.0,
+                ..Default::default()
+            }),
+            None
+        );
     }
 
     #[test]
     fn size_and_shoes_tell_the_kind() {
-        assert_eq!(RailClass::of(&rail(18.0, 14.0, 4)), Some(RailClass::Tram), "a KT4D");
-        assert_eq!(RailClass::of(&rail(80.0, 20.0, 4)), Some(RailClass::Train), "a locomotive");
-        assert_eq!(RailClass::of(&rail(52.0, 26.0, 2)), Some(RailClass::Train), "a heavy coach");
-        assert_eq!(RailClass::of(&rail(40.0, 42.0, 4)), Some(RailClass::Tram), "a long low-floor tram is no train");
+        assert_eq!(
+            RailClass::of(&rail(18.0, 14.0, 4)),
+            Some(RailClass::Tram),
+            "a KT4D"
+        );
+        assert_eq!(
+            RailClass::of(&rail(80.0, 20.0, 4)),
+            Some(RailClass::Train),
+            "a locomotive"
+        );
+        assert_eq!(
+            RailClass::of(&rail(52.0, 26.0, 2)),
+            Some(RailClass::Train),
+            "a heavy coach"
+        );
+        assert_eq!(
+            RailClass::of(&rail(40.0, 42.0, 4)),
+            Some(RailClass::Tram),
+            "a long low-floor tram is no train"
+        );
         let mut metro = rail(30.0, 16.0, 4);
         metro.contact_shoes.push([0.0; 6]);
-        assert_eq!(RailClass::of(&metro), Some(RailClass::Metro), "a third rail");
+        assert_eq!(
+            RailClass::of(&metro),
+            Some(RailClass::Metro),
+            "a third rail"
+        );
         // the file may say it
         let mut tram = rail(80.0, 20.0, 4);
         tram.rail_class = Some("Tram".into());
@@ -158,13 +218,35 @@ mod tests {
 
     #[test]
     fn tracks_are_told_by_their_surroundings() {
-        let street = TrackFacts { street_beside: true, min_radius: 300.0, third_rail: false };
-        let line = TrackFacts { street_beside: false, min_radius: 400.0, third_rail: false };
-        let loop_ = TrackFacts { street_beside: false, min_radius: 25.0, third_rail: false };
+        let street = TrackFacts {
+            street_beside: true,
+            min_radius: 300.0,
+            third_rail: false,
+        };
+        let line = TrackFacts {
+            street_beside: false,
+            min_radius: 400.0,
+            third_rail: false,
+        };
+        let loop_ = TrackFacts {
+            street_beside: false,
+            min_radius: 25.0,
+            third_rail: false,
+        };
         assert_eq!(TrackClass::of(street), TrackClass::Street);
         assert_eq!(TrackClass::of(line), TrackClass::Mainline);
-        assert_eq!(TrackClass::of(loop_), TrackClass::Street, "no railway bends so tight");
-        assert_eq!(TrackClass::of(TrackFacts { third_rail: true, ..loop_ }), TrackClass::Mainline);
+        assert_eq!(
+            TrackClass::of(loop_),
+            TrackClass::Street,
+            "no railway bends so tight"
+        );
+        assert_eq!(
+            TrackClass::of(TrackFacts {
+                third_rail: true,
+                ..loop_
+            }),
+            TrackClass::Mainline
+        );
     }
 
     #[test]
@@ -172,10 +254,16 @@ mod tests {
         use RailClass::*;
         assert!(TrackClass::Street.takes(Tram, false));
         assert!(TrackClass::Mainline.takes(Tram, false));
-        assert!(!TrackClass::Street.takes(Train, false), "a train does not run in the street");
+        assert!(
+            !TrackClass::Street.takes(Train, false),
+            "a train does not run in the street"
+        );
         assert!(TrackClass::Mainline.takes(Train, false));
         assert!(TrackClass::Mainline.takes(Metro, true));
-        assert!(!TrackClass::Mainline.takes(Metro, false), "a metro needs its third rail");
+        assert!(
+            !TrackClass::Mainline.takes(Metro, false),
+            "a metro needs its third rail"
+        );
         assert!(!TrackClass::Street.takes(Metro, true));
     }
 }

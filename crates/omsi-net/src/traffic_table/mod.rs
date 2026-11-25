@@ -26,7 +26,7 @@ pub mod wire;
 mod tests;
 
 pub use client::{ClientTable, Event, Pose};
-pub use ids::{TrafficId, REUSE_DELAY};
+pub use ids::{REUSE_DELAY, TrafficId};
 pub use row::{Kind, Look, Meta, Row};
 pub use server::ClientSync;
 pub use table::TrafficTable;

@@ -34,12 +34,12 @@
 //! side (where the stages owe the step, where it starts and joins) is `omsi-app`'s
 //! `sim_thread`.
 
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::sync::mpsc;
 use std::time::Instant;
 
-use crate::ai_traffic::model::PlayerBox;
 use crate::ai_traffic::TrafficSim;
+use crate::ai_traffic::model::PlayerBox;
 use crate::people::{PeopleSim, PlayerBusView};
 use crate::scenery::SceneryState;
 use crate::world_data::WorldData;
@@ -73,16 +73,25 @@ impl SimThread {
     pub fn spawn() -> std::io::Result<SimThread> {
         // (one job at a time: the slot holds the next while one runs, never more)
         let (tx, rx) = mpsc::sync_channel::<Job>(1);
-        let handle = std::thread::Builder::new().name("sim".into()).spawn(move || {
-            for job in rx {
-                job();
-            }
-        })?;
-        Ok(SimThread { jobs: Some(tx), handle: Some(handle) })
+        let handle = std::thread::Builder::new()
+            .name("sim".into())
+            .spawn(move || {
+                for job in rx {
+                    job();
+                }
+            })?;
+        Ok(SimThread {
+            jobs: Some(tx),
+            handle: Some(handle),
+        })
     }
 
     /// `step` on `state`, on the sim thread; `InFlight::join` gives the state back.
-    pub fn start<T: Send + 'static>(&self, state: T, step: impl FnOnce(&mut T) + Send + 'static) -> InFlight<T> {
+    pub fn start<T: Send + 'static>(
+        &self,
+        state: T,
+        step: impl FnOnce(&mut T) + Send + 'static,
+    ) -> InFlight<T> {
         let (tx, rx) = mpsc::sync_channel(1);
         let job: Job = Box::new(move || {
             let _ = tx.send(run_step(state, step));
@@ -121,7 +130,9 @@ impl<T> InFlight<T> {
         let t = Instant::now();
         let (state, secs, panic) = match self {
             InFlight::Done(o) => o,
-            InFlight::Thread(rx) => rx.recv().expect("the sim thread sends every step's state back"),
+            InFlight::Thread(rx) => rx
+                .recv()
+                .expect("the sim thread sends every step's state back"),
         };
         if let Some(p) = panic {
             resume_unwind(p);
@@ -181,10 +192,18 @@ impl SimJob {
     /// stage); after the ticks the scenery scripts, which read the lights so too. Without the
     /// traffic here there is none: the people see no traffic, its lights read unlinked.
     fn run(&mut self) {
-        let ticks = self.traffic.as_ref().map_or(0, |(_, o)| o.len()).max(self.people.as_ref().map_or(0, |(_, o, _)| o.len()));
+        let ticks = self
+            .traffic
+            .as_ref()
+            .map_or(0, |(_, o)| o.len())
+            .max(self.people.as_ref().map_or(0, |(_, o, _)| o.len()));
         for k in 0..ticks {
             let t = Instant::now();
-            if let Some(owed) = self.traffic.as_mut().and_then(|(sim, owed)| owed.get(k).map(|o| (sim, o))) {
+            if let Some(owed) = self
+                .traffic
+                .as_mut()
+                .and_then(|(sim, owed)| owed.get(k).map(|o| (sim, o)))
+            {
                 owed.0.advance(owed.1.dt, owed.1.player);
             }
             let after_traffic = Instant::now();
@@ -202,7 +221,11 @@ impl SimJob {
         if let Some((state, step)) = self.scenery.take() {
             let mut state = state;
             let traffic = self.traffic.as_ref().map(|(sim, _)| &**sim);
-            let phase = |c: usize, li: usize| traffic.map(|t| t.light_vars(c, li)).unwrap_or((crate::traffic::UNLINKED_PHASE as f32, 0.0));
+            let phase = |c: usize, li: usize| {
+                traffic
+                    .map(|t| t.light_vars(c, li))
+                    .unwrap_or((crate::traffic::UNLINKED_PHASE as f32, 0.0))
+            };
             step(&mut state, &phase);
             self.scenery = Some((state, Box::new(|_, _| {})));
         }
@@ -264,7 +287,11 @@ impl DrawnLag {
             self.span = 0.0;
         }
         let most = self.now.max(self.last);
-        self.lag = if most >= self.lag { most } else { (self.lag - Self::EASE * frame_secs).max(most) };
+        self.lag = if most >= self.lag {
+            most
+        } else {
+            (self.lag - Self::EASE * frame_secs).max(most)
+        };
     }
 
     pub(crate) fn behind(&self, behind: f32, owed: f32) -> f32 {
@@ -292,7 +319,10 @@ pub fn set_enabled(setting: bool) -> bool {
 /// `OMSI_SIM_THREAD`'s value over the setting (see `set_enabled`).
 fn choice(var: Option<&str>, setting: bool) -> bool {
     match var {
-        Some(v) => !matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"),
+        Some(v) => !matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        ),
         None => setting,
     }
 }
@@ -303,7 +333,13 @@ fn empty_traffic() -> TrafficSim {
     TrafficSim::assemble(
         std::path::Path::new(""),
         Default::default(),
-        crate::ai_traffic::setup::RandomTypes { types: Vec::new(), groups: Vec::new(), group_curves: false, group_uvg: Vec::new(), uvg_defaults: Vec::new() },
+        crate::ai_traffic::setup::RandomTypes {
+            types: Vec::new(),
+            groups: Vec::new(),
+            group_curves: false,
+            group_uvg: Vec::new(),
+            uvg_defaults: Vec::new(),
+        },
         Vec::new(),
         Default::default(),
         (Vec::new(), Vec::new()),
@@ -383,17 +419,28 @@ impl Pipeline {
     /// empty one stands in for it until `join`), the people (taken out of the frame by the
     /// caller, given back by `join`; with no people's step owed they are given back at
     /// once) and the scenery (an empty list meanwhile). Nothing owed, nothing starts.
-    pub fn start(&mut self, sim: Option<&mut TrafficSim>, scenery: Option<&mut SceneryState>, people: Option<PeopleSim>) -> Option<PeopleSim> {
+    pub fn start(
+        &mut self,
+        sim: Option<&mut TrafficSim>,
+        scenery: Option<&mut SceneryState>,
+        people: Option<PeopleSim>,
+    ) -> Option<PeopleSim> {
         if self.out.is_some() {
             return people;
         }
         let now = Instant::now();
-        let frame_secs = self.started.replace(now).map_or(0.0, |t| (now - t).as_secs_f32());
+        let frame_secs = self
+            .started
+            .replace(now)
+            .map_or(0.0, |t| (now - t).as_secs_f32());
         self.lag.note(self.owed_secs(), frame_secs);
         let mut job = SimJob::default();
         let owed = std::mem::take(&mut self.owed);
         if let (false, Some(sim)) = (owed.is_empty(), sim) {
-            let mut out = self.stand_in.take().unwrap_or_else(|| Box::new(empty_traffic()));
+            let mut out = self
+                .stand_in
+                .take()
+                .unwrap_or_else(|| Box::new(empty_traffic()));
             std::mem::swap(sim, &mut *out);
             job.traffic = Some((out, owed));
         }
@@ -426,8 +473,14 @@ impl Pipeline {
     /// Everything out on the sim thread back in place (waits for it), the people given back
     /// to the caller. Nothing out: nothing.
     /// `sim`, `scenery`: where the traffic's simulation and the scenery stand in the frame.
-    pub fn join(&mut self, sim: Option<&mut TrafficSim>, scenery: Option<&mut SceneryState>) -> (Joined, Option<PeopleSim>) {
-        let Some(f) = self.out.take() else { return (Joined::default(), None) };
+    pub fn join(
+        &mut self,
+        sim: Option<&mut TrafficSim>,
+        scenery: Option<&mut SceneryState>,
+    ) -> (Joined, Option<PeopleSim>) {
+        let Some(f) = self.out.take() else {
+            return (Joined::default(), None);
+        };
         let (job, _, waited) = f.join();
         if let Some((mut back, _)) = job.traffic {
             match sim {
@@ -451,10 +504,22 @@ impl Pipeline {
         }
         let people = job.people.map(|(p, owed, took)| {
             let dt = owed.iter().map(|o| o.dt).sum();
-            self.people_stepped = Some(PeopleStepped { took, dt, secs: job.people_secs });
+            self.people_stepped = Some(PeopleStepped {
+                took,
+                dt,
+                secs: job.people_secs,
+            });
             p
         });
-        (Joined { traffic: job.traffic_secs, people: job.people_secs, scenery: job.scenery_secs, waited }, people)
+        (
+            Joined {
+                traffic: job.traffic_secs,
+                people: job.people_secs,
+                scenery: job.scenery_secs,
+                waited,
+            },
+            people,
+        )
     }
 
     /// Something is out on the sim thread.

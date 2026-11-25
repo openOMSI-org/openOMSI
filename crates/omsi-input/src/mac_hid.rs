@@ -74,24 +74,37 @@ impl MacHid {
         // joysticks (wheels say they are one), gamepads and multi-axis controllers only: all
         // devices would take in the keyboard, which needs the Input Monitoring permission
         let matcher = |usage: i32| -> CFRetained<CFDictionary<CFString, CFNumber>> {
-            let (pk, uk) = (CFString::from_static_str("DeviceUsagePage"), CFString::from_static_str("DeviceUsage"));
+            let (pk, uk) = (
+                CFString::from_static_str("DeviceUsagePage"),
+                CFString::from_static_str("DeviceUsage"),
+            );
             let (pv, uv) = (CFNumber::new_i32(1), CFNumber::new_i32(usage));
             CFDictionary::from_slices(&[&*pk, &*uk], &[&*pv, &*uv])
         };
         let matchers = CFArray::from_retained_objects(&[matcher(4), matcher(5), matcher(8)]);
         unsafe { manager.set_device_matching_multiple(Some(matchers.as_opaque())) };
         if manager.open(0) != 0 {
-            log::warn!("HID: cannot open the device manager; wheels and pedals are read through gilrs");
+            log::warn!(
+                "HID: cannot open the device manager; wheels and pedals are read through gilrs"
+            );
             return None;
         }
-        let mut h = MacHid { manager, devices: Vec::new(), last_scan: None, count: -1 };
+        let mut h = MacHid {
+            manager,
+            devices: Vec::new(),
+            last_scan: None,
+            count: -1,
+        };
         h.scan();
         Some(h)
     }
 
     /// Find the devices again when the set of them changed (checked every two seconds).
     fn scan(&mut self) {
-        if self.last_scan.is_some_and(|t| t.elapsed().as_secs_f32() < 2.0) {
+        if self
+            .last_scan
+            .is_some_and(|t| t.elapsed().as_secs_f32() < 2.0)
+        {
             return;
         }
         self.last_scan = Some(std::time::Instant::now());
@@ -110,13 +123,18 @@ impl MacHid {
         unsafe { set.values(raw.as_mut_ptr()) };
         self.devices.clear();
         for p in raw {
-            let Some(p) = NonNull::new(p as *mut IOHIDDevice) else { continue };
+            let Some(p) = NonNull::new(p as *mut IOHIDDevice) else {
+                continue;
+            };
             let device: CFRetained<IOHIDDevice> = unsafe { CFRetained::retain(p) };
             if !(device.conforms_to(1, 4) || device.conforms_to(1, 5) || device.conforms_to(1, 8)) {
                 continue;
             }
-            let Some(elements) = (unsafe { device.matching_elements(None, 0) }) else { continue };
-            let elements: CFRetained<CFArray<IOHIDElement>> = unsafe { CFRetained::cast_unchecked(elements) };
+            let Some(elements) = (unsafe { device.matching_elements(None, 0) }) else {
+                continue;
+            };
+            let elements: CFRetained<CFArray<IOHIDElement>> =
+                unsafe { CFRetained::cast_unchecked(elements) };
             let mut axes = Vec::new();
             let mut cookies = Vec::new();
             for e in elements.iter() {
@@ -132,15 +150,34 @@ impl MacHid {
                     min = 0;
                     max = (1i64 << bits) - 1;
                 }
-                axes.push(Axis { code: (e.usage_page() << 16) | e.usage(), element: e, min, max, bits });
+                axes.push(Axis {
+                    code: (e.usage_page() << 16) | e.usage(),
+                    element: e,
+                    min,
+                    max,
+                    bits,
+                });
             }
             if axes.is_empty() {
                 continue;
             }
             let name = string_property(&device, "Product").unwrap_or_else(|| "HID device".into());
-            let id = number_property(&device, "VendorID").zip(number_property(&device, "ProductID")).map(|(v, p)| (v as u16, p as u16));
-            log::info!("HID: {name} {id:04x?}: {} axes {:?}", axes.len(), axes.iter().map(|a| format!("{:#x} {}..{}", a.code, a.min, a.max)).collect::<Vec<_>>());
-            self.devices.push(Device { device, name, id, axes });
+            let id = number_property(&device, "VendorID")
+                .zip(number_property(&device, "ProductID"))
+                .map(|(v, p)| (v as u16, p as u16));
+            log::info!(
+                "HID: {name} {id:04x?}: {} axes {:?}",
+                axes.len(),
+                axes.iter()
+                    .map(|a| format!("{:#x} {}..{}", a.code, a.min, a.max))
+                    .collect::<Vec<_>>()
+            );
+            self.devices.push(Device {
+                device,
+                name,
+                id,
+                axes,
+            });
         }
     }
 
@@ -153,13 +190,28 @@ impl MacHid {
             for a in &d.axes {
                 let mut v: NonNull<IOHIDValue> = NonNull::dangling();
                 let ok = unsafe { d.device.value(&a.element, NonNull::from(&mut v)) } == 0;
-                let raw = if ok { unsafe { v.as_ref() }.integer_value() as i64 } else { (a.min + a.max) / 2 };
+                let raw = if ok {
+                    unsafe { v.as_ref() }.integer_value() as i64
+                } else {
+                    (a.min + a.max) / 2
+                };
                 // a value read back signed from an unsigned field
-                let raw = if raw < a.min && a.min >= 0 { raw + (1i64 << a.bits) } else { raw };
+                let raw = if raw < a.min && a.min >= 0 {
+                    raw + (1i64 << a.bits)
+                } else {
+                    raw
+                };
                 let span = (a.max - a.min).max(1) as f32;
-                axes.push((a.code, (((raw - a.min) as f32 / span) * 2.0 - 1.0).clamp(-1.0, 1.0)));
+                axes.push((
+                    a.code,
+                    (((raw - a.min) as f32 / span) * 2.0 - 1.0).clamp(-1.0, 1.0),
+                ));
             }
-            out.push(HidAxes { name: d.name.clone(), id: d.id, axes });
+            out.push(HidAxes {
+                name: d.name.clone(),
+                id: d.id,
+                axes,
+            });
         }
         out
     }

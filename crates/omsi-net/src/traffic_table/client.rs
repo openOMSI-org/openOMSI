@@ -3,7 +3,7 @@
 
 use super::ids::TrafficId;
 use super::row::{Kind, Look, Meta, Row};
-use super::wire::{self, newer, Ack, Packet, RowUpdate, Trouble, MAX_TROUBLES};
+use super::wire::{self, Ack, MAX_TROUBLES, Packet, RowUpdate, Trouble, newer};
 use std::collections::{HashMap, VecDeque};
 
 /// Poses kept of a vehicle: more than the farthest a baseline reaches back.
@@ -167,7 +167,11 @@ impl ClientTable {
             }
             Some(n) if newer(seq, n) => {
                 let d = seq.wrapping_sub(n) as u32;
-                self.mask = if d > 32 { 0 } else { self.mask.checked_shl(d).unwrap_or(0) | 1u32.checked_shl(d - 1).unwrap_or(0) };
+                self.mask = if d > 32 {
+                    0
+                } else {
+                    self.mask.checked_shl(d).unwrap_or(0) | 1u32.checked_shl(d - 1).unwrap_or(0)
+                };
                 self.newest = Some(seq);
             }
             Some(n) => {
@@ -188,7 +192,11 @@ impl ClientTable {
 
     fn push_sample(row: &mut ClientRow, snap: u16, ms: f64, r: Row, local: f64) {
         row.heard = local;
-        let at = row.samples.iter().rposition(|s| s.snap == snap || newer(snap, s.snap)).map_or(0, |i| i + 1);
+        let at = row
+            .samples
+            .iter()
+            .rposition(|s| s.snap == snap || newer(snap, s.snap))
+            .map_or(0, |i| i + 1);
         if at > 0 && row.samples[at - 1].snap == snap {
             return;
         }
@@ -201,7 +209,9 @@ impl ClientTable {
     /// Take a datagram in at local time `local` (s). False when it is not a traffic
     /// datagram of this protocol.
     pub fn on_packet(&mut self, data: &[u8], local: f64) -> bool {
-        let Some(p) = wire::decode(data, crate::PROTOCOL as u8) else { return false };
+        let Some(p) = wire::decode(data, crate::PROTOCOL as u8) else {
+            return false;
+        };
         self.stats.datagrams += 1;
         self.stats.bytes += data.len() as u64;
         self.apply(p, local);
@@ -220,13 +230,25 @@ impl ClientTable {
             self.looks.insert(*i, l.clone());
         }
         for s in &p.spawns {
-            if self.tombstones.get(&s.id).is_some_and(|(snap, _)| newer(*snap, p.snap)) {
+            if self
+                .tombstones
+                .get(&s.id)
+                .is_some_and(|(snap, _)| newer(*snap, p.snap))
+            {
                 continue;
             }
             match self.rows.get_mut(&s.id) {
                 Some(row) => Self::push_sample(row, p.snap, ms, s.row, local),
                 None => {
-                    let mut row = ClientRow { id: s.id, look: s.look, kind: s.kind, meta: Meta::default(), born_snap: p.snap, samples: VecDeque::new(), heard: local };
+                    let mut row = ClientRow {
+                        id: s.id,
+                        look: s.look,
+                        kind: s.kind,
+                        meta: Meta::default(),
+                        born_snap: p.snap,
+                        samples: VecDeque::new(),
+                        heard: local,
+                    };
                     Self::push_sample(&mut row, p.snap, ms, s.row, local);
                     self.rows.insert(s.id, row);
                     self.tombstones.remove(&s.id);
@@ -247,7 +269,11 @@ impl ClientTable {
             }
         }
         for id in &p.removes {
-            if self.rows.get(id).is_some_and(|r| !newer(r.born_snap, p.snap)) {
+            if self
+                .rows
+                .get(id)
+                .is_some_and(|r| !newer(r.born_snap, p.snap))
+            {
                 self.rows.remove(id);
                 self.event(Event::Removed(*id));
             }
@@ -269,7 +295,11 @@ impl ClientTable {
                         }
                     }
                 }
-                RowUpdate::Delta { id, base_back, delta } => {
+                RowUpdate::Delta {
+                    id,
+                    base_back,
+                    delta,
+                } => {
                     self.stats.delta_rows += 1;
                     let base_snap = p.snap.wrapping_sub(*base_back as u16);
                     let Some(r) = self.rows.get_mut(id) else {
@@ -279,7 +309,12 @@ impl ClientTable {
                         }
                         continue;
                     };
-                    match r.samples.iter().find(|s| s.snap == base_snap).map(|s| delta.apply(&s.row)) {
+                    match r
+                        .samples
+                        .iter()
+                        .find(|s| s.snap == base_snap)
+                        .map(|s| delta.apply(&s.row))
+                    {
                         Some(row) => Self::push_sample(r, p.snap, ms, row, local),
                         None => {
                             self.stats.unusable += 1;
@@ -296,7 +331,12 @@ impl ClientTable {
         if !std::mem::take(&mut self.ack_due) {
             return None;
         }
-        Some(Ack { epoch: self.epoch?, seq: self.newest?, mask: self.mask, troubles: std::mem::take(&mut self.troubles) })
+        Some(Ack {
+            epoch: self.epoch?,
+            seq: self.newest?,
+            mask: self.mask,
+            troubles: std::mem::take(&mut self.troubles),
+        })
     }
 
     /// Housekeeping at local time `local`: old tombstones go, and vehicles the host has not
@@ -304,7 +344,12 @@ impl ClientTable {
     pub fn tick(&mut self, local: f64) {
         self.tombstones.retain(|_, (_, t)| local - *t < TOMB_KEEP);
         if local - self.last_packet < 5.0 {
-            let stale: Vec<TrafficId> = self.rows.values().filter(|r| local - r.heard >= SILENT_PURGE).map(|r| r.id).collect();
+            let stale: Vec<TrafficId> = self
+                .rows
+                .values()
+                .filter(|r| local - r.heard >= SILENT_PURGE)
+                .map(|r| r.id)
+                .collect();
             for id in stale {
                 self.rows.remove(&id);
                 self.event(Event::Removed(id));
@@ -325,9 +370,27 @@ impl ClientTable {
         let s = &r.samples;
         let last = s.back()?;
         let flags = |r: &Row| (r.blinker(), r.brake(), r.lights(), r.at_station());
-        let pose = |a: &Row, pos: [f64; 3], heading: f64, extrapolated: bool, teleported: bool, f: &Row| {
+        let pose = |a: &Row,
+                    pos: [f64; 3],
+                    heading: f64,
+                    extrapolated: bool,
+                    teleported: bool,
+                    f: &Row| {
             let (blinker, brake, lights, at_station) = flags(f);
-            Pose { pos, heading, pitch: a.pitch_deg(), bank: a.bank_deg(), speed: a.speed_ms(), steer: a.steer_deg(), blinker, brake, lights, at_station, extrapolated, teleported }
+            Pose {
+                pos,
+                heading,
+                pitch: a.pitch_deg(),
+                bank: a.bank_deg(),
+                speed: a.speed_ms(),
+                steer: a.steer_deg(),
+                blinker,
+                brake,
+                lights,
+                at_station,
+                extrapolated,
+                teleported,
+            }
         };
         if ms >= last.ms {
             let (pos, heading) = if s.len() >= 2 && last.row.speed_ms().abs() >= 0.1 {
@@ -340,12 +403,20 @@ impl ClientTable {
                 let turn = if jumped || span > 1.0 {
                     0.0
                 } else {
-                    let d = (last.row.heading_deg() - prev.row.heading_deg() + 540.0).rem_euclid(360.0) - 180.0;
+                    let d = (last.row.heading_deg() - prev.row.heading_deg() + 540.0)
+                        .rem_euclid(360.0)
+                        - 180.0;
                     (d / span).clamp(-90.0, 90.0)
                 };
-                let mid = (last.row.heading_deg() + turn * dt / 2.0).rem_euclid(360.0).to_radians();
+                let mid = (last.row.heading_deg() + turn * dt / 2.0)
+                    .rem_euclid(360.0)
+                    .to_radians();
                 let v = last.row.speed_ms() * dt;
-                let vz = if jumped || span > 1.0 { 0.0 } else { ((b[2] - a[2]) / span).clamp(-6.0, 6.0) };
+                let vz = if jumped || span > 1.0 {
+                    0.0
+                } else {
+                    ((b[2] - a[2]) / span).clamp(-6.0, 6.0)
+                };
                 (
                     [b[0] + mid.sin() * v, b[1] + mid.cos() * v, b[2] + vz * dt],
                     (last.row.heading_deg() + turn * dt).rem_euclid(360.0),
@@ -353,11 +424,25 @@ impl ClientTable {
             } else {
                 (last.row.position(), last.row.heading_deg())
             };
-            return Some(pose(&last.row, pos, heading, ms > last.ms, false, &last.row));
+            return Some(pose(
+                &last.row,
+                pos,
+                heading,
+                ms > last.ms,
+                false,
+                &last.row,
+            ));
         }
         let first = s.front()?;
         if ms <= first.ms {
-            return Some(pose(&first.row, first.row.position(), first.row.heading_deg(), false, false, &first.row));
+            return Some(pose(
+                &first.row,
+                first.row.position(),
+                first.row.heading_deg(),
+                false,
+                false,
+                &first.row,
+            ));
         }
         let k = s.partition_point(|x| x.ms <= ms);
         let (a, b) = (&s[k - 1], &s[k]);
@@ -366,9 +451,20 @@ impl ClientTable {
             return Some(pose(&b.row, pb, b.row.heading_deg(), false, true, &b.row));
         }
         let t = ((ms - a.ms) / (b.ms - a.ms).max(1.0)).clamp(0.0, 1.0);
-        let pos = [lerp(pa[0], pb[0], t), lerp(pa[1], pb[1], t), lerp(pa[2], pb[2], t)];
+        let pos = [
+            lerp(pa[0], pb[0], t),
+            lerp(pa[1], pb[1], t),
+            lerp(pa[2], pb[2], t),
+        ];
         let heading = lerp_angle(a.row.heading_deg(), b.row.heading_deg(), t);
-        let mut out = pose(&b.row, pos, heading, false, false, if t < 0.5 { &a.row } else { &b.row });
+        let mut out = pose(
+            &b.row,
+            pos,
+            heading,
+            false,
+            false,
+            if t < 0.5 { &a.row } else { &b.row },
+        );
         out.pitch = lerp(a.row.pitch_deg(), b.row.pitch_deg(), t);
         out.bank = lerp(a.row.bank_deg(), b.row.bank_deg(), t);
         out.speed = lerp(a.row.speed_ms(), b.row.speed_ms(), t);

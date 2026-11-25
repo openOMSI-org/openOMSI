@@ -18,7 +18,10 @@ use std::path::{Path, PathBuf};
 mod lines;
 mod places;
 mod relief;
-pub use lines::{LineInfo, RouteInfo, GROUP_BRT, GROUP_EXPRESS, GROUP_FEEDER, MODAL_BUS, MODAL_METRO, MODAL_RAIL, MODAL_TRAM};
+pub use lines::{
+    GROUP_BRT, GROUP_EXPRESS, GROUP_FEEDER, LineInfo, MODAL_BUS, MODAL_METRO, MODAL_RAIL,
+    MODAL_TRAM, RouteInfo,
+};
 pub use places::{Label, Marker, Region, Street};
 pub use relief::{LINE_CONTOUR, LINE_CONTOUR_INDEX};
 
@@ -265,7 +268,13 @@ impl Package {
                 "name" => name = v.to_string(),
                 "credit" => credit = v.to_string(),
                 "terrain_offset" => terrain_offset = v.parse().unwrap_or(0.0),
-                "north" => north = v.parse::<f32>().ok().filter(|n| n.is_finite()).unwrap_or(0.0),
+                "north" => {
+                    north = v
+                        .parse::<f32>()
+                        .ok()
+                        .filter(|n| n.is_finite())
+                        .unwrap_or(0.0)
+                }
                 _ => {
                     // a colour: `water = #..` for the dark map, `light_water = #..` for the light one
                     if let Some(c) = parse_color(v) {
@@ -346,7 +355,11 @@ impl Package {
             }
             index.push(Entry { cx, cy, at, len });
         }
-        let by_key = index.iter().enumerate().map(|(i, e)| ((e.cx, e.cy), i)).collect();
+        let by_key = index
+            .iter()
+            .enumerate()
+            .map(|(i, e)| ((e.cx, e.cy), i))
+            .collect();
         Some(Package {
             name,
             credit,
@@ -383,11 +396,7 @@ impl Package {
 
     /// The colours of the dark map or of the light one.
     pub fn palette(&self, light: bool) -> &Palette {
-        if light {
-            &self.light
-        } else {
-            &self.dark
-        }
+        if light { &self.light } else { &self.dark }
     }
 
     /// How many chunks the file has.
@@ -473,7 +482,11 @@ impl Package {
                 for _ in 0..n {
                     points.push(self.to_world(r.f32()?, r.f32()?));
                 }
-                out.contours.push(Line { class, width, points });
+                out.contours.push(Line {
+                    class,
+                    width,
+                    points,
+                });
                 continue;
             }
             if !matches!(class, LINE_RIVER | LINE_RAIL | LINE_BORDER) {
@@ -648,22 +661,46 @@ mod tests {
         let p = Package::open(&dir).expect("docs/examples/openomsi-realmap is a package");
         assert_eq!(p.name, "Synthetic example");
         assert_eq!(p.chunks(), 1);
-        assert_eq!(p.north(), 12.0, "the manifest of the example says where north lies");
+        assert_eq!(
+            p.north(),
+            12.0,
+            "the manifest of the example says where north lies"
+        );
         let l = p.layers(None);
         assert_eq!(l.fills[FILL_WATER as usize].len(), 14);
-        for class in [FILL_GREEN, FILL_BUILT, FILL_GRASS, FILL_FOREST, FILL_SPORT, FILL_FARM] {
+        for class in [
+            FILL_GREEN,
+            FILL_BUILT,
+            FILL_GRASS,
+            FILL_FOREST,
+            FILL_SPORT,
+            FILL_FARM,
+        ] {
             assert_eq!(l.fills[class as usize].len(), 2, "class {class}");
         }
         let classes: Vec<u8> = l.lines.iter().map(|x| x.class).collect();
-        assert_eq!(classes, vec![LINE_RIVER, LINE_RIVER, LINE_RAIL, LINE_BORDER]);
+        assert_eq!(
+            classes,
+            vec![LINE_RIVER, LINE_RIVER, LINE_RAIL, LINE_BORDER]
+        );
         // a hill: eleven contour lines, from 40 to 60 m, an index line at each tenth
         assert!(p.has_contours());
         assert_eq!(l.contours.len(), 11);
-        assert_eq!(l.contours.iter().filter(|c| c.class == LINE_CONTOUR_INDEX).map(|c| c.width as i32).collect::<Vec<_>>(), vec![40, 50, 60]);
+        assert_eq!(
+            l.contours
+                .iter()
+                .filter(|c| c.class == LINE_CONTOUR_INDEX)
+                .map(|c| c.width as i32)
+                .collect::<Vec<_>>(),
+            vec![40, 50, 60]
+        );
         // the file's origin is the south-west corner of the tutorial map's tiles (-300, -600): tile (-1, -2)
         let (x, y) = crate::tile_local_to_world(-1, -2, 0.0, 0.0);
         let first = l.fills[FILL_WATER as usize][0][0];
-        assert!((first.0 - (x + 420.0)).abs() < 1e-3 && (first.1 - (y + 800.0)).abs() < 1e-3, "{first:?}");
+        assert!(
+            (first.0 - (x + 420.0)).abs() < 1e-3 && (first.1 - (y + 800.0)).abs() < 1e-3,
+            "{first:?}"
+        );
     }
 
     #[test]

@@ -8,8 +8,13 @@ fn main() {
     let mut args = std::env::args().skip(1);
     let addr = args.next().unwrap_or_else(|| "127.0.0.1:27015".into());
     let secs: u64 = args.next().and_then(|s| s.parse().ok()).unwrap_or(20);
-    let addrs = std::net::ToSocketAddrs::to_socket_addrs(&addr).expect("address").collect();
-    let world = WorldInfo { map: "maps/Grundorf/global.cfg".into(), ..Default::default() };
+    let addrs = std::net::ToSocketAddrs::to_socket_addrs(&addr)
+        .expect("address")
+        .collect();
+    let world = WorldInfo {
+        map: "maps/Grundorf/global.cfg".into(),
+        ..Default::default()
+    };
     let mut lan = LanSession::join_addr(addrs, None, "watcher", world).expect("join");
     let mine = Pose::default();
     let end = Instant::now() + Duration::from_secs(secs);

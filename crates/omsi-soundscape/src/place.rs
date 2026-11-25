@@ -47,7 +47,9 @@ pub struct Place {
 impl Place {
     /// Whether one of the map's own sound objects of `kind` is within `reach` metres.
     pub fn map_has(&self, kind: Spot, ear: DVec3, reach: f64) -> bool {
-        self.spots.iter().any(|(k, p, _)| *k == kind && (*p - ear).length() < reach)
+        self.spots
+            .iter()
+            .any(|(k, p, _)| *k == kind && (*p - ear).length() < reach)
     }
 
     pub fn near(&self, kind: Spot) -> impl Iterator<Item = &(Spot, DVec3, i64)> {
@@ -84,7 +86,10 @@ const ROAD_REACH: f64 = 1200.0;
 
 impl Gather {
     pub fn new(ear: DVec3) -> Gather {
-        Gather { ear, ..Default::default() }
+        Gather {
+            ear,
+            ..Default::default()
+        }
     }
 
     /// One tile's sound data, with the world position of its corner.
@@ -92,7 +97,11 @@ impl Gather {
         let ear = self.ear;
         let at = |p: [f32; 3]| corner + DVec3::new(p[0] as f64, p[1] as f64, p[2] as f64);
         for t in &g.trees {
-            let d = DVec3::new(corner.x + t[0] as f64 - ear.x, corner.y + t[1] as f64 - ear.y, 0.0);
+            let d = DVec3::new(
+                corner.x + t[0] as f64 - ear.x,
+                corner.y + t[1] as f64 - ear.y,
+                0.0,
+            );
             let d2 = d.length_squared();
             if d2 > TREE_REACH * TREE_REACH {
                 continue;
@@ -106,7 +115,12 @@ impl Gather {
             }
         }
         for b in &g.buildings {
-            let d = DVec3::new(corner.x + b[0] as f64 - ear.x, corner.y + b[1] as f64 - ear.y, 0.0).length();
+            let d = DVec3::new(
+                corner.x + b[0] as f64 - ear.x,
+                corner.y + b[1] as f64 - ear.y,
+                0.0,
+            )
+            .length();
             if d < HOUSE_REACH {
                 // (nearer houses shape the place more)
                 let w = 1.0 - d / HOUSE_REACH * 0.5;
@@ -115,7 +129,9 @@ impl Gather {
             }
         }
         for s in &g.spots {
-            let Some(kind) = Spot::from_u16(s.kind) else { continue };
+            let Some(kind) = Spot::from_u16(s.kind) else {
+                continue;
+            };
             let p = at(s.pos);
             if (p - ear).length() < SPOT_REACH {
                 self.place.spots.push((kind, p, s.id));
@@ -198,7 +214,11 @@ impl Gather {
         p.urban = (1.0 - (-self.houses / 25.0).exp()) as f32;
         // (a cell is some 20 m square: a lake of a few hectares is near 1)
         p.water_amount = (1.0 - (-self.water_cells / 40.0).exp()) as f32;
-        p.height = if self.houses > 0.0 { (self.height_sum / self.houses) as f32 } else { 0.0 };
+        p.height = if self.houses > 0.0 {
+            (self.height_sum / self.houses) as f32
+        } else {
+            0.0
+        };
         p.deciduous = (1.0 - (-self.deciduous).exp()) as f32;
         p.conifer = (1.0 - (-self.conifer).exp()) as f32;
         p.open = ((1.0 - p.urban) * (1.0 - p.deciduous.max(p.conifer))).clamp(0.0, 1.0);
@@ -222,7 +242,11 @@ mod tests {
         let ear = DVec3::new(150.0, 150.0, 0.0);
         let mut town = GroundSound::default();
         for i in 0..40 {
-            town.buildings.push([100.0 + (i % 8) as f32 * 15.0, 100.0 + (i / 8) as f32 * 20.0, 18.0]);
+            town.buildings.push([
+                100.0 + (i % 8) as f32 * 15.0,
+                100.0 + (i / 8) as f32 * 20.0,
+                18.0,
+            ]);
         }
         let mut g = Gather::new(ear);
         g.tile(&town, DVec3::ZERO);
@@ -231,12 +255,20 @@ mod tests {
 
         let mut wood = GroundSound::default();
         for i in 0..60 {
-            wood.trees.push([120.0 + (i % 8) as f32 * 8.0, 120.0 + (i / 8) as f32 * 8.0, 20.0, 1.0]);
+            wood.trees.push([
+                120.0 + (i % 8) as f32 * 8.0,
+                120.0 + (i / 8) as f32 * 8.0,
+                20.0,
+                1.0,
+            ]);
         }
         let mut g = Gather::new(ear);
         g.tile(&wood, DVec3::ZERO);
         let p = g.finish();
-        assert!(p.conifer > 0.9 && p.deciduous == 0.0 && p.open < 0.1, "{p:?}");
+        assert!(
+            p.conifer > 0.9 && p.deciduous == 0.0 && p.open < 0.1,
+            "{p:?}"
+        );
 
         let p = Gather::new(ear).finish();
         assert_eq!(p.open, 1.0);
@@ -248,14 +280,28 @@ mod tests {
         let mut g = GroundSound::default();
         // two lanes each way 300 m to the east, 1 km long
         for _ in 0..4 {
-            g.lines.push(SoundLine { kind: LineKind::Road, speed: 120.0, points: (0..=100).map(|k| [300.0, -500.0 + k as f32 * 10.0, 0.0]).collect() });
+            g.lines.push(SoundLine {
+                kind: LineKind::Road,
+                speed: 120.0,
+                points: (0..=100)
+                    .map(|k| [300.0, -500.0 + k as f32 * 10.0, 0.0])
+                    .collect(),
+            });
         }
-        g.spots.push(SoundSpot { kind: Spot::ChurchCatholic as u16, pos: [-600.0, 0.0, 0.0], id: 7 });
+        g.spots.push(SoundSpot {
+            kind: Spot::ChurchCatholic as u16,
+            pos: [-600.0, 0.0, 0.0],
+            id: 7,
+        });
         let mut gather = Gather::new(ear);
         gather.tile(&g, DVec3::ZERO);
         let p = gather.finish();
         assert!(p.fast_roads > 0.5, "{}", p.fast_roads);
-        assert!(p.fast_roads_from.x > 0.9, "from the east: {:?}", p.fast_roads_from);
+        assert!(
+            p.fast_roads_from.x > 0.9,
+            "from the east: {:?}",
+            p.fast_roads_from
+        );
         assert_eq!(p.near(Spot::ChurchCatholic).count(), 1);
     }
 }

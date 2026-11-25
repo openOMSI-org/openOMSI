@@ -1,7 +1,7 @@
 //! Signalled crossroads of several lanes run headless: the movements that have green
 //! get through, whatever the cross traffic waiting at its red does.
 
-use super::scenario_tests::{add_car, street, Fixture};
+use super::scenario_tests::{Fixture, add_car, street};
 use super::*;
 use crate::ai_traffic::setup::RandomTypes;
 use crate::traffic::{LaneBuilder, LaneKey, TrafficLightController};
@@ -37,9 +37,16 @@ fn crossroads(b: Build) -> (Network, Vec<[usize; 2]>) {
     let mut lanes: Vec<crate::traffic::Lane> = Vec::new();
     let mut path_no = 0u16;
     let mut ins = Vec::new();
-    let mut obj = |mut l: crate::traffic::Lane, light: Option<usize>, prio: bool, lanes: &mut Vec<crate::traffic::Lane>| {
+    let mut obj = |mut l: crate::traffic::Lane,
+                   light: Option<usize>,
+                   prio: bool,
+                   lanes: &mut Vec<crate::traffic::Lane>| {
         l.source = 2;
-        l.key = Some(LaneKey { tile: (0, 0), id: 7, path: path_no });
+        l.key = Some(LaneKey {
+            tile: (0, 0),
+            id: 7,
+            path: path_no,
+        });
         path_no += 1;
         l.traffic_light = light.map(|li| (0, li));
         if prio {
@@ -69,19 +76,38 @@ fn crossroads(b: Build) -> (Network, Vec<[usize; 2]>) {
             obj(street(start, h, 2.0 * HALF - pre), lit, prio, &mut lanes);
             if k == 0 {
                 let r = HALF + off;
-                let mut l = LaneBuilder::arc(start, h, (r - pre) * std::f64::consts::FRAC_PI_2, -(r - pre), 0.0, LaneKind::Street, 3.0);
+                let mut l = LaneBuilder::arc(
+                    start,
+                    h,
+                    (r - pre) * std::f64::consts::FRAC_PI_2,
+                    -(r - pre),
+                    0.0,
+                    LaneKind::Street,
+                    3.0,
+                );
                 l.turn = 1;
                 obj(l, lit, prio, &mut lanes);
             } else {
                 let r = HALF - off;
-                let mut l = LaneBuilder::arc(start, h, (r - pre).max(1.0) * std::f64::consts::FRAC_PI_2, (r - pre).max(1.0), 0.0, LaneKind::Street, 3.0);
+                let mut l = LaneBuilder::arc(
+                    start,
+                    h,
+                    (r - pre).max(1.0) * std::f64::consts::FRAC_PI_2,
+                    (r - pre).max(1.0),
+                    0.0,
+                    LaneKind::Street,
+                    3.0,
+                );
                 l.turn = 2;
                 obj(l, lit, prio, &mut lanes);
             }
         }
         ins.push(pair);
     }
-    let mut net = Network { lanes, ..Default::default() };
+    let mut net = Network {
+        lanes,
+        ..Default::default()
+    };
     net.link(1.5);
     (net, ins)
 }
@@ -89,9 +115,25 @@ fn crossroads(b: Build) -> (Network, Vec<[usize; 2]>) {
 fn traffic(f: &Fixture, mut net: Network) -> TrafficSim {
     net.build_grid();
     net.compute_reach();
-    let random = RandomTypes { types: Vec::new(), groups: Vec::new(), group_curves: false, group_uvg: Vec::new(), uvg_defaults: Vec::new() };
+    let random = RandomTypes {
+        types: Vec::new(),
+        groups: Vec::new(),
+        group_curves: false,
+        group_uvg: Vec::new(),
+        uvg_defaults: Vec::new(),
+    };
     let ctl = TrafficLightController::new(vec![vec![(6, 1000.0)], vec![(0, 1000.0)]], 0.0);
-    TrafficSim::assemble(&f.dir, net, random, vec![ctl], HashMap::new(), (Vec::new(), Vec::new()), Vec::new(), (1.0, 0), 0)
+    TrafficSim::assemble(
+        &f.dir,
+        net,
+        random,
+        vec![ctl],
+        HashMap::new(),
+        (Vec::new(), Vec::new()),
+        Vec::new(),
+        (1.0, 0),
+        0,
+    )
 }
 
 /// Cars on every lane in, `n` per lane 10 m apart up to the line; north-south green. After
@@ -115,7 +157,17 @@ fn run(b: Build, n: usize, secs: f32) -> (usize, usize, usize) {
     for _ in 0..(secs / super::fixed_step::SIM_DT) as usize {
         t.tick(super::fixed_step::SIM_DT, None);
     }
-    let left = |green: bool| cars.iter().filter(|(id, lane, g)| *g == green && t.cars.iter().find(|c| c.id == *id).is_none_or(|c| c.state.lane != *lane)).count();
+    let left = |green: bool| {
+        cars.iter()
+            .filter(|(id, lane, g)| {
+                *g == green
+                    && t.cars
+                        .iter()
+                        .find(|c| c.id == *id)
+                        .is_none_or(|c| c.state.lane != *lane)
+            })
+            .count()
+    };
     (left(true), left(false), cars.len() / 2)
 }
 
@@ -128,7 +180,10 @@ fn cycle(b: Build, green: f32, secs: f32) -> [usize; 4] {
     let mut t = traffic(&f, net);
     let period = 2.0 * (green + 3.0);
     t.lights[0] = TrafficLightController::new(
-        vec![vec![(6, green), (0, period - green)], vec![(0, green + 3.0), (6, green), (0, 3.0)]],
+        vec![
+            vec![(6, green), (0, period - green)],
+            vec![(0, green + 3.0), (6, green), (0, 3.0)],
+        ],
         period,
     );
     let mut seed = 0x400;
@@ -137,7 +192,11 @@ fn cycle(b: Build, green: f32, secs: f32) -> [usize; 4] {
     for _ in 0..(secs / super::fixed_step::SIM_DT) as usize {
         for (d, pair) in ins.iter().enumerate() {
             for &lane in pair {
-                if !t.cars.iter().any(|c| c.state.lane == lane && c.state.s < 15.0) {
+                if !t
+                    .cars
+                    .iter()
+                    .any(|c| c.state.lane == lane && c.state.s < 15.0)
+                {
                     seed += 0x13;
                     let id = add_car(&mut t, &f, lane, 2.0, seed, Some(8.0));
                     came.push((id, lane, d));
@@ -146,7 +205,11 @@ fn cycle(b: Build, green: f32, secs: f32) -> [usize; 4] {
         }
         t.tick(super::fixed_step::SIM_DT, None);
         came.retain(|&(id, lane, d)| {
-            let gone = t.cars.iter().find(|c| c.id == id).is_none_or(|c| c.state.lane != lane);
+            let gone = t
+                .cars
+                .iter()
+                .find(|c| c.id == id)
+                .is_none_or(|c| c.state.lane != lane);
             if gone {
                 through[d] += 1;
             }
@@ -158,7 +221,21 @@ fn cycle(b: Build, green: f32, secs: f32) -> [usize; 4] {
 
 #[test]
 fn green_movements_of_a_multi_lane_crossroads_get_through() {
-    for b in [Build::default(), Build { stub: true, ..Default::default() }, Build { main_priority: true, ..Default::default() }, Build { stub: true, main_priority: true }] {
+    for b in [
+        Build::default(),
+        Build {
+            stub: true,
+            ..Default::default()
+        },
+        Build {
+            main_priority: true,
+            ..Default::default()
+        },
+        Build {
+            stub: true,
+            main_priority: true,
+        },
+    ] {
         let (green, red, each) = run(b, 3, 40.0);
         assert_eq!(red, 0, "a car went from a red approach");
         assert_eq!(green, each, "cars from the green approaches stood");
@@ -167,7 +244,21 @@ fn green_movements_of_a_multi_lane_crossroads_get_through() {
 
 #[test]
 fn every_approach_of_a_signalled_crossroads_flows() {
-    for b in [Build::default(), Build { stub: true, ..Default::default() }, Build { main_priority: true, ..Default::default() }, Build { stub: true, main_priority: true }] {
+    for b in [
+        Build::default(),
+        Build {
+            stub: true,
+            ..Default::default()
+        },
+        Build {
+            main_priority: true,
+            ..Default::default()
+        },
+        Build {
+            stub: true,
+            main_priority: true,
+        },
+    ] {
         let through = cycle(b, 20.0, 300.0);
         for (d, n) in through.iter().enumerate() {
             // (two lanes, 20 s of green a 46 s cycle: a starved approach gets a handful)
@@ -183,7 +274,10 @@ fn a_held_program_runs_on_when_the_side_road_asks() {
     let mut c = TrafficLightController::from_program(
         vec![
             (vec![(3, 2.0), (6, 51.0), (9, 3.0), (0, 0.0)], None),
-            (vec![(0, 63.0), (3, 2.0), (6, 11.0), (9, 3.0), (0, 0.0)], None),
+            (
+                vec![(0, 63.0), (3, 2.0), (6, 11.0), (9, 3.0), (0, 0.0)],
+                None,
+            ),
         ],
         Some(82.0),
         &[[1.0, 34.0, 1.0]],
@@ -201,4 +295,34 @@ fn a_held_program_runs_on_when_the_side_road_asks() {
         c.advance(0.02);
     }
     assert!(c.time > 50.0, "still at {}", c.time);
+}
+
+/// A stop on a light number the crossing does not have (light 2 of two) is a stop on light
+/// 0, as Omsi.exe builds the program (0x687ffc): it runs on when light 0 is asked rather
+/// than wait for good.
+#[test]
+fn a_stop_on_a_light_past_the_last_is_a_stop_on_light_zero() {
+    let mut c = TrafficLightController::from_program(
+        vec![
+            (vec![(6, 20.0), (9, 3.0), (0, 0.0)], None),
+            (vec![(0, 25.0), (6, 10.0), (0, 0.0)], None),
+        ],
+        Some(40.0),
+        &[[2.0, 10.0, 1.0]],
+        &[[-1.0, 30.0, 0.0, 35.0]],
+    );
+    assert_eq!(c.stops[0].light, 0);
+    assert_eq!(c.stops[1].light, 0);
+    c.start(5.0);
+    for _ in 0..500 {
+        c.request.fill(false);
+        c.advance(0.02);
+    }
+    assert!(c.held, "nobody asked light 0: held at {}", c.time);
+    for _ in 0..100 {
+        c.request.fill(false);
+        c.request[0] = true;
+        c.advance(0.02);
+    }
+    assert!(c.time > 11.0, "light 0 asked: still at {}", c.time);
 }

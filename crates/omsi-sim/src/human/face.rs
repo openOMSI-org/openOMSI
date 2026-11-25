@@ -127,7 +127,12 @@ pub fn shape_key(name: &str) -> String {
     let n = name.rsplit(['.', ':', '|']).next().unwrap_or(name);
     let parts: Vec<&str> = n.split('_').collect();
     // the last part that is not a number
-    let tail = parts.iter().rev().find(|p| !p.is_empty() && !p.chars().all(|c| c.is_ascii_digit())).copied().unwrap_or(n);
+    let tail = parts
+        .iter()
+        .rev()
+        .find(|p| !p.is_empty() && !p.chars().all(|c| c.is_ascii_digit()))
+        .copied()
+        .unwrap_or(n);
     let key = tail.to_ascii_lowercase();
     // (visemes: `AA_VI_00_Sil`, `AA_VI_10_aa`; ARKit: `AK_25_JawOpen`)
     key
@@ -141,7 +146,9 @@ pub struct FaceRig {
 
 impl Default for FaceRig {
     fn default() -> Self {
-        FaceRig { shape: [None; CHANNELS] }
+        FaceRig {
+            shape: [None; CHANNELS],
+        }
     }
 }
 
@@ -161,7 +168,9 @@ impl FaceRig {
                 }
             }
         }
-        (rig.shape[Channel::BlinkL as usize].is_some() || rig.shape[Channel::JawOpen as usize].is_some()).then_some(rig)
+        (rig.shape[Channel::BlinkL as usize].is_some()
+            || rig.shape[Channel::JawOpen as usize].is_some())
+        .then_some(rig)
     }
 
     /// The indices of the shapes the face uses.
@@ -261,7 +270,13 @@ impl Face {
         };
         // a resting face of one's own: most neutral, some a little friendly, some set
         let m = f.rand();
-        f.mood = if m < 0.3 { 0.15 + 0.25 * f.rand() } else if m < 0.45 { -0.15 - 0.2 * f.rand() } else { 0.05 * (f.rand() - 0.5) };
+        f.mood = if m < 0.3 {
+            0.15 + 0.25 * f.rand()
+        } else if m < 0.45 {
+            -0.15 - 0.2 * f.rand()
+        } else {
+            0.05 * (f.rand() - 0.5)
+        };
         f.next_blink = 0.5 + 3.0 * f.rand();
         f.next_saccade = 0.3 + f.rand();
         f.next_expression = 4.0 + 20.0 * f.rand();
@@ -288,14 +303,27 @@ impl Face {
             self.blink_t = 0.0;
             self.double_blink = self.rand() < 0.12;
             let talking = input.talking.is_some();
-            self.next_blink = self.time + if talking { 1.5 + 2.5 * self.rand() } else { 2.0 + 4.5 * self.rand() };
+            self.next_blink = self.time
+                + if talking {
+                    1.5 + 2.5 * self.rand()
+                } else {
+                    2.0 + 4.5 * self.rand()
+                };
         }
         let mut blink = 0.0;
         if self.blink_t >= 0.0 {
             self.blink_t += dt;
             let t = self.blink_t;
             // shut quickly (60 ms), stay 30 ms, open more slowly (110 ms)
-            blink = if t < 0.06 { ease(t / 0.06) } else if t < 0.09 { 1.0 } else if t < 0.2 { 1.0 - ease((t - 0.09) / 0.11) } else { 0.0 };
+            blink = if t < 0.06 {
+                ease(t / 0.06)
+            } else if t < 0.09 {
+                1.0
+            } else if t < 0.2 {
+                1.0 - ease((t - 0.09) / 0.11)
+            } else {
+                0.0
+            };
             if t >= 0.2 {
                 if self.double_blink {
                     self.double_blink = false;
@@ -308,8 +336,14 @@ impl Face {
         // --- gaze: saccades to a new point every 0.4-3 s, the eyes leading the head
         if self.time >= self.next_saccade {
             let (hx, hy) = input.head_turn;
-            let lead = (hx.clamp(-40.0, 40.0) / 40.0 * 0.5, hy.clamp(-30.0, 30.0) / 30.0 * 0.4);
-            self.gaze_target = (lead.0 + 0.5 * (self.rand() - 0.5), lead.1 + 0.35 * (self.rand() - 0.55));
+            let lead = (
+                hx.clamp(-40.0, 40.0) / 40.0 * 0.5,
+                hy.clamp(-30.0, 30.0) / 30.0 * 0.4,
+            );
+            self.gaze_target = (
+                lead.0 + 0.5 * (self.rand() - 0.5),
+                lead.1 + 0.35 * (self.rand() - 0.55),
+            );
             if input.paying {
                 self.gaze_target = (0.0, 0.05);
             }
@@ -344,7 +378,8 @@ impl Face {
             w[Channel::PressR as usize] += -self.mood * 0.5;
         }
         // --- now and then an expression, eased in and out
-        if self.expression.is_none() && self.time >= self.next_expression && input.talking.is_none() {
+        if self.expression.is_none() && self.time >= self.next_expression && input.talking.is_none()
+        {
             let r = self.rand();
             let late = input.hour < 6.5 || input.hour > 22.0;
             let e = if late && r < 0.25 {
@@ -410,14 +445,17 @@ impl Face {
                     }
                     Expression::Yawn => {
                         // the mouth opens wide for most of it, the eyes shut
-                        let open = ease(((t - 0.4) / 1.0).clamp(0.0, 1.0)) * ease(((len - t) / 0.9).clamp(0.0, 1.0));
+                        let open = ease(((t - 0.4) / 1.0).clamp(0.0, 1.0))
+                            * ease(((len - t) / 0.9).clamp(0.0, 1.0));
                         w[Channel::JawOpen as usize] += 0.85 * open;
                         w[Channel::Funnel as usize] += 0.2 * open;
                         w[Channel::BrowInnerUp as usize] += 0.4 * open;
                         w[Channel::SquintL as usize] += 0.7 * open;
                         w[Channel::SquintR as usize] += 0.7 * open;
-                        w[Channel::BlinkL as usize] = (w[Channel::BlinkL as usize] + 0.6 * open).min(1.0);
-                        w[Channel::BlinkR as usize] = (w[Channel::BlinkR as usize] + 0.6 * open).min(1.0);
+                        w[Channel::BlinkL as usize] =
+                            (w[Channel::BlinkL as usize] + 0.6 * open).min(1.0);
+                        w[Channel::BlinkR as usize] =
+                            (w[Channel::BlinkR as usize] + 0.6 * open).min(1.0);
                     }
                 }
             }
@@ -439,7 +477,8 @@ impl Face {
         }
         // --- talking: the jaw with the loudness, the visemes at the syllables' pace
         let loud = input.talking.unwrap_or(0.0).clamp(0.0, 1.0);
-        self.talk_amount += ((input.talking.is_some() as u8 as f32) - self.talk_amount) * (dt / 0.12).min(1.0);
+        self.talk_amount +=
+            ((input.talking.is_some() as u8 as f32) - self.talk_amount) * (dt / 0.12).min(1.0);
         if input.talking.is_some() {
             // ~5 syllables a second, a little irregular
             self.syllable += dt * (4.0 + 2.5 * self.rand());
@@ -448,7 +487,11 @@ impl Face {
                 self.viseme.0 = self.viseme.1;
                 // open vowels most of the time, consonants between
                 let r = self.rand();
-                self.viseme.1 = if r < 0.55 { (self.rand() * 5.0) as usize } else { 5 + (self.rand() * 9.0) as usize };
+                self.viseme.1 = if r < 0.55 {
+                    (self.rand() * 5.0) as usize
+                } else {
+                    5 + (self.rand() * 9.0) as usize
+                };
             }
             self.viseme.2 = ease(self.syllable);
         }
@@ -482,7 +525,16 @@ mod tests {
 
     #[test]
     fn rocketbox_shape_names_are_found() {
-        let names = ["blendShape1.AA_VI_00_Sil", "blendShape1.AA_VI_10_aa", "AA_VI_11_E", "AK_09_EyeBlinkLeft", "AK_10_EyeBlinkRight", "AK_25_JawOpen", "AK_44_MouthSmileLeft", "AU_45_Blink"];
+        let names = [
+            "blendShape1.AA_VI_00_Sil",
+            "blendShape1.AA_VI_10_aa",
+            "AA_VI_11_E",
+            "AK_09_EyeBlinkLeft",
+            "AK_10_EyeBlinkRight",
+            "AK_25_JawOpen",
+            "AK_44_MouthSmileLeft",
+            "AU_45_Blink",
+        ];
         let rig = FaceRig::from_shapes(names.iter().copied()).unwrap();
         assert_eq!(rig.shape[Channel::VisemeAA as usize], Some(1));
         assert_eq!(rig.shape[Channel::VisemeE as usize], Some(2));
@@ -497,7 +549,13 @@ mod tests {
         let mut f = Face::new(7);
         let mut blinked = false;
         for _ in 0..(10.0 / 0.016) as usize {
-            let w = f.advance(&FaceInput { hour: 12.0, ..Default::default() }, 0.016);
+            let w = f.advance(
+                &FaceInput {
+                    hour: 12.0,
+                    ..Default::default()
+                },
+                0.016,
+            );
             blinked |= w[Channel::BlinkL as usize] > 0.95;
             assert!(w.iter().all(|v| (0.0..=1.0).contains(v)));
         }
@@ -505,7 +563,14 @@ mod tests {
         let mut jaw = 0.0f32;
         for k in 0..120 {
             let loud = if k % 10 < 5 { 0.8 } else { 0.1 };
-            let w = f.advance(&FaceInput { talking: Some(loud), hour: 12.0, ..Default::default() }, 0.016);
+            let w = f.advance(
+                &FaceInput {
+                    talking: Some(loud),
+                    hour: 12.0,
+                    ..Default::default()
+                },
+                0.016,
+            );
             jaw = jaw.max(w[Channel::JawOpen as usize]);
         }
         assert!(jaw > 0.3, "the jaw stayed shut while talking: {jaw}");

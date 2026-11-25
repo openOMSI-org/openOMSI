@@ -31,9 +31,20 @@ pub fn look_ahead(speed: f32) -> f32 {
 /// for one going the same way (`way_dir` within 60 degrees of the bus's heading): with the
 /// bus behind it, that stretch ahead of the bus reached over the car itself and it braked
 /// for a bus that was only following it (#139).
-pub fn player_reach_ahead(half_len: f32, speed: f32, horizon: f32, fwd: DVec2, way_dir: DVec2) -> f64 {
+pub fn player_reach_ahead(
+    half_len: f32,
+    speed: f32,
+    horizon: f32,
+    fwd: DVec2,
+    way_dir: DVec2,
+) -> f64 {
     let same_way = way_dir.length() > 0.5 && way_dir.normalize().dot(fwd) > 0.5;
-    half_len as f64 + if same_way { 0.0 } else { (speed.max(0.0) * horizon) as f64 }
+    half_len as f64
+        + if same_way {
+            0.0
+        } else {
+            (speed.max(0.0) * horizon) as f64
+        }
 }
 
 /// Seconds a car has stood behind one that waits to move over into its lane, and that one has
@@ -118,7 +129,12 @@ impl TrafficSim {
     /// along its lane (on the same lane; else the lower number) stops taking the other for
     /// its lead for a few seconds and drives off.
     pub fn break_lead_pairs(&mut self) {
-        let index: HashMap<u64, usize> = self.cars.iter().enumerate().map(|(k, c)| (c.id, k)).collect();
+        let index: HashMap<u64, usize> = self
+            .cars
+            .iter()
+            .enumerate()
+            .map(|(k, c)| (c.id, k))
+            .collect();
         let mut pairs: Vec<(usize, u64)> = Vec::new();
         for (a, c) in self.cars.iter().enumerate() {
             let Some(bid) = c.lead_car else { continue };
@@ -127,13 +143,23 @@ impl TrafficSim {
                 continue;
             }
             let (sa, sb) = (&self.cars[a].state, &self.cars[b].state);
-            let a_goes = if sa.lane == sb.lane { sa.s > sb.s } else { c.id < bid };
+            let a_goes = if sa.lane == sb.lane {
+                sa.s > sb.s
+            } else {
+                c.id < bid
+            };
             let (go, other) = if a_goes { (a, bid) } else { (b, c.id) };
             pairs.push((go, other));
         }
         for (go, other) in pairs {
             if omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() {
-                log::info!("t={:.1}: cars {} and {} each waited for the other: {} drives off", self.time, self.cars[go].id, other, self.cars[go].id);
+                log::info!(
+                    "t={:.1}: cars {} and {} each waited for the other: {} drives off",
+                    self.time,
+                    self.cars[go].id,
+                    other,
+                    self.cars[go].id
+                );
             }
             self.cars[go].ignore_lead = Some((other, self.time as f64 + 5.0));
         }
@@ -144,12 +170,28 @@ impl TrafficSim {
         // one that stands drives on (up to the line, the gap) and the other can move over.
         for b in 0..self.cars.len() {
             let c = &self.cars[b];
-            let Some(&a) = c.lead_car.and_then(|id| index.get(&id)) else { continue };
+            let Some(&a) = c.lead_car.and_then(|id| index.get(&id)) else {
+                continue;
+            };
             let wait = &self.cars[a].sideways;
-            let waits_for_this_lane = wait.waiting.is_some_and(|(lane, at)| lane == c.state.lane && self.time - at < 0.5);
-            if c.state.speed.abs() < 0.3 && c.stopped > MOVE_OVER_PATIENCE && wait.signalled > MOVE_OVER_PATIENCE && waits_for_this_lane && c.ignore_lead.is_none_or(|(_, until)| until < self.time as f64) {
+            let waits_for_this_lane = wait
+                .waiting
+                .is_some_and(|(lane, at)| lane == c.state.lane && self.time - at < 0.5);
+            if c.state.speed.abs() < 0.3
+                && c.stopped > MOVE_OVER_PATIENCE
+                && wait.signalled > MOVE_OVER_PATIENCE
+                && waits_for_this_lane
+                && c.ignore_lead
+                    .is_none_or(|(_, until)| until < self.time as f64)
+            {
                 if omsi_cfg::flags::OMSI_DEBUG_STUCK.is_set() {
-                    log::info!("t={:.1}: car {} stands behind car {}, which waits to move over into its lane ({:.0} s): it drives on", self.time, c.id, self.cars[a].id, wait.signalled);
+                    log::info!(
+                        "t={:.1}: car {} stands behind car {}, which waits to move over into its lane ({:.0} s): it drives on",
+                        self.time,
+                        c.id,
+                        self.cars[a].id,
+                        wait.signalled
+                    );
                 }
                 let other = self.cars[a].id;
                 self.cars[b].ignore_lead = Some((other, self.time as f64 + 5.0));
@@ -293,7 +335,9 @@ impl TrafficSim {
         let me = car.id;
         let near: Vec<&Footprint> = feet
             .near(pos, reach as f64 + 2.0)
-            .filter(|f| f.car != i && !rounding.contains(&f.car) && (f.z - z).abs() < BODY_LEVEL + 6.0)
+            .filter(|f| {
+                f.car != i && !rounding.contains(&f.car) && (f.z - z).abs() < BODY_LEVEL + 6.0
+            })
             .filter(|f| (f.center - pos).length() < reach as f64 + f.half_len + f.half_w + 2.0)
             .filter(|f| {
                 let o = &self.cars[f.car];
@@ -368,11 +412,26 @@ impl TrafficSim {
     /// ahead in its own lane that it follows anyway. Moving vehicles further on are the
     /// lane's gaps' business (`can_merge`, `oncoming_block`).
     /// Returns what is in the way.
-    pub fn ghost_blocked(&self, i: usize, way: &dyn Fn(f32) -> DVec3, len: f32, feet: &super::foot_grid::Feet, skip: &[usize], extra: &[Obb]) -> Option<String> {
+    pub fn ghost_blocked(
+        &self,
+        i: usize,
+        way: &dyn Fn(f32) -> DVec3,
+        len: f32,
+        feet: &super::foot_grid::Feet,
+        skip: &[usize],
+        extra: &[Obb],
+    ) -> Option<String> {
         let car = &self.cars[i];
         let st = &car.state;
         let (front, rear, hw) = (st.front as f64, st.rear as f64, car.half_width as f64);
-        let height = car.vehicle.ty.def.bounding_box.map(|b| b[2] as f64).filter(|h| *h > 0.5).unwrap_or(1.5);
+        let height = car
+            .vehicle
+            .ty
+            .def
+            .bounding_box
+            .map(|b| b[2] as f64)
+            .filter(|h| *h > 0.5)
+            .unwrap_or(1.5);
         let pivot = (st.rear * 0.6).clamp(1.0, 3.0);
         let h = car.vehicle.heading.to_radians();
         let heading_fwd = DVec2::new(h.sin(), h.cos());
@@ -380,7 +439,16 @@ impl TrafficSim {
             let p = way(d);
             let fwd = (p - way(d - pivot)).truncate().normalize_or_zero();
             let fwd = if fwd == DVec2::ZERO { heading_fwd } else { fwd };
-            Footprint { car: usize::MAX, center: p.truncate() + fwd * ((front - rear) * 0.5), fwd, right: DVec2::new(fwd.y, -fwd.x), half_len: (front + rear) * 0.5, half_w: hw, speed: 0.0, z: p.z }
+            Footprint {
+                car: usize::MAX,
+                center: p.truncate() + fwd * ((front - rear) * 0.5),
+                fwd,
+                right: DVec2::new(fwd.y, -fwd.x),
+                half_len: (front + rear) * 0.5,
+                half_w: hw,
+                speed: 0.0,
+                z: p.z,
+            }
         };
         let pos = car.vehicle.position.truncate();
         let reach = len as f64 + front + 10.0;
@@ -388,7 +456,11 @@ impl TrafficSim {
         let margin = GHOST_CLEARANCE * 0.5;
         let bodies: Vec<&Footprint> = feet
             .near(pos, reach)
-            .filter(|f| f.car != i && !skip.contains(&f.car) && (f.center - pos).length() < reach + f.half_len + f.half_w)
+            .filter(|f| {
+                f.car != i
+                    && !skip.contains(&f.car)
+                    && (f.center - pos).length() < reach + f.half_len + f.half_w
+            })
             .filter(|f| !start.overlaps(f, 0.0))
             .collect();
         let players: Vec<Footprint> = if skip.contains(&usize::MAX) {
@@ -400,13 +472,30 @@ impl TrafficSim {
                 .filter(|p| p.4.abs() < 0.5 && (p.0.truncate() - pos).length() < reach + p.2 as f64)
                 .map(|&(c, ph, hl, phw, _)| {
                     let hr = ph.to_radians();
-                    Footprint { car: usize::MAX, center: c.truncate(), fwd: DVec2::new(hr.sin(), hr.cos()), right: DVec2::new(hr.cos(), -hr.sin()), half_len: hl as f64, half_w: phw as f64, speed: 0.0, z: c.z }
+                    Footprint {
+                        car: usize::MAX,
+                        center: c.truncate(),
+                        fwd: DVec2::new(hr.sin(), hr.cos()),
+                        right: DVec2::new(hr.cos(), -hr.sin()),
+                        half_len: hl as f64,
+                        half_w: phw as f64,
+                        speed: 0.0,
+                        z: c.z,
+                    }
                 })
                 .filter(|f| !start.overlaps(f, 0.0))
                 .collect()
         };
-        let parked: Vec<Footprint> = extra.iter().map(|b| Footprint::from_obb(usize::MAX, b, 0.0)).filter(|f| !start.overlaps(f, 0.0)).collect();
-        let people: Vec<&(DVec3, DVec2, bool)> = self.people.iter().filter(|(p, _, _)| (p.truncate() - pos).length() < reach + 3.0).collect();
+        let parked: Vec<Footprint> = extra
+            .iter()
+            .map(|b| Footprint::from_obb(usize::MAX, b, 0.0))
+            .filter(|f| !start.overlaps(f, 0.0))
+            .collect();
+        let people: Vec<&(DVec3, DVec2, bool)> = self
+            .people
+            .iter()
+            .filter(|(p, _, _)| (p.truncate() - pos).length() < reach + 3.0)
+            .collect();
         let v = st.speed.max(3.0);
         let mut d = 0.0f32;
         let mut k = 0usize;
@@ -425,11 +514,20 @@ impl TrafficSim {
                     at.center += f.fwd * (f.speed * t) as f64;
                 }
                 if g.overlaps(&at, margin) {
-                    return Some(format!("the body of car {} {d:.1} m on", self.cars[f.car].id));
+                    return Some(format!(
+                        "the body of car {} {d:.1} m on",
+                        self.cars[f.car].id
+                    ));
                 }
             }
-            if let Some(f) = players.iter().find(|f| (f.z - g.z).abs() < 4.0 && g.overlaps(f, margin)) {
-                return Some(format!("a player's vehicle at ({:.1}, {:.1})", f.center.x, f.center.y));
+            if let Some(f) = players
+                .iter()
+                .find(|f| (f.z - g.z).abs() < 4.0 && g.overlaps(f, margin))
+            {
+                return Some(format!(
+                    "a player's vehicle at ({:.1}, {:.1})",
+                    f.center.x, f.center.y
+                ));
             }
             if parked.iter().any(|f| g.overlaps(f, margin)) {
                 return Some(format!("a parked car {d:.1} m on"));
@@ -439,13 +537,21 @@ impl TrafficSim {
                     continue;
                 }
                 let rel = p.truncate() + *pv * t.min(2.0) as f64 - g.center;
-                if rel.dot(g.fwd).abs() <= g.half_len + 0.3 && rel.dot(g.right).abs() <= g.half_w + 0.3 {
+                if rel.dot(g.fwd).abs() <= g.half_len + 0.3
+                    && rel.dot(g.right).abs() <= g.half_w + 0.3
+                {
                     return Some(format!("somebody on foot {d:.1} m on"));
                 }
             }
             if k.is_multiple_of(2) {
                 let p = way(d);
-                let mut b = Obb::vehicle(p.truncate(), g.fwd.x.atan2(g.fwd.y).to_degrees(), front, rear, hw);
+                let mut b = Obb::vehicle(
+                    p.truncate(),
+                    g.fwd.x.atan2(g.fwd.y).to_degrees(),
+                    front,
+                    rear,
+                    hw,
+                );
                 b.z0 = p.z + 0.15;
                 b.z1 = p.z + height;
                 if self.scenery_blocks(&b) {
@@ -481,7 +587,6 @@ impl TrafficSim {
         self.player_on_way(&car.state, car.half_width, player, 0.0)
     }
 
-
     /// The player's bus standing (or just starting) at a stop with its indicator out
     /// towards the traffic: a car coming up behind it in the lane beside lets it out - it
     /// stops before the room the bus pulls out into (the bus's box grown by 2.5 m towards
@@ -493,7 +598,11 @@ impl TrafficSim {
         let st = &car.state;
         let (centre, heading, half_len, _, speed) = *player;
         // (a bus that indicates and stays for long is not waited for: it is passed)
-        if self.player_signal_age > 1.0 || speed.abs() > 3.0 || (self.player_signalling > 20.0 && speed.abs() < 0.3) || (car.vehicle.position - centre).length() > 120.0 {
+        if self.player_signal_age > 1.0
+            || speed.abs() > 3.0
+            || (self.player_signalling > 20.0 && speed.abs() < 0.3)
+            || (car.vehicle.position - centre).length() > 120.0
+        {
             return None;
         }
         let h = heading.to_radians();
@@ -516,7 +625,13 @@ impl TrafficSim {
     /// way it only considers taking).
     /// `widen`: the box grown by this much (m) towards the traffic (the left, or the right
     /// on a left-hand-traffic map).
-    pub fn player_on_way(&self, st: &AiState, half_width: f32, player: &PlayerBox, widen: f64) -> Option<Lead> {
+    pub fn player_on_way(
+        &self,
+        st: &AiState,
+        half_width: f32,
+        player: &PlayerBox,
+        widen: f64,
+    ) -> Option<Lead> {
         let (centre, heading, half_len, half_w, speed) = *player;
         let h = heading.to_radians();
         let fwd = DVec2::new(h.sin(), h.cos());
@@ -526,7 +641,13 @@ impl TrafficSim {
         let centre = centre + (right * (out * widen * 0.5)).extend(0.0);
         let half_w = half_w + (widen * 0.5) as f32;
         let own = player.0 == self.player.map_or(DVec3::NAN, |p| p.0);
-        let horizon = if self.player_priority { 5.0 } else if own && self.player_waving() { 0.3 } else { 1.5 };
+        let horizon = if self.player_priority {
+            5.0
+        } else if own && self.player_waving() {
+            0.3
+        } else {
+            1.5
+        };
         let way_dir = (st.way_point(&self.net, 3.0) - st.way_point(&self.net, 0.0)).truncate();
         let ahead = player_reach_ahead(half_len, speed, horizon, fwd, way_dir);
         let behind = half_len as f64 + ((-speed).max(0.0) * horizon) as f64;
@@ -535,7 +656,20 @@ impl TrafficSim {
         // (the player's own bus bends its reach along its turn; a LAN player's goes straight)
         let turn = if own { self.player_turn } else { 0.0 };
         let body = half_len as f64 + margin;
-        let inside = |p: DVec3| in_player_box(p, bus, fwd, right, touching, body, body) || in_player_sweep(p, centre, fwd, right, wide, body, ahead + margin, behind + margin, turn);
+        let inside = |p: DVec3| {
+            in_player_box(p, bus, fwd, right, touching, body, body)
+                || in_player_sweep(
+                    p,
+                    centre,
+                    fwd,
+                    right,
+                    wide,
+                    body,
+                    ahead + margin,
+                    behind + margin,
+                    turn,
+                )
+        };
         let look = (st.speed * st.speed / (2.0 * st.decel) + st.speed * 2.0 + 15.0)
             .clamp(15.0, look_ahead(st.speed));
         let mut d = 0.0f32;
@@ -583,7 +717,17 @@ impl TrafficSim {
 /// speed lay across the oncoming lane, and the cars coming the other way braked hard for a
 /// bus that was never going to be where they were.
 #[allow(clippy::too_many_arguments)]
-pub fn in_player_sweep(p: DVec3, centre: DVec3, fwd: DVec2, right: DVec2, wide: f64, body: f64, ahead: f64, behind: f64, turn: f64) -> bool {
+pub fn in_player_sweep(
+    p: DVec3,
+    centre: DVec3,
+    fwd: DVec2,
+    right: DVec2,
+    wide: f64,
+    body: f64,
+    ahead: f64,
+    behind: f64,
+    turn: f64,
+) -> bool {
     if turn.abs() < 1e-4 || ahead <= body {
         return in_player_box(p, centre, fwd, right, wide, ahead, behind);
     }
@@ -602,8 +746,15 @@ pub fn in_player_sweep(p: DVec3, centre: DVec3, fwd: DVec2, right: DVec2, wide: 
 /// The curvature (1/m, positive to the right) of the player's path from its last two boxes
 /// `dt` apart, smoothed into `before`: none for a bus creeping or standing, whose heading
 /// says little about where it goes.
-pub fn player_turn_of(before: f64, last: Option<PlayerBox>, now: Option<PlayerBox>, dt: f32) -> f64 {
-    let (Some(a), Some(b)) = (last, now) else { return 0.0 };
+pub fn player_turn_of(
+    before: f64,
+    last: Option<PlayerBox>,
+    now: Option<PlayerBox>,
+    dt: f32,
+) -> f64 {
+    let (Some(a), Some(b)) = (last, now) else {
+        return 0.0;
+    };
     let speed = b.4.abs() as f64;
     if speed < 1.0 || dt <= 0.0 || (b.0 - a.0).length() > 5.0 + speed * dt as f64 * 2.0 {
         return 0.0;
@@ -618,7 +769,15 @@ pub fn player_turn_of(before: f64, last: Option<PlayerBox>, now: Option<PlayerBo
 /// either side, `ahead` in front and `behind` behind it) - on the same level only: a bus
 /// under a bridge held up the traffic on the bridge above it (#753). 4 m, as for the other
 /// vehicles' bodies.
-pub fn in_player_box(p: DVec3, centre: DVec3, fwd: DVec2, right: DVec2, wide: f64, ahead: f64, behind: f64) -> bool {
+pub fn in_player_box(
+    p: DVec3,
+    centre: DVec3,
+    fwd: DVec2,
+    right: DVec2,
+    wide: f64,
+    ahead: f64,
+    behind: f64,
+) -> bool {
     let rel = p.truncate() - centre.truncate();
     let (x, y) = (rel.dot(right), rel.dot(fwd));
     x.abs() <= wide && y <= ahead && y >= -behind && (p.z - centre.z).abs() < 4.0

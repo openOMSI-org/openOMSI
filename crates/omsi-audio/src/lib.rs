@@ -1,6 +1,7 @@
 //! Audio.
 
 pub mod mixer;
+pub mod packs;
 pub mod radio;
 pub mod radio_fx;
 pub mod soundset;

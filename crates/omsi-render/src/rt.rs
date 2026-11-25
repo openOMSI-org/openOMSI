@@ -8,7 +8,12 @@
 //! the screen-space AO where they are there. What a hit looks like - for the reflections -
 //! comes from a record per geometry: its material's colour and textures, which the hit reads
 //! from small copies of them at its triangle's texture coordinates (rt_tex.rs), or their mean
-//! colours until those are made.
+//! colours until those are made, and its corners' normals, by which it is lit.
+//!
+//! After the main pass the reflections are traced (rt_reflect.wgsl): a ray per pixel along a
+//! direction of the surface's GGX lobe, new every frame, and denoised over the frames and the
+//! pixels round it (rt_denoise.wgsl) before the composite adds them, weighted by the main
+//! pass's Fresnel and lobe integral, in place of the probe's reflection.
 //!
 //! OMSI_NO_RT=1 opens no ray queries (Enhanced+ draws as Enhanced), OMSI_NO_RT_FRAME=1 keeps
 //! them but traces nothing, OMSI_NO_RT_GRADE=1 leaves out Enhanced+'s grade, and
@@ -18,13 +23,12 @@
 
 use super::*;
 
+mod reflect;
+
 /// How far from the camera meshes are traced (m): beyond it the shadow map holds.
 pub(super) const RT_RANGE: f32 = 420.0;
 /// How far the ambient occlusion looks (m).
 const AO_RADIUS: f32 = 2.2;
-/// The sun disc as traced (tangent of its radius): larger than the real 0.27 deg, for the
-/// soft edge a shadow takes on away from its caster (the shadow map's is softer still).
-const SUN_CONE: f32 = 0.012;
 /// Bottom-level structures built (or rebuilt) per frame at most: a map tile streamed in
 /// brings hundreds of meshes; they come into the shadows over a few frames instead of a hitch.
 const BLAS_BUDGET: usize = 320;
@@ -209,10 +213,34 @@ pub(super) struct RayTracer {
     refl_layout: wgpu::BindGroupLayout,
     reflect: wgpu::ComputePipeline,
     composite: wgpu::RenderPipeline,
-    /// The reflections' rays (one per `refl_div()` x `refl_div()` pixels).
-    refl: Option<((u32, u32), wgpu::TextureView)>,
-    /// A 1 x 1 storage texture for the composite's unused output binding.
-    spare: wgpu::TextureView,
+    /// The reflections' rays (one per `refl_div()` x `refl_div()` pixels) and their denoiser's
+    /// textures.
+    refl: Option<((u32, u32), ReflTargets)>,
+    /// 1 x 1 storage textures for the outputs a pass leaves unused (one per binding).
+    spare: [wgpu::TextureView; 3],
+    /// The reflections' denoiser (rt_denoise.wgsl): its layout, its passes, the a-trous steps
+    /// (a uniform per pass, read with a dynamic offset) and its bind groups.
+    denoise_layout: wgpu::BindGroupLayout,
+    temporal_refl: wgpu::ComputePipeline,
+    atrous: wgpu::ComputePipeline,
+    steps: wgpu::Buffer,
+    step_stride: u64,
+    denoise_groups: Option<(RtBindKey, [wgpu::BindGroup; 6])>,
+}
+
+/// The reflections' textures at the rays' size (all rgba16float).
+struct ReflTargets {
+    /// This frame's rays: rgb what each brings back, a how far it went.
+    raw: wgpu::TextureView,
+    /// The surface each left: its distance, roughness, normal (rt_reflect.wgsl `t_meta_out`).
+    meta: wgpu::TextureView,
+    /// The history (rgb, frames in it) and its moments (the luminance's two, the view depth it
+    /// was taken at, the variance), this frame's and last frame's by turns.
+    hist: [wgpu::TextureView; 2],
+    moments: [wgpu::TextureView; 2],
+    /// The a-trous passes' two textures by turns; the last pass leaves the result in `a`.
+    a: wgpu::TextureView,
+    b: wgpu::TextureView,
 }
 
 /// One reflection ray per this many pixels each way (OMSI_RT_REFL_HALF=1: per 2 x 2).
@@ -226,23 +254,37 @@ fn refl_div() -> u32 {
 
 /// The traced lighting's shader: the shared ray tracing and its own.
 pub(super) fn lighting_source() -> String {
-    [include_str!("rt_common.wgsl"), include_str!("rt.wgsl")].join("\n")
+    [
+        crate::shaders::hot_wgsl(include_str!("rt_common.wgsl"), "rt_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt.wgsl"), "rt.wgsl"),
+    ]
+    .join("\n")
 }
 
 /// The size of the shaders' `RtParams` (for the shader test).
 #[cfg(test)]
 pub(super) const PARAMS_SIZE: usize = std::mem::size_of::<Params>();
 
+/// The reflections' denoiser's shader: the shared ray tracing's parameters and its own.
+pub(super) fn denoise_source() -> String {
+    [
+        crate::shaders::hot_wgsl(include_str!("rt_common.wgsl"), "rt_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt_denoise.wgsl"), "rt_denoise.wgsl"),
+    ]
+    .join("\n")
+}
+
 /// The reflections' shader: the shared ray tracing, the enhanced uniform's layout, its own.
 pub(super) fn reflect_source() -> String {
-    let common = include_str!("enhanced_common.wgsl");
+    let common =
+        crate::shaders::hot_wgsl(include_str!("enhanced_common.wgsl"), "enhanced_common.wgsl");
     let enh = &common[..common
         .find("@group(0) @binding(11)")
         .expect("Enhanced struct")];
     [
-        include_str!("rt_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt_common.wgsl"), "rt_common.wgsl"),
         enh,
-        include_str!("rt_reflect.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt_reflect.wgsl"), "rt_reflect.wgsl"),
     ]
     .join("\n")
 }
@@ -356,39 +398,7 @@ impl RayTracer {
         let trace = pipeline("cs_trace", None);
         let temporal = pipeline("cs_denoise", None);
         let avg_stride = (device.limits().min_storage_buffer_offset_alignment as u64).max(256);
-        let atlas_entries = rt_tex::TexStore::avg_entries();
-        let avg_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("texture means"),
-            entries: &[
-                texture_entry(0, wgpu::TextureSampleType::Float { filterable: true }),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                storage_buffer(2, false, true, 32),
-                atlas_entries[0],
-                atlas_entries[1],
-            ],
-        });
-        let avg_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("texture means"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("rt_avg.wgsl").into()),
-        });
-        let avg_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("texture means"),
-            bind_group_layouts: &[Some(&avg_layout)],
-            immediate_size: 0,
-        });
-        let avg_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("texture means"),
-            layout: Some(&avg_pl),
-            module: &avg_module,
-            entry_point: Some("cs_tex_avg"),
-            compilation_options: Default::default(),
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        });
+        let (avg_layout, avg_pipeline) = reflect::tex_mean_pipeline(device);
         let vis = wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT;
         let tex = |binding, sample_type, view_dimension, visibility| wgpu::BindGroupLayoutEntry {
             binding,
@@ -453,6 +463,8 @@ impl RayTracer {
                 tex(12, unfilt, d2, vis),
                 storage_buffer(13, true, false, 16),
                 tex(14, filt, d2, wgpu::ShaderStages::COMPUTE),
+                storage_texture(15),
+                tex(16, unfilt, d2, vis),
             ],
         });
         let refl_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -518,6 +530,34 @@ impl RayTracer {
             multiview_mask: None,
             cache: crate::pipeline_cache::get(device).as_ref(),
         });
+        let (denoise_layout, temporal_refl, atrous) = reflect::denoise_pipelines(device, &div);
+        let step_stride = (device.limits().min_uniform_buffer_offset_alignment as u64).max(256);
+        // (written with the parameters every frame, `prepare_ray_tracing`: through the queue,
+        // not mapped at creation - see `buffer_init`)
+        let steps = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("rt reflections denoiser steps"),
+            size: 3 * step_stride,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let spare = || {
+            device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some("rt spare"),
+                    size: wgpu::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba16Float,
+                    usage: wgpu::TextureUsages::STORAGE_BINDING,
+                    view_formats: &[],
+                })
+                .create_view(&Default::default())
+        };
         let tlas_cap = 8192;
         RayTracer {
             blas: hashbrown::HashMap::new(),
@@ -557,22 +597,13 @@ impl RayTracer {
             reflect,
             composite,
             refl: None,
-            spare: device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some("rt spare"),
-                    size: wgpu::Extent3d {
-                        width: 1,
-                        height: 1,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba16Float,
-                    usage: wgpu::TextureUsages::STORAGE_BINDING,
-                    view_formats: &[],
-                })
-                .create_view(&Default::default()),
+            spare: [spare(), spare(), spare()],
+            denoise_layout,
+            temporal_refl,
+            atrous,
+            steps,
+            step_stride,
+            denoise_groups: None,
         }
     }
 
@@ -1032,12 +1063,18 @@ impl Renderer {
                 _ => ([0.0; 4], [0.0; 4], [0.0; 4], [0.0; 4]),
             };
         let debug = omsi_cfg::flags::OMSI_DEBUG_RT.parse::<f32>().unwrap_or(0.0);
+        // The sun's disc as the shadow rays see it (tangent of its radius): its own 0.27
+        // degrees, so that a shadow is as sharp at its caster's foot and as soft away from it
+        // as the real one; a veil of high cloud spreads the sun into an aureole a few degrees
+        // wide, and the shadows widen with it (as the shadow map's, `sun_shadow_soft`).
+        let veil_spread = 1.0 - (-lighting.veil.clamp(0.0, 3.0) / sun.z.max(0.03)).exp();
+        let cone = SUN_RADIUS.tan() * (1.0 + 3.0 * veil_spread);
         let p = Params {
             inv_view_proj: view_proj.inverse().to_cols_array_2d(),
             view_proj: view_proj.to_cols_array_2d(),
             prev_view_proj: prev_vp.to_cols_array_2d(),
             eye: cam.extend((frame % 4096) as f32).to_array(),
-            sun: sun.extend(if sun_on { SUN_CONE } else { 0.0 }).to_array(),
+            sun: sun.extend(if sun_on { cone } else { 0.0 }).to_array(),
             size: [
                 w as f32,
                 h as f32,
@@ -1055,6 +1092,9 @@ impl Renderer {
         };
         self.queue
             .write_buffer(&rt.params, 0, bytemuck::bytes_of(&p));
+        // (the reflections' a-trous passes' steps, `reflect::refl_steps`)
+        self.queue
+            .write_buffer(&rt.steps, 0, &reflect::refl_steps(rt.step_stride));
         rt.prev = Some((view_proj, ro, vehicle));
         true
     }
@@ -1276,180 +1316,6 @@ impl Renderer {
             pass.set_bind_group(0, bg, &[]);
             pass.dispatch_workgroups(gx, gy, 1);
         }
-    }
-}
-
-impl Renderer {
-    /// The ray-traced reflections of the window's picture, added to `HdrTargets::view` after
-    /// the main pass (and before the rain on the glass, which looks through it).
-    pub(super) fn encode_rt_reflections(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        w: u32,
-        h: u32,
-        queries: Option<&wgpu::QuerySet>,
-        timed: &mut Vec<&'static str>,
-    ) {
-        let (Some(rt), Some(hdr), Some(ao), Some(probe)) = (
-            self.rt.as_mut(),
-            self.targets.hdr_targets.get(&(w, h)),
-            self.targets.ao.as_ref(),
-            self.tone.probe.as_ref(),
-        ) else {
-            return;
-        };
-        let Some(gbuf) = hdr.gbuf.as_ref() else {
-            return;
-        };
-        let half = (w.div_ceil(refl_div()), h.div_ceil(refl_div()));
-        if rt.refl.as_ref().is_none_or(|r| r.0 != half) {
-            let mk = |label: &str| {
-                self.device
-                    .create_texture(&wgpu::TextureDescriptor {
-                        label: Some(label),
-                        size: wgpu::Extent3d {
-                            width: half.0,
-                            height: half.1,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rgba16Float,
-                        usage: wgpu::TextureUsages::STORAGE_BINDING
-                            | wgpu::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    })
-                    .create_view(&Default::default())
-            };
-            rt.refl = Some((half, mk("rt reflection rays")));
-        }
-        let (_, raw) = rt.refl.as_ref().unwrap();
-        let dummy = &self.black_texture.view;
-        let group =
-            |out: &wgpu::TextureView, scene: &wgpu::TextureView, h12: &wgpu::TextureView| {
-                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("ray-traced reflections"),
-                    layout: &rt.refl_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: rt.params.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: rt.tlas.as_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::TextureView(&ao.depth_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: rt.records_buf.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 4,
-                            resource: rt.tex_avg.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 5,
-                            resource: wgpu::BindingResource::TextureView(&gbuf[0].1),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 6,
-                            resource: wgpu::BindingResource::TextureView(&gbuf[1].1),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 7,
-                            resource: wgpu::BindingResource::TextureView(out),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 8,
-                            resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 9,
-                            resource: wgpu::BindingResource::TextureView(scene),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 10,
-                            resource: wgpu::BindingResource::TextureView(&probe.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 11,
-                            resource: self.tone.enh_buf.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 12,
-                            resource: wgpu::BindingResource::TextureView(h12),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 13,
-                            resource: rt.tex.uvs.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 14,
-                            resource: wgpu::BindingResource::TextureView(&rt.tex.atlas_view),
-                        },
-                    ],
-                })
-            };
-        // (no pass's output is among its inputs)
-        let key: RtBindKey = (
-            rt.bind_gen,
-            vec![
-                ao.depth_view.clone(),
-                gbuf[0].1.clone(),
-                gbuf[1].1.clone(),
-                raw.clone(),
-                hdr.view.clone(),
-                probe.view.clone(),
-                dummy.clone(),
-            ],
-        );
-        if rt.refl_groups.as_ref().is_none_or(|g| g.0 != key) {
-            rt.refl_groups = Some((
-                key,
-                [group(raw, &hdr.view, dummy), group(&rt.spare, dummy, raw)],
-            ));
-        }
-        let [trace_bg, composite_bg] = &rt.refl_groups.as_ref().expect("made above").1;
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("rt reflections"),
-                timestamp_writes: pass_timer(queries, timed, "rt reflections").map(|t| {
-                    wgpu::ComputePassTimestampWrites {
-                        query_set: t.query_set,
-                        beginning_of_pass_write_index: t.beginning_of_pass_write_index,
-                        end_of_pass_write_index: t.end_of_pass_write_index,
-                    }
-                }),
-            });
-            let (gx, gy) = (half.0.div_ceil(8), half.1.div_ceil(8));
-            pass.set_pipeline(&rt.reflect);
-            pass.set_bind_group(0, trace_bg, &[]);
-            pass.dispatch_workgroups(gx, gy, 1);
-        }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("rt reflections composite"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &hdr.view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: pass_timer(queries, timed, "rt composite"),
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_pipeline(&rt.composite);
-        pass.set_bind_group(0, composite_bg, &[]);
-        pass.draw(0..3, 0..1);
     }
 }
 

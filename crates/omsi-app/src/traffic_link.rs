@@ -22,7 +22,10 @@ pub(crate) fn vehicle_outline(v: &omsi_sim::VehicleInstance, speed: f32) -> traf
 /// the front section and drove into the back of a turning GN92), and the vehicles placed
 /// by hand from the vehicle list, with their trailers - under ids of their own beside the
 /// LAN players'.
-pub(crate) fn own_outlines(player: Option<&Player>, placed: &[Player]) -> Vec<(u32, traffic::PlayerBox)> {
+pub(crate) fn own_outlines(
+    player: Option<&Player>,
+    placed: &[Player],
+) -> Vec<(u32, traffic::PlayerBox)> {
     let mut out = Vec::new();
     let mut add = |v: &omsi_sim::VehicleInstance, base: u32, whole: bool| {
         let speed = v.physics.speed;
@@ -95,7 +98,11 @@ fn remote_outlines(
 /// The indicators of the vehicles of `lan_outlines` and `own_outlines` by the same ids (a
 /// rear section shows its towing vehicle's): a light path marked as a turn asks its light
 /// for whoever stands on it indicating that way.
-pub(crate) fn outline_indicators(game: &lan::LanGame, player: Option<&Player>, placed: &[Player]) -> hashbrown::HashMap<u32, u8> {
+pub(crate) fn outline_indicators(
+    game: &lan::LanGame,
+    player: Option<&Player>,
+    placed: &[Player],
+) -> hashbrown::HashMap<u32, u8> {
     let mut out: hashbrown::HashMap<u32, u8> = hashbrown::HashMap::new();
     for (id, r) in &game.remotes {
         out.insert(*id, r.last.blinker);
@@ -135,9 +142,16 @@ pub(crate) fn traffic_inputs(
 ) {
     if let Some(c) = cam {
         t.viewer = Some(
-            traffic::Viewer::from_camera(c.position, c.forward().as_dvec3(), c.fov_deg, c.far, aspect, fog)
-                .with_extent(extent)
-                .with_culling(render.min_obj_size, render.max_obj_dist),
+            traffic::Viewer::from_camera(
+                c.position,
+                c.forward().as_dvec3(),
+                c.fov_deg,
+                c.far,
+                aspect,
+                fog,
+            )
+            .with_extent(extent)
+            .with_culling(render.min_obj_size, render.max_obj_dist),
         );
     }
     t.weekday = clock.weekday();

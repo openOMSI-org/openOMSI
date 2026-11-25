@@ -11,7 +11,12 @@ fn main() {
                 n += 1;
                 for i in t.indices {
                     let v = &m.vertices[i as usize];
-                    uv = [uv[0].min(v.uv.x), uv[1].min(v.uv.y), uv[2].max(v.uv.x), uv[3].max(v.uv.y)];
+                    uv = [
+                        uv[0].min(v.uv.x),
+                        uv[1].min(v.uv.y),
+                        uv[2].max(v.uv.x),
+                        uv[3].max(v.uv.y),
+                    ];
                     let q = v.position.to_array();
                     for a in 0..3 {
                         pos[a] = pos[a].min(q[a]);
@@ -19,7 +24,10 @@ fn main() {
                     }
                 }
             }
-            println!("  {k} {:?}: {n} tris, u {:.3}..{:.3} v {:.3}..{:.3}, pos {:.3?}", mat.texture, uv[0], uv[2], uv[1], uv[3], pos);
+            println!(
+                "  {k} {:?}: {n} tris, u {:.3}..{:.3} v {:.3}..{:.3}, pos {:.3?}",
+                mat.texture, uv[0], uv[2], uv[1], uv[3], pos
+            );
         }
     }
 }

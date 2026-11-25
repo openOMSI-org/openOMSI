@@ -16,16 +16,30 @@ pub struct MuteList {
 }
 
 fn key(name: &str) -> String {
-    name.trim().chars().take(MAX_NAME).collect::<String>().to_lowercase()
+    name.trim()
+        .chars()
+        .take(MAX_NAME)
+        .collect::<String>()
+        .to_lowercase()
 }
 
 impl MuteList {
     /// The list in `path` (missing or unreadable: empty), saved there when it changes.
     pub fn load(path: PathBuf) -> MuteList {
         let names = std::fs::read_to_string(&path)
-            .map(|t| t.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(key).take(MAX_ENTRIES).collect())
+            .map(|t| {
+                t.lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                    .map(key)
+                    .take(MAX_ENTRIES)
+                    .collect()
+            })
             .unwrap_or_default();
-        MuteList { names, path: Some(path) }
+        MuteList {
+            names,
+            path: Some(path),
+        }
     }
 
     pub fn is_muted(&self, name: &str) -> bool {
@@ -60,7 +74,10 @@ impl MuteList {
 
     fn save(&self) {
         let Some(p) = &self.path else { return };
-        let text = format!("# players whose voice chat is muted (one name per line)\n{}\n", self.names.iter().cloned().collect::<Vec<_>>().join("\n"));
+        let text = format!(
+            "# players whose voice chat is muted (one name per line)\n{}\n",
+            self.names.iter().cloned().collect::<Vec<_>>().join("\n")
+        );
         if let Some(dir) = p.parent() {
             let _ = std::fs::create_dir_all(dir);
         }

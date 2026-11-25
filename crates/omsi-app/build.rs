@@ -7,8 +7,13 @@ fn main() {
     windows_icon();
     steam();
     // (the executable exports the two switchable-graphics hints of main.rs, see there)
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
-        for sym in ["NvOptimusEnablement", "AmdPowerXpressRequestHighPerformance"] {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        for sym in [
+            "NvOptimusEnablement",
+            "AmdPowerXpressRequestHighPerformance",
+        ] {
             println!("cargo:rustc-link-arg-bin=openomsi=/EXPORT:{sym},DATA");
         }
     }
@@ -36,7 +41,10 @@ fn steam() {
     let src = std::path::Path::new("../../assets/steam_redist").join(lib);
     println!("cargo:rerun-if-changed={}", src.display());
     // (OUT_DIR is <target>/<profile>/build/<crate>/out: the binary lies three folders up)
-    if let Some(dir) = std::env::var_os("OUT_DIR").map(std::path::PathBuf::from).and_then(|o| o.ancestors().nth(3).map(|d| d.to_path_buf())) {
+    if let Some(dir) = std::env::var_os("OUT_DIR")
+        .map(std::path::PathBuf::from)
+        .and_then(|o| o.ancestors().nth(3).map(|d| d.to_path_buf()))
+    {
         let _ = std::fs::copy(&src, dir.join(lib));
     }
 }
@@ -50,7 +58,10 @@ fn windows_icon() {
     res.set_icon("../../assets/icons/app/openomsi.ico")
         .set("ProductName", "openOMSI")
         .set("FileDescription", "openOMSI")
-        .set("ProductVersion", &std::env::var("OPENOMSI_VERSION").unwrap_or_default());
+        .set(
+            "ProductVersion",
+            &std::env::var("OPENOMSI_VERSION").unwrap_or_default(),
+        );
     if let Err(e) = res.compile() {
         println!("cargo:warning=no icon in the executable: {e}");
     }

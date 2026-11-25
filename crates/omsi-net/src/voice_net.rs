@@ -58,19 +58,30 @@ pub const DEFAULT_RANGE: f32 = 75.0;
 
 impl Default for VoicePolicy {
     fn default() -> Self {
-        VoicePolicy { enabled: true, radio: true, range: DEFAULT_RANGE }
+        VoicePolicy {
+            enabled: true,
+            radio: true,
+            range: DEFAULT_RANGE,
+        }
     }
 }
 
 impl VoicePolicy {
     pub fn with_range(mut self, range: f32) -> Self {
-        self.range = if range.is_finite() { range.clamp(MIN_RANGE, MAX_RANGE) } else { DEFAULT_RANGE };
+        self.range = if range.is_finite() {
+            range.clamp(MIN_RANGE, MAX_RANGE)
+        } else {
+            DEFAULT_RANGE
+        };
         self
     }
 
     /// The host's answer to `voice?`: `voice <on> <radio> <range>`.
     pub fn command(&self) -> String {
-        format!("voice {} {} {}", self.enabled as u8, self.radio as u8, self.range)
+        format!(
+            "voice {} {} {}",
+            self.enabled as u8, self.radio as u8, self.range
+        )
     }
 
     /// The host's answer as a joining game reads it.
@@ -80,7 +91,11 @@ impl VoicePolicy {
         let enabled = flag(f.next())?;
         let radio = flag(f.next())?;
         let range = f.next()?.parse::<f32>().ok().filter(|r| r.is_finite())?;
-        Some(VoicePolicy { enabled, radio, range: range.clamp(MIN_RANGE, MAX_RANGE) })
+        Some(VoicePolicy {
+            enabled,
+            radio,
+            range: range.clamp(MIN_RANGE, MAX_RANGE),
+        })
     }
 
     /// Whether `channel` is carried at all.
@@ -112,7 +127,11 @@ pub fn encode(proto: u8, channel: u8, end: bool, from: u32, seq: u16, payload: &
 /// A datagram of voice taken apart, or None for one that does not hold together (wrong
 /// version, a channel or flag that does not exist, too long, no sender).
 pub fn decode(data: &[u8], proto: u8) -> Option<VoiceIn> {
-    if data.len() < HEADER || data.len() > HEADER + MAX_PAYLOAD || data[0] != MAGIC || data[1] != proto {
+    if data.len() < HEADER
+        || data.len() > HEADER + MAX_PAYLOAD
+        || data[0] != MAGIC
+        || data[1] != proto
+    {
         return None;
     }
     if data[2] > RADIO || data[3] & !END != 0 {
@@ -126,7 +145,13 @@ pub fn decode(data: &[u8], proto: u8) -> Option<VoiceIn> {
     if data.len() == HEADER && !end {
         return None;
     }
-    Some(VoiceIn { from, channel: data[2], seq: u16::from_le_bytes(data[8..10].try_into().ok()?), end, payload: data[HEADER..].to_vec() })
+    Some(VoiceIn {
+        from,
+        channel: data[2],
+        seq: u16::from_le_bytes(data[8..10].try_into().ok()?),
+        end,
+        payload: data[HEADER..].to_vec(),
+    })
 }
 
 type Place = [f64; 3];
@@ -144,7 +169,12 @@ pub fn place_of(p: &Pose) -> Option<Place> {
 /// Who gets a frame of `channel` from the player at `from`: `others` are the other players
 /// (id and place, where known). Nearby, those within the range (plus a margin) - a player
 /// whose place is unknown is not reached; on the radio, all of them.
-pub fn recipients(policy: &VoicePolicy, channel: u8, from: Option<Place>, others: &[(u32, Option<Place>)]) -> Vec<u32> {
+pub fn recipients(
+    policy: &VoicePolicy,
+    channel: u8,
+    from: Option<Place>,
+    others: &[(u32, Option<Place>)],
+) -> Vec<u32> {
     if !policy.allows(channel) {
         return Vec::new();
     }
@@ -154,7 +184,9 @@ pub fn recipients(policy: &VoicePolicy, channel: u8, from: Option<Place>, others
         .filter(|(_, at)| {
             channel == RADIO
                 || match (from, at) {
-                    (Some(a), Some(b)) => (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>() <= reach * reach,
+                    (Some(a), Some(b)) => {
+                        (0..3).map(|i| (a[i] - b[i]).powi(2)).sum::<f64>() <= reach * reach
+                    }
                     _ => false,
                 }
         })
@@ -223,13 +255,18 @@ impl LanSession {
     }
 
     pub(super) fn on_voice(&mut self, data: &[u8], from: SocketAddr) {
-        let Some(v) = decode(data, PROTOCOL as u8) else { return };
+        let Some(v) = decode(data, PROTOCOL as u8) else {
+            return;
+        };
         if v.from == self.my_id {
             return;
         }
         match self.role {
             Role::Host => {
-                if self.checked_peer(v.from, from, VOICE_RATE, PeerTraffic::Voice).is_none() {
+                if self
+                    .checked_peer(v.from, from, VOICE_RATE, PeerTraffic::Voice)
+                    .is_none()
+                {
                     return;
                 }
                 if self.voice_muted.contains(&v.from) || !self.voice_policy.allows(v.channel) {
@@ -238,7 +275,15 @@ impl LanSession {
                 let at = self.peers.get(&v.from).and_then(|p| place_of(&p.pose));
                 self.relay_voice(data, v.channel, v.from, at);
                 // (the host is a player too - unless it is a dedicated server, which is nowhere)
-                if self.own_place.is_some() && !recipients(&self.voice_policy, v.channel, at, &[(self.my_id, self.own_place)]).is_empty() {
+                if self.own_place.is_some()
+                    && !recipients(
+                        &self.voice_policy,
+                        v.channel,
+                        at,
+                        &[(self.my_id, self.own_place)],
+                    )
+                    .is_empty()
+                {
                     self.push_voice(v);
                 }
             }
@@ -279,7 +324,8 @@ impl LanSession {
         if !self.voice_muted.is_empty() {
             let peers = &self.peers;
             let me = self.my_id;
-            self.voice_muted.retain(|id| *id == me || peers.contains_key(id));
+            self.voice_muted
+                .retain(|id| *id == me || peers.contains_key(id));
         }
     }
 }
@@ -289,13 +335,26 @@ mod tests {
     use super::*;
 
     fn policy(range: f32, radio: bool) -> VoicePolicy {
-        VoicePolicy { enabled: true, radio, range }
+        VoicePolicy {
+            enabled: true,
+            radio,
+            range,
+        }
     }
 
     #[test]
     fn a_datagram_round_trips_and_malformed_ones_are_refused() {
         let d = encode(15, NEARBY, false, 7, 65535, &[1, 2, 3]);
-        assert_eq!(decode(&d, 15), Some(VoiceIn { from: 7, channel: 0, seq: 65535, end: false, payload: vec![1, 2, 3] }));
+        assert_eq!(
+            decode(&d, 15),
+            Some(VoiceIn {
+                from: 7,
+                channel: 0,
+                seq: 65535,
+                end: false,
+                payload: vec![1, 2, 3]
+            })
+        );
         // an end frame may carry nothing, an ordinary one may not
         assert!(decode(&encode(15, RADIO, true, 7, 1, &[]), 15).is_some());
         assert!(decode(&encode(15, RADIO, false, 7, 1, &[]), 15).is_none());
@@ -314,13 +373,25 @@ mod tests {
 
     #[test]
     fn nearby_reaches_those_in_range_and_the_radio_everybody() {
-        let others = [(2, Some([10.0, 0.0, 0.0])), (3, Some([200.0, 0.0, 0.0])), (4, None)];
+        let others = [
+            (2, Some([10.0, 0.0, 0.0])),
+            (3, Some([200.0, 0.0, 0.0])),
+            (4, None),
+        ];
         let from = Some([0.0, 0.0, 0.0]);
         let p = policy(50.0, true);
         assert_eq!(recipients(&p, NEARBY, from, &others), vec![2]);
         assert_eq!(recipients(&p, RADIO, from, &others), vec![2, 3, 4]);
         // the margin covers a few metres of disagreement about where somebody is
-        assert_eq!(recipients(&p, NEARBY, from, &[(5, Some([55.0, 0.0, 0.0])), (6, Some([70.0, 0.0, 0.0]))]), vec![5]);
+        assert_eq!(
+            recipients(
+                &p,
+                NEARBY,
+                from,
+                &[(5, Some([55.0, 0.0, 0.0])), (6, Some([70.0, 0.0, 0.0]))]
+            ),
+            vec![5]
+        );
         // nobody knows where the speaker is: nobody nearby hears them
         assert!(recipients(&p, NEARBY, None, &others).is_empty());
     }
@@ -330,21 +401,41 @@ mod tests {
         let others = [(2, Some([1.0, 0.0, 0.0]))];
         let from = Some([0.0, 0.0, 0.0]);
         assert!(recipients(&policy(50.0, false), RADIO, from, &others).is_empty());
-        assert_eq!(recipients(&policy(50.0, false), NEARBY, from, &others), vec![2]);
-        let off = VoicePolicy { enabled: false, ..policy(50.0, true) };
+        assert_eq!(
+            recipients(&policy(50.0, false), NEARBY, from, &others),
+            vec![2]
+        );
+        let off = VoicePolicy {
+            enabled: false,
+            ..policy(50.0, true)
+        };
         assert!(recipients(&off, NEARBY, from, &others).is_empty());
         assert!(recipients(&off, RADIO, from, &others).is_empty());
     }
 
     #[test]
     fn the_policy_travels_as_a_command() {
-        let p = VoicePolicy { enabled: true, radio: false, range: 120.0 };
+        let p = VoicePolicy {
+            enabled: true,
+            radio: false,
+            range: 120.0,
+        };
         assert_eq!(VoicePolicy::parse_command(&p.command()), Some(p));
-        assert_eq!(VoicePolicy::parse_command("voice 1 1 99999"), Some(VoicePolicy { enabled: true, radio: true, range: MAX_RANGE }));
+        assert_eq!(
+            VoicePolicy::parse_command("voice 1 1 99999"),
+            Some(VoicePolicy {
+                enabled: true,
+                radio: true,
+                range: MAX_RANGE
+            })
+        );
         assert_eq!(VoicePolicy::parse_command("voice 1 1 nan"), None);
         assert_eq!(VoicePolicy::parse_command("voice x"), None);
         assert_eq!(VoicePolicy::parse_command("trigger x"), None);
-        assert_eq!(VoicePolicy::default().with_range(f32::NAN).range, DEFAULT_RANGE);
+        assert_eq!(
+            VoicePolicy::default().with_range(f32::NAN).range,
+            DEFAULT_RANGE
+        );
         assert_eq!(VoicePolicy::default().with_range(1.0).range, MIN_RANGE);
     }
 }

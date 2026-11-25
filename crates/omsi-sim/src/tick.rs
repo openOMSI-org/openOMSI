@@ -81,9 +81,18 @@ impl FixedStep {
     /// `MAX_TICKS_PER_FRAME` (a tenth of a second's worth is kept to be made up in the next
     /// frames; the rest of a longer stall is dropped).
     pub fn advance(&mut self, frame_dt: f32) -> Ticks {
-        let n = advance_fixed_clock(&mut self.accum, frame_dt, self.dt, self.max_per_frame, self.max_held);
+        let n = advance_fixed_clock(
+            &mut self.accum,
+            frame_dt,
+            self.dt,
+            self.max_per_frame,
+            self.max_held,
+        );
         self.ticks += n as u64;
-        Ticks { n, alpha: self.alpha() }
+        Ticks {
+            n,
+            alpha: self.alpha(),
+        }
     }
 
     /// Where the picture stands between the last two ticks.
@@ -126,8 +135,18 @@ impl BodyPose {
 /// The poses of a vehicle as drawn: the body, then each trailer.
 pub fn poses_of(v: &crate::VehicleInstance) -> Vec<BodyPose> {
     let mut out = Vec::with_capacity(1 + v.trailers.len());
-    out.push(BodyPose { position: v.position, heading: v.heading, pitch: v.pitch, bank: v.bank });
-    out.extend(v.trailers.iter().map(|t| BodyPose { position: t.position, heading: t.heading, pitch: t.pitch, bank: t.bank }));
+    out.push(BodyPose {
+        position: v.position,
+        heading: v.heading,
+        pitch: v.pitch,
+        bank: v.bank,
+    });
+    out.extend(v.trailers.iter().map(|t| BodyPose {
+        position: t.position,
+        heading: t.heading,
+        pitch: t.pitch,
+        bank: t.bank,
+    }));
     out
 }
 
@@ -167,7 +186,16 @@ impl Default for SimTicks {
 
 impl SimTicks {
     pub fn new(rate_hz: f64) -> Self {
-        SimTicks { step: FixedStep::new(rate_hz), now: 0, prev: Vec::new(), alpha: 1.0, daylight: None, frames: 0, since: None, last: true }
+        SimTicks {
+            step: FixedStep::new(rate_hz),
+            now: 0,
+            prev: Vec::new(),
+            alpha: 1.0,
+            daylight: None,
+            frames: 0,
+            since: None,
+            last: true,
+        }
     }
 
     /// The simulation's time (s) and its ticks since the start: at the end of the tick being
@@ -200,12 +228,20 @@ impl SimTicks {
     pub fn between(&self, v: &crate::VehicleInstance) -> Option<(Vec<BodyPose>, Vec<BodyPose>)> {
         let cur = poses_of(v);
         (!self.prev.is_empty() && cur.len() == self.prev.len()).then(|| {
-            let at = self.prev.iter().zip(&cur).map(|(a, b)| BodyPose::between(a, b, self.alpha)).collect();
+            let at = self
+                .prev
+                .iter()
+                .zip(&cur)
+                .map(|(a, b)| BodyPose::between(a, b, self.alpha))
+                .collect();
             (cur, at)
         })
     }
 
-    pub fn to_drawn(&self, v: &mut crate::VehicleInstance) -> Option<(Vec<BodyPose>, Vec<BodyPose>)> {
+    pub fn to_drawn(
+        &self,
+        v: &mut crate::VehicleInstance,
+    ) -> Option<(Vec<BodyPose>, Vec<BodyPose>)> {
         let (cur, at) = self.between(v)?;
         put(v, &at);
         Some((cur, at))
@@ -229,7 +265,10 @@ impl SimTicks {
         let wall = since.elapsed().as_secs_f32();
         if wall >= 10.0 {
             let (t, n) = self.sim_time();
-            log::debug!("fixed step: {n} ticks, {t:.2} s simulated; {} frames in the last {wall:.1} s", self.frames);
+            log::debug!(
+                "fixed step: {n} ticks, {t:.2} s simulated; {} frames in the last {wall:.1} s",
+                self.frames
+            );
             self.frames = 0;
             self.since = Some(std::time::Instant::now());
         }
@@ -257,7 +296,14 @@ mod tests {
     fn the_ticks_do_not_depend_on_the_frame_rate() {
         // ten seconds at 30, 45, 60, 144 and 240 frames a second, and frames of uneven length:
         // 1200 ticks each (one either way where the frames' sum ends a hair before or after)
-        for frames in [vec![1.0 / 30.0], vec![1.0 / 45.0], vec![1.0 / 60.0], vec![1.0 / 144.0], vec![1.0 / 240.0], vec![0.011, 0.023, 0.016, 0.0067]] {
+        for frames in [
+            vec![1.0 / 30.0],
+            vec![1.0 / 45.0],
+            vec![1.0 / 60.0],
+            vec![1.0 / 144.0],
+            vec![1.0 / 240.0],
+            vec![0.011, 0.023, 0.016, 0.0067],
+        ] {
             let n = ticks_of(&frames, 10.0);
             assert!((1199..=1201).contains(&n), "{frames:?}: {n} ticks");
         }
@@ -337,15 +383,32 @@ mod tests {
 
     #[test]
     fn a_pose_between_two_ticks() {
-        let a = BodyPose { position: DVec3::new(0.0, 0.0, 0.0), heading: 350.0, pitch: 0.0, bank: 1.0 };
-        let b = BodyPose { position: DVec3::new(1.0, 2.0, 0.0), heading: 10.0, pitch: 2.0, bank: 1.0 };
+        let a = BodyPose {
+            position: DVec3::new(0.0, 0.0, 0.0),
+            heading: 350.0,
+            pitch: 0.0,
+            bank: 1.0,
+        };
+        let b = BodyPose {
+            position: DVec3::new(1.0, 2.0, 0.0),
+            heading: 10.0,
+            pitch: 2.0,
+            bank: 1.0,
+        };
         let m = BodyPose::between(&a, &b, 0.5);
         assert!((m.position - DVec3::new(0.5, 1.0, 0.0)).length() < 1e-9);
-        assert!((m.heading.rem_euclid(360.0) - 0.0).abs() < 1e-9 || (m.heading.rem_euclid(360.0) - 360.0).abs() < 1e-9, "{m:?}");
+        assert!(
+            (m.heading.rem_euclid(360.0) - 0.0).abs() < 1e-9
+                || (m.heading.rem_euclid(360.0) - 360.0).abs() < 1e-9,
+            "{m:?}"
+        );
         assert_eq!(m.pitch, 1.0);
         assert_eq!(BodyPose::between(&a, &b, 1.0), b);
         // a jump is not swept
-        let far = BodyPose { position: DVec3::new(100.0, 0.0, 0.0), ..b };
+        let far = BodyPose {
+            position: DVec3::new(100.0, 0.0, 0.0),
+            ..b
+        };
         assert_eq!(BodyPose::between(&a, &far, 0.3), far);
     }
 }

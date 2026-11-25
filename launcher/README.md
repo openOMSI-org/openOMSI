@@ -83,6 +83,20 @@ validation, full and unavailable sessions, continuing while status is pending, s
 the server list, code-only and address dialogs, cancellation restoring the duty, and host setup.
 They do not start a game, query a remote server, or change a real saved duty.
 
+## Settings navigation
+
+Settings uses persistent categories and smaller topic pages. Graphics profiles remain under
+**Settings → Graphics → Profiles**, with save, load, delete, import and export controls. Search
+includes all available settings and custom blocks such as graphics profiles. Each topic shows
+all applicable options. Use a setting's star to keep it in
+**Favourite settings**, stored locally by the launcher. The original settings values, platform
+conditions and automatic saving are unchanged.
+
+Serve `launcher/` and open `/tests/settings-navigation-check.html` to check the real controls
+against local command fixtures. The checks cover every original schema row, profile management,
+profile allowlists, search, favourites, conditional visibility and setting writes. They also run
+through `node launcher/tests/drive-check.mjs` in the existing interface check matrix.
+
 ## Sharing graphics profiles
 
 In **Settings → Graphics → Profiles**, **Export graphics profile** saves the selected

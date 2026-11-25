@@ -61,11 +61,19 @@ impl Params {
     pub fn tobii(smoothing: f32, dead_zone: f32) -> Params {
         let s = smoothing.clamp(0.0, 1.0);
         let d = dead_zone.max(0.0);
-        Params { knee: [3.0 * s, 2.0 * s], dead: [d, d], tau: [0.02 + 0.06 * s, 0.03 + 0.09 * s] }
+        Params {
+            knee: [3.0 * s, 2.0 * s],
+            dead: [d, d],
+            tau: [0.02 + 0.06 * s, 0.03 + 0.09 * s],
+        }
     }
 
     /// opentrack's poses, which opentrack filters itself (its Accela): only glided.
-    pub const OPENTRACK: Params = Params { knee: [0.0; 2], dead: [0.0; 2], tau: [0.02; 2] };
+    pub const OPENTRACK: Params = Params {
+        knee: [0.0; 2],
+        dead: [0.0; 2],
+        tau: [0.02; 2],
+    };
 }
 
 /// The channels: yaw, pitch, roll (degrees), x, y, z (cm), and the edge's yaw (degrees).
@@ -128,11 +136,16 @@ impl HeadFilter {
     /// The pose for the frame at `now` from the tracker's latest (`s`; none: there is none),
     /// with `tobii` for a Tobii tracker's poses. None once the view is straight ahead again.
     pub fn step(&mut self, s: Option<&Sample>, now: Instant, tobii: Params) -> Option<HeadPose> {
-        let gap = self.last.map(|t| now.saturating_duration_since(t).as_secs_f32());
+        let gap = self
+            .last
+            .map(|t| now.saturating_duration_since(t).as_secs_f32());
         // (not stepped for a while - another view, no bus: what it had is old, the head is
         // where the tracker says now)
         if gap.is_some_and(|g| g > STALE) {
-            *self = HeadFilter { snap: true, ..HeadFilter::default() };
+            *self = HeadFilter {
+                snap: true,
+                ..HeadFilter::default()
+            };
         }
         self.last = Some(now);
         let dt = gap.unwrap_or(0.0).min(0.1);
@@ -151,13 +164,24 @@ impl HeadFilter {
             self.slow = self.out;
             self.hold = [0.0; N];
             if self.out.iter().all(|v| v.abs() < 0.05) {
-                *self = HeadFilter { last: self.last, ..HeadFilter::default() };
+                *self = HeadFilter {
+                    last: self.last,
+                    ..HeadFilter::default()
+                };
                 return None;
             }
             return Some(self.pose());
         };
         let p = tobii;
-        let v = [s.pose.rot[0], s.pose.rot[1], s.pose.rot[2], s.pose.pos[0], s.pose.pos[1], s.pose.pos[2], s.edge];
+        let v = [
+            s.pose.rot[0],
+            s.pose.rot[1],
+            s.pose.rot[2],
+            s.pose.pos[0],
+            s.pose.pos[1],
+            s.pose.pos[2],
+            s.edge,
+        ];
         if self.key != Some((s.tobii, s.seq)) {
             // (a new pose: the glide goes on from where the last one is at the time it came -
             // after none, from where the view is)
@@ -186,7 +210,12 @@ impl HeadFilter {
                 self.snap = false;
             }
             self.before = before;
-            self.glide = Some(Glide { from, to, t0: s.at, span: s.interval.clamp(0.004, 0.1) });
+            self.glide = Some(Glide {
+                from,
+                to,
+                t0: s.at,
+                span: s.interval.clamp(0.004, 0.1),
+            });
             self.key = Some((s.tobii, s.seq));
             self.gain = s.gain;
             self.live = true;
@@ -196,7 +225,9 @@ impl HeadFilter {
         let (rise, fall) = ((-h / RISE).exp(), (-h / HOLD).exp());
         let ease = 1.0 - (-h / SLOW).exp();
         for j in 1..=n {
-            let t = now.checked_sub(Duration::from_secs_f32((n - j) as f32 * h)).unwrap_or(now);
+            let t = now
+                .checked_sub(Duration::from_secs_f32((n - j) as f32 * h))
+                .unwrap_or(now);
             let target = self.target(t);
             for i in 0..N {
                 let (knee, dead, tau) = match i {
@@ -208,7 +239,11 @@ impl HeadFilter {
                 // (a real movement: the pose aimed at gets away from its slow average - told by
                 // the head alone, not by the view, which made it swing)
                 self.slow[i] += diff(target[i], self.slow[i]) * ease;
-                self.hold[i] = if diff(target[i], self.slow[i]).abs() >= knee + dead { 1.0 - (1.0 - self.hold[i]) * rise } else { self.hold[i] * fall };
+                self.hold[i] = if diff(target[i], self.slow[i]).abs() >= knee + dead {
+                    1.0 - (1.0 - self.hold[i]) * rise
+                } else {
+                    self.hold[i] * fall
+                };
                 let d = diff(target[i], self.out[i]);
                 // (the dead zone round the view as it is: no jump at its edge)
                 let m = (d.abs() - dead).max(0.0);
@@ -242,7 +277,14 @@ impl HeadFilter {
     /// The filtered pose, the tracker's turn made larger and the edge's yaw on top.
     fn pose(&self) -> HeadPose {
         let o = &self.out;
-        HeadPose { pos: [o[3], o[4], o[5]], rot: [wrap(o[0] * self.gain[0] + o[6]), o[1] * self.gain[1], o[2] * self.gain[2]] }
+        HeadPose {
+            pos: [o[3], o[4], o[5]],
+            rot: [
+                wrap(o[0] * self.gain[0] + o[6]),
+                o[1] * self.gain[1],
+                o[2] * self.gain[2],
+            ],
+        }
     }
 }
 
@@ -286,7 +328,16 @@ mod tests {
     /// (degrees, and half of it in cm) and the gain `gain`, read by frames at `fps` for `secs`
     /// seconds through a filter with `p`.
     #[allow(clippy::too_many_arguments)]
-    fn run_g(head: &dyn Fn(f32) -> (f32, f32, f32), sigma: f32, hz: f32, fps: f32, secs: f32, p: Params, tobii: bool, gain: [f32; 3]) -> Vec<Frame> {
+    fn run_g(
+        head: &dyn Fn(f32) -> (f32, f32, f32),
+        sigma: f32,
+        hz: f32,
+        fps: f32,
+        secs: f32,
+        p: Params,
+        tobii: bool,
+        gain: [f32; 3],
+    ) -> Vec<Frame> {
         let start = Instant::now();
         let mut noise = Noise(0x9e37_79b9_7f4a_7c15);
         let mut f = HeadFilter::default();
@@ -300,18 +351,45 @@ mod tests {
             while (seq as f32) / hz <= t + 1e-6 {
                 let ts = seq as f32 / hz;
                 let (y, pi, x) = head(ts);
-                let pose = HeadPose { pos: [x + noise.normal(sigma * 0.5), 0.0, 0.0], rot: [y + noise.normal(sigma), pi + noise.normal(sigma), 0.0] };
-                sample = Some(Sample { pose, gain, edge: 0.0, seq, at: start + Duration::from_secs_f32(ts), interval: 1.0 / hz, tobii });
+                let pose = HeadPose {
+                    pos: [x + noise.normal(sigma * 0.5), 0.0, 0.0],
+                    rot: [y + noise.normal(sigma), pi + noise.normal(sigma), 0.0],
+                };
+                sample = Some(Sample {
+                    pose,
+                    gain,
+                    edge: 0.0,
+                    seq,
+                    at: start + Duration::from_secs_f32(ts),
+                    interval: 1.0 / hz,
+                    tobii,
+                });
                 seq += 1;
             }
-            let r = f.step(sample.as_ref(), start + Duration::from_secs_f32(t), p).unwrap_or_default();
-            out.push(Frame { t, yaw: r.rot[0], pitch: r.rot[1], x: r.pos[0], head: head(t).0 });
+            let r = f
+                .step(sample.as_ref(), start + Duration::from_secs_f32(t), p)
+                .unwrap_or_default();
+            out.push(Frame {
+                t,
+                yaw: r.rot[0],
+                pitch: r.rot[1],
+                x: r.pos[0],
+                head: head(t).0,
+            });
         }
         out
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn run(head: &dyn Fn(f32) -> (f32, f32, f32), sigma: f32, hz: f32, fps: f32, secs: f32, p: Params, tobii: bool) -> Vec<Frame> {
+    fn run(
+        head: &dyn Fn(f32) -> (f32, f32, f32),
+        sigma: f32,
+        hz: f32,
+        fps: f32,
+        secs: f32,
+        p: Params,
+        tobii: bool,
+    ) -> Vec<Frame> {
         run_g(head, sigma, hz, fps, secs, p, tobii, [1.0; 3])
     }
 
@@ -344,9 +422,21 @@ mod tests {
             let yaw: Vec<f32> = rest.iter().map(|x| x.yaw).collect();
             let pitch: Vec<f32> = rest.iter().map(|x| x.pitch).collect();
             let pos: Vec<f32> = rest.iter().map(|x| x.x).collect();
-            let step = yaw.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f32::max);
-            assert!(std(&yaw) <= 0.06 && std(&pitch) <= 0.06, "at {at}: std yaw {} pitch {}", std(&yaw), std(&pitch));
-            assert!(spread(&yaw) <= 0.3 && step <= 0.05, "at {at}: spread {}, step {step}", spread(&yaw));
+            let step = yaw
+                .windows(2)
+                .map(|w| (w[1] - w[0]).abs())
+                .fold(0.0, f32::max);
+            assert!(
+                std(&yaw) <= 0.06 && std(&pitch) <= 0.06,
+                "at {at}: std yaw {} pitch {}",
+                std(&yaw),
+                std(&pitch)
+            );
+            assert!(
+                spread(&yaw) <= 0.3 && step <= 0.05,
+                "at {at}: spread {}, step {step}",
+                spread(&yaw)
+            );
             assert!(std(&pos) <= 0.03, "at {at}: std x {}", std(&pos));
             assert!((yaw.iter().sum::<f32>() / yaw.len() as f32 - at).abs() < 0.5);
         }
@@ -361,17 +451,40 @@ mod tests {
         let a = run_g(&head, 0.3, 30.0, 144.0, 4.0, calm(), true, [1.0; 3]);
         let b = run_g(&head, 0.3, 30.0, 144.0, 4.0, calm(), true, [2.5, 2.0, 1.0]);
         for (x, y) in a.iter().zip(&b) {
-            assert!((y.yaw - 2.5 * x.yaw).abs() <= 1e-3 && (y.pitch - 2.0 * x.pitch).abs() <= 1e-3, "{x:?} {y:?}");
+            assert!(
+                (y.yaw - 2.5 * x.yaw).abs() <= 1e-3 && (y.pitch - 2.0 * x.pitch).abs() <= 1e-3,
+                "{x:?} {y:?}"
+            );
         }
         // (and the edge's yaw on top)
         let start = Instant::now();
         let mut f = HeadFilter::default();
-        let s = Sample { pose: HeadPose { pos: [0.0; 3], rot: [10.0, 4.0, 0.0] }, gain: [2.5, 2.0, 1.0], edge: 5.0, seq: 1, at: start, interval: 0.033, tobii: true };
+        let s = Sample {
+            pose: HeadPose {
+                pos: [0.0; 3],
+                rot: [10.0, 4.0, 0.0],
+            },
+            gain: [2.5, 2.0, 1.0],
+            edge: 5.0,
+            seq: 1,
+            at: start,
+            interval: 0.033,
+            tobii: true,
+        };
         let mut x = HeadPose::default();
         for k in 0..300 {
-            x = f.step(Some(&s), start + Duration::from_millis(4 * k), Params::tobii(0.5, 0.0)).unwrap();
+            x = f
+                .step(
+                    Some(&s),
+                    start + Duration::from_millis(4 * k),
+                    Params::tobii(0.5, 0.0),
+                )
+                .unwrap();
         }
-        assert!((x.rot[0] - 30.0).abs() < 0.05 && (x.rot[1] - 8.0).abs() < 0.05, "{x:?}");
+        assert!(
+            (x.rot[0] - 30.0).abs() < 0.05 && (x.rot[1] - 8.0).abs() < 0.05,
+            "{x:?}"
+        );
     }
 
     /// The head turned 20 degrees at once: the view follows within a fifth of a second of
@@ -379,9 +492,25 @@ mod tests {
     #[test]
     fn a_fast_turn_is_followed() {
         for fps in [60.0, 144.0] {
-            let r = run(&|t| (if t >= 1.0 { 20.0 } else { 0.0 }, 0.0, 0.0), 0.0, 30.0, fps, 2.0, calm(), true);
-            assert!(at(&r, 1.2).yaw >= 18.0, "{fps} fps: {} after 0.2 s", at(&r, 1.2).yaw);
-            assert!(at(&r, 1.35).yaw >= 19.6, "{fps} fps: {} after 0.35 s", at(&r, 1.35).yaw);
+            let r = run(
+                &|t| (if t >= 1.0 { 20.0 } else { 0.0 }, 0.0, 0.0),
+                0.0,
+                30.0,
+                fps,
+                2.0,
+                calm(),
+                true,
+            );
+            assert!(
+                at(&r, 1.2).yaw >= 18.0,
+                "{fps} fps: {} after 0.2 s",
+                at(&r, 1.2).yaw
+            );
+            assert!(
+                at(&r, 1.35).yaw >= 19.6,
+                "{fps} fps: {} after 0.35 s",
+                at(&r, 1.35).yaw
+            );
             assert!(r.iter().all(|x| x.yaw <= 20.0 + 1e-3));
         }
     }
@@ -394,11 +523,20 @@ mod tests {
         let r = run(&|t| (30.0 * t, 0.0, 0.0), 0.0, 30.0, fps, 2.0, calm(), true);
         for w in r.windows(2).filter(|w| w[0].t >= 0.3) {
             let speed = (w[1].yaw - w[0].yaw) * fps;
-            assert!((27.0..=33.0).contains(&speed), "{speed} degrees a second at {}", w[0].t);
+            assert!(
+                (27.0..=33.0).contains(&speed),
+                "{speed} degrees a second at {}",
+                w[0].t
+            );
         }
         let r = run(&|t| (60.0 * t, 0.0, 0.0), 0.0, 30.0, fps, 1.5, calm(), true);
         for x in r.iter().filter(|x| x.t >= 0.5) {
-            assert!(x.head - x.yaw <= 6.0, "{} behind at {}", x.head - x.yaw, x.t);
+            assert!(
+                x.head - x.yaw <= 6.0,
+                "{} behind at {}",
+                x.head - x.yaw,
+                x.t
+            );
         }
     }
 
@@ -410,10 +548,22 @@ mod tests {
         let fps = 144.0;
         for smoothing in [0.25, 0.5, 1.0] {
             for v in [5.0, 8.0, 10.0, 12.0, 15.0, 20.0, 25.0, 30.0] {
-                let r = run(&|t| (v * t, 0.0, 0.0), 0.0, 30.0, fps, 3.0, Params::tobii(smoothing, 0.1), true);
+                let r = run(
+                    &|t| (v * t, 0.0, 0.0),
+                    0.0,
+                    30.0,
+                    fps,
+                    3.0,
+                    Params::tobii(smoothing, 0.1),
+                    true,
+                );
                 for w in r.windows(2).filter(|w| w[0].t >= 1.5) {
                     let speed = (w[1].yaw - w[0].yaw) * fps;
-                    assert!((0.85 * v..=1.15 * v).contains(&speed), "smoothing {smoothing}, {v} degrees a second: {speed} at {}", w[0].t);
+                    assert!(
+                        (0.85 * v..=1.15 * v).contains(&speed),
+                        "smoothing {smoothing}, {v} degrees a second: {speed} at {}",
+                        w[0].t
+                    );
                 }
             }
         }
@@ -423,13 +573,40 @@ mod tests {
     /// creeping after it for seconds.
     #[test]
     fn the_view_settles_after_a_turn() {
-        let r = run(&|t| (60.0 * t.min(0.6), 0.0, 0.0), 0.0, 30.0, 144.0, 1.5, calm(), true);
-        assert!((36.0 - at(&r, 0.85).yaw).abs() <= 0.1 + 0.3, "{} at 0.25 s after the stop", at(&r, 0.85).yaw);
+        let r = run(
+            &|t| (60.0 * t.min(0.6), 0.0, 0.0),
+            0.0,
+            30.0,
+            144.0,
+            1.5,
+            calm(),
+            true,
+        );
+        assert!(
+            (36.0 - at(&r, 0.85).yaw).abs() <= 0.1 + 0.3,
+            "{} at 0.25 s after the stop",
+            at(&r, 0.85).yaw
+        );
         for v in [8.0, 10.0, 15.0] {
-            let r = run(&|t| (v * t.min(2.0), 0.0, 0.0), 0.0, 30.0, 144.0, 4.0, calm(), true);
+            let r = run(
+                &|t| (v * t.min(2.0), 0.0, 0.0),
+                0.0,
+                30.0,
+                144.0,
+                4.0,
+                calm(),
+                true,
+            );
             let end = 2.0 * v;
-            assert!((end - at(&r, 2.5).yaw).abs() <= 0.1 + 0.05, "{v}: {} at 0.5 s after the stop", at(&r, 2.5).yaw);
-            assert!((at(&r, 4.0).yaw - at(&r, 2.5).yaw).abs() <= 0.02, "{v}: still creeping");
+            assert!(
+                (end - at(&r, 2.5).yaw).abs() <= 0.1 + 0.05,
+                "{v}: {} at 0.5 s after the stop",
+                at(&r, 2.5).yaw
+            );
+            assert!(
+                (at(&r, 4.0).yaw - at(&r, 2.5).yaw).abs() <= 0.02,
+                "{v}: still creeping"
+            );
         }
     }
 
@@ -438,12 +615,54 @@ mod tests {
     #[test]
     fn the_dead_zone_leaves_small_movements_out() {
         let p = Params::tobii(0.5, 0.5);
-        let r = run(&|t| (if t >= 1.0 { 0.4 } else { 0.0 }, 0.0, 0.0), 0.0, 30.0, 144.0, 5.0, p, true);
-        assert!(r.last().unwrap().yaw.abs() <= 1e-4, "{}", r.last().unwrap().yaw);
-        let r = run(&|t| (if t >= 1.0 { 5.0 } else { 0.0 }, 0.0, 0.0), 0.0, 30.0, 144.0, 5.0, p, true);
-        assert!((r.last().unwrap().yaw - 4.5).abs() <= 0.05, "{}", r.last().unwrap().yaw);
+        let r = run(
+            &|t| (if t >= 1.0 { 0.4 } else { 0.0 }, 0.0, 0.0),
+            0.0,
+            30.0,
+            144.0,
+            5.0,
+            p,
+            true,
+        );
+        assert!(
+            r.last().unwrap().yaw.abs() <= 1e-4,
+            "{}",
+            r.last().unwrap().yaw
+        );
+        let r = run(
+            &|t| (if t >= 1.0 { 5.0 } else { 0.0 }, 0.0, 0.0),
+            0.0,
+            30.0,
+            144.0,
+            5.0,
+            p,
+            true,
+        );
+        assert!(
+            (r.last().unwrap().yaw - 4.5).abs() <= 0.05,
+            "{}",
+            r.last().unwrap().yaw
+        );
         // (turned 15 degrees, the head going 0.4 to and fro: the view stands)
-        let r = run(&|t| (15.0 - if t >= 2.0 && (t * 3.0) as i32 % 2 == 0 { 0.4 } else { 0.0 }, 0.0, 0.0), 0.0, 30.0, 144.0, 6.0, p, true);
+        let r = run(
+            &|t| {
+                (
+                    15.0 - if t >= 2.0 && (t * 3.0) as i32 % 2 == 0 {
+                        0.4
+                    } else {
+                        0.0
+                    },
+                    0.0,
+                    0.0,
+                )
+            },
+            0.0,
+            30.0,
+            144.0,
+            6.0,
+            p,
+            true,
+        );
         let late: Vec<f32> = r.iter().filter(|x| x.t >= 1.9).map(|x| x.yaw).collect();
         assert!(spread(&late) <= 1e-3, "{}", spread(&late));
     }
@@ -456,18 +675,42 @@ mod tests {
         let start = Instant::now();
         let p = calm();
         let mut f = HeadFilter::default();
-        let held = |seq: u64, yaw: f32, at: f32| Sample { pose: HeadPose { pos: [0.0; 3], rot: [yaw, 0.0, 0.0] }, gain: [1.0; 3], edge: 0.0, seq, at: start + Duration::from_secs_f32(at), interval: 1.0 / 30.0, tobii: true };
+        let held = |seq: u64, yaw: f32, at: f32| Sample {
+            pose: HeadPose {
+                pos: [0.0; 3],
+                rot: [yaw, 0.0, 0.0],
+            },
+            gain: [1.0; 3],
+            edge: 0.0,
+            seq,
+            at: start + Duration::from_secs_f32(at),
+            interval: 1.0 / 30.0,
+            tobii: true,
+        };
         let fps = 144.0;
         let mut t = 0.0;
         let mut k = 0;
         let mut tracked = 0.0;
         while t < 1.0 {
-            tracked = f.step(Some(&held(k / 5, 20.0, (k / 5) as f32 / 30.0)), start + Duration::from_secs_f32(t), p).unwrap().rot[0];
+            tracked = f
+                .step(
+                    Some(&held(k / 5, 20.0, (k / 5) as f32 / 30.0)),
+                    start + Duration::from_secs_f32(t),
+                    p,
+                )
+                .unwrap()
+                .rot[0];
             k += 1;
             t = k as f32 / fps;
         }
-        let mut was = f.step(None, start + Duration::from_secs_f32(t), p).unwrap().rot[0];
-        assert!(was <= tracked && tracked - was <= 1.5 * 20.0 / fps / HOME, "{tracked} -> {was}");
+        let mut was = f
+            .step(None, start + Duration::from_secs_f32(t), p)
+            .unwrap()
+            .rot[0];
+        assert!(
+            was <= tracked && tracked - was <= 1.5 * 20.0 / fps / HOME,
+            "{tracked} -> {was}"
+        );
         let mut gone = None;
         // (stepped every frame, as the camera steps it, until the tracker is back)
         let back = t + 1.6;
@@ -477,7 +720,12 @@ mod tests {
                 Some(x) => {
                     assert!(gone.is_none(), "back from home at {now}");
                     let most = was * (1.0 - (-1.0 / fps / HOME).exp()) + 1e-3;
-                    assert!(was - x.rot[0] <= most && x.rot[0] <= was, "{} -> {}", was, x.rot[0]);
+                    assert!(
+                        was - x.rot[0] <= most && x.rot[0] <= was,
+                        "{} -> {}",
+                        was,
+                        x.rot[0]
+                    );
                     was = x.rot[0];
                 }
                 None => {
@@ -491,7 +739,9 @@ mod tests {
         for j in 0..(0.5 * fps) as usize {
             let now = back + j as f32 / fps;
             let s = held(100 + (j / 5) as u64, 10.0, back + (j / 5) as f32 / 30.0);
-            let x = f.step(Some(&s), start + Duration::from_secs_f32(now), p).map_or(0.0, |x| x.rot[0]);
+            let x = f
+                .step(Some(&s), start + Duration::from_secs_f32(now), p)
+                .map_or(0.0, |x| x.rot[0]);
             assert!(x - was <= 0.15 * 10.0, "{was} -> {x}");
             was = x;
         }
@@ -504,9 +754,24 @@ mod tests {
     fn the_same_at_every_frame_rate() {
         let runs: Vec<Vec<Frame>> = [30.0, 60.0, 120.0, 240.0]
             .iter()
-            .map(|&fps| run(&|t| (if t >= 1.0 { 20.0 } else { 0.0 }, 0.0, 0.0), 0.0, 30.0, fps, 1.5, calm(), true))
+            .map(|&fps| {
+                run(
+                    &|t| (if t >= 1.0 { 20.0 } else { 0.0 }, 0.0, 0.0),
+                    0.0,
+                    30.0,
+                    fps,
+                    1.5,
+                    calm(),
+                    true,
+                )
+            })
             .collect();
-        for (t, most) in [(1.0 + 1.0 / 30.0, 0.5), (1.0 + 2.0 / 30.0, 0.5), (1.1, 0.5), (1.2, 0.2)] {
+        for (t, most) in [
+            (1.0 + 1.0 / 30.0, 0.5),
+            (1.0 + 2.0 / 30.0, 0.5),
+            (1.1, 0.5),
+            (1.2, 0.2),
+        ] {
             let v: Vec<f32> = runs.iter().map(|r| at(r, t).yaw).collect();
             assert!(spread(&v) <= most, "at {t}: {v:?}");
         }
@@ -516,30 +781,75 @@ mod tests {
     /// followed closely, whatever the smoothing.
     #[test]
     fn opentrack_is_only_glided() {
-        let r = run(&|t| (60.0 * t, 0.0, 0.0), 0.0, 250.0, 144.0, 1.0, Params::OPENTRACK, false);
+        let r = run(
+            &|t| (60.0 * t, 0.0, 0.0),
+            0.0,
+            250.0,
+            144.0,
+            1.0,
+            Params::OPENTRACK,
+            false,
+        );
         for x in r.iter().filter(|x| x.t >= 0.3) {
             assert!(x.head - x.yaw <= 1.5, "{} behind", x.head - x.yaw);
         }
-        let r = run(&|t| (if t >= 0.5 { 1.0 } else { 0.0 }, 0.0, 0.0), 0.0, 250.0, 144.0, 1.0, Params::OPENTRACK, false);
+        let r = run(
+            &|t| (if t >= 0.5 { 1.0 } else { 0.0 }, 0.0, 0.0),
+            0.0,
+            250.0,
+            144.0,
+            1.0,
+            Params::OPENTRACK,
+            false,
+        );
         assert!(at(&r, 0.56).yaw >= 0.9, "{} after 60 ms", at(&r, 0.56).yaw);
     }
 
     #[test]
     fn a_udp_tracker_on_auto_gets_the_players_dead_zone() {
-        let r = run(&|t| (0.3 * (t * 40.0).sin(), 0.0, 0.0), 0.0, 250.0, 144.0, 1.0, Params::tobii(0.5, 1.0), false);
-        assert!(r.iter().filter(|x| x.t >= 0.5).all(|x| x.yaw.abs() < 0.1), "a tremble inside the dead zone moves the view");
+        let r = run(
+            &|t| (0.3 * (t * 40.0).sin(), 0.0, 0.0),
+            0.0,
+            250.0,
+            144.0,
+            1.0,
+            Params::tobii(0.5, 1.0),
+            false,
+        );
+        assert!(
+            r.iter().filter(|x| x.t >= 0.5).all(|x| x.yaw.abs() < 0.1),
+            "a tremble inside the dead zone moves the view"
+        );
     }
 
     /// opentrack's yaw past straight behind (170 on to -170): the view turns on the short way,
     /// not 340 degrees back.
     #[test]
     fn the_yaw_turns_on_past_behind() {
-        let r = run(&|t| (wrap(150.0 + 40.0 * t), 0.0, 0.0), 0.0, 250.0, 144.0, 1.5, Params::OPENTRACK, false);
+        let r = run(
+            &|t| (wrap(150.0 + 40.0 * t), 0.0, 0.0),
+            0.0,
+            250.0,
+            144.0,
+            1.5,
+            Params::OPENTRACK,
+            false,
+        );
         for w in r.windows(2).filter(|w| w[0].t >= 0.2) {
-            assert!(wrap(w[1].yaw - w[0].yaw).abs() <= 1.0, "{} -> {} at {}", w[0].yaw, w[1].yaw, w[0].t);
+            assert!(
+                wrap(w[1].yaw - w[0].yaw).abs() <= 1.0,
+                "{} -> {} at {}",
+                w[0].yaw,
+                w[1].yaw,
+                w[0].t
+            );
             assert!(w[1].yaw.abs() <= 180.0);
         }
-        assert!((wrap(r.last().unwrap().yaw - 210.0)).abs() <= 1.5, "{}", r.last().unwrap().yaw);
+        assert!(
+            (wrap(r.last().unwrap().yaw - 210.0)).abs() <= 1.5,
+            "{}",
+            r.last().unwrap().yaw
+        );
     }
 
     /// Every rotation channel crosses the boundary along the shortest arc, both ways.
@@ -554,14 +864,28 @@ mod tests {
                     let t = frame as f32 / 144.0;
                     let mut rot = [0.0; 3];
                     rot[axis] = wrap(sign * (150.0 + 40.0 * t));
-                    let sample = Sample { pose: HeadPose { rot, pos: [0.0; 3] }, gain: [1.0; 3], edge: 0.0, seq: frame, at: start + Duration::from_secs_f32(t), interval: 1.0 / 144.0, tobii: false };
-                    let out = filter.step(Some(&sample), sample.at, Params::OPENTRACK).unwrap().rot[axis];
+                    let sample = Sample {
+                        pose: HeadPose { rot, pos: [0.0; 3] },
+                        gain: [1.0; 3],
+                        edge: 0.0,
+                        seq: frame,
+                        at: start + Duration::from_secs_f32(t),
+                        interval: 1.0 / 144.0,
+                        tobii: false,
+                    };
+                    let out = filter
+                        .step(Some(&sample), sample.at, Params::OPENTRACK)
+                        .unwrap()
+                        .rot[axis];
                     if let Some(was) = previous.filter(|_| t >= 0.3) {
                         assert!(wrap(out - was).abs() < 1.0, "axis {axis}: {was} -> {out}");
                     }
                     previous = Some(out);
                 }
-                assert!(wrap(previous.unwrap() - sign * 210.0).abs() < 2.0, "axis {axis}: {previous:?}");
+                assert!(
+                    wrap(previous.unwrap() - sign * 210.0).abs() < 2.0,
+                    "axis {axis}: {previous:?}"
+                );
             }
         }
     }
@@ -572,13 +896,42 @@ mod tests {
     fn a_change_of_source_does_not_jump() {
         let start = Instant::now();
         let mut f = HeadFilter::default();
-        let ot = |seq, at: f32| Sample { pose: HeadPose { pos: [0.0; 3], rot: [20.0, 0.0, 0.0] }, gain: [1.0; 3], edge: 0.0, seq, at: start + Duration::from_secs_f32(at), interval: 0.004, tobii: false };
-        let tobii = |seq, at: f32| Sample { pose: HeadPose { pos: [0.0; 3], rot: [8.0, 0.0, 0.0] }, gain: [2.5, 2.0, 1.0], edge: 0.0, seq, at: start + Duration::from_secs_f32(at), interval: 1.0 / 30.0, tobii: true };
+        let ot = |seq, at: f32| Sample {
+            pose: HeadPose {
+                pos: [0.0; 3],
+                rot: [20.0, 0.0, 0.0],
+            },
+            gain: [1.0; 3],
+            edge: 0.0,
+            seq,
+            at: start + Duration::from_secs_f32(at),
+            interval: 0.004,
+            tobii: false,
+        };
+        let tobii = |seq, at: f32| Sample {
+            pose: HeadPose {
+                pos: [0.0; 3],
+                rot: [8.0, 0.0, 0.0],
+            },
+            gain: [2.5, 2.0, 1.0],
+            edge: 0.0,
+            seq,
+            at: start + Duration::from_secs_f32(at),
+            interval: 1.0 / 30.0,
+            tobii: true,
+        };
         let mut was: Option<f32> = None;
         for k in 0..432u64 {
             let t = k as f32 / 144.0;
-            let s = if (1.0..2.0).contains(&t) { tobii(k / 5, t) } else { ot(k, t) };
-            let x = f.step(Some(&s), start + Duration::from_secs_f32(t), calm()).unwrap().rot[0];
+            let s = if (1.0..2.0).contains(&t) {
+                tobii(k / 5, t)
+            } else {
+                ot(k, t)
+            };
+            let x = f
+                .step(Some(&s), start + Duration::from_secs_f32(t), calm())
+                .unwrap()
+                .rot[0];
             if let Some(w) = was.filter(|_| t > 0.5) {
                 assert!((x - w).abs() <= 0.5, "{w} -> {x} at {t}");
             }
@@ -592,15 +945,39 @@ mod tests {
     fn a_stale_filter_starts_afresh() {
         let start = Instant::now();
         let mut f = HeadFilter::default();
-        let held = |seq, yaw, at: f32| Sample { pose: HeadPose { pos: [0.0; 3], rot: [yaw, 0.0, 0.0] }, gain: [2.5, 2.0, 1.0], edge: 0.0, seq, at: start + Duration::from_secs_f32(at), interval: 1.0 / 30.0, tobii: true };
+        let held = |seq, yaw, at: f32| Sample {
+            pose: HeadPose {
+                pos: [0.0; 3],
+                rot: [yaw, 0.0, 0.0],
+            },
+            gain: [2.5, 2.0, 1.0],
+            edge: 0.0,
+            seq,
+            at: start + Duration::from_secs_f32(at),
+            interval: 1.0 / 30.0,
+            tobii: true,
+        };
         for k in 0..144u64 {
-            f.step(Some(&held(k / 5, 20.0, (k / 5) as f32 / 30.0)), start + Duration::from_secs_f32(k as f32 / 144.0), calm());
+            f.step(
+                Some(&held(k / 5, 20.0, (k / 5) as f32 / 30.0)),
+                start + Duration::from_secs_f32(k as f32 / 144.0),
+                calm(),
+            );
         }
-        let x = f.step(Some(&held(500, 0.0, 2.0)), start + Duration::from_secs_f32(2.0), calm()).unwrap();
+        let x = f
+            .step(
+                Some(&held(500, 0.0, 2.0)),
+                start + Duration::from_secs_f32(2.0),
+                calm(),
+            )
+            .unwrap();
         assert!(x.rot[0].abs() <= 1e-3, "{x:?}");
         // (and with no pose then: nothing)
         let mut g = HeadFilter::default();
         g.step(Some(&held(1, 20.0, 0.0)), start, calm());
-        assert!(g.step(None, start + Duration::from_secs(2), calm()).is_none());
+        assert!(
+            g.step(None, start + Duration::from_secs(2), calm())
+                .is_none()
+        );
     }
 }

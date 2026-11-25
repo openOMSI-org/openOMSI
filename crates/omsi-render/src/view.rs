@@ -125,6 +125,12 @@ pub struct Lighting {
     pub shadows: bool,
     /// How wet the roads are (0..1): rain darkens them and makes them mirror the sky.
     pub wetness: f32,
+    /// The air's temperature (degC): the water on the panes spreads into a film in a cold
+    /// rain and beads up in a warm one (scene/08_rain_glass.wgsl `glass_water`).
+    pub air_temp: f32,
+    /// By day in a downpour, the share of the windows round the street lit from inside (0..1,
+    /// `omsi_scene::lights::apply_weather`; 0 with the setting `rain_lights` off).
+    pub rain_lights: f32,
     /// Snow cover on the ground and the roads (0..1).
     pub snow: f32,
     /// The roads are kept clear of the snow (the weather's "snow on road" off): no cover is
@@ -188,6 +194,9 @@ pub struct Lighting {
     /// condensation is laid on its panes in the bus's own frame, so it stays on the glass on
     /// a hill (#3958). Level: `[0, 1, 0, 1]`.
     pub pane_tilt: [f32; 4],
+    /// How brightly the saloon of the bus the camera is in is lit (0..1, its brightest
+    /// `[interiorlight]`): its glass mirrors the lit cabin at night (enhanced path).
+    pub cabin_light: f32,
     pub fog_base: Option<f64>,
     pub envir_tint: [Vec3; 3],
     /// How bright an LED panel's dots burn (`MaterialExtra::led`; the settings' 16 levels
@@ -299,8 +308,11 @@ impl Default for Lighting {
             wind: Vec3::ZERO,
             condensation: [0.0; 4],
             pane_tilt: [0.0, 1.0, 0.0, 1.0],
+            cabin_light: 0.0,
             lamp_shadows: false,
             wetness: 0.0,
+            air_temp: 12.0,
+            rain_lights: 0.0,
             snow: 0.0,
             roads_clear: false,
             road_snow: None,

@@ -3,8 +3,8 @@ use crate::{SimClock, VehicleHost, VehicleType};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 /// Original, minimal scripts: no installed game content is needed by these tests.
@@ -199,10 +199,12 @@ fn ignition_stop_and_off_states_do_not_engage_the_starter() {
         assert_eq!(v.var("presses"), Some(16.0));
         assert_eq!(v.var("releases"), Some(16.0));
         assert_eq!(v.var("request"), Some(0.0));
-        assert!(start
-            .report
-            .iter()
-            .any(|s| s.contains("could not work the starter")));
+        assert!(
+            start
+                .report
+                .iter()
+                .any(|s| s.contains("could not work the starter"))
+        );
     }
 }
 
@@ -379,10 +381,12 @@ fn post_start_stall_retries_then_verifies_a_stable_engine() {
     assert!(!start.running());
     assert_eq!(v.var("presses"), Some(2.0));
     assert_eq!(v.var("releases"), Some(2.0));
-    assert!(start
-        .report
-        .iter()
-        .any(|s| s.contains("died again: cranking once more")));
+    assert!(
+        start
+            .report
+            .iter()
+            .any(|s| s.contains("died again: cranking once more"))
+    );
 
     // An engine that dies after every release must also stop retrying after three tries.
     let mut v = fixture.vehicle();
@@ -402,10 +406,12 @@ fn post_start_stall_retries_then_verifies_a_stable_engine() {
     assert_eq!(v.var("presses"), Some(3.0));
     assert_eq!(v.var("releases"), Some(3.0));
     assert_eq!(v.var("request"), Some(0.0));
-    assert!(start
-        .report
-        .iter()
-        .any(|s| s == "the engine died again after starting"));
+    assert!(
+        start
+            .report
+            .iter()
+            .any(|s| s == "the engine died again after starting")
+    );
 }
 
 /// A fictional bus with arbitrary startup timings and speeds. Its only purpose is to

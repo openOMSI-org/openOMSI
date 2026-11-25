@@ -21,11 +21,19 @@ pub fn rms_db(x: &[f32]) -> f32 {
 /// The microphone gain (a multiplier, 0 to 4), with a soft limit so a loud voice never
 /// clips the encoder.
 pub fn mic_gain(frame: &mut [f32], gain: f32) {
-    let g = if gain.is_finite() { gain.clamp(0.0, 4.0) } else { 1.0 };
+    let g = if gain.is_finite() {
+        gain.clamp(0.0, 4.0)
+    } else {
+        1.0
+    };
     for s in frame {
         let v = *s * g;
         // (linear up to 0.8, then eased towards 1)
-        *s = if v.abs() <= 0.8 { v } else { v.signum() * (0.8 + 0.2 * ((v.abs() - 0.8) / 0.2).tanh()) };
+        *s = if v.abs() <= 0.8 {
+            v
+        } else {
+            v.signum() * (0.8 + 0.2 * ((v.abs() - 0.8) / 0.2).tanh())
+        };
     }
 }
 
@@ -59,7 +67,13 @@ impl Gate {
     /// `threshold_db`: the level a voice must reach to open the gate.
     pub fn new(threshold_db: f32) -> Gate {
         let t = threshold_db.clamp(-80.0, -5.0);
-        Gate { open_db: t, close_db: t - 4.0, hold: 15, left: 0, open: false }
+        Gate {
+            open_db: t,
+            close_db: t - 4.0,
+            hold: 15,
+            left: 0,
+            open: false,
+        }
     }
 
     pub fn set_threshold(&mut self, threshold_db: f32) {
@@ -96,7 +110,12 @@ pub struct RadioVoice {
 impl Default for RadioVoice {
     fn default() -> Self {
         let r = RATE as f32;
-        RadioVoice { hp: [Biquad::high_pass(300.0, r); 2], lp: [Biquad::low_pass(3400.0, r); 2], env: 0.0, rng: 0x1234_5678 }
+        RadioVoice {
+            hp: [Biquad::high_pass(300.0, r); 2],
+            lp: [Biquad::low_pass(3400.0, r); 2],
+            env: 0.0,
+            rng: 0x1234_5678,
+        }
     }
 }
 
@@ -146,9 +165,17 @@ pub fn squelch(open: bool) -> Vec<f32> {
             rng ^= rng << 5;
             let noise = (rng as f32 / u32::MAX as f32) * 2.0 - 1.0;
             let t = i as f32 / n as f32;
-            let env = if open { (1.0 - t).powi(2) } else { (1.0 - t).powi(3) };
+            let env = if open {
+                (1.0 - t).powi(2)
+            } else {
+                (1.0 - t).powi(3)
+            };
             // (the opening one has a faint tone in it, like a roger beep's start)
-            let tone = if open { (2.0 * std::f32::consts::PI * 1800.0 * i as f32 / r).sin() * 0.5 } else { 0.0 };
+            let tone = if open {
+                (2.0 * std::f32::consts::PI * 1800.0 * i as f32 / r).sin() * 0.5
+            } else {
+                0.0
+            };
             lp.process(hp.process(noise)) * env * 0.5 + tone * env * 0.15
         })
         .collect()
@@ -157,7 +184,11 @@ pub fn squelch(open: bool) -> Vec<f32> {
 /// A tone of `freq` Hz for tests and the synthetic microphone: frame `frame` (960 samples).
 pub fn tone_frame(freq: f32, frame: usize, amp: f32) -> Vec<f32> {
     let n = crate::codec::FRAME;
-    (0..n).map(|i| amp * (2.0 * std::f32::consts::PI * freq * ((frame * n + i) as f32 / RATE as f32)).sin()).collect()
+    (0..n)
+        .map(|i| {
+            amp * (2.0 * std::f32::consts::PI * freq * ((frame * n + i) as f32 / RATE as f32)).sin()
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -170,7 +201,11 @@ mod tests {
         assert_eq!(proximity_gain(5.0, 75.0), 1.0);
         assert_eq!(proximity_gain(75.0, 75.0), 0.0);
         assert_eq!(proximity_gain(200.0, 75.0), 0.0);
-        let (a, b, c) = (proximity_gain(20.0, 75.0), proximity_gain(40.0, 75.0), proximity_gain(60.0, 75.0));
+        let (a, b, c) = (
+            proximity_gain(20.0, 75.0),
+            proximity_gain(40.0, 75.0),
+            proximity_gain(60.0, 75.0),
+        );
         assert!(1.0 > a && a > b && b > c && c > 0.0, "{a} {b} {c}");
         // nonsense gives silence, not a blast
         assert_eq!(proximity_gain(f32::NAN, 75.0), 0.0);

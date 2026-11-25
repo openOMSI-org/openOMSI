@@ -20,7 +20,11 @@ pub struct Human {
 impl Human {
     pub fn load(path: &Path) -> Result<Human, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
-        let mut h = Human { path: f.path.clone(), walk_param: [1.4, 66.0, 1.0, 1.0, 0.0], ..Default::default() };
+        let mut h = Human {
+            path: f.path.clone(),
+            walk_param: [1.4, 66.0, 1.0, 1.0, 0.0],
+            ..Default::default()
+        };
         let mut r = f.reader().disabled_blocks();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {

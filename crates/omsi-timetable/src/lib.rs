@@ -116,7 +116,12 @@ pub fn parse_busstops(f: &CfgFile) -> Vec<BusStopEntry> {
             let group = r.i32();
             let object_id = r.i64();
             let params = r.f64s::<3>();
-            out.push(BusStopEntry { name, group, object_id, params });
+            out.push(BusStopEntry {
+                name,
+                group,
+                object_id,
+                params,
+            });
         }
     }
     out
@@ -132,7 +137,13 @@ pub fn parse_stnlinks(f: &CfgFile) -> Vec<StnLink> {
                 let from_id = r.i64();
                 let to_id = r.i64();
                 let params = r.f64s::<6>();
-                out.push(StnLink { length, from_id, to_id, params, entries: Vec::new() });
+                out.push(StnLink {
+                    length,
+                    from_id,
+                    to_id,
+                    params,
+                    entries: Vec::new(),
+                });
             }
             "stnlink_entry" => {
                 let values = r.f64s::<7>();
@@ -156,7 +167,15 @@ impl Trip {
         Ok(Self::parse(&f))
     }
     pub fn parse(f: &CfgFile) -> Trip {
-        let mut t = Trip { path: f.path.clone(), name: f.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(), ..Default::default() };
+        let mut t = Trip {
+            path: f.path.clone(),
+            name: f
+                .path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            ..Default::default()
+        };
         let mut r = f.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
@@ -168,11 +187,17 @@ impl Trip {
                 }
                 "trainreverse" => t.train_reverse = true,
                 "station_typ2" => t.stations.push(r.i64()),
-                "station" => t.stations_legacy.push((0..8).map(|_| r.str().to_string()).collect()),
+                "station" => t
+                    .stations_legacy
+                    .push((0..8).map(|_| r.str().to_string()).collect()),
                 "profile" => {
                     let name = r.str().to_string();
                     let factor = r.f32();
-                    t.profiles.push(TripProfile { name, factor, ..Default::default() });
+                    t.profiles.push(TripProfile {
+                        name,
+                        factor,
+                        ..Default::default()
+                    });
                 }
                 "profile_man_arr_time" => {
                     let i = r.i32();
@@ -205,7 +230,10 @@ impl Trip {
 impl Track {
     pub fn load(path: &Path) -> Result<Track, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
-        let mut t = Track { path: f.path.clone(), entries: Vec::new() };
+        let mut t = Track {
+            path: f.path.clone(),
+            entries: Vec::new(),
+        };
         let mut r = f.reader();
         while let Some(k) = r.next_keyword() {
             if k == "track_entry" {
@@ -216,7 +244,10 @@ impl Track {
                 // optional 7th value in newer files
                 let save = r.pos();
                 let l = r.str();
-                if !l.trim().is_empty() && omsi_cfg::keyword_of(l).is_none() && !l.trim().ends_with(':') {
+                if !l.trim().is_empty()
+                    && omsi_cfg::keyword_of(l).is_none()
+                    && !l.trim().ends_with(':')
+                {
                     values.push(omsi_cfg::parse_f64(l));
                 } else {
                     r.seek(save);
@@ -234,7 +265,15 @@ impl Line {
         Ok(Self::parse(&f))
     }
     pub fn parse(f: &CfgFile) -> Line {
-        let mut l = Line { path: f.path.clone(), name: f.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(), ..Default::default() };
+        let mut l = Line {
+            path: f.path.clone(),
+            name: f
+                .path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            ..Default::default()
+        };
         let mut r = f.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
@@ -244,14 +283,23 @@ impl Line {
                     let number = r.str().to_string();
                     let ai_group = r.str().to_string();
                     let extra = r.str().to_string();
-                    l.tours.push(Tour { number, ai_group, extra, trips: Vec::new() });
+                    l.tours.push(Tour {
+                        number,
+                        ai_group,
+                        extra,
+                        trips: Vec::new(),
+                    });
                 }
                 "addtrip" => {
                     let trip = r.str().to_string();
                     let profile = r.i32();
                     let departure = r.f32();
                     if let Some(t) = l.tours.last_mut() {
-                        t.trips.push(TourTrip { trip, profile, departure });
+                        t.trips.push(TourTrip {
+                            trip,
+                            profile,
+                            departure,
+                        });
                     }
                 }
                 _ => {}
@@ -273,11 +321,22 @@ impl Line {
         o.push_str(&format!("[priority]\r\n{}\r\n", self.priority));
         for t in &self.tours {
             o.push_str("------------------------------------\r\n\r\n");
-            o.push_str(&format!("[newtour]\r\n{}\r\n{}\r\n{}\r\n\r\n------------------------------------\r\n\r\n", t.number, t.ai_group, t.extra));
+            o.push_str(&format!(
+                "[newtour]\r\n{}\r\n{}\r\n{}\r\n\r\n------------------------------------\r\n\r\n",
+                t.number, t.ai_group, t.extra
+            ));
             for tr in &t.trips {
                 let secs = (tr.departure as f64 * 60.0).round() as i64;
-                o.push_str(&format!("  Dep.: {}:{}:{}\r\n", secs / 3600, secs / 60 % 60, secs % 60));
-                o.push_str(&format!("[addtrip]\r\n{}\r\n{}\r\n{:.3}\r\n\r\n", tr.trip, tr.profile, tr.departure));
+                o.push_str(&format!(
+                    "  Dep.: {}:{}:{}\r\n",
+                    secs / 3600,
+                    secs / 60 % 60,
+                    secs % 60
+                ));
+                o.push_str(&format!(
+                    "[addtrip]\r\n{}\r\n{}\r\n{:.3}\r\n\r\n",
+                    tr.trip, tr.profile, tr.departure
+                ));
             }
         }
         o
@@ -291,7 +350,7 @@ impl Line {
 /// Writes a timetable file in the code page its folder's files are in (the file's own, when
 /// it has one already), so a text typed in the launcher reads back the same in the game.
 pub fn write_text(path: &Path, text: &str) -> std::io::Result<()> {
-    use omsi_cfg::codepage::{detect, CodePage};
+    use omsi_cfg::codepage::{CodePage, detect};
     let mut pages = Vec::new();
     if let Ok(old) = std::fs::read(path) {
         if !old.is_ascii() {
@@ -301,14 +360,21 @@ pub fn write_text(path: &Path, text: &str) -> std::io::Result<()> {
     if let Some(page) = path.parent().and_then(timetable_code_page) {
         pages.push(page);
     }
-    pages.extend([CodePage::Windows1252, CodePage::Windows1250, CodePage::Windows1251]);
+    pages.extend([
+        CodePage::Windows1252,
+        CodePage::Windows1250,
+        CodePage::Windows1251,
+    ]);
     for page in pages {
         let (bytes, _, unmappable) = page.encoding().encode(text);
         if !unmappable && omsi_cfg::decode_text(&bytes) == text {
             return std::fs::write(path, bytes);
         }
     }
-    Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "its texts fit in no code page the map's timetable is written in"))
+    Err(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        "its texts fit in no code page the map's timetable is written in",
+    ))
 }
 
 impl Trip {
@@ -318,14 +384,22 @@ impl Trip {
     pub fn to_text(&self) -> String {
         let mut o = String::new();
         o.push_str("-----------------------\r\nTime Table Trip File\r\n-----------------------\r\n\r\nCreated with openOMSI\r\n\r\n");
-        o.push_str(&format!("[trip]\r\n{}\r\n{}\r\n{}\r\n\r\n", self.display_name, self.terminus, self.line));
-        o.push_str(".........................\r\n        Stations\r\n.........................\r\n\r\n");
+        o.push_str(&format!(
+            "[trip]\r\n{}\r\n{}\r\n{}\r\n\r\n",
+            self.display_name, self.terminus, self.line
+        ));
+        o.push_str(
+            ".........................\r\n        Stations\r\n.........................\r\n\r\n",
+        );
         for id in &self.stations {
             o.push_str(&format!("[station_typ2]\r\n{id}\r\n\r\n"));
         }
         o.push_str("\r\n.........................\r\n        Profiles\r\n.........................\r\n\r\n");
         for p in &self.profiles {
-            o.push_str(&format!("[profile]\r\n{}\r\n{:.3}\r\n\r\n", p.name, p.factor));
+            o.push_str(&format!(
+                "[profile]\r\n{}\r\n{:.3}\r\n\r\n",
+                p.name, p.factor
+            ));
             for (i, v) in &p.man_dep_time {
                 o.push_str(&format!("[profile_man_dep_time]\r\n{i}\r\n{v:.3}\r\n"));
             }
@@ -339,11 +413,21 @@ impl Trip {
 }
 
 fn timetable_code_page(dir: &Path) -> Option<omsi_cfg::codepage::CodePage> {
-    let mut names: Vec<PathBuf> = std::fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).collect();
+    let mut names: Vec<PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .collect();
     names.sort();
     names
         .iter()
-        .filter(|p| p.extension().and_then(|e| e.to_str()).is_some_and(|e| ["ttp", "ttl", "cfg"].iter().any(|x| e.eq_ignore_ascii_case(x))))
+        .filter(|p| {
+            p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                ["ttp", "ttl", "cfg"]
+                    .iter()
+                    .any(|x| e.eq_ignore_ascii_case(x))
+            })
+        })
         .filter_map(|p| std::fs::read(p).ok())
         .find(|b| !b.is_ascii())
         .map(|b| omsi_cfg::codepage::detect(&b))
@@ -364,7 +448,9 @@ impl CarUse {
         if !self.only_types.is_empty() {
             return Some((1.0, &self.only_types));
         }
-        self.types_prefered.as_ref().map(|(f, l)| (*f, l.as_slice()))
+        self.types_prefered
+            .as_ref()
+            .map(|(f, l)| (*f, l.as_slice()))
     }
 
     /// Every `car_use/*.ocu` of a map folder, in the order the folder lists them.
@@ -374,9 +460,16 @@ impl CarUse {
         let mut files: Vec<std::path::PathBuf> = Vec::new();
         for d in omsi_cfg::mirrored_dirs(&omsi_cfg::resolve_path(map_dir, "car_use")) {
             for p in omsi_cfg::vfs::read_dir_paths(&d) {
-                let is_ocu = p.extension().map(|e| e.eq_ignore_ascii_case("ocu")).unwrap_or(false);
+                let is_ocu = p
+                    .extension()
+                    .map(|e| e.eq_ignore_ascii_case("ocu"))
+                    .unwrap_or(false);
                 let name = p.file_name().map(|n| n.to_ascii_lowercase());
-                if is_ocu && !files.iter().any(|f| f.file_name().map(|n| n.to_ascii_lowercase()) == name) {
+                if is_ocu
+                    && !files
+                        .iter()
+                        .any(|f| f.file_name().map(|n| n.to_ascii_lowercase()) == name)
+                {
                     files.push(p);
                 }
             }
@@ -384,7 +477,14 @@ impl CarUse {
         // (a name starting with `!` - the launcher's rules - sorts before the map's: the first
         // rule to give a tour its bus keeps it)
         files.sort_by_key(|p| p.file_name().map(|n| n.to_ascii_lowercase()));
-        files.iter().filter_map(|p| CarUse::load(p).map_err(|e| log::warn!("{}: {e}", p.display())).ok()).collect()
+        files
+            .iter()
+            .filter_map(|p| {
+                CarUse::load(p)
+                    .map_err(|e| log::warn!("{}: {e}", p.display()))
+                    .ok()
+            })
+            .collect()
     }
 
     pub fn load(path: &Path) -> Result<CarUse, omsi_cfg::CfgError> {
@@ -399,16 +499,29 @@ impl CarUse {
                     c.valid = (a, b);
                 }
                 "line" => c.line = r.str().to_string(),
-                "onlytypes" => c.only_types = r.until("[end]").into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+                "onlytypes" => {
+                    c.only_types = r
+                        .until("[end]")
+                        .into_iter()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                }
                 "types_prefered" => {
                     let factor = r.f32();
-                    let list = r.rest_of_block().into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                    let list = r
+                        .rest_of_block()
+                        .into_iter()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
                     c.types_prefered = Some((factor, list));
                 }
                 "number_tour" => {
                     for l in r.rest_of_block() {
                         if let Some((a, b)) = l.split_once('\t') {
-                            c.number_tour.push((a.trim().to_string(), b.trim().to_string()));
+                            c.number_tour
+                                .push((a.trim().to_string(), b.trim().to_string()));
                         }
                     }
                 }
@@ -449,7 +562,11 @@ impl TimetableData {
     /// it, unless a scenario after that folder takes it off with `[deactivate_lines]`
     /// (`deactivated`: line and the chrono folder saying so). A scenario can so replace a
     /// line of the map, take it off, and a later one bring it back.
-    pub fn load_with_chrono(map_dir: &Path, chrono_dirs: &[PathBuf], deactivated: &[(String, PathBuf)]) -> TimetableData {
+    pub fn load_with_chrono(
+        map_dir: &Path,
+        chrono_dirs: &[PathBuf],
+        deactivated: &[(String, PathBuf)],
+    ) -> TimetableData {
         let mut folders = vec![omsi_cfg::resolve_path(map_dir, "TTData")];
         for c in chrono_dirs {
             let dir = omsi_cfg::resolve_path(c, "TTData");
@@ -465,9 +582,19 @@ impl TimetableData {
         }
         // the lines, from the last folder back: folder k is the map's (0) or chrono k-1's
         let off_after = |name: &str, k: usize| {
-            deactivated.iter().any(|(l, dir)| l.trim().eq_ignore_ascii_case(name.trim()) && chrono_dirs.iter().position(|c| c == dir).is_some_and(|ci| ci + 1 > k))
+            deactivated.iter().any(|(l, dir)| {
+                l.trim().eq_ignore_ascii_case(name.trim())
+                    && chrono_dirs
+                        .iter()
+                        .position(|c| c == dir)
+                        .is_some_and(|ci| ci + 1 > k)
+            })
         };
-        let mut seen_lines: HashSet<String> = d.lines.iter().map(|x| x.name.to_ascii_lowercase()).collect();
+        let mut seen_lines: HashSet<String> = d
+            .lines
+            .iter()
+            .map(|x| x.name.to_ascii_lowercase())
+            .collect();
         for (k, f) in folders.iter().enumerate().rev() {
             if f.as_os_str().is_empty() {
                 continue;
@@ -475,10 +602,17 @@ impl TimetableData {
             let mut names: Vec<PathBuf> = omsi_cfg::vfs::read_dir_paths(f);
             names.sort_by_key(|p| p.to_string_lossy().to_uppercase());
             for p in names {
-                if !p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("ttl")) {
+                if !p
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("ttl"))
+                {
                     continue;
                 }
-                let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                let stem = p
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 let stem_lower = stem.to_ascii_lowercase();
                 if seen_lines.contains(&stem_lower) || off_after(&stem, k) {
                     continue;
@@ -497,7 +631,12 @@ impl TimetableData {
         let transit = omsi_transit::TransitData::load(map_dir, &mut issues);
         if !transit.routes.list.is_empty() {
             let merged = transit::merge_transit(&mut d, &transit);
-            log::info!("transport routes as timetable lines: {} lines, {} tours, {} trips", merged.lines, merged.tours, merged.trips);
+            log::info!(
+                "transport routes as timetable lines: {} lines, {} tours, {} trips",
+                merged.lines,
+                merged.tours,
+                merged.trips
+            );
             for s in &merged.skipped {
                 log::warn!("transport routes: {s}");
             }
@@ -508,7 +647,8 @@ impl TimetableData {
     fn merge_dir(&mut self, dir: &Path, lines: bool) {
         let d = self;
         if let Ok(f) = CfgFile::read(dir.join("Busstops.cfg")) {
-            let mut seen_stops: HashSet<(i64, i32)> = d.bus_stops.iter().map(|x| (x.object_id, x.group)).collect();
+            let mut seen_stops: HashSet<(i64, i32)> =
+                d.bus_stops.iter().map(|x| (x.object_id, x.group)).collect();
             for b in parse_busstops(&f) {
                 if seen_stops.insert((b.object_id, b.group)) {
                     d.bus_stops.push(b);
@@ -516,8 +656,12 @@ impl TimetableData {
             }
         }
         if let Ok(f) = CfgFile::read(dir.join("StnLinks.cfg")) {
-            let mut link_map: HashMap<(i64, i64), usize> =
-                d.stn_links.iter().enumerate().map(|(i, l)| ((l.from_id, l.to_id), i)).collect();
+            let mut link_map: HashMap<(i64, i64), usize> = d
+                .stn_links
+                .iter()
+                .enumerate()
+                .map(|(i, l)| ((l.from_id, l.to_id), i))
+                .collect();
             for l in parse_stnlinks(&f) {
                 let key = (l.from_id, l.to_id);
                 if let Some(&idx) = link_map.get(&key) {
@@ -530,20 +674,39 @@ impl TimetableData {
         }
         let mut names: Vec<PathBuf> = omsi_cfg::vfs::read_dir_paths(dir);
         names.sort();
-        let mut trip_map: HashMap<String, usize> =
-            d.trips.iter().enumerate().map(|(i, t)| (t.name.to_ascii_lowercase(), i)).collect();
+        let mut trip_map: HashMap<String, usize> = d
+            .trips
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (t.name.to_ascii_lowercase(), i))
+            .collect();
         let mut track_map: HashMap<String, usize> = d
             .tracks
             .iter()
             .enumerate()
-            .filter_map(|(i, t)| t.path.file_stem().map(|s| (s.to_string_lossy().to_ascii_lowercase(), i)))
+            .filter_map(|(i, t)| {
+                t.path
+                    .file_stem()
+                    .map(|s| (s.to_string_lossy().to_ascii_lowercase(), i))
+            })
             .collect();
-        let mut line_map: HashMap<String, usize> =
-            d.lines.iter().enumerate().map(|(i, l)| (l.name.to_ascii_lowercase(), i)).collect();
+        let mut line_map: HashMap<String, usize> = d
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(i, l)| (l.name.to_ascii_lowercase(), i))
+            .collect();
 
         for p in names {
-            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-            let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let ext = p
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let stem = p
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
             let res = match ext.as_str() {
                 "ttp" => Trip::load(&p).map(|t| {
                     let key = t.name.to_ascii_lowercase();
@@ -591,7 +754,13 @@ mod line_tests {
 
     #[test]
     fn a_trip_whose_file_name_ends_with_a_space_is_found_by_the_tours_name() {
-        let data = TimetableData { trips: vec![Trip { name: "10 - 2 ".into(), ..Default::default() }], ..Default::default() };
+        let data = TimetableData {
+            trips: vec![Trip {
+                name: "10 - 2 ".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
         assert!(data.trip("10 - 2").is_some());
         assert!(data.trip(" 10 - 2 ").is_some());
         assert!(data.trip("10 - 3").is_none());
@@ -603,7 +772,23 @@ mod line_tests {
             name: "76".into(),
             user_allowed: true,
             priority: 1,
-            tours: vec![Tour { number: "1".into(), ai_group: "Busses".into(), extra: "799".into(), trips: vec![TourTrip { trip: "76_BH-Kk".into(), profile: 0, departure: 247.0 }, TourTrip { trip: "76_Kk-BH".into(), profile: 1, departure: 262.5 }] }],
+            tours: vec![Tour {
+                number: "1".into(),
+                ai_group: "Busses".into(),
+                extra: "799".into(),
+                trips: vec![
+                    TourTrip {
+                        trip: "76_BH-Kk".into(),
+                        profile: 0,
+                        departure: 247.0,
+                    },
+                    TourTrip {
+                        trip: "76_Kk-BH".into(),
+                        profile: 1,
+                        departure: 262.5,
+                    },
+                ],
+            }],
             ..Default::default()
         };
         let f = CfgFile::from_str("76.ttl", &l.to_text());
@@ -614,7 +799,20 @@ mod line_tests {
     }
 
     fn line_of(trip: &str) -> Line {
-        Line { name: "5".into(), tours: vec![Tour { number: "1".into(), ai_group: "Busses".into(), extra: String::new(), trips: vec![TourTrip { trip: trip.into(), profile: 0, departure: 360.0 }] }], ..Default::default() }
+        Line {
+            name: "5".into(),
+            tours: vec![Tour {
+                number: "1".into(),
+                ai_group: "Busses".into(),
+                extra: String::new(),
+                trips: vec![TourTrip {
+                    trip: trip.into(),
+                    profile: 0,
+                    departure: 360.0,
+                }],
+            }],
+            ..Default::default()
+        }
     }
 
     fn folder(name: &str) -> PathBuf {
@@ -627,13 +825,18 @@ mod line_tests {
     #[test]
     fn a_cyrillic_trip_name_is_written_in_the_maps_code_page_and_read_back() {
         let d = folder("cyrillic");
-        let (ttp, _, _) = omsi_cfg::codepage::CodePage::Windows1251.encoding().encode("[trip]\r\n\r\nВокзал\r\n5\r\n");
+        let (ttp, _, _) = omsi_cfg::codepage::CodePage::Windows1251
+            .encoding()
+            .encode("[trip]\r\n\r\nВокзал\r\n5\r\n");
         std::fs::write(d.join("5_Вокзал.ttp"), ttp).unwrap();
         let line = line_of("5_Площадь-Вокзал");
         line.save(&d.join("5.ttl")).unwrap();
         let bytes = std::fs::read(d.join("5.ttl")).unwrap();
         assert!(!bytes.windows(2).any(|w| w == b"&#"));
-        assert_eq!(Line::load(&d.join("5.ttl")).unwrap().tours[0].trips[0].trip, "5_Площадь-Вокзал");
+        assert_eq!(
+            Line::load(&d.join("5.ttl")).unwrap().tours[0].trips[0].trip,
+            "5_Площадь-Вокзал"
+        );
         std::fs::remove_dir_all(&d).ok();
     }
 
@@ -641,7 +844,10 @@ mod line_tests {
     fn a_new_line_with_cyrillic_trips_in_an_ascii_folder_is_still_read_back() {
         let d = folder("plain");
         line_of("5_Площадь-Вокзал").save(&d.join("5.ttl")).unwrap();
-        assert_eq!(Line::load(&d.join("5.ttl")).unwrap().tours[0].trips[0].trip, "5_Площадь-Вокзал");
+        assert_eq!(
+            Line::load(&d.join("5.ttl")).unwrap().tours[0].trips[0].trip,
+            "5_Площадь-Вокзал"
+        );
         std::fs::remove_dir_all(&d).ok();
     }
 
@@ -656,7 +862,11 @@ mod line_tests {
     #[test]
     fn merge_dir_deduplicates_stops_and_updates_links() {
         let d = folder("merge_dir_test");
-        std::fs::write(d.join("Busstops.cfg"), "[busstop]\nStop A\n0\n101\n0\n0\n0\n\n[busstop]\nStop A dup\n0\n101\n0\n0\n0\n").unwrap();
+        std::fs::write(
+            d.join("Busstops.cfg"),
+            "[busstop]\nStop A\n0\n101\n0\n0\n0\n\n[busstop]\nStop A dup\n0\n101\n0\n0\n0\n",
+        )
+        .unwrap();
         std::fs::write(d.join("StnLinks.cfg"), "[StnLink]\n100.0\n101\n102\n0\n0\n0\n0\n0\n0\n\n[StnLink]\n150.0\n101\n102\n0\n0\n0\n0\n0\n0\n").unwrap();
         let mut tt = TimetableData::default();
         tt.merge_dir(&d, false);
@@ -683,11 +893,18 @@ mod stock_line_tests {
             let d = maps.join(m).join("TTData");
             require_content(&[&d]);
             let rd = std::fs::read_dir(&d).unwrap();
-            for e in rd.flatten().filter(|e| e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("ttl"))) {
+            for e in rd.flatten().filter(|e| {
+                e.path()
+                    .extension()
+                    .is_some_and(|x| x.eq_ignore_ascii_case("ttl"))
+            }) {
                 let l = Line::load(&e.path()).unwrap();
                 let back = Line::parse(&CfgFile::from_str(e.path(), &l.to_text()));
                 assert_eq!(back.tours, l.tours, "{}", e.path().display());
-                assert_eq!((back.user_allowed, back.priority), (l.user_allowed, l.priority));
+                assert_eq!(
+                    (back.user_allowed, back.priority),
+                    (l.user_allowed, l.priority)
+                );
                 n += 1;
             }
         }
@@ -705,14 +922,24 @@ mod trip_text_tests {
             terminus: "Nervenklinik".into(),
             line: "130".into(),
             stations: vec![3211605, 3211600, 524],
-            profiles: vec![TripProfile { name: "standard".into(), factor: 12.5, ..Default::default() }],
+            profiles: vec![TripProfile {
+                name: "standard".into(),
+                factor: 12.5,
+                ..Default::default()
+            }],
             ..Default::default()
         };
         let back = Trip::parse(&CfgFile::from_str(PathBuf::from("T.ttp"), &t.to_text()));
-        assert_eq!((back.terminus.as_str(), back.line.as_str()), ("Nervenklinik", "130"));
+        assert_eq!(
+            (back.terminus.as_str(), back.line.as_str()),
+            ("Nervenklinik", "130")
+        );
         assert_eq!(back.display_name, "");
         assert_eq!(back.stations, t.stations);
         assert_eq!(back.profiles.len(), 1);
-        assert_eq!((back.profiles[0].name.as_str(), back.profiles[0].factor), ("standard", 12.5));
+        assert_eq!(
+            (back.profiles[0].name.as_str(), back.profiles[0].factor),
+            ("standard", 12.5)
+        );
     }
 }

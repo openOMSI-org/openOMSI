@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/omsi-cfg",
+    "crates/omsi-pack",
     "crates/omsi-script",
     "crates/omsi-o3d",
     "crates/omsi-model",
@@ -50,6 +51,20 @@ members = [
     "crates/omsi-app",
     "crates/omsi-srcscan",
     "tools/omsi-check",
+    "crates/omsi-app-mx",
+    "crates/omsi-mapdraw-mx",
+    "crates/omsi-mt-mx",
+    "crates/omsi-multiplayer-ui-mx",
+    "crates/omsi-navigator-mx",
+    "crates/omsi-photo-mx",
+    "crates/omsi-plugin-ui-mx",
+    "crates/omsi-render-mx",
+    "crates/omsi-scene-mx",
+    "crates/omsi-settings-ui-mx",
+    "crates/omsi-ui-mx",
+    "crates/omsi-xr-mx",
+    # (above: the game on mX, a second copy of every crate that draws; the mX Graphics
+    # setting picks it or the wgpu one at start, see omsi-app's `run`)
 ]
 exclude = ["launcher/src-tauri"]
 
@@ -82,9 +97,12 @@ wgpu = { version = "29", default-features = false, features = ["std", "parking_l
 # match wgpu's (Dependabot's `wgpu` group updates the three together)
 wgpu-hal = "29"
 naga = "29"
-wgpu-mx = { git = "https://github.com/openOMSI-org/mX", rev = "a5185eb9288f0d7e56c3d18658df69dc928c7ca0", features = ["custom"] }
+# mX, openOMSI's own graphics library: the game with mX Graphics on (the *-mx crates)
+mx = { git = "https://github.com/openOMSI-org/mX", rev = "49d24fa690498581cc165221115619b0dbe7dac9" }
+# (the vendors' upscalers and frame generators on mX: DLSS, FSR 3, XeSS, MetalFX)
+mx-upscale = { git = "https://github.com/openOMSI-org/mX", rev = "49d24fa690498581cc165221115619b0dbe7dac9" }
 winit = "0.30"
-bytemuck = { version = "1", features = ["derive"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 memmap2 = "0.9"
 pollster = "1.0"
 # (every picture format a mod or a photo may come in; DDS and TGA have readers of our own)
@@ -142,3 +160,7 @@ wgpu-hal = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4
 wgpu-types = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
 wgpu-naga-bridge = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
 naga = { git = "https://github.com/openOMSI-Project/wgpu-openomsi", rev = "4eb06e5bf8062be2978d93e95556a4dd83f1d3b8" }
+# mX's own naga (v30, under the *-mx crates) with its fixes: the buffer heap in HLSL for
+# Direct3D 12 and Shader Model 5 for Direct3D 11 (mX's vendor/naga/MX_PATCHES.md); a
+# dependency's patches do not reach this workspace, so it is repeated here
+naga-mx = { git = "https://github.com/openOMSI-org/mX", rev = "49d24fa690498581cc165221115619b0dbe7dac9", package = "naga" }

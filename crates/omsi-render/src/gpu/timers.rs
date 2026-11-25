@@ -110,7 +110,10 @@ impl DevicePoller {
         // loads, a slow chip's frame) this thread gave up with wgpu-hal's panic "Could not
         // lock adapter context" (#898, after #843). It is not needed there: every submit
         // of the frame runs the same upkeep (wgpu-core's `maintain` after `queue.submit`).
-        if cfg!(target_arch = "wasm32") || gl_backend() || omsi_cfg::flags::OMSI_NO_POLL_THREAD.is_set() {
+        if cfg!(target_arch = "wasm32")
+            || gl_backend()
+            || omsi_cfg::flags::OMSI_NO_POLL_THREAD.is_set()
+        {
             return None;
         }
         let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -129,7 +132,10 @@ impl DevicePoller {
                 }
             })
             .ok()?;
-        Some(Self { stop, thread: Some(thread) })
+        Some(Self {
+            stop,
+            thread: Some(thread),
+        })
     }
 }
 
@@ -142,7 +148,10 @@ impl Drop for DevicePoller {
     }
 }
 
-pub(crate) fn in_scope<'s, R>(pool: Option<&rayon::ThreadPool>, op: impl FnOnce(&rayon::Scope<'s>) -> R) -> R {
+pub(crate) fn in_scope<'s, R>(
+    pool: Option<&rayon::ThreadPool>,
+    op: impl FnOnce(&rayon::Scope<'s>) -> R,
+) -> R {
     match pool {
         Some(p) => p.in_place_scope(op),
         None => rayon::in_place_scope(op),
@@ -158,7 +167,11 @@ pub(crate) fn instance_parts(pool: Option<&rayon::ThreadPool>, n: usize) -> usiz
     }
 }
 
-pub(crate) fn run_parts<T: Send>(pool: Option<&rayon::ThreadPool>, parts: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+pub(crate) fn run_parts<T: Send>(
+    pool: Option<&rayon::ThreadPool>,
+    parts: usize,
+    f: impl Fn(usize) -> T + Sync,
+) -> Vec<T> {
     let Some(pool) = pool else {
         return std::thread::scope(|s| {
             let f = &f;
@@ -173,7 +186,8 @@ pub(crate) fn run_parts<T: Send>(pool: Option<&rayon::ThreadPool>, parts: usize,
     // done with one part, takes the next instead of waiting for it.
     let n = parts.max(1);
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let out: Vec<std::sync::Mutex<Option<T>>> = (0..n).map(|_| std::sync::Mutex::new(None)).collect();
+    let out: Vec<std::sync::Mutex<Option<T>>> =
+        (0..n).map(|_| std::sync::Mutex::new(None)).collect();
     let work = || loop {
         let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if k >= n {
@@ -189,7 +203,13 @@ pub(crate) fn run_parts<T: Send>(pool: Option<&rayon::ThreadPool>, parts: usize,
         }
         work();
     });
-    out.into_iter().map(|o| o.into_inner().unwrap_or_else(|e| e.into_inner()).expect("render part")).collect()
+    out.into_iter()
+        .map(|o| {
+            o.into_inner()
+                .unwrap_or_else(|e| e.into_inner())
+                .expect("render part")
+        })
+        .collect()
 }
 
 impl GpuTimers {
@@ -270,7 +290,12 @@ fn partition(labels: &[&'static str], stamps: &[u64]) -> (Vec<(&'static str, u64
         out.push((*label, b.saturating_sub(prev.unwrap_or(*a))));
         prev = Some(*b);
     }
-    let all = order.iter().map(|o| o.0).min().zip(order.last()).map(|(first, last)| last.1.saturating_sub(first));
+    let all = order
+        .iter()
+        .map(|o| o.0)
+        .min()
+        .zip(order.last())
+        .map(|(first, last)| last.1.saturating_sub(first));
     (out, all)
 }
 
@@ -332,7 +357,10 @@ impl Renderer {
         }
         // the mirrors per frame, not per picture: a frame drawing two mirrors pays twice
         let [mirrors, windows, left, _] = self.pictures.get();
-        let mirror_all = out.iter().find(|(n, _, _)| n == "mirrors: (all passes)").map(|(_, ms, k)| (*ms, *k));
+        let mirror_all = out
+            .iter()
+            .find(|(n, _, _)| n == "mirrors: (all passes)")
+            .map(|(_, ms, k)| (*ms, *k));
         if let Some((ms, k)) = mirror_all {
             if let Some(f) = per_frame(ms, mirrors, windows + left) {
                 out.push(("mirrors: per frame".to_string(), f, k));
@@ -362,7 +390,10 @@ mod timer_tests {
     #[test]
     fn the_passes_partition_the_picture() {
         // main part 100..400, (untimed gap 400..450), main 450..900, upscale 900..1000
-        let (p, all) = partition(&["main part", "main", "upscale"], &[100, 400, 450, 900, 905, 1000]);
+        let (p, all) = partition(
+            &["main part", "main", "upscale"],
+            &[100, 400, 450, 900, 905, 1000],
+        );
         assert_eq!(p, vec![("main part", 300), ("main", 500), ("upscale", 100)]);
         assert_eq!(all, Some(900));
         // with the first part untimed (as before), the main pass alone missed its 300
@@ -389,7 +420,10 @@ mod run_parts_tests {
     /// with the caller taking them too while a helper is slow to start.
     #[test]
     fn every_part_once_in_order() {
-        let pool = rayon::ThreadPoolBuilder::new().num_threads(2).build().unwrap();
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .unwrap();
         let runs = std::sync::atomic::AtomicUsize::new(0);
         let out = super::run_parts(Some(&pool), 9, |k| {
             runs.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -407,7 +441,10 @@ mod run_parts_tests {
     /// A city's instances in many parts with a pool, a few threads' worth without one.
     #[test]
     fn instance_parts_many_with_a_pool_few_without() {
-        let pool = rayon::ThreadPoolBuilder::new().num_threads(8).build().unwrap();
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .build()
+            .unwrap();
         assert_eq!(super::instance_parts(Some(&pool), 140_000), 72);
         assert_eq!(super::instance_parts(Some(&pool), 500), 1);
         assert_eq!(super::instance_parts(None, 140_000), 4);

@@ -40,7 +40,7 @@ fn arriving_ai_uses_the_timetable_stop_not_a_neighbour() {
     .unwrap();
     let def = omsi_vehicle::Vehicle::load(&dir.join("test.bus")).unwrap();
     let cabin =
-        Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY)]).expect("cabin"));
+        Arc::new(Cabin::load_train(&[(&def, Vec3::ZERO, f32::INFINITY, false)]).expect("cabin"));
     std::fs::remove_dir_all(&dir).unwrap();
     let mut humans = PeopleSim::new(Path::new("/nonexistent"), 200);
     humans.stops.insert(42, test_stop("Scheduled", ""));
@@ -158,21 +158,45 @@ fn somebody_late_keeps_a_timetable_bus_for_a_while() {
     x.bus = Some(bus);
     x.stop = Some(42);
     x.task = Task::WalkingToBusstop;
-    let late = Late { phase: LatePhase::Approach, walk: 1.1, run: 3.3, hurried: 0.0, stood: false };
+    let late = Late {
+        phase: LatePhase::Approach,
+        walk: 1.1,
+        run: 3.3,
+        hurried: 0.0,
+        stood: false,
+    };
     x.late = Some(late);
-    assert_eq!(holds_bus(&x, bus), None, "still on the way, the bus not standing yet");
-    x.late = Some(Late { phase: LatePhase::Hurry, ..late });
+    assert_eq!(
+        holds_bus(&x, bus),
+        None,
+        "still on the way, the bus not standing yet"
+    );
+    x.late = Some(Late {
+        phase: LatePhase::Hurry,
+        ..late
+    });
     assert_eq!(holds_bus(&x, bus), Some(Some(42)));
     x.task = Task::ToBus;
-    assert_eq!(holds_bus(&x, bus), Some(Some(42)), "hurrying to the gather point");
+    assert_eq!(
+        holds_bus(&x, bus),
+        Some(Some(42)),
+        "hurrying to the gather point"
+    );
     assert_eq!(holds_bus(&x, BusId::Ai(8)), None, "not another bus");
     x.task = Task::WalkingToBus;
     assert_eq!(holds_bus(&x, bus), Some(Some(42)));
-    x.late = Some(Late { phase: LatePhase::Hurry, hurried: RUNNER_HOLD_MAX + 0.1, ..late });
+    x.late = Some(Late {
+        phase: LatePhase::Hurry,
+        hurried: RUNNER_HOLD_MAX + 0.1,
+        ..late
+    });
     assert_eq!(holds_bus(&x, bus), None, "hurried longer than a bus waits");
     x.task = Task::ToBus;
     assert_eq!(holds_bus(&x, bus), None);
-    x.late = Some(Late { phase: LatePhase::Missed(1.0), ..late });
+    x.late = Some(Late {
+        phase: LatePhase::Missed(1.0),
+        ..late
+    });
     assert_eq!(holds_bus(&x, bus), None, "left behind");
     // anybody else as ever
     x.late = None;
@@ -201,18 +225,57 @@ fn the_riders_feel_hard_braking_fast_bends_and_a_jerky_foot() {
         jolts
     };
     // pulling away at 1.2 m/s², cruising, braking at 1.5 m/s² to a stop: nothing
-    assert!(run(&|t| if t < 10.0 { (1.2 * t as f32, 0.0, 1.2) } else if t < 20.0 { (12.0, 0.0, 0.0) } else if t < 28.0 { (12.0 - 1.5 * (t as f32 - 20.0), 0.0, -1.5) } else { (0.0, 0.0, 0.0) }, 40.0).is_empty());
+    assert!(
+        run(
+            &|t| if t < 10.0 {
+                (1.2 * t as f32, 0.0, 1.2)
+            } else if t < 20.0 {
+                (12.0, 0.0, 0.0)
+            } else if t < 28.0 {
+                (12.0 - 1.5 * (t as f32 - 20.0), 0.0, -1.5)
+            } else {
+                (0.0, 0.0, 0.0)
+            },
+            40.0
+        )
+        .is_empty()
+    );
     // a gentle bend at 1.5 m/s² sideways
     assert!(run(&|_| (10.0, 1.5, 0.0), 10.0).is_empty());
     // an emergency stop at 7 m/s²: one jolt, not one a frame
-    let hard = run(&|t| if t < 1.0 { (14.0, 0.0, 0.0) } else { (14.0, 0.0, -7.0) }, 2.0);
+    let hard = run(
+        &|t| {
+            if t < 1.0 {
+                (14.0, 0.0, 0.0)
+            } else {
+                (14.0, 0.0, -7.0)
+            }
+        },
+        2.0,
+    );
     assert_eq!(hard.len(), 1, "{hard:?}");
     assert_eq!(hard[0].1, 0.1);
     // a bend at 4 m/s² held for seconds
     assert_eq!(run(&|_| (12.0, 4.0, 0.0), 6.0).len(), 1);
     // throttle and brake every 1.5 s: the fifth swing on upsets them, each further one too
-    let jerky = run(&|t| (8.0, 0.0, if (t / 1.5).floor() as i64 % 2 == 0 { 1.0 } else { -1.0 }), 15.0);
-    assert!(jerky.len() >= 4 && jerky.iter().all(|j| j.1 == 0.05) && jerky[0].0 > 5.0, "{jerky:?}");
+    let jerky = run(
+        &|t| {
+            (
+                8.0,
+                0.0,
+                if (t / 1.5).floor() as i64 % 2 == 0 {
+                    1.0
+                } else {
+                    -1.0
+                },
+            )
+        },
+        15.0,
+    );
+    assert!(
+        jerky.len() >= 4 && jerky.iter().all(|j| j.1 == 0.05) && jerky[0].0 > 5.0,
+        "{jerky:?}"
+    );
     // standing, nothing counts
     assert!(run(&|_| (0.0, 5.0, -8.0), 5.0).is_empty());
 }
@@ -220,10 +283,14 @@ fn the_riders_feel_hard_braking_fast_bends_and_a_jerky_foot() {
 #[test]
 fn complaints_come_worst_first_and_once_each() {
     let at = bad_ride_thresholds([0.5, 0.5, 0.5]);
-    assert!((at[0] - 0.05).abs() < 1e-6 && (at[1] - 0.3).abs() < 1e-6 && (at[2] - 0.65).abs() < 1e-6);
+    assert!(
+        (at[0] - 0.05).abs() < 1e-6 && (at[1] - 0.3).abs() < 1e-6 && (at[2] - 0.65).abs() < 1e-6
+    );
     let lo = bad_ride_thresholds([0.0, 0.0, 0.0]);
     let hi = bad_ride_thresholds([1.0, 1.0, 1.0]);
-    assert!(lo[1] >= 0.2 - 1e-6 && hi[1] <= 0.4 + 1e-6 && lo[2] >= 0.5 - 1e-6 && hi[2] <= 0.8 + 1e-6);
+    assert!(
+        lo[1] >= 0.2 - 1e-6 && hi[1] <= 0.4 + 1e-6 && lo[2] >= 0.5 - 1e-6 && hi[2] <= 0.8 + 1e-6
+    );
     assert_eq!(bad_ride_complaint(0.01, 0, at), None);
     assert_eq!(bad_ride_complaint(0.1, 0, at), Some(1));
     assert_eq!(bad_ride_complaint(0.1, 1, at), None);
@@ -284,66 +351,274 @@ fn who_boards_the_players_bus() {
         line: "76".into(),
         terminus: "Endstation ".into(),
         departure: 8.0 * 3600.0,
-        stops: ["Bauernhof", "Depot", "Kirche", "Endstation"].into_iter().map(trip).collect(),
+        stops: ["Bauernhof", "Depot", "Kirche", "Endstation"]
+            .into_iter()
+            .map(trip)
+            .collect(),
     };
     // (named as the timetable's Busstops.cfg names the objects; one it does not know by
     // its id)
-    let names: HashMap<i64, String> = [(10, "Bauernhof".to_string()), (11, "Kirche".to_string()), (13, "Depot".to_string())].into_iter().collect();
+    let names: HashMap<i64, String> = [
+        (10, "Bauernhof".to_string()),
+        (11, "Kirche".to_string()),
+        (13, "Depot".to_string()),
+    ]
+    .into_iter()
+    .collect();
     let dt = Arc::new(DutyTrip::of(&planned, Some(&names)));
     assert_eq!(dt.terminus, "Endstation");
-    assert_eq!(dt.stops.iter().map(|s| s.1.as_str()).collect::<Vec<_>>(), ["Bauernhof", "Depot", "Kirche", "12"]);
-    let duty = |next: usize, done: bool| Takes::Duty { trip: dt.clone(), next, done };
+    assert_eq!(
+        dt.stops.iter().map(|s| s.1.as_str()).collect::<Vec<_>>(),
+        ["Bauernhof", "Depot", "Kirche", "12"]
+    );
+    let duty = |next: usize, done: bool| Takes::Duty {
+        trip: dt.clone(),
+        next,
+        done,
+    };
     let here = test_stop("Bauernhof Grundorf", "Bauernhof");
     let set = |t: &[&str]| t.iter().map(|x| x.to_string()).collect::<HashSet<String>>();
     let shown = "Endstation Grundorf";
 
     // on the duty with the destination shown: at the stop, and on the line record
     // whatever spelling the depot file has
-    assert_eq!(at_stop(10, &here, Some(shown), &duty(0, false)), AtStop::Serves);
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), shown, &duty(0, false)), Some(Fit::Duty));
+    assert_eq!(
+        at_stop(10, &here, Some(shown), &duty(0, false)),
+        AtStop::Serves
+    );
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Endstation"]),
+            shown,
+            &duty(0, false)
+        ),
+        Some(Fit::Duty)
+    );
     // a record that does not list the trip's terminus at all (made of another variant's
     // trips): the trip goes to their stop all the same
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Waldweg"]), shown, &duty(0, false)), Some(Fit::Duty));
-    assert_eq!(fit(10, &here, Some("12"), &set(&["Waldweg"]), shown, &duty(0, false)), Some(Fit::Duty));
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Waldweg"]),
+            shown,
+            &duty(0, false)
+        ),
+        Some(Fit::Duty)
+    );
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("12"),
+            &set(&["Waldweg"]),
+            shown,
+            &duty(0, false)
+        ),
+        Some(Fit::Duty)
+    );
     // ... but not somebody whose stop the trip does not go to, nor one it only passes
-    assert_eq!(fit(10, &here, Some("Waldweg"), &set(&["Waldweg"]), shown, &duty(0, false)), None);
-    assert_eq!(fit(10, &here, Some("Depot"), &set(&["Waldweg"]), shown, &duty(0, false)), None);
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Waldweg"),
+            &set(&["Waldweg"]),
+            shown,
+            &duty(0, false)
+        ),
+        None
+    );
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Depot"),
+            &set(&["Waldweg"]),
+            shown,
+            &duty(0, false)
+        ),
+        None
+    );
     // nor at a stop the trip has left behind, or does not call at
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Waldweg"]), shown, &duty(3, false)), None);
-    assert_eq!(fit(20, &test_stop("Am Teich", "Am Teich"), Some("Kirche"), &set(&["Waldweg"]), shown, &duty(0, false)), None);
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Waldweg"]),
+            shown,
+            &duty(3, false)
+        ),
+        None
+    );
+    assert_eq!(
+        fit(
+            20,
+            &test_stop("Am Teich", "Am Teich"),
+            Some("Kirche"),
+            &set(&["Waldweg"]),
+            shown,
+            &duty(0, false)
+        ),
+        None
+    );
     // another platform of the stop's name will do
-    assert_eq!(fit(14, &test_stop("Bauernhof 2", "Bauernhof"), Some("Kirche"), &set(&["Waldweg"]), shown, &duty(0, false)), Some(Fit::Duty));
+    assert_eq!(
+        fit(
+            14,
+            &test_stop("Bauernhof 2", "Bauernhof"),
+            Some("Kirche"),
+            &set(&["Waldweg"]),
+            shown,
+            &duty(0, false)
+        ),
+        Some(Fit::Duty)
+    );
     // the depot file's terminus on the record: the bus is theirs as in Omsi.exe
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation Grundorf"]), shown, &duty(0, false)), Some(Fit::Terminus));
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Endstation Grundorf"]),
+            shown,
+            &duty(0, false)
+        ),
+        Some(Fit::Terminus)
+    );
 
     // free drive: nobody waiting gets on, the riders get off at their stops
-    assert_eq!(at_stop(10, &here, Some(shown), &Takes::Nobody), AtStop::Passes);
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), shown, &Takes::Nobody), None);
+    assert_eq!(
+        at_stop(10, &here, Some(shown), &Takes::Nobody),
+        AtStop::Passes
+    );
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Endstation"]),
+            shown,
+            &Takes::Nobody
+        ),
+        None
+    );
     // no destination shown (or "Nicht einsteigen"): it empties and takes nobody, duty or not
     assert_eq!(at_stop(10, &here, None, &duty(0, false)), AtStop::Empties);
     assert_eq!(at_stop(10, &here, None, &Takes::Nobody), AtStop::Empties);
     // at the trip's last stop it empties too, whatever the depot file calls it ...
     let end = test_stop("Endstation Grundorf Wendeschleife", "12");
-    assert_eq!(at_stop(12, &end, Some(shown), &duty(3, true)), AtStop::Empties);
-    assert_eq!(at_stop(12, &end, Some(shown), &duty(3, false)), AtStop::Serves);
+    assert_eq!(
+        at_stop(12, &end, Some(shown), &duty(3, true)),
+        AtStop::Empties
+    );
+    assert_eq!(
+        at_stop(12, &end, Some(shown), &duty(3, false)),
+        AtStop::Serves
+    );
     // ... and as at the terminus it shows
-    assert_eq!(at_stop(12, &test_stop("Endstation Grundorf", ""), Some(shown), &duty(3, false)), AtStop::Empties);
+    assert_eq!(
+        at_stop(
+            12,
+            &test_stop("Endstation Grundorf", ""),
+            Some(shown),
+            &duty(3, false)
+        ),
+        AtStop::Empties
+    );
     // a finished trip takes nobody by the duty, nor a works trip from the depot
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), shown, &duty(0, true)), None);
-    let works = Takes::Duty { trip: Arc::new(DutyTrip::of(&TripPlan { line: String::new(), ..planned.clone() }, Some(&names))), next: 0, done: false };
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), shown, &works), None);
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation Grundorf"]), shown, &works), Some(Fit::Terminus));
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Endstation"]),
+            shown,
+            &duty(0, true)
+        ),
+        None
+    );
+    let works = Takes::Duty {
+        trip: Arc::new(DutyTrip::of(
+            &TripPlan {
+                line: String::new(),
+                ..planned.clone()
+            },
+            Some(&names),
+        )),
+        next: 0,
+        done: false,
+    };
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Endstation"]),
+            shown,
+            &works
+        ),
+        None
+    );
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Endstation Grundorf"]),
+            shown,
+            &works
+        ),
+        Some(Fit::Terminus)
+    );
 
     // a timetable bus: as in Omsi.exe, the terminus on the record or nothing
-    assert_eq!(at_stop(10, &here, Some("Endstation"), &Takes::Terminus), AtStop::Serves);
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), "Endstation", &Takes::Terminus), Some(Fit::Terminus));
-    assert_eq!(fit(10, &here, Some("Kirche"), &set(&["Endstation"]), "Endstation Grundorf", &Takes::Terminus), None);
+    assert_eq!(
+        at_stop(10, &here, Some("Endstation"), &Takes::Terminus),
+        AtStop::Serves
+    );
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Endstation"]),
+            "Endstation",
+            &Takes::Terminus
+        ),
+        Some(Fit::Terminus)
+    );
+    assert_eq!(
+        fit(
+            10,
+            &here,
+            Some("Kirche"),
+            &set(&["Endstation"]),
+            "Endstation Grundorf",
+            &Takes::Terminus
+        ),
+        None
+    );
 
     // two buses at the stop: the one whose terminus is on the record, though further
     let (ai, me) = (BusId::Ai(5), BusId::Player);
-    assert_eq!(best_bus([(me, Fit::Duty, 5.0), (ai, Fit::Terminus, 30.0)].into_iter()), Some((ai, Fit::Terminus)));
-    assert_eq!(best_bus([(ai, Fit::Terminus, 30.0), (me, Fit::Terminus, 5.0)].into_iter()), Some((me, Fit::Terminus)));
-    assert_eq!(best_bus([(me, Fit::Duty, 5.0)].into_iter()), Some((me, Fit::Duty)));
+    assert_eq!(
+        best_bus([(me, Fit::Duty, 5.0), (ai, Fit::Terminus, 30.0)].into_iter()),
+        Some((ai, Fit::Terminus))
+    );
+    assert_eq!(
+        best_bus([(ai, Fit::Terminus, 30.0), (me, Fit::Terminus, 5.0)].into_iter()),
+        Some((me, Fit::Terminus))
+    );
+    assert_eq!(
+        best_bus([(me, Fit::Duty, 5.0)].into_iter()),
+        Some((me, Fit::Duty))
+    );
     assert_eq!(best_bus(std::iter::empty()), None);
 }
 
@@ -376,7 +651,10 @@ fn stop(alias: &str) -> PaxStop {
 fn a_stop_answers_to_its_label_and_its_timetable_name() {
     let s = stop("Koenigsrath Bf Ausstieg");
     assert!(s.is_named("Königsrath, Bf. Ausstieg "));
-    assert!(s.is_named("Koenigsrath Bf Ausstieg"), "the timetable's spelling");
+    assert!(
+        s.is_named("Koenigsrath Bf Ausstieg"),
+        "the timetable's spelling"
+    );
     assert!(!s.is_named("Königsrath, Bf. Pause"));
     // a stop the timetable does not know: its id, as the riders' destinations then are
     assert!(stop("4711").is_named("4711"));
@@ -503,7 +781,10 @@ pub fn routes_follow_the_link_order_and_one_way_links() {
     // from 0 to 2: through 1 (0 cannot use the one-way link back from 0 to 2)
     let next = |a: usize, b: usize| r[a].iter().find(|l| l.reach.contains(&b)).map(|l| l.to);
     assert_eq!(next(0, 2), Some(1));
-    assert_eq!(next(2, 0), Some(1).or(Some(0)).filter(|_| true).and(next(2, 0)));
+    assert_eq!(
+        next(2, 0),
+        Some(1).or(Some(0)).filter(|_| true).and(next(2, 0))
+    );
     assert_eq!(next(1, 0), Some(0));
     assert_eq!(next(1, 2), Some(2));
 }
@@ -516,12 +797,38 @@ fn a_route_in_front_of_the_terminus_is_not_part_of_its_name() {
     let here = test_stop("Market", "");
     let termini: HashSet<String> = ["Apsley Station".to_string()].into_iter().collect();
     for shown in ["402 Apsley Station", "B2 Apsley Station", "Apsley Station"] {
-        assert_eq!(fit(1, &here, None, &termini, shown, &Takes::Terminus), Some(Fit::Terminus), "{shown}");
-        assert_eq!(at_stop(2, &test_stop("Apsley Station", ""), Some(shown), &Takes::Terminus), AtStop::Empties, "{shown}");
+        assert_eq!(
+            fit(1, &here, None, &termini, shown, &Takes::Terminus),
+            Some(Fit::Terminus),
+            "{shown}"
+        );
+        assert_eq!(
+            at_stop(
+                2,
+                &test_stop("Apsley Station", ""),
+                Some(shown),
+                &Takes::Terminus
+            ),
+            AtStop::Empties,
+            "{shown}"
+        );
     }
     for shown in ["402 Apsley Bus Station", "Via Apsley Station", "402"] {
-        assert_eq!(fit(1, &here, None, &termini, shown, &Takes::Terminus), None, "{shown}");
-        assert_ne!(at_stop(2, &test_stop("Apsley Station", ""), Some(shown), &Takes::Terminus), AtStop::Empties, "{shown}");
+        assert_eq!(
+            fit(1, &here, None, &termini, shown, &Takes::Terminus),
+            None,
+            "{shown}"
+        );
+        assert_ne!(
+            at_stop(
+                2,
+                &test_stop("Apsley Station", ""),
+                Some(shown),
+                &Takes::Terminus
+            ),
+            AtStop::Empties,
+            "{shown}"
+        );
     }
 }
 
@@ -533,7 +840,11 @@ fn the_other_platform_of_the_stop_keeps_the_request_point() {
     assert!(!rider.wants_stop_at(&stop, DVec3::Y * 1000.0, true));
     let point = rider.stop_request_at.unwrap().1;
     // nearer now, the bus takes the stop's other object (same name) for the next stop
-    let other = RequestStop { id: 43, pos: stop.pos + DVec3::X * 20.0, ..stop.clone() };
+    let other = RequestStop {
+        id: 43,
+        pos: stop.pos + DVec3::X * 20.0,
+        ..stop.clone()
+    };
     assert!(!rider.wants_stop_at(&other, DVec3::Y * (point + 10.0), true));
     assert_eq!(rider.stop_request_at, Some((43, point)));
     assert!(rider.wants_stop_at(&other, DVec3::Y * (point - 10.0), true));
@@ -545,15 +856,38 @@ fn the_other_platform_of_the_stop_keeps_the_request_point() {
 fn route_test_hof() -> omsi_vehicle::Hof {
     use omsi_vehicle::hof::{InfoTrip, Terminus};
     let mut hof = omsi_vehicle::Hof::default();
-    let terminus = |code: i32, id: &str| Terminus { code, texture_id: id.into(), terminus_stop: Some(id.into()), ..Default::default() };
-    hof.termini = vec![terminus(10, "07HOSPITAL"), terminus(11, "7 Station"), terminus(12, "7 Town Loop")];
-    let mut route = |code: &str, terminus: &str, stops: &[&str]| {
-        hof.info_trips.push(InfoTrip { code: code.into(), route: terminus.into(), line: "7".into(), ..Default::default() });
-        hof.info_busstop_lists.push(stops.iter().map(|s| s.to_string()).collect());
+    let terminus = |code: i32, id: &str| Terminus {
+        code,
+        texture_id: id.into(),
+        terminus_stop: Some(id.into()),
+        ..Default::default()
     };
-    route("701", "10", &["Station", "Mill Lane", "Hospital Gate#north side"]);
+    hof.termini = vec![
+        terminus(10, "07HOSPITAL"),
+        terminus(11, "7 Station"),
+        terminus(12, "7 Town Loop"),
+    ];
+    let mut route = |code: &str, terminus: &str, stops: &[&str]| {
+        hof.info_trips.push(InfoTrip {
+            code: code.into(),
+            route: terminus.into(),
+            line: "7".into(),
+            ..Default::default()
+        });
+        hof.info_busstop_lists
+            .push(stops.iter().map(|s| s.to_string()).collect());
+    };
+    route(
+        "701",
+        "10",
+        &["Station", "Mill Lane", "Hospital Gate#north side"],
+    );
     route("702", "11", &["Hospital Gate", "Mill Lane", "Station"]);
-    route("703", "12", &["Station", "Mill Lane", "Old Bridge", "Station"]);
+    route(
+        "703",
+        "12",
+        &["Station", "Mill Lane", "Old Bridge", "Station"],
+    );
     hof
 }
 
@@ -569,8 +903,15 @@ fn everybody_leaves_at_the_last_stop_of_the_ibis_route() {
     let back = SetRoute::from_depot(&hof, 1, None).unwrap();
     assert!(back.is_last_stop(&test_stop("Station", "")));
     let at_start = SetRoute::from_depot(&hof, 2, Some(0)).unwrap();
-    assert!(!at_start.is_last_stop(&test_stop("Station", "")), "a loop does not empty where it sets off");
-    assert!(SetRoute::from_depot(&hof, 2, Some(3)).unwrap().is_last_stop(&test_stop("Station", "")));
+    assert!(
+        !at_start.is_last_stop(&test_stop("Station", "")),
+        "a loop does not empty where it sets off"
+    );
+    assert!(
+        SetRoute::from_depot(&hof, 2, Some(3))
+            .unwrap()
+            .is_last_stop(&test_stop("Station", ""))
+    );
     assert_eq!(SetRoute::from_depot(&hof, 3, None), None, "no such route");
 }
 
@@ -580,16 +921,42 @@ fn everybody_leaves_at_the_last_stop_of_the_ibis_route() {
 #[test]
 fn a_circular_takes_the_people_waiting_for_where_it_ends() {
     let mut hof = route_test_hof();
-    hof.termini.push(omsi_vehicle::hof::Terminus { code: 20, texture_id: "9 Station".into(), ..Default::default() });
-    hof.info_trips.push(omsi_vehicle::hof::InfoTrip { code: "901".into(), route: "20".into(), line: "9".into(), ..Default::default() });
-    hof.info_busstop_lists.push(vec!["Hospital Gate".into(), "Station".into()]);
+    hof.termini.push(omsi_vehicle::hof::Terminus {
+        code: 20,
+        texture_id: "9 Station".into(),
+        ..Default::default()
+    });
+    hof.info_trips.push(omsi_vehicle::hof::InfoTrip {
+        code: "901".into(),
+        route: "20".into(),
+        line: "9".into(),
+        ..Default::default()
+    });
+    hof.info_busstop_lists
+        .push(vec!["Hospital Gate".into(), "Station".into()]);
     let set = |names: &[&str]| -> HashSet<String> { names.iter().map(|s| s.to_string()).collect() };
     let loop_ = SetRoute::from_depot(&hof, 2, Some(1)).unwrap();
-    assert_eq!(loop_.takes_waiting_for(&set(&["7 Station"])), Some(Fit::Terminus));
-    assert_eq!(loop_.takes_waiting_for(&set(&["Station"])), Some(Fit::Terminus), "the route's number in front");
+    assert_eq!(
+        loop_.takes_waiting_for(&set(&["7 Station"])),
+        Some(Fit::Terminus)
+    );
+    assert_eq!(
+        loop_.takes_waiting_for(&set(&["Station"])),
+        Some(Fit::Terminus),
+        "the route's number in front"
+    );
     assert_eq!(loop_.takes_waiting_for(&set(&["07HOSPITAL"])), None);
-    assert_eq!(loop_.takes_waiting_for(&set(&["9 Station"])), None, "another line");
-    assert_eq!(SetRoute::from_depot(&hof, 0, None).unwrap().takes_waiting_for(&set(&["7 Station"])), None);
+    assert_eq!(
+        loop_.takes_waiting_for(&set(&["9 Station"])),
+        None,
+        "another line"
+    );
+    assert_eq!(
+        SetRoute::from_depot(&hof, 0, None)
+            .unwrap()
+            .takes_waiting_for(&set(&["7 Station"])),
+        None
+    );
 }
 
 /// The people waiting at a stop, and walking back to their place, keep the floor of that
@@ -606,8 +973,16 @@ fn the_people_waiting_keep_the_floor_of_their_place() {
     let mut stop = test_stop("Kerbside", "");
     stop.pos.z = 10.0;
     stop.spots = vec![
-        WaitSpot { pos: DVec3::new(1.0, 0.0, 10.2), face: 0.0, height: 0.0 },
-        WaitSpot { pos: DVec3::new(2.0, 0.0, 10.6), face: 0.0, height: 0.45 },
+        WaitSpot {
+            pos: DVec3::new(1.0, 0.0, 10.2),
+            face: 0.0,
+            height: 0.0,
+        },
+        WaitSpot {
+            pos: DVec3::new(2.0, 0.0, 10.6),
+            face: 0.0,
+            height: 0.45,
+        },
     ];
     stop.taken = vec![false; 2];
     let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
@@ -636,6 +1011,7 @@ fn the_people_waiting_keep_the_floor_of_their_place() {
             age: 40.0,
             stuck: 0.0,
             ghost: 0.0,
+            stuck_total: 0.0,
             car_wait: 0.0,
             detour: 0.0,
             detour_side: 0.0,
@@ -650,10 +1026,23 @@ fn the_people_waiting_keep_the_floor_of_their_place() {
     };
     let near = |a: Option<f64>, b: f64| a.is_some_and(|a| (a - b).abs() < 1e-6);
     assert!(near(floor(&mut h, Task::WaitingForBus, Some(0)), 10.2));
-    assert!(near(floor(&mut h, Task::WaitingForBus, Some(1)), 10.15), "the seat's floor");
-    assert!(near(floor(&mut h, Task::WalkingToBusstop, Some(1)), 10.15), "walking back to it");
-    assert!(near(floor(&mut h, Task::WaitingForBus, None), 10.0), "the stop's own height");
-    assert_eq!(floor(&mut h, Task::ToBus, None), None, "off to a bus: the ground");
+    assert!(
+        near(floor(&mut h, Task::WaitingForBus, Some(1)), 10.15),
+        "the seat's floor"
+    );
+    assert!(
+        near(floor(&mut h, Task::WalkingToBusstop, Some(1)), 10.15),
+        "walking back to it"
+    );
+    assert!(
+        near(floor(&mut h, Task::WaitingForBus, None), 10.0),
+        "the stop's own height"
+    );
+    assert_eq!(
+        floor(&mut h, Task::ToBus, None),
+        None,
+        "off to a bus: the ground"
+    );
     // (a seat keeps its bench's floor: the pavement beside it lifts only a standing place)
     h.people = vec![person(Task::WaitingForBus, Some(1))];
     assert!(h.waits_seated(0));

@@ -79,7 +79,12 @@ fn parse_lines(text: &str, to_world: &dyn Fn(f64, f64) -> (f64, f64)) -> Vec<Lin
         }
         let f: Vec<&str> = line.split('\t').collect();
         match f[0] {
-            "ORIGEM" if f.len() >= 3 => origin = (f[1].trim().parse().unwrap_or(0.0), f[2].trim().parse().unwrap_or(0.0)),
+            "ORIGEM" if f.len() >= 3 => {
+                origin = (
+                    f[1].trim().parse().unwrap_or(0.0),
+                    f[2].trim().parse().unwrap_or(0.0),
+                )
+            }
             "L" if f.len() >= 4 => {
                 let group = match f[2].trim() {
                     "BRT" => GROUP_BRT,
@@ -117,8 +122,14 @@ fn parse_lines(text: &str, to_world: &dyn Fn(f64, f64) -> (f64, f64)) -> Vec<Lin
                 }
             }
             "P" | "S" if f.len() >= 2 => {
-                let nums: Vec<f64> = f[1].split_whitespace().filter_map(|v| v.parse().ok()).collect();
-                let pts: Vec<(f64, f64)> = nums.chunks_exact(2).map(|c| to_world(origin.0 + c[0], origin.1 + c[1])).collect();
+                let nums: Vec<f64> = f[1]
+                    .split_whitespace()
+                    .filter_map(|v| v.parse().ok())
+                    .collect();
+                let pts: Vec<(f64, f64)> = nums
+                    .chunks_exact(2)
+                    .map(|c| to_world(origin.0 + c[0], origin.1 + c[1]))
+                    .collect();
                 if let Some(r) = out.last_mut().and_then(|l| l.routes.last_mut()) {
                     if f[0] == "P" {
                         r.pts = pts;
@@ -147,12 +158,21 @@ mod tests {
         let text = "# lines\nORIGEM\t1000\t2000\nL\t110\tBRT\tTerminal - Centre\nR\t12.5\t20\t35\t0\tMon-Fri\tbus_a\tTerminal - Centre\nP\t0 0 100 0 200 50\nS\t0 0 200 50\nR\t12.5\t20\t36\t0\tMon-Fri\tbus_a\tCentre - Terminal\nP\t200 50 0 0\nL\t5\tFEEDER\tNothing\nL\tT1\tBRT\tTram line\ttram\t19900101\t19911231\nR\t3\t4\t9\t0\tdaily\ttram_a\tA - B\nP\t0 0 10 10\n";
         let l = parse_lines(text, &world);
         assert_eq!(l.len(), 2, "a line with no way is left out");
-        assert_eq!((l[0].number.as_str(), l[0].group, l[0].modal), ("110", GROUP_BRT, MODAL_BUS));
+        assert_eq!(
+            (l[0].number.as_str(), l[0].group, l[0].modal),
+            ("110", GROUP_BRT, MODAL_BUS)
+        );
         assert_eq!(l[0].routes.len(), 2);
-        assert_eq!(l[0].routes[0].pts, vec![(1000.0, 2000.0), (1100.0, 2000.0), (1200.0, 2050.0)]);
+        assert_eq!(
+            l[0].routes[0].pts,
+            vec![(1000.0, 2000.0), (1100.0, 2000.0), (1200.0, 2050.0)]
+        );
         assert_eq!(l[0].routes[0].stops.len(), 2);
         assert!((l[0].routes[0].km - 12.5).abs() < 1e-6 && l[0].routes[1].minutes == 36);
-        assert_eq!((l[1].number.as_str(), l[1].modal, l[1].from, l[1].to), ("T1", MODAL_TRAM, 19900101, 19911231));
+        assert_eq!(
+            (l[1].number.as_str(), l[1].modal, l[1].from, l[1].to),
+            ("T1", MODAL_TRAM, 19900101, 19911231)
+        );
     }
 
     #[test]
@@ -161,7 +181,16 @@ mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples");
         let p = Package::open(&dir).expect("docs/examples/openomsi-realmap is a package");
         let l = p.lines();
-        assert_eq!(l.iter().map(|x| (x.number.as_str(), x.group, x.modal)).collect::<Vec<_>>(), [("E1", GROUP_FEEDER, MODAL_BUS), ("E2", GROUP_BRT, MODAL_BUS), ("T1", GROUP_FEEDER, MODAL_TRAM)]);
+        assert_eq!(
+            l.iter()
+                .map(|x| (x.number.as_str(), x.group, x.modal))
+                .collect::<Vec<_>>(),
+            [
+                ("E1", GROUP_FEEDER, MODAL_BUS),
+                ("E2", GROUP_BRT, MODAL_BUS),
+                ("T1", GROUP_FEEDER, MODAL_TRAM)
+            ]
+        );
         assert_eq!(l[0].routes.len(), 2, "out and back");
         assert_eq!(l[0].routes[0].stops.len(), 2);
     }
@@ -169,7 +198,15 @@ mod tests {
     #[test]
     fn a_form_of_a_line_runs_between_its_dates() {
         let mut p = Package::test_stub();
-        p.lines = vec![LineInfo { number: "T1".into(), group: GROUP_BRT, modal: MODAL_TRAM, from: 19900101, to: 19911231, name: String::new(), routes: Vec::new() }];
+        p.lines = vec![LineInfo {
+            number: "T1".into(),
+            group: GROUP_BRT,
+            modal: MODAL_TRAM,
+            from: 19900101,
+            to: 19911231,
+            name: String::new(),
+            routes: Vec::new(),
+        }];
         assert!(p.line_on(0, 0), "an unknown date lets every form hold");
         assert!(p.line_on(0, 19900101) && p.line_on(0, 19911231));
         assert!(!p.line_on(0, 19891231) && !p.line_on(0, 19920101));

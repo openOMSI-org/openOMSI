@@ -14,12 +14,15 @@
 use glam::Vec3;
 use omsi_audio::stream::StreamBuf;
 use omsi_audio::{AudioEngine, VoiceId, VoiceParams};
-use omsi_cfg::radio::{config_path, default_text, DEFAULT_STATIONS};
+use omsi_cfg::radio::{DEFAULT_STATIONS, config_path, default_text};
 use std::sync::Arc;
 
 /// The setting of the radio's effects named `key` (`radio_speaker`, `radio_hiss`,
 /// `radio_dropouts`) in `fx`: its key as written to the settings, and its amount.
-pub fn fx_setting<'a>(fx: &'a mut omsi_audio::radio_fx::RadioFxParams, key: &str) -> (&'static str, &'a mut f32) {
+pub fn fx_setting<'a>(
+    fx: &'a mut omsi_audio::radio_fx::RadioFxParams,
+    key: &str,
+) -> (&'static str, &'a mut f32) {
     match key {
         "radio_speaker" => ("radio_speaker", &mut fx.speaker),
         "radio_hiss" => ("radio_hiss", &mut fx.hiss),
@@ -29,7 +32,11 @@ pub fn fx_setting<'a>(fx: &'a mut omsi_audio::radio_fx::RadioFxParams, key: &str
 
 /// The options' slider `key` of the radio's effects set to `v` (in steps of a hundredth):
 /// the key and value kept for the next game.
-pub fn set_fx_setting(fx: &mut omsi_audio::radio_fx::RadioFxParams, key: &str, v: f32) -> (&'static str, String) {
+pub fn set_fx_setting(
+    fx: &mut omsi_audio::radio_fx::RadioFxParams,
+    key: &str,
+    v: f32,
+) -> (&'static str, String) {
     let (key, at) = fx_setting(fx, key);
     *at = ((v * 100.0).round() / 100.0).clamp(0.0, 1.0);
     (key, at.to_string())
@@ -44,28 +51,47 @@ fn plugin_stations(dir: &std::path::Path) -> Vec<(String, String)> {
     let mut files = Vec::new();
     let mut walk = vec![(dir.to_path_buf(), 0)];
     while let Some((d, depth)) = walk.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
         for e in rd.flatten() {
             let p = e.path();
             if p.is_dir() && depth < 2 {
                 walk.push((p, depth + 1));
-            } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| matches!(x.to_ascii_lowercase().as_str(), "opl" | "cfg" | "ini" | "txt" | "m3u" | "pls")) {
+            } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| {
+                matches!(
+                    x.to_ascii_lowercase().as_str(),
+                    "opl" | "cfg" | "ini" | "txt" | "m3u" | "pls"
+                )
+            }) {
                 files.push(p);
             }
         }
     }
     files.sort();
     for f in files {
-        let Ok(bytes) = std::fs::read(&f) else { continue };
+        let Ok(bytes) = std::fs::read(&f) else {
+            continue;
+        };
         if bytes.len() > 1 << 20 {
             continue;
         }
         let text = String::from_utf8_lossy(&bytes);
         for line in text.lines() {
-            let Some(at) = line.find("http://").or_else(|| line.find("https://")) else { continue };
-            let url: String = line[at..].chars().take_while(|c| !c.is_whitespace() && !matches!(c, '"' | '\'' | ';' | ',' | '|')).collect();
-            let before = line[..at].trim().trim_end_matches(['=', ':', '|', ',', ';', '"', '\'', '\t']).trim();
-            let before = before.trim_start_matches(|c: char| c.is_ascii_digit() || matches!(c, '.' | ')' | '-' | ' '));
+            let Some(at) = line.find("http://").or_else(|| line.find("https://")) else {
+                continue;
+            };
+            let url: String = line[at..]
+                .chars()
+                .take_while(|c| !c.is_whitespace() && !matches!(c, '"' | '\'' | ';' | ',' | '|'))
+                .collect();
+            let before = line[..at]
+                .trim()
+                .trim_end_matches(['=', ':', '|', ',', ';', '"', '\'', '\t'])
+                .trim();
+            let before = before.trim_start_matches(|c: char| {
+                c.is_ascii_digit() || matches!(c, '.' | ')' | '-' | ' ')
+            });
             let name = if before.is_empty() || before.len() > 60 {
                 url.split('/').nth(2).unwrap_or(&url).to_string()
             } else {
@@ -96,7 +122,13 @@ fn parse_frequency(text: &str) -> Option<Frequency> {
         None => (text, None),
     };
     let mhz = mhz.trim().to_ascii_lowercase();
-    let mhz: f32 = mhz.trim_end_matches("mhz").trim().replace(',', ".").parse().ok().filter(|v: &f32| *v > 0.0 && v.is_finite())?;
+    let mhz: f32 = mhz
+        .trim_end_matches("mhz")
+        .trim()
+        .replace(',', ".")
+        .parse()
+        .ok()
+        .filter(|v: &f32| *v > 0.0 && v.is_finite())?;
     let at = match at {
         Some(p) => {
             let (x, y) = p.split_once(',')?;
@@ -104,7 +136,10 @@ fn parse_frequency(text: &str) -> Option<Frequency> {
         }
         None => None,
     };
-    Some(Frequency { mhz: format!("{mhz:.1}"), at })
+    Some(Frequency {
+        mhz: format!("{mhz:.1}"),
+        at,
+    })
 }
 
 /// The frequencies of the stations that name any, by address (lower case).
@@ -115,10 +150,13 @@ type Frequencies = std::collections::HashMap<String, Vec<Frequency>>;
 fn frequency_at(on: &[Frequency], x: f64, y: f64) -> Option<&str> {
     let near = on
         .iter()
-        .filter_map(|f| f.at.map(|(fx, fy)| ((fx - x).powi(2) + (fy - y).powi(2), f)))
+        .filter_map(|f| {
+            f.at.map(|(fx, fy)| ((fx - x).powi(2) + (fy - y).powi(2), f))
+        })
         .min_by(|a, b| a.0.total_cmp(&b.0))
         .map(|(_, f)| f);
-    near.or_else(|| on.iter().find(|f| f.at.is_none())).map(|f| f.mhz.as_str())
+    near.or_else(|| on.iter().find(|f| f.at.is_none()))
+        .map(|f| f.mhz.as_str())
 }
 
 /// What a radio.cfg says: its stations, its volume where one is set, and the frequencies
@@ -132,10 +170,16 @@ fn parse_stations(text: &str) -> (Vec<(String, String)>, Option<f32>, Frequencie
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let Some((name, value)) = line.split_once('=') else { continue };
+        let Some((name, value)) = line.split_once('=') else {
+            continue;
+        };
         let (name, value) = (name.trim(), value.trim());
         if name.eq_ignore_ascii_case("volume") {
-            volume = value.parse::<f32>().ok().map(|v| v.clamp(0.0, 1.0)).or(volume);
+            volume = value
+                .parse::<f32>()
+                .ok()
+                .map(|v| v.clamp(0.0, 1.0))
+                .or(volume);
             continue;
         }
         let mut parts = value.split('|');
@@ -165,7 +209,12 @@ fn with_volume(text: &str, v: f32) -> String {
     let mut out: Vec<String> = text
         .lines()
         .map(|l| {
-            let is_volume = !l.trim_start().starts_with('#') && l.split_once('=').is_some_and(|(n, _)| n.trim().trim_start_matches('\u{feff}').eq_ignore_ascii_case("volume"));
+            let is_volume = !l.trim_start().starts_with('#')
+                && l.split_once('=').is_some_and(|(n, _)| {
+                    n.trim()
+                        .trim_start_matches('\u{feff}')
+                        .eq_ignore_ascii_case("volume")
+                });
             if is_volume && !done {
                 done = true;
                 line.clone()
@@ -186,8 +235,12 @@ fn with_volume(text: &str, v: f32) -> String {
 /// the stations a bus hears where the map plays, and the frequencies they are on there.
 /// Its volume line counts for nothing: how loud the radio is stays the player's business.
 fn map_stations(map_cfg: &std::path::Path) -> (Vec<(String, String)>, Frequencies) {
-    let Some(dir) = map_cfg.parent() else { return Default::default() };
-    let Ok(bytes) = omsi_cfg::vfs::read(&dir.join("radio.cfg")) else { return Default::default() };
+    let Some(dir) = map_cfg.parent() else {
+        return Default::default();
+    };
+    let Ok(bytes) = omsi_cfg::vfs::read(&dir.join("radio.cfg")) else {
+        return Default::default();
+    };
     let (stations, _, frequencies) = parse_stations(&omsi_cfg::codepage::decode(&bytes));
     (stations, frequencies)
 }
@@ -243,7 +296,10 @@ fn radio_point(v: &omsi_sim::VehicleInstance) -> Vec3 {
     let def = &v.ty.def;
     let eye = def
         .cameras_driver
-        .get(def.camera_std.min(def.cameras_driver.len().saturating_sub(1)))
+        .get(
+            def.camera_std
+                .min(def.cameras_driver.len().saturating_sub(1)),
+        )
         .map(|c| Vec3::from(c.pos))
         .unwrap_or(Vec3::new(-0.5, 0.0, 1.8));
     eye + Vec3::new(0.25, 0.5, -0.25)
@@ -268,7 +324,11 @@ const DISPLAY_WIDTH: usize = 10;
 /// letters (its fonts have little else), no `@` (the display's line break).
 fn display_line(name: &str, status: &str) -> String {
     let waiting = status.is_empty() || status.ends_with('…') || status.eq_ignore_ascii_case(name);
-    let text = if waiting { name.to_string() } else { format!("{name} - {status}") };
+    let text = if waiting {
+        name.to_string()
+    } else {
+        format!("{name} - {status}")
+    };
     let mut out = String::new();
     for c in text.chars() {
         let plain: &str = match c {
@@ -326,7 +386,9 @@ fn marquee(text: &str, width: usize, seconds: f32) -> String {
     }
     let round = chars.len() + 3;
     let at = ((seconds - 1.5).max(0.0) * 4.0) as usize % round;
-    (0..width).map(|i| chars.get((at + i) % round).copied().unwrap_or(' ')).collect()
+    (0..width)
+        .map(|i| chars.get((at + i) % round).copied().unwrap_or(' '))
+        .collect()
 }
 
 impl Radio {
@@ -343,7 +405,10 @@ impl Radio {
                 frequencies = on;
             }
             None => {
-                stations = DEFAULT_STATIONS.iter().map(|(n, u)| (n.to_string(), u.to_string())).collect();
+                stations = DEFAULT_STATIONS
+                    .iter()
+                    .map(|(n, u)| (n.to_string(), u.to_string()))
+                    .collect();
                 if let Some(p) = &path {
                     let _ = std::fs::create_dir_all(p.parent().unwrap_or(p));
                     let _ = std::fs::write(p, default_text());
@@ -358,12 +423,27 @@ impl Radio {
             }
         }
         if stations.len() > own {
-            log::info!("radio: {} stations of the OMSI radio plugins added", stations.len() - own);
+            log::info!(
+                "radio: {} stations of the OMSI radio plugins added",
+                stations.len() - own
+            );
         }
         if !stations.is_empty() {
             log::info!("radio: {} stations", stations.len());
         }
-        Radio { stations: stations.clone(), own: stations, frequencies: frequencies.clone(), own_frequencies: frequencies, map: String::new(), relisted: false, volume, offset: 0, power: false, playing: None, fx: Default::default() }
+        Radio {
+            stations: stations.clone(),
+            own: stations,
+            frequencies: frequencies.clone(),
+            own_frequencies: frequencies,
+            map: String::new(),
+            relisted: false,
+            volume,
+            offset: 0,
+            power: false,
+            playing: None,
+            fx: Default::default(),
+        }
     }
 
     /// The frequency the station that plays is on where the bus is (`94.6 MHz`), for a
@@ -373,7 +453,9 @@ impl Radio {
     /// writes.
     pub fn frequency(&self, x: f64, y: f64) -> Option<String> {
         let p = self.playing.as_ref()?;
-        let on = self.frequencies.get(&self.stations.get(p.station)?.1.to_ascii_lowercase())?;
+        let on = self
+            .frequencies
+            .get(&self.stations.get(p.station)?.1.to_ascii_lowercase())?;
         Some(format!("{} MHz", frequency_at(on, x, y)?))
     }
 
@@ -387,7 +469,11 @@ impl Radio {
         self.map = map.to_string();
         let (mut list, on) = map_stations(&omsi_cfg::resolve_path(root, map));
         if !list.is_empty() {
-            log::info!("radio: {} stations of the map, {} with their frequencies", list.len(), on.len());
+            log::info!(
+                "radio: {} stations of the map, {} with their frequencies",
+                list.len(),
+                on.len()
+            );
         }
         self.frequencies = self.own_frequencies.clone();
         self.frequencies.extend(on);
@@ -416,7 +502,9 @@ impl Radio {
         if self.stations.is_empty() {
             return None;
         }
-        let button = Self::bus_button(v).filter(|_| Self::has_radio(v)).or(self.power.then_some(0));
+        let button = Self::bus_button(v)
+            .filter(|_| Self::has_radio(v))
+            .or(self.power.then_some(0));
         button.map(|b| (b + self.offset) % self.stations.len())
     }
 
@@ -441,7 +529,12 @@ impl Radio {
 
     /// Follow the player's bus radio; a text for the screen when the station or its song
     /// changes.
-    pub fn update(&mut self, audio: &AudioEngine, v: &omsi_sim::VehicleInstance, inside: bool) -> Option<String> {
+    pub fn update(
+        &mut self,
+        audio: &AudioEngine,
+        v: &omsi_sim::VehicleInstance,
+        inside: bool,
+    ) -> Option<String> {
         let wanted = self.wanted(v);
         // (another map's list: the same button is another station now)
         if std::mem::take(&mut self.relisted) {
@@ -453,13 +546,30 @@ impl Radio {
                 let (name, url) = &self.stations[station];
                 log::info!("radio: station {} {name} ({url})", station + 1);
                 let buf = omsi_audio::radio::open(url);
-                let voice = audio.play_stream(buf.clone(), VoiceParams { gain: 0.0, ..Default::default() });
-                self.playing = Some(Playing { station, buf, voice, shown: String::new(), line: (String::new(), std::time::Instant::now()), heard_at: None, fx: Default::default() });
+                let voice = audio.play_stream(
+                    buf.clone(),
+                    VoiceParams {
+                        gain: 0.0,
+                        ..Default::default()
+                    },
+                );
+                self.playing = Some(Playing {
+                    station,
+                    buf,
+                    voice,
+                    shown: String::new(),
+                    line: (String::new(), std::time::Instant::now()),
+                    heard_at: None,
+                    fx: Default::default(),
+                });
             }
         }
         let p = self.playing.as_mut()?;
         // the volume knob, where the radio has one (0..1, some go to 2)
-        let knob = v.var("SndVol_Radio").map(|x| x.clamp(0.0, 2.0)).unwrap_or(1.0);
+        let knob = v
+            .var("SndVol_Radio")
+            .map(|x| x.clamp(0.0, 2.0))
+            .unwrap_or(1.0);
         let gain = self.volume * knob;
         let params = if inside {
             // from the driver's corner of the cab, half as far as it is, and following the
@@ -468,14 +578,30 @@ impl Radio {
             let ear = audio.listener_position();
             let want = radio_point(v) - xf.inverse().transform_point3(ear);
             let now = std::time::Instant::now();
-            let rel = cab_place(p.heard_at.map(|h| h.0), want, p.heard_at.map_or(0.0, |h| (now - h.1).as_secs_f32()));
+            let rel = cab_place(
+                p.heard_at.map(|h| h.0),
+                want,
+                p.heard_at.map_or(0.0, |h| (now - h.1).as_secs_f32()),
+            );
             p.heard_at = Some((rel, now));
-            VoiceParams { gain, position: Some(ear + xf.transform_vector3(rel)), range: 3.0, doppler: false, ..Default::default() }
+            VoiceParams {
+                gain,
+                position: Some(ear + xf.transform_vector3(rel)),
+                range: 3.0,
+                doppler: false,
+                ..Default::default()
+            }
         } else {
             // heard through the bodywork from outside
             p.heard_at = None;
             let pos = v.position.as_vec3() + Vec3::Z * 1.5;
-            VoiceParams { gain, position: Some(pos), range: 4.0, lowpass_hz: 700.0, ..Default::default() }
+            VoiceParams {
+                gain,
+                position: Some(pos),
+                range: 4.0,
+                lowpass_hz: 700.0,
+                ..Default::default()
+            }
         };
         audio.set_params(p.voice, params);
         if p.fx != self.fx {
@@ -485,7 +611,11 @@ impl Radio {
         let status = p.buf.status();
         if status != p.shown && !status.is_empty() && status != "connecting …" {
             p.shown = status.clone();
-            let line = format!("Radio {} plays {} ({status})", p.station + 1, self.stations[p.station].0);
+            let line = format!(
+                "Radio {} plays {} ({status})",
+                p.station + 1,
+                self.stations[p.station].0
+            );
             log::info!("{line}");
             return Some(line);
         }
@@ -499,12 +629,18 @@ impl Radio {
         if self.stations.is_empty() {
             return None;
         }
-        let Some(p) = self.playing.as_mut() else { return Some(String::new()) };
+        let Some(p) = self.playing.as_mut() else {
+            return Some(String::new());
+        };
         let line = display_line(&self.stations[p.station].0, &p.buf.status());
         if p.line.0 != line {
             p.line = (line, std::time::Instant::now());
         }
-        Some(marquee(&p.line.0, DISPLAY_WIDTH, p.line.1.elapsed().as_secs_f32()))
+        Some(marquee(
+            &p.line.0,
+            DISPLAY_WIDTH,
+            p.line.1.elapsed().as_secs_f32(),
+        ))
     }
 
     pub fn volume(&self) -> f32 {
@@ -515,9 +651,18 @@ impl Radio {
     /// (as it gives it, else as the list has it) and the title it gives; both empty while
     /// the radio is off.
     pub fn now_playing(&self) -> (String, String) {
-        let Some(p) = self.playing.as_ref() else { return Default::default() };
+        let Some(p) = self.playing.as_ref() else {
+            return Default::default();
+        };
         let name = p.buf.station_name();
-        let name = if name.is_empty() { self.stations.get(p.station).map(|s| s.0.clone()).unwrap_or_default() } else { name };
+        let name = if name.is_empty() {
+            self.stations
+                .get(p.station)
+                .map(|s| s.0.clone())
+                .unwrap_or_default()
+        } else {
+            name
+        };
         (name, p.buf.title())
     }
 
@@ -559,7 +704,10 @@ impl Radio {
         if let Some(path) = config_path() {
             let text = std::fs::read_to_string(&path).unwrap_or_else(|_| default_text());
             if let Err(e) = std::fs::write(&path, with_volume(&text, self.volume)) {
-                log::warn!("radio: the volume could not be kept in {}: {e}", path.display());
+                log::warn!(
+                    "radio: the volume could not be kept in {}: {e}",
+                    path.display()
+                );
             }
         }
         format!("Radio volume {:.0} %", self.volume * 100.0)
@@ -574,7 +722,9 @@ impl Radio {
 }
 
 fn switches_radio(p: &omsi_script::Program) -> bool {
-    ["SndExt_Radio", "Snd_Radio"].iter().any(|n| p.var(n).is_some_and(|id| p.stores(id)))
+    ["SndExt_Radio", "Snd_Radio"]
+        .iter()
+        .any(|n| p.var(n).is_some_and(|id| p.stores(id)))
 }
 
 #[cfg(test)]
@@ -589,11 +739,24 @@ mod tests {
         let program = |name: &str, text: &str| {
             let f = dir.join(name);
             std::fs::write(&f, text).unwrap();
-            omsi_script::compile(&omsi_script::CompileInput { builtin_vars: vec!["Snd_Radio".into(), "SndExt_Radio".into()], scripts: vec![f], ..Default::default() })
+            omsi_script::compile(&omsi_script::CompileInput {
+                builtin_vars: vec!["Snd_Radio".into(), "SndExt_Radio".into()],
+                scripts: vec![f],
+                ..Default::default()
+            })
         };
-        let stored = program("plain.osc", "{frame}\n(L.L.Snd_Radio) (S.L.Snd_Radio)\n{end}\n");
-        let silent = program("silent.osc", "{frame}\n(L.L.Snd_Radio) 1 + (S.L.Throttle)\n{end}\n");
-        let radio = program("radio.osc", "{trigger:radio_on}\n1 (S.L.SndExt_Radio)\n{end}\n");
+        let stored = program(
+            "plain.osc",
+            "{frame}\n(L.L.Snd_Radio) (S.L.Snd_Radio)\n{end}\n",
+        );
+        let silent = program(
+            "silent.osc",
+            "{frame}\n(L.L.Snd_Radio) 1 + (S.L.Throttle)\n{end}\n",
+        );
+        let radio = program(
+            "radio.osc",
+            "{trigger:radio_on}\n1 (S.L.SndExt_Radio)\n{end}\n",
+        );
         std::fs::remove_dir_all(&dir).ok();
         assert!(switches_radio(&stored));
         assert!(!switches_radio(&silent));
@@ -603,12 +766,27 @@ mod tests {
     #[test]
     fn the_radio_switches_on_by_itself_in_a_bus_without_one() {
         let one = vec![("One".to_string(), "https://a.example/one.mp3".to_string())];
-        let mut r = Radio { stations: one.clone(), own: one, frequencies: Frequencies::new(), own_frequencies: Frequencies::new(), map: String::new(), relisted: false, volume: 0.7, offset: 0, power: false, playing: None, fx: Default::default() };
+        let mut r = Radio {
+            stations: one.clone(),
+            own: one,
+            frequencies: Frequencies::new(),
+            own_frequencies: Frequencies::new(),
+            map: String::new(),
+            relisted: false,
+            volume: 0.7,
+            offset: 0,
+            power: false,
+            playing: None,
+            fx: Default::default(),
+        };
         assert_eq!(r.toggle_power(None), "Radio 1 plays One");
         assert!(r.power);
         assert_eq!(r.toggle_power(None), "Radio off");
         r.stations.clear();
-        assert_eq!(r.toggle_power(None), "No radio stations (see ~/.openomsi/radio.cfg)");
+        assert_eq!(
+            r.toggle_power(None),
+            "No radio stations (see ~/.openomsi/radio.cfg)"
+        );
         assert!(!r.power);
     }
 
@@ -620,7 +798,10 @@ mod tests {
         assert_eq!(step_volume(1.0, true), 1.0);
         assert_eq!(step_volume(0.05, false), 0.0);
         let text = "# mine\nvolume = 0.4\nOne = https://a.example/one.mp3\n";
-        assert_eq!(with_volume(text, 0.5), "# mine\nvolume = 0.5\nOne = https://a.example/one.mp3\n");
+        assert_eq!(
+            with_volume(text, 0.5),
+            "# mine\nvolume = 0.5\nOne = https://a.example/one.mp3\n"
+        );
         assert_eq!(with_volume("One = x\n", 0.3), "volume = 0.3\nOne = x\n");
         assert_eq!(parse_stations(&with_volume(text, 0.9)).1, Some(0.9));
     }
@@ -629,17 +810,42 @@ mod tests {
     fn a_station_list_edited_keeps_the_files_comments_volume_and_frequencies() {
         let text = "# my stations\nvolume = 0.4\nOne = https://a.example/one.mp3 | 94.6 @ 100, 200\n# a note\nTwo = https://b.example/two\n";
         let list = station_lines(text);
-        assert_eq!(list, vec![("One".to_string(), "https://a.example/one.mp3 | 94.6 @ 100, 200".to_string()), ("Two".to_string(), "https://b.example/two".to_string())]);
+        assert_eq!(
+            list,
+            vec![
+                (
+                    "One".to_string(),
+                    "https://a.example/one.mp3 | 94.6 @ 100, 200".to_string()
+                ),
+                ("Two".to_string(), "https://b.example/two".to_string())
+            ]
+        );
         // the second removed, two added (one of them still without an address)
-        let edited = vec![list[0].clone(), ("#Jazz = FM".to_string(), "https://c.example/jazz.m3u".to_string()), ("Later".to_string(), String::new())];
+        let edited = vec![
+            list[0].clone(),
+            (
+                "#Jazz = FM".to_string(),
+                "https://c.example/jazz.m3u".to_string(),
+            ),
+            ("Later".to_string(), String::new()),
+        ];
         let out = with_stations(text, &edited);
-        assert_eq!(out, "# my stations\nvolume = 0.4\nOne = https://a.example/one.mp3 | 94.6 @ 100, 200\nJazz   FM = https://c.example/jazz.m3u\n# a note\n");
+        assert_eq!(
+            out,
+            "# my stations\nvolume = 0.4\nOne = https://a.example/one.mp3 | 94.6 @ 100, 200\nJazz   FM = https://c.example/jazz.m3u\n# a note\n"
+        );
         let (stations, volume, frequencies) = parse_stations(&out);
-        assert_eq!(stations.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), ["One", "Jazz   FM"]);
+        assert_eq!(
+            stations.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(),
+            ["One", "Jazz   FM"]
+        );
         assert_eq!(volume, Some(0.4));
         assert_eq!(frequencies.len(), 1);
         // a file without stations gets them after what it has
-        assert_eq!(with_stations("volume = 1\n", &edited[..1]), "volume = 1\nOne = https://a.example/one.mp3 | 94.6 @ 100, 200\n");
+        assert_eq!(
+            with_stations("volume = 1\n", &edited[..1]),
+            "volume = 1\nOne = https://a.example/one.mp3 | 94.6 @ 100, 200\n"
+        );
         assert_eq!(station_lines(&default_text()).len(), DEFAULT_STATIONS.len());
     }
 
@@ -648,7 +854,10 @@ mod tests {
         assert_eq!(display_line("Evropa 2", ""), "Evropa 2");
         assert_eq!(display_line("Evropa 2", "buffering …"), "Evropa 2");
         assert_eq!(display_line("Evropa 2", "evropa 2"), "Evropa 2");
-        assert_eq!(display_line("Český rozhlas", "Dvořák – Žalm č. 23"), "Cesky rozhlas - Dvorak - Zalm c. 23");
+        assert_eq!(
+            display_line("Český rozhlas", "Dvořák – Žalm č. 23"),
+            "Cesky rozhlas - Dvorak - Zalm c. 23"
+        );
         assert_eq!(display_line("me@radio", "Наше Радио"), "me radio -");
     }
 
@@ -658,15 +867,36 @@ mod tests {
         let map = dir.join("maps").join("Mesto");
         std::fs::create_dir_all(&map).unwrap();
         std::fs::write(map.join("radio.cfg"), "# the town's stations\nvolume = 0.1\nMestske radio = http://example.org/mesto.mp3\nSecond = http://example.org/own.mp3\n").unwrap();
-        let own = vec![("Mine".to_string(), "http://example.org/mine.mp3".to_string()), ("Own".to_string(), "http://EXAMPLE.org/own.mp3".to_string())];
-        let mut r = Radio { stations: own.clone(), own, frequencies: Default::default(), own_frequencies: Default::default(), map: String::new(), relisted: false, volume: 0.7, offset: 2, power: false, playing: None, fx: Default::default() };
+        let own = vec![
+            (
+                "Mine".to_string(),
+                "http://example.org/mine.mp3".to_string(),
+            ),
+            ("Own".to_string(), "http://EXAMPLE.org/own.mp3".to_string()),
+        ];
+        let mut r = Radio {
+            stations: own.clone(),
+            own,
+            frequencies: Default::default(),
+            own_frequencies: Default::default(),
+            map: String::new(),
+            relisted: false,
+            volume: 0.7,
+            offset: 2,
+            power: false,
+            playing: None,
+            fx: Default::default(),
+        };
         r.set_map(&dir, "maps/Mesto/global.cfg");
         let names: Vec<&str> = r.stations.iter().map(|s| s.0.as_str()).collect();
         assert_eq!(names, ["Mestske radio", "Second", "Mine"]);
         assert_eq!((r.volume, r.offset, r.relisted), (0.7, 0, true));
         // a map without a radio.cfg: the player's own again
         r.set_map(&dir, "maps/Jinde/global.cfg");
-        assert_eq!(r.stations.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), ["Mine", "Own"]);
+        assert_eq!(
+            r.stations.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(),
+            ["Mine", "Own"]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -675,15 +905,53 @@ mod tests {
         let (stations, volume, on) = parse_stations(
             "volume = 0.5\nZurnal = http://example.org/Z.mp3 | 94.6 @ 25400, 990 | 90.9 MHz @ 2300,-720\nKiss = http://example.org/k.mp3 | 98,1\nPlain = http://example.org/p.mp3\nBad = http://example.org/b.mp3 | here @ 1,2 | 0\n",
         );
-        assert_eq!(stations.iter().map(|s| s.1.as_str()).collect::<Vec<_>>(), ["http://example.org/Z.mp3", "http://example.org/k.mp3", "http://example.org/p.mp3", "http://example.org/b.mp3"]);
+        assert_eq!(
+            stations.iter().map(|s| s.1.as_str()).collect::<Vec<_>>(),
+            [
+                "http://example.org/Z.mp3",
+                "http://example.org/k.mp3",
+                "http://example.org/p.mp3",
+                "http://example.org/b.mp3"
+            ]
+        );
         assert_eq!(volume, Some(0.5));
-        assert_eq!(on["http://example.org/z.mp3"], [Frequency { mhz: "94.6".into(), at: Some((25400.0, 990.0)) }, Frequency { mhz: "90.9".into(), at: Some((2300.0, -720.0)) }]);
-        assert_eq!(on["http://example.org/k.mp3"], [Frequency { mhz: "98.1".into(), at: None }]);
-        assert!(!on.contains_key("http://example.org/p.mp3") && !on.contains_key("http://example.org/b.mp3"));
+        assert_eq!(
+            on["http://example.org/z.mp3"],
+            [
+                Frequency {
+                    mhz: "94.6".into(),
+                    at: Some((25400.0, 990.0))
+                },
+                Frequency {
+                    mhz: "90.9".into(),
+                    at: Some((2300.0, -720.0))
+                }
+            ]
+        );
+        assert_eq!(
+            on["http://example.org/k.mp3"],
+            [Frequency {
+                mhz: "98.1".into(),
+                at: None
+            }]
+        );
+        assert!(
+            !on.contains_key("http://example.org/p.mp3")
+                && !on.contains_key("http://example.org/b.mp3")
+        );
         // the nearest place counts
-        assert_eq!(frequency_at(&on["http://example.org/z.mp3"], 24000.0, 0.0), Some("94.6"));
-        assert_eq!(frequency_at(&on["http://example.org/z.mp3"], 5000.0, 0.0), Some("90.9"));
-        assert_eq!(frequency_at(&on["http://example.org/k.mp3"], 5000.0, 0.0), Some("98.1"));
+        assert_eq!(
+            frequency_at(&on["http://example.org/z.mp3"], 24000.0, 0.0),
+            Some("94.6")
+        );
+        assert_eq!(
+            frequency_at(&on["http://example.org/z.mp3"], 5000.0, 0.0),
+            Some("90.9")
+        );
+        assert_eq!(
+            frequency_at(&on["http://example.org/k.mp3"], 5000.0, 0.0),
+            Some("98.1")
+        );
     }
 
     #[test]

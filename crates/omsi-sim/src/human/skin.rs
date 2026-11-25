@@ -57,15 +57,23 @@ pub fn skin(
 /// and normals per mesh, for [`skin_from`].
 pub fn curl_hands(ty: &HumanType, radius: f32) -> Vec<(Vec<Vec3>, Vec<Vec3>)> {
     let rig = &ty.rig;
-    let hand_len = (ty.joints.finger - ty.joints.hand).length().clamp(0.12, 0.3);
-    let mut out: Vec<(Vec<Vec3>, Vec<Vec3>)> = ty.meshes.iter().map(|m| (m.data.positions.clone(), m.data.normals.clone())).collect();
+    let hand_len = (ty.joints.finger - ty.joints.hand)
+        .length()
+        .clamp(0.12, 0.3);
+    let mut out: Vec<(Vec<Vec3>, Vec<Vec3>)> = ty
+        .meshes
+        .iter()
+        .map(|m| (m.data.positions.clone(), m.data.normals.clone()))
+        .collect();
     for side in 0..2 {
         let slot = HAND[side] as u8;
         let w = rig.wrist[side];
         let u = (rig.wrist[side] - rig.elbow[side]).normalize_or(Vec3::X * SIDE[side]);
         let p = -Vec3::Z;
         let kd = hand_len * 0.58;
-        let owned = |inf: &Influence| (0..inf.n as usize).any(|k| inf.slot[k] == slot && inf.weight[k] > 0.5);
+        let owned = |inf: &Influence| {
+            (0..inf.n as usize).any(|k| inf.slot[k] == slot && inf.weight[k] > 0.5)
+        };
         // the fingers' middle plane: their average height
         let (mut zs, mut n) = (0.0f32, 0.0f32);
         for m in &ty.meshes {
@@ -115,11 +123,15 @@ pub fn curl_hands(ty: &HumanType, radius: f32) -> Vec<(Vec<Vec3>, Vec<Vec3>)> {
                 let s = rel.dot(u);
                 let h = rel.dot(p);
                 let c = rel.dot(axis) * side_sign;
-                let thumb = smoothstep(thumb_root, thumb_root + 0.02 * scale, c) * (1.0 - smoothstep(-0.005 * scale, 0.012 * scale, s));
+                let thumb = smoothstep(thumb_root, thumb_root + 0.02 * scale, c)
+                    * (1.0 - smoothstep(-0.005 * scale, 0.012 * scale, s));
                 if thumb > 0.0 {
                     let t = (THUMB_TURN * thumb).to_radians();
                     let (dc, dh) = (c - thumb_root, h);
-                    let (c2, h2) = (thumb_root + dc * t.cos() - dh * t.sin(), dc * t.sin() + dh * t.cos());
+                    let (c2, h2) = (
+                        thumb_root + dc * t.cos() - dh * t.sin(),
+                        dc * t.sin() + dh * t.cos(),
+                    );
                     out[k].0[i] = knuckle + u * s + p * h2 + axis * (c2 * side_sign);
                     // (axis = u x p: a turn about u takes axis towards -p)
                     out[k].1[i] = Quat::from_axis_angle(u, -t * side_sign) * m.data.normals[i];
@@ -135,7 +147,8 @@ pub fn curl_hands(ty: &HumanType, radius: f32) -> Vec<(Vec<Vec3>, Vec<Vec3>)> {
                 let extra = (s - MAX_TURN * radius).max(0.0);
                 let r = (radius - h).max(0.003);
                 let tangent = u * phi.cos() + p * phi.sin();
-                out[k].0[i] = centre - p * (r * phi.cos()) + u * (r * phi.sin()) + tangent * extra + across;
+                out[k].0[i] =
+                    centre - p * (r * phi.cos()) + u * (r * phi.sin()) + tangent * extra + across;
                 out[k].1[i] = Quat::from_axis_angle(axis, phi) * m.data.normals[i];
             }
         }
@@ -147,13 +160,17 @@ pub fn curl_hands(ty: &HumanType, radius: f32) -> Vec<(Vec<Vec3>, Vec<Vec3>)> {
 /// centre in the rest frame (left, right), for a caller that wants the bar exactly there.
 pub fn grip_centres(ty: &HumanType, radius: f32) -> [Option<Vec3>; 2] {
     let rig = &ty.rig;
-    let hand_len = (ty.joints.finger - ty.joints.hand).length().clamp(0.12, 0.3);
+    let hand_len = (ty.joints.finger - ty.joints.hand)
+        .length()
+        .clamp(0.12, 0.3);
     [0, 1].map(|side| {
         let slot = HAND[side] as u8;
         let w = rig.wrist[side];
         let u = (rig.wrist[side] - rig.elbow[side]).normalize_or(Vec3::X * SIDE[side]);
         let kd = hand_len * 0.58;
-        let owned = |inf: &Influence| (0..inf.n as usize).any(|k| inf.slot[k] == slot && inf.weight[k] > 0.5);
+        let owned = |inf: &Influence| {
+            (0..inf.n as usize).any(|k| inf.slot[k] == slot && inf.weight[k] > 0.5)
+        };
         let (mut zs, mut n) = (0.0f32, 0.0f32);
         for m in &ty.meshes {
             for (i, inf) in m.skin.iter().enumerate() {

@@ -6,7 +6,10 @@ use super::*;
 impl PeopleSim {
     pub fn clear_waiting(&mut self) -> usize {
         let waiting = |p: &Person| {
-            p.puppet.is_none() && !p.remote && matches!(p.place, Place::Ground) && matches!(&p.state, State::Pax(x) if x.inside.is_none() && x.bus.is_none() && matches!(x.task, Task::WaitingForBus | Task::WalkingToBusstop))
+            p.puppet.is_none()
+                && !p.remote
+                && matches!(p.place, Place::Ground)
+                && matches!(&p.state, State::Pax(x) if x.inside.is_none() && x.bus.is_none() && matches!(x.task, Task::WaitingForBus | Task::WalkingToBusstop))
         };
         let mut gone = 0;
         for i in (0..self.people.len()).rev() {
@@ -22,17 +25,15 @@ impl PeopleSim {
 
     /// Put people at the bus stops near `center`: at the start everywhere, later only at
     /// stops out of sight (the others fill with people walking up).
-    pub fn populate(
-        &mut self,
-        world: &dyn World,
-        center: DVec3,
-    ) {
+    pub fn populate(&mut self, world: &dyn World, center: DVec3) {
         if self.avatar_only {
             return;
         }
         // whoever stands under the surface there (its tile's pavements and roads came
         // after them), or anyone standing still off it: onto it
-        let waiting: Vec<bool> = (0..self.people.len()).map(|i| self.waiting_height(i).is_some()).collect();
+        let waiting: Vec<bool> = (0..self.people.len())
+            .map(|i| self.waiting_height(i).is_some())
+            .collect();
         for (p, waiting) in self.people.iter_mut().zip(waiting) {
             if matches!(p.place, Place::Ground) && !waiting {
                 if let Some(z) = world.walk_height_near(p.position.x, p.position.y, p.position.z) {
@@ -47,19 +48,16 @@ impl PeopleSim {
         self.populate_with(world, None, center);
     }
 
-    pub fn populate_with(
-        &mut self,
-        world: &dyn World,
-        net: Option<&Network>,
-        center: DVec3,
-    ) {
+    pub fn populate_with(&mut self, world: &dyn World, net: Option<&Network>, center: DVec3) {
         self.center = center;
         // (the stops set up already are passed over before anything is asked of the ground
         // or copied: once the map round the player is up, every call came here for none)
         let list: Vec<(i64, DVec3, f64, String)> = world
             .bus_stops()
             .iter()
-            .filter(|s| !self.stops.contains_key(&s.0) && (s.1 - center).length() < STOP_RANGE + 100.0)
+            .filter(|s| {
+                !self.stops.contains_key(&s.0) && (s.1 - center).length() < STOP_RANGE + 100.0
+            })
             .map(|s| (s.0, s.1, s.2, s.3.clone()))
             .collect();
         for (id, pos, rot, name) in list {
@@ -77,18 +75,31 @@ impl PeopleSim {
     /// places are the `[passpos]` of every object near it - within 10 m to the platform's
     /// side and from 10 m behind to the stop's length ahead of it -, the gather point a
     /// metre to the kerb and a metre ahead, the destinations of the trips leaving it.
-    pub fn build_pax_stop(&mut self, world: &dyn World, net: Option<&Network>, id: i64, pos: DVec3, heading: f64, name: &str) -> PaxStop {
+    pub fn build_pax_stop(
+        &mut self,
+        world: &dyn World,
+        net: Option<&Network>,
+        id: i64,
+        pos: DVec3,
+        heading: f64,
+        name: &str,
+    ) -> PaxStop {
         let length = world.stop_length(id);
         let side = world.stop_side(id).round().clamp(0.0, 255.0) as u8;
         let left = LEFT_HAND.load(std::sync::atomic::Ordering::Relaxed);
-        let (xmax, xmin) = (if (side == 1) != left { 0.0 } else { 10.0 }, if (side == 0) != left { 0.0 } else { -10.0 });
+        let (xmax, xmin) = (
+            if (side == 1) != left { 0.0 } else { 10.0 },
+            if (side == 0) != left { 0.0 } else { -10.0 },
+        );
         let h = heading.to_radians();
         let objects = world.object_positions();
         let mut spots: Vec<WaitSpot> = Vec::new();
         for (obj, p, face, height) in world.waiting_places().iter() {
             let Some((opos, _)) = objects.get(obj) else {
                 if debug_pax() && (*p - pos).length() < 30.0 {
-                    log::info!("stop {id}: waiting place of object {obj} at {p:?}: object position unknown");
+                    log::info!(
+                        "stop {id}: waiting place of object {obj} at {p:?}: object position unknown"
+                    );
                 }
                 continue;
             };
@@ -103,24 +114,40 @@ impl PeopleSim {
             // (0x7efb08 with -heading: in the stop's frame)
             let lat = h.cos() * v.x - h.sin() * v.y;
             let along = h.cos() * v.y + h.sin() * v.x;
-            if !(-along < 10.0 && -along > -(length as f64).max(10.0) && -lat < xmax && -lat > xmin) {
+            if !(-along < 10.0 && -along > -(length as f64).max(10.0) && -lat < xmax && -lat > xmin)
+            {
                 if debug_pax() && v.length() < 30.0 {
-                    log::info!("stop {id}: object {obj} (waiting place {p:?}) not the stop's: across {:.1}, along {:.1}", -lat, -along);
+                    log::info!(
+                        "stop {id}: object {obj} (waiting place {p:?}) not the stop's: across {:.1}, along {:.1}",
+                        -lat,
+                        -along
+                    );
                 }
                 continue;
             }
-            spots.push(WaitSpot { pos: *p, face: *face, height: *height });
+            spots.push(WaitSpot {
+                pos: *p,
+                face: *face,
+                height: *height,
+            });
         }
         // the gather point (+0x48): (1, 0, 1) or (-1, 0, 1) through the stop's turn
         let x = if (side == 1) == left { 1.0 } else { -1.0 };
         let (fwd, right) = (DVec2::new(h.sin(), h.cos()), DVec2::new(h.cos(), -h.sin()));
         let g = pos.truncate() + right * x + fwd * 1.0;
         let gather = DVec3::new(g.x, g.y, pos.z);
-        let lane = net.and_then(|n| self.ped.as_ref().and_then(|pn| pn.nearest(n, pos, 12.0))).map(|(l, s, _)| (l, s));
+        let lane = net
+            .and_then(|n| self.ped.as_ref().and_then(|pn| pn.nearest(n, pos, 12.0)))
+            .map(|(l, s, _)| (l, s));
         let (enter_max, enter_min) = world.stop_enter(id);
         // the destinations: the stops the trips from here go on to, as likely as people
         // get off there; each with the termini of the buses that go there
-        let lines: Vec<(String, HashSet<String>)> = self.stop_targets.as_ref().and_then(|m| m.get(&id)).cloned().unwrap_or_default();
+        let lines: Vec<(String, HashSet<String>)> = self
+            .stop_targets
+            .as_ref()
+            .and_then(|m| m.get(&id))
+            .cloned()
+            .unwrap_or_default();
         // (the weight of the stations the trips from here reach - by their objects, as
         // Omsi.exe takes it from the trip's station record. Looked up by the label among the
         // stops placed so far, every stop on a tile not loaded yet - and every one whose
@@ -132,20 +159,46 @@ impl PeopleSim {
             .map(|(n, _)| {
                 let objects = targets.and_then(|t| t.get(n)).filter(|o| !o.is_empty());
                 match objects {
-                    Some(o) => o.iter().map(|k| world.stop_exit_weight(*k)).fold(0.0, f32::max),
-                    None => world.bus_stops().iter().find(|s| s.3.trim() == n.trim()).map(|s| world.stop_exit_weight(s.0)).unwrap_or(0.5),
+                    Some(o) => o
+                        .iter()
+                        .map(|k| world.stop_exit_weight(*k))
+                        .fold(0.0, f32::max),
+                    None => world
+                        .bus_stops()
+                        .iter()
+                        .find(|s| s.3.trim() == n.trim())
+                        .map(|s| world.stop_exit_weight(s.0))
+                        .unwrap_or(0.5),
                 }
             })
             .collect();
         let total: f32 = weights.iter().sum();
         let dests: Vec<(String, f32)> = if total > 0.0 {
-            lines.iter().zip(&weights).map(|((n, _), w)| (n.clone(), w / total)).collect()
+            lines
+                .iter()
+                .zip(&weights)
+                .map(|((n, _), w)| (n.clone(), w / total))
+                .collect()
         } else {
             Vec::new()
         };
         if debug_pax() {
-            log::info!("stop {id} '{name}' at ({:.1}, {:.1}, {:.2}) heading {heading:.0}: {} waiting places, length {length}, side {side}, {} destinations", pos.x, pos.y, pos.z, spots.len(), dests.len());
-            log::info!("stop {id}: exit weights {:?}", lines.iter().zip(&weights).map(|((n, _), w)| format!("{n}={w}")).collect::<Vec<_>>());
+            log::info!(
+                "stop {id} '{name}' at ({:.1}, {:.1}, {:.2}) heading {heading:.0}: {} waiting places, length {length}, side {side}, {} destinations",
+                pos.x,
+                pos.y,
+                pos.z,
+                spots.len(),
+                dests.len()
+            );
+            log::info!(
+                "stop {id}: exit weights {:?}",
+                lines
+                    .iter()
+                    .zip(&weights)
+                    .map(|((n, _), w)| format!("{n}={w}"))
+                    .collect::<Vec<_>>()
+            );
         }
         let n = spots.len();
         // what the timetable calls it - its id when the timetable does not know it, as the
@@ -179,10 +232,15 @@ impl PeopleSim {
     }
 
     /// The stops near the player fill with people (sub_61bf94, every frame): a stop coming
-    /// into range gets its people at once, one in range another one every 10..15 s while
-    /// it has fewer than it should - its pass_enter mean times its own random factor
-    /// times the passenger density, at most one per waiting place. A stop going out of
-    /// range loses the people waiting there.
+    /// into range gets its people at once - its pass_enter mean times its own random factor
+    /// times the passenger density (times the share its due trips ask for), at most one per
+    /// waiting place. One in range that has fewer than that 10..15 s after it last had them
+    /// all gets one more each frame until it has (0x61bd44 adds one, and only a stop at its
+    /// number starts its clock again). The people who boarded a bus still count for the stop
+    /// while that bus is within 60 m (0x62d75b), and once it has left the stop its trip asks
+    /// for nobody there any more (0x61a068, `DueTrips`): the stop does not fill again for the
+    /// bus standing at it, nor for the one that has just left. A stop going out of range
+    /// loses the people waiting there.
     pub fn stops_tick(&mut self, dt: f32, world: &dyn World) {
         if self.mirror || self.avatar_only {
             return;
@@ -195,8 +253,12 @@ impl PeopleSim {
         if !self.handed.is_empty() {
             let (stops, remote) = (&self.stops, &self.remote_now);
             self.handed.retain(|(stop, bus)| {
-                let Some(s) = stops.get(stop) else { return false };
-                remote.iter().any(|b| b.id == BusId::Ai(*bus) && (b.pos - s.pos).length() < 60.0)
+                let Some(s) = stops.get(stop) else {
+                    return false;
+                };
+                remote
+                    .iter()
+                    .any(|b| b.id == BusId::Ai(*bus) && (b.pos - s.pos).length() < 60.0)
             });
         }
         // who belongs to each stop, counted once for all of them (a person counted per stop
@@ -255,15 +317,41 @@ impl PeopleSim {
                 s.factor = (r * 2.0 - 1.0) * k + 1.0;
             }
             let count = counts.get(&id).copied().unwrap_or(0);
-            debug_assert_eq!(count, self.people.iter().filter(|p| matches!(&p.state, State::Pax(x) if x.stop == Some(id))).count() + self.handed.iter().filter(|h| h.0 == id).count());
+            debug_assert_eq!(
+                count,
+                self.people
+                    .iter()
+                    .filter(|p| matches!(&p.state, State::Pax(x) if x.stop == Some(id)))
+                    .count()
+                    + self.handed.iter().filter(|h| h.0 == id).count()
+            );
             let want = {
                 let s = &self.stops[&id];
                 let mean = (s.enter_max + s.enter_min) / 2.0;
                 // (0x61bf94: with a timetable, times the share of the trips due there - at a
                 // stop no trip leaves from, nobody)
-                let none_due = self.due_dests.as_ref().is_some_and(|d| d.get(&id).is_none_or(|set| set.is_empty()));
-                let served = if self.stop_targets.is_some() && (s.lines.is_empty() || none_due) { 0.0 } else { 1.0 };
-                let w = (self.density.max(0.0) * mean * s.factor * served).round().max(0.0) as usize;
+                let none_due = self
+                    .due_dests
+                    .as_ref()
+                    .is_some_and(|d| d.get(&id).is_none_or(|set| set.is_empty()));
+                // (in free drive the stops fill by their own numbers: nobody is working the
+                // timetable, so nothing is "due" anywhere, #2712)
+                let free = self.free_drive_fill.fills(self.duty.is_some());
+                let served = super::free_drive::stop_served(
+                    self.stop_targets.is_some(),
+                    free,
+                    !s.lines.is_empty(),
+                    !none_due,
+                );
+                // (0x61bf94 times the share its trips ask for now, 0x61a068: rising as the
+                // next bus draws near, #3506; free drive fills by the stop's own numbers)
+                let share = match &self.due_dests {
+                    Some(d) if self.stop_targets.is_some() && !free => d.share_of(id),
+                    _ => 1.0,
+                };
+                let w = (self.density.max(0.0) * mean * s.factor * served * share)
+                    .round()
+                    .max(0.0) as usize;
                 forced.unwrap_or(w).min(s.spots.len())
             };
             let s = self.stops.get_mut(&id).unwrap();
@@ -285,7 +373,9 @@ impl PeopleSim {
                     break;
                 }
             }
-            if count >= want || !changed {
+            // (0x61bf94: the clock starts again only at exactly the stop's number - short of
+            // it, the next frame adds another one)
+            if count == want {
                 self.stops.get_mut(&id).unwrap().clock_ms = 0.0;
             }
         }
@@ -296,12 +386,24 @@ impl PeopleSim {
     pub fn draw_dest(&mut self, id: i64) -> (Option<String>, Option<usize>) {
         let mut r = self.rand_f() as f32;
         let mut dest: Option<String> = None;
-        let Some(stop) = self.stops.get(&id) else { return (None, None) };
+        let Some(stop) = self.stops.get(&id) else {
+            return (None, None);
+        };
         // (of the trips due here soon, `due_dests`; their weights made a whole again)
-        let due = self.due_dests.as_ref().map(|d| d.get(&id));
+        let free = self.free_drive_fill.fills(self.duty.is_some());
+        let due = if free {
+            None
+        } else {
+            self.due_dests.as_ref().map(|d| d.get(&id))
+        };
         let dests: Vec<(&String, f32)> = match due {
             Some(set) => {
-                let kept: Vec<(&String, f32)> = stop.dests.iter().filter(|(n, _)| set.is_some_and(|s| s.contains(n.trim()))).map(|(n, w)| (n, *w)).collect();
+                let kept: Vec<(&String, f32)> = stop
+                    .dests
+                    .iter()
+                    .filter(|(n, _)| set.is_some_and(|s| s.contains(n.trim())))
+                    .map(|(n, w)| (n, *w))
+                    .collect();
                 let total: f32 = kept.iter().map(|k| k.1).sum();
                 if total <= 0.0 {
                     return (None, None);
@@ -309,7 +411,9 @@ impl PeopleSim {
                 // (the share that drew no destination stays the stop's own: those people go
                 // nowhere by bus, as before)
                 let all: f32 = stop.dests.iter().map(|d| d.1).sum();
-                kept.into_iter().map(|(n, w)| (n, w / total * all)).collect()
+                kept.into_iter()
+                    .map(|(n, w)| (n, w / total * all))
+                    .collect()
             }
             None => stop.dests.iter().map(|(n, w)| (n, *w)).collect(),
         };
@@ -322,7 +426,9 @@ impl PeopleSim {
                 dest = Some(n.clone());
             }
         }
-        let line = dest.as_ref().and_then(|d| stop.lines.iter().position(|(n, _)| n.trim() == d.trim()));
+        let line = dest
+            .as_ref()
+            .and_then(|d| stop.lines.iter().position(|(n, _)| n.trim() == d.trim()));
         (dest, line)
     }
 
@@ -353,18 +459,18 @@ impl PeopleSim {
         self.set_task(i, Task::WalkingToBusstop, &dummy_b, &dummy_ix, world);
         if debug_pax() {
             let d = self.pax(i).and_then(|p| p.dest.clone());
-            log::info!("t={:.1} pax {} waits at stop {id} place {k}, for {:?}", self.time, self.people[i].label(), d);
+            log::info!(
+                "t={:.1} pax {} waits at stop {id} place {k}, for {:?}",
+                self.time,
+                self.people[i].label(),
+                d
+            );
         }
         Some(i)
     }
 
     /// Keep strollers on the pavements near the player, and people walking up to the stops.
-    pub fn populate_on_foot(
-        &mut self,
-        world: &dyn World,
-        net: &Network,
-        dt: f32,
-    ) {
+    pub fn populate_on_foot(&mut self, world: &dyn World, net: &Network, dt: f32) {
         let Some(ped) = self.ped.take() else { return };
         self.populate_on_foot_with(&ped, world, net, dt);
         self.ped = Some(ped);
@@ -397,7 +503,15 @@ impl PeopleSim {
             (self.pedestrians as f32 * crowd * self.density.clamp(0.0, 3.0)).round() as usize;
         // (0x62463c: walking the pavements only while fewer than half the pool do, and never
         // past the pool)
-        let target = target.min(self.max_people / 2).min((self.max_people + self.people.iter().filter(|p| matches!(p.state, State::Strolling(_))).count()).saturating_sub(self.pool_used()));
+        let target = target.min(self.max_people / 2).min(
+            (self.max_people
+                + self
+                    .people
+                    .iter()
+                    .filter(|p| matches!(p.state, State::Strolling(_)))
+                    .count())
+            .saturating_sub(self.pool_used()),
+        );
         let have = self
             .people
             .iter()
@@ -430,7 +544,7 @@ impl PeopleSim {
                 let heading = if fwd { h as f64 } else { h as f64 + 180.0 };
                 if let Some(i) = self.spawn(
                     world,
-                                        p,
+                    p,
                     heading,
                     State::Strolling(PedWalk::new(vec![leg], true, side)),
                 ) {
@@ -500,9 +614,7 @@ impl PeopleSim {
                     let mut walk = PedWalk::new(vec![first, over], true, 0.4);
                     // marked so that the knob spawns them once
                     walk.side = -0.4;
-                    if let Some(i) =
-                        self.spawn(world, p, h, State::Strolling(walk))
-                    {
+                    if let Some(i) = self.spawn(world, p, h, State::Strolling(walk)) {
                         self.people[i].activity = Activity::Walk;
                     }
                 }

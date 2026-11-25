@@ -23,14 +23,26 @@ pub fn tell_scripts(w: &crate::World, v: &mut omsi_sim::VehicleInstance) {
         .enumerate()
         .map(|(k, wh)| {
             let hub = v.position + rot.transform_vector3(wh.attach).as_dvec3();
-            let contact = glam::DVec3::new(hub.x, hub.y, if wh.ground_seen { wh.ground_z } else { hub.z - wh.radius as f64 });
+            let contact = glam::DVec3::new(
+                hub.x,
+                hub.y,
+                if wh.ground_seen {
+                    wh.ground_z
+                } else {
+                    hub.z - wh.radius as f64
+                },
+            );
             let axle = rb.wheel_axle.get(k).copied().unwrap_or(0);
             let side = if wh.attach.x < 0.0 { "L" } else { "R" };
-            (format!("Axle_SurfaceID_{axle}_{side}"), w.surface_under(contact).unwrap_or(0))
+            (
+                format!("Axle_SurfaceID_{axle}_{side}"),
+                w.surface_under(contact).unwrap_or(0),
+            )
         })
         .collect();
     if !found.is_empty() {
-        v.host.offroad = found.iter().map(|(_, id)| offroad_of(*id)).sum::<f32>() / found.len() as f32;
+        v.host.offroad =
+            found.iter().map(|(_, id)| offroad_of(*id)).sum::<f32>() / found.len() as f32;
     }
     for (name, id) in found {
         v.set_var(&name, id as f32);
@@ -43,6 +55,10 @@ mod tests {
     #[test]
     fn the_ground_off_the_road_soils_the_bus() {
         assert_eq!([0, 1, 2, 6].map(super::offroad_of), [0.0; 4]);
-        assert!(super::offroad_of(3) > super::offroad_of(4) && super::offroad_of(4) > super::offroad_of(5) && super::offroad_of(5) > 0.0);
+        assert!(
+            super::offroad_of(3) > super::offroad_of(4)
+                && super::offroad_of(4) > super::offroad_of(5)
+                && super::offroad_of(5) > 0.0
+        );
     }
 }
