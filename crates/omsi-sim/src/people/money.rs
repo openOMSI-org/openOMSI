@@ -171,20 +171,6 @@ impl Money {
         }
     }
 
-    /// The value of the smallest coin.
-    pub fn smallest_value(&self) -> f32 {
-        self.currency
-            .as_ref()
-            .and_then(|c| {
-                c.coins
-                    .iter()
-                    .map(|(_, v)| *v)
-                    .filter(|v| *v > 0.0)
-                    .reduce(f32::min)
-            })
-            .unwrap_or(0.01)
-    }
-
     /// How many coins lie on the change tray.
     pub fn change_count(&self) -> usize {
         self.placed.iter().filter(|p| p.3).count()

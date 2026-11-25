@@ -160,30 +160,7 @@ impl Renderer {
                 mb(m.budget_bytes)
             );
         }
-        // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
-        // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
-        // violation, so wgpu cannot turn it into a recoverable error. Start those adapters
-        // with the conservative feature set instead. OMSI_INTEL_FULL_GPU=1 is useful for
-        // retesting after a driver update without rebuilding the game.
-        let intel_vulkan_safe = cfg!(windows)
-            && info.backend == mx::Backend::Vulkan
-            && info.vendor == 0x8086
-            && !omsi_cfg::flags::OMSI_INTEL_FULL_GPU.is_set();
-        let options = if intel_vulkan_safe {
-            log::warn!(
-                "Intel Vulkan adapter detected ({}): using the stable driver profile (1x MSAA, 1x anisotropy, SSAO and runtime texture compression off); set OMSI_INTEL_FULL_GPU=1 after updating the Intel driver to retry the requested settings",
-                info.name
-            );
-            RenderOptions {
-                msaa: 1,
-                anisotropy: 1,
-                ssao: false,
-                compress_textures: false,
-                ..options
-            }
-        } else {
-            options
-        };
+        let options = intel_vulkan_profile(&info, options);
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(
             info.backend == mx::Backend::Gl,
@@ -1036,5 +1013,34 @@ impl Renderer {
             rt,
             mesh_pages: false,
         }
+    }
+}
+
+/// The options an adapter opens with: an Intel one on Vulkan under Windows gets the
+/// conservative profile (see the comment inside), any other the options as they are.
+fn intel_vulkan_profile(info: &mx::AdapterInfo, options: RenderOptions) -> RenderOptions {
+    // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
+    // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
+    // violation, so wgpu cannot turn it into a recoverable error. Start those adapters
+    // with the conservative feature set instead. OMSI_INTEL_FULL_GPU=1 is useful for
+    // retesting after a driver update without rebuilding the game.
+    let intel_vulkan_safe = cfg!(windows)
+        && info.backend == mx::Backend::Vulkan
+        && info.vendor == 0x8086
+        && !omsi_cfg::flags::OMSI_INTEL_FULL_GPU.is_set();
+    if intel_vulkan_safe {
+        log::warn!(
+            "Intel Vulkan adapter detected ({}): using the stable driver profile (1x MSAA, 1x anisotropy, SSAO and runtime texture compression off); set OMSI_INTEL_FULL_GPU=1 after updating the Intel driver to retry the requested settings",
+            info.name
+        );
+        RenderOptions {
+            msaa: 1,
+            anisotropy: 1,
+            ssao: false,
+            compress_textures: false,
+            ..options
+        }
+    } else {
+        options
     }
 }

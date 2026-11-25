@@ -134,6 +134,8 @@ mod destination_tests;
 #[rustfmt::skip]
 mod entry_doors_tests;
 #[cfg(test)]
+mod button_door_tests;
+#[cfg(test)]
 #[rustfmt::skip]
 mod no_ticket_tests;
 #[cfg(test)]
