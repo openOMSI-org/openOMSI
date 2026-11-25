@@ -818,6 +818,7 @@ impl Renderer {
                 cloud_shape_view: sky.cloud_shape_view,
                 cloud_detail_view: sky.cloud_detail_view,
                 cloud_sampler: sky.cloud_sampler,
+                moon_view: sky.moon_view,
                 cloud_shape_cpu: sky.cloud_shape_cpu,
                 cloud_view_buf: sky.cloud_view_buf,
                 cloud_sun: None,

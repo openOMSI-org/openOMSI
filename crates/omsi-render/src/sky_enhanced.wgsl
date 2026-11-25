@@ -737,9 +737,13 @@ fn star_hash(c: vec3<i32>) -> vec4<f32> {
     return vec4<f32>(x & vec4<u32>(0xffffffu)) / 16777216.0;
 }
 
+// The near side as seen from the Earth, north up (grey, `moon_map`; made from NASA's
+// Scientific Visualization Studio's CGI Moon Kit, LRO's LROC colour map).
+@group(1) @binding(13) var t_moon: texture_2d<f32>;
+
 // The moon and the stars towards d (radiance), behind what cloud covers it. The moon is a
-// lit sphere: its lit side faces the sun, its phase is what the sun's direction makes of
-// it, and its grey seas darken parts of the disc. The stars are a few thousand points
+// sphere with the real face on it: its lit side faces the sun, and its phase is what the
+// sun's direction makes of it. The stars are a few thousand points
 // fixed in the sky, of a few magnitudes, slightly coloured; they show only where the sky
 // behind them is dark - a lit city's glow and the haze leave the brightest few.
 fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
@@ -755,24 +759,41 @@ fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
     let m = enh.moon.xyz;
     let r = enh.moon.w;
     let cm = dot(d, m);
+    // how much of this pixel the disc covers (the stars are behind it)
+    var covered = 0.0;
     if (cm > cos(r * 1.3) && max(enh.moon_disc.r, enh.moon_disc.g) > 0.0) {
         // the point on the moon's sphere seen in direction d
         let right = normalize(cross(m, vec3<f32>(0.0, 0.0, 1.0)) + vec3<f32>(1e-5, 0.0, 0.0));
         let up = cross(right, m);
         let q = vec2<f32>(dot(d, right), dot(d, up)) / r;
         let q2 = dot(q, q);
-        let rim = 1.0 - smoothstep(0.92, 1.05, sqrt(q2));
+        // a pixel in disc radii: the limb's edge and the map's level
+        let px = max(length(pix) * 0.6 / r, 1e-4);
+        covered = 1.0 - smoothstep(1.0 - px, 1.0 + px, sqrt(q2));
         let nz = sqrt(max(1.0 - q2, 0.0));
         let n = normalize(right * q.x + up * q.y - m * nz);
-        let sun_side = smoothstep(-0.04, 0.08, dot(n, normalize(camera.sun_dir.xyz)));
-        // the seas: a few broad dark patches fixed on the face
-        let sea = smoothstep(0.45, 0.7, cloud_fbm(q * 1.7 + vec2<f32>(3.1, 7.7)));
-        let albedo = 1.0 - 0.38 * sea;
+        // the dust's reflection (Lommel-Seeliger): a full moon is as bright at the limb
+        // as in the middle, and the light fades out towards the terminator
+        let sun = normalize(camera.sun_dir.xyz);
+        let mu0 = dot(n, sun);
+        let lit = 2.0 * max(mu0, 0.0) / (max(mu0, 0.0) + max(nz, 0.05)) * smoothstep(-0.02, 0.1, mu0);
+        let level = log2(max(px * f32(textureDimensions(t_moon).x) * 0.5, 1.0));
+        let map = textureSampleLevel(t_moon, s_lin, vec2<f32>(0.5 + 0.5 * q.x, 0.5 - 0.5 * q.y), level).r;
+        // (about 1 on the highlands, a third of it in the darkest seas)
+        let albedo = pow(map * 1.75, 1.35);
         // (as bright as the lit part's share of the irradiance spread over the disc; the
-        // dark part keeps a trace of earthshine)
-        let lit_share = max(0.5 + 0.5 * dot(-m, normalize(camera.sun_dir.xyz)), 0.03);
-        let l = enh.moon_disc.rgb / (PI * r * r * lit_share) * (sun_side + 0.004) * albedo * rim;
-        col = col + l * through;
+        // dark part keeps a trace of earthshine, more of it by a thin crescent)
+        let lit_share = max(0.5 + 0.5 * dot(-m, sun), 0.03);
+        var face = enh.moon_disc.rgb / (PI * r * r * lit_share) * through;
+        // a low moon is orange, not as red as the clear air's numbers alone make it
+        face = mix(face, vec3<f32>(dot(face, vec3<f32>(0.2126, 0.7152, 0.0722))), 0.45);
+        // The night's exposure is for the street: the moon shown by it was a white lamp
+        // with a halo. It is held under the screen's white, whatever the metering adds
+        // (`exposure.y`, as for the displays), so its face shows and it does not glow.
+        let peak = max(face.r, max(face.g, face.b)) * enh.exposure.x;
+        face = face * min(1.0, 0.55 * enh.exposure.y / max(peak, 1e-6));
+        let earthshine = 0.004 + 0.02 * (1.0 - lit_share) * (1.0 - lit_share);
+        col = col + face * (lit + earthshine) * albedo * covered;
     }
     // the stars: one candidate in some of the cells of a grid on the sphere
     let vis = enh.moon_disc.w;
@@ -798,7 +819,7 @@ fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
             let sky_l = dot(sky_table(d), vec3<f32>(0.2126, 0.7152, 0.0722)) * enh.exposure.x;
             let limit = clamp(sky_l * 90.0 + (1.0 - vis), 0.0, 1.2);
             let shows = smoothstep(limit, limit + 0.15, b) * (1.0 - smoothstep(0.03, 0.1, sky_l));
-            col = col + tint * (0.04 + 1.4 * b) * spot * shows * through / max(enh.exposure.x, 1e-6) * smoothstep(0.0, 0.15, d.z);
+            col = col + tint * (0.04 + 1.4 * b) * spot * shows * through * (1.0 - covered) / max(enh.exposure.x, 1e-6) * smoothstep(0.0, 0.15, d.z);
         }
     }
     return col;
