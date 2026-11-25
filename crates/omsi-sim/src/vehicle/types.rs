@@ -346,9 +346,22 @@ pub fn source_stamp(path: &Path) -> u64 {
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
-    written.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(17) ^ size
+        .map(|d| d.as_nanos() as u64);
+    if let Some(written) = written {
+        return written.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(17) ^ size;
+    }
+    // An archived (or in-memory) file has no filesystem timestamp: hash what VFS reads, so a
+    // replacement mesh of the very same size still gets another stamp.
+    match omsi_cfg::vfs::read(path) {
+        Ok(bytes) => {
+            let mut hash = 0xcbf2_9ce4_8422_2325u64;
+            for byte in bytes {
+                hash = (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3);
+            }
+            hash ^ size
+        }
+        Err(_) => 0,
+    }
 }
 
 /// Where a `[mesh]` file of a model lives: next to the model file as OMSI reads it, else -

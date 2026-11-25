@@ -1,10 +1,12 @@
 //! The bus's files read again - "Reload this vehicle" - read its meshes again too (#2618).
 //! What tells the world a rebuilt mesh from the one it already has on the GPU is the stamp
-//! each mesh carries: the size and the time its `.o3d` was last written.
+//! each mesh carries: the size and the time its `.o3d` was last written, or a hash of its
+//! contents when it comes from an archive with no filesystem timestamp.
 
 use super::*;
 
 const TRIANGLE: &str = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+const TRIANGLE_MOVED: &str = "v 0 0 0\nv 2 0 0\nv 0 1 0\nf 1 2 3\n";
 const QUAD: &str = "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3\nf 1 3 4\n";
 
 /// A vehicle folder whose model has one mesh, `body.obj`, holding `mesh`.
@@ -26,6 +28,15 @@ fn temp_dir(tag: &str) -> std::path::PathBuf {
     dir
 }
 
+fn archived_mesh(zip_path: &Path, mesh: &str) -> std::path::PathBuf {
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(zip_path).unwrap());
+    zip.start_file("body.obj", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    std::io::Write::write_all(&mut zip, mesh.as_bytes()).unwrap();
+    zip.finish().unwrap();
+    omsi_cfg::vfs::mount_zip(zip_path).unwrap().join("body.obj")
+}
+
 #[test]
 fn a_mesh_file_that_changed_has_another_stamp() {
     let dir = temp_dir("stamp");
@@ -40,6 +51,26 @@ fn a_mesh_file_that_changed_has_another_stamp() {
         source_stamp(&dir.join("absent.obj")),
         0,
         "a mesh of a pack that is not installed has none"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_archived_mesh_rebuilt_at_the_same_size_has_another_stamp() {
+    let dir = temp_dir("stamp_zip");
+    let first = archived_mesh(&dir.join("first.zip"), TRIANGLE);
+    let second = archived_mesh(&dir.join("second.zip"), TRIANGLE_MOVED);
+    assert_eq!(
+        omsi_cfg::vfs::file_size(&first),
+        omsi_cfg::vfs::file_size(&second),
+        "the replacement has the very same size"
+    );
+    let stamp = source_stamp(&first);
+    assert_ne!(stamp, 0, "a mesh in an archive has a stamp");
+    assert_ne!(
+        source_stamp(&second),
+        stamp,
+        "the GPU must not reuse the mesh the archive used to hold"
     );
     std::fs::remove_dir_all(&dir).ok();
 }
