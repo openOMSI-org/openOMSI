@@ -141,6 +141,20 @@ fn a_car_standing_at_the_line_asks_a_light_of_no_distance() {
     assert!(!asked(&mut t));
 }
 
+/// A light without `[approachdist]` is asked from 10 m before its line, as Omsi.exe's
+/// `[traffic_light]` default (0x7b4214): not by a car still 30 m off.
+#[test]
+fn a_light_without_a_distance_is_asked_from_ten_metres() {
+    let f = Fixture::new();
+    let ty = f.ty.clone();
+    for (gap, expect) in [(30.0, false), (15.0, false), (8.0, true)] {
+        let mut t = traffic(&f, road_to_light(120.0));
+        t.lights = vec![program(None)];
+        place_front(&mut t, &ty, LaneKind::Street, 0, gap, 8.0, 0x35);
+        assert_eq!(asked(&mut t), expect, "driving up {gap} m before the line");
+    }
+}
+
 #[test]
 fn a_train_asks_a_crossing_without_a_distance_from_its_braking_distance() {
     let f = Fixture::new();
@@ -275,9 +289,9 @@ fn the_players_train_asks_the_lights_on_every_branch_ahead() {
     };
     // a train 450 m off asks both branches' lights
     assert_eq!(run(250.0, true, true, 15.0), (true, true));
-    // a tram there does not, but does 30 m off (the default distance)
+    // a tram there does not, but does 5 m off (within the default 10 m)
     assert_eq!(run(250.0, true, false, 8.0), (false, false));
-    assert_eq!(run(660.0, true, false, 8.0), (true, true));
+    assert_eq!(run(685.0, true, false, 8.0), (true, true));
     // backing away from the fork it asks nothing
     assert_eq!(run(660.0, true, false, -2.0), (false, false));
 }

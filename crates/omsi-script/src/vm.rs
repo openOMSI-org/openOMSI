@@ -335,7 +335,8 @@ impl Vm {
             return;
         }
         self.depth += 1;
-        let ops = &p.blocks[block as usize].ops;
+        let mut block = block;
+        let mut ops = &p.blocks[block as usize].ops;
         let mut pc = 0usize;
         while pc < ops.len() {
             if self.budget == 0 {
@@ -355,6 +356,17 @@ impl Vm {
                 Op::Macro(b) => {
                     let b = *b;
                     self.run_block(p, b, state, host);
+                }
+                // (a block without its `{end}` goes on with the next block's code at this
+                // depth, as Omsi.exe follows its word chain: 40 macros without their `{end}`
+                // called a few levels down are not cut off by `MAX_DEPTH`)
+                Op::FallThrough(b) => {
+                    let Some(next) = p.blocks.get(*b as usize) else {
+                        break;
+                    };
+                    block = *b;
+                    ops = &next.ops;
+                    pc = 0;
                 }
                 Op::Random => {
                     // `Random(Abs(Round(x)))` in the exe: a whole number in [0, n). Scripts
@@ -485,15 +497,14 @@ fn exec_hot(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut 
 #[inline(never)]
 fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut dyn Host) {
     match op {
-        Op::Macro(_) | Op::Random | Op::JumpIfZero(_) | Op::Jump(_) => {
+        Op::Macro(_) | Op::FallThrough(_) | Op::Random | Op::JumpIfZero(_) | Op::Jump(_) => {
             unreachable!("handled by run_block")
         }
         Op::Callback(n) => host.callback(p.name(*n), *n, s, state),
         Op::SoundTrigger(n) => host.sound_trigger_vars(p.name(*n), *n, &state.vars),
-        Op::SoundTriggerFile(n) => {
-            let file = s.pop_str();
-            host.sound_trigger_file(p.name(*n), &file);
-        }
+        // the file stays on the string stack: Omsi.exe sub_5d4860 (`TXPC_calcblock_soundtrigger`)
+        // reads it there and does not pop it
+        Op::SoundTriggerFile(n) => host.sound_trigger_file(p.name(*n), s.top_str()),
         // (The string operations work on the stack's own buffers: a pop followed by a push
         // leaves the stack as changing `sst[0]` in place does, and a push takes over the
         // buffer of the string that falls off the bottom. Each of them used to allocate.)
@@ -786,13 +797,25 @@ mod tests {
         );
     }
 
-    /// A macro that calls itself twice, 64 deep, would make 2^64 calls: the run is cut short
-    /// at its budget, the game goes on, and the next run has a budget of its own.
+    /// `top` calls `m0`, and each of 60 macros calls the next twice: 2^60 calls (a macro can
+    /// only call one defined below it, so this is how a script runs for ever).
+    fn doubling_chain(top: &str) -> String {
+        let mut src = format!("{{{top}}}\n(M.L.m0)\n{{end}}\n");
+        for k in 0..60 {
+            let next = k + 1;
+            src.push_str(&format!(
+                "{{macro:m{k}}}\n(L.L.a) 1 + (S.L.a) (M.L.m{next}) (M.L.m{next})\n{{end}}\n"
+            ));
+        }
+        src.push_str("{macro:m60}\n(L.L.a) 1 + (S.L.a)\n{end}\n");
+        src
+    }
+
+    /// A chain of macros that would make 2^60 calls: the run is cut short at its budget, the
+    /// game goes on, and the next run has a budget of its own.
     #[test]
     fn a_script_that_would_run_for_ever_is_cut_short() {
-        let p = prog(
-            "{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n{frame}\n(M.L.m)\n{end}\n",
-        );
+        let p = prog(&doubling_chain("frame"));
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         let mut vm = Vm::new();
         let mut st = State::new(&p);
@@ -814,15 +837,15 @@ mod tests {
 
     /// A chain of macros run 10 x 10 x ... times, as GPM's AFR4 printer reads its depot file.
     fn nested_count(top: &str) -> String {
-        let mut src = String::from("{macro:m1}\n(L.L.a) 1 + (S.L.a)\n{end}\n");
-        for k in 1..7 {
+        let mut src = format!("{{{top}}}\n(M.L.m7)\n{{end}}\n");
+        for k in (1..7).rev() {
             src.push_str(&format!(
                 "{{macro:m{}}}\n{}\n{{end}}\n",
                 k + 1,
                 format!("(M.L.m{k}) ").repeat(10)
             ));
         }
-        src.push_str(&format!("{{{top}}}\n(M.L.m7)\n{{end}}\n"));
+        src.push_str("{macro:m1}\n(L.L.a) 1 + (S.L.a)\n{end}\n");
         src
     }
 
@@ -849,8 +872,7 @@ mod tests {
 
     #[test]
     fn an_init_block_that_would_run_for_ever_is_cut_short() {
-        let p =
-            prog("{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n{init}\n(M.L.m)\n{end}\n");
+        let p = prog(&doubling_chain("init"));
         let mut vm = Vm::new();
         let mut st = State::new(&p);
         let t0 = std::time::Instant::now();
@@ -872,17 +894,17 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let vl = dir.join("v.txt");
         std::fs::write(&vl, "a\n").unwrap();
-        let mut scripts = vec![dir.join("m.osc")];
-        std::fs::write(
-            &scripts[0],
-            "{macro:m}\n(L.L.a) 1 + (S.L.a) (M.L.m) (M.L.m)\n{end}\n",
-        )
-        .unwrap();
+        let mut scripts = Vec::new();
         for k in 0..50 {
             let f = dir.join(format!("f{k}.osc"));
-            std::fs::write(&f, "{frame}\n(M.L.m)\n{end}\n").unwrap();
+            std::fs::write(&f, "{frame}\n(M.L.m0)\n{end}\n").unwrap();
             scripts.push(f);
         }
+        // (the macros in the last file: a call finds only a macro defined below it)
+        let m = dir.join("m.osc");
+        let chain = doubling_chain("macro:unused");
+        std::fs::write(&m, chain.split_once("{end}\n").unwrap().1).unwrap();
+        scripts.push(m);
         let p = compile(&CompileInput {
             varlists: vec![vl],
             scripts,
@@ -901,7 +923,7 @@ mod tests {
 
     #[test]
     fn stack_semantics() {
-        let p = prog("{macro:m}\n1 4 +\n{end}\n{init}\n(M.L.m) (S.L.result)\n{end}\n");
+        let p = prog("{init}\n(M.L.m) (S.L.result)\n{end}\n{macro:m}\n1 4 +\n{end}\n");
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         let mut vm = Vm::new();
         let mut st = State::new(&p);
@@ -939,6 +961,31 @@ mod tests {
         assert_eq!(st.get(p.var("b").unwrap()), 50.0);
         assert_eq!(st.get(p.var("result").unwrap()), 4.0);
         assert_eq!(vm.stacks.st[0], 7.0);
+    }
+
+    #[test]
+    fn a_sound_trigger_with_a_file_leaves_the_file_on_the_stack() {
+        struct Files(Vec<String>);
+        impl Host for Files {
+            fn sys_var(&mut self, _v: SysVar) -> f32 {
+                0.0
+            }
+            fn callback(&mut self, _: &str, _: NameId, _: &mut Stacks, _: &mut State) {}
+            fn sound_trigger(&mut self, _name: &str, _id: NameId) {}
+            fn sound_trigger_file(&mut self, _name: &str, file: &str) {
+                self.0.push(file.to_string());
+            }
+        }
+        let p = prog("{init}\n\"x\" \"a.wav\" (T.F.snd) \"b.wav\" $+ (T.F.snd)\n{end}\n");
+        assert!(p.errors.is_empty(), "{:?}", p.errors);
+        let mut vm = Vm::new();
+        let mut host = Files(Vec::new());
+        vm.run_init(&p, &mut State::new(&p), &mut host);
+        assert_eq!(host.0, ["a.wav", "a.wavb.wav"]);
+        assert_eq!(
+            vm.stacks.sst[..2],
+            ["a.wavb.wav".to_string(), "x".to_string()]
+        );
     }
 
     #[test]
@@ -997,7 +1044,7 @@ mod tests {
     #[test]
     fn triggers_that_set_a_variable() {
         let p = prog(
-            "{trigger:on}\n1 (S.L.a)\n{end}\n{trigger:off}\n0 (S.L.b) (S.L.a)\n{end}\n{macro:m}\n(L.L.a) ! (S.L.a)\n{end}\n{trigger:tog}\n(M.L.m)\n{end}\n{trigger:ai_x}\n1 (S.L.a)\n{end}\n{trigger:other}\n1 (S.L.b)\n{end}\n",
+            "{trigger:on}\n1 (S.L.a)\n{end}\n{trigger:off}\n0 (S.L.b) (S.L.a)\n{end}\n{trigger:tog}\n(M.L.m)\n{end}\n{macro:m}\n(L.L.a) ! (S.L.a)\n{end}\n{trigger:ai_x}\n1 (S.L.a)\n{end}\n{trigger:other}\n1 (S.L.b)\n{end}\n",
         );
         assert!(p.errors.is_empty(), "{:?}", p.errors);
         assert_eq!(

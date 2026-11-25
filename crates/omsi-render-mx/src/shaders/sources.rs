@@ -780,7 +780,7 @@ pub(crate) fn rainfall_drops(r: f32, quality: u8) -> [u32; 4] {
 /// without storage buffers, where there are no lamps).
 pub(crate) fn fog_lamps_shader_source() -> String {
     [
-        include_str!("../fog_lamps.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../fog_lamps.wgsl"), "fog_lamps.wgsl"),
         include_str!("../enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
         if omsi_cfg::flags::OMSI_NO_BEAM_SHADOWS.is_set() {
@@ -788,7 +788,7 @@ pub(crate) fn fog_lamps_shader_source() -> String {
         } else {
             include_str!("../beam_shadow.wgsl")
         },
-        include_str!("../lamp_air.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
     ]
     .join("\n")
 }
@@ -809,7 +809,7 @@ const CELL_CAP: u32 = 32u;
 /// The light coronas (both paths).
 pub(crate) fn corona_shader_source() -> String {
     let src = [
-        include_str!("../corona.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../corona.wgsl"), "corona.wgsl"),
         include_str!("../enhanced_common.wgsl"),
         FOG_LAMP_LIGHTS,
         include_str!("../beam_shadow_none.wgsl"),

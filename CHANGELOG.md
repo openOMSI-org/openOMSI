@@ -6,7 +6,37 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ## Unreleased
 
+### New and improved
+
+- **mX Graphics twice as fast on the GPU**: in Enhanced the main pass draws most surfaces with a
+  lean pipeline that leaves out the shading they do not use (films, water, LEDs, bump maps, wet or
+  snowy roads in dry weather), compiled in the background, and the ground's albedo pass works
+  with MSAA and ambient occlusion. In the MAN EN92's cab at Grundorf (1920x1080, Enhanced, 4x
+  MSAA, Apple M4) a frame takes 12.6 ms of GPU time instead of 29.5 by day, 15.3 instead of 26.6
+  in rain and 13.1 instead of 28.1 at night: 70, 59 and 64 frames a second instead of 32, 36 and
+  32. `OMSI_NO_LEAN` draws everything with the full pipelines.
+- **mX Graphics are fully bindless**: the renderer, the interface and the VR mirror read every
+  texture, sampler and buffer from mX's heap, ray tracing and the multisampled pane depth
+  included; no bind groups are left.
+- **Name a save in the game and load any save by name** ([#4045](https://github.com/openOMSI-org/openOMSI/pull/4045)).
+- **Plugins page in the launcher**: switch plugins on and off, see their errors and change their
+  settings ([#4044](https://github.com/openOMSI-org/openOMSI/pull/4044)).
+- **Take control of an AI bus** from the map camera, as in OMSI 2
+  ([#4047](https://github.com/openOMSI-org/openOMSI/pull/4047)).
+- **A dead zone for each controller axis** instead of one for all, set in the settings file
+  ([#4108](https://github.com/openOMSI-org/openOMSI/pull/4108)).
+- **A stop's own passenger numbers**: a stop's numbers are multiplied before the rounding, so
+  small stops get their passengers ([#4101](https://github.com/openOMSI-org/openOMSI/pull/4101)).
+- **Signed publisher packs**: a publisher's map can depend on a signed pack under `Packs/`,
+  played with the publisher's key in `Publishers.json`; ordinary maps and mods load as before
+  ([#3593](https://github.com/openOMSI-org/openOMSI/pull/3593)).
+- **Scripts read the track**: `omsi.bus.track()`, a first step towards a rail simulation
+  ([#4051](https://github.com/openOMSI-org/openOMSI/pull/4051)).
+
 ### Multiplayer
+
+- **A hosted LAN session sets the buses its players drive**
+  ([#4100](https://github.com/openOMSI-org/openOMSI/pull/4100)).
 
 - **Rail points lie the same way for every player**: the hosting game's points go to each
   player's game with the traffic lights (those within 600 m of its vehicle, once a second), and
@@ -22,6 +52,22 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **mX Graphics on OpenGL (ANGLE on macOS)**: blending works again - the interface's text and
+  icons drew as transparent boxes, smoke and LED layers were wrong - and textures with mip maps
+  made on the GPU are no longer black at a distance.
+- **Trams follow switches set by traffic lights**
+  ([#4183](https://github.com/openOMSI-org/openOMSI/pull/4183)).
+- **Dashboard labels on meshes with mixed materials** no longer flicker or disappear
+  ([#4185](https://github.com/openOMSI-org/openOMSI/pull/4185)).
+- **Indicators with their own bitmap** (`[light_enh_2]`) show the whole bitmap while blinking
+  instead of a tiny point ([#4159](https://github.com/openOMSI-org/openOMSI/pull/4159)).
+- **Multi-line vehicle menus**: the Volvo Wright dashboard menu keeps its rows aligned, and
+  multi-line strings in vehicle scripts compile as one
+  ([#4181](https://github.com/openOMSI-org/openOMSI/pull/4181)).
+- **Pedestrians stuck walking in place** for two minutes are removed
+  ([#4102](https://github.com/openOMSI-org/openOMSI/pull/4102)).
+- **The MAN NLC's windscreen no longer fogs up with the heater on**
+  ([#4161](https://github.com/openOMSI-org/openOMSI/pull/4161)).
 - **mX graphics have the tram changes too**: the rear cab, backing a tram from it and the J
   points key, the tunnel mouths and the sun kept out of tunnels, the rail vehicles' collisions,
   the curves and the body sway came only to the standard graphics. With mX graphics switched on

@@ -515,6 +515,8 @@ export function createMarkdown({ resolveLink } = {}) {
         if (inBody && t.type === "td_open") {
           col++;
           const h = heads[col] || "";
+          // on a phone a wide table is shown row by row, each cell under its column's name
+          if (h) t.attrSet("data-label", h);
           const inline = toks[j + 1];
           const kids = inline.children || [];
           const onlyCode = kids.length > 0 && kids.every((k) => k.type === "code_inline");

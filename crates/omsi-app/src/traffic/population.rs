@@ -505,25 +505,29 @@ impl Traffic {
         } else {
             self.sim.spawn_radius
         };
-        let nearby = self.sim.net.lanes_starting_near(center, radius);
+        // the pieces of lane within the radius, wherever their lanes start (#3518), 3 m off
+        // either end of the lane
+        let nearby: Vec<(usize, f32, f32)> = self
+            .sim
+            .net
+            .lane_spans_within(center, radius)
+            .into_iter()
+            .map(|(i, a, b)| (i, a.max(3.0), b.min(self.sim.net.lanes[i].length() - 3.0)))
+            .filter(|&(_, a, b)| b > a)
+            .collect();
         // candidate lanes of this kind near the centre
-        let pick = |through: bool| -> Vec<(usize, f32)> {
+        let pick = |through: bool| -> Vec<(usize, f32, f32, f32)> {
             nearby
                 .iter()
-                .copied()
-                .map(|i| (i, &self.sim.net.lanes[i]))
-                .filter(|(_, l)| {
-                    l.kind == kind
-                        && l.length() > 8.0
-                        && (l.start() - center).truncate().length() < radius
-                })
+                .map(|&(i, a, b)| (i, &self.sim.net.lanes[i], a, b))
+                .filter(|(_, l, ..)| l.kind == kind && l.length() > 8.0)
                 // lanes the map keeps clear of cars, and those whose [rule] trafficdensity is
                 // zero, are not spawned on at all; a lower density makes a lane that much less
                 // likely to be picked
-                .filter(|(_, l)| !l.no_cars && l.density > 0.0)
+                .filter(|(_, l, ..)| !l.no_cars && l.density > 0.0)
                 // nor, where there are others, lanes that end the network just ahead (the car
                 // would only drive into the end and wait there to be taken away)
-                .filter(|(i, _)| {
+                .filter(|(i, ..)| {
                     !through
                         || kind != LaneKind::Street
                         || self
@@ -533,11 +537,11 @@ impl Traffic {
                             .map(|r| *r >= omsi_sim::traffic::DEAD_END)
                             .unwrap_or(true)
                 })
-                // as many cars on a lane as metres of it (times its density): counted per
-                // lane, the many short lanes of a junction drew the cars into the town's
-                // tangles and left the long roads between them empty
-                .map(|(i, l)| (i, l.length() * l.density.clamp(0.05, 4.0)))
-                .collect::<Vec<(usize, f32)>>()
+                // as many cars on a lane as metres of it in range (times its density):
+                // counted per lane, the many short lanes of a junction drew the cars into the
+                // town's tangles and left the long roads between them empty
+                .map(|(i, l, a, b)| (i, a, b, (b - a) * l.density.clamp(0.05, 4.0)))
+                .collect::<Vec<(usize, f32, f32, f32)>>()
         };
         let mut candidates = pick(true);
         if candidates.is_empty() {
@@ -550,7 +554,7 @@ impl Traffic {
         let cumulative: Vec<f32> = candidates
             .iter()
             .map(|c| {
-                acc += c.1;
+                acc += c.3;
                 acc
             })
             .collect();
@@ -610,12 +614,10 @@ impl Traffic {
             {
                 attempts += 1;
                 let x = self.rand_f() as f32 * total_w;
-                let lane = candidates[cumulative
+                let (lane, a, b, _) = candidates[cumulative
                     .partition_point(|&c| c < x)
-                    .min(candidates.len() - 1)]
-                .0;
-                let s =
-                    (self.rand_f() * (self.sim.net.lanes[lane].length() as f64 - 6.0)) as f32 + 3.0;
+                    .min(candidates.len() - 1)];
+                let s = a + self.rand_f() as f32 * (b - a);
                 let (p, heading) = self.sim.net.lanes[lane].at(s);
                 if (p - center).length() < 40.0 {
                     continue; // not right next to the player

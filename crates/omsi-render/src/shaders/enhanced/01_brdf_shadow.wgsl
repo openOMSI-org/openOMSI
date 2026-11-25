@@ -150,6 +150,15 @@ fn rain_env_enhanced(d: vec3<f32>, lod: f32) -> vec3<f32> {
     return mix(surround, e, smoothstep(-0.05, 0.35, d.z));
 }
 
+// How much of a foliage crown a cut-out is (0..1), by its normal. OMSI points a tree's
+// normals straight up only to light it evenly: one whose normal stands up is lit by the sun
+// from every side (`thin` in `shade`). One whose normal lies level - a fence, a railing,
+// a cut-out mapped once per side with the normals turned round - faces one way and is lit
+// on that side alone, as Omsi.exe's N.L lights it (#2687).
+fn crown_share(n: vec3<f32>) -> f32 {
+    return smoothstep(0.35, 0.75, n.z);
+}
+
 // A fixed, deterministic PCF kernel (shader.wgsl's `shadow_tent`). The old PCSS blocker
 // search was unstable for alpha-tested foliage: a few leaves entering or leaving its
 // 12-sample search changed the penumbra radius, producing checkerboard patches and

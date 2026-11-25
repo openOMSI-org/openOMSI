@@ -1293,3 +1293,32 @@ fn catch_up_skips_pass_through_stations() {
     assert_eq!(duty.next_stop, 3);
     assert_eq!(duty.take_skipped(), Some((1, 2, 4)));
 }
+
+/// #2267: the IBIS's stop follows the duty's only for a player who lets the game type the
+/// IBIS and asks it to - and only when the two differ.
+#[test]
+fn the_ibis_stop_is_typed_again_only_when_asked_and_out_of_step() {
+    use super::super::PlayerDuty;
+    let stale = PlayerDuty::ibis_stop_stale;
+    assert!(
+        stale(Some(2), 3, true, true),
+        "the bus served the stop the IBIS still shows"
+    );
+    assert!(!stale(Some(3), 3, true, true), "already there");
+    assert!(
+        stale(None, 0, true, true),
+        "never typed: the first stop too"
+    );
+    assert!(
+        !stale(Some(2), 3, true, false),
+        "the setting is off: the driver presses the key"
+    );
+    assert!(
+        !stale(Some(2), 3, false, true),
+        "a plugin leaves the IBIS to the driver"
+    );
+    assert!(
+        stale(Some(5), 4, true, true),
+        "sent back a stop, the IBIS goes back with it"
+    );
+}

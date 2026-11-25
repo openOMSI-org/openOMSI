@@ -326,6 +326,14 @@ fn misted(uv: vec2<f32>, c: vec3<f32>) -> vec3<f32> {
     return mix(c, sum / w, 0.5 * fog);
 }
 
+fn display_dither(seed: u32) -> f32 {
+    var bits = seed;
+    bits = (bits ^ (bits >> 16u)) * 0x7feb352du;
+    bits = (bits ^ (bits >> 15u)) * 0x846ca68bu;
+    bits ^= bits >> 16u;
+    return f32(bits >> 8u) / 16777216.0;
+}
+
 // The tone-mapped picture, encoded for the display (gamma), dithered.
 fn graded(in: VsOut) -> vec3<f32> {
     let hdr = misted(in.uv, clean(textureSampleLevel(t_src, s_lin, in.uv, 0.0).rgb));
@@ -349,9 +357,11 @@ fn graded(in: VsOut) -> vec3<f32> {
     }
     var e = to_srgb(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)));
     // triangular dither of one code value: no bands in the sky's gradient
-    let px = in.clip.xy;
-    let n1 = fract(52.9829189 * fract(dot(px, vec2<f32>(0.06711056, 0.00583715))));
-    let n2 = fract(52.9829189 * fract(dot(px + vec2<f32>(17.0, 31.0), vec2<f32>(0.06711056, 0.00583715))));
+    // Hash integer pixels so the dither has no repeating diagonal lattice.
+    let pixel = vec2<u32>(in.clip.xy);
+    let seed = pixel.x * 0x8da6b343u ^ pixel.y * 0xd8163841u;
+    let n1 = display_dither(seed);
+    let n2 = display_dither(seed ^ 0x9e3779b9u);
     e = e + vec3<f32>((n1 + n2 - 1.0) / 255.0);
     return e;
 }

@@ -1,569 +1,733 @@
 # Dedicated server
 
-```
-openomsi --root /path/to/OMSI2 --server /opt/openomsi-server/server.cfg
-```
+A dedicated server hosts an openOMSI multiplayer session that stays on, with no player at the machine.
+This page is for server owners: setup, every `server.cfg` key, administration, bans and the public server list.
+To join a server as a player, see [Playing together](MULTIPLAYER.md).
 
-Every release has ready server packages: `openOMSI-<version>-server-linux-x64.zip` and
-`-server-linux-arm64.zip` (started with `start.sh /path/to/OMSI2 [server.cfg]`), and for
-Windows 10/11 and Windows Server 2016 or later `-server-windows-x64.zip` and
-`-server-windows-arm64.zip` (started with `start.cmd C:\path\to\OMSI2 [server.cfg]`).
-`scripts/build-server.sh [folder]` builds the same on a Linux machine into `dist/server`.
-The OMSI 2 folder given is a complete original installation, as the players have it; the
-server's mods go into its `Vehicles`, `maps`, `Sceneryobjects` … as in the game's content
-folder.
+The server is the game itself (`openomsi`) started with `--server`. It has no window, no sound and needs no graphics card.
+It simulates the world, the AI traffic, the timetable buses and the people exactly as a hosting player's game does, and draws nothing.
 
-The server is the game binary hosting a session with no window, no sound and no
-graphics card: the renderer runs on wgpu's no-op device, so the world, the AI traffic, the
-timetable buses and the people are simulated exactly as a hosting player's game does, and
-nothing is drawn. `server.cfg` is written with a comment for every key on the first start:
+## Quick start
 
-| Keys | What they set |
-|---|---|
-| `name`, `motd` | shown in the players' server list and when they join |
-| `map`, `date`, `time`, `weather` | the map, the start date (empty: today), the time of day, the weather (a `.owt`, empty: the map's default, `cycle`: one after another through the day) |
-| `speed_limit_kmh` | Optional RP speed limit: `0` (off), `60`, `75`, or `80` km/h |
-| `time_speed`, `real_time` | how fast the clock runs (1 to 30), or the machine's real date and time |
-| `metar_sync`, `metar_station` | the weather follows an airport's METAR report (ICAO code; empty: the one nearest the map), downloaded every ten minutes and passed on to the players |
-| `traffic`, `timetable`, `passengers`, `passenger_density` | AI cars, timetable buses, waiting passengers and how many of them (below) |
-| `ai_drive_through_parked` | `1`: the AI drives on through a parked car standing in its lane, as OMSI 2's does, instead of stopping behind it and going round it when it can (for maps where a parked car stands in the lane with no way round); `0` (default) keeps the stop |
-| `ai_unsched_factor`, `ai_max_scheduled`, `ai_max_parked`, `ai_max_humans` | the server's own AI limits, for the whole server: random traffic in percent of the map's density (0 to 300), timetable vehicles at once (`0`: no limit), parked cars (`0`: every space, `-1`: none), people at once (1 to 4096, not per player); empty: the values of `settings.cfg` |
-| `port`, `web_port`, `max_players` | UDP port of the session (27015), TCP port of the web gateway (27025), player limit (16) |
-| `gateway_proxy_header` | the header a proxy of this machine names a WebSocket player's address in (below) |
-| `tunnel` | start a free Cloudflare quick tunnel (needs `cloudflared`) |
-| `public_address` | where players reach the web port without the tunnel (`1.2.3.4:27025`, a name, or `off`); a game joining through the tunnel tries it first. Empty: found by itself (the machine's own internet address, else the one the internet sees if the server reaches itself there, never behind a carrier's NAT) |
-| `radius` | how many tiles round the map's first entry point are kept loaded (0: the whole map) |
-| `admin_password`, `moderator_password` | administration in the game, the web panel and `POST /admin` (see [Administration](#administration)); at least 12 characters each, empty: nobody |
-| `admin_web`, `admin_web_origins`, `admin_trusted_proxies`, `admin_proxy_header` | where the web panel (`/admin/` on the web port) can be reached from: `local` (what a new `server.cfg` writes), `remote` through trusted proxies (passwords of at least 16 characters, else `local`), or `off` (a file from before the panel, without the key) |
-| `vehicles` | the buses players may drive, separated by `;`: bus files (`Vehicles/MAN_SD200/MAN_SD77.bus`) or their folders (`Vehicles/MAN_SD200`), the latter for every bus in the folder (empty: every bus on the server) |
-| `share_positions` | `GET /players` on the web port (below) |
-| `accept_uploads`, `uploads_keep_days` | players' buses (below) |
-| `share_maps` | a player who joins without the server's map gets it from the server (the map and everything it uses, gigabytes for a big map); off (the written default), players install it themselves and are told which one is missing |
-| `voice_*` | voice chat (below) |
-| `public_server`, `public_list_url` | list the server in the public server list ([below](#public-server-list)); the list service's address (empty: openOMSI's own) |
-| `owner_bans`, `require_hardware_id` | machine bans ([below](#machine-bans)): the file of the owner's list shared by all your sessions (empty: `~/.openomsi/bans-owner.json`), and turning away players whose game sends no machine identifier |
+### 1. Download
 
-`server-icon.png` beside `server.cfg` (64x64, a PNG under 256 KB) is the icon the players'
-list shows.
+Every release has ready server packages:
 
-**The start script that asks** (`run-server.cmd` on Windows, a double click; `run-server.sh`
-on Linux, both beside `openomsi` in the server's zip): the first time it asks for the OMSI 2
-folder (and checks it is a complete installation before going on), then for the main
-settings of `server.cfg` - name, players at most, the UDP and web ports, the tunnel, the admin
-password (typed hidden; 12 characters at least) - with what the file has in brackets, kept
-with Enter. Every time, it lists the installed maps by number (the last one marked, taken
-with Enter) and starts the server on the one picked, without changing `map` in `server.cfg`;
-the output goes to the window and to `server.log` (begun anew at every start, see [What the
-server keeps about its players](#what-the-server-keeps-about-its-players)), and when the server stops on an error it
-says what the exit code means. Asked once per map, it makes `start-<map>.cmd` (or `.sh`)
-beside it: that starts the same map again with no question. `run-server.cmd -Setup`
-(`run-server.sh --setup`) asks for the folder and the settings again; `-Map maps/<folder>/global.cfg`
-(`--map …`) starts a map with no question. What it remembers is in `run-server.conf` (the
-folder, the last map, the maps of the `start-` scripts). It speaks Portuguese on a system in
-Portuguese, English otherwise. It needs no rights of an administrator; on Windows it runs in
-the Windows PowerShell every Windows has. `start.cmd` / `start.sh` stay as they were, for a
-service or another launcher.
-
-For a launcher of its own, the program has the two pieces the script uses:
-`openomsi --root <folder> --list-maps` prints the installed maps (one a line, as `server.cfg`
-names them; the content folder's too) and ends - with code 1 and what is missing when the
-folder is not a complete OMSI 2, never another installation found instead; with
-`--server <server.cfg>` it also writes a missing `server.cfg` with its defaults, nothing more
-of a server's start. `--server-map maps/<folder>/global.cfg` starts the server on that map
-instead of `server.cfg`'s.
-
-**When it does not start**, it says why on its output and ends with a code a launcher can
-tell apart:
-
-| exit code | cause |
-|---|---|
-| 1 | the original OMSI 2 was not found at `--root` (the files missing are listed: a wrong folder, or an incomplete installation), or another error, printed as `Error: …` |
-| 2 | `server.cfg` cannot be read or written, or its `map` is not installed (the maps there are listed, as `server.cfg` names them) |
-| 3 | its UDP `port` is taken (another server, or another program): stop it, or choose another port |
-
-A `web_port` that is taken is no reason to stop: the gateway takes another port and the log
-says which (the status page, the WebSocket players and the tunnel are there). The log goes to
-the standard error output: a launcher keeps it with the rest (`start.sh` writes it to
-`server.log` too; `start.cmd` shows it in its window), and does not take a line there for a
-failure - informational lines go there as well; the exit code says whether it failed. Paths
-with spaces or accents are passed as they are, quoted. A map is named as in the game, relative
-to the OMSI 2 folder (`maps/<folder>/global.cfg`), and found in the content folder (mods) too.
-
-Players reach it two ways:
-
-* UDP at `host:port` (a server with a public address, or on the LAN);
-* over a **WebSocket** at its web port (`omsi-net::ws`): every datagram is one binary
-  message, the server's gateway gives each WebSocket a UDP socket of its own on 127.0.0.1.
-  The session sees such a player there (`joined from 127.0.0.1:<port>`); the log says who
-  that is (`gateway: player WebSocket from <address> on 127.0.0.1:<port>`), with the
-  address a reverse proxy or tunnel on the machine forwards: the last `X-Forwarded-For`,
-  else `CF-Connecting-IP`. With Cloudflare's proxy (the orange cloud) in front of a proxy of
-  this machine, the last `X-Forwarded-For` is a Cloudflare edge, and the players would share a
-  few addresses (16 connections each at most): `gateway_proxy_header = cf-connecting-ip`
-  then believes Cloudflare's `CF-Connecting-IP` first - only with Cloudflare in front, which
-  writes it over a client's own.
-  That is what a free Cloudflare quick tunnel carries (`tunnel = 1` starts `cloudflared
-  tunnel --url http://127.0.0.1:<web_port>` and prints the `https://….trycloudflare.com`
-  address). The same port answers `GET /status` (JSON: name, motd, map, players,
-  max_players, time, weather, version, protocol, vehicles, and on a dedicated server `world`:
-  its AI cars, buses, cars asleep, parked cars, people walking, waiting and aboard, the
-  traffic density, whether it has passengers and the passenger density it applies now) and `GET /icon.png`, which the launcher's Multiplayer → Servers list
-  shows. `vehicles` is the server's `vehicles` list (else every bus it has): a joining
-  player's launcher offers only those, and so do the game menu's *Place a vehicle* and *Swap*
-  once the game has joined. With an `admin_password` it also takes `POST /admin`
-  from the machine itself: one admin command a line (`clock 30600`, `weather set
-  Weather/#CAVOK.owt`, `say …`, `kick 3`, as the Administration menu sends them), the
-  password in `X-Admin-Password`; five wrong ones in two minutes close it for a while. A
-  tool beside the server (a dispatch page, a script) administers it that way without
-  joining. A reverse proxy on the same machine connects from 127.0.0.1 as well: do not let
-  it pass `/admin` on. With `share_positions = 1` it also answers
-  `GET /players`: a JSON array of the players (`id`, `name`, `bus`, `line`, `destination`,
-  `tour`, `x`/`y` in world metres east/north, `heading` in degrees clockwise from north,
-  `speed_kmh`, `on_foot` and `aboard` - a player on foot is where it walks (even with its
-  own bus parked nearby), one sitting in another player's bus is with that bus (its id) - and `lat`/`lon` on a `[worldcoordinates]`
-  map such as Berlin-Spandau, `null` elsewhere), refreshed every second - what a live map of
-  the server on a website needs.
-  It is off by default: the players' names and positions are then nobody's business.
-
-**Passengers.** `passengers = 1/0` switches the people at the stops and on the pavements on
-or off for the whole run (a number there is not a count: `passengers = 50` reads as off).
-How many there are is `passenger_density`, a factor on the map's own demand: the hourly
-`[trafficdensity_passenger]` of its `global.cfg` and each stop's own numbers, so the map's
-busy and quiet hours and stops stay as they are. `1` is what the map says, `0.5` half, `2`
-twice, from `0` to `3`; it is the same factor as the game's own passengers setting
-(`pax_density` in `settings.cfg`), which a server without the key goes on using as before.
-It is not a cap on how many people there are (that is `ai_max_humans` of `settings.cfg`), and
-it changes neither `traffic` nor the timetable's buses. `0` brings no new people while the
-passengers stay on; whoever already waits, walks or rides stays. A value that is not a number
-from 0 to 3 (negative, `NaN`, `10`) is refused with the reason in the log, and the server
-runs as if the key were not there. An admin changes it while the server runs with
-`passengers <factor>` (the Administration menu's command, also through `POST /admin`): the
-stops get that many people from then on - nobody already there is taken away, the boarded
-passengers' trips go on, and the players' games only mirror the server's people, so nobody
-appears twice. `GET /status` shows the density applied and the people waiting, walking and
-aboard. On a server with `passengers = 0` the command is refused (the log says so).
-
-The players can **talk** to each other (see [VOICE.md](VOICE.md)): holding a talk key sends
-the player's voice, as small Opus frames, to the server, which passes it on to the players it
-concerns without decoding it - on the *nearby* channel to those within `voice_range` metres
-of the speaker (75 by default; the listeners make it quieter with the distance), on the
-*radio* channel to everybody. The server needs no audio device and stores nothing.
-
-| key | default | |
+| Package | System | Start script |
 |---|---|---|
-| `voice` | 1 | Voice chat at all. A player must also switch it on in their own settings (off by default), so a server that does not want the traffic says 0. |
-| `voice_radio` | 1 | The session-wide radio channel; 0 leaves the nearby channel only. |
-| `voice_range` | 75 | How far the nearby channel carries (5 to 1000 m). |
+| `openOMSI-<version>-server-linux-x64.zip` | Linux x86-64 | `start.sh`, `run-server.sh` |
+| `openOMSI-<version>-server-linux-arm64.zip` | Linux ARM64 | `start.sh`, `run-server.sh` |
+| `openOMSI-<version>-server-windows-x64.zip` | Windows 10/11, Server 2016 or later | `start.cmd`, `run-server.cmd` |
+| `openOMSI-<version>-server-windows-arm64.zip` | Windows on ARM | `start.cmd`, `run-server.cmd` |
 
-Each player is limited to 60 frames a second (a talking player sends 50), a frame to 400
-bytes; a player over it is dropped, as with every other kind of traffic. An administrator or
-moderator silences a player's voice with `vmute <id>` (and `vunmute <id>`), from the player's
-page in the game's Administration menu or the Player list; the silence ends when the player
-leaves. A `server.cfg` from before (with `voice_server_uid`, `voice_channel`,
-`voice_channel_password`) loads as it did: those keys are ignored and the log says so, while
-`voice_range` and `voice_radio` mean the above (a range under 5 m is raised to 5).
+Unpack it into a folder of its own. You also need a **complete original OMSI 2 installation** on that machine, the same one the players have.
+Put the server's mods into the OMSI 2 folder's `Vehicles`, `maps`, `Sceneryobjects` … as in the game's content folder.
 
-The same gateway and tunnel open for a player hosting by **code** (Connect by Code): its
-address goes to the rendezvous topic, and a joining game that gets no answer from the
-addresses in the code (routers that cannot be punched through) joins through the tunnel.
+To build the same package yourself on Linux: `scripts/build-server.sh [folder]` (into `dist/server` by default).
 
-## Players' buses (`accept_uploads`)
+### 2. Run the guided start script
 
-With `accept_uploads = 1` (the default) a player may drive a bus the server does not have:
-the player's game sends the server the files that bus uses, the server keeps them and passes
-them on to every other player, so nobody sees a stand-in.
+The easiest way is the script that asks:
 
-* **What goes:** only what the player's game actually read for that bus - the variant and the
-  paint driven, the shared folders its files point into (`..\..\Anzeigen`, shared sounds) and
-  the fonts its displays write with - not the whole pack. Stock OMSI 2 content and files that
-  came from the server never go. Programs, libraries and plugins are refused by name and by
-  content, as for the server's own mods.
-* **When:** a joining player sends it under the loading screen ("Getting your bus to the
-  server", with the progress), so the others see the real bus from its first metre; after
-  three minutes the loading screen lets go and the rest goes on in the background, shown as a
-  card over the HUD. A bus or paint changed in the game is sent the same way.
-* **The others:** every player's game says which bus it drives by its fingerprint (the
-  hash over the list of its files). A game that draws that player uses its own copy when it
-  is the same bus file for file, and else asks the server for that bus by its fingerprint
-  ("Downloading another player's bus: 40%") - never another version that has the same path
-  here. Joining downloads only the server's own mods (and its map, with `share_maps`); the buses of the players
-  who are there come this way, the moment their players are drawn (a bus still on its way to
-  the server is waited for: the server answers the moment it has come). At most three buses
-  download at once.
-* **How it goes:** both ways in pieces of 1 MiB (a small file is one piece), each compressed
-  when that makes it smaller (uncompressed `.tga`/`.bmp` textures go at a few percent of their
-  size; `.dds`/`.png` hardly shrink), over four connections at once. Every piece is kept
-  sealed the moment it comes, so a transfer that breaks off goes on where it stopped, whatever
-  the size of the file, and loses at most the pieces on their way. A file counts only once
-  all its pieces are here and its SHA-256 is the one its list names, and it has passed the
-  checks of what it is; a bus is drawn only once every file of its list is here. Anything
-  else - a piece changed on the way, a file that is not what its list says - is thrown away
-  and fetched again, never drawn.
-* **On the server:** taken without asking and with no size limit, and kept by its content:
-  every file sealed once in `~/.openomsi/lan-store` by its SHA-256 (a file several buses share
-  is kept and sent once), every bus as its list of files in `lan-store/vehicles/<fingerprint>.json`
-  - the fingerprint the server works out itself from what it checked. Two players with two
-  versions of the same mod are two buses, both kept, neither in the place of the other; the
-  server draws each player's bus in the version that player has. Still there after a restart.
-  A bus nobody drives is kept `uploads_keep_days` (30 by default) after it was last used; when
-  the disk runs short for a file being sent, the buses nobody drives now go first, the least
-  lately used first, until it fits - no bus is ever refused for its size, only when even then
-  the disk cannot hold it. A bus being sent, and every file of it, is never let go meanwhile.
-  To forget a bus by hand, stop the server and delete its `.json`.
-* With `vehicles` empty the players may choose any bus they have, not only the server's own;
-  with a `vehicles` list only those buses are taken. A session a player hosts sets its own
-  list with `--session-buses "<bus>;<bus>"` (the same spellings); a player who drives another
-  bus is sent away and told which ones the session has, as on a dedicated server.
-* `accept_uploads = 0` switches it off. A player's game hosting a session (`--lan-host`) takes
-  the joining players' buses the same way, and keeps its own bus in its store for them.
+- Windows: double-click `run-server.cmd`.
+- Linux: run `./run-server.sh`.
 
-## Optional RP speed governor
+1. The first time, it asks for the OMSI 2 folder and checks that it is a complete installation.
+2. It asks for the main settings: name, maximum players, UDP port, web port, the tunnel and the admin password (typed hidden, at least 12 characters).
+   The current value is shown in brackets. `Enter` keeps it.
+3. Every time, it lists the installed maps by number. The last one is marked; `Enter` takes it.
+4. It starts the server on that map. Output goes to the window and to `server.log`.
+5. Once per map it offers to create `start-<map>.cmd` (or `.sh`), which starts that map again with no questions.
 
-The dedicated server may advertise a `speed_limit_kmh` of `60`, `75` or
-`80` to players. `0` (the default) preserves normal unrestricted controls.
-Unrecognized presets log a warning and disable the limiter. Clients ask the host
-periodically (including after reconnect) and apply a progressive throttle
-reduction in the final 5 km/h before the limit. Above it, a small braking
-assist counters downhill acceleration; steering, reverse and normal braking
-remain usable. The simulation does not abruptly clamp vehicle velocity.
+| Option | Does |
+|---|---|
+| `run-server.cmd -Setup` / `run-server.sh --setup` | Ask for the folder and settings again. |
+| `run-server.cmd -Map maps/<folder>/global.cfg` / `run-server.sh --map …` | Start this map with no questions. |
 
-**Compatibility and limitation:** the policy is sent as an authenticated
-host-sourced LAN command, so older clients ignore it. At this stage the
-governor is **cooperative client-side RP behavior**, not an anti-cheat:
-modified game clients can ignore it. The dedicated host does not yet reject
-overspeed poses. Operators requiring competitive enforcement should verify
-client versions and treat overspeed detection as follow-up work. Restart
-the dedicated server after changing `server.cfg`.
+The script remembers the folder, the last map and its shortcuts in `run-server.conf`.
+It does not change `map` in `server.cfg`. It speaks Portuguese on a Portuguese system and English otherwise.
+It needs no administrator rights. On Windows it runs in the built-in Windows PowerShell.
+When the server stops on an error, the script says what the exit code means.
+
+### 3. Or start it directly
+
+```bash
+./start.sh /path/to/OMSI2 [server.cfg]
+```
+
+```text
+start.cmd C:\path\to\OMSI2 [server.cfg]
+```
+
+Both run:
+
+```bash
+openomsi --root /path/to/OMSI2 --server /path/to/server.cfg
+```
+
+A missing `server.cfg` is written with its defaults and a comment for every key on the first start.
+`start.sh` writes the output to `server.log` too. `start.cmd` shows it in its window only.
+
+### 4. Minimal configuration
+
+Edit `server.cfg` beside the script. For a first server, these keys are enough:
+
+```text
+name = My openOMSI server
+motd = Welcome! Drive safely.
+map = maps/Grundorf/global.cfg
+max_players = 16
+admin_password = a-long-password-here
+```
+
+Restart the server after changing `server.cfg`.
+
+### 5. Connect
+
+The server prints its addresses when it starts. Players join in the launcher on **Servers** → **Use a server address**:
+
+- `<server address>:27015` (UDP), or
+- the `https://….trycloudflare.com` address the server printed (with `tunnel = 1`, the default).
+
+On the same machine, use `127.0.0.1:27015`.
+
+### 6. Open the firewall
+
+| Port | Protocol | Used for |
+|---|---|---|
+| 27015 (`port`) | UDP | The session |
+| 27015 (`port`) | TCP | The server's mods and the players' buses |
+| 27025 (`web_port`) | TCP | Status, icon, WebSocket players, web panel |
+
+On a server on the internet, open all three. With the tunnel, players can also come in through it with no ports open.
+
+## Configuration reference
+
+`server.cfg` is `key = value`, one per line. Lines starting with `#` are comments. Flags take `1`/`0` (also `true`, `yes`, `on`).
+Two defaults are given when they differ: the value in a newly written file, and what a missing key means (for a `server.cfg` from an older version).
+
+### Name and map
+
+| Key | Default | What it sets |
+|---|---|---|
+| `name` | `openOMSI server` | Shown in the players' server list and when they join. |
+| `motd` | `Welcome! Drive safely.` (missing: empty) | Message of the day. |
+| `map` | `maps/Berlin-Spandau/global.cfg` | The map, relative to the OMSI 2 folder. Maps in the content folder are found too. |
+| `date` | empty | Start date `YYYY-MM-DD`. Empty: today. |
+| `time` | `08:00` | Start time of day. |
+| `weather` | empty | A `.owt` file of the OMSI 2 folder. Empty: the map's default. `cycle`: one weather after another through the day, as the month allows. |
+| `radius` | `0` | Tiles around the map's first entry point kept loaded. `0`: the whole map. |
+
+`server-icon.png` beside `server.cfg` is the icon in the players' list: a PNG, 64x64, under 256 KB.
+
+### Clock and weather
+
+| Key | Default | What it sets |
+|---|---|---|
+| `time_speed` | `1` | How fast the clock runs, 1 to 30. |
+| `real_time` | `0` | `1`: the clock follows the machine's real date and time. `time`, `date`, `time_speed` and the admins' clock are then ignored. |
+| `metar_sync` | `0` | `1`: the weather follows an airport's real METAR report. The server downloads it every ten minutes and passes it on, so players need no METAR sync of their own. Admins cannot change the weather then. |
+| `metar_station` | empty | The airport's ICAO code, for example `EDDB`. Empty: the one nearest the map. |
+
+### Traffic and passengers
+
+| Key | Default | What it sets |
+|---|---|---|
+| `traffic` | `30` | Random AI cars. Capped at the game's own maximum. |
+| `timetable` | `1` | Timetable buses. |
+| `passengers` | `1` | People at the stops and on the pavements, on or off for the whole run. A number is not a count: `passengers = 50` reads as off. |
+| `passenger_density` | `1` (missing: the machine's `settings.cfg`) | How many people, as a factor on the map's own demand ([below](#passenger-density)). 0 to 3. |
+| `ai_drive_through_parked` | `0` | `1`: the AI drives on through a parked car standing in its lane, as OMSI 2's does. `0` stops behind it and goes round when it can. Use `1` on maps where a parked car blocks a lane with no way round. |
+| `speed_limit_kmh` | `0` | Optional roleplay speed limit: `0` (off), `60`, `75` or `80` ([below](#speed-limit)). |
+
+#### AI limits
+
+These override the machine's `settings.cfg` for this server. Empty: `settings.cfg` decides. They are for the whole server, not per player: with players all over the map, raise them (and the CPU) with the players.
+
+| Key | Range | What it sets |
+|---|---|---|
+| `ai_unsched_factor` | 0 to 300 | Random traffic, percent of the map's density (100 = as the map says). |
+| `ai_max_scheduled` | 0 to 4096 | Timetable vehicles on the road at once. `0`: no limit. |
+| `ai_max_parked` | -1 to 100000 | Parked cars in the loaded tiles. `0`: every space. `-1`: none. |
+| `ai_max_humans` | 1 to 4096 | People at once: waiting, walking and riding. |
+
+A value out of range is ignored with a warning in the log.
+
+#### Passenger density
+
+`passenger_density` multiplies the map's own demand: the hourly `[trafficdensity_passenger]` of its `global.cfg` and each stop's numbers. The map's busy and quiet hours stay as they are.
+
+- `1` is what the map says, `0.5` half, `2` twice.
+- `0` brings no new people, but those already waiting, walking or riding stay. `passengers = 0` switches them off.
+- It is not a cap on how many people there are (that is `ai_max_humans`). It does not change `traffic` or the timetable.
+- It is the same factor as the game's own `pax_density` setting.
+- A value that is not a number from 0 to 3 is refused with the reason in the log, and the server runs as if the key were missing.
+
+Admins change it while the server runs with `passengers <factor>`. Nobody already there is removed.
+
+#### Speed limit
+
+`speed_limit_kmh` asks every player's game to hold their bus under 60, 75 or 80 km/h. Any other value logs a warning and turns the limit off.
+
+- The game reduces the throttle progressively in the last 5 km/h. Above the limit, a small braking assist counters downhill speed.
+- Steering, reverse and normal braking work as usual. The speed is never clamped abruptly.
+- Games ask the server for the limit regularly, also after reconnecting. Older games ignore it.
+
+> **Warning:** This is cooperative roleplay behaviour, not anti-cheat. A modified game can ignore it, and the server does not reject buses that go too fast.
+
+### Network
+
+| Key | Default | What it sets |
+|---|---|---|
+| `port` | `27015` | UDP port of the session. The same number on TCP carries the mods and players' buses. |
+| `web_port` | `27025` | TCP port of the web gateway: status, icon, WebSocket players, web panel. If it is taken, the server picks another and logs which. |
+| `max_players` | `16` | Player limit, 1 to 64. |
+| `tunnel` | `1` | Start a free Cloudflare quick tunnel in front of the web port and print its `https://….trycloudflare.com` address. The game downloads `cloudflared` if needed. |
+| `public_address` | empty | Where players reach the web port without the tunnel ([below](#public-address)). |
+| `gateway_proxy_header` | `x-forwarded-for` | How a reverse proxy on this machine names a WebSocket player's address: `x-forwarded-for` or `cf-connecting-ip` ([below](#behind-a-reverse-proxy)). |
+
+#### Public address
+
+A quick tunnel drops its connections now and then. A game joining through the tunnel therefore first tries the server's direct web address.
+
+- Empty: found automatically. This is the machine's own internet address when it has one. Otherwise it is the address the internet sees, if the server can reach itself there (not behind a carrier's NAT).
+- `1.2.3.4:27025` or `play.example.org:27025`: your own.
+- `off`: told to nobody.
+
+The address is shown to whoever asks the server's status.
+
+### Players and content
+
+| Key | Default | What it sets |
+|---|---|---|
+| `vehicles` | empty | The buses players may drive, separated by `;` ([below](#allowed-buses)). Empty: every bus on the server (and with `accept_uploads = 1`, any bus a player has). |
+| `accept_uploads` | `1` | Take the buses of players who drive one the server lacks, and pass them on ([Uploads](#uploads)). |
+| `uploads_keep_days` | `30` | Days an uploaded bus nobody drives is kept, 1 to 3650. |
+| `parked_buses` | `0` | How many uploaded buses stand parked in the world for any player to take ([below](#parked-buses)). 0 to 536. Needs `accept_uploads = 1`. |
+| `share_maps` | `0` (missing: `1`) | A player who joins without the server's map gets it from the server, with everything it uses ([below](#sharing-the-map)). |
+| `share_positions` | `0` | `GET /players` on the web port tells anyone the players' names, buses, lines and positions ([below](#web-endpoints)). |
+| `allow_player_teleport` | `0` | `1`: every player may teleport their **own** bus (F4 map, navigator map, start points). `0`: only admins and moderators. It never moves another player. |
+
+#### Allowed buses
+
+`vehicles` takes bus files (`Vehicles/MAN_SD200/MAN_SD77.bus`) or bus folders (`Vehicles/MAN_SD200` or `MAN_SD200`, meaning every bus directly in that folder).
+Slashes or backslashes and any case are fine.
+
+- The players' launcher offers only these buses, and so do the game's *Place a vehicle* and *Swap* menus.
+- A player who drives another bus is sent away and told the list.
+- The server announces these buses with their paint schemes (the first 256). Players who lack one can download it after they confirm ([Playing together](MULTIPLAYER.md#buses-from-the-server)).
+  A first start checks every file and can take minutes for a large list. The web port is open meanwhile.
+
+#### Sharing the map
+
+With `share_maps = 1`, a player who joins without the server's map downloads it and everything it uses: objects, splines, vehicles. For a big map that is gigabytes.
+With `0`, players install the map themselves and are told which one is missing. The server's bandwidth then goes to the players' buses.
+
+To put a map on the server with everything it uses, pack it into the server's content folder:
+
+```bash
+openomsi --root "/path/to/OMSI2" --pack-map "<map name>" --pack-to content
+```
+
+On the same disk, files go in as hard links and take no extra space. `--pack-to map.zip` makes a zip for another machine.
+Files the map names that do not exist are listed in `openomsi-map-pack-<map>.txt` in the target folder.
+
+#### Parked buses
+
+With `parked_buses` above 0, buses that players uploaded stand in the world when nobody drives them, where their last driver left them (also after a restart).
+Any player who walks up to one takes it with the key that takes a seat. At most this many stand, one of each bus.
+A game is told only the ones near its player. Players on an older release see them as other players' parked buses and cannot take them.
+
+### Administration keys
+
+| Key | Default | What it sets |
+|---|---|---|
+| `admin_password` | empty | Password of the admin role. At least 12 characters. Empty: no admin. |
+| `moderator_password` | empty | Password of the moderator role. At least 12 characters. Empty: no moderators. One equal to `admin_password` gives the admin role. |
+| `admin_web` | `local` (missing: `off`) | Who reaches the web panel: `local`, `remote` or `off` ([Web panel](#web-panel)). |
+| `admin_web_origins` | empty | Other `https://` sites whose pages may use the admin API, separated by `;`. |
+| `admin_trusted_proxies` | empty (this machine) | Proxies whose word about a request's source is believed, separated by `;`. |
+| `admin_proxy_header` | `x-forwarded-for` | The header those proxies name the client in: `x-forwarded-for` (last address), `x-real-ip` or `cf-connecting-ip`. |
+
+A shorter password lets nobody in, and the log says so. With `admin_web = remote`, both passwords need 16 characters, or the panel stays `local`.
+
+### Voice chat
+
+| Key | Default | What it sets |
+|---|---|---|
+| `voice` | `1` (missing: `0`) | Voice chat at all. Players must also switch it on themselves. |
+| `voice_radio` | `1` (missing: `0`) | The session-wide radio channel. `0` leaves only the nearby channel. |
+| `voice_range` | `75` | How far the nearby channel carries, 5 to 1000 m. |
+
+The server passes voice on without decoding it and needs no audio device. See [Voice chat](VOICE.md).
+Old keys `voice_server_uid`, `voice_channel` and `voice_channel_password` are ignored, and the log says so.
+
+### Public list and bans
+
+| Key | Default | What it sets |
+|---|---|---|
+| `public_server` | `0` | `1`: list the server in the public server list ([Public server list](#public-server-list)). |
+| `public_list_url` | empty | The list service's `https://` address. Empty: openOMSI's own. Not in the written file. |
+| `owner_bans` | empty | The owner's ban list file, shared by all your sessions. Empty: `~/.openomsi/bans-owner.json`. |
+| `require_hardware_id` | `0` | `1`: turn away players whose game sends no machine identifier. |
+
+### Logs and privacy
+
+| Key | Default | What it sets |
+|---|---|---|
+| `log_addresses` | `0` | `1`: write the players' internet addresses whole in the log (for an abuse report). `0`: a public address keeps only its network (`203.0.113.x`). |
+| `log_keep` | `5` | Earlier `server.log` files kept (`server.1.log` is the newest). `0` keeps none. |
+| `log_max_mb` | `20` | A new `server.log` is begun past this size. `0`: no limit. |
+
+`log_keep` and `log_max_mb` are applied by `run-server` and `start.sh`. See [What the server keeps](#what-the-server-keeps).
+
+## Uploads
+
+With `accept_uploads = 1` a player may drive a bus the server does not have. Their game sends the files to the server, which keeps them and passes them on, so nobody sees a stand-in.
+
+**What is sent.** Only what the player's game actually loaded for that bus: the variant and paint driven, the shared folders its files point into (`..\..\Anzeigen`, shared sounds) and the fonts of its displays.
+Stock OMSI 2 content and files that came from the server are never sent. Programs, libraries and plugins are refused by name and by content.
+
+**When.** A joining player sends it under the loading screen (*Getting your bus to the server*), so the others see the real bus from the start. After three minutes the loading screen lets go and the rest continues in the background.
+A bus or paint changed in the game is sent the same way.
+
+**How others get it.** Each game names the bus by its fingerprint, a hash over its list of files.
+A game that already has the same bus file for file uses its own copy. Otherwise it downloads that exact version from the server, never another version at the same path. At most three buses download at once.
+
+**Transfer.** Files go in pieces of 1 MiB, compressed when that helps, over four connections at once.
+An interrupted transfer resumes where it stopped. A file counts only when its SHA-256 matches its list and it passes the content checks. A bus is drawn only when all its files are there.
+
+**Storage on the server.** Every file is kept sealed once in `~/.openomsi/lan-store`, by its SHA-256. A file several buses share is kept once.
+Every bus is a list of files in `lan-store/vehicles/<fingerprint>.json`. Two versions of the same mod are two buses, both kept.
+
+- Uploads are taken without asking and have no size limit.
+- A bus nobody drives is kept `uploads_keep_days` after its last use.
+- When the disk runs short, the buses nobody drives now go first, least recently used first. No bus is refused for its size.
+- To forget a bus by hand, stop the server and delete its `.json`.
+
+`accept_uploads = 0` turns uploads off. A game hosting a session (not a dedicated server) takes its players' buses the same way.
 
 ## Administration
-**Multiplayer relocation (dedicated servers).** A player authenticated with
-`/admin <password>` as administrator or moderator can relocate their own bus
-without reconnecting: Esc → Service → Teleport to a start point (e.g. Bauhof
-to Kraken), F4 map click and the navigator/city map teleport now request a
-host-authorized move. The dedicated host validates the sender and returns a
-`teleport` command; the client applies the same reset logic as existing
-host-controlled teleports. Moderators can `goto` and `unstick`; admins
-can additionally `bring` and `bringall` through the new Players menu.
 
-`allow_player_teleport = 0` in `server.cfg` (default) restricts self
-teleport to authenticated moderators/admins. Set it to `1` to allow every
-connected player to relocate **only their own bus** using the same UI.
-This setting does not authorize moving other players, setting the world clock,
-or editing the map. Old game clients do not support this request protocol.
+The server has two roles. The role comes from the password given, and the server alone decides it. Every operation is checked on the server.
 
+| Role | May |
+|---|---|
+| Moderator | See the server and its players. Send players away and ban them for the session (not admins). Chat, private words and notices. Duties, services, `unstick`, `goto`. Mute a player's voice. |
+| Admin | Everything a moderator may, plus the world: clock, its speed, weather, traffic, passengers. `bring` and `bringall`. Bans in all your sessions, and lifting bans. |
 
-A server administers itself with passwords of `server.cfg`, at least 12 characters each (a
-shorter one lets nobody in, and the log says so - a server set up before with 8 to 11
-characters needs a longer one now). The game's login goes over the session unencrypted: its
-challenge, salt and rounds can be overheard, and a short password could then be guessed
-offline, hence the length.
+There are four ways to administer. All go through the same checks and the same audit log:
 
-| key | role | may |
+1. **In the game**: say `/admin <password>` in the chat, then use `Esc` → **Administration...** and **Player list...**.
+2. **The web panel** at `http://127.0.0.1:<web_port>/admin/`.
+3. **The web API** under `/api/admin/` (what the panel uses).
+4. **`POST /admin`** from the server machine itself, for scripts.
+
+### In the game
+
+1. Join the server.
+2. Type `/admin <password>` in the chat.
+   The password never goes over the network: the server sends a challenge and the game proves it knows the password.
+3. The server answers with your role. `Esc` → **Administration...** now shows the server's menu.
+
+The **Administration** menu shows your role, the clock and the weather, and has:
+
+- **Players...**: every player by name and number, with what they drive. Searchable. A player's page offers sending them away (now, or for the rest of this run), with a confirmation naming them.
+- The clock, its speed, the next weather, the traffic and the passenger density, with their current values. Or why they cannot be changed: moderator role, real time, METAR, no passengers.
+- The results of the last operations.
+- **Stop administering** ends your rights.
+
+The menu asks the server every 3 seconds at most while it is open. A server older than the game shows **Full list of commands (older menu)...**.
+Rights end when you leave or when you talk from another address.
+
+> **Note:** A game from before the roles, given the moderator password, shows the admin's old menu. The server still refuses the world's actions, but that game does not show the refusal. Moderators should use a current game.
+
+### Admin commands
+
+The menus send these lines. `POST /admin` takes the same lines.
+`<player>` is a player number, or `number#connection` to make sure it is still the same join (the admins' list gives the connection). A player who left and came back has a new connection, and the operation is refused.
+
+| Command | Role | Does |
 |---|---|---|
-| `admin_password` | admin | everything below, and the world: the clock and its speed, the weather, the AI traffic, the passengers; bringing players to their bus (`bring`, `bringall`) |
-| `moderator_password` | moderator | see the server and its players, send a player away (not an admin), the chat, a word or a notice to one player or to all (`tell`, `notify`), duties, services, putting a player's bus back on its wheels (`unstick`), going to a player (`goto`, which moves the moderator's own bus) |
+| `kick <player> [reason]` | moderator | Send away. They can join again. |
+| `ban <player> [reason]` | moderator | Send away and keep out for the rest of this server run (by the game's random nonce and address). |
+| `hwban <player> session [12h\|3d] [reason]` | moderator | Ban the machine from this server. Without a duration: until lifted. |
+| `hwban <player> all [12h\|3d] [reason]` | admin | Ban the machine from all your sessions. |
+| `unban <ban id>` | admin | Lift a machine ban. |
+| `say <text>` | moderator | Chat line to everybody. |
+| `tell <player> <text>` | moderator | Private word to one player. |
+| `notify <all\|player> <id> <seconds> <kind> <text>` | moderator | A notice card. `kind`: `info`, `warn`, `alert`, `action`, `success`. Seconds 2 to 30. |
+| `duty <player> <line> <tour> <trip> <stop>` | moderator | Give a duty. A space in a name is `%20`. |
+| `duty-off <player>` | moderator | Take a duty back. |
+| `service <repair\|refuel\|wash> [all\|<player>]` | moderator | Service buses. |
+| `unstick <player>` | moderator | Put a player's bus back on its wheels. |
+| `goto <player>` | moderator | Move your own bus beside theirs (from the game only). |
+| `vmute <player>` / `vunmute <player>` | moderator | Silence or allow a player's voice for the session. |
+| `bring <player>` | admin | Put their bus beside yours (you must drive on the server). |
+| `bringall` | admin | Bring everybody, one behind the other. |
+| `clock <seconds>` | admin | Set the time of day (seconds since midnight: `30600` is 08:30). |
+| `time <seconds>` | admin | Move the clock, at most a day either way. |
+| `speed <factor>` | admin | Clock speed, 1 to 30. |
+| `weather next` | admin | Next weather. |
+| `weather set <file>` | admin | This weather, for example `Weather/#CAVOK.owt`. |
+| `traffic <density>` / `traffic clear` | admin | AI traffic density, or clear all AI traffic (a jam). |
+| `passengers <factor>` | admin | Passenger density, 0 to 3. Refused when `passengers = 0`. |
 
-The role comes from the password that was given and is decided by the server alone: nothing a
-game or a page sends names or raises it, and every operation is checked on the server, whether
-a menu showed it or not. A `moderator_password` equal to the `admin_password` gives the admin's
-role. No password: no administration.
+Two read-only queries serve the menus: `admin-list [search]` lists players (number, connection, state, role, vehicle, name; no positions or addresses) and `admin-state` gives the clock, speed, weather, traffic, passengers and locks.
 
-**In the game.** A player says `/admin <password>` in the chat; the password never goes over the
-network (the game asks `auth?`, the server answers with a fresh challenge, its salt and rounds,
-and the game proves it knows the password: PBKDF2 and an HMAC of the challenge). Five wrong
-answers in two minutes from one source (the player's address - the one behind the web gateway
-for a player who came by WebSocket - or their number on this machine) lock it for that source
-for a while; thirty from all sources together lock it for everybody. The web panel counts its
-own wrong passwords apart (see below): a lock of the one is no lock of the other. The server answers `admin-ok admin`
-or `admin-ok moderator` (a game before the roles reads the first word), and the Esc menu's
-*Administration* sends every line to the server as `admin <action>`. The rights end when the
-player leaves or talks from another address.
+A moderator cannot send away, ban or silence an admin. Nobody can ban themselves.
+`bring`, `bringall` and `goto` need the admin's own bus on the server, so the web panel does not offer them. A player on foot who is brought is put back at the wheel first.
 
-A game from before the roles, given the moderator's password, shows the admin's whole old menu:
-the server still refuses the world's actions, but that game does not read the answer
-(`admin-result`), so nothing happens on its screen. Moderators should play a current game.
+### Operation results
 
-**The Administration menu, from afar.** A player who administers a dedicated server gets
-the server's own menu under Esc → *Administration*: who they are (admin or moderator), the
-clock and the weather; *Players...* - every player the server lists, by name and number, with
-what they do and drive, searchable with the menu's search line; a player's page and, before
-sending them away (now, or for the rest of the run), a question naming them, their number and
-their connection; the clock, its speed, the next weather, the traffic and the passengers'
-density with their present values - or why they cannot be changed (a moderator's role, the real
-time, METAR, no passengers); and what became of the last operations. The menu asks the server
-over the session itself - the server may be anywhere; it never looks for it at an address of
-its own - every 3 seconds at most while it is open, one question at a time, and says so when
-no answer comes (a server older than the game: *Full list of commands (older menu)...* still
-has every line of the older menu). The line picked stays on what it does when new answers
-come; a player picked who left or came back is not acted on. *Stop administering* ends the
-rights. It is a list of the game menu like the others, worked the same way (the search line
-needs a keyboard; the list works without it). The host of a game hosted by code keeps the menu it had.
+Every operation, whichever way it comes, is done by the server's own loop and recorded with its result:
 
-**One way of doing it.** Whatever way an operation comes - a player's menu, the machine's own
-tool (`POST /admin`, see above: the admin's role), the web panel - it is checked against the
-role, done by the server's own loop on its tick (never by a web request's thread), and
-recorded with what became of it: `applied` (done: a player sent away is gone from the session,
-the clock reads the new time), `pending` (the server did its part, the rest is a player's game:
-a word or a duty sent to it), `rejected` with the reason (no such player, not the player picked
-any more, not allowed for the role, the clock follows the real time, the weather follows the
-METAR report, a weather that is not installed, a number out of range), or `queued` while the
-loop has not come to it. A player's game that asked is told `admin-result <record> <status>
-<message>`. A request taken is not a request done.
+| Status | Means |
+|---|---|
+| `queued` | Taken, not done yet. Refused if not done within 30 s. |
+| `applied` | Done: the player is gone, the clock reads the new time. |
+| `pending` | The server did its part; the rest is a player's game (a word or duty sent to it). |
+| `rejected` | Not done, with the reason: no such player, a different connection, not allowed for the role, real time or METAR in control, weather not installed, number out of range. |
 
-**Picking a player.** A player is named by number *and* connection: `kick 3#17 reason` (the
-connection is the session's own number for that join, which the admins' list gives). A player
-who left, or left and came back - the same number, a new connection - or somebody else who has
-the number now is not the one picked: the operation is refused and nobody else is touched. The
-older menus' `kick 3` still works and names the number alone. `hwban 3#17 session|all [12h|3d] reason` bans the player's machine and `unban <id>` lifts a ban ([Machine bans](#machine-bans)). The players' list for an admin
-(`admin-list [search]` → an `admin-p <id> <conn> <state> <role> <aboard> <online s> <vehicle>
-<name>` line each, then `admin-end <found> <total>`) needs no `share_positions`: it gives no
-position and no address. A search finds every name that holds the text, whatever the case
-(`pichau` finds `Pichau` and `pichau_fan`, the exact name first), as text - no pattern, no
-command - and never picks one by itself: the admin picks. `admin-state` answers `admin-s` with
-the clock, its speed, the weather, the traffic, the passengers' density and counts, the players
-and the locks (`rt=1`: real time, `metar=`: the METAR station).
+A game that asked gets `admin-result <record> <status> <message>`.
+Texts are values, never commands: a line break in a reason becomes a space, and markup stays text.
 
-**Sending away.** A player sent away (`kick`) reads the reason given, or "sent away by an admin",
-and may join again. `ban` keeps them out for the rest of this server run, by their game's random
-nonce and the address they came from. That is not an identity: a player name is whatever the
-game says, an address changes (and many players can share one), and the session knows nothing
-that outlives a run and could not be made up. So `ban` is for the run only; the lasting ban is the
-[machine ban](#machine-bans), which holds a machine's identifier instead of a name or an address.
+### Web panel
 
-**Bringing players, going to them.** `bring`, `bringall` and `goto` stay in the game's menu for
-an admin who drives on the server: the player's game puts its bus beside the admin's (with its
-trailers; a player on foot is put back at the wheel first, so walking is not kept). What
-becomes of other players sitting in a bus that is moved is not checked. They need the admin's
-bus, and are not safe for every case, so the web panel and the new panels offer none of them.
+`http://127.0.0.1:<web_port>/admin/` (with the final slash) on the server machine. It is part of the server: nothing to install.
 
-**The web API.** The web gateway answers the administration under `/api/admin/` (and the
-panel under `/admin/`), on the server's web port; nothing else is needed. All JSON, the token
-of a login in `Authorization: Bearer <token>` - never in a cookie or in the address. A request
-that changes something is `POST` with `Content-Type: application/json`.
+1. Open the address in a browser on the server machine.
+2. Log in with the admin or moderator password. It is sent to the server only and kept nowhere.
+3. The session token lives in that browser tab until you close it or log out.
 
-| request | body / query | answer |
-|---|---|---|
-| `POST /api/admin/login` | `{"password": "…"}` | `200 {"token", "session"}`; `401` wrong password; `429 {"retry_after"}` too many lately; `404` no password set |
-| `POST /api/admin/logout` | `{}` | `200`: the session ends |
-| `GET /api/admin/session` | | `200 {"session"}` |
-| `GET /api/admin/state` | | `200 {"session", "server", "age_ms"}` |
-| `GET /api/admin/players` | `?q=<search>` | `200 {"players", "total", "age_ms"}` |
-| `POST /api/admin/ops` | an operation, below | `202 {"op"}` queued; `400` not one (with the reason); `403` not for this role; `503` too many waiting |
-| `GET /api/admin/ops/<id>` | | `200 {"op"}`; `404` not kept any more (the audit log has it) |
-| `GET /api/admin/bans` | | `200 {"bans": [{"id", "name", "reason", "by", "at", "until", "scope"}], "age_ms"}` - no identifiers |
-| `GET /api/admin/events` | `?audit_after=<seq>` | `200 {"ops": the last 50 records, "audit": the audit entries after seq}` |
+The panel shows the server (map, players, clock and speed, weather, traffic, passenger density, people waiting, walking and riding), the players with a search (by name or `#number`), actions on the player picked (send away, ban for this run, a word, a machine ban), announcements, the world controls, and the result of each operation.
+Controls a role may not use are disabled with the reason.
+It refreshes every 3 seconds while the tab is visible. It is in English and Portuguese, for desktop and phone.
 
-`session` is `{"role": "admin"|"moderator", "permissions": ["view", "moderate", "world"], "actor":
-"web#2 (address)", "expires_in": seconds}`. `server` is `{"name", "map", "version", "players",
-"max_players", "time": "HH:MM", "clock": seconds of the day, "clock_speed", "real_time", "weather",
-"metar": station or null, "traffic", "traffic_max", "timetable", "passengers",
-"passenger_density", "passenger_density_max", "waiting", "walking", "aboard", "cars",
-"buses"}`, as the server's loop published it about a second ago (`age_ms`; a server that has
-stopped publishing shows as old). A player is `{"id", "conn", "name", "state": "joining" |
-"driving" | "on_foot" | "aboard", "vehicle", "line", "tour", "aboard": the driver's id or null,
-"online_secs", "admin": role or null}` - no position, no address. An operation's record is
-`{"id", "actor", "op", "summary", "target": {"id", "conn"} or null, "target_name", "status":
-"queued" | "applied" | "pending" | "rejected", "message", "at"}`.
+A login session ends after 30 minutes unused, after 12 hours, at logout or when the server stops. At most 16 run at once; a moderator's login never pushes out an admin's.
 
-The operations (`POST /api/admin/ops`), with what they need:
+#### Who can reach the panel
 
-| body | role |
+| `admin_web` | Reachable from |
+|---|---|
+| `local` | The server machine only, directly. A request that came through a tunnel or proxy is refused, including the server's own Cloudflare tunnel. |
+| `remote` | Also through the proxies in `admin_trusted_proxies`, only for requests they say came over HTTPS. Passwords need 16 characters. |
+| `off` | Nobody. `POST /admin` from the machine still works. A `server.cfg` without the key, or with a wrong word, is `off`. |
+
+Other protections:
+
+- On this machine the panel answers only to `127.0.0.1`, `localhost` and `[::1]`. Another site's name pointed at this machine (DNS rebinding) is refused.
+- A request whose browser names another origin is refused unless it is in `admin_web_origins`. No other site may read the answers.
+- Five wrong passwords in two minutes lock that source for a while. Thirty from anywhere lock everybody except the server machine itself.
+  The game's login and the panel count wrong passwords separately.
+
+> **Warning:** With `admin_web = remote` and `tunnel = 1`, the local `cloudflared` is a trusted proxy, so the panel is on the public tunnel address, guarded by the passwords alone. A proxy of your own with a certificate (Caddy, nginx) in front of `127.0.0.1:<web_port>` is safer.
+
+#### Behind a reverse proxy
+
+A reverse proxy on the server machine must add the client's address to what it passes on. One that adds none hands every request from the internet over as this machine's own.
+
+| Proxy | Setting |
+|---|---|
+| Caddy | Default `admin_proxy_header = x-forwarded-for`. |
+| nginx | `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` with the default, or `proxy_set_header X-Real-IP $remote_addr;` with `admin_proxy_header = x-real-ip`. A plain `proxy_pass` adds no address: add one of these. |
+| Cloudflare's proxy (orange cloud) in front of your proxy | `admin_proxy_header = cf-connecting-ip` and `gateway_proxy_header = cf-connecting-ip`. Otherwise every client looks like a few Cloudflare addresses. |
+
+The proxy must not pass `/admin` (the machine's own door) on.
+For `remote`, HTTPS is recognised by `X-Forwarded-Proto: https`, or Cloudflare's `CF-Visitor` with `admin_proxy_header = cf-connecting-ip`.
+
+> **Warning:** A tunnel working below HTTP (`ssh -R`, frp, playit, `ngrok tcp`) hands every client over as this machine, with no header to tell. With one in front of the web port, anybody who reaches it meets the login as if they were local. Point such a tunnel at the game port only, or set `admin_web = off`.
+
+#### Web API
+
+All JSON on the web port. The login token goes in `Authorization: Bearer <token>`, never in a cookie or URL. Requests that change something are `POST` with `Content-Type: application/json`.
+
+| Request | Answer |
+|---|---|
+| `POST /api/admin/login` `{"password": "…"}` | `200 {"token", "session"}`. `401` wrong password, `429 {"retry_after"}` too many, `404` no password set. |
+| `POST /api/admin/logout` `{}` | `200`. |
+| `GET /api/admin/session` | `200 {"session"}` |
+| `GET /api/admin/state` | `200 {"session", "server", "age_ms"}` |
+| `GET /api/admin/players?q=<search>` | `200 {"players", "total", "age_ms"}` |
+| `POST /api/admin/ops` (an operation) | `202 {"op"}` queued. `400` invalid, `403` not for this role, `503` too many waiting. |
+| `GET /api/admin/ops/<id>` | `200 {"op"}`. `404` no longer kept (the audit log has it). |
+| `GET /api/admin/bans` | `200 {"bans": [{"id", "name", "reason", "by", "at", "until", "scope"}], "age_ms"}`. No identifiers. |
+| `GET /api/admin/events?audit_after=<seq>` | `200 {"ops": the last 50 records, "audit": entries after seq}` |
+
+Objects:
+
+- `session`: `{"role": "admin"|"moderator", "permissions": ["view", "moderate", "world"], "actor": "web#2 (address)", "expires_in": seconds}`.
+- `server`: `{"name", "map", "version", "players", "max_players", "time": "HH:MM", "clock", "clock_speed", "real_time", "weather", "metar", "traffic", "traffic_max", "timetable", "passengers", "passenger_density", "passenger_density_max", "waiting", "walking", "aboard", "cars", "buses"}`, as published about a second ago (`age_ms`).
+- A player: `{"id", "conn", "name", "state": "joining"|"driving"|"on_foot"|"aboard", "vehicle", "line", "tour", "aboard", "online_secs", "admin"}`. No position, no address.
+- An operation record: `{"id", "actor", "op", "summary", "target": {"id", "conn"} or null, "target_name", "status", "message", "at"}`.
+
+Operations for `POST /api/admin/ops`:
+
+| Body | Role |
 |---|---|
 | `{"op": "kick", "target": {"id": 3, "conn": 17}, "reason": "…"}` (reason optional, 120 characters) | moderator |
-| `{"op": "ban", "target": {…}, "reason": "…"}` - for this server run | moderator |
-| `{"op": "hwban", "target": {…}, "reason": "…", "scope": "session"\|"all", "hours": 24}` (`scope` default `session`, `hours` 1 .. 8784, none: for good) - the machine, see below | moderator for `session`, admin for `all` |
+| `{"op": "ban", "target": {…}, "reason": "…"}` (this server run) | moderator |
+| `{"op": "hwban", "target": {…}, "reason": "…", "scope": "session"\|"all", "hours": 24}` | moderator for `session`, admin for `all` |
 | `{"op": "unban", "id": "0badf00d"}` | admin |
 | `{"op": "say", "text": "…"}` / `{"op": "tell", "target": {…}, "text": "…"}` (160 characters) | moderator |
-| `{"op": "clock", "seconds": 30600}` (0 .. 86400) / `{"op": "shift", "seconds": -3600}` / `{"op": "speed", "factor": 2}` (1 .. 30) | admin |
+| `{"op": "clock", "seconds": 30600}` (0 to 86400) / `{"op": "shift", "seconds": -3600}` / `{"op": "speed", "factor": 2}` (1 to 30) | admin |
 | `{"op": "weather", "next": true}` / `{"op": "weather", "file": "Weather/#CAVOK.owt"}` | admin |
-| `{"op": "traffic", "density": 40}` (0 .. the game's top) / `{"op": "traffic", "clear": true}` | admin |
-| `{"op": "passenger_density", "value": 1.5}` (0 .. 3) | admin |
+| `{"op": "traffic", "density": 40}` / `{"op": "traffic", "clear": true}` | admin |
+| `{"op": "passenger_density", "value": 1.5}` (0 to 3) | admin |
 
-A request is answered `queued` at once; the server's loop does it on its next step and the
-record says what became of it (`GET /api/admin/ops/<id>`): the web's threads never touch the
-session or the world. A request the loop has not come to in 30 s is refused. The texts are
-values, never commands: a line break in a reason is a space, markup stays text (the panel
-shows it as text).
+`hwban`'s `scope` defaults to `session`. `hours` is 1 to 8784; without it the ban holds until lifted.
 
-**The web panel.** `http://127.0.0.1:<web_port>/admin/` (with the slash) on the server's
-machine - or through your HTTPS proxy with `admin_web = remote` - is a page of the server
-itself: no other service, nothing to install, the same API and the same checks as above. Log
-in with the admin's or the moderator's password (it is sent to the server only and kept
-nowhere; the session's token lives in that browser tab until it is closed or you log out). It
-shows the server (map, players, clock and its speed, weather, traffic, the passengers' density
-and how many wait, walk and ride, with "real time" and "METAR" when they hold the clock or the
-weather), the players with a search (by name or `#number`), the actions on the player picked
-- send away, for this run, a word - each confirmed with the name, number and connection; the
-announcement; the world's controls with their present values (disabled with the reason for a
-moderator, on the real time or under METAR, without passengers); and what became of each
-operation (queued, applied, sent, rejected and why). It asks the server every 3 seconds while
-the tab is shown (not while it is hidden), more slowly when the server does not answer, and
-says so; a player who left or came back while picked is not acted on. English and Portuguese,
-for a desktop and a phone. `crates/omsi-lan/examples/admin_demo.rs` runs a session with a few
-players and the panel without OMSI 2, to try it (`crates/omsi-admin/panel/test/` drives it in
-a browser).
+### Local tool: POST /admin
 
-**Who reaches the web panel and the API** (`server.cfg`):
+A script on the server machine can administer without joining:
 
-* `admin_web = local` (what a new server's file says): from the server's own machine only, directly - a request
-  that came through a tunnel or a reverse proxy (it carries `X-Forwarded-For`, `CF-Connecting-IP`
-  …) is refused, the server's own Cloudflare tunnel (`tunnel = 1`) included. Starting the tunnel
-  does not put the administration on the internet.
-* `admin_web = remote`: also through the proxies listed in `admin_trusted_proxies` (addresses
-  separated by `;`; this machine by default), and only for requests they say came over HTTPS
-  (`X-Forwarded-Proto: https`, or Cloudflare's `CF-Visitor` with `admin_proxy_header =
-  cf-connecting-ip` only - behind another proxy it would be the client's own). The address they say a request came
-  from is believed of them alone, and only in the header they write: `admin_proxy_header`, the
-  last address of `X-Forwarded-For` by default (Caddy, nginx, Cloudflare), or `x-real-ip`, or
-  `cf-connecting-ip` - the other headers may be the client's own, passed on. That address counts
-  its wrong passwords and names it in the records; a request the proxy names nobody for, or
-  names this machine for, is refused. Which header to choose:
-  * Caddy: the default (it adds the client to `X-Forwarded-For`).
-  * nginx: either `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` with the
-    default, or `proxy_set_header X-Real-IP $remote_addr;` with `admin_proxy_header =
-    x-real-ip` - nginx passes the client's own `X-Forwarded-For` on unchanged otherwise.
-  * Cloudflare's proxy (the orange cloud) in front of your own proxy: `cf-connecting-ip` - the
-    last `X-Forwarded-For` address is then Cloudflare's, and every client would share a few
-    addresses for the locks. A plain HTTP request from another machine is refused. Mind
-  that with `tunnel = 1` the local cloudflared is such a proxy: the panel is then on the public
-  tunnel address, guarded by the passwords alone. A proxy of your own (Caddy, nginx with a
-  certificate) in front of `127.0.0.1:<web_port>` is the safer way; it must not pass `/admin`
-  (the machine's own door) on.
-* On this machine the panel answers to its own names only (`127.0.0.1`, `localhost`, `[::1]`): a
-  page of another site whose name was turned to this machine (DNS rebinding) is refused.
-* A reverse proxy on this machine must say it is one: it has to add `X-Forwarded-For` (or the
-  header of `admin_proxy_header`) to what it passes on. One that adds none hands every request
-  from the internet over as this machine's own - the server cannot tell them apart. nginx's
-  plain `proxy_pass http://127.0.0.1:<web_port>;` is such a one (it sends `Host: 127.0.0.1:…`
-  and no address): add `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
-* Mind that a tunnel working below HTTP (`ssh -R`, frp, playit, `ngrok tcp`) hands every client
-  over as this machine, with no header to tell: with one in front of the web port, anybody who
-  reaches it meets the login as if they were here (the passwords and their locks still hold).
-  Point such a tunnel at the game's port only, or keep `admin_web = off`.
-* `admin_web = off`: none (the machine's own `POST /admin` stays as it is). A `server.cfg`
-  without the key - one from before the web panel - or with a wrong word is off: an update
-  opens no panel the operator did not ask for. Add `admin_web = local` to have it.
-* `admin_web_origins`: other `https://` sites whose pages may send requests (a dispatch page
-  elsewhere); a request whose browser names another origin is refused. No answer allows
-  another site's page to read it (no `Access-Control-Allow-Origin`).
+```bash
+curl -X POST -H "X-Admin-Password: $PASSWORD" \
+  --data-binary $'clock 30600\nsay Good morning!' \
+  http://127.0.0.1:27025/admin
+```
 
-A session ends after 30 minutes unused, after 12 hours, at logout, or when the server stops;
-at most 16 at once (a moderator's login makes room among the moderators' sessions only, never an
-admin's). Five wrong passwords in two minutes lock a source for a while, thirty from anywhere
-lock the door for everybody but this machine itself (a flood from afar cannot keep the operator
-out of their own panel). A wrong password is noted in the audit log, a lock once - not each
-knock on it. The server's `POST /admin` for a tool on its machine stays
-as it was (one command a line, `X-Admin-Password`, the loopback only, `202` when taken): its
-commands go the same way as the others and are in the audit log, with what became of them.
+One command per line, with the admin role. It answers `202` when taken. It works only from the loopback address and needs `admin_password`.
+Five wrong passwords in two minutes close it for a while. A reverse proxy on the same machine also connects from 127.0.0.1: do not let it pass `/admin` on.
 
-**The audit log.** Every login, refused password, operation and what became of it is written to
-`admin-audit.log` beside `server.cfg` (a JSON object a line: when, who - `player 3 'Name'`,
-`local tool (POST /admin)`, `web#2 (address)` -, the role, the action, the player, the result),
-put aside as `admin-audit.log.1` past 1 MB, keeping the previous backup as `admin-audit.log.2`
-(about 3 MB total). Web logins and refused passwords keep their **whole source addresses**
-in this audit file, regardless of `log_addresses`; that setting controls only the general
-game/server log. No password
-or token is ever written to it; names, reasons and chat lines are kept as cleaned text.
+### Audit log
 
-## Machine bans
+Every login, refused password, operation and its result is written to `admin-audit.log` beside `server.cfg`.
 
-A ban by name or address does not say who somebody is, so the lasting ban is by **machine**.
-The game sends a *hardware identifier* when it joins, made for this host's owner: the host
-answers the first hello with its *realm* (a random key kept in the owner's list, see below), and
-the game sends SHA-256 over a fixed text, the machine's own id (Windows `MachineGuid`, Linux
-`/etc/machine-id`, macOS `IOPlatformUUID`; on a system with none, a random number kept in
-`~/.openomsi/hardware-id`) and that realm, cut to 128 bits. The id itself never leaves the
-machine and cannot be got back from the hash; no disk or board serial number is read. Every
-session of one owner list gets the same identifier from a machine; another owner gets another.
-The host pins the identifier to the connection at its first hello (a later hello of the same
-connection cannot change it), shows it to nobody (the panels list bans by name, reason and
-time only), and turns a joining machine away if a ban holds it:
-`you are banned from this session: <reason>`.
+- One JSON object per line: when, who (`player 3 'Name'`, `local tool (POST /admin)`, `web#2 (address)`), role, action, player, result.
+- Rotated past 1 MB to `admin-audit.log.1`, keeping `admin-audit.log.2` too: about 3 MB in total.
+- Web logins and refused passwords keep their whole source address, whatever `log_addresses` says.
+- No password or token is ever written. Names, reasons and chat are cleaned text.
+- A lock is logged once, not every knock on it.
 
-* **Who bans.** The host of a game started by code, and a server's admins and moderators, from
-  the game menu's *Player list* -> a player -> *Ban this machine...* (with a reason, for a day,
-  a week or for good), or the web panel, or `POST /api/admin/ops`. A moderator bans for the
-  session and cannot ban an admin; the owner's list and lifting a ban are the admin's. The ban
-  sends the player away at once and is in the audit log. A host cannot ban its own machine.
-* **Scope, and what "my sessions" means.** *This session*: the list of the session -
-  `bans.json` beside `server.cfg` for a dedicated server (kept across restarts); for a game
-  hosting by code only while that game runs. *All my sessions*: the owner's list,
-  `~/.openomsi/bans-owner.json` of the account the host runs as, read by every game and
-  server started from that account on that machine, running ones within a second of the
-  change. To share one list between servers (or machines), point `owner_bans` at a file in a
-  synced folder. A ban may end (`hours`), else it holds until lifted. Lifting one (game menu:
-  *Player list* -> *Banned machines*; web panel; `unban`) takes it out of whichever list it is
-  in, for the other sessions too.
-* **Files.** JSON, written whole to a temporary file and moved over the old one; a file that
-  cannot be read gives no bans (the log says so, and a `.bak` copy is kept) and is never
-  silently emptied.
-* **Limits, honestly.** The identifier is a claim of the game, not a proof of the machine: a
-  changed game can send any value, and a reinstalled system, a new machine id, a virtual
-  machine or another computer is another machine. A game before this feature, and a player who
-  switched it off (`OMSI_NO_HARDWARE_ID=1`), send none: such a player cannot be banned by
-  machine - `require_hardware_id = 1` turns them away, and a ban by `ban` still holds the run.
-  Players switch it off in the launcher (*Send servers an identifier for bans*) or with
-  `OMSI_NO_HARDWARE_ID=1`. Two hosts with different owner lists get different identifiers
-  and cannot compare who joined them, unless they share the list (`owner_bans`) on purpose.
-  Bans made before LAN protocol 16 name identifiers no game sends any more (the server's log
-  says so at the start): ban those players again.
-* **Wire.** The `HELLO` ends with `|<hardware id>`: empty until the host's `REALM|<realm>`
-  came, `-` when the player sends none. A host with a ban list answers an empty one with
-  `REALM` and lets the player in only after the next hello.
+## Bans
+
+There are two kinds of ban:
+
+| Ban | Holds | Lasts |
+|---|---|---|
+| `ban` | The game's random nonce and the address it came from | This server run only |
+| Machine ban (`hwban`) | The machine's identifier | Until it ends or is lifted, across restarts |
+
+A name is whatever the game says, and an address changes or is shared. So the lasting ban is the machine ban.
+
+### Ban a machine
+
+1. In the game, open `Esc` → **Player list...** and pick the player.
+2. Choose **Ban this machine...**.
+3. Pick a reason, then the scope and length: **This session** or **All my sessions** (admin only), each **for a day**, **for a week** or **for good**.
+
+The web panel and `POST /api/admin/ops` do the same. The player is sent away at once, and the ban is in the audit log.
+The host of a session started by code can ban too. A host cannot ban its own machine.
+
+To lift a ban: **Player list...** → **Banned machines**, the web panel, or `unban <id>`. Lifting removes it from whichever list holds it.
+
+### Where bans are kept
+
+| Scope | File |
+|---|---|
+| This session | `bans.json` beside `server.cfg`. For a game hosting by code: only while it runs. |
+| All my sessions | The owner's list, `~/.openomsi/bans-owner.json` of the account the server runs as. Every game and server started from that account reads it, running ones within a second. |
+
+To share one list between servers or machines, point `owner_bans` at a file in a synced folder.
+The files are JSON, written to a temporary file and moved into place. A file that cannot be read gives no bans (the log says so, and a `.bak` copy is kept). It is never silently emptied.
+
+### How the identifier works
+
+When a game joins, the host answers its first hello with a *realm*, a random key kept in the owner's list.
+The game sends SHA-256 over the machine's own ID and that realm, cut to 128 bits. The machine ID is Windows `MachineGuid`, Linux `/etc/machine-id` or macOS `IOPlatformUUID`; on a system with none, a random number kept in `~/.openomsi/hardware-id`.
+
+- The machine ID never leaves the machine and cannot be recovered from the hash. No disk or board serial is read.
+- Every session of one owner list gets the same identifier from a machine. Another owner gets a different one, so owners cannot compare who joined them unless they share a list on purpose.
+- The host fixes the identifier to the connection at its first hello and shows it to nobody. The panels list bans by name, reason and time only.
+- A banned machine is turned away with `you are banned from this session: <reason>`.
+
+### Limits
+
+- The identifier is the game's claim, not a proof. A modified game can send any value. A reinstalled system, a new machine ID, a virtual machine or another computer is another machine.
+- Older games, and players who turned it off, send none. They cannot be machine-banned. `require_hardware_id = 1` turns them away; `ban` still holds them for the run.
+- Players turn it off in the launcher: **Settings → General → Send servers an identifier for bans**.
+- Bans made before network protocol 16 name identifiers no game sends any more. The server log says so at start. Ban those players again.
 
 ## Public server list
 
-`public_server = 1` lists the server in the list that the launcher (*Multiplayer -> Servers ->
-Public servers*) shows. The server registers with the list service (`public_list_url`, default
-openOMSI's own, a Cloudflare Worker in `services/serverlist`), is listed once the service has
-read the server's `GET /status` and found the challenge it gave there (so the web port or the
-tunnel must be reachable from the internet; a tunnel is the sure way), says it is alive every
-minute, and is forgotten three minutes after its last word. Listed: name, message of the day,
-map, players, maximum, version and where to join. Nothing about the players is sent. `name`,
-`motd` and `server-icon.png` are checked before the first word (a name or message that is
-flagged - profanity and the usual ways round a filter, addresses, hidden characters - refuses
-the listing, and the log says which key to change; a flagged icon too) and every launcher
-checks each listing again before showing it: a flagged text is covered, a custom icon is shown
-only if the viewer's own image check cleared it. The service filters too (no addresses or
-invitations, limits per source), but no client takes its word.
+`public_server = 1` lists the server in the launcher's **Servers → Public servers** tab.
 
-**About OpenLB.** The feature was planned with the OpenLB library (ImgCleaner / TxtCleaner),
-and it cannot be used here: its licence is the MIT text with one line added - the software "may
-not be used for anything but its original purpose" - which is a limit on use that the AGPL
-this project is under does not allow in a part of it (and crates.io files it as
-"non-standard"); its models (a 99 MB text model and 10 to 47 MB image models) come with no
-licence and with training data that "cannot be released"; and it needs a native ONNX runtime
-library (`ort`, pinned to a release candidate, loaded dynamically) shipped for every platform,
-which the dedicated server, Android and iOS builds would each have to carry. So the moderation
-is behind a small trait (`omsi-serverlist`, `Moderator`): text is checked by
-[`rustrict`](https://crates.io/crates/rustrict) (MIT, already the chat's filter) and our rules,
-and **icons are not cleared at all yet**: no image classifier is bundled, so every custom icon
-is "unchecked" and the public list shows the default one. An open-licence classifier (a small
-Apache-2.0 or MIT model run by `tract`, downloaded to the content folder with a checksum, not
-committed) plugs in with `set_image_classifier` and nothing else changes.
+1. The server registers with the list service (`public_list_url`, by default openOMSI's own).
+2. The service fetches the server's `GET /status` and looks for a challenge it gave. So the web port or the tunnel must be reachable from the internet. The tunnel is the sure way.
+3. Once found, the server is listed. It says it is alive every minute and is dropped three minutes after the last time.
 
-## What the server keeps about its players
+Listed: name, message of the day, map, players, maximum, version and where to join. Nothing about the players is sent.
 
-Tell your players what is kept (the motd is a good place). `server.cfg` lists the same at its
-end.
+`name`, `motd` and `server-icon.png` are checked before the first registration. A name or message that is flagged (profanity, ways round a filter, addresses, hidden characters) refuses the listing, and the log says which key to change.
+Every launcher checks each listing again before showing it: a flagged text is covered.
+
+> **Note:** Custom icons are not shown in the public list yet. No image classifier is bundled, so every custom icon counts as unchecked and the list shows the default icon.
+
+## Web endpoints
+
+The web port (`web_port`, also behind the tunnel) answers:
+
+| Request | Answer |
+|---|---|
+| `GET /` | A small page with the name, message, map and players. |
+| `GET /status` | JSON: `name`, `motd`, `map`, `players`, `max_players`, `version`, `date`, `time`, `weather`, `protocol`, `vehicles`, the announced fleet, and `world` (AI cars, buses, parked cars, people walking, waiting and aboard, traffic and passenger density). |
+| `GET /icon.png` | The server icon. |
+| `GET /players` | Only with `share_positions = 1`, else `404`. |
+| WebSocket | Players joining over the web ([below](#websocket-players)). |
+| `/admin/`, `/api/admin/` | The [web panel](#web-panel) and its API. |
+| `POST /admin` | The [local tool](#local-tool-post-admin). |
+
+`GET /players` returns a JSON array refreshed every second, for a live map on a website:
+
+| Field | Meaning |
+|---|---|
+| `id`, `name` | Player number and name. |
+| `bus`, `paint`, `line`, `destination`, `tour` | What they drive. Empty when on foot. |
+| `x`, `y` | World metres east and north. |
+| `heading` | Degrees clockwise from north. |
+| `speed_kmh` | Speed. |
+| `on_foot` | Not driving. A player on foot is where they walk, even with their own bus parked nearby. |
+| `aboard` | The id of the player whose bus they ride in, or `null`. They are placed with that bus. |
+| `parked` | A bus standing free ([parked buses](#parked-buses)). |
+| `lat`, `lon` | On a map with `[worldcoordinates]` (such as Berlin-Spandau), else `null`. |
+
+It is off by default: tell your players when you turn it on.
+
+### WebSocket players
+
+Players can join at the web port over a WebSocket instead of UDP. Each datagram is one binary message. This is what the Cloudflare tunnel carries.
+
+The gateway gives each WebSocket player a UDP socket of its own on 127.0.0.1. The session log then says `joined from 127.0.0.1:<port>`, and the gateway logs who that is: `gateway: player WebSocket from <address> on 127.0.0.1:<port>`.
+The address is the one a proxy or tunnel on this machine forwards: the last `X-Forwarded-For`, else `CF-Connecting-IP`.
+
+With Cloudflare's proxy in front of a proxy of yours, the last `X-Forwarded-For` is a Cloudflare edge, and players would share a few addresses (16 connections each at most). Set `gateway_proxy_header = cf-connecting-ip` then, and only then.
+
+The same gateway and tunnel also open for a player hosting by code. A joining game that cannot reach the code's addresses joins through the tunnel.
+
+## Running as a service
+
+The start scripts `start.sh` and `start.cmd` are meant for services: they ask nothing.
+
+### Linux (systemd)
+
+1. Create a user for the server, for example `openomsi`, and unpack the server into `/opt/openomsi-server`.
+2. Run it once by hand to write `server.cfg`, then edit it.
+3. Create `/etc/systemd/system/openomsi-server.service`:
+
+```ini
+[Unit]
+Description=openOMSI dedicated server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=openomsi
+WorkingDirectory=/opt/openomsi-server
+ExecStart=/opt/openomsi-server/start.sh /srv/omsi2 /opt/openomsi-server/server.cfg
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
+```
+
+4. Start it and enable it at boot:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now openomsi-server
+journalctl -u openomsi-server -f
+```
+
+The players' buses and the owner's ban list live in the service user's `~/.openomsi`.
+
+### Windows
+
+Use the Task Scheduler, which every Windows has:
+
+1. Open **Task Scheduler** → **Create Task**.
+2. **General**: a name, **Run whether user is logged on or not**.
+3. **Triggers**: **At startup**.
+4. **Actions**: **Start a program**, program `C:\openomsi-server\start.cmd`, arguments `"C:\path\to\OMSI 2"`, start in `C:\openomsi-server`.
+5. **Settings**: untick **Stop the task if it runs longer than**. Optionally **If the task fails, restart every** 1 minute.
+
+### Docker (Linux)
+
+The repository has a container setup in `docker/server` (see its `README.md`):
+
+```bash
+cd docker/server
+cp .env.example .env              # set OMSI_DIR to your OMSI 2 folder
+mkdir config
+cp server.cfg.example config/server.cfg
+docker compose up -d --build
+docker compose logs -f
+```
+
+The OMSI 2 folder is mounted read-only. `config/` holds `server.cfg`, `content/` the packed maps, and a volume keeps the players' buses.
+The server is ready when `http://<address>:27025/status` answers (`docker ps` shows `healthy`).
+Docker keeps the log itself: five files of 20 MB.
+
+## What the server keeps
+
+Tell your players what is kept, for example in the `motd`. `server.cfg` lists the same at its end.
 
 | What | Where | How long |
 |---|---|---|
-| Who joined and left, their names, **the chat (every message)**, the admins' actions, errors | `server.log` beside `server.cfg` (`run-server` and `start.sh`; Docker: `docker compose logs`) | A new file at every start and past `log_max_mb` (20 MB; 0: no limit); `log_keep` (5) earlier ones as `server.1.log` (the newest) … `server.5.log`; `log_keep = 0` keeps none. Docker: five files of 20 MB (`docker-compose.yml`) |
-| The players' internet addresses | the same log | A public address keeps only its network (`203.0.113.x`, `2001:db8:85a3::x`); the local network's and this machine's are written whole. `log_addresses = 1` writes them whole (for an abuse report) |
-| Logins, refused passwords, the admins' and moderators' operations; **whole source addresses** for web logins and refused passwords, regardless of `log_addresses` | `admin-audit.log` | Rotated past 1 MB, keeping `admin-audit.log.1` and `.2`: about 3 MB total |
-| Banned machines (their hardware identifier) | `bans.json`, `owner_bans` | Until the ban is lifted |
-| The players' buses (with `accept_uploads = 1`) | `~/.openomsi/lan-store` | `uploads_keep_days` (30) after the last use |
-| Name, icon, map, players, motd (not the players' names) | the public list, with `public_server = 1` | Forgotten three minutes after the server stops |
-| Names, buses, lines and positions | anyone who asks `GET /players`, with `share_positions = 1` | Live only |
+| Who joined and left, names, **every chat message**, admin actions, errors | `server.log` beside the start script (`run-server`, `start.sh`; Docker: `docker compose logs`) | New file at every start and past `log_max_mb`. `log_keep` older files. |
+| Players' internet addresses | The same log | Public addresses cut to their network unless `log_addresses = 1`. Local network addresses are written whole. |
+| Logins, refused passwords, admin and moderator operations, with whole source addresses for web logins | `admin-audit.log` | About 3 MB in total. |
+| Banned machines' identifiers | `bans.json`, the owner's list | Until the ban is lifted. |
+| Players' buses (`accept_uploads = 1`) | `~/.openomsi/lan-store` | `uploads_keep_days` after last use. |
+| Name, icon, map, players count, motd | The public list (`public_server = 1`) | Until three minutes after the server stops. |
+| Names, buses, lines, positions | Anyone asking `GET /players` (`share_positions = 1`) | Live only. |
 
-Voice is passed on and never recorded or decoded. The address cut is the game's own logger, so
-a game hosting a session from the launcher (`game.log`, written again at every start) cuts them
-the same way. Before a crash report is turned into a GitHub issue, the launcher also takes the
-account's folder and name out of it (`~`, `<user>`) and the driver's name (`Drivers/<driver>.odr`).
+Voice is passed on and never recorded or decoded.
+A game hosting from the launcher cuts addresses in `game.log` the same way. Before a crash report becomes a GitHub issue, the launcher also removes the account's folder and name and the driver's name.
+
+The server prints at start that you run it, not openOMSI: you are responsible for the data players send it and what you keep.
+
+## Troubleshooting
+
+The server prints why it stops and ends with an exit code a launcher can tell apart:
+
+| Exit code | Cause | Fix |
+|---|---|---|
+| 1 | The original OMSI 2 was not found at `--root` (the missing files are listed), or another error printed as `Error: …` | Point `--root` at a complete installation. `run-server … --setup` chooses the folder again. |
+| 2 | `server.cfg` cannot be read or written, or its `map` is not installed (the installed maps are listed) | Fix the file's permissions or the `map` key. |
+| 3 | The UDP `port` is taken | Stop the other server or program, or choose another port. |
+
+A taken `web_port` does not stop the server: it takes another port and logs which.
+The log goes to standard error. Informational lines go there too: the exit code, not a line, says whether it failed.
+
+Other problems:
+
+- **Players cannot connect over UDP.** Open UDP and TCP 27015 and TCP 27025 in the firewall and any cloud security group. Or let players use the tunnel address.
+- **"server.cfg: admin_password has fewer than 12 characters"**: the administration stays off until the password is longer. Servers set up with 8 to 11 characters need a longer one now.
+- **The web panel does not open.** Check `admin_web` (a `server.cfg` from before the panel has none, which means off). From another machine you need `remote`, an HTTPS proxy and 16-character passwords.
+- **The server is not in the public list.** The log says why: a flagged name or message, or the service cannot reach the web port. Keep `tunnel = 1` or open the web port.
+- **A map is missing for players.** With `share_maps = 0` players install it themselves. Turn it on, or tell them which map to install.
+- **Players are sent away for their bus.** The `vehicles` list does not include it. The kick message names the allowed buses.
+- **Slow first start.** With a long `vehicles` list, the first start checks every file of every bus. Later starts are faster.
+
+### Helper flags
+
+For your own launcher or scripts:
+
+| Flag | Does |
+|---|---|
+| `--root <folder> --list-maps` | Print the installed maps, one per line, as `server.cfg` names them (content folder included), and end. Exit code 1 with the missing files when the folder is not a complete OMSI 2. |
+| `--root <folder> --server <server.cfg> --list-maps` | The same, and write a missing `server.cfg` with its defaults. |
+| `--server-map maps/<folder>/global.cfg` | Start on this map instead of `server.cfg`'s. |
+| `--pack-map <map> --pack-to <folder or .zip>` | Pack a map with everything it uses ([above](#sharing-the-map)). |
+
+Paths with spaces or accents are passed as they are, quoted. Maps are named relative to the OMSI 2 folder.
+More flags are in [Command line](COMMAND_LINE.md).
 
 ## License
 
 openOMSI is released under the GNU Affero General Public License, version 3 only (`LICENSE`).
-Its launcher preview encodes pictures with [jpeg-encoder](https://crates.io/crates/jpeg-encoder): this
-software is based in part on the work of the Independent JPEG Group.
+Its launcher preview encodes pictures with [jpeg-encoder](https://crates.io/crates/jpeg-encoder): this software is based in part on the work of the Independent JPEG Group.

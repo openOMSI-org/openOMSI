@@ -1,166 +1,241 @@
 # Refactor checks
 
-A refactor (code moved, functions extracted, duplication removed) must not change what the
-game does. These checks show it did not, beside `cargo test`.
+A refactor (code moved, functions extracted, duplication removed) must not change what the game
+does. This page lists the checks that show it did not, beside `cargo test`, and the checks every
+pull request runs.
+
+## Checking a refactor
+
+1. Build `openomsi` from the commit before your change and from your change (release builds).
+2. Copy each binary out of `target/release` together with `libsteam_api.dylib` (macOS) or
+   `libsteam_api.so` (Linux x86-64). The program does not start without it.
+3. Compare the pictures: [Golden pictures](REFACTOR_CHECKS.md#golden-pictures).
+4. Compare the sound: [Audio traces](REFACTOR_CHECKS.md#audio-traces).
+5. If the change is meant to make the game faster, measure it:
+   [Frame time](REFACTOR_CHECKS.md#frame-time).
+6. Run the tests that need the original install:
+   [Tests with the original install](REFACTOR_CHECKS.md#tests-with-the-original-install).
+7. Run the pull request checks locally: size budget, crate layers and formatting
+   ([Pull request checks](REFACTOR_CHECKS.md#pull-request-checks)).
+
+All scripts need the original OMSI 2 install: `$OMSI_ROOT`, else `OMSI 2 Original` beside the
+checkout.
+
+> **Warning:** The pictures and recordings are made from licensed content. Keep the output
+> folders outside the repository (the scripts refuse a folder inside it) and never commit them.
 
 ## Golden pictures
 
-`scripts/golden.sh` renders a fixed set of offscreen scenes with one `openomsi` binary, and
-compares two such sets pixel by pixel. Build the binary of the commit before the change and
-the one after it, render both, compare:
+`scripts/golden.sh` renders a fixed set of offscreen scenes with one binary and compares two such
+sets pixel by pixel.
 
-```sh
-export OMSI_ROOT="/path/to/OMSI 2"          # the original install (default: "OMSI 2 Original" beside the checkout)
+```bash
+export OMSI_ROOT="/path/to/OMSI 2"
 scripts/golden.sh render /path/to/before/openomsi /tmp/golden/before
 scripts/golden.sh render /path/to/after/openomsi  /tmp/golden/after
 scripts/golden.sh compare /tmp/golden/before /tmp/golden/after
 ```
 
-`compare` prints `identical` for each scene that matches byte for byte; otherwise the share of
-pixels that differ and the largest and mean channel difference (0..255), and writes an
-amplified difference picture into `<after>/diff/`. It exits 1 when any scene differs (beyond
-its allowance, below). `render <bin> <dir> <scene> ...` renders only the named scenes, and
-`compare` then compares only the scenes that are there. Each run writes `<scene>.log` beside
-the picture; the first line names the build.
+| Command | What it does |
+| --- | --- |
+| `render <bin> <dir> [scene ...]` | Renders all scenes, or only the named ones |
+| `compare <dir a> <dir b>` | Compares the scenes present in both |
+| `list` | Lists the scenes |
 
-The binary needs `libsteam_api.dylib` (macOS) beside it: copy both out of `target/release`.
-The pictures are made from licensed content: keep the output directories outside the
-repository (the script refuses a directory inside it) and never commit them.
+`compare` prints `identical` for each scene that matches byte for byte. Otherwise it prints the
+share of differing pixels and the largest and mean channel difference (0-255), and writes an
+amplified difference picture into `<dir b>/diff/`. It exits 1 when a scene differs beyond its
+allowance. Each run also writes `<scene>.log`; its first line names the build.
 
 ### The scenes
 
-All at 960×540 (`GOLDEN_SIZE`), `OMSI_SEED=1` (`GOLDEN_SEED`), the default date (1989-05-30),
-Grundorf unless named otherwise, the camera at the map's editor camera unless a bus is
-spawned.
+All scenes are 960×540 (`GOLDEN_SIZE`) with `OMSI_SEED=1` (`GOLDEN_SEED`) and the default date
+(1989-05-30). They use Grundorf unless named otherwise, and the map's editor camera unless a bus
+is spawned.
 
-| Scene | Arguments | Covers | Allowance |
-|---|---|---|---|
-| `grundorf_day` | `--time 12:00` | terrain, splines, objects, sky, sun shadows | none |
-| `grundorf_night` | `--time 23:30` | night maps, lamps, coronas | none |
-| `grundorf_rain` | `--time 14:00 --weather Weather/Schmuddelwetter.owt` | rain, wet ground, puddles | none |
-| `grundorf_fog_dusk` | `--time 20:45 --weather Weather/Daemmerungsnebel.owt` | fog, dusk light | none |
-| `grundorf_enhanced` | `--time 18:30 --enhanced` | the Enhanced (physically based) renderer | 0.01 % |
-| `grundorf_bus_outside` | `--time 10:00 --bus Vehicles/MAN_SD200/MAN_SD80.bus --view outside` | a bus from outside: model, materials, reflections | none |
-| `grundorf_cockpit` | `--time 10:00 --bus Vehicles/MAN_SD202/MAN_D86.bus --view driver` | the cab: interior, gauges, mirrors, HUD | 0.01 % |
-| `grundorf_drive_traffic` | SD202 at stop Bauernhof (`--spawn 500,748,339`), started by its switches (`--triggers ...`), `--drive 12 --traffic 15 --view driver` | engine start, gearbox, driving physics, AI traffic, script state after 12 s | 1 % |
-| `spandau_day` | `--map maps/Berlin-Spandau/global.cfg --time 11:00` | a second, larger map | 0.01 % |
+| Scene | Covers | Allowance |
+| --- | --- | --- |
+| `grundorf_day` | Terrain, splines, objects, sky, sun shadows (12:00) | none |
+| `grundorf_night` | Night maps, lamps, coronas (23:30) | none |
+| `grundorf_rain` | Rain, wet ground, puddles (`Schmuddelwetter.owt`) | none |
+| `grundorf_fog_dusk` | Fog, dusk light (`Daemmerungsnebel.owt`, 20:45) | none |
+| `grundorf_enhanced` | The Enhanced renderer (18:30) | 0.01 % |
+| `grundorf_bus_outside` | A bus from outside: model, materials, reflections (SD80) | none |
+| `grundorf_cockpit` | The cab: interior, gauges, mirrors, HUD (SD202 D86) | 0.01 % |
+| `grundorf_drive_traffic` | Engine start, gearbox, driving physics, AI traffic, script state | 1 % |
+| `spandau_day` | A second, larger map (Berlin-Spandau, 11:00) | 0.01 % |
 
-### Why runs are repeatable, and what is not
+`grundorf_drive_traffic` spawns the SD202 at stop Bauernhof (`--spawn 500,748,339`), starts it with
+its own switches (`--triggers ...`), and drives 12 s with traffic 15 from the driver's view. The
+exact arguments of every scene are in the script.
 
-* Every scene runs with a fresh, empty `$HOME`, so the settings are the defaults and nothing
-  remembered from earlier runs (the settings file, the install path, the driver profile)
-  takes part.
-* The settings file of each run turns `windy_trees` off: the renderer's animation clock is
-  real time since start-up, so swaying trees never come out twice alike.
-* What else is animated by that clock is covered by the scene allowances (share of pixels
-  allowed to differ): the drive scene's exhaust smoke in the left mirror (about 0.3 % of the
-  pixels), a dozen pixels of an instrument in the cab, a few pixels off by one in the Enhanced scene, and once in a while a single pixel off
-  by one on Spandau. Everything else matched byte for byte.
-* The simulation itself is repeatable: two runs of the drive scene log the same distance,
-  speed, engine revolutions and traffic figures.
+Also compare the ends of the `grundorf_drive_traffic` logs (`drove ... in 12 s, now ... km/h`,
+`traffic: ...`). They carry no wall-clock figures.
 
-Measured with the binary of `main` at c85b2e0d (Oct 7 2026): three renders, all scenes
-identical or within their allowance, every run.
+### What repeats and what does not
 
-Worth comparing too: the end of the logs (`drove ... in 12 s, now ... km/h`, `traffic: ...`)
-of `grundorf_drive_traffic`; they carry no wall-clock figures.
+- Every scene runs with a fresh, empty `$HOME`, so settings are the defaults and nothing is
+  remembered from earlier runs.
+- Each run's settings turn `windy_trees` off. The renderer's animation clock is real time since
+  start, so swaying trees never come out alike.
+- The allowances cover the rest of that clock: the exhaust smoke in the drive scene's left mirror
+  (about 0.3 % of pixels), a dozen pixels of a cab instrument, a few pixels in the Enhanced scene,
+  and now and then one pixel on Spandau.
+- The simulation itself repeats: two runs of the drive scene log the same distance, speed, engine
+  speed and traffic figures.
+
+> **Note:** On 2026-10-07 (`main` at c85b2e0d) all scenes were identical or within their
+> allowance in three renders. By 2026-11-17, the day, rain and other scenes differed between two
+> runs of the same wgpu build (animated particles: 12.8 % of pixels for day, 23.7 % for rain).
+> Before you trust a difference, render the "before" binary twice and compare those two runs.
 
 ## Audio traces
 
-The golden pictures say nothing about what is heard. `scripts/audio-trace.sh` runs offscreen
-drives with one `openomsi` binary, each writing an audio trace (`OMSI_AUDIO_TRACE=<file>`)
-and the sound mixed from it (`OMSI_RECORD`), and compares two such sets:
+The golden pictures say nothing about sound. `scripts/audio-trace.sh` runs offscreen drives with
+one binary. Each writes an audio trace (`OMSI_AUDIO_TRACE`) and the sound mixed from it
+(`OMSI_RECORD`), and two sets are compared:
 
-```sh
+```bash
 scripts/audio-trace.sh render  /path/to/before/openomsi /tmp/audio/before
 scripts/audio-trace.sh render  /path/to/after/openomsi  /tmp/audio/after
 scripts/audio-trace.sh compare /tmp/audio/before /tmp/audio/after
 ```
 
-The trace is written in omsi-audio's `AudioEngine`, where every sound of the game arrives:
-each voice started (its file, gain, pitch, loop, place to the centimetre, range, filter),
-each change of its parameters, each stop and end, the listener once a step, the radio's
-effects. Whatever moved around above the mixer, a trace taken there means the same in both
-builds. An offscreen recording steps the mixer with the simulation, so its trace does not
-depend on how fast the pictures are drawn.
+The trace is written in `omsi-audio`'s `AudioEngine`, where every sound arrives: each voice
+started (file, gain, pitch, loop, position, range, filter), each parameter change, each stop and
+end, the listener once a step, and the radio's effects. An offscreen recording steps the mixer
+with the simulation, so its trace does not depend on drawing speed.
 
 | Scene | What it plays |
-|---|---|
-| `grundorf_drive_traffic` | golden.sh's drive: the SD202 started by its switches and driven off from the cab, AI traffic |
-| `grundorf_rain_outside` | the same drive heard from outside, at night in the rain: the street's rain, the bus's outside sounds |
-| `spandau_ambience` | Spandau at 08:00 with traffic, the timetable's buses and passengers, the ambience's one-shots forty times as often (`OMSI_AMBIENCE_DENSITY=40`) |
+| --- | --- |
+| `grundorf_drive_traffic` | The golden drive: the SD202 started by its switches and driven off, AI traffic |
+| `grundorf_rain_outside` | The same drive heard from outside, at night in the rain |
+| `spandau_ambience` | Spandau at 08:00 with traffic, timetable buses and passengers; ambience one-shots 40 times as often (`OMSI_AMBIENCE_DENSITY=40`) |
 
-`compare` names voices by what they play and the step they started in, and sorts the lines
-of a step: some sounds are started from hash maps (the ambience's layers, a sound set's
-entries), whose order changes from run to run of one binary, and with it the voices'
-numbers and the place in its clip a loop starts from (drawn in start order). What is left
-is the same from run to run; `compare` exits 1 when it is not, with the first step that
-differs and the files started more or less often. The mixes are compared too, but only
-reported: the order the voices are summed in moves their samples by one unit (of 32767).
+How `compare` reads the traces:
 
-The ambience's recordings are read from `$OMSI_AMBIENCE_DIR`, else `~/.openomsi/ambience`;
-without them the ambience is silent in both runs alike.
+- It names voices by what they play and the step they started in, and sorts the lines of a step.
+  Some sounds start from hash maps, whose order changes from run to run.
+- It exits 1 when the traces differ, naming the first differing step and the files started more
+  or less often.
+- It reports differences in the mixes but does not fail on them: the order voices are summed in
+  moves samples by one unit (of 32767).
 
-What an offscreen run does not play - the scenery's sound objects, the bus radio, the
-passengers' voices - comes from `scripts/audio-trace.sh window <binary> <dir>`: whole
-sessions in a window that is never shown (`OMSI_HIDDEN_WINDOW`, `OMSI_MUTE`), the radio
-tuned to a station nobody answers (its voice and volume are traced, not the music). Their
-frames follow the wall clock, so these traces are compared only as which sounds were played
-at all; take two runs of each binary to see what moves anyway. One thing that does: a
-timetable bus due beside the player at the start is put there only while the map is still
-loading, so whether it is heard depends on how fast the start-up went.
+The ambience's recordings come from `$OMSI_AMBIENCE_DIR`, else `~/.openomsi/ambience`. Without
+them the ambience is silent in both runs.
 
-Measured on 2026-10-11, main 0.2.30 (a8668bf7) against refactor/stages c51b3626, both with
-the trace: the three offscreen scenes asked the mixer for the same sounds (37, 43 and 156
-voices, every parameter change of every step), the mixes within one unit; the two window
-sessions played the same sounds (the scenery's cock and blackbird, the radio, traffic,
-ambience slots, the bus), as two runs of one binary do.
+`AUDIO_TRACE_SEED` (default 1) changes `OMSI_SEED`.
+
+### Window sessions
+
+An offscreen run does not play the scenery's sound objects, the bus radio or the passengers'
+voices. For those, run whole sessions in a window that is never shown:
+
+```bash
+scripts/audio-trace.sh window /path/to/openomsi /tmp/audio/window-before
+```
+
+These runs use `OMSI_HIDDEN_WINDOW` and are muted. The radio is tuned to a station that never
+answers, so its voice and volume are traced, not the music. Their frames follow the wall clock,
+so these traces are compared only by which sounds were played. Take two runs of each binary to
+see what moves anyway. One known case: a timetable bus due beside the player at the start appears
+only while the map is still loading, so whether it is heard depends on start-up speed.
+
+On 2026-10-11 (`main` 0.2.30 a8668bf7 against `refactor/stages` c51b3626) the three offscreen
+scenes asked the mixer for the same sounds (37, 43 and 156 voices) with mixes within one unit,
+and the window sessions played the same sounds.
 
 ## Frame time
 
-A change meant to make the game faster is measured on the window's own frame, without a
-window on the screen: `scripts/bench-window.sh <binary> <out prefix> [plain|enhanced]` runs
-Spandau with traffic, passengers and the timetable in a window that is never shown
-(`OMSI_HIDDEN_WINDOW`), drives off, and writes `OMSI_PROFILE`'s exit summary (frame-time
-percentiles, every stage of the frame in milliseconds, the process's CPU time per frame).
-`scripts/compare-performance.py before.json after.json` compares two of them. The stages'
-times hold still from run to run far better than the frame times; take several runs of
-each binary and their medians all the same.
+Measure a speed change on the window's own frame, without a window on the screen:
 
-## Tests that need the original install
+```bash
+scripts/bench-window.sh /path/to/before/openomsi /tmp/bench/before enhanced
+scripts/bench-window.sh /path/to/after/openomsi  /tmp/bench/after  enhanced
+scripts/compare-performance.py /tmp/bench/before.json /tmp/bench/after.json
+```
 
-Tests that read the original OMSI 2 install are `#[ignore]`d, so CI shows them as ignored
-instead of passing them without looking at anything. They find the install through
-`tools/test-support/original_root.rs` (`include!`d into their test modules): `$OMSI_ROOT`,
-else `OMSI 2 Original` beside the checkout. Run them with
+The full form is `bench-window.sh <binary> <out prefix> [plain|enhanced] [seconds] [extra args ...]`.
+The run is Berlin-Spandau at 08:00 with the MAN EN92, traffic 30, passengers and the timetable,
+in the driver's view at 1280×720. At 44 s the bus drives off. The run lasts 110 s by default and
+writes `<out prefix>.log` and `<out prefix>.json` (`OMSI_PROFILE`'s exit summary: frame-time
+percentiles, every stage in milliseconds, CPU time per frame).
 
-```sh
+| Variable | Effect |
+| --- | --- |
+| `BENCH_STILL=1` | The bus never drives off; the camera stands still |
+| `BENCH_FPS=<n>` | Limits the frame rate (30 or 60, as most players see it) |
+| `BENCH_TRAFFIC=<n>` | Traffic density (default 30) |
+| `BENCH_TIME=<HH:MM>` | Time of day (default 08:00) |
+
+> **Tip:** Stage times hold still between runs far better than frame times. Still take several
+> runs of each binary, on one machine, and compare the medians.
+
+`tools/mx_port/bench_wgpu_vs_mx.py` compares wgpu and mX builds offscreen (see
+[Porting the renderer to mX](MX_PORT.md)).
+
+## Tests with the original install
+
+Tests that read the original OMSI 2 install are `#[ignore]`d, so CI shows them as ignored instead
+of passing them without checking anything. They find the install through
+`tools/test-support/original_root.rs`: `$OMSI_ROOT`, else `OMSI 2 Original` beside the checkout.
+
+```bash
 OMSI_ROOT="/path/to/OMSI 2" cargo test -p <crate> -- --ignored
 ```
 
-Some need add-on content the stock install does not have (the AA-FR bus bundle, the Volvo
-Wright family, the MB O530 Facelift): their `ignore` reason names it. An ignored test that is
-run and finds its content missing fails, naming the file.
+Some need add-on content the stock install lacks (the AA-FR bus bundle, the Volvo Wright family,
+the MB O530 Facelift); their ignore reason names it. An ignored test that runs and finds its
+content missing fails and names the file.
 
-## Size budget
+## Pull request checks
 
-`scripts/size-budget.sh` (in the pull request checks) fails when a Rust file or function
-grows more than 5 % past its size in `scripts/size-budget.txt`, or a new one passes 1500
-(file) or 300 (function) lines. Functions are recorded by crate and name, so one moved to
-another file of its crate keeps its allowance. After a split, `scripts/size-budget.sh
---update` lowers the recorded sizes; it never raises them. `--list` shows every file with
-its longest function.
+Every pull request runs these (`.github/workflows/pr_checks.yml`). Run them locally before you
+push.
 
-## Crate layers
+### Size budget
 
-`scripts/arch-guard.sh` (run by the pull request checks) keeps the crates in their layers:
-the file formats at the bottom, then the simulation, the presentation (renderer, audio, UI),
-the app's subsystems, and `omsi-app` on top as the glue. `scripts/arch-rules.txt` lists what
-must not depend on what (`forbid omsi-sim omsi-render`: the simulation never knows how it is
-drawn) and the edges that still break a rule and are to be removed (`allow ...`); once such an
-edge is gone, the check asks for its `allow` line to be deleted, so it cannot come back.
-The same file limits how many lines of Rust a pull request may add to `crates/omsi-app`, net
-(added minus removed) and its tests aside (`app-growth`, against the pull request's base;
-locally against the merge base with main, and without any it says the growth was not
-checked): a new subsystem gets a crate of its own instead of growing the app. `--graph` prints
-the dependency graph.
+```bash
+scripts/size-budget.sh            # check
+scripts/size-budget.sh --update   # after a split: lower the recorded sizes
+scripts/size-budget.sh --list     # every file with its longest function
+```
+
+- A file may have at most 1500 lines, or its recorded size in `scripts/size-budget.txt` plus 5 %.
+- A function over 300 lines must be recorded and may grow at most 5 %. A new function may not pass
+  300 lines.
+- Functions are recorded by crate and name, so moving one to another file of its crate keeps its
+  allowance.
+- `--update` only lowers sizes. Raising one is a reviewer's decision: edit `size-budget.txt` by
+  hand in the same pull request and say why.
+
+### Crate layers
+
+```bash
+scripts/arch-guard.sh            # check
+scripts/arch-guard.sh --graph    # print the dependency graph
+```
+
+It keeps the crates in their layers: file formats at the bottom, then the simulation, the
+presentation (renderer, audio, UI), the app's subsystems, and `omsi-app` on top.
+`scripts/arch-rules.txt` holds the rules:
+
+- `forbid <from> <to>`: for example `forbid omsi-sim omsi-render` (the simulation never knows how
+  it is drawn).
+- `allow <from> <to>`: an existing edge that still breaks a rule. Once the edge is gone, the check
+  asks you to delete the line.
+- `app-growth 300`: a pull request may add at most 300 lines of Rust to `crates/omsi-app`, net and
+  tests aside. Locally it is measured against the merge base with `main`. A new subsystem gets a
+  crate of its own.
+
+Dev-dependencies do not count. See [Architecture](ARCHITECTURE.md#target-layering).
+
+### Formatting
+
+```bash
+scripts/format-check.sh
+```
+
+It checks the changed `.rs` files one by one (`scripts/format-check-file.sh`) and runs
+`cargo fmt --check` on the crates listed in `scripts/formatted-crates.txt`. Format the files you
+changed, not whole crates that are not in that list.

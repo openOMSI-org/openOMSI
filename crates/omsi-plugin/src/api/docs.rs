@@ -1,6 +1,6 @@
-//! The reference part of docs/PLUGINS.md, written from the registry: a table per group of
-//! functions and one of the events. A test keeps the file's copy the same as this
-//! (`OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest` writes it).
+//! A Markdown reference written from the registry: a table per group of functions and one of
+//! the events. docs/PLUGIN_API.md is the published reference; the `api_manifest` test checks it
+//! names every function and event of the registry.
 
 use super::{ApiFn, Perm, events, registry};
 
@@ -31,7 +31,7 @@ pub const GROUPS: &[(&str, &str)] = &[
     ("util", "Helpers"),
 ];
 
-/// Where the generated part starts and ends in docs/PLUGINS.md.
+/// Where a generated part starts and ends in a Markdown file (see `splice`).
 pub const BEGIN: &str = "<!-- api:begin (written from the registry: OMSI_API_BLESS=1 cargo test -p omsi-plugin api_manifest) -->";
 pub const END: &str = "<!-- api:end -->";
 

@@ -66,7 +66,12 @@ fn main() {
         let hold_speed = |rb: &RigidBody| -> f32 {
             ((v_target - rb.forward_speed()) * rb.mass * 2.0
                 + rb.rolling_resistance
-                + 0.36 * rb.forward_speed().powi(2) * (rb.mass / 2200.0).clamp(2.0, 8.5))
+                // (only the realistic model has an air drag of its own to hold against)
+                + if rb.realistic {
+                    0.36 * rb.forward_speed().powi(2) * (rb.mass / 2200.0).clamp(2.0, 8.5)
+                } else {
+                    0.0
+                })
                 * r_drive
         };
         for _ in 0..180 {
