@@ -8927,3 +8927,12 @@ _version: 2
   en: "No saved situation of this map yet"
 "Saved as \"{}\"":
   en: "Saved as \"{}\""
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.":
+  en: "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.":
+  en: "Automatic announcements are off."

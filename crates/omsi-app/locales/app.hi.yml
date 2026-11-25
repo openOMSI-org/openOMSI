@@ -3302,3 +3302,9 @@
 "Save under a name...": "किसी नाम से सहेजें..."
 "No saved situation of this map yet": "इस मैप की कोई सहेजी गई स्थिति अभी नहीं है"
 "Saved as \"{}\"": "\"{}\" के रूप में सहेजा गया"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "स्वचालित घोषणाएं: इस रूट की HOF फ़ाइल में प्रति स्टॉप एक रिकॉर्डिंग है, इसलिए दबाने की आवश्यकता नहीं है।"
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "स्वचालित घोषणाएं: इस बस में कोई IBIS \"अगला स्टॉप\" बटन नहीं है, इसलिए इसकी घोषणाएं अपनी ही रहती हैं।"
+"Automatic announcements are off.": "स्वचालित घोषणाएं बंद हैं।"
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

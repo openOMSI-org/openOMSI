@@ -3010,3 +3010,9 @@
 "Save under a name...": "บันทึกโดยตั้งชื่อ..."
 "No saved situation of this map yet": "ยังไม่มีสถานการณ์ที่บันทึกไว้ของแผนที่นี้"
 "Saved as \"{}\"": "บันทึกเป็น \"{}\" แล้ว"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "การประกาศอัตโนมัติ: ไฟล์ HOF ของสายนี้มีเสียงบันทึกเดียวต่อป้าย จึงไม่ต้องกดอะไร"
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "การประกาศอัตโนมัติ: รถคันนี้ไม่มีปุ่ม IBIS \"ป้ายถัดไป\" เสียงประกาศจึงยังคงเป็นของรถเอง"
+"Automatic announcements are off.": "การประกาศอัตโนมัติปิดอยู่"
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

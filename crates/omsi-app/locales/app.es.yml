@@ -4462,3 +4462,8 @@
 "Save under a name...": "Guardar con un nombre..."
 "No saved situation of this map yet": "Aún no hay ninguna situación guardada de este mapa"
 "Saved as \"{}\"": "Guardado como «{}»"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Anuncios automáticos: el archivo HOF de esta ruta tiene una grabación por parada, por lo que no es necesario pulsar nada."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Anuncios automáticos: este autobús no tiene tecla IBIS de «siguiente parada», por lo que sus anuncios se mantienen propios."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.": "Los anuncios automáticos están desactivados."

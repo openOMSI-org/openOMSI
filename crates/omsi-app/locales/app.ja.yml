@@ -3356,3 +3356,8 @@
 "Save under a name...": "名前を付けて保存..."
 "No saved situation of this map yet": "このマップの保存された状況はまだありません"
 "Saved as \"{}\"": "「{}」として保存しました"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "自動アナウンス：この路線のHOFには停留所ごとに1つの録音しかないため、押す必要はありません。"
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "自動アナウンス：このバスにはIBIS「次停留所」キーがないため、車内独自のアナウンスが維持されます。"
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.": "自動アナウンスはオフです。"

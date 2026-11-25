@@ -3010,3 +3010,9 @@
 "Save under a name...": "Lưu với một tên..."
 "No saved situation of this map yet": "Chưa có tình huống nào được lưu cho bản đồ này"
 "Saved as \"{}\"": "Đã lưu thành \"{}\""
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Thông báo tự động: tệp HOF của tuyến này có một bản ghi mỗi điểm dừng, không cần nhấn nút."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Thông báo tự động: xe buýt này không có phím IBIS \"trạm tiếp theo\", vì vậy các thông báo vẫn giữ nguyên."
+"Automatic announcements are off.": "Thông báo tự động đã tắt."
+
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."

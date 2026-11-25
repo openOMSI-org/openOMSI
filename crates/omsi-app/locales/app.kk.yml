@@ -3301,3 +3301,8 @@
 "Save under a name...": "Атаумен сақтау..."
 "No saved situation of this map yet": "Бұл картаның сақталған жағдайы әзірге жоқ"
 "Saved as \"{}\"": "«{}» ретінде сақталды"
+
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.": "Автоматты хабарландырулар: бұл бағыттың HOF файлында аялдамаға бір жазба бар, ештеңе басудың қажеті жоқ."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Автоматты хабарландырулар: бұл автобуста IBIS «келесі аялдама» пернесі жоқ, сондықтан оның хабарландырулары өздігінен қалады."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.": "Автоматты хабарландырулар өшірулі."
