@@ -771,8 +771,14 @@ impl Renderer {
             let data = omsi_texture::Image {
                 width: img.width,
                 height: img.height,
-                rgba: img.rgba.iter().map(|b| lut[*b as usize]).collect(),
-                has_alpha: false,
+                // (the alpha is not sRGB-encoded: a height map in it stays as it is)
+                rgba: img
+                    .rgba
+                    .iter()
+                    .enumerate()
+                    .map(|(i, b)| if i % 4 == 3 { *b } else { lut[*b as usize] })
+                    .collect(),
+                has_alpha: img.has_alpha,
             };
             self.add_texture(scene, &data, true)
         };

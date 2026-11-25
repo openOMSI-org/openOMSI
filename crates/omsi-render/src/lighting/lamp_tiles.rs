@@ -158,10 +158,12 @@ impl TileWants {
     ) -> Vec<LampShadow> {
         let mut tiles: Vec<LampShadow> = Vec::new();
         let mut tiled: Vec<(u32, usize)> = Vec::new();
-        let cubed = self.cube_tiles(scene, &mut tiles, &mut tiled);
-        self.world.retain(|w| !cubed.contains(&w.2));
-        self.world_tiles(scene, &mut tiles, &mut tiled);
-        self.vehicle_tiles(eye.cam_rel, own, &mut tiles, &mut tiled);
+        if eye.level > 0 {
+            let cubed = self.cube_tiles(scene, &mut tiles, &mut tiled);
+            self.world.retain(|w| !cubed.contains(&w.2));
+            self.world_tiles(scene, &mut tiles, &mut tiled);
+            self.vehicle_tiles(eye.cam_rel, own, &mut tiles, &mut tiled);
+        }
         for &(idx, slot) in &tiled {
             if let Some(g) = gpu_lights.get_mut(idx as usize) {
                 g.pos[3] = -(-g.pos[3]).max(0.0) - LAMP_MARK * (slot + 1) as f32;

@@ -36,7 +36,9 @@ struct CoronaOut {
     // 1 for what is drawn at the scene's level (a precipitation streak, lit fog: a cone or
     // a halo), 0 for a light's glare
     @location(2) kind: f32,
-    @location(3) @interpolate(flat) vehicle_lamp: u32,
+    // 1 for a vehicle's own outside lamp (a headlamp, a tail or brake lamp, an indicator:
+    // parameter bit 16, `Corona::vehicle_lamp`) in the Enhanced picture
+    @location(3) star: f32,
     // 1 for a light's cone in the fog (OMSI's fan, see below)
     @location(4) beam: f32,
     // the cone's inner and outer half angles (radians)
@@ -54,7 +56,6 @@ struct CoronaOut {
 const GLARE_K: f32 = 8.0;
 // the glare's strength at the sprite's rim, against the lamp's core
 const GLARE_TAIL: f32 = 0.4;
-const VEHICLE_LAMP: u32 = 16u;
 
 // How many times its sprite a lamp's quad is drawn: `GLARE_K` with *Glow of lights* on (enh.led.z),
 // and in mist, fog and rain (which have a halo of their own, in the bitmap) only the sprite.
@@ -63,29 +64,38 @@ fn glare_scale(compact: bool) -> f32 {
     return select(1.0, GLARE_K, !compact && enh.led.z > 0.5 && wet < 1.0);
 }
 
-fn compact_vehicle_lamp(flags: u32) -> bool {
-    return (flags & VEHICLE_LAMP) != 0u && enh.led.z > 0.5;
-}
+const VEHICLE_LAMP: u32 = 16u;
+// The largest a vehicle lamp's glow is drawn in the Enhanced picture (m, its radius). A
+// car's `[light_enh_2]` sizes are made for Omsi.exe's flat sprites, which it draws dim -
+// half a metre to a metre and more for a tail lamp. Drawn as bright as a lamp is in the
+// high-range picture, at that size every car's lamps were balls of light wider than its
+// bumper. A lamp's lens is some ten to twenty centimetres; its glare is the glow pass's.
+const VEHICLE_LAMP_MAX: f32 = 0.22;
+// How much of a directional lamp's light still shows from the side, outside its cone
+// (the lens and the reflector catch it): a headlamp seen from the pavement is a lit lamp,
+// not a dark one that snaps on as the eye crosses its cone's edge.
+const SIDE_GLOW: f32 = 0.07;
 
 @vertex
 fn vs_main(in: CoronaIn) -> CoronaOut {
-    return corona_vertex(in, 1.0);
+    return corona_vertex(in, 1.0, false);
 }
 
 @vertex
 fn vs_enhanced(in: CoronaIn) -> CoronaOut {
-    let compact = compact_vehicle_lamp(u32(in.extra.z + 0.5));
+    let compact = (u32(in.extra.z + 0.5) & VEHICLE_LAMP) != 0u;
     if (compact && in.extra.w > 1.5 && in.extra.w < 2.5) {
-        // Drop the round fog billboard. Keep directional cones, including on targets
-        // where the volumetric spotlight pass is unavailable.
+        // (a vehicle lamp's round fog billboard: its light in the air is the lamps'
+        // airlight's, `lamp_airlight`, which follows the beam; the billboard stood in front
+        // of the car as a lit disc)
         var hidden: CoronaOut;
         hidden.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
         return hidden;
     }
-    return corona_vertex(in, glare_scale(compact));
+    return corona_vertex(in, glare_scale(compact), true);
 }
 
-fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
+fn corona_vertex(in: CoronaIn, glare: f32, enhanced: bool) -> CoronaOut {
     var out: CoronaOut;
     let corners = array<vec2<f32>, 6>(vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let c = corners[in.vid % 6u];
@@ -163,6 +173,7 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
         hout.uv = c * 0.5 + 0.5;
         hout.color = vec4<f32>(in.color.rgb, k);
         hout.kind = 1.0;
+        hout.star = 0.0;
         hout.beam = 0.0;
         hout.cone = vec2<f32>(0.0, 0.0);
         if (k <= 0.001 || on_screen <= 0.01) {
@@ -206,6 +217,7 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
         bout.uv = c;
         bout.color = vec4<f32>(in.color.rgb, k);
         bout.kind = 1.0;
+        bout.star = 0.0;
         bout.beam = 1.0;
         bout.cone = vec2<f32>(inner, outer);
         if (k <= 0.001 || on_screen <= 0.01) {
@@ -227,8 +239,16 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
         let ang = acos(clamp(dot(normalize(in.dir.xyz), view_dir), -1.0, 1.0));
         let outer = acos(clamp(in.dir.w, -1.0, 1.0));
         let inner = select(0.0, acos(clamp(in.extra.x, -1.0, 1.0)), in.extra.x >= -1.0);
-        brightness = brightness * clamp((outer - ang) / max(outer - inner, 0.0001), 0.0, 1.0);
+        let k = clamp((outer - ang) / max(outer - inner, 0.0001), 0.0, 1.0);
+        if (enhanced) {
+            // (smoothly into the cone, and a trace of it outside, in front of the lamp)
+            let front = clamp(1.0 - (ang - outer) / 0.6, 0.0, 1.0) * select(0.0, 1.0, ang < 1.65);
+            brightness = brightness * max(k * k * (3.0 - 2.0 * k), SIDE_GLOW * front);
+        } else {
+            brightness = brightness * k;
+        }
     }
+    let compact = enhanced && (u32(in.extra.z + 0.5) & VEHICLE_LAMP) != 0u && !streak && !flake;
     // the light that reaches the eye through the fog: Beer-Lambert's exp(-density x
     // distance), the same law the scene's own fog follows (`shader.wgsl`). Left out, the
     // street lamps and signals shone at full strength to the end of the view in a fog that
@@ -237,8 +257,7 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
         brightness = brightness * exp(-dist * max(camera.fog.w, 0.0));
     }
     // a star grows with the light's strength; every sprite's strength stops at 1
-    let flags = u32(in.extra.z + 0.5);
-    let star_sprite = (flags & 8u) != 0u && !streak;
+    let star_sprite = (u32(in.extra.z + 0.5) & 8u) != 0u && !streak;
     let grow = select(1.0, brightness, star_sprite);
     if (!streak) {
         brightness = min(brightness, 1.0);
@@ -270,7 +289,18 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
     // 0.9 is measured against Omsi.exe: at the size the game files ask for, every glow reads
     // a shade too wide beside the original, which draws the sprite a little inside the
     // diameter its `size` names. (Streaks keep their size: they are rain, not a light.)
-    let size = select(max(in.size * grow, dist * 0.002) * 0.9 * select(glare, 1.0, flake), in.size, streak);
+    var own = in.size * grow;
+    if (compact) {
+        own = min(own, VEHICLE_LAMP_MAX);
+    }
+    // (Enhanced: a lamp smaller on the screen than the distance floor keeps its light, not
+    // its brightness - spread over the floor's sprite it is dimmer, as a far lamp is a
+    // fainter point, instead of every far car's lamps reading as large as near ones)
+    if (enhanced && !streak && !flake && own < dist * 0.002) {
+        let q = own / (dist * 0.002);
+        brightness = brightness * max(q * q, 0.18);
+    }
+    let size = select(max(own, dist * 0.002) * 0.9 * select(glare, 1.0, flake), in.size, streak);
     let stretch = select(vec2<f32>(1.0, 1.0), vec2<f32>(0.06, 4.0), streak);
     var upv = up;
     if (streak) {
@@ -284,13 +314,26 @@ fn corona_vertex(in: CoronaIn, glare: f32) -> CoronaOut {
     let pull = select(min(size * 0.5, 0.5), in.extra.y, in.extra.y >= 0.0);
     let wp = in.pos + (right * c.x * stretch.x + upv * c.y * stretch.y) * size + select(view_dir * min(pull, dist * 0.9), vec3<f32>(0.0), streak);
     out.clip = camera.view_proj * vec4<f32>(wp, 1.0);
+    // A lamp's glare quad (Enhanced, *Glow of lights*) is `GLARE_K` times its sprite and flat,
+    // facing the eye. Left at the lamp's own depth it cuts into whatever stands within its
+    // reach - the bumper, the road in front of the bus, the lens itself - along a straight
+    // line, and fights with the lens's own depth: a bright plane standing in the air, seen
+    // the plainer the lower the camera. A glare is the eye's and the lens's, not a thing in
+    // the world: it is moved towards the eye in depth only (as a smoke puff is, above; its
+    // size on the screen stays) by the quad's own radius, so that only what truly stands
+    // between the eye and the lamp, further out than that, covers it.
+    if (!streak && !flake && glare > 1.0) {
+        let push = min(size, dist * 0.9);
+        let nearer = camera.view_proj * vec4<f32>(wp + view_dir * push, 1.0);
+        out.clip.z = nearer.z / nearer.w * out.clip.w;
+    }
     out.uv = c * 0.5 + 0.5;
     out.color = vec4<f32>(in.color.rgb, brightness);
     out.kind = select(0.0, 1.0, streak);
     out.wpos = vec4<f32>(in.pos, select(select(0.0, 2.0, flake), 1.0, streak));
+    out.star = select(0.0, 1.0, compact);
     out.beam = 0.0;
     out.cone = vec2<f32>(0.0, 0.0);
-    out.vehicle_lamp = flags & VEHICLE_LAMP;
     // (not `<= 0.001`: a NaN brightness is not smaller, and Direct3D drew it as a black
     // square where Metal's fast maths had dropped it)
     if (!(brightness > 0.001) || (bitcast<u32>(brightness) & 0x7f800000u) == 0x7f800000u) {
@@ -400,7 +443,7 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
     // (a lamp's quad is `GLARE_K` times its sprite: the sprite's own coordinates are these
     // stretched out from the middle, and the rest of the quad holds the glare)
     let lamp = in.kind < 0.5 && in.beam < 0.5;
-    let compact = compact_vehicle_lamp(in.vehicle_lamp);
+    let compact = in.star > 0.5;
     let glare = glare_scale(compact);
     var qin = in;
     if (lamp) {
@@ -420,14 +463,15 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         return vec4<f32>(light * (0.16 / (0.28 + peak)), 1.0);
     }
     var tail = 0.0;
-    let wet = clamp(enh.fog.x * 400.0 + enh.weather.z * 0.7, 0.0, 1.0);
+    // (only with the glow on: off, a lamp is drawn exactly as it was before the option)
     if (lamp && glare > 1.0) {
         // The glare of a lens (and of an eye) round a bright source: a long tail falling as the
         // cube of the distance (the near term of the CIE's glare function, 10 / theta^3), from
         // the sprite's rim out to the quad's edge, where it is let go. Mist, fog and rain
         // have their own halo, which the bitmap carries; in clear air this is what is left.
+        let wet0 = clamp(enh.fog.x * 400.0 + enh.weather.z * 0.7, 0.0, 1.0);
         let k = 0.8;
-        tail = GLARE_TAIL * k * k * k / (r * r * r + k * k * k) * (1.0 - smoothstep(GLARE_K * 0.6, GLARE_K, r)) * (1.0 - wet);
+        tail = GLARE_TAIL * k * k * k / (r * r * r + k * k * k) * (1.0 - smoothstep(GLARE_K * 0.6, GLARE_K, r)) * (1.0 - wet0);
     }
     if (lamp) {
         // A lamp seen through clear air is a small, very bright core with a faint ring of
@@ -436,26 +480,33 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // spread it the way a lens does, a short falloff of glare, and a dim trace of the
         // bitmap (which keeps a star's rays and a streak's shape). Mist, fog and rain
         // scatter the light round the lamp, and there the full halo comes back.
+        let wet = clamp(enh.fog.x * 400.0 + enh.weather.z * 0.7, 0.0, 1.0);
         // (the core never narrower than a pixel and a half: a far lamp stays a point of
         // light, as the sprite's distance floor keeps it on the screen)
         let lit = textureSampleLevel(t_corona, s_corona, vec2<f32>(0.5, 0.5), 0.0).rgb;
         let w = max(0.1, px * 1.5);
-        if (!compact) {
-            let core = exp(-r * r / (w * w)) * 3.0 + exp(-r * 9.0) * 0.35;
-            shape = mix(core * max(lit, shape) + shape * 0.22, shape, wet);
-        }
+        let core = exp(-r * r / (w * w)) * 3.0 + exp(-r * 9.0) * 0.35;
+        shape = mix(core * max(lit, shape) + shape * 0.22, shape, wet);
         // (round, inside the circle the sprite holds: a far lamp's sprite is a few pixels,
         // the core spans it, and brighter than white even in its corners it showed the
         // whole quad - a square blot of light for every distant headlamp)
         shape = shape * (1.0 - smoothstep(1.0 - px, 1.0, r));
-        shape = shape + vec3<f32>(tail) * max(lit, vec3<f32>(0.25));
+        // (the tail is added after the core is scaled, and soft-limited just under white:
+        // pre-exposed at night it clipped to a flat white disc as wide as the sprite - a
+        // plane of light - where it should fall off smoothly into the dark; the glow filter
+        // takes the core's HDR peak for the halo)
+        let halo = vec3<f32>(tail) * max(lit, vec3<f32>(0.25)) * in.color.a * scale;
+        let soft = vec3<f32>(0.9) * (vec3<f32>(1.0) - exp(-halo / vec3<f32>(0.9)));
+        var light = in.color.rgb * (shape * in.color.a * scale + soft);
+        if (compact) {
+            // (a vehicle lamp's glow held to a few times white: bright enough that the glow
+            // pass gives it a small halo, not so bright that a tail lamp floods the screen)
+            let peak = max(light.r, max(light.g, light.b));
+            light = light * (2.5 / max(peak, 2.5));
+        }
+        return vec4<f32>(light, 1.0);
     }
-    var light = in.color.rgb * shape * in.color.a * scale;
-    if (lamp && compact) {
-        let peak = max(light.r, max(light.g, light.b));
-        light *= 0.45 / max(peak, 0.45);
-    }
-    return vec4<f32>(light, 1.0);
+    return vec4<f32>(in.color.rgb * shape * in.color.a * scale, 1.0);
 }
 
 // Smoke ([smoke] particles): the smoke texture tinted with the particle's colour, lit by the

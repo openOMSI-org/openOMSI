@@ -40,6 +40,8 @@ pub struct PbrFiles {
     /// A packed map and its channel order: occlusion, roughness, metalness as (r, g, b)
     /// indices.
     pub packed: Option<(PathBuf, [usize; 3])>,
+    /// A height map (white high): the Enhanced picture's parallax occlusion mapping.
+    pub height: Option<PathBuf>,
 }
 
 impl PbrFiles {
@@ -49,6 +51,7 @@ impl PbrFiles {
             && self.metal.is_none()
             && self.ao.is_none()
             && self.packed.is_none()
+            && self.height.is_none()
     }
 }
 
@@ -57,7 +60,8 @@ pub struct PbrImages {
     pub normal: Option<Image>,
     /// Occlusion, roughness, metalness in red, green, blue.
     pub orm: Option<Image>,
-    /// normal (1, or 2 for an OpenGL-style map), occlusion, roughness, metalness present.
+    /// normal (1, or 2 for an OpenGL-style map; 4 more with a height map in the ORM map's
+    /// alpha), occlusion, roughness, metalness present.
     pub flags: [f32; 4],
 }
 
@@ -130,6 +134,7 @@ pub fn find(diffuse: &Path) -> PbrFiles {
         "ambientocclusion",
         "ambient_occlusion",
     ]);
+    out.height = pick(&["hh", "height", "heightmap", "disp", "displacement", "parallax"]);
     if let Some(p) = pick(&["orm", "arm"]) {
         out.packed = Some((p, [0, 1, 2]));
     } else if let Some(p) = pick(&["mra"]) {
@@ -354,6 +359,35 @@ pub fn load_set(files: &PbrFiles) -> Option<PbrImages> {
     } else {
         None
     };
+    // the height map into the ORM map's alpha (one more texture slot is none the scene shader
+    // has to spare): an ORM map of "nothing known" made for it where there is none
+    let height = files.height.as_ref().and_then(|p| {
+        let i = load(p)?;
+        if is_grey(&i) {
+            Some(i)
+        } else {
+            log::info!("{}: not a grey height map: left alone", p.display());
+            None
+        }
+    });
+    let mut orm = orm;
+    if let Some(hm) = &height {
+        let mut o = orm.take().unwrap_or_else(|| {
+            let hm = capped(hm.clone(), MAX_SIDE);
+            Image {
+                width: hm.width,
+                height: hm.height,
+                rgba: vec![255u8; (hm.width * hm.height * 4) as usize],
+                has_alpha: false,
+            }
+        });
+        for (i, v) in channel(hm, 0, o.width, o.height).into_iter().enumerate() {
+            o.rgba[i * 4 + 3] = v;
+        }
+        o.has_alpha = true;
+        flags[0] += 4.0;
+        orm = Some(o);
+    }
     if normal.is_none() && orm.is_none() {
         return None;
     }

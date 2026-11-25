@@ -238,8 +238,10 @@ impl Renderer {
             scene,
             &eye,
             enhanced_frame,
+            // (the saloon's lamps always have their maps in the Enhanced picture - the
+            // seats', the handrails' and the partitions' shadows under them; the street's
+            // and the headlamps' follow `light_shadows`, see `LampTiles::tiles`)
             lighting.lamp_shadows
-                && self.options.light_shadows > 0
                 && with_overlays
                 && projection.is_none()
                 && self.shadows.shadow_pipelines.len() > 6,

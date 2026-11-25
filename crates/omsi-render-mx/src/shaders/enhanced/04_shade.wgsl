@@ -13,6 +13,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     if (terrain) {
         duv = in.uv * material.extra.z;
     }
+    // a height map (in the PBR set's ORM alpha, `foo_height`): parallax occlusion mapping
+    if (material.pbr.x > 3.5 && !terrain) {
+        duv = parallax_uv(duv, in.world, safe_normal(in.normal), normalize(eye - in.world));
+    }
     // (without the [texcoordtransX/Y] offset: the transmap, night map and light map stay
     // in place, see fs_main)
     let buv = tex_address(in.uv - in.params.zw);
@@ -342,10 +346,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // `foo_orm`: see omsi_texture::pbr): the normal map bends the normal, the packed map
     // gives the occlusion, roughness and metalness in place of the guesses above
     var pbr_ao = 1.0;
-    if (!LEAN && material.pbr.x > 0.5 && !terrain) {
+    if (!LEAN && pbr_normal_flag() > 0.5 && !terrain) {
         var tn = textureSampleBias(t_pbr_normal, s_diffuse, duv, camera.lod.x).xyz * 2.0 - vec3<f32>(1.0);
         // (an OpenGL-style map, green up: `_gl` in its name)
-        if (material.pbr.x > 1.5) {
+        if (pbr_normal_flag() > 1.5) {
             tn.y = -tn.y;
         }
         n = perturb_normal(n, in.world, duv, tn);
