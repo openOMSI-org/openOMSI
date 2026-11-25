@@ -363,22 +363,31 @@ impl Player {
     }
 
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
-        if self.unframed_click.is_some() {
-            // (a second click before the frame that reads the first: it is pressed after that
-            // frame, so the scripts see both, in order)
-            let target = self.pick_click(origin, dir, spread);
-            let click = self.unframed_click.as_mut()?;
+        match self.pick_click(origin, dir, spread) {
+            Some(target) => Some(self.click_target(target)),
+            None => {
+                // (a click on nothing lets the button go)
+                match self.unframed_click.as_mut() {
+                    Some(click) => click.let_go(true),
+                    None => self.release(),
+                }
+                None
+            }
+        }
+    }
+
+    /// Press what a click found. A second click before the frame that reads the first waits
+    /// for that frame and is pressed after it, so the scripts see both, in order.
+    pub(crate) fn click_target(&mut self, target: ClickTarget) -> usize {
+        let i = target.mesh();
+        if let Some(click) = self.unframed_click.as_mut() {
             click.let_go(true);
-            let target = target?;
-            let i = target.mesh();
             click.queue(target);
-            return Some(i);
+            return i;
         }
         self.release();
-        let target = self.pick_click(origin, dir, spread)?;
-        let i = target.mesh();
         self.press(target);
-        Some(i)
+        i
     }
 
     fn pick_click(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<ClickTarget> {
@@ -435,6 +444,10 @@ impl Player {
         let mut waiting = std::mem::take(&mut click.waiting);
         if let Some(next) = waiting.pop_front() {
             self.press(next.target);
+            // (the mouse moved while it waited: its drag, after its press)
+            if next.motion != (0.0, 0.0) {
+                self.drag(next.motion.0, next.motion.1);
+            }
             if let Some(pressed) = self.unframed_click.as_mut() {
                 pressed.release = next.release;
                 pressed.waiting = waiting;
@@ -470,6 +483,21 @@ impl Player {
     /// movement in `mouse_x` / `mouse_y`, which is how the rotary knobs, the sun blind, the
     /// driver's window and the ignition key are operated.
     pub(crate) fn drag(&mut self, dx: f32, dy: f32) {
+        // A click waiting for its frame takes the motion that comes after it (it is dragged
+        // once it is pressed); a control let go before its frame is not dragged any more.
+        if let Some(click) = self.unframed_click.as_mut() {
+            match click.waiting.back_mut() {
+                Some(w) => {
+                    if w.release.is_none() {
+                        w.motion.0 += dx;
+                        w.motion.1 += dy;
+                    }
+                    return;
+                }
+                None if click.release.is_some() => return,
+                None => {}
+            }
+        }
         let (ev, trailer) = if let Some(i) = self.pressed_mesh {
             let Some(ev) = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
                 .mouse_event
@@ -657,6 +685,7 @@ impl UnframedClick {
         self.waiting.push_back(WaitingClick {
             target,
             release: None,
+            motion: (0.0, 0.0),
         });
     }
 
@@ -673,11 +702,13 @@ impl UnframedClick {
 struct WaitingClick {
     target: ClickTarget,
     release: Option<bool>,
+    /// The mouse's movement while it waited, dragged after its press.
+    motion: (f32, f32),
 }
 
 /// What a click presses: a mesh of the bus, one of a coupled part, or a control by its
 /// trigger.
-enum ClickTarget {
+pub(crate) enum ClickTarget {
     Bus(usize),
     Trailer(usize, usize),
     Control(String),

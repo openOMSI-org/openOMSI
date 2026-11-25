@@ -8,6 +8,7 @@ mod doors;
 mod gears;
 mod ibis;
 mod mouse;
+pub(crate) use mouse::ClickTarget;
 mod part_sounds;
 mod picking;
 mod rp_speed_limit;

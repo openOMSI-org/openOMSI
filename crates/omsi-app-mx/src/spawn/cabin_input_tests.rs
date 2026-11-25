@@ -249,3 +249,55 @@ fn two_taps_before_a_frame_both_reach_the_scripts_in_order() {
     assert_eq!(p.vehicle.var("zero_frames"), Some(0.0));
     assert!(p.unframed_click.is_none());
 }
+
+/// A quick tap on one control and a drag on another, both before the next frame: the
+/// second control waits for the frame that read the first, and the motion that came while
+/// it waited drags it, not the control let go before.
+#[test]
+fn a_drag_after_a_quick_tap_before_a_frame_moves_the_second_control() {
+    let mut vehicle = crate::schedule::tests::script_test_vehicle(
+        "{trigger:knob_drag}\n(L.L.value) (L.S.mouse_y) 100 / + (S.L.value)\n{end}\n\
+         {trigger:lever_drag}\n(L.L.lever) (L.S.mouse_y) 100 / + (S.L.lever)\n{end}\n\
+         {trigger:lever}\n(L.L.lever_pressed) 1 + (S.L.lever_pressed)\n{end}\n",
+        "value\nlever\nlever_pressed\n",
+        "",
+    );
+    let ty = Arc::make_mut(&mut vehicle.ty);
+    for (k, ev) in ["knob", "lever"].into_iter().enumerate() {
+        ty.model.meshes.push(omsi_model::MeshDef {
+            mouse_event: Some(ev.into()),
+            ..Default::default()
+        });
+        ty.meshes.push(omsi_sim::vehicle::VehicleMesh {
+            def_index: k,
+            data: Default::default(),
+            file: Default::default(),
+            materials: vec![],
+            overrides: vec![],
+            pivot: glam::Mat4::IDENTITY,
+            viewpoint: 0,
+            skin: vec![],
+            keep_winding: false,
+        });
+    }
+    vehicle.mesh_props.resize_with(2, Default::default);
+    let mut p = test_player(vehicle, vec![]);
+    let dt = 1.0 / 60.0;
+    p.click_target(crate::player::ClickTarget::Bus(0));
+    p.release();
+    p.click_target(crate::player::ClickTarget::Bus(1));
+    p.drag(0.0, 50.0);
+    assert_eq!(p.vehicle.var("lever_pressed"), Some(0.0), "the lever waits");
+    for _ in 0..3 {
+        p.vehicle.update(dt);
+        p.settle_click();
+    }
+    assert_eq!(
+        p.vehicle.var("value"),
+        Some(0.0),
+        "the knob let go is not dragged"
+    );
+    assert_eq!(p.vehicle.var("lever_pressed"), Some(1.0));
+    assert!((p.vehicle.var("lever").unwrap() - 0.5).abs() < 1e-6);
+    assert_eq!(p.pressed_mesh, Some(1));
+}
