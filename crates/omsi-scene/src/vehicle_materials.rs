@@ -637,6 +637,15 @@ pub(super) fn texture_is_clear(mask: &[u8]) -> bool {
 
 pub(super) fn slot_is_clear_window(mesh: &MeshData, slot: usize, mask: &[u8]) -> bool {
     let (mut clear, mut all) = (0usize, 0usize);
+    let samples: [(f32, f32, f32); 7] = [
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (0.5, 0.5, 0.0),
+        (0.0, 0.5, 0.5),
+        (0.5, 0.0, 0.5),
+        (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0),
+    ];
     for &(first, count, material) in &mesh.ranges {
         if material as usize != slot {
             continue;
@@ -644,11 +653,21 @@ pub(super) fn slot_is_clear_window(mesh: &MeshData, slot: usize, mask: &[u8]) ->
         let start = first as usize;
         let end = start.saturating_add(count as usize).min(mesh.indices.len());
         for tri in mesh.indices.get(start..end).unwrap_or_default().chunks_exact(3) {
-            let Some(uv) = tri.iter().map(|&i| mesh.uvs.get(i as usize).copied()).sum::<Option<glam::Vec2>>() else { continue };
-            let uv = uv / 3.0;
+            let (Some(a), Some(b), Some(c)) = (
+                mesh.uvs.get(tri[0] as usize).copied(),
+                mesh.uvs.get(tri[1] as usize).copied(),
+                mesh.uvs.get(tri[2] as usize).copied(),
+            ) else { continue };
             let at = |t: f32| ((t.rem_euclid(1.0) * ALPHA_MASK as f32) as usize).min(ALPHA_MASK - 1);
+            let clear_samples = samples
+                .iter()
+                .filter(|&&(wa, wb, wc)| {
+                    let uv = a * wa + b * wb + c * wc;
+                    mask[at(uv.y) * ALPHA_MASK + at(uv.x)] <= 8
+                })
+                .count();
             all += 1;
-            if mask[at(uv.y) * ALPHA_MASK + at(uv.x)] <= 8 {
+            if clear_samples * 2 >= samples.len() {
                 clear += 1;
             }
         }
