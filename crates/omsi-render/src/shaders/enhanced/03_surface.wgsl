@@ -164,6 +164,61 @@ fn matl_glow_light(buv: vec2<f32>, col: vec3<f32>) -> vec3<f32> {
     return col * dot(gm.rgb, vec3<f32>(0.299, 0.587, 0.114)) * material.glow.x * max(enh.exposure.z * 2.0, 0.8);
 }
 
+// The colour (linear rgb, luminance 1) of a black body at `kelvin`: its chromaticity on the
+// Planckian locus (Kim et al.'s cubic fit, 1667..25000 K, held at the ends), as
+// `omsi_model::blackbody_rgb` computes it.
+fn blackbody(kelvin: f32) -> vec3<f32> {
+    let t = clamp(kelvin, 1667.0, 25000.0);
+    let t2 = t * t;
+    let t3 = t2 * t;
+    var x = -3.0258469e9 / t3 + 2.1070379e6 / t2 + 0.2226347e3 / t + 0.240390;
+    if (t <= 4000.0) {
+        x = -0.2661239e9 / t3 - 0.2343589e6 / t2 + 0.8776956e3 / t + 0.179910;
+    }
+    let x2 = x * x;
+    let x3 = x2 * x;
+    var y = 3.0817580 * x3 - 5.8733867 * x2 + 3.75112997 * x - 0.37001483;
+    if (t <= 2222.0) {
+        y = -1.1063814 * x3 - 1.3481102 * x2 + 2.18555832 * x - 0.20219683;
+    } else if (t <= 4000.0) {
+        y = -0.9549476 * x3 - 1.37418593 * x2 + 2.09137015 * x - 0.16748867;
+    }
+    let xyz = vec3<f32>(x / y, 1.0, (1.0 - x - y) / y);
+    let rgb = max(vec3<f32>(
+        dot(xyz, vec3<f32>(3.2406, -1.5372, -0.4986)),
+        dot(xyz, vec3<f32>(-0.9689, 1.8758, 0.0415)),
+        dot(xyz, vec3<f32>(0.0557, -0.2040, 1.0570)),
+    ), vec3<f32>(0.0));
+    return rgb / max(dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-6);
+}
+
+// [matl_emissive] (openOMSI, `EmissionLight`): the material's own light, in HDR - it blooms
+// by its brightness (post.wgsl) and keeps its colour however bright. `buv` is where its
+// texture is read (the light map's coordinate, the slot it rides in), `base` the diffuse
+// texture's colour it shines through without one, `slot` the instance's slot value (the
+// level, or `-(K + level)` with a temperature: `omsi_model::slot_value`) and `pre` the
+// frame's exposure. The artist's strength is on the scale of the screens and `[matl_glow]`
+// (held against the metering as they are); a luminance in cd/m² is exposed as the scene is.
+fn emission_light(buv: vec2<f32>, base: vec3<f32>, slot: f32, pre: f32) -> vec3<f32> {
+    let bits = u32(material.emission.w + 0.5);
+    var col = material.emission.rgb;
+    var level = 1.0;
+    if ((bits & 8u) != 0u) {
+        if ((bits & 16u) != 0u && slot < 0.0) {
+            col = blackbody(floor(-slot));
+            level = min(fract(-slot) / 0.999, 1.0);
+        } else {
+            level = clamp(slot, 0.0, 1.0);
+        }
+    }
+    var map = base;
+    if ((bits & 2u) != 0u) {
+        map = textureSampleBias(t_light, s_diffuse, buv, camera.lod.x).rgb;
+    }
+    let scale = select(max(enh.exposure.z * 2.0, 0.8), pre, (bits & 4u) != 0u) * material.glow.z;
+    return col * map * level * scale;
+}
+
 // How much of the light crossing the player's bus's pane its condensation scatters (0..1,
 // 07_glass.wgsl `glass_condensation`), for the screen mask.
 var<private> glass_fog: f32;

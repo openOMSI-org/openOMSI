@@ -276,7 +276,7 @@ struct MaterialParams {
     // x: [matl_glow] strength (0 = the keyword is not there; the material is its own light -
     // its `t_light` is a greyscale mask of how much shines where, its colour is its own, see
     // the enhanced pass), y an LED panel's share of the `Led glow` ([led_glow_effect],
-    // 1 without it), z/w free
+    // 1 without it), z [matl_emissive]'s scale (see `emission`), w free
     glow: vec4<f32>,
     // The PBR factors (openOMSI `[matl_metallic]` and the rest, `PbrFactors`): x metalness,
     // y roughness, z the normal map's strength, w the occlusion map's - each only where its
@@ -285,6 +285,10 @@ struct MaterialParams {
     // rgb the base colour factor (linear); w bits: 1 base colour, 2 metalness, 4 roughness,
     // 8 normal strength, 16 occlusion strength
     base_color: vec4<f32>,
+    // [matl_emissive] (`EmissionLight`): rgb its colour (linear), w bits - 1 it shines, 2 its
+    // texture is in `t_light`, 4 physical units, 8 the instance's slot value scales it, 16
+    // that value carries its temperature; its scale is `glow.z`
+    emission: vec4<f32>,
 };
 
 // Whether the material's commands set the PBR factor of bit `b` (see `base_color.w`).

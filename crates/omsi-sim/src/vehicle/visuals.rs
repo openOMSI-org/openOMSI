@@ -183,6 +183,8 @@ impl VehicleInstance {
         self.props_plan.refresh(&self.ty, &self.var_index);
         self.props_plan
             .apply(&self.state.vars, &mut self.mesh_props);
+        self.props_plan
+            .apply_emission(dt, &self.state.vars, &mut self.mesh_props);
         // Dirt overlays are engine-owned layers. A model may declare Dirt_Norm or
         // Dirt_Wiped in its cfg without putting the name in the script varlist; the
         // generic alphascale fallback is 1.0 in that case, which makes Dreck.tga an

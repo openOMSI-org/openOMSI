@@ -1073,6 +1073,8 @@ impl TrailerPart {
         crate::anim::apply_parents(&self.animators, &mut self.mesh_transforms);
         self.props_plan.refresh(&self.ty, index);
         self.props_plan.apply(vars, &mut self.mesh_props);
+        self.props_plan
+            .apply_emission(dt, vars, &mut self.mesh_props);
     }
 }
 

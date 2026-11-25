@@ -215,6 +215,9 @@ pub(super) struct PropsPlan {
     /// as `Dirt_Norm` join it later, and an `[alphascale]` on one must then find it).
     pub(super) vars_seen: usize,
     pub(super) built: bool,
+    /// The emissive slots the scripts drive (`emission::plan`) and each one's faded level.
+    pub(super) emit: Vec<super::emission::EmitSlot>,
+    pub(super) emit_level: Vec<f32>,
 }
 
 impl PropsPlan {
@@ -300,6 +303,11 @@ impl PropsPlan {
             }
         }
         self.dirt_wiped = var("dirt_wiped");
+        let emit = super::emission::plan(ty, &var);
+        if emit.len() != self.emit.len() {
+            self.emit_level.clear();
+        }
+        self.emit = emit;
         self.lights = ty
             .model
             .meshes
