@@ -1147,17 +1147,6 @@ pub fn fit_date_to_years(date: &str, span: Option<(i32, i32)>) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
-/// The `--date` of a duty: the date the player chose as it stands. Only a date taken from
-/// the machine's calendar (`use_real_date`) is fitted to the map's `[years]` - an old saved
-/// duty or a manually picked year must not be moved behind the player's back.
-fn date_for_game(date: &str, real_date: bool, span: Option<(i32, i32)>) -> String {
-    if real_date {
-        fit_date_to_years(date, span)
-    } else {
-        date.to_string()
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct EntryInfo {
     pub index: i32,
