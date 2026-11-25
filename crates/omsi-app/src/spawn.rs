@@ -764,6 +764,7 @@ fn new_player(
         press_info: (true, 0.0),
         auto_drag: None,
         pressed_trailer_mesh: None,
+        unframed_click: None,
         occlude_controls: false,
         drawn_outside: false,
         startup: None,

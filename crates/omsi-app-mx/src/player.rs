@@ -180,6 +180,9 @@ pub(crate) struct Player {
     /// Coupled-part mesh currently pressed.  Articulated buses keep the rear controls in
     /// the trailer model, while their mouse events are still handled by the lead vehicle.
     pub(crate) pressed_trailer_mesh: Option<(usize, usize)>,
+    /// The `[mouseevent]` last pressed, while no frame has run since (see
+    /// `Player::settle_click`).
+    pub(crate) unframed_click: Option<mouse::UnframedClick>,
     /// Set while the camera looks at the bus from outside (F3): a switch behind a wall or a
     /// window of the bus is out of reach there, and is neither named, clicked nor turned.
     pub(crate) occlude_controls: bool,
@@ -1259,6 +1262,7 @@ impl Player {
             self.vehicle.host.trigger_mark(),
         );
         self.vehicle.update(dt);
+        self.settle_click();
         if let Some(keep) = kept_indicator(
             self.blinker_cancel,
             lever,

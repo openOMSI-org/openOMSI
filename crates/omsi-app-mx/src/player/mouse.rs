@@ -342,7 +342,22 @@ impl Player {
         Some((name, false))
     }
 
+    /// Fire a cab control's press trigger. Momentary `[mouseevent]` buttons (Aachen ibox /
+    /// ticket printer, #744) set a flag in it and clear it in `_drag` / `_off`; the next
+    /// frame's scripts act on the flag, and the flag is cleared after that frame (a held
+    /// click processed again appended digits twice, `1`→`11`), see `settle_click`.
+    pub(crate) fn trigger_cab_control(&mut self, ev: &str) -> bool {
+        let plain = self.vehicle.trigger(ev);
+        self.unframed_click = Some(UnframedClick {
+            ev: ev.to_string(),
+            release: None,
+        });
+        plain
+    }
+
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
+        // (a second click before a frame: the first is settled at once)
+        self.settle_click();
         self.release();
         if let Some(i) = self.pick(origin, dir, spread) {
             let ev = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
@@ -350,16 +365,7 @@ impl Player {
                 .clone()
                 .unwrap();
             log::info!("mouse event {ev}");
-            let plain = self.vehicle.trigger(&ev);
-            // Momentary `[mouseevent]` buttons (Aachen ibox / ticket printer, #744) set a
-            // flag in the press trigger and clear it in `_drag` / `_off`. The frame script
-            // is what acts on the flag. Run that frame now, before the next redraw's
-            // `_drag` (or a quick `_off`) zeroes it and the click does nothing.
-            self.vehicle.update_scripts_only(0.0);
-            // Clear the press flag immediately after the frame consumed it. Otherwise a
-            // held click can be processed again on the next `tick` (digit keys append
-            // twice: `1`→`11`, and ibox `0`/`D11` becomes `1`→`10`→`100`).
-            self.clear_momentary_mouse_flag(&ev);
+            let plain = self.trigger_cab_control(&ev);
             self.pressed_mesh = Some(i);
             self.press_info = (plain, 0.0);
             self.auto_drag = None;
@@ -375,10 +381,21 @@ impl Player {
         if !self.vehicle.trigger_part(ti, &ev) {
             self.vehicle.trigger(&ev);
         }
-        self.vehicle.update_scripts_only(0.0);
-        self.clear_momentary_mouse_flag(&ev);
+        self.unframed_click = Some(UnframedClick { ev, release: None });
         self.pressed_trailer_mesh = Some((ti, i));
         Some(i)
+    }
+
+    /// After the frame that met a click: a momentary key's flag is cleared (see
+    /// `clear_momentary_mouse_flag`) and a button let go before the frame is let go now.
+    pub(crate) fn settle_click(&mut self) {
+        let Some(click) = self.unframed_click.take() else {
+            return;
+        };
+        self.clear_momentary_mouse_flag(&click.ev);
+        if let Some(allow_auto_drag) = click.release {
+            self.release_mouse(allow_auto_drag);
+        }
     }
 
     /// Aachen ibox / ticket-printer style: press sets a flag, `_drag` / `_off` clear it.
@@ -510,6 +527,10 @@ impl Player {
     }
 
     fn release_mouse(&mut self, allow_auto_drag: bool) {
+        if let Some(click) = self.unframed_click.as_mut() {
+            click.release = Some(allow_auto_drag);
+            return;
+        }
         if let Some(i) = self.pressed_mesh.take() {
             let ty = self.vehicle.ty.clone();
             let def = &ty.model.meshes[ty.meshes[i].def_index];
@@ -558,6 +579,21 @@ impl Player {
             }
         }
     }
+}
+
+/// A `[mouseevent]` pressed since the last frame. Omsi.exe fires a switch's trigger as the
+/// mouse message comes (0x7bad78: the press, `_drag` or `_off` trigger and nothing else) and
+/// its scripts act on it in the next frame, with that frame's `Timegap`. A frame of the
+/// scripts run at once, with no time passing, left the scripts' derived values where a
+/// frame of no time puts them: the O305-based buses' charge lamp lit for a frame at every
+/// click (their `elec_V_battery` does not move without time and stops reading under the
+/// generator's, #3800).
+pub(crate) struct UnframedClick {
+    ev: String,
+    /// The button was let go before that frame (whether a drag control may be dragged
+    /// over, see `release_mouse`): its `_off` waits for the frame, so that a quick tap
+    /// still reaches the scripts' frame.
+    release: Option<bool>,
 }
 
 /// A sun blind can be left at any position, including after a very short drag. Treating
