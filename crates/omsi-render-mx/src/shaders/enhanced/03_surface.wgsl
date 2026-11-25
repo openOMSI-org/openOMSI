@@ -50,8 +50,14 @@ fn perturb_normal(n: vec3<f32>, p: vec3<f32>, uv: vec2<f32>, tn: vec3<f32>) -> v
     let duv2 = dpdy(uv);
     let dp2perp = cross(dp2, n);
     let dp1perp = cross(n, dp1);
-    let t = dp2perp * duv1.x + dp1perp * duv2.x;
-    let b = dp2perp * duv1.y + dp1perp * duv2.y;
+    // (the frame's handedness from the screen's: these are the uv's gradients times the
+    // determinant of the screen-to-surface map, whose sign is the screen's y axis - down in
+    // Direct3D, Metal and Vulkan. Normalised without it, both tangents came out reversed and
+    // every normal map lit its bumps from the wrong side)
+    let det = dot(dp1, dp2perp);
+    let sgn = select(-1.0, 1.0, det >= 0.0);
+    let t = (dp2perp * duv1.x + dp1perp * duv2.x) * sgn;
+    let b = (dp2perp * duv1.y + dp1perp * duv2.y) * sgn;
     let m = max(dot(t, t), dot(b, b));
     if (m < 1e-20) {
         return n;

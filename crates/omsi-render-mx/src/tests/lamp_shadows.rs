@@ -1,5 +1,9 @@
 use super::*;
 
+pub(super) fn lamp_shadows_renderer() -> Renderer {
+    renderer()
+}
+
 fn renderer() -> Renderer {
     let instance = mx::Instance::new();
     pollster::block_on(Renderer::new_with(
