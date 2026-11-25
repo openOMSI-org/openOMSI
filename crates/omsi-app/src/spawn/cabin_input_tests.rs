@@ -388,3 +388,35 @@ fn a_click_runs_no_frame_of_the_scripts_without_time() {
     assert_eq!(p.vehicle.var("flag"), Some(0.0));
     assert!(p.unframed_click.is_none());
 }
+
+/// Two taps on the ticket printer's keys before the next frame: each key's flag is read by
+/// a frame of its own, in the order they were pressed, and no frame without time runs.
+#[test]
+fn two_taps_before_a_frame_both_reach_the_scripts_in_order() {
+    let vehicle = crate::schedule::tests::script_test_vehicle(
+        "{trigger:ibox_taste_1}\n1 (S.L.flag) 1 (S.L.digit)\n{end}\n\
+         {trigger:ibox_taste_1_drag}\n0 (S.L.flag)\n{end}\n\
+         {trigger:ibox_taste_2}\n1 (S.L.flag) 2 (S.L.digit)\n{end}\n\
+         {trigger:ibox_taste_2_drag}\n0 (S.L.flag)\n{end}\n\
+         {frame}\n\
+         (L.S.Timegap) 0 = {if} (L.L.zero_frames) 1 + (S.L.zero_frames) {endif}\n\
+         (L.L.flag) {if} (L.L.typed) 10 * (L.L.digit) + (S.L.typed) {endif}\n\
+         {end}\n",
+        "flag\ndigit\ntyped\nzero_frames\n",
+        "",
+    );
+    let mut p = test_player(vehicle, vec![]);
+    let dt = 1.0 / 60.0;
+    p.trigger_cab_control("ibox_taste_1");
+    p.release();
+    p.trigger_cab_control("ibox_taste_2");
+    p.release();
+    for _ in 0..4 {
+        p.vehicle.update(dt);
+        p.settle_click();
+    }
+    assert_eq!(p.vehicle.var("typed"), Some(12.0), "both digits, in order");
+    assert_eq!(p.vehicle.var("flag"), Some(0.0));
+    assert_eq!(p.vehicle.var("zero_frames"), Some(0.0));
+    assert!(p.unframed_click.is_none());
+}

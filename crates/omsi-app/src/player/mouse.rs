@@ -342,59 +342,107 @@ impl Player {
         Some((name, false))
     }
 
+    /// A cab control's trigger as a click fires it; while a click waits for its frame, it
+    /// waits behind that one (see [`UnframedClick`]).
     pub(crate) fn trigger_cab_control(&mut self, ev: &str) -> bool {
+        if let Some(click) = self.unframed_click.as_mut() {
+            click.queue(ClickTarget::Control(ev.to_string()));
+            return self.vehicle.has_trigger(ev);
+        }
+        self.fire_cab_control(ev)
+    }
+
+    fn fire_cab_control(&mut self, ev: &str) -> bool {
         let was_interlocked = omsi_sim::input::is_stop_brake_interlocked(&self.vehicle);
         let plain = self.vehicle.trigger(ev);
-        self.unframed_click = Some(UnframedClick {
-            ev: ev.to_string(),
-            release: None,
-        });
+        self.unframed_click = Some(UnframedClick::new(ev));
         omsi_sim::input::maybe_release_held_brake(&self.vehicle, &mut self.axes, was_interlocked);
         plain
     }
 
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
-        // (a second click before a frame: the first is settled at once)
-        self.settle_click();
-        self.release();
-        if let Some(i) = self.pick(origin, dir, spread) {
-            let ev = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
-                .mouse_event
-                .clone()
-                .unwrap();
-            log::info!("mouse event {ev}");
-            let plain = self.trigger_cab_control(&ev);
-            self.pressed_mesh = Some(i);
-            self.press_info = (plain, 0.0);
-            self.auto_drag = None;
+        if self.unframed_click.is_some() {
+            // (a second click before the frame that reads the first: it is pressed after that
+            // frame, so the scripts see both, in order)
+            let target = self.pick_click(origin, dir, spread);
+            let click = self.unframed_click.as_mut()?;
+            click.let_go(true);
+            let target = target?;
+            let i = target.mesh();
+            click.queue(target);
             return Some(i);
         }
-        let (ti, i) = self.pick_trailer(origin, dir, spread)?;
-        let ev = self.vehicle.trailers[ti].ty.model.meshes
-            [self.vehicle.trailers[ti].ty.meshes[i].def_index]
-            .mouse_event
-            .clone()
-            .unwrap();
-        log::info!("trailer mouse event {ev} (part {ti})");
-        let was_interlocked = omsi_sim::input::is_stop_brake_interlocked(&self.vehicle);
-        if !self.vehicle.trigger_part(ti, &ev) {
-            self.vehicle.trigger(&ev);
-        }
-        self.unframed_click = Some(UnframedClick { ev, release: None });
-        omsi_sim::input::maybe_release_held_brake(&self.vehicle, &mut self.axes, was_interlocked);
-        self.pressed_trailer_mesh = Some((ti, i));
+        self.release();
+        let target = self.pick_click(origin, dir, spread)?;
+        let i = target.mesh();
+        self.press(target);
         Some(i)
     }
 
+    fn pick_click(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<ClickTarget> {
+        if let Some(i) = self.pick(origin, dir, spread) {
+            return Some(ClickTarget::Bus(i));
+        }
+        let (ti, i) = self.pick_trailer(origin, dir, spread)?;
+        Some(ClickTarget::Trailer(ti, i))
+    }
+
+    fn press(&mut self, target: ClickTarget) {
+        match target {
+            ClickTarget::Bus(i) => {
+                let ev = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
+                    .mouse_event
+                    .clone()
+                    .unwrap();
+                log::info!("mouse event {ev}");
+                let plain = self.fire_cab_control(&ev);
+                self.pressed_mesh = Some(i);
+                self.press_info = (plain, 0.0);
+                self.auto_drag = None;
+            }
+            ClickTarget::Trailer(ti, i) => {
+                let ev = self.vehicle.trailers[ti].ty.model.meshes
+                    [self.vehicle.trailers[ti].ty.meshes[i].def_index]
+                    .mouse_event
+                    .clone()
+                    .unwrap();
+                log::info!("trailer mouse event {ev} (part {ti})");
+                let was_interlocked = omsi_sim::input::is_stop_brake_interlocked(&self.vehicle);
+                if !self.vehicle.trigger_part(ti, &ev) {
+                    self.vehicle.trigger(&ev);
+                }
+                self.unframed_click = Some(UnframedClick::new(&ev));
+                omsi_sim::input::maybe_release_held_brake(
+                    &self.vehicle,
+                    &mut self.axes,
+                    was_interlocked,
+                );
+                self.pressed_trailer_mesh = Some((ti, i));
+            }
+            ClickTarget::Control(ev) => {
+                self.fire_cab_control(&ev);
+            }
+        }
+    }
+
     /// After the frame that met a click: a momentary key's flag is cleared (see
-    /// `clear_momentary_mouse_flag`) and a button let go before the frame is let go now.
+    /// `clear_momentary_mouse_flag`), a button let go before the frame is let go now, and the
+    /// next click waiting is pressed (its frame is the next one).
     pub(crate) fn settle_click(&mut self) {
-        let Some(click) = self.unframed_click.take() else {
+        let Some(mut click) = self.unframed_click.take() else {
             return;
         };
         self.clear_momentary_mouse_flag(&click.ev);
         if let Some(allow_auto_drag) = click.release {
             self.release_mouse(allow_auto_drag);
+        }
+        let mut waiting = std::mem::take(&mut click.waiting);
+        if let Some(next) = waiting.pop_front() {
+            self.press(next.target);
+            if let Some(pressed) = self.unframed_click.as_mut() {
+                pressed.release = next.release;
+                pressed.waiting = waiting;
+            }
         }
     }
 
@@ -528,7 +576,7 @@ impl Player {
 
     fn release_mouse(&mut self, allow_auto_drag: bool) {
         if let Some(click) = self.unframed_click.as_mut() {
-            click.release = Some(allow_auto_drag);
+            click.let_go(allow_auto_drag);
             return;
         }
         if let Some(i) = self.pressed_mesh.take() {
@@ -639,6 +687,58 @@ pub(crate) struct UnframedClick {
     /// over, see `release_mouse`): its `_off` waits for the frame, so that a quick tap
     /// still reaches the scripts' frame.
     release: Option<bool>,
+    /// Clicks that came before that frame, pressed one a frame after it: a second tap on the
+    /// ticket printer's keys before the frame that read the first would otherwise have
+    /// cleared the first key's flag unread.
+    waiting: std::collections::VecDeque<WaitingClick>,
+}
+
+impl UnframedClick {
+    fn new(ev: &str) -> Self {
+        Self {
+            ev: ev.to_string(),
+            release: None,
+            waiting: Default::default(),
+        }
+    }
+
+    fn queue(&mut self, target: ClickTarget) {
+        self.waiting.push_back(WaitingClick {
+            target,
+            release: None,
+        });
+    }
+
+    /// The button is let go: the last click pressed or waiting is the one let go.
+    fn let_go(&mut self, allow_auto_drag: bool) {
+        let release = match self.waiting.back_mut() {
+            Some(w) => &mut w.release,
+            None => &mut self.release,
+        };
+        release.get_or_insert(allow_auto_drag);
+    }
+}
+
+struct WaitingClick {
+    target: ClickTarget,
+    release: Option<bool>,
+}
+
+/// What a click presses: a mesh of the bus, one of a coupled part, or a control by its
+/// trigger.
+enum ClickTarget {
+    Bus(usize),
+    Trailer(usize, usize),
+    Control(String),
+}
+
+impl ClickTarget {
+    fn mesh(&self) -> usize {
+        match self {
+            ClickTarget::Bus(i) | ClickTarget::Trailer(_, i) => *i,
+            ClickTarget::Control(_) => 0,
+        }
+    }
 }
 
 /// A sun blind can be left at any position, including after a very short drag. Treating
