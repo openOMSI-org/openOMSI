@@ -601,7 +601,8 @@ pub(crate) fn apply_weather(
 ) {
     let (kind, rate) = precip_of(w);
     v.host.precip_type = kind as f32;
-    v.host.precip_rate = rate;
+    // (the strength whatever falls, as Omsi.exe's `PrecipRate`)
+    v.host.precip_rate = omsi_weather::conditions::precip_strength(w);
     v.host.wind = crate::rain::weather_wind(w);
     v.host.street_cond = street_condition(w, wetness);
     v.set_var("PrecipType", kind as f32);

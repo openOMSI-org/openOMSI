@@ -116,9 +116,8 @@ pub(crate) fn set_ai_environment(
     host.clock.paused = paused;
     host.auto_clutch = if auto_clutch { 1.0 } else { 0.0 };
     if let Some(w) = weather {
-        let (kind, rate) = precip_of(w);
-        host.precip_type = kind as f32;
-        host.precip_rate = rate;
+        host.precip_type = precip_of(w).0 as f32;
+        host.precip_rate = omsi_weather::conditions::precip_strength(w);
         host.temperature = w.temp.0;
         host.abs_humidity = w.temp.1;
         host.wind = crate::rain::weather_wind(w);
