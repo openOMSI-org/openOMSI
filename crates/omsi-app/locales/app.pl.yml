@@ -3575,3 +3575,7 @@
 "Automatic announcements are off.": "Automatyczne zapowiedzi są wyłączone."
 
 "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+
+"Draw other players' buses in less detail when far away": "Rysuj autobusy innych graczy z mniejszą liczbą detali z daleka"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Tryb wieloosobowy: powyżej 120 m oraz gdy liczba klatek na sekundę spada poniżej 20, autobusy innych graczy zachowują karoserię, lecz tracą sylwetki kierowców i wyświetlacze kierunkowe, których nikt stamtąd nie czyta; wracają w pełni powyżej 26 kl./s"
+

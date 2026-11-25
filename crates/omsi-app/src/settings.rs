@@ -182,6 +182,7 @@ pub struct Settings {
     pub zoom_hold_amount: f32,
     pub zoom_hold_latch: bool,
     pub flashlight_cursor: bool,
+    pub others_detail: bool,
     /// The 3D picture drawn at this fraction of the window's size and scaled up (0.5..1),
     /// 0 = automatic (full size unless the window has more pixels than a 2560x1080 screen,
     /// as a Retina window does). The HUD is always drawn at full size.
@@ -816,6 +817,7 @@ impl Settings {
             zoom_hold_amount: 0.5,
             zoom_hold_latch: false,
             flashlight_cursor: false,
+            others_detail: false,
             time_speed: 1.0,
             time_sync: false,
             metar_sync: false,
@@ -974,7 +976,24 @@ impl Settings {
         {
             s.apply_safe_gpu(n);
         }
-        log::info!("settings from {}: msaa {} af {} ssao {} shadows {} ({}) navigator {} graphics {} post aa {} vsync {} render scale {} boarding {} min object size {} max object distance {} max fps {}", p.display(), s.msaa, s.anisotropy, s.ssao, s.shadows, s.shadow_size, s.navigator, s.graphics, s.post_aa, s.vsync, s.render_scale_text(), s.boarding, s.min_obj_size, s.object_distance(), s.max_fps);
+        log::info!(
+            "settings from {}: msaa {} af {} ssao {} shadows {} ({}) navigator {} graphics {} post aa {} vsync {} render scale {} boarding {} min object size {} max object distance {} max fps {}",
+            p.display(),
+            s.msaa,
+            s.anisotropy,
+            s.ssao,
+            s.shadows,
+            s.shadow_size,
+            s.navigator,
+            s.graphics,
+            s.post_aa,
+            s.vsync,
+            s.render_scale_text(),
+            s.boarding,
+            s.min_obj_size,
+            s.object_distance(),
+            s.max_fps
+        );
         *LAST.lock() = Some((p, text, s.clone()));
         s
     }
@@ -1003,9 +1022,13 @@ impl Settings {
                     .map(|x| x.clamp(0.15, 1.0))
                     .unwrap_or(self.zoom_hold_amount)
             }
-            "flashlight_cursor" => {
-                self.flashlight_cursor =
-                    matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes")
+            "flashlight_cursor" | "others_detail" => {
+                let on = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
+                if k == "others_detail" {
+                    self.others_detail = on
+                } else {
+                    self.flashlight_cursor = on
+                }
             }
             _ => {
                 let x = omsi_launcher_lib::head_tracking_value(k, v.parse::<f64>().ok()) as f32;
@@ -1887,7 +1910,8 @@ impl Settings {
                 | "ui_theme_pack"
                 | "zoom_hold_amount"
                 | "zoom_hold_latch"
-                | "flashlight_cursor" => s.read_extra(&k, v),
+                | "flashlight_cursor"
+                | "others_detail" => s.read_extra(&k, v),
                 "discord_status" => s.discord_status = b(v),
                 "discord_app_id" => s.discord_app_id = v.trim().to_string(),
                 k if crate::discord::Show::KEYS.contains(&k) => s.discord_show.set(k, b(v)),
@@ -2101,11 +2125,15 @@ impl Settings {
         // default, not because anybody chose it: passengers then stood at the cash desk
         // waiting for a driver who did not know he had to sell them a ticket.
         if version < 2 && self.boarding == "pay" {
-            log::info!("settings: boarding=pay from an old settings file taken as auto (choose pay again in the launcher to keep it)");
+            log::info!(
+                "settings: boarding=pay from an old settings file taken as auto (choose pay again in the launcher to keep it)"
+            );
             self.boarding = "auto".into();
         }
         if version == 3 && self.passenger_animation == "enhanced" {
-            log::info!("settings: passenger_animation=enhanced from a version 3 settings file taken as Original OMSI (choose Natural again to keep it)");
+            log::info!(
+                "settings: passenger_animation=enhanced from a version 3 settings file taken as Original OMSI (choose Natural again to keep it)"
+            );
             self.passenger_animation = "original".into();
         }
     }
@@ -2117,7 +2145,56 @@ impl Settings {
     pub fn to_text(&self) -> String {
         let mut text = format!(
             "# openOMSI settings\nversion={}\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nshadow_blobs={}\nlamp_shadows={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nvr={}\nvr_scale={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\npost_aa={}\nrender_scale={}\nlanguage={}\ntexture_compression={}\nvideo_memory={}\nauto_clutch={}\nmomentary_gears={}\nmin_obj_size={}\nmax_obj_dist={}\nmax_fps={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\nmirror_hud={}\nmirror_refresh={}\ndoppler={}\ndriver={}\ndriverview_smooth={}\n",
-            SETTINGS_VERSION, self.msaa, self.anisotropy, self.ssao as u8, self.shadows as u8, self.shadow_size, self.shadow_blobs as u8, self.lamp_shadows as u8, self.navigator as u8, self.ui_opacity, self.navigator_corner, self.boarding, self.detail_textures as u8, self.exact_fare as u8, self.enhanced as u8, self.graphics, self.vr as u8, self.vr_scale, self.fullscreen as u8, self.vsync as u8, self.volume, self.drive_keys, self.post_aa, self.render_scale_text(), self.language, self.texture_compression as u8, self.video_memory, self.auto_clutch as u8, self.momentary_gears as u8, self.min_obj_size, if self.max_obj_dist < 0.0 { "auto".to_string() } else { self.max_obj_dist.to_string() }, self.max_fps, self.chat as u8, self.tooltips as u8, self.name_tags as u8, self.show_fps as u8, self.clouds as u8, self.pax_density, self.vol_ai, self.vol_scenery, self.mirror_size, self.mirror_hud, self.mirror_refresh, self.doppler as u8, self.driver as u8, self.driverview_smooth as u8
+            SETTINGS_VERSION,
+            self.msaa,
+            self.anisotropy,
+            self.ssao as u8,
+            self.shadows as u8,
+            self.shadow_size,
+            self.shadow_blobs as u8,
+            self.lamp_shadows as u8,
+            self.navigator as u8,
+            self.ui_opacity,
+            self.navigator_corner,
+            self.boarding,
+            self.detail_textures as u8,
+            self.exact_fare as u8,
+            self.enhanced as u8,
+            self.graphics,
+            self.vr as u8,
+            self.vr_scale,
+            self.fullscreen as u8,
+            self.vsync as u8,
+            self.volume,
+            self.drive_keys,
+            self.post_aa,
+            self.render_scale_text(),
+            self.language,
+            self.texture_compression as u8,
+            self.video_memory,
+            self.auto_clutch as u8,
+            self.momentary_gears as u8,
+            self.min_obj_size,
+            if self.max_obj_dist < 0.0 {
+                "auto".to_string()
+            } else {
+                self.max_obj_dist.to_string()
+            },
+            self.max_fps,
+            self.chat as u8,
+            self.tooltips as u8,
+            self.name_tags as u8,
+            self.show_fps as u8,
+            self.clouds as u8,
+            self.pax_density,
+            self.vol_ai,
+            self.vol_scenery,
+            self.mirror_size,
+            self.mirror_hud,
+            self.mirror_refresh,
+            self.doppler as u8,
+            self.driver as u8,
+            self.driverview_smooth as u8
         );
         text.push_str(&format!(
             "nav_dynamic_arrows={}\nnav_map_arrows={}\n",
@@ -2181,7 +2258,7 @@ impl Settings {
             self.triple_hud_center as u8, self.triple.fov_deg, self.fov
         ));
         text.push_str(&format!("triple_screen={}\ntriple_span={}\ntriple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\ntriple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", self.triple.enabled as u8, self.triple_span as u8, self.triple.width_mm, self.triple.distance_mm, self.triple.bezel_mm, self.triple.left_angle_deg, self.triple.right_angle_deg, self.triple.eye_height_mm));
-        text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\nzoom_hold_amount={}\nzoom_hold_latch={}\nflashlight_cursor={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8, self.zoom_hold_amount, self.zoom_hold_latch as u8, self.flashlight_cursor as u8));
+        text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\nzoom_hold_amount={}\nzoom_hold_latch={}\nflashlight_cursor={}\nothers_detail={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8, self.zoom_hold_amount, self.zoom_hold_latch as u8, self.flashlight_cursor as u8, self.others_detail as u8));
         text.push_str(&format!("seat_pitch_deg={}\n", self.seat_pitch_deg));
         text.push_str(&format!("cab_wheel_rotation={}\n", self.cab_wheel_rotation));
         text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", self.head_tracking_yaw_sens, self.head_tracking_pitch_sens, self.head_tracking_roll_sens, self.head_tracking_x_sens, self.head_tracking_y_sens, self.head_tracking_z_sens, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
@@ -2372,7 +2449,13 @@ impl Settings {
             };
             self.mirror_size = self.mirror_size.min(128);
         }
-        log::warn!("safer graphics after a lost graphics device ({n}): msaa 1, SSAO off, shadows {} ({}), video memory {} of its limit, render scale {}", self.shadows, self.shadow_size, if n >= 2 { "half" } else { "two thirds" }, self.render_scale_text());
+        log::warn!(
+            "safer graphics after a lost graphics device ({n}): msaa 1, SSAO off, shadows {} ({}), video memory {} of its limit, render scale {}",
+            self.shadows,
+            self.shadow_size,
+            if n >= 2 { "half" } else { "two thirds" },
+            self.render_scale_text()
+        );
     }
 
     /// The render scale the picture is drawn at: FSR 1's quality's, or the render scale's (0:
@@ -2798,6 +2881,10 @@ mod sim_thread_tests;
 /// settings' own seat, which is where a seat set before this lives on.
 #[path = "settings/bus_seats.rs"]
 pub mod bus_seats;
+
+#[cfg(test)]
+#[path = "settings/others_detail_tests.rs"]
+mod others_detail_tests;
 
 #[cfg(test)]
 #[path = "settings/passenger_connections_tests.rs"]
