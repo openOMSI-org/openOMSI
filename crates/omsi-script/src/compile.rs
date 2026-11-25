@@ -40,6 +40,7 @@ pub struct Program {
     pub names: Vec<String>,
     pub curves: Vec<Curve>,
     pub blocks: Vec<Block>,
+    /// The entry blocks: at most one of each kind, the set's first (see `register`).
     pub init: Vec<BlockId>,
     pub frame: Vec<BlockId>,
     pub frame_ai: Vec<BlockId>,
@@ -523,7 +524,6 @@ pub fn compile(input: &CompileInput) -> Program {
         pending: &mut pending,
         missing_curve: None,
         declare_unknown: input.declare_unknown,
-        file_frames: (0, 0),
         reached: 0,
     };
     for f in &files {
@@ -570,7 +570,6 @@ struct Compiler<'a> {
     /// The empty curve an unknown `(F.L.name)` evaluates (see `compile_access`).
     missing_curve: Option<u32>,
     declare_unknown: bool,
-    file_frames: (usize, usize),
     /// Not 0 when the last block runs on into the next (0x80), with the entry kinds (1 init,
     /// 2 frame, 4 frame_ai) whose code runs on into it.
     reached: u8,
@@ -595,7 +594,6 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_file(&mut self, f: &CfgFile) {
-        self.file_frames = (self.p.frame.len(), self.p.frame_ai.len());
         // kinds (aliases), block, if-stack: (jump op index, has_else). When the last block of
         // the file before runs on into this one, so do the words before this file's first
         // header: Omsi.exe chains the words of all files, so they run between the two blocks.
@@ -929,46 +927,21 @@ impl<'a> Compiler<'a> {
         self.reached = if falls { 0x80 | self.reached | own } else { 0 };
     }
 
-    #[rustfmt::skip]
-    fn same_frame_block(&self, left: BlockId, right: BlockId) -> bool {
-        let (left, right) = (left as usize, right as usize);
-        let (b_l, b_r) = (&self.p.blocks[left], &self.p.blocks[right]);
-        if b_l.ops.len() != b_r.ops.len() { return false; }
-        for (op1, op2) in b_l.ops.iter().zip(&b_r.ops) {
-            match (op1, op2) {
-                (Op::PushStr(i1), Op::PushStr(i2)) => {
-                    if self.p.strings.get(*i1 as usize) != self.p.strings.get(*i2 as usize) { return false; }
-                }
-                _ if op1 != op2 => return false,
-                _ => {}
-            }
-        }
-        // Unresolved calls still have identical placeholder ops.
-        let calls = |id| {
-            let start = self.pending.partition_point(|(block, _, _)| *block < id);
-            self.pending[start..].iter().take_while(move |(block, _, _)| *block == id).map(|(_, op, name)| (op, name))
-        };
-        calls(left).eq(calls(right))
-    }
-
     fn register(&mut self, kind: BlockKind, id: BlockId) {
         match kind {
-            BlockKind::Init => self.p.init.push(id),
-            BlockKind::Frame => {
-                let is_dup = self.p.frame[self.file_frames.0..]
-                    .iter()
-                    .any(|&prev| self.same_frame_block(prev, id));
-                if !is_dup {
-                    self.p.frame.push(id);
-                }
-            }
-            BlockKind::FrameAi => {
-                let is_dup = self.p.frame_ai[self.file_frames.1..]
-                    .iter()
-                    .any(|&prev| self.same_frame_block(prev, id));
-                if !is_dup {
-                    self.p.frame_ai.push(id);
-                }
+            // Omsi.exe keeps one entry block of each kind: sub_5d1db8 walks the word chain of
+            // all the set's files (in `[script]` order) from the last word back to the first
+            // and overwrites the `{init}` / `{frame}` / `{frame_ai}` entry (the compares at
+            // 0x5d2844 / 0x5d2863 / 0x5d2883) at each such header it meets, so the first header
+            // of a kind wins. A later one is only reached by a block running on into it: the
+            // SKM6126's hidden extra `{frame}` blocks ran its timers twice a frame (#1101).
+            BlockKind::Init if self.p.init.is_empty() => self.p.init.push(id),
+            BlockKind::Frame if self.p.frame.is_empty() => self.p.frame.push(id),
+            BlockKind::FrameAi if self.p.frame_ai.is_empty() => self.p.frame_ai.push(id),
+            BlockKind::Init | BlockKind::Frame | BlockKind::FrameAi => {
+                log::debug!(
+                    "a later {{init}}/{{frame}}/{{frame_ai}} header is ignored, as in OMSI"
+                );
             }
             BlockKind::Macro(n) => {
                 self.p.macros.insert(n, id);
