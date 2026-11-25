@@ -368,6 +368,11 @@ pub struct RenderOptions {
     /// reflections, where the device can trace rays (hardware ray queries); elsewhere the
     /// enhanced picture as it is.
     pub ray_tracing: bool,
+    /// Experimental, with `ray_tracing`: ray-traced global illumination (the settings'
+    /// `rt_gi`) - the light the surfaces round a point send back to it, one diffuse bounce
+    /// traced at half size and gathered over the frames (rt/gi.rs). Read every frame: it
+    /// needs no rebuild.
+    pub rt_gi: bool,
     /// The Enhanced picture's street-scale light: the sky's occlusion by houses and trees
     /// over 18 m, and the light the surfaces send to each other (the settings'
     /// `street_light`). `None`: as the chip allows (off on a small or shared one, see
@@ -419,6 +424,7 @@ impl Default for RenderOptions {
             no_enhanced: false,
             preview_only: false,
             ray_tracing: false,
+            rt_gi: false,
             street_light: None,
             light_shadows: 1,
             cloud_shadows: false,

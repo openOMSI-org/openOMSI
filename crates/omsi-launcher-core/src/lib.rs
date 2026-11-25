@@ -3480,6 +3480,7 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
     v["ray_tracing"] = json!(false);
+    v["rt_gi"] = json!(false);
     v["light_shadows"] = json!("off");
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
@@ -3883,6 +3884,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "cloud_quality" => v[&k] = json!(cloud_quality(val)),
             "street_light" => v[&k] = json!(street_light(val)),
             "ray_tracing" | "rt" => v["ray_tracing"] = json!(b(val)),
+            "rt_gi" => v[&k] = json!(b(val)),
             "light_shadows" => v[&k] = json!(light_shadows(val)),
             "cloud_shadows" | "light_glow" | "volumetric_fog" => v[&k] = json!(b(val)),
             "rain_quality" => v[&k] = json!(rain_quality(val)),
@@ -5124,6 +5126,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
                 .unwrap_or("off")
         )
     ));
+    // (experimental: the traced global illumination, with the ray tracing)
+    text.push_str(&format!("rt_gi={}\n", b("rt_gi", false)));
     text.push_str(&format!(
         "ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\nvolumetric_fog={}\n",
         b("ray_tracing", false)

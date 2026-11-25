@@ -27,6 +27,12 @@ struct RtParams {
     sky: vec4<f32>,
     // xyz the sun's radiance at the hits (pre-exposed), w the probe's mip count
     sun_light: vec4<f32>,
+    // the street lamps' grid for the traced global illumination's hits (the camera's
+    // `light_grid`: xy its origin, z the cell, w the cells a side; 0: no lamps)
+    light_grid: vec4<f32>,
+    // the traced global illumination (rt_gi.wgsl): x a ray's reach (m), y the rays a pixel
+    // without history, z how far from the camera it is traced (m), w 1 when it is on
+    gi: vec4<f32>,
 };
 
 struct Record {

@@ -88,6 +88,7 @@ const graphics = {
         // the mode first, then the quality presets for it: they set most of what follows
         { type: 'select', key: 'graphics', label: 'Graphics', options: [['vanilla', 'Vanilla (as OMSI 2)'], ['vanilla_plus', 'Vanilla+'], ['enhanced', 'Enhanced']] },
         { type: 'toggle', key: 'ray_tracing', label: 'Real-Time Ray Tracing', help: 'Enhanced: the sun\'s shadows, the ambient occlusion and the reflections traced with hardware ray queries, where the card has them; the heaviest option (takes effect when the game starts the next time)', heavy: (v) => !!v, when: enhanced },
+        { type: 'toggle', key: 'rt_gi', label: 'Ray-traced global illumination (experimental)', help: 'With Real-Time Ray Tracing: the light the surfaces round a point send back to it - a sunlit road brightening a wall, a red bus tinting the pavement, the light through the windows filling the saloon; traced at half size and gathered over a few frames, so it can lag or shimmer in motion', heavy: (v) => !!v, when: traced },
         { type: 'custom', id: 'preset' },
         { type: 'custom', id: 'optimise' },
         { type: 'select', key: 'msaa', label: 'Anti-aliasing', options: [['1', 'Off'], ['2', '2x MSAA'], ['4', '4x MSAA'], ['8', '8x MSAA']], heavy: (v, s) => v === '8' && !traced(s), when: (s, p) => !temporalOn(s, p) },
@@ -519,6 +520,6 @@ export const SETTINGS_TABS = [graphics, driving, camera, sound, gameplay, genera
 
 /** The settings a saved graphics profile holds (`GRAPHICS_PROFILE_KEYS`). */
 export const GRAPHICS_PROFILE_KEYS = [
-  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'frame_generation', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'detailed_trees', 'road_snow', 'procedural_dirt', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow', 'volumetric_fog',
+  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'frame_generation', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'detailed_trees', 'road_snow', 'procedural_dirt', 'ray_tracing', 'rt_gi', 'light_shadows', 'cloud_shadows', 'light_glow', 'volumetric_fog',
   'vsync', 'max_fps', 'view_distance', 'max_obj_dist', 'min_obj_size', 'mirror_size', 'mirror_refresh', 'mirror_quality', 'mirror_hud_every_frame', 'video_memory', 'texture_compression', 'gpu_texture_compression',
 ];

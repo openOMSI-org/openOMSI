@@ -375,6 +375,11 @@ pub struct RenderOptions {
     /// reflections, where the device can trace rays (hardware ray queries); elsewhere the
     /// enhanced picture as it is.
     pub ray_tracing: bool,
+    /// Experimental, with `ray_tracing`: ray-traced global illumination (the settings'
+    /// `rt_gi`) - the light the surfaces round a point send back to it, one diffuse bounce
+    /// traced at half size and gathered over the frames (rt/gi.rs). Read every frame: it
+    /// needs no rebuild.
+    pub rt_gi: bool,
     /// The Enhanced picture's street-scale light: the sky's occlusion by houses and trees
     /// over 18 m, and the light the surfaces send to each other (the settings'
     /// `street_light`). `None`: as the chip allows (off on a small or shared one, see
@@ -426,6 +431,7 @@ impl Default for RenderOptions {
             no_enhanced: false,
             preview_only: false,
             ray_tracing: false,
+            rt_gi: false,
             street_light: None,
             light_shadows: 1,
             cloud_shadows: false,
@@ -479,6 +485,15 @@ const AUX_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 static RT_GBUF: crate::AdapterBool = crate::AdapterBool::new(6);
 fn rt_gbuf() -> bool {
     RT_GBUF.load(std::sync::atomic::Ordering::Relaxed)
+}
+/// The camera group holds the traced global illumination's result (binding 22, `t_gi`):
+/// with the ray tracing, on a device that takes a seventeenth texture in a shader stage. The
+/// scene's camera and material groups hold sixteen without it - the WebGPU default and all
+/// that the Intel Vulkan profile asks for (`intel_vulkan_profile`); there the scene shader
+/// reads no `t_gi` and the global illumination stays off (rt/gi.rs).
+static GI_BINDING: crate::AdapterBool = crate::AdapterBool::new(8);
+pub(crate) fn gi_binding() -> bool {
+    GI_BINDING.load(std::sync::atomic::Ordering::Relaxed)
 }
 const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 

@@ -884,6 +884,12 @@ impl Renderer {
         };
         let msaa = options.msaa;
         RT_GBUF.store(options.ray_tracing, std::sync::atomic::Ordering::Relaxed);
+        GI_BINDING.store(
+            options.ray_tracing
+                && device.limits().max_sampled_textures_per_shader_stage
+                    >= crate::pipelines::scene::PANE_MASK_TEXTURES,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let errors = errors::install(&device, format, &options);
         let leave_out_enhanced = passes::leave_out_enhanced(&options, &adapter_name);
         if sixteen_texture_units() && !options.no_enhanced && !options.preview_only {
