@@ -77,7 +77,12 @@ fn fs_enhanced_cloud_trace(in: FsIn) -> TraceOut {
     let uv = (in.clip.xy + trace_jitter(frame)) / cview.size.xy;
     let d = cloud_view_dir(uv);
     let ign = fract(52.9829189 * fract(dot(floor(in.clip.xy), vec2<f32>(0.06711056, 0.00583715))));
-    let jitter = fract(ign + frame * 0.61803399);
+    // (moved on by the golden ratio once every four frames, not every frame: a resolved
+    // pixel gets a fresh ray only in one frame of four, the four quarters in turn, and stepped
+    // on by four times the golden ratio - 0.47, nearly half a step - its own rays' start
+    // points came in pairs and never spread over the step; what the history kept of them was
+    // the interleaved gradient's pattern, a grid of diamonds over the clouds' shaded parts)
+    let jitter = fract(ign + floor(frame * 0.25) * 0.61803399);
     let bg = sky_table(d);
     let c = cloud_march(d, bg, i32(cview.frame.w), jitter, cview.params.z, true);
     return TraceOut(vec4<f32>(c.light / max(enh.ground.w, 1e-8), c.trans), c.dist);
@@ -97,26 +102,41 @@ fn fs_enhanced_cloud_resolve(in: FsIn) -> @location(0) vec4<f32> {
     if (fresh) {
         cur = textureLoad(t_trace, ic, 0);
     }
-    // the traced pixels round it: their mean and spread (the geometry's left out)
+    // The traced pixels round it: their mean and spread (the geometry's left out), each
+    // weighted by how near its centre lies to this pixel (a tent two traced pixels wide).
+    // Taken about the nearest traced pixel alone, every 2x2 of the resolved picture (4x4 of
+    // the window's) shared one box, and on the move, where the box holds the history in,
+    // the clouds showed those boxes: a grain of cells over them, the traced pixels' noise
+    // in a grid.
     var m1 = vec4<f32>(0.0);
     var m2 = vec4<f32>(0.0);
     var n = 0.0;
-    for (var dy = -1; dy <= 1; dy = dy + 1) {
-        for (var dx = -1; dx <= 1; dx = dx + 1) {
-            let q = clamp(ic + vec2<i32>(dx, dy), vec2<i32>(0), tsi - vec2<i32>(1));
-            if (textureLoad(t_trace_depth, q, 0).r >= 0.0) {
+    let base = vec2<i32>(floor(x - vec2<f32>(0.5))) - vec2<i32>(1);
+    for (var dy = 0; dy < 4; dy = dy + 1) {
+        for (var dx = 0; dx < 4; dx = dx + 1) {
+            let q0 = base + vec2<i32>(dx, dy);
+            let off = vec2<f32>(q0) + vec2<f32>(0.5) - x;
+            let k = max(vec2<f32>(0.0), vec2<f32>(1.5) - abs(off));
+            let wq = k.x * k.y;
+            let q = clamp(q0, vec2<i32>(0), tsi - vec2<i32>(1));
+            if (wq > 0.0 && textureLoad(t_trace_depth, q, 0).r >= 0.0) {
                 let s = textureLoad(t_trace, q, 0);
-                m1 = m1 + s;
-                m2 = m2 + s * s;
-                n = n + 1.0;
+                m1 = m1 + s * wq;
+                m2 = m2 + s * s * wq;
+                n = n + wq;
             }
         }
     }
-    if (n < 0.5) {
+    if (n < 1e-3) {
         return cur;
     }
     let mean = m1 / n;
     let spread = sqrt(max(m2 / n - mean * mean, vec4<f32>(0.0)));
+    // (between this frame's rays, half of the new light is their smooth mean: one upsampled
+    // ray carries its own start point's noise, the interleaved gradient's pattern)
+    if (!fresh) {
+        cur = mix(cur, mean, 0.5);
+    }
     // where the clouds this pixel sees were in the last frame's picture
     let depth = textureLoad(t_trace_depth, ic, 0).r;
     let p = cloud_view_dir(uv) * select(1e6, depth, depth > 0.0) + cview.moved.xyz;
@@ -138,8 +158,16 @@ fn fs_enhanced_cloud_resolve(in: FsIn) -> @location(0) vec4<f32> {
     if (!manual) {
         // (the history only within what the neighbourhood allows; a fresh ray replaces
         // more of it than the upsampled trace between them)
+        // (pulled towards the mean along the line to it, not cut channel by channel: a cut
+        // channel by channel moved the colour as well, a speckle of its own)
         let g = 1.25;
-        hist = clamp(hist, mean - g * spread - vec4<f32>(1e-4), mean + g * spread + vec4<f32>(1e-4));
+        let ext = g * spread + vec4<f32>(1e-4);
+        let off = hist - mean;
+        let r = abs(off) / ext;
+        let over = max(max(r.x, r.y), max(r.z, r.w));
+        if (over > 1.0) {
+            hist = mean + off / over;
+        }
         w = w * select(0.985, 0.9, fresh);
     }
     return mix(cur, hist, w);
