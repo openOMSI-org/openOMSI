@@ -186,6 +186,9 @@ pub fn template_for(hof_path: &Path, hof_name: &str) -> Option<PathBuf> {
     }
     let mut files: Vec<PathBuf> = Vec::new();
     let mut seen = std::collections::HashSet::new();
+    // A mod (or another content root) can carry the template while the depot file stays in
+    // the base root: search every mirrored root as `depot_files` does, but return the path
+    // with the archive's own spelling, not a lowercased deduplication key.
     for d in omsi_cfg::mirrored_dirs(dir) {
         for p in omsi_cfg::vfs::read_dir_paths(&d) {
             let n = p
@@ -312,6 +315,8 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    // The bus and its template live in different roots: HOF discovery merges them, so the
+    // template lookup has to find a file a mod added without copying the depot file over.
     #[test]
     fn the_template_is_found_in_a_mirrored_content_root() {
         let root = std::env::temp_dir().join(format!("omsi-tchof-root-{}", std::process::id()));
