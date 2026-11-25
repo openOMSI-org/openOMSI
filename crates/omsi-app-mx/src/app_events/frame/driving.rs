@@ -384,6 +384,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
             .map(|w| w.reverb_at(cam.position))
             .unwrap_or((0.0, 0.0));
         omsi_audio::soundset::set_master_volume(cx.common.settings.volume);
+        omsi_audio::packs::set_sound_maxcount(cx.common.settings.sound_maxcount);
         a.set_listener(omsi_audio::Listener {
             position: cam.position.as_vec3(),
             forward: cam.forward(),

@@ -41,15 +41,28 @@ pub struct Issues {
 
 impl Issues {
     pub fn new(file: &str) -> Issues {
-        Issues { file: file.to_string(), list: Vec::new() }
+        Issues {
+            file: file.to_string(),
+            list: Vec::new(),
+        }
     }
 
     pub fn error(&mut self, line: usize, message: impl Into<String>) {
-        self.list.push(Issue { file: self.file.clone(), line, error: true, message: message.into() });
+        self.list.push(Issue {
+            file: self.file.clone(),
+            line,
+            error: true,
+            message: message.into(),
+        });
     }
 
     pub fn warn(&mut self, line: usize, message: impl Into<String>) {
-        self.list.push(Issue { file: self.file.clone(), line, error: false, message: message.into() });
+        self.list.push(Issue {
+            file: self.file.clone(),
+            line,
+            error: false,
+            message: message.into(),
+        });
     }
 }
 
@@ -71,16 +84,25 @@ pub struct Block {
 impl Block {
     /// The first value of a key (keys compare without regard to case).
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.entries.iter().find(|e| e.key.eq_ignore_ascii_case(key)).map(|e| e.value.as_str())
+        self.entries
+            .iter()
+            .find(|e| e.key.eq_ignore_ascii_case(key))
+            .map(|e| e.value.as_str())
     }
 
     pub fn line_of(&self, key: &str) -> usize {
-        self.entries.iter().find(|e| e.key.eq_ignore_ascii_case(key)).map(|e| e.line).unwrap_or(self.line)
+        self.entries
+            .iter()
+            .find(|e| e.key.eq_ignore_ascii_case(key))
+            .map(|e| e.line)
+            .unwrap_or(self.line)
     }
 
     /// Every value of a (repeatable) key.
     pub fn all<'a>(&'a self, key: &'a str) -> impl Iterator<Item = &'a Entry> + 'a {
-        self.entries.iter().filter(move |e| e.key.eq_ignore_ascii_case(key))
+        self.entries
+            .iter()
+            .filter(move |e| e.key.eq_ignore_ascii_case(key))
     }
 
     pub fn str(&self, key: &str) -> String {
@@ -88,7 +110,8 @@ impl Block {
     }
 
     pub fn f32(&self, key: &str) -> Option<f32> {
-        self.get(key).and_then(|v| num(v.split_whitespace().next()?))
+        self.get(key)
+            .and_then(|v| num(v.split_whitespace().next()?))
     }
 
     pub fn f32_or(&self, key: &str, default: f32) -> f32 {
@@ -120,7 +143,10 @@ impl Block {
     /// Three numbers `x y z`.
     pub fn vec3(&self, key: &str) -> Option<[f64; 3]> {
         let v = self.get(key)?;
-        let n: Vec<f64> = v.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+        let n: Vec<f64> = v
+            .split_whitespace()
+            .filter_map(|w| w.parse().ok())
+            .collect();
         (n.len() >= 3).then(|| [n[0], n[1], n[2]])
     }
 
@@ -142,11 +168,17 @@ impl Block {
 
 pub fn split_list(v: &str, by_comma: bool) -> Vec<String> {
     let sep = |c: char| c == ',' || c == ';' || (!by_comma && c.is_whitespace());
-    v.split(sep).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    v.split(sep)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 fn num(s: &str) -> Option<f32> {
-    s.replace(',', ".").parse::<f32>().ok().filter(|v| v.is_finite())
+    s.replace(',', ".")
+        .parse::<f32>()
+        .ok()
+        .filter(|v| v.is_finite())
 }
 
 pub fn flag(v: &str) -> Option<bool> {
@@ -160,7 +192,9 @@ pub fn flag(v: &str) -> Option<bool> {
 /// Splits `150 m` into the number and its unit word (lower-cased, empty when none).
 fn number_and_unit(v: &str) -> Option<(f32, String)> {
     let v = v.trim();
-    let split = v.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == ',' || c == '-' || c == '+')).unwrap_or(v.len());
+    let split = v
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == ',' || c == '-' || c == '+'))
+        .unwrap_or(v.len());
     let n = num(&v[..split])?;
     Some((n, v[split..].trim().to_ascii_lowercase()))
 }
@@ -205,8 +239,12 @@ pub fn parse_clock(v: &str) -> Option<f32> {
     }
     let h: f32 = parts[0].trim().parse().ok()?;
     let m: f32 = parts[1].trim().parse().ok()?;
-    let s: f32 = parts.get(2).map(|s| s.trim().parse().ok()).unwrap_or(Some(0.0))?;
-    (h >= 0.0 && (0.0..60.0).contains(&m) && (0.0..60.0).contains(&s)).then(|| h * 3600.0 + m * 60.0 + s)
+    let s: f32 = parts
+        .get(2)
+        .map(|s| s.trim().parse().ok())
+        .unwrap_or(Some(0.0))?;
+    (h >= 0.0 && (0.0..60.0).contains(&m) && (0.0..60.0).contains(&s))
+        .then(|| h * 3600.0 + m * 60.0 + s)
 }
 
 /// Reads a file's text into blocks. Lines before the first block are ignored with a warning.
@@ -221,7 +259,11 @@ pub fn parse(text: &str, issues: &mut Issues) -> Vec<Block> {
         if line.starts_with('[') {
             match line.find(']') {
                 Some(end) => {
-                    blocks.push(Block { name: line[1..end].trim().to_ascii_lowercase(), line: n, entries: Vec::new() });
+                    blocks.push(Block {
+                        name: line[1..end].trim().to_ascii_lowercase(),
+                        line: n,
+                        entries: Vec::new(),
+                    });
                     let rest = line[end + 1..].trim();
                     if !rest.is_empty() && !rest.starts_with("//") && !rest.starts_with('#') {
                         issues.warn(n, format!("text after the block name is ignored: {rest}"));
@@ -244,7 +286,11 @@ pub fn parse(text: &str, issues: &mut Issues) -> Vec<Block> {
             Some((k, v)) => (k.trim(), v.trim()),
             None => (body, ""),
         };
-        block.entries.push(Entry { key: key.to_ascii_lowercase(), value: value.to_string(), line: n });
+        block.entries.push(Entry {
+            key: key.to_ascii_lowercase(),
+            value: value.to_string(),
+            line: n,
+        });
     }
     blocks
 }
@@ -256,7 +302,10 @@ mod tests {
     #[test]
     fn blocks_keys_and_comments() {
         let mut is = Issues::new("t.cfg");
-        let b = parse("// head\n[Station]\nid A\nname  Main Square  // the hub\nmodes tram, metro\n\n[station]\nid B\n", &mut is);
+        let b = parse(
+            "// head\n[Station]\nid A\nname  Main Square  // the hub\nmodes tram, metro\n\n[station]\nid B\n",
+            &mut is,
+        );
         assert_eq!(b.len(), 2);
         assert_eq!(b[0].name, "station");
         assert_eq!(b[0].get("NAME"), Some("Main Square"));

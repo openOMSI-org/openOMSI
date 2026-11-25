@@ -31,6 +31,9 @@ pub(crate) struct WindowStart {
     tries: u32,
     /// A surface was made on the device at the start (see `window_ready`).
     had_surface: bool,
+    /// The device failed on a plain picture (lost while the pipelines were built): no more
+    /// of them on it; the build's failure takes the next interface.
+    lost: bool,
 }
 
 /// The log's word on the window's first picture (how long the start took to show anything).
@@ -361,6 +364,7 @@ impl App {
             shown: None,
             tries: 0,
             had_surface,
+            lost: false,
         });
         self.drive_window_start(event_loop);
     }
@@ -383,7 +387,7 @@ impl App {
             // (once, and then twice a second: the window keeps its picture, and the main
             // thread keeps taking the window's messages - Windows calls a window that takes
             // none for five seconds "not responding")
-            if ws.shown.is_none_or(|t| t.elapsed().as_secs_f32() > 0.5) {
+            if !ws.lost && ws.shown.is_none_or(|t| t.elapsed().as_secs_f32() > 0.5) {
                 ws.shown = Some(Instant::now());
                 if let (Some(s), Some(win)) = (self.gfx.surface.as_mut(), self.window.as_ref()) {
                     let shown = crate::startup::present_clear(
@@ -393,6 +397,8 @@ impl App {
                         win,
                         LOADING_BACKGROUND,
                     );
+                    ws.lost = shown.is_none();
+                    let shown = shown.unwrap_or(false);
                     first_picture(self.started, shown);
                     // (shown all the same when a hidden window gives no picture to draw
                     // into: better a blank window than none)
@@ -538,7 +544,8 @@ impl App {
                     &renderer.queue,
                     &window,
                     LOADING_BACKGROUND,
-                );
+                )
+                .unwrap_or(false);
                 first_picture(self.started, shown);
             }
         }
@@ -768,6 +775,7 @@ impl App {
                         paint: o.paint.clone(),
                         situation_vars: o.vars.clone(),
                         situation_strvars: o.strvars.clone(),
+                        situation_cars: o.cars.clone(),
                         situation_odometer_km: o.odometer_km,
                         situation_others: Vec::new(),
                         line: None,
@@ -1347,6 +1355,8 @@ pub(crate) struct CamBlend {
     /// (view, camera numbers) of the last frame: a change of the numbers inside the same
     /// view is a camera switch.
     pub key: Option<(String, (usize, usize))>,
+    /// The coupled part the camera hangs on (None: the front): the frame of `from` and `shown`.
+    pub part: Option<usize>,
     /// Where the glide has come to (in the bus's frame), while one is under way.
     pub from: Option<omsi_vehicle::Camera>,
     /// The cockpit camera as it was drawn last frame (in the bus's frame): where the next

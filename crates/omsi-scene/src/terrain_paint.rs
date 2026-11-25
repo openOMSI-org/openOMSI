@@ -21,7 +21,10 @@ pub(super) const PAINT_MASK_MIN: usize = 512;
 /// steps' middles; the shader's sharpening then gives a crisp edge along that curve.
 /// Returns the alpha as RGBA (white) and the new edge lengths.
 pub(super) fn smooth_paint_mask(rgba: &[u8], w: usize, h: usize) -> (Vec<u8>, usize, usize) {
-    let s = (PAINT_MASK_MIN / w.max(1)).max(1).min(PAINT_MASK_MIN / h.max(1)).max(1);
+    let s = (PAINT_MASK_MIN / w.max(1))
+        .max(1)
+        .min(PAINT_MASK_MIN / h.max(1))
+        .max(1);
     let (dw, dh) = (w * s, h * s);
     let src = |i: isize, j: isize| -> f32 {
         let i = i.clamp(0, w as isize - 1) as usize;
@@ -109,7 +112,10 @@ pub(super) fn split_terrain_mapped(
     xf: Mat4,
     origin: DVec3,
 ) -> (MeshData, MeshData) {
-    (terrain_rest(src, slots), terrain_ground(src, slots, pos, xf, origin))
+    (
+        terrain_rest(src, slots),
+        terrain_ground(src, slots, pos, xf, origin),
+    )
 }
 
 /// The mesh without its `[terrainmapping]` slots (see `split_terrain_mapped`): the same for
@@ -121,7 +127,13 @@ pub(super) fn terrain_rest(src: &MeshData, slots: &[usize]) -> MeshData {
 }
 
 /// The `[terrainmapping]` slots of a mesh in tile space (see `split_terrain_mapped`).
-pub(super) fn terrain_ground(src: &MeshData, slots: &[usize], pos: DVec3, xf: Mat4, origin: DVec3) -> MeshData {
+pub(super) fn terrain_ground(
+    src: &MeshData,
+    slots: &[usize],
+    pos: DVec3,
+    xf: Mat4,
+    origin: DVec3,
+) -> MeshData {
     let mut ground = MeshData {
         one_sided: src.one_sided,
         ..MeshData::default()
@@ -137,8 +149,15 @@ pub(super) fn terrain_ground(src: &MeshData, slots: &[usize], pos: DVec3, xf: Ma
                 let p = src.positions[k as usize];
                 let local = xf.transform_point3(p).as_dvec3() / tile_size() + to_tile;
                 ground.positions.push(p);
-                ground.normals.push(src.normals.get(k as usize).copied().unwrap_or(glam::Vec3::Z));
-                ground.uvs.push(glam::Vec2::new(local.x as f32, local.y as f32));
+                ground.normals.push(
+                    src.normals
+                        .get(k as usize)
+                        .copied()
+                        .unwrap_or(glam::Vec3::Z),
+                );
+                ground
+                    .uvs
+                    .push(glam::Vec2::new(local.x as f32, local.y as f32));
                 ground.positions.len() as u32 - 1
             });
             ground.indices.push(v);
@@ -160,23 +179,70 @@ pub(super) fn terrain_ground(src: &MeshData, slots: &[usize], pos: DVec3, xf: Ma
 pub(super) fn vegetation_give_of(sco: &omsi_scenery::sco::SceneryObject) -> Option<f32> {
     // (not "wald": a whole DLC's objects are grouped as "Thüringer Wald", and its houses'
     // cut-out windows and railings swayed in the wind, #1775)
-    const GROUP_WORDS: [&str; 17] = ["tree", "baum", "bäume", "baeume", "deciduous", "conifer", "shrub", "bush", "busch", "strauch", "hecke", "hedge", "plant", "pflanz", "arbor", "vegetation", "forest"];
-    const NAME_WORDS: [&str; 15] = ["tree", "trees", "baum", "shrub", "shrubbery", "bush", "busch", "strauch", "hecke", "hedge", "arbor", "chestnut", "kastanie", "palm", "plant"];
+    const GROUP_WORDS: [&str; 17] = [
+        "tree",
+        "baum",
+        "bäume",
+        "baeume",
+        "deciduous",
+        "conifer",
+        "shrub",
+        "bush",
+        "busch",
+        "strauch",
+        "hecke",
+        "hedge",
+        "plant",
+        "pflanz",
+        "arbor",
+        "vegetation",
+        "forest",
+    ];
+    const NAME_WORDS: [&str; 15] = [
+        "tree",
+        "trees",
+        "baum",
+        "shrub",
+        "shrubbery",
+        "bush",
+        "busch",
+        "strauch",
+        "hecke",
+        "hedge",
+        "arbor",
+        "chestnut",
+        "kastanie",
+        "palm",
+        "plant",
+    ];
     if sco.tree.is_some() {
         return None;
     }
-    let groups: Vec<String> = sco.groups.iter().map(|g| g.trim().to_lowercase()).filter(|g| !g.is_empty()).collect();
+    let groups: Vec<String> = sco
+        .groups
+        .iter()
+        .map(|g| g.trim().to_lowercase())
+        .filter(|g| !g.is_empty())
+        .collect();
     if groups.iter().any(|g| g.contains("backdrop")) {
         return None;
     }
-    let stem = sco.path.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let stem = sco
+        .path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
     // (a group's words, each from its start: "German Street Side" holds "tree" within
     // "street", and every pole, sign, lamp, traffic light and fence of OMSI's own street
     // objects swayed in the wind with the trees)
     let plant = if groups.is_empty() {
-        stem.split(|c: char| !c.is_alphabetic()).any(|w| NAME_WORDS.contains(&w))
+        stem.split(|c: char| !c.is_alphabetic())
+            .any(|w| NAME_WORDS.contains(&w))
     } else {
-        groups.iter().any(|g| g.split(|c: char| !c.is_alphabetic()).any(|word| GROUP_WORDS.iter().any(|w| word.starts_with(w))))
+        groups.iter().any(|g| {
+            g.split(|c: char| !c.is_alphabetic())
+                .any(|word| GROUP_WORDS.iter().any(|w| word.starts_with(w)))
+        })
     };
     plant.then(|| vegetation_give(&[&stem, &groups.join(" ")]))
 }
@@ -185,30 +251,48 @@ pub(super) fn vegetation_give_of(sco: &omsi_scenery::sco::SceneryObject) -> Opti
 /// the crown leaves the trunk where the slot's lowest leaves hang, and at a quarter of the
 /// plant's height at least (a picture of the whole tree on crossed cards, trunk and all,
 /// is one slot); a plant up to 3 m tall - a shrub, a hedge - bends from the ground.
-pub(super) fn foliage_sway(meshes: &[(MeshData, Vec<omsi_o3d::Material>, Vec<MaterialDef>)], mesh: &MeshData, slot: u32, give: f32) -> Option<[f32; 3]> {
+pub(super) fn foliage_sway(
+    meshes: &[(MeshData, Vec<omsi_o3d::Material>, Vec<MaterialDef>)],
+    mesh: &MeshData,
+    slot: u32,
+    give: f32,
+) -> Option<[f32; 3]> {
     let (lo, hi) = meshes
         .iter()
         .flat_map(|(m, _, _)| m.positions.iter())
-        .fold((f32::MAX, f32::MIN), |(lo, hi), p| (lo.min(p.z), hi.max(p.z)));
+        .fold((f32::MAX, f32::MIN), |(lo, hi), p| {
+            (lo.min(p.z), hi.max(p.z))
+        });
     let leaf_lo = mesh
         .ranges
         .iter()
         .filter(|r| r.2 == slot)
-        .flat_map(|r| mesh.indices.get(r.0 as usize..(r.0 + r.1) as usize).unwrap_or(&[]))
+        .flat_map(|r| {
+            mesh.indices
+                .get(r.0 as usize..(r.0 + r.1) as usize)
+                .unwrap_or(&[])
+        })
         .filter_map(|&i| mesh.positions.get(i as usize))
         .fold(f32::MAX, |lo, p| lo.min(p.z));
     let height = hi - lo;
     if !(height > 0.2) || leaf_lo == f32::MAX {
         return None;
     }
-    let pivot = if height <= 3.0 { lo } else { leaf_lo.max(lo + 0.25 * height) };
+    let pivot = if height <= 3.0 {
+        lo
+    } else {
+        leaf_lo.max(lo + 0.25 * height)
+    };
     (hi - pivot > 0.1).then_some([pivot, hi, if height <= 3.0 { 0.5 * give } else { give }])
 }
 
 /// How much a tree gives to the wind by its kind (windy trees): a conifer's needles and
 /// stiff whorls of branches move less than a broadleaf's crown.
 pub(super) fn vegetation_give(names: &[&str]) -> f32 {
-    const CONIFER: [&str; 12] = ["fir", "tanne", "fichte", "kiefer", "pine", "spruce", "conifer", "nadel", "cypress", "zypresse", "thuja", "larch"];
+    const CONIFER: [&str; 12] = [
+        "fir", "tanne", "fichte", "kiefer", "pine", "spruce", "conifer", "nadel", "cypress",
+        "zypresse", "thuja", "larch",
+    ];
     let conifer = names.iter().any(|n| {
         let n = n.to_ascii_lowercase();
         CONIFER.iter().any(|c| n.contains(c))
@@ -220,9 +304,21 @@ pub(super) fn vegetation_give(names: &[&str]) -> f32 {
 /// of its height): the crown leaves the trunk at about a quarter of the picture's height; a
 /// shrub (a type no taller than 3 m) bends from the ground.
 pub(super) fn tree_card_sway(ot: &ObjectType, texture: &str) -> [f32; 3] {
-    let shrub = ot.sco.tree.as_ref().is_some_and(|t| t.2 > 0.0 && t.2 <= 3.0);
+    let shrub = ot
+        .sco
+        .tree
+        .as_ref()
+        .is_some_and(|t| t.2 > 0.0 && t.2 <= 3.0);
     let path = ot.sco.path.to_string_lossy();
-    [if shrub { SHRUB_CARD_PIVOT } else { TREE_CARD_PIVOT }, 1.0, vegetation_give(&[texture, &path])]
+    [
+        if shrub {
+            SHRUB_CARD_PIVOT
+        } else {
+            TREE_CARD_PIVOT
+        },
+        1.0,
+        vegetation_give(&[texture, &path]),
+    ]
 }
 
 /// How a `[tree]`'s crossed cards stand for an object turned by `heading` (degrees,
@@ -249,7 +345,15 @@ pub(super) fn tree_quad_mesh() -> MeshData {
     // bend is the same across the card, so two columns do (the boughs' lobes are a crown
     // wide). 12 quads a side: every tree of a forest pays for it.
     const TREE_COLS: u32 = 2;
-    const ROWS: [f32; 7] = [0.0, SHRUB_CARD_PIVOT, TREE_CARD_PIVOT, 0.46, 0.64, 0.82, 1.0];
+    const ROWS: [f32; 7] = [
+        0.0,
+        SHRUB_CARD_PIVOT,
+        TREE_CARD_PIVOT,
+        0.46,
+        0.64,
+        0.82,
+        1.0,
+    ];
     const TREE_ROWS: u32 = ROWS.len() as u32 - 1;
     let mut m = MeshData::default();
     for (dx, dy) in [(0.5f32, 0.0f32), (0.0, 0.5)] {
@@ -269,7 +373,8 @@ pub(super) fn tree_quad_mesh() -> MeshData {
             for c in 0..TREE_COLS {
                 let (a, b, cc, d) = (at(c, r), at(c + 1, r), at(c + 1, r + 1), at(c, r + 1));
                 // both sides
-                m.indices.extend_from_slice(&[a, b, cc, a, cc, d, a, cc, b, a, d, cc]);
+                m.indices
+                    .extend_from_slice(&[a, b, cc, a, cc, d, a, cc, b, a, d, cc]);
             }
         }
     }
@@ -307,7 +412,10 @@ pub(super) fn seasonal_texture(name: &str, dirs: &[&Path]) -> bool {
 pub fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
     // (found whatever its case: `Texture` of a parked car's folder on Linux, whose file
     // system tells `texture` from `Texture`, left the car white)
-    let mut dirs = vec![omsi_cfg::resolve_path(content_dir, "texture"), content_dir.to_path_buf()];
+    let mut dirs = vec![
+        omsi_cfg::resolve_path(content_dir, "texture"),
+        content_dir.to_path_buf(),
+    ];
     // vehicle folders keep the model in `model\` and the textures in `texture\` next to it
     if let Some(parent) = content_dir.parent() {
         dirs.push(omsi_cfg::resolve_path(parent, "texture"));
@@ -325,7 +433,9 @@ pub fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
 pub fn surf_map(texture: &str, dirs: &[&Path]) -> Option<Arc<omsi_geometry::HeightMap>> {
     // (global, not a field of `World`: a memo of what the file holds, the same whatever map
     // is open, so a new `World` reads nothing twice; the tests ask without a `World`)
-    static MEMO: std::sync::OnceLock<Mutex<HashMap<PathBuf, Option<Arc<omsi_geometry::HeightMap>>>>> = std::sync::OnceLock::new();
+    static MEMO: std::sync::OnceLock<
+        Mutex<HashMap<PathBuf, Option<Arc<omsi_geometry::HeightMap>>>>,
+    > = std::sync::OnceLock::new();
     // OMSI_NO_SURF: every road as smooth as before (A/B)
     if omsi_cfg::flags::OMSI_NO_SURF.is_set() {
         return None;
@@ -345,7 +455,10 @@ pub fn surf_map(texture: &str, dirs: &[&Path]) -> Option<Arc<omsi_geometry::Heig
         return m.clone();
     }
     let map = match omsi_texture::decode_file(&path) {
-        Ok(img) => omsi_geometry::HeightMap::from_rgba(img.width as usize, img.height as usize, &img.rgba).map(Arc::new),
+        Ok(img) => {
+            omsi_geometry::HeightMap::from_rgba(img.width as usize, img.height as usize, &img.rgba)
+                .map(Arc::new)
+        }
         Err(e) => {
             log::warn!("{e}");
             None
@@ -382,19 +495,44 @@ pub fn surface_id(texture: &str, dirs: &[&Path]) -> u8 {
 /// The `[surface]` a texture's file name suggests (German and English names of the stock
 /// and the common add-on textures).
 pub fn surface_by_name(texture: &str) -> u8 {
-    let n = texture.replace('\\', "/").rsplit('/').next().unwrap_or("").to_ascii_lowercase();
+    let n = texture
+        .replace('\\', "/")
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     let has = |keys: &[&str]| keys.iter().any(|k| n.contains(k));
     if has(&["schnee", "snow"]) {
         6
-    } else if has(&["kopfstein", "kopfgr", "cobble", "pflaster", "sett", "waschpfl"]) {
+    } else if has(&[
+        "kopfstein",
+        "kopfgr",
+        "cobble",
+        "pflaster",
+        "sett",
+        "waschpfl",
+    ]) {
         2
-    } else if has(&["schotter", "kies", "gravel", "splitt", "ballast", "gleisbett"]) {
+    } else if has(&[
+        "schotter",
+        "kies",
+        "gravel",
+        "splitt",
+        "ballast",
+        "gleisbett",
+    ]) {
         5
     } else if has(&["gras", "rasen", "wiese", "meadow", "lawn", "gruen"]) {
         4
-    } else if has(&["sand", "erde", "dirt", "mud", "matsch", "feld", "acker", "field", "soil", "lehm", "waldweg", "forest"]) {
+    } else if has(&[
+        "sand", "erde", "dirt", "mud", "matsch", "feld", "acker", "field", "soil", "lehm",
+        "waldweg", "forest",
+    ]) {
         3
-    } else if has(&["beton", "concrete", "platte", "gehweg", "verbund", "pavement", "sidewalk", "wabenst", "gw_"]) {
+    } else if has(&[
+        "beton", "concrete", "platte", "gehweg", "verbund", "pavement", "sidewalk", "wabenst",
+        "gw_",
+    ]) {
         1
     } else {
         0

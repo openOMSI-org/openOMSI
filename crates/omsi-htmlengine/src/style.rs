@@ -106,12 +106,20 @@ impl Style {
 pub(crate) fn parse_color(s: &str) -> Option<[u8; 4]> {
     let s = s.trim().to_ascii_lowercase();
     if let Some(h) = s.strip_prefix('#') {
-        let d: Vec<u8> = h.chars().map(|c| c.to_digit(16).map(|v| v as u8)).collect::<Option<Vec<_>>>()?;
+        let d: Vec<u8> = h
+            .chars()
+            .map(|c| c.to_digit(16).map(|v| v as u8))
+            .collect::<Option<Vec<_>>>()?;
         return match d.len() {
             3 => Some([d[0] * 17, d[1] * 17, d[2] * 17, 255]),
             4 => Some([d[0] * 17, d[1] * 17, d[2] * 17, d[3] * 17]),
             6 => Some([d[0] * 16 + d[1], d[2] * 16 + d[3], d[4] * 16 + d[5], 255]),
-            8 => Some([d[0] * 16 + d[1], d[2] * 16 + d[3], d[4] * 16 + d[5], d[6] * 16 + d[7]]),
+            8 => Some([
+                d[0] * 16 + d[1],
+                d[2] * 16 + d[3],
+                d[4] * 16 + d[5],
+                d[6] * 16 + d[7],
+            ]),
             _ => None,
         };
     }
@@ -129,8 +137,15 @@ pub(crate) fn parse_color(s: &str) -> Option<[u8; 4]> {
         if p.len() < 3 {
             return None;
         }
-        let alpha = p.get(3).map_or(255.0, |a| if *a <= 1.0 { a * 255.0 } else { *a });
-        return Some([p[0].clamp(0.0, 255.0) as u8, p[1].clamp(0.0, 255.0) as u8, p[2].clamp(0.0, 255.0) as u8, alpha.clamp(0.0, 255.0) as u8]);
+        let alpha = p
+            .get(3)
+            .map_or(255.0, |a| if *a <= 1.0 { a * 255.0 } else { *a });
+        return Some([
+            p[0].clamp(0.0, 255.0) as u8,
+            p[1].clamp(0.0, 255.0) as u8,
+            p[2].clamp(0.0, 255.0) as u8,
+            alpha.clamp(0.0, 255.0) as u8,
+        ]);
     }
     let named = match s.as_str() {
         "black" => [0, 0, 0, 255],
@@ -159,7 +174,10 @@ pub(crate) struct Units {
 
 pub(crate) fn parse_len(v: &str, u: &Units) -> Option<Len> {
     let v = v.trim().to_ascii_lowercase();
-    let num = |suffix: &str| v.strip_suffix(suffix).and_then(|n| n.trim().parse::<f32>().ok());
+    let num = |suffix: &str| {
+        v.strip_suffix(suffix)
+            .and_then(|n| n.trim().parse::<f32>().ok())
+    };
     if v == "0" {
         return Some(Len::Px(0.0));
     }
@@ -225,12 +243,22 @@ pub(crate) fn find_url(val: &str) -> Option<(String, usize, usize)> {
     let s = val.to_ascii_lowercase().find("url(")?;
     let inner = s + 4;
     let e = val[inner..].find(')')? + inner;
-    let path = val[inner..e].trim().trim_matches(|c| c == '"' || c == '\'').trim().to_string();
+    let path = val[inner..e]
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .trim()
+        .to_string();
     Some((path, s, e + 1))
 }
 
 pub(crate) fn parse_bg_size(t: &[&str], u: &Units) -> Option<BgSize> {
-    let len = |x: &str| if x == "auto" { Some(None) } else { parse_len(x, u).map(Some) };
+    let len = |x: &str| {
+        if x == "auto" {
+            Some(None)
+        } else {
+            parse_len(x, u).map(Some)
+        }
+    };
     match t {
         ["cover"] => Some(BgSize::Cover),
         ["contain"] => Some(BgSize::Contain),
@@ -250,11 +278,21 @@ pub(crate) fn parse_bg_pos(t: &[&str], u: &Units) -> Option<[Len; 2]> {
     match t {
         [a] => {
             let v = val(*a)?;
-            Some(if matches!(*a, "top" | "bottom") { [Len::Pct(50.0), v] } else { [v, Len::Pct(50.0)] })
+            Some(if matches!(*a, "top" | "bottom") {
+                [Len::Pct(50.0), v]
+            } else {
+                [v, Len::Pct(50.0)]
+            })
         }
         [a, b] => {
             let (x, y) = (val(*a)?, val(*b)?);
-            Some(if matches!(*a, "top" | "bottom") || matches!(*b, "left" | "right") { [y, x] } else { [x, y] })
+            Some(
+                if matches!(*a, "top" | "bottom") || matches!(*b, "left" | "right") {
+                    [y, x]
+                } else {
+                    [x, y]
+                },
+            )
         }
         _ => None,
     }
@@ -287,8 +325,16 @@ pub(crate) fn box_values(v: &str, u: &Units) -> ([f32; 4], bool) {
 impl Style {
     pub(crate) fn apply(&mut self, prop: &str, val: &str, parent_font: f32, vw: f32, vh: f32) {
         let val = val.trim().trim_end_matches("!important").trim();
-        let u = Units { font: parent_font, vw, vh };
-        let own = Units { font: self.font_px, vw, vh };
+        let u = Units {
+            font: parent_font,
+            vw,
+            vh,
+        };
+        let own = Units {
+            font: self.font_px,
+            vw,
+            vh,
+        };
         match prop {
             "color" => {
                 if let Some(c) = parse_color(val) {
@@ -339,7 +385,13 @@ impl Style {
                 }
             }
             "background-image" => {
-                self.bg_img = find_url(val).and_then(|(p, _, _)| if p.is_empty() { None } else { Some(Arc::from(p.as_str())) });
+                self.bg_img = find_url(val).and_then(|(p, _, _)| {
+                    if p.is_empty() {
+                        None
+                    } else {
+                        Some(Arc::from(p.as_str()))
+                    }
+                });
             }
             "background-size" => {
                 if let Some(z) = parse_bg_size(&split_top(val), &own) {
@@ -374,7 +426,8 @@ impl Style {
                 }
             }
             "font-weight" => {
-                self.bold = matches!(val, "bold" | "bolder") || val.parse::<u32>().map_or(false, |w| w >= 600);
+                self.bold = matches!(val, "bold" | "bolder")
+                    || val.parse::<u32>().map_or(false, |w| w >= 600);
             }
             "text-align" => {
                 self.align = match val {
@@ -410,8 +463,20 @@ impl Style {
             "padding-right" => self.padding[1] = parse_len(val, &own).map_or(0.0, |l| l.px(vw)),
             "padding-bottom" => self.padding[2] = parse_len(val, &own).map_or(0.0, |l| l.px(vw)),
             "padding-left" => self.padding[3] = parse_len(val, &own).map_or(0.0, |l| l.px(vw)),
-            "width" => self.width = if val == "auto" { None } else { parse_len(val, &own) },
-            "height" => self.height = if val == "auto" { None } else { parse_len(val, &own) },
+            "width" => {
+                self.width = if val == "auto" {
+                    None
+                } else {
+                    parse_len(val, &own)
+                }
+            }
+            "height" => {
+                self.height = if val == "auto" {
+                    None
+                } else {
+                    parse_len(val, &own)
+                }
+            }
             "display" => {
                 self.none = val == "none";
                 self.inline = val == "inline";

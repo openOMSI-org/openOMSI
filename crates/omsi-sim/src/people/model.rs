@@ -146,6 +146,8 @@ pub struct Person {
     /// Seconds without getting nearer the goal while wanting to move; seconds left
     /// passing through others.
     pub stuck: f32,
+    /// Seconds spent wanting to walk and not moving, across slip-pasts (#3790).
+    pub stuck_total: f32,
     pub ghost: f32,
     /// Seconds a standing vehicle has stood in the way (see the crowd step).
     pub car_wait: f32,
@@ -399,10 +401,12 @@ pub struct PeopleSim {
     /// wants one of them and boards only a bus showing one of its termini; at a stop no trip
     /// goes on from, anybody takes the first bus (0x61c33c).
     pub stop_targets: Option<HashMap<i64, Vec<(String, HashSet<String>)>>>,
-    /// Per bus stop, the destinations of the trips due there soon (`Schedule::
-    /// due_destinations`, made anew every game minute): the people turning up draw theirs
-    /// from these alone. None: from all of the stop's (no timetable).
-    pub due_dests: Option<HashMap<i64, HashSet<String>>>,
+    /// Per bus stop, the destinations of the trips due there soon (`Schedule::due_trips`,
+    /// made anew every game minute, where their buses are every frame): the people turning
+    /// up draw theirs from these alone, and the stop fills to the share of its number those
+    /// trips ask for until their bus has passed it (`DueTrips::share_of`). None: from all of
+    /// the stop's (no timetable).
+    pub due_dests: Option<crate::timetable_run::DueTrips>,
     /// Game time `due_dests` was made at.
     pub due_at: f64,
     /// The timetable's name of each stop object (`Schedule::stop_names`), the names the
@@ -450,6 +454,9 @@ pub struct PeopleSim {
     /// Optional visual-only response to an approaching full bus.
     pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
+    /// Which doors the passengers may get in through (#3124): as the vehicle says, the
+    /// front one only, the first two, or the rear one. Set by the app from the settings.
+    pub entry_doors: crate::people::entry_doors::EntryDoors,
     /// The fare is paid without a ticket (#2742): the passenger pays, gets the change and
     /// goes to their place instead of waiting at the desk for a ticket - and no ticket
     /// sound or ticket hand-over is made. Set by the app from the settings.

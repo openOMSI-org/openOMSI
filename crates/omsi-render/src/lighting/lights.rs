@@ -608,7 +608,7 @@ impl Renderer {
         // (the player's headlamps, which share a map of their own: see `passes::headlamp_shadow`)
         let own = eye
             .vehicle
-            .filter(|_| lamp_shadows && enhanced)
+            .filter(|_| lamp_shadows && enhanced && eye.level > 0)
             .map(|(b, _)| passes::VehicleBox::new(b, ro));
         self.lights.cookies.begin_frame();
         // The grid is made in a room kept all unused but for the cells the last one filled,
@@ -1199,6 +1199,8 @@ pub(crate) struct LightRes {
     pub(crate) fog_lamps_pipeline: Option<[wgpu::RenderPipeline; 2]>,
     pub(crate) fog_lamps_layout: wgpu::BindGroupLayout,
     pub(crate) fog_lamps_buf: wgpu::Buffer,
+    /// Enhanced: the volumetric fog (`vol_fog`; none where its pipelines cannot be made).
+    pub(crate) vol_fog: Option<crate::vol_fog::VolFog>,
     /// The tile light maps (`.map.LM.bmp`) of the 5x5 tiles around the camera, north up, and
     /// where that square lies (world x, y of its south-west corner, its side in metres).
     pub(crate) lm_atlas: wgpu::Texture,

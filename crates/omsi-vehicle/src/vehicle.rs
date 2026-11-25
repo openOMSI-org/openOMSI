@@ -441,13 +441,11 @@ impl Vehicle {
         self.coupling_front.is_some() && !self.has_friendly_name
     }
 
-    /// The vehicle's mass in kg: a `[mass]` under 100 is tonnes (as every `.bus` of OMSI 2 has it).
+    /// The vehicle's mass in kg: `[mass]` is tonnes, whatever its size (Omsi.exe reads it as
+    /// it stands, 0x7b4214, and works with it times 1000 throughout its physics, 0x7e2574 -
+    /// the BR 132's 122 is a locomotive of 122 t).
     pub fn mass_kg(&self) -> f32 {
-        if self.mass < 100.0 {
-            self.mass * 1000.0
-        } else {
-            self.mass
-        }
+        self.mass * 1000.0
     }
 
     /// A rail vehicle: a car of a `.zug` runs on rails, which Omsi.exe stands end to end by
@@ -531,7 +529,7 @@ impl Vehicle {
             } else {
                 VehicleKind::Bus
             },
-            mass: 1000.0,
+            mass: 1.0,
             ..Default::default()
         };
         let base = file.dir().to_path_buf();
@@ -1004,6 +1002,17 @@ mod tests {
                 .transport
                 .is_empty()
         );
+    }
+
+    /// `[mass]` is tonnes however large (Omsi.exe works with it times 1000): a locomotive of
+    /// 122 t is not 122 kg.
+    #[test]
+    fn mass_is_tonnes_however_large() {
+        let mass = |text: &str| Vehicle::parse(&CfgFile::from_str("x.ovh", text)).mass_kg();
+        assert_eq!(mass("[mass]\n10.9\n"), 10_900.0);
+        assert_eq!(mass("[mass]\n122\n"), 122_000.0);
+        // a file without `[mass]`: 1 t, as before
+        assert_eq!(mass("[friendlyname]\nx\n"), 1000.0);
     }
 
     #[test]

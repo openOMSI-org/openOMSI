@@ -17,7 +17,13 @@ fn main() {
         names.sort();
         for n in names {
             let path = dir.join(&n).canonicalize().unwrap();
-            writeln!(f, "    ({:?}, include_str!({:?})),", n.trim_end_matches(".svg"), path.display().to_string()).unwrap();
+            writeln!(
+                f,
+                "    ({:?}, include_str!({:?})),",
+                n.trim_end_matches(".svg"),
+                path.display().to_string()
+            )
+            .unwrap();
         }
     }
     writeln!(f, "];").unwrap();

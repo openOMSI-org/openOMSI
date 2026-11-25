@@ -616,7 +616,22 @@ fn vehicle_host(
     host.initial_ident = ident;
     // (the paint scheme's variables are there for the scripts' {init})
     host.paint_scheme = Some(paint_scheme(&vt, args.paint.as_deref()));
+    // the variables the launcher chose for this bus (its onboard computer: IBIS, a ticket
+    // printer, a door type) are there for {init} as well, and stay over the scheme's
+    host.initial_vars = requested_vars(args);
     host
+}
+
+/// `--setvar name=value[,name=value…]` as the vehicle's own variables.
+fn requested_vars(args: &Args) -> Vec<(String, f32)> {
+    let Some(sv) = &args.setvar else {
+        return Vec::new();
+    };
+    sv.split(',')
+        .filter_map(|kv| kv.split_once('='))
+        .map(|(k, v)| (k.trim().to_string(), omsi_cfg::parse_f32(v)))
+        .filter(|(k, _)| !k.is_empty())
+        .collect()
 }
 
 /// The vehicle put at the entry point `--entry` (or the map's first): on the road surface
@@ -789,6 +804,9 @@ fn new_player(
         blind_pick: None,
         ibis_typist: None,
         duty_typed: false,
+        duty_trip_pending: false,
+        ibis_shown: None,
+        ibis_auto_stop: crate::settings::Settings::load().ibis_auto_stop,
         ibis_holds: Default::default(),
         html_next_stop: None,
         ibis_background: false,
@@ -833,6 +851,9 @@ pub(crate) fn test_player(
 
 #[cfg(test)]
 mod cabin_input_tests;
+
+#[cfg(test)]
+mod setvar_args_tests;
 
 /// `OMSI_DEBUG_MESHES`: every mesh of the vehicle with its bounds, and per material slot (of the
 /// meshes whose file the flag names) which part of its texture it shows.

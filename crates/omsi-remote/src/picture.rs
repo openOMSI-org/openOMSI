@@ -1,7 +1,7 @@
 use crate::lock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::mpsc::{SyncSender, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -30,11 +30,17 @@ impl Pictures {
     }
 
     pub(crate) fn wants(&self, session: u64) -> bool {
-        lock(&self.wants).get(&session).is_some_and(|w| w.2.elapsed() < FRESH)
+        lock(&self.wants)
+            .get(&session)
+            .is_some_and(|w| w.2.elapsed() < FRESH)
     }
 
     pub(crate) fn largest(&self) -> Option<(u32, u32)> {
-        lock(&self.wants).values().filter(|w| w.2.elapsed() < FRESH).map(|w| (w.0, w.1)).max_by_key(|(w, h)| u64::from(*w) * u64::from(*h))
+        lock(&self.wants)
+            .values()
+            .filter(|w| w.2.elapsed() < FRESH)
+            .map(|w| (w.0, w.1))
+            .max_by_key(|(w, h)| u64::from(*w) * u64::from(*h))
     }
 
     pub(crate) fn seq(&self) -> u64 {
@@ -71,7 +77,9 @@ pub(crate) fn encode(w: u32, h: u32, rgb: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
     let mut out = Vec::new();
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, QUALITY).encode(rgb, w, h, image::ExtendedColorType::Rgb8).ok()?;
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, QUALITY)
+        .encode(rgb, w, h, image::ExtendedColorType::Rgb8)
+        .ok()?;
     Some(out)
 }
 
@@ -89,7 +97,9 @@ pub(crate) fn encoder(pictures: Arc<Pictures>) -> Option<SyncSender<Raw>> {
         .name("remote cockpit map".into())
         .spawn(move || {
             for r in rx {
-                if let Some(jpeg) = rgb_rows(&r.data, r.row, r.w, r.h, r.bgra).and_then(|rgb| encode(r.w, r.h, &rgb)) {
+                if let Some(jpeg) = rgb_rows(&r.data, r.row, r.w, r.h, r.bgra)
+                    .and_then(|rgb| encode(r.w, r.h, &rgb))
+                {
                     pictures.put(jpeg);
                 }
             }

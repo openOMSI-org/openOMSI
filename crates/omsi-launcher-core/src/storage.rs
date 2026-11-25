@@ -2,8 +2,8 @@
 //! *sealed LAN store*, not the full ~/.openomsi folder (settings, saves and mods live there).
 //! Cleanup is suspended while any game holds a cache lease, including CLI runs.
 
-use serde::Serialize;
 use omsi_cfg::cache_budget::{self, Kind};
+use serde::Serialize;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -29,9 +29,12 @@ pub fn status() -> Status {
     let local = cache_budget::usage(&base.join("cache"), Kind::Local);
     let lan = cache_budget::usage(&base.join("lan-store"), Kind::ClientLan);
     Status {
-        local_bytes: local.bytes, local_limit: cache_budget::LOCAL_LIMIT,
-        lan_bytes: lan.bytes, lan_limit: cache_budget::LAN_LIMIT,
-        reclaimed_local: 0, reclaimed_lan: 0,
+        local_bytes: local.bytes,
+        local_limit: cache_budget::LOCAL_LIMIT,
+        lan_bytes: lan.bytes,
+        lan_limit: cache_budget::LAN_LIMIT,
+        reclaimed_local: 0,
+        reclaimed_lan: 0,
         busy: running(),
         server_store: lan.server_store,
     }
@@ -44,21 +47,30 @@ pub fn cleanup(scope: &str, clear: bool) -> Result<Status, String> {
         return Err(crate::i18n::tr("Unknown cache scope."));
     }
     if running() {
-        return Err(crate::i18n::tr("Close all running openOMSI games before cleaning the cache."));
+        return Err(crate::i18n::tr(
+            "Close all running openOMSI games before cleaning the cache.",
+        ));
     }
     let base = crate::data_dir();
-    let _maintenance = omsi_cfg::cache_activity::maintenance(&base)
-        .ok_or_else(|| crate::i18n::tr("Close all running openOMSI games before cleaning the cache."))?;
+    let _maintenance = omsi_cfg::cache_activity::maintenance(&base).ok_or_else(|| {
+        crate::i18n::tr("Close all running openOMSI games before cleaning the cache.")
+    })?;
     let mut reclaimed_local = 0;
     let mut reclaimed_lan = 0;
     if matches!(scope, "local" | "both") {
-        let u = cache_budget::trim(&base.join("cache"), Kind::Local,
-            if clear { 0 } else { cache_budget::LOCAL_LIMIT });
+        let u = cache_budget::trim(
+            &base.join("cache"),
+            Kind::Local,
+            if clear { 0 } else { cache_budget::LOCAL_LIMIT },
+        );
         reclaimed_local = u.freed;
     }
     if matches!(scope, "lan" | "both") {
-        let u = cache_budget::trim(&base.join("lan-store"), Kind::ClientLan,
-            if clear { 0 } else { cache_budget::LAN_LIMIT });
+        let u = cache_budget::trim(
+            &base.join("lan-store"),
+            Kind::ClientLan,
+            if clear { 0 } else { cache_budget::LAN_LIMIT },
+        );
         reclaimed_lan = u.freed;
     }
     drop(_maintenance);
@@ -71,11 +83,17 @@ pub fn cleanup(scope: &str, clear: bool) -> Result<Status, String> {
 /// The launcher invokes this on regular polls. Disk scanning is throttled, performed
 /// away from the UI thread, and deferred until no registered game is running.
 pub fn automatic_cleanup() {
-    if cfg!(any(target_os = "android", target_os = "ios")) { return; }
+    if cfg!(any(target_os = "android", target_os = "ios")) {
+        return;
+    }
     static LAST: Mutex<Option<Instant>> = Mutex::new(None);
     let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
-    if last.is_some_and(|t| t.elapsed() < Duration::from_secs(120)) { return; }
-    if running() { return; }
+    if last.is_some_and(|t| t.elapsed() < Duration::from_secs(120)) {
+        return;
+    }
+    if running() {
+        return;
+    }
     *last = Some(Instant::now());
     std::thread::spawn(|| {
         // A game might have started since the idle check: cleanup re-checks.

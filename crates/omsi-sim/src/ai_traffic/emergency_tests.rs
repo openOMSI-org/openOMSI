@@ -5,7 +5,7 @@
 
 use super::bus_service::AiTimetable;
 use super::emergency::*;
-use super::scenario_tests::{crossroads, snapshot, street, Fixture};
+use super::scenario_tests::{Fixture, crossroads, snapshot, street};
 use super::*;
 use crate::ai_traffic::setup::RandomTypes;
 use crate::traffic::{Lane, LaneBuilder, LaneKey, TrafficLightController};
@@ -14,9 +14,27 @@ use crate::traffic::{Lane, LaneBuilder, LaneKey, TrafficLightController};
 fn sim(f: &Fixture, mut net: Network, lights: usize) -> TrafficSim {
     net.build_grid();
     net.compute_reach();
-    let random = RandomTypes { types: Vec::new(), groups: Vec::new(), group_curves: false, group_uvg: Vec::new(), uvg_defaults: Vec::new() };
-    let ctls = (0..lights).map(|_| TrafficLightController::new(vec![vec![(6, 1000.0)]], 0.0)).collect();
-    TrafficSim::assemble(&f.dir, net, random, ctls, HashMap::new(), (Vec::new(), Vec::new()), Vec::new(), (1.0, 0), 0)
+    let random = RandomTypes {
+        types: Vec::new(),
+        groups: Vec::new(),
+        group_curves: false,
+        group_uvg: Vec::new(),
+        uvg_defaults: Vec::new(),
+    };
+    let ctls = (0..lights)
+        .map(|_| TrafficLightController::new(vec![vec![(6, 1000.0)]], 0.0))
+        .collect();
+    TrafficSim::assemble(
+        &f.dir,
+        net,
+        random,
+        ctls,
+        HashMap::new(),
+        (Vec::new(), Vec::new()),
+        Vec::new(),
+        (1.0, 0),
+        0,
+    )
 }
 
 /// Light `c` shows `state` from now on (6 green, 0 red).
@@ -26,8 +44,22 @@ fn show(t: &mut TrafficSim, c: usize, state: i32) {
 
 /// A car on `lane` at `s` driving at `v` (not slowed down for being placed), with id `id`.
 fn car(t: &mut TrafficSim, f: &Fixture, lane: usize, s: f32, id: u64, v: f32) -> u64 {
-    let vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
-    t.place_car(vehicle, LaneKind::Street, lane, s, f.ty.clone(), 0x9e37 * id + 1, None, Some(id), Some(v), None);
+    let vehicle = VehicleInstance::new(
+        f.ty.clone(),
+        crate::VehicleHost::new(crate::SimClock::default()),
+    );
+    t.place_car(
+        vehicle,
+        LaneKind::Street,
+        lane,
+        s,
+        f.ty.clone(),
+        0x9e37 * id + 1,
+        None,
+        Some(id),
+        Some(v),
+        None,
+    );
     let c = t.cars.iter_mut().find(|c| c.id == id).unwrap();
     c.fresh = 0.0;
     c.state.speed = v;
@@ -43,15 +75,20 @@ fn siren(t: &mut TrafficSim, f: &Fixture, lane: usize, s: f32, id: u64, v: f32) 
 
 fn set_priority(t: &mut TrafficSim, id: u64, on: bool) {
     let c = t.cars.iter_mut().find(|c| c.id == id).unwrap();
-    c.vehicle.set_engine_var("TrafficPriority", if on { 1.0 } else { 0.0 });
+    c.vehicle
+        .set_engine_var("TrafficPriority", if on { 1.0 } else { 0.0 });
     // (a script that reads the warning has it among its variables)
     if c.vehicle.var("TrafficPriorityWarningNeeded").is_none() {
-        c.vehicle.set_engine_var("TrafficPriorityWarningNeeded", 0.0);
+        c.vehicle
+            .set_engine_var("TrafficPriorityWarningNeeded", 0.0);
     }
 }
 
 fn get(t: &TrafficSim, id: u64) -> &AiCar {
-    t.cars.iter().find(|c| c.id == id).expect("the car is still there")
+    t.cars
+        .iter()
+        .find(|c| c.id == id)
+        .expect("the car is still there")
 }
 
 fn find(t: &TrafficSim, id: u64) -> Option<&AiCar> {
@@ -107,8 +144,15 @@ fn in_middle(c: &AiCar) -> bool {
 
 /// Of the cars `ids`, never two on crossing paths in the middle at once.
 fn one_movement(t: &TrafficSim) -> bool {
-    let middle: Vec<usize> = t.cars.iter().filter(|c| in_middle(c)).map(|c| c.state.lane - 4).collect();
-    middle.iter().all(|a| middle.iter().all(|b| a == b || (a + 2) % 4 == *b))
+    let middle: Vec<usize> = t
+        .cars
+        .iter()
+        .filter(|c| in_middle(c))
+        .map(|c| c.state.lane - 4)
+        .collect();
+    middle
+        .iter()
+        .all(|a| middle.iter().all(|b| a == b || (a + 2) % 4 == *b))
 }
 
 #[test]
@@ -136,13 +180,27 @@ fn only_the_emergency_vehicle_crosses_its_red_and_it_crawls() {
         assert!(any_overlap(&t).is_none());
     }
     assert!(through.is_some(), "the emergency vehicle crossed its red");
-    assert!(fastest_inside <= CRAWL + 0.2, "it crossed the red at {fastest_inside:.1} m/s");
-    assert!(fastest_inside > 2.0, "it did cross ({fastest_inside:.1} m/s)");
+    assert!(
+        fastest_inside <= CRAWL + 0.2,
+        "it crossed the red at {fastest_inside:.1} m/s"
+    );
+    assert!(
+        fastest_inside > 2.0,
+        "it did cross ({fastest_inside:.1} m/s)"
+    );
     for id in [follower, other] {
         let c = get(&t, id);
-        assert!(matches!(c.state.lane, 0 | 2) && c.state.speed < 0.1, "car {id} kept its red (lane {} at {:.1} m/s)", c.state.lane, c.state.speed);
+        assert!(
+            matches!(c.state.lane, 0 | 2) && c.state.speed < 0.1,
+            "car {id} kept its red (lane {} at {:.1} m/s)",
+            c.state.lane,
+            c.state.speed
+        );
     }
-    assert!(t.emergency.reservations.is_empty(), "the junction is let go once it is through");
+    assert!(
+        t.emergency.reservations.is_empty(),
+        "the junction is let go once it is through"
+    );
     // the warning for its script: on while it crossed against the light, gone now
     assert!(warned);
     assert!(find(&t, e).is_none_or(|c| c.vehicle.var("TrafficPriorityWarningNeeded") == Some(0.0)));
@@ -162,7 +220,10 @@ fn on_green_it_crosses_at_its_own_speed() {
             assert!(!t.emergency.crawling(e));
         }
     }
-    assert!(fastest_inside > CRAWL + 2.0, "it crept over a green light ({fastest_inside:.1} m/s)");
+    assert!(
+        fastest_inside > CRAWL + 2.0,
+        "it crept over a green light ({fastest_inside:.1} m/s)"
+    );
 }
 
 #[test]
@@ -177,7 +238,11 @@ fn an_unsignalled_junction_kept_for_it_is_crossed_at_normal_speed_while_the_cros
     let mut cross_out = false;
     for _ in 0..(40.0 / super::fixed_step::SIM_DT) as usize {
         step(&mut t);
-        assert!(one_movement(&t), "two crossing movements in the middle at {:.1} s", t.time);
+        assert!(
+            one_movement(&t),
+            "two crossing movements in the middle at {:.1} s",
+            t.time
+        );
         if let Some(c) = find(&t, e) {
             if c.state.lane == 4 {
                 fastest_inside = fastest_inside.max(c.state.speed);
@@ -187,8 +252,14 @@ fn an_unsignalled_junction_kept_for_it_is_crossed_at_normal_speed_while_the_cros
         cross_waited |= c.state.lane == 3 && c.yielding && c.yield_to == Some(e);
         cross_out |= c.state.lane == 11;
     }
-    assert!(fastest_inside > CRAWL + 2.0, "it crept over a junction without lights ({fastest_inside:.1} m/s)");
-    assert!(cross_waited, "the cross traffic gave way to it at its entry");
+    assert!(
+        fastest_inside > CRAWL + 2.0,
+        "it crept over a junction without lights ({fastest_inside:.1} m/s)"
+    );
+    assert!(
+        cross_waited,
+        "the cross traffic gave way to it at its entry"
+    );
     assert!(cross_out, "and went on once it was through");
 }
 
@@ -204,20 +275,32 @@ fn crossing_traffic_on_green_waits_for_it_and_moves_off_after() {
     let mut cross_in_at = None;
     for k in 0..(50.0 / super::fixed_step::SIM_DT) as usize {
         step(&mut t);
-        assert!(one_movement(&t), "two crossing movements in the middle at {:.1} s", t.time);
+        assert!(
+            one_movement(&t),
+            "two crossing movements in the middle at {:.1} s",
+            t.time
+        );
         assert!(any_overlap(&t).is_none());
         let Some(c) = find(&t, cross) else { break };
         held |= c.state.lane == 1 && c.state.speed < 0.3 && c.yielding;
         if cross_in_at.is_none() && c.state.lane == 5 {
             cross_in_at = Some(k);
         }
-        if e_out_at.is_none() && find(&t, e).is_some_and(|c| c.state.lane == 8 && c.state.s > c.tail + 0.5) {
+        if e_out_at.is_none()
+            && find(&t, e).is_some_and(|c| c.state.lane == 8 && c.state.s > c.tail + 0.5)
+        {
             e_out_at = Some(k);
         }
     }
     assert!(held, "the cross traffic waited at its green");
-    let (e_out, cross_in) = (e_out_at.expect("the emergency vehicle got through"), cross_in_at.expect("the cross traffic moved off again"));
-    assert!(cross_in >= e_out, "the cross traffic went in before the emergency vehicle was out");
+    let (e_out, cross_in) = (
+        e_out_at.expect("the emergency vehicle got through"),
+        cross_in_at.expect("the cross traffic moved off again"),
+    );
+    assert!(
+        cross_in >= e_out,
+        "the cross traffic went in before the emergency vehicle was out"
+    );
 }
 
 #[test]
@@ -234,15 +317,31 @@ fn a_car_already_in_the_junction_clears_it_first() {
         if k < hold {
             hold_still(&mut t, occupant);
         } else if k == hold {
-            t.cars.iter_mut().find(|c| c.id == occupant).unwrap().state.max_speed_kmh = 50.0;
+            t.cars
+                .iter_mut()
+                .find(|c| c.id == occupant)
+                .unwrap()
+                .state
+                .max_speed_kmh = 50.0;
         }
         step(&mut t);
         assert!(any_overlap(&t).is_none(), "bodies met at {:.1} s", t.time);
-        e_waited |= k < hold && get(&t, e).state.speed < 0.2 && t.emergency.reservations.iter().any(|r| r.owner == e);
+        e_waited |= k < hold
+            && get(&t, e).state.speed < 0.2
+            && t.emergency.reservations.iter().any(|r| r.owner == e);
     }
-    assert!(e_waited, "the emergency vehicle waited for the car in the junction");
-    assert!(find(&t, occupant).is_none_or(|c| c.state.lane == 9), "the car in the junction drove out");
-    assert!(find(&t, e).is_none_or(|c| c.state.lane == 8), "the emergency vehicle got through after it");
+    assert!(
+        e_waited,
+        "the emergency vehicle waited for the car in the junction"
+    );
+    assert!(
+        find(&t, occupant).is_none_or(|c| c.state.lane == 9),
+        "the car in the junction drove out"
+    );
+    assert!(
+        find(&t, e).is_none_or(|c| c.state.lane == 8),
+        "the emergency vehicle got through after it"
+    );
 }
 
 #[test]
@@ -255,7 +354,11 @@ fn of_two_emergency_vehicles_the_lower_id_keeps_the_junction() {
         let mut owners: Vec<u64> = Vec::new();
         for _ in 0..(40.0 / super::fixed_step::SIM_DT) as usize {
             step(&mut t);
-            assert!(one_movement(&t), "two crossing movements in the middle at {:.1} s", t.time);
+            assert!(
+                one_movement(&t),
+                "two crossing movements in the middle at {:.1} s",
+                t.time
+            );
             assert!(t.emergency.reservations.len() <= 1, "two kept one junction");
             if let Some(r) = t.emergency.reservations.first() {
                 if owners.last() != Some(&r.owner) {
@@ -263,10 +366,20 @@ fn of_two_emergency_vehicles_the_lower_id_keeps_the_junction() {
                 }
             }
         }
-        assert_eq!(owners.first(), Some(&4), "the lower id first (owners {owners:?})");
-        assert!(owners.len() <= 2, "the junction changed hands back and forth: {owners:?}");
+        assert_eq!(
+            owners.first(),
+            Some(&4),
+            "the lower id first (owners {owners:?})"
+        );
+        assert!(
+            owners.len() <= 2,
+            "the junction changed hands back and forth: {owners:?}"
+        );
         for id in [4, 7] {
-            assert!(find(&t, id).is_none_or(|c| c.state.lane >= 8), "{id} got through");
+            assert!(
+                find(&t, id).is_none_or(|c| c.state.lane >= 8),
+                "{id} got through"
+            );
         }
     }
 }
@@ -282,21 +395,46 @@ fn a_timetable_bus_with_traffic_priority_has_no_active_drive() {
         stops: Vec::new(),
         number: None,
         hof: None,
-        timetable: AiTimetable { line: String::new(), terminus: String::new(), stops: Vec::new() },
+        timetable: AiTimetable {
+            line: String::new(),
+            terminus: String::new(),
+            stops: Vec::new(),
+        },
     };
-    let vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
-    let bus = t.place_car(vehicle, LaneKind::Street, 0, 80.0, f.ty.clone(), 0x77, None, Some(1), Some(8.0), Some(setup));
+    let vehicle = VehicleInstance::new(
+        f.ty.clone(),
+        crate::VehicleHost::new(crate::SimClock::default()),
+    );
+    let bus = t.place_car(
+        vehicle,
+        LaneKind::Street,
+        0,
+        80.0,
+        f.ty.clone(),
+        0x77,
+        None,
+        Some(1),
+        Some(8.0),
+        Some(setup),
+    );
     set_priority(&mut t, bus, true);
     // a car of the random traffic with the same variable is on an active drive
     let e = siren(&mut t, &f, 2, 20.0, 3, 8.0);
     assert!(!active(get(&t, bus)) && active(get(&t, e)));
     for _ in 0..(20.0 / super::fixed_step::SIM_DT) as usize {
         step(&mut t);
-        assert!(get(&t, ahead).make_way.is_none(), "a car made way for the timetable bus");
+        assert!(
+            get(&t, ahead).make_way.is_none(),
+            "a car made way for the timetable bus"
+        );
         assert!(t.emergency.reservations.iter().all(|r| r.owner != bus));
         assert!(!get(&t, bus).state.priority_drive);
     }
-    assert_eq!(get(&t, bus).state.lane, 0, "the timetable bus kept to its red");
+    assert_eq!(
+        get(&t, bus).state.lane,
+        0,
+        "the timetable bus kept to its red"
+    );
 }
 
 #[test]
@@ -313,7 +451,12 @@ fn it_cannot_force_its_way_into_a_full_exit() {
         assert!(any_overlap(&t).is_none());
     }
     let c = get(&t, e);
-    assert!(c.state.lane == 0 && c.state.speed < 0.1, "it went into the junction it could not leave (lane {} s {:.1})", c.state.lane, c.state.s);
+    assert!(
+        c.state.lane == 0 && c.state.speed < 0.1,
+        "it went into the junction it could not leave (lane {} s {:.1})",
+        c.state.lane,
+        c.state.s
+    );
 }
 
 #[test]
@@ -356,11 +499,20 @@ fn the_junction_is_kept_until_its_rear_is_out() {
             9 => x.state.s + x.state.front + 12.0,
             _ => f32::MIN,
         };
-        assert!(front_x < 0.5 || rear_y > -1.75 + 1.5, "the car from the west went into the long rear (front x {front_x:.1}, rear y {rear_y:.1})");
+        assert!(
+            front_x < 0.5 || rear_y > -1.75 + 1.5,
+            "the car from the west went into the long rear (front x {front_x:.1}, rear y {rear_y:.1})"
+        );
     }
-    assert!(kept_while_in, "the junction was let go with the rear still in it");
+    assert!(
+        kept_while_in,
+        "the junction was let go with the rear still in it"
+    );
     assert!(released, "and let go once the rear was out");
-    assert!(get(&t, cross).state.lane != 1, "the car from the west went on after it");
+    assert!(
+        get(&t, cross).state.lane != 1,
+        "the car from the west went on after it"
+    );
 }
 
 #[test]
@@ -368,25 +520,48 @@ fn it_never_crosses_an_occupied_pedestrian_crossing() {
     let f = Fixture::new();
     let mut net = signalled_crossroads(150.0);
     // a footpath of the junction object across the northbound path, 4 m past the middle
-    let mut walk = LaneBuilder::arc(DVec3::new(-10.0, 4.0, 0.0), 90.0, 20.0, 0.0, 0.0, LaneKind::Sidewalk, 2.0);
+    let mut walk = LaneBuilder::arc(
+        DVec3::new(-10.0, 4.0, 0.0),
+        90.0,
+        20.0,
+        0.0,
+        0.0,
+        LaneKind::Sidewalk,
+        2.0,
+    );
     walk.source = 2;
-    walk.key = Some(LaneKey { tile: (0, 0), id: 1, path: 20 });
+    walk.key = Some(LaneKey {
+        tile: (0, 0),
+        id: 1,
+        path: 20,
+    });
     net.lanes.push(walk);
     let walk = net.lanes.len() - 1;
     net.link(1.5);
     let mut t = sim(&f, net, 2);
     show(&mut t, 0, 0);
-    assert!(t.net.walks[4].iter().any(|w| w.0 == walk), "the footpath crosses the path");
+    assert!(
+        t.net.walks[4].iter().any(|w| w.0 == walk),
+        "the footpath crosses the path"
+    );
     t.walkers = vec![(walk, 11.75)];
     let e = siren(&mut t, &f, 0, 90.0, 1, 10.0);
     for _ in 0..(30.0 / super::fixed_step::SIM_DT) as usize {
         step(&mut t);
         let c = get(&t, e);
-        assert!(c.state.lane == 0 || (c.state.lane == 4 && c.state.s + c.state.front < 16.0 - 2.0), "it drove onto the crossing (lane {} s {:.1})", c.state.lane, c.state.s);
+        assert!(
+            c.state.lane == 0 || (c.state.lane == 4 && c.state.s + c.state.front < 16.0 - 2.0),
+            "it drove onto the crossing (lane {} s {:.1})",
+            c.state.lane,
+            c.state.s
+        );
     }
     t.walkers.clear();
     ticks(&mut t, 15.0);
-    assert!(find(&t, e).is_none_or(|c| c.state.lane == 8), "it went on once the crossing was clear");
+    assert!(
+        find(&t, e).is_none_or(|c| c.state.lane == 8),
+        "it went on once the crossing was clear"
+    );
 }
 
 #[test]
@@ -417,10 +592,19 @@ fn no_junction_stays_kept_over_switches_removals_and_network_changes() {
         step(&mut t);
         let sirens: Vec<u64> = t.emergency.sirens.iter().map(|s| s.id).collect();
         for r in &t.emergency.reservations {
-            assert!(sirens.contains(&r.owner), "a junction kept for {} that is no emergency vehicle now", r.owner);
+            assert!(
+                sirens.contains(&r.owner),
+                "a junction kept for {} that is no emergency vehicle now",
+                r.owner
+            );
         }
         assert!(t.emergency.reservations.len() <= sirens.len());
-        assert!(t.emergency.requests.values().all(|r| sirens.contains(&r.from)));
+        assert!(
+            t.emergency
+                .requests
+                .values()
+                .all(|r| sirens.contains(&r.from))
+        );
     }
     for id in [a, c] {
         if find(&t, id).is_some() {
@@ -428,11 +612,17 @@ fn no_junction_stays_kept_over_switches_removals_and_network_changes() {
         }
     }
     step(&mut t);
-    assert!(t.emergency.reservations.is_empty() && t.emergency.requests.is_empty(), "something was left kept");
+    assert!(
+        t.emergency.reservations.is_empty() && t.emergency.requests.is_empty(),
+        "something was left kept"
+    );
     show(&mut t, 0, 6);
     ticks(&mut t, 40.0);
     for id in [a, c, normal] {
-        assert!(find(&t, id).is_none_or(|x| x.state.lane >= 8), "{id} never got through");
+        assert!(
+            find(&t, id).is_none_or(|x| x.state.lane >= 8),
+            "{id} never got through"
+        );
     }
     assert!(t.cars.iter().all(|x| x.make_way.is_none()));
 }
@@ -440,15 +630,28 @@ fn no_junction_stays_kept_over_switches_removals_and_network_changes() {
 /// A road north of `lanes` lanes side by side (3.5 m apart and wide; lane 0 the leftmost),
 /// 600 m long, and a road of its own 14 m to the east of it (the last lane).
 fn carriageway(lanes: usize) -> Network {
-    let mut ls: Vec<Lane> = (0..lanes).map(|k| {
-        let mut l = LaneBuilder::arc(DVec3::new(-3.5 * (lanes - 1 - k) as f64, 0.0, 0.0), 0.0, 600.0, 0.0, 0.0, LaneKind::Street, 3.5);
-        l.width = 3.5;
-        l
-    }).collect();
+    let mut ls: Vec<Lane> = (0..lanes)
+        .map(|k| {
+            let mut l = LaneBuilder::arc(
+                DVec3::new(-3.5 * (lanes - 1 - k) as f64, 0.0, 0.0),
+                0.0,
+                600.0,
+                0.0,
+                0.0,
+                LaneKind::Street,
+                3.5,
+            );
+            l.width = 3.5;
+            l
+        })
+        .collect();
     let mut parallel = street(DVec3::new(14.0, 0.0, 0.0), 0.0, 600.0);
     parallel.width = 3.5;
     ls.push(parallel);
-    let mut net = Network { lanes: ls, ..Default::default() };
+    let mut net = Network {
+        lanes: ls,
+        ..Default::default()
+    };
     net.link(1.5);
     for k in 1..lanes {
         net.lanes[k - 1].right = Some(k);
@@ -476,19 +679,41 @@ fn the_cars_on_its_way_make_way_a_road_beside_does_not() {
         corridor = corridor.min(get(&t, e).state.lateral);
         // within their lanes (3.5 m)
         for c in [o, i] {
-            assert!(c.state.lateral.abs() + c.half_width <= 1.75 + 1e-3, "car {} left its lane ({:.2})", c.id, c.state.lateral);
+            assert!(
+                c.state.lateral.abs() + c.half_width <= 1.75 + 1e-3,
+                "car {} left its lane ({:.2})",
+                c.id,
+                c.state.lateral
+            );
         }
-        assert!(b.make_way.is_none() && b.state.lateral.abs() < 1e-3 && b.state.speed > 7.0, "the road beside reacted");
+        assert!(
+            b.make_way.is_none() && b.state.lateral.abs() < 1e-3 && b.state.speed > 7.0,
+            "the road beside reacted"
+        );
         passed |= get(&t, e).state.s > o.state.s + 20.0;
     }
-    assert!(outer_out > 0.3, "the outer lane moved to the kerb ({outer_out:.2})");
-    assert!(inner_in < -0.3, "the inner lane moved inward ({inner_in:.2})");
-    assert!(corridor < -1.0, "the emergency vehicle took the corridor ({corridor:.2})");
+    assert!(
+        outer_out > 0.3,
+        "the outer lane moved to the kerb ({outer_out:.2})"
+    );
+    assert!(
+        inner_in < -0.3,
+        "the inner lane moved inward ({inner_in:.2})"
+    );
+    assert!(
+        corridor < -1.0,
+        "the emergency vehicle took the corridor ({corridor:.2})"
+    );
     assert!(passed, "it got past them");
     // let go once it has passed: back to the middle and on their way
     for id in [outer, inner] {
         let c = get(&t, id);
-        assert!(c.make_way.is_none() && c.state.lateral.abs() < 0.1 && c.state.speed > 5.0, "car {id} did not go on (lateral {:.2}, {:.1} m/s)", c.state.lateral, c.state.speed);
+        assert!(
+            c.make_way.is_none() && c.state.lateral.abs() < 0.1 && c.state.speed > 5.0,
+            "car {id} did not go on (lateral {:.2}, {:.1} m/s)",
+            c.state.lateral,
+            c.state.speed
+        );
     }
 }
 
@@ -505,7 +730,11 @@ fn moved_aside(lanes: usize, lane: usize, left_hand: bool) -> f32 {
     for _ in 0..(8.0 / super::fixed_step::SIM_DT) as usize {
         step(&mut t);
         let x = get(&t, c);
-        assert!(x.state.lateral.abs() + x.half_width <= 1.75 + 1e-3, "it left its lane ({:.2})", x.state.lateral);
+        assert!(
+            x.state.lateral.abs() + x.half_width <= 1.75 + 1e-3,
+            "it left its lane ({:.2})",
+            x.state.lateral
+        );
         if x.state.lateral.abs() > most.abs() {
             most = x.state.lateral;
         }
@@ -532,11 +761,18 @@ fn the_scenery_can_forbid_the_move_aside_but_not_a_stop() {
     let approach = street(DVec3::ZERO, 0.0, 150.0);
     let mut path = street(DVec3::new(0.0, 150.0, 0.0), 0.0, 20.0);
     path.source = 2;
-    path.key = Some(LaneKey { tile: (0, 0), id: 5, path: 0 });
+    path.key = Some(LaneKey {
+        tile: (0, 0),
+        id: 5,
+        path: 0,
+    });
     path.traffic_light = Some((0, 0));
     let on = street(DVec3::new(0.0, 170.0, 0.0), 0.0, 300.0);
     for wall in [false, true] {
-        let mut net = Network { lanes: vec![approach.clone(), path.clone(), on.clone()], ..Default::default() };
+        let mut net = Network {
+            lanes: vec![approach.clone(), path.clone(), on.clone()],
+            ..Default::default()
+        };
         net.link(1.5);
         let mut t = sim(&f, net, 1);
         show(&mut t, 0, 0);
@@ -545,7 +781,11 @@ fn the_scenery_can_forbid_the_move_aside_but_not_a_stop() {
             t.scenery_probe = Some(Arc::new(|b: &Obb| {
                 let (s, c) = b.heading.sin_cos();
                 let (fwd, right) = (DVec2::new(s, c), DVec2::new(c, -s));
-                [(-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)].iter().any(|&(a, r)| (b.center + right * (a * b.half.x) + fwd * (r * b.half.y)).x > 1.2)
+                [(-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)]
+                    .iter()
+                    .any(|&(a, r)| {
+                        (b.center + right * (a * b.half.x) + fwd * (r * b.half.y)).x > 1.2
+                    })
             }));
         }
         let me = car(&mut t, &f, 0, 100.0, 2, 8.0);
@@ -555,7 +795,11 @@ fn the_scenery_can_forbid_the_move_aside_but_not_a_stop() {
             step(&mut t);
             let c = get(&t, me);
             most = most.max(c.state.lateral);
-            let over = if c.state.lane == 0 { c.state.s + c.state.front - 150.0 } else { 1.0 };
+            let over = if c.state.lane == 0 {
+                c.state.s + c.state.front - 150.0
+            } else {
+                1.0
+            };
             assert!(over <= 0.0, "the red light no longer held it");
         }
         if wall {
@@ -574,17 +818,46 @@ fn roundabout() -> Network {
     let mut lanes = Vec::new();
     let object = |mut l: Lane, path: u16| {
         l.source = 2;
-        l.key = Some(LaneKey { tile: (0, 0), id: 9, path });
+        l.key = Some(LaneKey {
+            tile: (0, 0),
+            id: 9,
+            path,
+        });
         l
     };
     for k in 0..4 {
         let a = -(k as f64) * 90.0;
         let p = DVec3::new(r * a.to_radians().sin(), r * a.to_radians().cos(), 0.0);
-        lanes.push(object(LaneBuilder::arc(p, a - 90.0, r * std::f64::consts::FRAC_PI_2, -r, 0.0, LaneKind::Street, 3.0), k as u16));
+        lanes.push(object(
+            LaneBuilder::arc(
+                p,
+                a - 90.0,
+                r * std::f64::consts::FRAC_PI_2,
+                -r,
+                0.0,
+                LaneKind::Street,
+                3.0,
+            ),
+            k as u16,
+        ));
     }
-    lanes.push(object(LaneBuilder::arc(DVec3::new(-12.0, -27.0, 0.0), 0.0, 12.0 * std::f64::consts::FRAC_PI_2, 12.0, 0.0, LaneKind::Street, 3.0), 4));
+    lanes.push(object(
+        LaneBuilder::arc(
+            DVec3::new(-12.0, -27.0, 0.0),
+            0.0,
+            12.0 * std::f64::consts::FRAC_PI_2,
+            12.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        ),
+        4,
+    ));
     lanes.push(street(DVec3::new(-12.0, -127.0, 0.0), 0.0, 100.0));
-    let mut net = Network { lanes, ..Default::default() };
+    let mut net = Network {
+        lanes,
+        ..Default::default()
+    };
     net.link(1.5);
     net
 }
@@ -601,7 +874,11 @@ fn a_car_on_a_ring_drives_on() {
         let c = get(&t, ring);
         assert!(c.make_way.is_none(), "the ring car stopped to make way");
         if k as f32 * super::fixed_step::SIM_DT > 2.0 {
-            assert!(c.state.speed > 2.0, "the ring car stood in the way ({:.1} m/s)", c.state.speed);
+            assert!(
+                c.state.speed > 2.0,
+                "the ring car stood in the way ({:.1} m/s)",
+                c.state.speed
+            );
         }
         assert!(any_overlap(&t).is_none());
     }
@@ -616,10 +893,16 @@ fn the_speed_bonus_holds_on_an_active_drive_only_and_within_the_vehicle() {
     let f = Fixture::new();
     let mut road = street(DVec3::ZERO, 0.0, 3000.0);
     road.speed_limit_kmh = 50.0;
-    let mut net = Network { lanes: vec![road], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![road],
+        ..Default::default()
+    };
     net.link(1.5);
     let run = |on: bool, max: f32| {
-        let mut n = Network { lanes: net.lanes.clone(), ..Default::default() };
+        let mut n = Network {
+            lanes: net.lanes.clone(),
+            ..Default::default()
+        };
         n.link(1.5);
         let mut t = sim(&f, n, 0);
         let e = car(&mut t, &f, 0, 10.0, 1, 13.0);
@@ -631,16 +914,28 @@ fn the_speed_bonus_holds_on_an_active_drive_only_and_within_the_vehicle() {
     let fast = run(true, 200.0);
     assert!((fast - 75.0).abs() < 1.5, "on a drive at {fast:.1} km/h");
     let capped = run(true, 58.0);
-    assert!(capped < 58.5 && capped > 56.0, "its top speed at {capped:.1} km/h");
+    assert!(
+        capped < 58.5 && capped > 56.0,
+        "its top speed at {capped:.1} km/h"
+    );
     let plain = run(false, 200.0);
-    assert!(plain < 50.0 * 1.15 + 0.5, "without the siren at {plain:.1} km/h");
+    assert!(
+        plain < 50.0 * 1.15 + 0.5,
+        "without the siren at {plain:.1} km/h"
+    );
 }
 
 /// An emergency vehicle and four cars at the crossroads, placed in `order` (with fixed ids).
 fn emergency_crossroads(f: &Fixture, order: &[usize]) -> TrafficSim {
     let mut t = sim(f, signalled_crossroads(150.0), 2);
     show(&mut t, 0, 0);
-    let cars = [(0, 80.0, true), (0, 120.0, false), (1, 110.0, false), (2, 115.0, false), (3, 100.0, false)];
+    let cars = [
+        (0, 80.0, true),
+        (0, 120.0, false),
+        (1, 110.0, false),
+        (2, 115.0, false),
+        (3, 100.0, false),
+    ];
     for &k in order {
         let (lane, s, e) = cars[k];
         if e {
@@ -675,7 +970,10 @@ fn the_warning_is_for_a_vehicle_close_ahead_not_one_far_off() {
     let f = Fixture::new();
     let mut road = street(DVec3::ZERO, 0.0, 1000.0);
     road.speed_limit_kmh = 50.0;
-    let mut net = Network { lanes: vec![road], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![road],
+        ..Default::default()
+    };
     net.link(1.5);
     let mut t = sim(&f, net, 0);
     let e = siren(&mut t, &f, 0, 100.0, 1, 0.0);
@@ -685,19 +983,33 @@ fn the_warning_is_for_a_vehicle_close_ahead_not_one_far_off() {
         hold_still(&mut t, ahead);
         step(&mut t);
     }
-    assert_eq!(get(&t, e).vehicle.var("TrafficPriorityWarningNeeded"), Some(0.0), "a car 95 m ahead");
+    assert_eq!(
+        get(&t, e).vehicle.var("TrafficPriorityWarningNeeded"),
+        Some(0.0),
+        "a car 95 m ahead"
+    );
     t.cars.iter_mut().find(|c| c.id == ahead).unwrap().state.s = 140.0;
     for _ in 0..10 {
         hold_still(&mut t, e);
         hold_still(&mut t, ahead);
         step(&mut t);
     }
-    assert_eq!(get(&t, e).vehicle.var("TrafficPriorityWarningNeeded"), Some(1.0), "a car 35 m ahead");
+    assert_eq!(
+        get(&t, e).vehicle.var("TrafficPriorityWarningNeeded"),
+        Some(1.0),
+        "a car 35 m ahead"
+    );
 }
 
 /// A road with a lane each way: lane 0 north along x = 0, lane 1 south 3.5 m to the west.
 fn two_way() -> Network {
-    let mut net = Network { lanes: vec![street(DVec3::ZERO, 0.0, 1500.0), street(DVec3::new(-3.5, 1500.0, 0.0), 180.0, 1500.0)], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![
+            street(DVec3::ZERO, 0.0, 1500.0),
+            street(DVec3::new(-3.5, 1500.0, 0.0), 180.0, 1500.0),
+        ],
+        ..Default::default()
+    };
     net.link(1.5);
     net
 }
@@ -715,13 +1027,21 @@ fn it_goes_round_a_car_making_way_but_waits_for_the_oncoming_traffic() {
         for k in 0..(60.0 / super::fixed_step::SIM_DT) as usize {
             let secs = k as f32 * super::fixed_step::SIM_DT;
             // a stream of cars coming the other way for the first 25 s
-            if oncoming && secs < 25.0 && !t.cars.iter().any(|c| c.state.lane == 1 && c.state.s < 1270.0) {
+            if oncoming
+                && secs < 25.0
+                && !t
+                    .cars
+                    .iter()
+                    .any(|c| c.state.lane == 1 && c.state.s < 1270.0)
+            {
                 car(&mut t, &f, 1, 1240.0, next_id, 11.0);
                 next_id += 1;
             }
             step(&mut t);
             assert!(any_overlap(&t).is_none(), "bodies met at {secs:.1} s");
-            let (Some(c), Some(x)) = (find(&t, e), find(&t, slow)) else { break };
+            let (Some(c), Some(x)) = (find(&t, e), find(&t, slow)) else {
+                break;
+            };
             made_way |= x.make_way.is_some_and(|w| w.from == e);
             if past_at.is_none() && c.state.s - c.state.rear > x.state.s + x.state.front {
                 past_at = Some(secs);
@@ -730,7 +1050,10 @@ fn it_goes_round_a_car_making_way_but_waits_for_the_oncoming_traffic() {
         assert!(made_way, "the slow car made way");
         let past = past_at.expect("the emergency vehicle got past");
         if oncoming {
-            assert!(past > 25.0, "it went round while the other lane's traffic came ({past:.1} s)");
+            assert!(
+                past > 25.0,
+                "it went round while the other lane's traffic came ({past:.1} s)"
+            );
         } else {
             assert!(past < 25.0, "it took {past:.1} s to get past");
         }
@@ -756,7 +1079,11 @@ fn the_players_and_a_lan_players_emergency_vehicles_are_made_way_for() {
             }
             moved = moved.max(get(&t, c).state.lateral);
         }
-        let from = if lan { lan_siren_id(5) } else { super::stats::WAITS_ON_PLAYER };
+        let from = if lan {
+            lan_siren_id(5)
+        } else {
+            super::stats::WAITS_ON_PLAYER
+        };
         assert_eq!(get(&t, c).make_way.map(|w| w.from), Some(from));
         assert!(moved > 0.3, "it moved to the kerb ({moved:.2})");
     }
@@ -786,10 +1113,21 @@ fn a_standing_emergency_vehicle_does_not_keep_the_junction() {
     }
     assert!(kept, "the junction was kept for it while it came");
     let at = through_at.expect("the cross traffic went on its green");
-    assert!(at < STANDING_LETS_GO + 15.0, "the cross traffic waited for a standing emergency vehicle until {at:.1} s");
-    assert!(t.emergency.reservations.is_empty(), "a junction is still kept for one that stands");
+    assert!(
+        at < STANDING_LETS_GO + 15.0,
+        "the cross traffic waited for a standing emergency vehicle until {at:.1} s"
+    );
+    assert!(
+        t.emergency.reservations.is_empty(),
+        "a junction is still kept for one that stands"
+    );
     // it moves again: the junction is kept for it again
-    t.cars.iter_mut().find(|c| c.id == e).unwrap().state.max_speed_kmh = 50.0;
+    t.cars
+        .iter_mut()
+        .find(|c| c.id == e)
+        .unwrap()
+        .state
+        .max_speed_kmh = 50.0;
     show(&mut t, 0, 6);
     let mut again = false;
     for _ in 0..(10.0 / super::fixed_step::SIM_DT) as usize {
@@ -808,7 +1146,10 @@ fn a_car_whose_way_meets_nothing_of_its_way_is_not_held() {
     let e = siren(&mut t, &f, 0, 110.0, 1, 6.0);
     // from the north, straight on south (lane 6 runs beside lane 4 the other way)
     let oncoming = car(&mut t, &f, 2, 120.0, 2, 6.0);
-    assert!(!t.net.crossings[4].iter().any(|c| c.other == 6), "the scene's two ways do not meet");
+    assert!(
+        !t.net.crossings[4].iter().any(|c| c.other == 6),
+        "the scene's two ways do not meet"
+    );
     let mut held = false;
     for _ in 0..(15.0 / super::fixed_step::SIM_DT) as usize {
         step(&mut t);
@@ -816,5 +1157,8 @@ fn a_car_whose_way_meets_nothing_of_its_way_is_not_held() {
             held |= find(&t, oncoming).is_some_and(|c| c.yield_to == Some(e));
         }
     }
-    assert!(!held, "the oncoming car waited for the emergency vehicle's junction");
+    assert!(
+        !held,
+        "the oncoming car waited for the emergency vehicle's junction"
+    );
 }

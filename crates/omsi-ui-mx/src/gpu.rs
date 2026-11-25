@@ -131,18 +131,19 @@ pub struct Draw {
 struct Uniform {
     view_proj: [[f32; 4]; 4],
     viewport: [f32; 4],
-    target: [f32; 4],
+    target: [f32; 3],
+    tex: u32,
     clip: [f32; 4],
-    params: [f32; 4],
+    params: [f32; 3],
+    smp: u32,
 }
 
-const SLOT: u64 = 256;
 const DEPTH_FORMAT: mx::TextureFormat = mx::TextureFormat::Depth24PlusStencil8;
-const MAX_LAYERS: u64 = 256;
 
 struct Tex {
     texture: Option<mx::Texture>,
-    group: mx::BindGroup,
+    /// (held for its index in the heap)
+    view: mx::TextureView,
     size: (u32, u32),
 }
 
@@ -162,9 +163,6 @@ pub struct Gpu {
     pipeline_depth: Option<mx::RenderPipeline>,
     pipeline_shadow: Option<mx::RenderPipeline>,
     depth: Option<(mx::TextureView, u32, u32)>,
-    uniform: mx::Buffer,
-    /// One bind group per layer, each on its slot of `uniform` (made when first drawn).
-    uniform_groups: Vec<mx::BindGroup>,
     sampler: mx::Sampler,
     /// The vertex buffers and their capacity (None: making it failed; tried again next upload).
     buffers: Vec<(Option<mx::Buffer>, u64)>,
@@ -293,13 +291,6 @@ impl Gpu {
             with_depth.then(|| make_pipeline(Some(depth_state(true, Default::default()))));
         let pipeline_shadow =
             with_depth.then(|| make_pipeline(Some(depth_state(false, shadow_stencil))));
-        let uniform = device
-            .create_buffer(&mx::BufferDescriptor {
-                label: Some("omsi-ui uniform"),
-                size: SLOT * MAX_LAYERS,
-                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
-            })
-            .expect("mX: a buffer");
         let sampler = device
             .create_sampler(&mx::SamplerDescriptor {
                 label: Some("omsi-ui"),
@@ -316,8 +307,6 @@ impl Gpu {
             pipeline_depth,
             pipeline_shadow,
             depth: None,
-            uniform,
-            uniform_groups: Vec::new(),
             sampler,
             buffers: Vec::new(),
             packed: Vec::new(),
@@ -364,29 +353,12 @@ impl Gpu {
         let view = texture
             .create_view(&Default::default())
             .expect("mX: a texture view");
-        let group = self.group(device, &view);
         self.textures.push(Some(Tex {
             texture: Some(texture),
-            group,
+            view,
             size: (w, h),
         }));
         self.textures.len() - 1
-    }
-
-    fn group(&self, device: &mx::Device, view: &mx::TextureView) -> mx::BindGroup {
-        device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("omsi-ui texture"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: mx::BindingResource::TextureView(view),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        })
     }
 
     fn write(queue: &mx::Queue, t: &mx::Texture, stride_w: u32, r: [u32; 4], rgba: &[u8]) {
@@ -468,14 +440,13 @@ impl Gpu {
     /// A texture drawn elsewhere (a render target) to draw with; returns its index.
     pub fn add_view(
         &mut self,
-        device: &mx::Device,
+        _device: &mx::Device,
         view: &mx::TextureView,
         size: (u32, u32),
     ) -> usize {
-        let group = self.group(device, view);
         self.textures.push(Some(Tex {
             texture: None,
-            group,
+            view: view.clone(),
             size,
         }));
         self.textures.len() - 1
@@ -484,16 +455,15 @@ impl Gpu {
     /// Point `id` at another view (a render target made anew at another size).
     pub fn set_view(
         &mut self,
-        device: &mx::Device,
+        _device: &mx::Device,
         id: usize,
         view: &mx::TextureView,
         size: (u32, u32),
     ) {
-        let group = self.group(device, view);
         if let Some(slot) = self.textures.get_mut(id) {
             *slot = Some(Tex {
                 texture: None,
-                group,
+                view: view.clone(),
                 size,
             });
         }
@@ -532,11 +502,10 @@ impl Gpu {
             let view = texture
                 .create_view(&Default::default())
                 .expect("mX: a texture view");
-            let group = self.group(&device, &view);
             if let Some(slot) = self.textures.first_mut() {
                 *slot = Some(Tex {
                     texture: Some(texture),
-                    group,
+                    view,
                     size: (size, size),
                 });
             }
@@ -690,7 +659,7 @@ impl Gpu {
     pub fn render(
         &mut self,
         device: &mx::Device,
-        queue: &mx::Queue,
+        _queue: &mx::Queue,
         encoder: &mut mx::CommandEncoder,
         target: &mx::TextureView,
         size: (u32, u32),
@@ -699,46 +668,6 @@ impl Gpu {
         draws: &[Draw],
     ) {
         let (w, h) = (size.0.max(1), size.1.max(1));
-        // the layers' uniforms
-        let mut data = vec![0u8; (SLOT * MAX_LAYERS) as usize];
-        for (k, l) in layers.iter().take(MAX_LAYERS as usize).enumerate() {
-            let vp = if l.viewport[2] > 0.0 {
-                l.viewport
-            } else {
-                [0.0, 0.0, w as f32, h as f32]
-            };
-            let u = Uniform {
-                view_proj: l.view_proj.to_cols_array_2d(),
-                viewport: vp,
-                target: [w as f32, h as f32, l.height, 0.0],
-                clip: l.clip,
-                params: [l.radius, l.opacity, l.px_scale, 0.0],
-            };
-            let at = k * SLOT as usize;
-            data[at..at + std::mem::size_of::<Uniform>()].copy_from_slice(bytemuck::bytes_of(&u));
-        }
-        queue
-            .write_buffer(
-                &self.uniform,
-                0,
-                &data[..(SLOT as usize * layers.len().clamp(1, MAX_LAYERS as usize))],
-            )
-            .expect("mX: a queue write");
-        while self.uniform_groups.len() < layers.len().min(MAX_LAYERS as usize) {
-            let at = self.uniform_groups.len() as u64 * SLOT;
-            self.uniform_groups
-                .push(device.create_bind_group(&mx::BindGroupDescriptor {
-                    label: Some("omsi-ui uniform"),
-                    entries: &[mx::BindGroupEntry {
-                        binding: 0,
-                        resource: mx::BindingResource::Buffer(mx::BufferBinding {
-                            buffer: &self.uniform,
-                            offset: at,
-                            size: Some(std::mem::size_of::<Uniform>() as u64),
-                        }),
-                    }],
-                }));
-        }
         if self.samples > 1
             && self
                 .msaa
@@ -818,7 +747,7 @@ impl Gpu {
             let Some(Some(tex)) = self.textures.get(d.texture) else {
                 continue;
             };
-            if d.range.is_empty() || d.layer as usize >= self.uniform_groups.len() {
+            if d.range.is_empty() {
                 continue;
             }
             let want = match (&self.pipeline_depth, &self.pipeline_shadow) {
@@ -839,8 +768,22 @@ impl Gpu {
                 continue;
             }
             state = None;
-            pass.set_bind_group(0, &self.uniform_groups[d.layer as usize]);
-            pass.set_bind_group(1, &tex.group);
+            // the layer's numbers and the picture's place in the heap
+            let vp = if l.viewport[2] > 0.0 {
+                l.viewport
+            } else {
+                [0.0, 0.0, w as f32, h as f32]
+            };
+            let u = Uniform {
+                view_proj: l.view_proj.to_cols_array_2d(),
+                viewport: vp,
+                target: [w as f32, h as f32, l.height],
+                tex: tex.view.index(),
+                clip: l.clip,
+                params: [l.radius, l.opacity, l.px_scale],
+                smp: self.sampler.index(),
+            };
+            pass.set_immediates(0, bytemuck::bytes_of(&u));
             // A flat layer's `viewport` is the size its pixels are laid out in (an interface in
             // logical pixels): drawn over the whole target, scaled to it. As the rasteriser's
             // viewport it squeezed an interface zoomed by 1.1 into the top-left 90 % of the
@@ -937,7 +880,13 @@ mod tests {
 
     #[test]
     fn shader_validates() {
-        let m = naga::front::wgsl::parse_str(include_str!("ui.wgsl")).expect("parse");
+        // (with the heap's arrays mX declares for it)
+        let src = format!(
+            "enable wgpu_binding_array; {}\n{}",
+            include_str!("ui.wgsl"),
+            mx::PRELUDE
+        );
+        let m = naga::front::wgsl::parse_str(&src).expect("parse");
         naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
             naga::valid::Capabilities::all(),

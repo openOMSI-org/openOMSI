@@ -9,4 +9,6 @@ pub mod engine;
 pub mod jitter;
 pub mod mutes;
 
-pub use engine::{Channel, Core, Frame, Mode, NewStream, Outgoing, Settings, Status, Talker, Voice};
+pub use engine::{
+    Channel, Core, Frame, Mode, NewStream, Outgoing, Settings, Status, Talker, Voice,
+};

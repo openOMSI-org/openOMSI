@@ -75,7 +75,13 @@ pub fn blocked(me: &Footprint, occupied: &[Footprint]) -> bool {
 
 /// A point `d` metres along the lanes from (`lane`, `s`), following the links (or the
 /// straight continuation where there are none), with the heading there.
-pub fn along(lanes: &[Lane], prev: &[Vec<usize>], lane: usize, s: f32, d: f32) -> Option<(DVec3, f32)> {
+pub fn along(
+    lanes: &[Lane],
+    prev: &[Vec<usize>],
+    lane: usize,
+    s: f32,
+    d: f32,
+) -> Option<(DVec3, f32)> {
     let mut li = lane;
     let mut s = s + d;
     for _ in 0..16 {

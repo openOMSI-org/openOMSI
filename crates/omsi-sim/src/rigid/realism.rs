@@ -21,7 +21,8 @@ const SEA_LEVEL_PRESSURE: f32 = 101_325.0;
 /// Air density (kg/m³) at `temp_c` degrees and `altitude` metres above sea level (ISA
 /// pressure): 1.20 at 20 °C, 1.29 at freezing.
 pub fn air_density(temp_c: f32, altitude: f32) -> f32 {
-    let p = SEA_LEVEL_PRESSURE * (1.0 - 2.255_77e-5 * altitude.clamp(-400.0, 4000.0)).powf(5.255_88);
+    let p =
+        SEA_LEVEL_PRESSURE * (1.0 - 2.255_77e-5 * altitude.clamp(-400.0, 4000.0)).powf(5.255_88);
     p / (GAS_CONSTANT * (temp_c.clamp(-60.0, 60.0) + 273.15))
 }
 
@@ -47,14 +48,21 @@ impl Aero {
     /// 0.55-0.75 measured on city buses). The frontal area is the box less the ground
     /// clearance and the rounded top corners; the side area the length times the same.
     pub fn of(size: Option<[f32; 3]>, mass_kg: f32) -> Aero {
-        let [width, length, height] = size.filter(|s| s.iter().all(|x| x.is_finite() && *x > 0.3)).unwrap_or(if mass_kg >= 6000.0 {
-            [2.5, (mass_kg / 1000.0).clamp(6.0, 18.0) + 2.0, 3.0]
-        } else {
-            [1.8, 4.5, 1.5]
-        });
+        let [width, length, height] = size
+            .filter(|s| s.iter().all(|x| x.is_finite() && *x > 0.3))
+            .unwrap_or(if mass_kg >= 6000.0 {
+                [2.5, (mass_kg / 1000.0).clamp(6.0, 18.0) + 2.0, 3.0]
+            } else {
+                [1.8, 4.5, 1.5]
+            });
         let body = (height - 0.25).max(0.5);
         let cd = 0.30 + 0.35 * ((height - 1.5) / 1.5).clamp(0.0, 1.0);
-        Aero { cd_a: cd * width * body * 0.92, cs_a: 0.9 * length * body * 0.9, lever: 0.1 * height, arm: 0.05 * length }
+        Aero {
+            cd_a: cd * width * body * 0.92,
+            cs_a: 0.9 * length * body * 0.9,
+            lever: 0.1 * height,
+            arm: 0.05 * length,
+        }
     }
 }
 
@@ -108,7 +116,11 @@ impl Surface {
     /// RMS height (m) of the unevenness between the wavelengths a tyre follows
     /// ([`WAVE_MIN`] to [`WAVE_MAX`]), without a concrete road's joints.
     pub fn rms(&self) -> f32 {
-        components(self.gd).iter().map(|c| 0.5 * c.amp * c.amp).sum::<f32>().sqrt()
+        components(self.gd)
+            .iter()
+            .map(|c| 0.5 * c.amp * c.amp)
+            .sum::<f32>()
+            .sqrt()
     }
 }
 
@@ -120,14 +132,54 @@ pub fn surface(id: u8) -> Surface {
     // 0.012 on sett pavement, 0.03 on earth, 0.035 on grass, 0.02 on gravel, 0.025 on snow
     // and 0.06 in deep snow)
     match id {
-        1 => Surface { grip_dry: 1.0, grip_wet: 1.0, rolling: 1.0, gd: 90e-6 },
-        2 => Surface { grip_dry: 0.78, grip_wet: 0.74, rolling: 1.5, gd: 900e-6 },
-        3 => Surface { grip_dry: 0.72, grip_wet: 0.6, rolling: 3.5, gd: 1800e-6 },
-        4 => Surface { grip_dry: 0.5, grip_wet: 0.45, rolling: 4.0, gd: 3000e-6 },
-        5 => Surface { grip_dry: 0.68, grip_wet: 0.72, rolling: 2.5, gd: 1500e-6 },
-        6 => Surface { grip_dry: 0.35, grip_wet: 0.35, rolling: 3.0, gd: 400e-6 },
-        7 => Surface { grip_dry: 0.3, grip_wet: 0.3, rolling: 7.0, gd: 1200e-6 },
-        _ => Surface { grip_dry: 1.0, grip_wet: 1.0, rolling: 1.0, gd: 25e-6 },
+        1 => Surface {
+            grip_dry: 1.0,
+            grip_wet: 1.0,
+            rolling: 1.0,
+            gd: 90e-6,
+        },
+        2 => Surface {
+            grip_dry: 0.78,
+            grip_wet: 0.74,
+            rolling: 1.5,
+            gd: 900e-6,
+        },
+        3 => Surface {
+            grip_dry: 0.72,
+            grip_wet: 0.6,
+            rolling: 3.5,
+            gd: 1800e-6,
+        },
+        4 => Surface {
+            grip_dry: 0.5,
+            grip_wet: 0.45,
+            rolling: 4.0,
+            gd: 3000e-6,
+        },
+        5 => Surface {
+            grip_dry: 0.68,
+            grip_wet: 0.72,
+            rolling: 2.5,
+            gd: 1500e-6,
+        },
+        6 => Surface {
+            grip_dry: 0.35,
+            grip_wet: 0.35,
+            rolling: 3.0,
+            gd: 400e-6,
+        },
+        7 => Surface {
+            grip_dry: 0.3,
+            grip_wet: 0.3,
+            rolling: 7.0,
+            gd: 1200e-6,
+        },
+        _ => Surface {
+            grip_dry: 1.0,
+            grip_wet: 1.0,
+            rolling: 1.0,
+            gd: 25e-6,
+        },
     }
 }
 
@@ -157,7 +209,9 @@ pub fn rolling_scale(id: u8, speed: f32, load_ratio: f32) -> f32 {
 
 /// A hashed value in -1..1 (splitmix64).
 fn hash(i: i64, seed: u32) -> f32 {
-    let mut z = (i as u64).wrapping_add((seed as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)).wrapping_add(0x9e37_79b9_7f4a_7c15);
+    let mut z = (i as u64)
+        .wrapping_add((seed as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15))
+        .wrapping_add(0x9e37_79b9_7f4a_7c15);
     z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
     z ^= z >> 31;
@@ -195,7 +249,12 @@ fn components(gd: f32) -> [Component; COMPONENTS] {
         let dn = n * step;
         let g = gd * (n / 0.1).powi(-2);
         let coherence = 1.0 / (1.0 + (n / 0.12).powi(2));
-        Component { n, amp: (2.0 * g * dn).sqrt(), phase: std::f32::consts::PI * hash(i as i64, 11), apart: std::f32::consts::PI * hash(i as i64, 29) * (1.0 - coherence) }
+        Component {
+            n,
+            amp: (2.0 * g * dn).sqrt(),
+            phase: std::f32::consts::PI * hash(i as i64, 11),
+            apart: std::f32::consts::PI * hash(i as i64, 29) * (1.0 - coherence),
+        }
     })
 }
 
@@ -218,7 +277,8 @@ pub fn roughness(id: u8, s: f64, side: u8) -> f32 {
     for c in set {
         // (the phase from the position modulo the wavelength, exact in f64 at kilometres)
         let cycles = (s * c.n as f64).rem_euclid(1.0) as f32;
-        let phase = std::f32::consts::TAU * cycles + c.phase + if side == 0 { 0.0 } else { c.apart };
+        let phase =
+            std::f32::consts::TAU * cycles + c.phase + if side == 0 { 0.0 } else { c.apart };
         z += c.amp * phase.cos();
     }
     if id == 1 {
@@ -260,14 +320,22 @@ mod tests {
         // a file without a size is sized by its mass
         assert!(Aero::of(None, 12_000.0).cd_a > Aero::of(None, 1_200.0).cd_a * 4.0);
         // and a size that is no number does not poison the force
-        assert!(Aero::of(Some([f32::NAN, 12.0, 3.0]), 12_000.0).cd_a.is_finite());
+        assert!(
+            Aero::of(Some([f32::NAN, 12.0, 3.0]), 12_000.0)
+                .cd_a
+                .is_finite()
+        );
     }
 
     #[test]
     fn drag_follows_the_square_of_the_speed_and_the_wind() {
         let a = Aero::of(Some([2.55, 12.0, 3.0]), 12_000.0);
         let rho = 1.2;
-        let at = |v: f32, wind: f32| air_force(&a, rho, Vec3::new(0.0, v, 0.0), Vec3::new(0.0, wind, 0.0)).0.y;
+        let at = |v: f32, wind: f32| {
+            air_force(&a, rho, Vec3::new(0.0, v, 0.0), Vec3::new(0.0, wind, 0.0))
+                .0
+                .y
+        };
         // 80 km/h in still air: ½ ρ CdA v² = 1.5-1.6 kN on a 12 m bus
         let f80 = at(22.2, 0.0);
         assert!(f80 < -1200.0 && f80 > -1900.0, "{f80}");
@@ -283,10 +351,18 @@ mod tests {
         // wind from the right (blowing towards -x of the body frame... the body is moving
         // at 20 m/s and the wind blows 15 m/s towards the left): relative air comes from the
         // right and the force pushes left
-        let (f, t) = air_force(&a, 1.2, Vec3::new(0.0, 20.0, 0.0), Vec3::new(-15.0, 0.0, 0.0));
+        let (f, t) = air_force(
+            &a,
+            1.2,
+            Vec3::new(0.0, 20.0, 0.0),
+            Vec3::new(-15.0, 0.0, 0.0),
+        );
         assert!(f.x < -2000.0, "push {}", f.x);
         assert!(t.y < 0.0, "roll {}", t.y);
-        assert!(t.z > 0.0, "the centre of pressure ahead turns the bus into the wind (to the left here)");
+        assert!(
+            t.z > 0.0,
+            "the centre of pressure ahead turns the bus into the wind (to the left here)"
+        );
         assert!(f.y < 0.0);
         assert_eq!(air_force(&a, 1.2, Vec3::ZERO, Vec3::ZERO).0, Vec3::ZERO);
     }
@@ -299,11 +375,26 @@ mod tests {
         let (f, t) = wind_force(&a, SCRIPT_DENSITY, v, Vec3::ZERO);
         assert!(f.length() < 1e-3 && t.length() < 1e-3, "{f:?}");
         // a headwind and a thicker air add, a tailwind takes off
-        assert!(wind_force(&a, SCRIPT_DENSITY, v, Vec3::new(0.0, -10.0, 0.0)).0.y < -500.0);
-        assert!(wind_force(&a, SCRIPT_DENSITY, v, Vec3::new(0.0, 10.0, 0.0)).0.y > 500.0);
+        assert!(
+            wind_force(&a, SCRIPT_DENSITY, v, Vec3::new(0.0, -10.0, 0.0))
+                .0
+                .y
+                < -500.0
+        );
+        assert!(
+            wind_force(&a, SCRIPT_DENSITY, v, Vec3::new(0.0, 10.0, 0.0))
+                .0
+                .y
+                > 500.0
+        );
         assert!(wind_force(&a, 1.32, v, Vec3::ZERO).0.y < -50.0);
         // a crosswind pushes
-        assert!(wind_force(&a, SCRIPT_DENSITY, v, Vec3::new(-15.0, 0.0, 0.0)).0.x < -2000.0);
+        assert!(
+            wind_force(&a, SCRIPT_DENSITY, v, Vec3::new(-15.0, 0.0, 0.0))
+                .0
+                .x
+                < -2000.0
+        );
     }
 
     #[test]
@@ -330,7 +421,9 @@ mod tests {
     /// RMS of the road a tyre follows over a long run (5 km, to take in the longest waves).
     fn rms_of(id: u8) -> f32 {
         let n = 400_000;
-        let sum: f64 = (0..n).map(|i| roughness(id, i as f64 * 0.0125 + 3.1, 0).powi(2) as f64).sum();
+        let sum: f64 = (0..n)
+            .map(|i| roughness(id, i as f64 * 0.0125 + 3.1, 0).powi(2) as f64)
+            .sum();
         (sum / n as f64).sqrt() as f32
     }
 
@@ -338,15 +431,34 @@ mod tests {
     fn roughness_has_the_rms_of_its_surface() {
         for id in [0u8, 2, 3, 4, 5, 6, 7] {
             let (got, want) = (rms_of(id), surface(id).rms());
-            assert!((got / want - 1.0).abs() < 0.1, "surface {id}: {got} against {want}");
+            assert!(
+                (got / want - 1.0).abs() < 0.1,
+                "surface {id}: {got} against {want}"
+            );
         }
         // the figures of the standard: good asphalt a few millimetres over thirty metres of
         // wavelength, cobbles a centimetre or two, a meadow three
-        assert!(surface(0).rms() > 0.002 && surface(0).rms() < 0.005, "{}", surface(0).rms());
-        assert!(surface(2).rms() > 0.010 && surface(2).rms() < 0.025, "{}", surface(2).rms());
-        assert!(surface(4).rms() > 0.025 && surface(4).rms() < 0.045, "{}", surface(4).rms());
+        assert!(
+            surface(0).rms() > 0.002 && surface(0).rms() < 0.005,
+            "{}",
+            surface(0).rms()
+        );
+        assert!(
+            surface(2).rms() > 0.010 && surface(2).rms() < 0.025,
+            "{}",
+            surface(2).rms()
+        );
+        assert!(
+            surface(4).rms() > 0.025 && surface(4).rms() < 0.045,
+            "{}",
+            surface(4).rms()
+        );
         // concrete adds its joints to the surface's own unevenness
-        assert!(rms_of(1) > surface(1).rms() && rms_of(1) < surface(1).rms() * 1.6, "{}", rms_of(1));
+        assert!(
+            rms_of(1) > surface(1).rms() && rms_of(1) < surface(1).rms() * 1.6,
+            "{}",
+            rms_of(1)
+        );
     }
 
     #[test]
@@ -387,7 +499,15 @@ mod tests {
         let after = slab_joints(5.2);
         assert!((after - before).abs() <= 0.006);
         assert!((slab_joints(5.0) - slab_joints(4.999)).abs() < 1e-4);
-        let steps = (1..60).filter(|k| (slab_joints(*k as f64 * 5.0 + 0.3) - slab_joints(*k as f64 * 5.0 - 0.3)).abs() > 0.001).count();
-        assert!(steps > 30, "{steps} of 59 joints step by more than a millimetre");
+        let steps = (1..60)
+            .filter(|k| {
+                (slab_joints(*k as f64 * 5.0 + 0.3) - slab_joints(*k as f64 * 5.0 - 0.3)).abs()
+                    > 0.001
+            })
+            .count();
+        assert!(
+            steps > 30,
+            "{steps} of 59 joints step by more than a millimetre"
+        );
     }
 }

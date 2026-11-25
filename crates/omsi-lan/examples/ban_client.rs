@@ -18,8 +18,16 @@ fn main() {
     let machine = a.next().expect("machine");
     let secs: u64 = a.next().and_then(|s| s.parse().ok()).unwrap_or(30);
     unsafe { std::env::set_var("OMSI_NO_BRIDGE", "1") };
-    let mut lan = LanSession::join(&format!("127.0.0.1:{port}"), &name, WorldInfo::default(), Duration::from_millis(10)).expect("a socket");
-    lan.hardware_id = Some(omsi_lan::bans::derive_hardware_id(&format!("demo-{machine}")));
+    let mut lan = LanSession::join(
+        &format!("127.0.0.1:{port}"),
+        &name,
+        WorldInfo::default(),
+        Duration::from_millis(10),
+    )
+    .expect("a socket");
+    lan.hardware_id = Some(omsi_lan::bans::derive_hardware_id(&format!(
+        "demo-{machine}"
+    )));
     let start = Instant::now();
     let mut joined = false;
     while start.elapsed() < Duration::from_secs(secs) {

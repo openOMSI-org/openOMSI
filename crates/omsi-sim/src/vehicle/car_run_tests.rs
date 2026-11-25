@@ -601,7 +601,8 @@ fn ai_train_couplings_hide_inner_tail_lights_and_light_the_last_car() {
     );
 }
 
-// the rear cab's BKK FUTAR says its stops with (T.F.x), and looks them up by $.yard
+// the rear cab's BKK FUTAR says its stops with (T.F.x), and looks them up by $.yard; a
+// blank file is passed on too, as it frees the entry (0x74f2e8 -> 0x75030c)
 #[test]
 fn a_car_keeps_its_file_sounds_and_takes_the_new_yard() {
     let mut lead = VehicleInstance::new(
@@ -619,7 +620,10 @@ fn a_car_keeps_its_file_sounds_and_takes_the_new_yard() {
     run.frame(&mut lead, [1.0, 0.0, 0.0], None, &mut Vec::new());
     assert_eq!(
         run.take_fired_files(),
-        vec![("ev_mp3".to_string(), "a.wav".to_string())]
+        vec![
+            ("ev_mp3".to_string(), "a.wav".to_string()),
+            ("ev_mp3".to_string(), " ".to_string()),
+        ]
     );
     assert!(run.take_fired_files().is_empty());
     run.set_str_var("yard", "Budafok 141-250");
@@ -740,9 +744,17 @@ fn a_rear_cabs_switch_is_saved_and_taken_back() {
     let saved = v.car_states();
     assert_eq!(saved.len(), 1);
     assert_eq!(saved[0].car, 0);
-    assert!(saved[0].vars.iter().any(|(n, x)| n.eq_ignore_ascii_case("SLW_x") && *x == 5.0));
     assert!(
-        !saved[0].vars.iter().any(|(n, _)| n.eq_ignore_ascii_case("SLR_x")),
+        saved[0]
+            .vars
+            .iter()
+            .any(|(n, x)| n.eq_ignore_ascii_case("SLW_x") && *x == 5.0)
+    );
+    assert!(
+        !saved[0]
+            .vars
+            .iter()
+            .any(|(n, _)| n.eq_ignore_ascii_case("SLR_x")),
         "what the leading vehicle gives it is not its own"
     );
     for started in [false, true] {
@@ -752,10 +764,22 @@ fn a_rear_cabs_switch_is_saved_and_taken_back() {
             assert_eq!(again.trailers[0].run_var("SLW_x"), Some(0.0));
             assert!(again.restore_car_states(&saved) > 0);
         } else {
-            assert_eq!(again.restore_car_states(&saved), 0, "taken when its scripts start");
+            assert_eq!(
+                again.restore_car_states(&saved),
+                0,
+                "taken when its scripts start"
+            );
         }
         run_frames(&mut again, 3);
-        assert_eq!(again.trailers[0].run_var("SLW_x"), Some(5.0), "started first: {started}");
-        assert_eq!(again.var("SLW_x"), Some(0.0), "the head car's stays its own");
+        assert_eq!(
+            again.trailers[0].run_var("SLW_x"),
+            Some(5.0),
+            "started first: {started}"
+        );
+        assert_eq!(
+            again.var("SLW_x"),
+            Some(0.0),
+            "the head car's stays its own"
+        );
     }
 }

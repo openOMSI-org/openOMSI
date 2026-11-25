@@ -1,147 +1,185 @@
 # Versioning and releases
 
-## The version number: `MAJOR.MINOR.PATCH`
+What openOMSI's version numbers mean, which release channel you get, and how maintainers cut a
+release. Players need the first two sections; the rest is for maintainers.
 
-| Part | Where it comes from | Example |
+## Version numbers
+
+A version is `MAJOR.MINOR.PATCH`, for example `1.2.17`.
+
+| Part | Where it comes from |
+| --- | --- |
+| `MAJOR` | First number in the `VERSION` file, changed by hand |
+| `MINOR` | Second number in `VERSION`, changed by hand |
+| `PATCH` | Counted automatically: one more than the last release tagged `v<MAJOR.MINOR>.*`, or `0` if there is none |
+
+- Releases have no gaps. After `1.2.16` the next release is `1.2.17`, however many commits lie between.
+- A commit that already has a release keeps its version.
+- `PATCH` restarts at `0` when `VERSION` changes: after `1.1.23`, the first release with `VERSION` set to `1.2` is `1.2.0`.
+- A build of a commit without a release shows the number the next release will get.
+- A pull request's test build shows `<version>-pr<number>`, for example `0.1.1313-pr1192`.
+
+You see the version in the launcher's side bar, in `game.log`, in crash reports and with
+`openomsi --version`.
+
+## Release channels
+
+| Channel | What it is | Who gets it |
 | --- | --- | --- |
-| `MAJOR` | the first number in the [`VERSION`](../VERSION) file, changed by hand | `1` |
-| `MINOR` | the second number in `VERSION`, changed by hand | `1.2` |
-| `PATCH` | counted automatically: one more than the last release `v<MAJOR.MINOR>.*` (its tag), or `0` when there is none yet | `1.2.17` |
+| **Stable** (default) | A beta that maintainers tested and promoted | Everyone else. The updater, the start guard, the website's Download page, `releases/latest` and the README badge only see stable releases. |
+| **Beta** | A build of `main` started by a maintainer, published as a GitHub pre-release | Testers |
 
-Releases follow each other without gaps, however many commits come in between: after
-`1.2.16`, the next release is `1.2.17`. A commit that already has a release keeps its version.
-`PATCH` restarts from `0` whenever `VERSION` changes: after `1.1.23`, the first release with
-`VERSION` set to `1.2` is `1.2.0`, and the next one `1.2.1`.
+To switch channel:
 
-To start a new version, change that one line in a pull request like any other change:
+1. Open the launcher's **Settings → General → Updates**.
+2. Set **Update channel** to **Beta (for testers)** or **Stable**.
 
-```sh
+The launcher looks for an update again at once.
+
+- On Beta, the updater offers the newest release (beta or stable) that has a file for your
+  computer and is not marked as broken. **Choose a version…** also lists betas, marked *Beta*.
+- Back on Stable, an installed beta stays until a newer stable release comes out, or until you
+  pick an older one in **Choose a version…**.
+- If your installed version is marked as broken, the updater can offer the current stable
+  release even when it is older. With automatic updates on, it installs when the game is closed.
+
+The website has a separate Betas download page. When no beta is newer than stable, it links
+back to the stable download instead of offering an older build.
+
+## Cutting a release
+
+### Start a new MAJOR.MINOR
+
+Change the one line in `VERSION` in a pull request, like any other change:
+
+```bash
 git switch -c version-1.2 && echo 1.2 > VERSION
 git commit -am "Version 1.2" && git push -u origin version-1.2
 ```
 
-`scripts/version.sh` prints the version of the checked-out commit; the game shows it in the
-launcher's side bar, in its log and in `openomsi --version` (baked in by
-`crates/omsi-platform/build.rs`, which uses the same rule). A build of a commit that has no
-release shows the number of the next release, whichever commit that release comes from.
+`scripts/version.sh` prints the version of the checked-out commit. The build
+(`crates/omsi-platform/build.rs`) uses the same rule; CI passes the result in `OPENOMSI_VERSION`.
 
-## Releases: beta, then stable
+### Publish a beta
 
-There are two channels:
+A push to `main` builds every platform but publishes nothing.
 
-| Channel | What it is | Who gets it |
-| --- | --- | --- |
-| **Beta** | a build of `main` a maintainer starts by hand, published as a GitHub **pre-release** | testers: the launcher's **Settings → General → Updates → Update channel: Beta**, or the [Releases](https://github.com/openOMSI-org/openOMSI/releases) page |
-| **Stable** | a beta the maintainers have tested and promoted | every other player: on the Stable channel (the default) the launcher's updater, the start guard, the website's Download page, `releases/latest` and the README badge only ever see stable releases |
+1. Open **Actions → Release → Run workflow** on GitHub and run it from `main`
+   (or `gh workflow run release.yml --ref main`).
+2. The workflow (`.github/workflows/release.yml`) works out the version with `scripts/version.sh`.
+3. It builds Windows x64 and ARM64, macOS (Apple silicon and Intel), Linux x64 and ARM64 and
+   Android, and packs the dedicated server from the Linux and Windows builds.
+4. It creates the pre-release `v<version>`, tagged on that commit.
 
-On the Beta channel the updater offers the newest release, beta or stable, that has a file
-for this computer and is not listed in `release/health.json`, and *Choose a version…* lists
-the betas too (marked *Beta*). Changing the channel looks for an update again at once. Back on Stable, nothing is taken away: the
-beta installed stays until a newer stable release comes out, or an older one is chosen in
-*Choose a version…*.
+The release carries:
 
-### Beta: a release started by hand
+| Files | Platforms |
+| --- | --- |
+| `openOMSI-<version>-<os>-<arch>.zip` | `windows-x64`, `windows-arm64`, `macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64` |
+| `openOMSI-<version>-windows-<arch>-setup.exe` | Windows installers (x64, ARM64) |
+| `openOMSI-<version>-macos-<arch>.dmg` | macOS disk images (arm64, x64) |
+| `openOMSI-<version>-android-arm64.apk`, `openOMSI-android.apk` | Android |
+| `openOMSI-<version>-server-<os>-<arch>.zip` | Dedicated server: `linux-x64`, `linux-arm64`, `windows-x64`, `windows-arm64` |
+| `SHA256SUMS` | SHA-256 of every file above |
 
-A push to `main` publishes nothing by itself. A maintainer starts a release with **Actions →
-Release → Run workflow** from `main` (or `gh workflow run release.yml --ref main`), which runs
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) for the commit `main` is on:
+The release notes come from this version's section of `CHANGELOG.md` (`scripts/release-notes.sh`).
 
-1. works out the version with `scripts/version.sh`;
-2. builds Windows x64 and ARM64 (MSVC), macOS for Apple silicon and Intel, Linux x64 and
-   ARM64 and Android in parallel, and packs the dedicated server from the Linux and Windows
-   builds;
-3. creates the pre-release `v<version>` (tag on that commit) with the archives
-   `openOMSI-<version>-windows-x64.zip`, `-windows-arm64.zip`, `-macos-arm64.zip`,
-   `-macos-x64.zip`, `-linux-x64.zip`, `-linux-arm64.zip`, `-android-arm64.apk`,
-   `-server-linux-x64.zip`, `-server-linux-arm64.zip`, `-server-windows-x64.zip`,
-   `-server-windows-arm64.zip`, the installers `-windows-x64-setup.exe`,
-   `-windows-arm64-setup.exe`, `-macos-arm64.dmg` and `-macos-x64.dmg`, a `SHA256SUMS`
-   file with the SHA-256 of each of them, and
-   release notes from this version's section of `CHANGELOG.md`
-   ([`scripts/release-notes.sh`](../scripts/release-notes.sh)).
+The workflow has an **only** input (`windows`, `macos`, `linux` or `android`) to release a beta
+of one platform, for a fix only that platform needs. Such a beta never gets the other
+platforms' files, so it cannot be promoted.
 
-### Stable: promoting a tested beta
+### Promote a beta to stable
 
-Only betas of `main` are published (a workflow run on another branch builds without
-publishing). When a beta has been tested and nothing blocks it (about once a week, sooner for an urgent
-fix), a maintainer runs **Actions → Promote a beta → Run workflow** from `main` with its version
-([`.github/workflows/promote.yml`](../.github/workflows/promote.yml)). The beta becomes the
-stable release as it is: the same tag, the same files, the same SHA-256 - nothing is built
-again. Its notes are rewritten to list every change since the previous stable release (the
-sections of `CHANGELOG.md` in between). Only a published beta of `main`, newer than the current
-stable release, with the files of every platform and not listed in `release/health.json`,
-can be promoted. The workflow runs from `main` only and reads `release/health.json` and
-`CHANGELOG.md` as they are on `main` at that moment, whatever branch it is started from.
+When a beta has been tested and nothing blocks it (about once a week, sooner for an urgent fix):
+
+1. Open **Actions → Promote a beta → Run workflow** from `main`.
+2. Enter the beta's version, for example `0.2.55`.
+
+The beta becomes the stable release as it is: same tag, same files, same SHA-256. Nothing is
+built again. Its notes are rewritten to list every change since the previous stable release.
+
+Only a beta that meets all of these can be promoted:
+
+- published from `main`;
+- newer than the current stable release;
+- has the files of every platform;
+- not listed in `release/health.json`.
+
+The workflow (`.github/workflows/promote.yml`) reads `release/health.json` and `CHANGELOG.md`
+as they are on `main` at that moment, whatever branch it is started from.
 
 ### A published release never changes
 
-A version is published once. The release job refuses to publish a version that already
-exists, whose tag names another commit, or whose commit is older than the last release; it
-never moves a tag nor replaces a file. A release's tag is never deleted either: the next
-version is counted from the tags. A mistake in a release is fixed by a new commit, hence a
-new version. With the repository's
-*immutable releases* setting on, GitHub enforces it too.
+- The release job refuses a version that already exists, whose tag names another commit, or
+  whose commit is older than the last release.
+- It never moves a tag or replaces a file. Tags are never deleted: the next version is counted from them.
+- A mistake is fixed with a new commit, and so a new version.
+- The repository's *immutable releases* setting makes GitHub enforce this too.
 
-The `SHA256SUMS` of a release checks a download by hand:
+To check a download by hand:
 
-```sh
+```bash
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-The launcher's updater checks each archive against the SHA-256 that GitHub's API lists for
-it before installing it (when the API cannot be reached and the updater falls back to
-github.com, it relies on the HTTPS connection alone).
+The launcher's updater checks each archive against the SHA-256 that GitHub's API lists for it.
+When the API cannot be reached and it falls back to github.com, it relies on HTTPS alone.
 
-Pull requests build Windows x64, macOS for Apple silicon, Linux x64 and Android without
-publishing anything; every push to `main` builds all the platforms above, also without
-publishing. Build output never goes into the repository (`target/` and `dist/` are ignored).
+Before any update replaces the program, the new one must pass `openomsi --self-test` (it
+starts, prints its version and exits). A release that cannot even load on a computer is
+refused there and never offered again.
 
-### Test builds of a pull request
+## Pull request test builds
 
-A pull request's builds are test builds for anyone who wants to try the change:
+Pull requests build Windows x64, macOS (Apple silicon), Linux x64 and Android, without
+publishing. The label `ci:all-platforms` builds all seven platforms from the next push or run.
 
-* their version names the pull request, `<version>-pr<number>` (e.g. `0.1.1313-pr1192`),
-  in the launcher's side bar, `game.log` and crash reports;
-* the updater never offers them a release, so a test build stays until it is deleted;
-* the Android one is an app of its own, *openOMSI PR #N* (`org.openomsi.game.pr`), that
-  installs beside the release and shares its `openOMSI` folder;
-* [`.github/workflows/pr_builds.yml`](../.github/workflows/pr_builds.yml) comments on the
-  pull request with a download link per platform (through [nightly.link](https://nightly.link),
-  no GitHub account needed) once they are built, and updates that comment on every push.
-  The files are kept for 14 days.
+- `.github/workflows/pr_builds.yml` comments on the pull request with a download link per
+  platform through [nightly.link](https://nightly.link) (no GitHub account needed), and
+  updates the comment on every push. The files are kept for 14 days.
+- The version is `<version>-pr<number>`. The updater never offers a release to a test build,
+  so it stays until you delete it.
+- The Android build is a separate app, *openOMSI PR #N* (`org.openomsi.game.pr`). It installs
+  beside the release and shares its `openOMSI` folder.
 
-The version badge at the top of the README always shows the newest stable release.
+Build output never goes into the repository (`target/` and `dist/` are ignored).
 
-### A broken release
+## Handling a broken release
 
-The start guard (`crates/omsi-guard`, see docs/ARCHITECTURE.md) heals a release that crashes
-or hangs at the start on every player's computer by itself: a newer release is installed at
-once, or the version before is put back. For a release that starts but is broken otherwise
-(saves, physics, a crash a minute in), list it in [`release/health.json`](../release/health.json)
-on `main`:
+The start guard (see [Architecture](ARCHITECTURE.md)) heals a release that crashes or hangs
+at start on its own: it installs a newer release, or puts the previous version back.
 
-```json
-{ "bad": ["0.2.31"], "message": "0.2.31 loses the timetable after a stop" }
-```
+For a release that starts but is broken otherwise (saves, physics, a crash a minute in):
 
-Every start of a listed version notes it; the next start installs a newer release when there
-is one, else goes back to the version before (when its files are still kept, i.e. the listed
-version has not been running long), and tells the player why with the message. Then push the
-fix and promote its beta as soon as it is checked. The list is read from GitHub with a short wait at each start; offline,
-nothing happens. Take a version off the list once nobody runs it any more.
+1. List it in `release/health.json` on `main`:
 
-Before any update replaces a program, the new one must pass `openomsi --self-test` (it starts,
-says its version and ends): a release that cannot even be loaded on a computer is refused there
-and never offered again.
+   ```json
+   { "bad": ["0.2.31"], "message": "0.2.31 loses the timetable after a stop" }
+   ```
 
+2. Push the fix and promote its beta as soon as it is checked, so players without a working
+   previous build can update.
+3. Take the version off the list once nobody runs it any more.
+
+What players see:
+
+- Every start of a listed version notes it.
+- On the next start, the guard tries the updater's candidate, then the locally kept previous
+  version if there is one, and tells the player why.
+- The guard installs the replacement even when automatic updates are off. A download of an
+  older stable build needs the archive's SHA-256 from the GitHub API and passes the same
+  self-test as a normal update.
+- The list is read from GitHub with a short timeout.
+
+See [Troubleshooting](TROUBLESHOOTING.md) for what players can do themselves.
 
 ## The website
 
-[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) publishes `site/` together with
-the Markdown files of `docs/` to GitHub Pages
-(https://openomsi.org/) whenever they change on `main`. The site renders
-the Markdown in the browser, so a documentation change is one edit in `docs/`.
-The Download page offers the latest stable release. Beta downloads have a separate page
-with the same platform cards and installation instructions; when no beta is newer than
-stable, it links back to stable instead of offering an older build. The release history
-has separate Stable and Betas lists. Auxiliary asset packs are kept out of both lists.
+`.github/workflows/pages.yml` builds `site/` from the Markdown files in `docs/` and publishes
+it to GitHub Pages (https://openomsi.org/) whenever they change on `main`.
+
+- A documentation change is one edit in `docs/`. The build splits long documents into
+  chapters, makes the menu, the search index and the links, and fails on a broken link.
+- The Download page offers the latest stable release. Betas have their own page with the same
+  platform cards and install steps.
+- The release history has separate Stable and Betas lists. Auxiliary asset packs appear in neither.

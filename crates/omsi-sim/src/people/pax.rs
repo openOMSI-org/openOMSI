@@ -911,11 +911,13 @@ pub fn weighted_dist(a: Vec3, b: Vec3, w: f32) -> f32 {
 impl Cabin {
     /// sub_72506c: the point of `list` nearest `p` (height weighed by 5). `level`: only
     /// points at most 2 m below `p` and not above it. `open`/`flags` (entries): a shut
-    /// door counts only with a button, and only while no door of the list is open - with
-    /// one open, people walk to it instead of waiting at a shut one (Omsi.exe let them
-    /// stand at a shut button door with the others open); `avoid`: a passenger buying a
-    /// ticket skips `{noticketsale}` doors. Nothing found: the first of the list, or the
-    /// search again without `avoid`.
+    /// door (`PAX_Entry<i>_Open` below 0.5, 0x725161) counts only with a button
+    /// (`{withbutton}`, 0x7251f5) - whether or not another door is open, as Omsi.exe: the
+    /// people nearest a shut button door wait there and ask for it; `avoid`: a passenger
+    /// buying a ticket skips `{noticketsale}` doors (0x7251c4). Nothing found: the first of
+    /// the list, or the search again without `avoid` (0x725227), the doors' states still
+    /// counting - a ticket buyer whose selling doors are all shut walks to the nearest open
+    /// door that sells none.
     pub fn omsi_nearest(
         &self,
         p: Vec3,
@@ -926,11 +928,6 @@ impl Cabin {
         open: Option<&[bool]>,
     ) -> Option<usize> {
         let pts = &self.graph.points;
-        let any_open = open.is_some_and(|o| {
-            list.iter()
-                .enumerate()
-                .any(|(k, pt)| pt.is_some() && o.get(k).copied().unwrap_or(false))
-        });
         let mut best = 1e12f32;
         let mut found: Option<usize> = None;
         for (k, pt) in list.iter().enumerate() {
@@ -942,7 +939,7 @@ impl Cabin {
             let d = weighted_dist(p, *q, 5.0);
             let shut_ok = match open {
                 Some(o) if o.len() >= list.len() && !o[k] => {
-                    !any_open && flags.is_some_and(|f| f.get(k).is_some_and(|f| f.1))
+                    flags.is_some_and(|f| f.get(k).is_some_and(|f| f.1))
                 }
                 _ => true,
             };
@@ -971,13 +968,12 @@ impl Cabin {
         found
     }
 
-    /// The entry to walk to now, as `choose_entry` asks it (sub_625b98), with the launcher's
-    /// `rear_door_boarding` (#4055): with it on, every door of `list` is worth walking to,
-    /// open or shut - the nearest one wins wherever the passenger stands, and they wait there
-    /// and ask for it (`PAX_Entry<n>_Req`), as neoOMSI's rear doors work. `avoid` (a
-    /// passenger who still has to buy a ticket) still keeps them at a door that sells. Off:
-    /// as Omsi.exe, a shut door counting only with `{withbutton}` and only while no door of
-    /// the list is open.
+    /// The entry to walk to with the launcher's `rear_door_boarding` (#4055), as
+    /// `choose_entry` asks it: every door of `list` is worth walking to, open or shut - the
+    /// nearest one wins wherever the passenger stands, and they wait there and ask for it
+    /// (`PAX_Entry<n>_Req`), as neoOMSI's rear doors work. `avoid` (a passenger who still
+    /// has to buy a ticket) still keeps them at a door that sells. `fallback`: they have
+    /// waited long enough at a shut door, so only the open ones (and the buttons) count.
     pub fn entry_nearest(
         &self,
         p: Vec3,
@@ -985,13 +981,8 @@ impl Cabin {
         avoid: bool,
         flags: &[(bool, bool)],
         open: &[bool],
-        rear_boarding: bool,
         fallback: bool,
     ) -> Option<usize> {
-        if !rear_boarding {
-            let first = self.omsi_nearest(p, list, avoid, false, Some(flags), Some(open));
-            return first.or_else(|| self.omsi_nearest(p, list, avoid, false, Some(flags), None));
-        }
         let has_ticket_door = avoid
             && list
                 .iter()
@@ -1012,7 +1003,15 @@ impl Cabin {
             list.to_vec()
         };
         let first = if fallback {
-            self.omsi_nearest(p, &search_list, avoid, false, Some(flags), Some(open))
+            // (Omsi.exe counts a shut button door whether or not another is open; the way
+            // back after the wait is to an open one, so the buttons count only while every
+            // door of the list is shut)
+            let any_open = search_list
+                .iter()
+                .enumerate()
+                .any(|(k, pt)| pt.is_some() && open.get(k).copied().unwrap_or(false));
+            let flags: Vec<_> = flags.iter().map(|f| (f.0, f.1 && !any_open)).collect();
+            self.omsi_nearest(p, &search_list, avoid, false, Some(&flags), Some(open))
         } else {
             self.omsi_nearest(p, &search_list, avoid, false, Some(flags), None)
         };

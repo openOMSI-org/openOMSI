@@ -62,11 +62,7 @@ pub struct IdPool {
 }
 
 fn next_generation(g: u8) -> u8 {
-    if g == u8::MAX {
-        1
-    } else {
-        g + 1
-    }
+    if g == u8::MAX { 1 } else { g + 1 }
 }
 
 impl IdPool {
@@ -102,7 +98,8 @@ impl IdPool {
     }
 
     pub fn is_live(&self, id: TrafficId) -> bool {
-        self.live.get(id.slot()).copied().unwrap_or(false) && self.generations[id.slot()] == id.generation()
+        self.live.get(id.slot()).copied().unwrap_or(false)
+            && self.generations[id.slot()] == id.generation()
     }
 
     pub fn live(&self) -> usize {

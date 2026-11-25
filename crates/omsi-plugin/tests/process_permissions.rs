@@ -135,7 +135,8 @@ fn drive(host: &mut Plugins, game: &mut Game, done: impl Fn(&Game) -> bool) {
     assert!(
         done(game),
         "plugin process test timed out after {timeout}s (frames={}, messages={:?})",
-        game.frames, game.messages
+        game.frames,
+        game.messages
     );
 }
 #[track_caller]
@@ -256,7 +257,11 @@ fn once_waits_without_blocking_frames_then_prompts_again_and_deny_stays_denied()
     // Denial is about this entry/helper for the session, not the current hashes.
     let entry = f.folder.join("a_plugin.lua");
     let source = std::fs::read_to_string(&entry).unwrap();
-    std::fs::write(&entry, format!("{source}\n-- content changed after denial\n")).unwrap();
+    std::fs::write(
+        &entry,
+        format!("{source}\n-- content changed after denial\n"),
+    )
+    .unwrap();
     std::fs::write(f.folder.join("a_plugin.save.lua"), "return { counter = 2 }").unwrap();
     std::fs::write(f.folder.join(helper()), "changed helper").unwrap();
     let mut host = f.load(broker.clone());
@@ -282,14 +287,21 @@ fn saving_plugin_data_while_awaiting_consent_and_after_restart_preserves_approva
             std::fs::copy(f.folder.join(helper), folder.join(helper)).unwrap();
             std::fs::remove_file(&old_entry).unwrap();
             folder
-        } else { f.folder.clone() };
-        let entry = folder.join(if folder_plugin { "main.lua" } else { "a_plugin.lua" });
+        } else {
+            f.folder.clone()
+        };
+        let entry = folder.join(if folder_plugin {
+            "main.lua"
+        } else {
+            "a_plugin.lua"
+        });
         // Keep ordinary frame callbacks alive while native preparation/consent is pending.
         let start = source
             .lines()
             .find(|line| line.contains("omsi.process.start("))
             .unwrap();
-        let source = format!(r#"
+        let source = format!(
+            r#"
             local handle
             local done = false
             function on_frame()
@@ -309,14 +321,17 @@ fn saving_plugin_data_while_awaiting_consent_and_after_restart_preserves_approva
                     assert(omsi.process.forget(handle))
                 end
             end
-        "#);
+        "#
+        );
         std::fs::write(entry, source).unwrap();
         let broker = f.broker();
         let mut host = f.load(broker.clone());
         let mut game = Game::default();
         let p = prompt(&mut host, &mut game, &broker);
         // The snapshot has been captured. Save real omsi.data/storage/files repeatedly.
-        for _ in 0..16 { host.frame(&mut game); }
+        for _ in 0..16 {
+            host.frame(&mut game);
+        }
         assert!(!f.marker.exists());
         assert!(broker.respond(p.id, ProcessDecision::AlwaysAllow));
         drive(&mut host, &mut game, |g| !g.messages.is_empty());
@@ -324,7 +339,11 @@ fn saving_plugin_data_while_awaiting_consent_and_after_restart_preserves_approva
         host.finalize();
         std::fs::remove_file(&f.marker).unwrap();
         // Another plugin saves too, in the same shared plugins directory.
-        std::fs::write(f.folder.join("z_other.save.lua"), "return { changed = true }").unwrap();
+        std::fs::write(
+            f.folder.join("z_other.save.lua"),
+            "return { changed = true }",
+        )
+        .unwrap();
         let broker = f.broker();
         let mut host = f.load(broker.clone());
         let mut game = Game::default();
@@ -373,15 +392,28 @@ fn always_survives_restart_but_changes_reprompt_and_cannot_race_approval() {
     // pending start and asks again for the new content.
     let answered = broker.respond(p.id, ProcessDecision::AlwaysAllow);
     drive(&mut host, &mut game, |g| {
-        g.messages.iter().any(|m| m.contains("plugin content changed"))
+        g.messages
+            .iter()
+            .any(|m| m.contains("plugin content changed"))
             || broker.prompt().is_some_and(|q| q.id != p.id)
     });
-    let refused = game.messages.iter().any(|m| m.contains("plugin content changed"));
-    assert!(refused || !answered || game.messages.iter().any(|m| m.contains("reloaded")), "{:?}", game.messages);
+    let refused = game
+        .messages
+        .iter()
+        .any(|m| m.contains("plugin content changed"));
+    assert!(
+        refused || !answered || game.messages.iter().any(|m| m.contains("reloaded")),
+        "{:?}",
+        game.messages
+    );
     for _ in 0..64 {
         host.frame(&mut game);
     }
-    assert!(!game.messages.iter().any(|m| m.starts_with("exited:")), "{:?}", game.messages);
+    assert!(
+        !game.messages.iter().any(|m| m.starts_with("exited:")),
+        "{:?}",
+        game.messages
+    );
     assert!(!f.marker.exists());
     host.finalize();
     std::fs::remove_dir_all(f.root).unwrap();

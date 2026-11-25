@@ -73,6 +73,14 @@ const MASK_GLASS_SEEN: u32 = 0x10u;
 const RT_FORCE_OPAQUE: u32 = 0x01u;
 const RT_FIRST_HIT: u32 = 0x04u;
 const PI: f32 = 3.14159265;
+// The roughness up to which a reflection is traced along the mirror direction alone and
+// blurred on the screen by its lobe's width (rt_denoise.wgsl `cs_atrous`); above it the
+// rays follow the lobe, a new direction every frame, and the frames are averaged. (Rays
+// scattered over the lobe of a pane, a polished coat or a wet road - one a pixel, a fresh
+// one every frame - left these, where the reflection shows most, as noise that crawled
+// whenever anything moved: the history of a lobe that narrow is thrown away at the least
+// motion. The blur gives the same soft image of the street, the same every frame.)
+const GLOSSY_MIRROR: f32 = 0.25;
 
 fn world_pos(uv: vec2<f32>, depth: f32) -> vec3<f32> {
     let h = p.inv_view_proj * vec4<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
@@ -175,7 +183,10 @@ fn trace(o: vec3<f32>, d: vec3<f32>, tmax: f32, mask: u32, seed: vec3<u32>, soli
     var start = 0.0;
     var out: Hit;
     out.t = -1.0;
-    for (var i = 0u; i < 6u; i++) {
+    // (four layers of cut-out leaves at most: past them the ray is taken as through - in
+    // a crown's thick of cards six restarts cost the trace a third of its time for light
+    // that the filter averages away)
+    for (var i = 0u; i < 4u; i++) {
         out.tries = i + 1u;
         let h = ray_hit(RT_FORCE_OPAQUE, mask, start, tmax, o, d);
         if (h.kind == RAY_QUERY_INTERSECTION_NONE) {

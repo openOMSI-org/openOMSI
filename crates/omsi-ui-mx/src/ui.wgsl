@@ -1,14 +1,16 @@
 // omsi-ui: shapes, text and icons in pixels, ribbons and markers in a 3D world.
+// A layer's numbers and the draw's picture in the immediates (128 bytes); the picture and
+// its sampler are read from mX's heap.
 struct U {
     view_proj: mat4x4<f32>,
-    viewport: vec4<f32>,   // x, y, w, h (target pixels) the world is drawn into
-    target_size: vec4<f32>, // w, h of the target, 0, 0
-    clip: vec4<f32>,       // x0, y0, x1, y1: everything outside fades out
-    params: vec4<f32>,     // clip corner radius, opacity, metres per pixel per unit depth, 0
+    viewport: vec4<f32>,    // x, y, w, h (target pixels) the world is drawn into
+    target_size: vec3<f32>, // w, h of the target, a solid shape's height
+    tex: u32,               // the picture in the heap
+    clip: vec4<f32>,        // x0, y0, x1, y1: everything outside fades out
+    params: vec3<f32>,      // clip corner radius, opacity, metres per pixel per unit depth
+    smp: u32,               // its sampler
 };
-@group(0) @binding(0) var<uniform> u: U;
-@group(1) @binding(0) var t_img: texture_2d<f32>;
-@group(1) @binding(1) var s_img: sampler;
+var<immediate> u: U;
 
 struct VIn {
     @location(0) pos: vec3<f32>,
@@ -81,7 +83,7 @@ fn rounded_mask(p: vec2<f32>) -> f32 {
 @fragment
 fn fs_main(i: VOut) -> @location(0) vec4<f32> {
     // (sampled for every fragment: a sample in a branch has no derivatives)
-    let t = textureSample(t_img, s_img, i.uv);
+    let t = textureSample(mx_tex2d[u.tex], mx_samplers[u.smp], i.uv);
     var c = i.color;
     if (i.tex > 0.5) {
         c = vec4<f32>(c.rgb * t.rgb, c.a * t.a);

@@ -7,7 +7,13 @@ use super::*;
 /// of the fleet - read from the disk (or an archive) in the frame each time. The pictures
 /// are kept (up to 64 MB of them), the misses too.
 fn st_load(path: &std::path::Path) -> Result<Arc<crate::image_decode::DecodedImage>, String> {
-    type Cache = Mutex<(std::collections::HashMap<std::path::PathBuf, Result<Arc<crate::image_decode::DecodedImage>, String>>, usize)>;
+    type Cache = Mutex<(
+        std::collections::HashMap<
+            std::path::PathBuf,
+            Result<Arc<crate::image_decode::DecodedImage>, String>,
+        >,
+        usize,
+    )>;
     static CACHE: std::sync::OnceLock<Cache> = std::sync::OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
     if let Some(hit) = cache.lock().0.get(path) {
@@ -32,13 +38,22 @@ impl VehicleHost {
         match cb {
             Some(Cb::GetFontIndex) => {
                 let font = stacks.pop_str();
-                let idx = match self.fonts.entries.iter().position(|f| f.0.eq_ignore_ascii_case(&font)) {
+                let idx = match self
+                    .fonts
+                    .entries
+                    .iter()
+                    .position(|f| f.0.eq_ignore_ascii_case(&font))
+                {
                     Some(i) => i,
                     None => {
                         // an empty name or a depot string that is no font (the Krüger
                         // matrix asks for the custom fonts of termini 14991.. this way) is
                         // looked up once and remembered as missing
-                        let atlas = if font.trim().is_empty() { None } else { self.font_lib.as_ref().and_then(|l| l.lock().load(&font)) };
+                        let atlas = if font.trim().is_empty() {
+                            None
+                        } else {
+                            self.font_lib.as_ref().and_then(|l| l.lock().load(&font))
+                        };
                         self.fonts.entries.push((font, atlas));
                         self.fonts.entries.len() - 1
                     }
@@ -54,28 +69,46 @@ impl VehicleHost {
                 let font = arg_i32(stacks.pop());
                 let text = stacks.pop_str();
                 // as Omsi.exe measures it (0x5d6c00): the glyphs and the gaps between them
-                let w = self.font_atlas(font).map(|a| a.font.text_width(&text) as f32).unwrap_or(0.0);
+                let w = self
+                    .font_atlas(font)
+                    .map(|a| a.font.text_width(&text) as f32)
+                    .unwrap_or(0.0);
                 if debug_text() {
-                    log::info!("TextLength(font {font} = {:?}, {text:?}) = {w}", self.font_atlas(font).map(|a| a.font.name.clone()));
+                    log::info!(
+                        "TextLength(font {font} = {:?}, {text:?}) = {w}",
+                        self.font_atlas(font).map(|a| a.font.name.clone())
+                    );
                 }
                 stacks.push(w);
             }
             // --- script textures (matrix displays)
             Some(Cb::StNewTex) => {
                 let i = arg_idx(stacks.pop());
-                if let Some(t) = self.script_textures.get_mut(i).filter(|_| draw_script_textures) {
+                if let Some(t) = self
+                    .script_textures
+                    .get_mut(i)
+                    .filter(|_| draw_script_textures)
+                {
                     t.renew();
                 }
             }
             Some(Cb::StLock) => {
                 let i = arg_idx(stacks.pop());
-                if let Some(t) = self.script_textures.get_mut(i).filter(|_| draw_script_textures) {
+                if let Some(t) = self
+                    .script_textures
+                    .get_mut(i)
+                    .filter(|_| draw_script_textures)
+                {
                     t.locked = true;
                 }
             }
             Some(Cb::StUnlock) => {
                 let i = arg_idx(stacks.pop());
-                if let Some(t) = self.script_textures.get_mut(i).filter(|_| draw_script_textures) {
+                if let Some(t) = self
+                    .script_textures
+                    .get_mut(i)
+                    .filter(|_| draw_script_textures)
+                {
                     t.unlock();
                 }
             }
@@ -84,7 +117,11 @@ impl VehicleHost {
                 // immediately after STUnlock. Remember that request for the renderer; it
                 // must also refresh the chain when this matrix changes again.
                 let i = arg_idx(stacks.pop());
-                if let Some(t) = self.script_textures.get_mut(i).filter(|_| draw_script_textures) {
+                if let Some(t) = self
+                    .script_textures
+                    .get_mut(i)
+                    .filter(|_| draw_script_textures)
+                {
                     if !t.mipmaps {
                         t.mipmaps = true;
                         t.dirty = true;
@@ -97,7 +134,11 @@ impl VehicleHost {
                 let r = stacks.pop();
                 let a = stacks.pop();
                 let i = arg_idx(stacks.pop());
-                if let Some(t) = self.script_textures.get_mut(i).filter(|_| draw_script_textures) {
+                if let Some(t) = self
+                    .script_textures
+                    .get_mut(i)
+                    .filter(|_| draw_script_textures)
+                {
                     t.color = [r, g, b, a].map(|c| arg_i32(c).clamp(0, 255) as u8);
                 }
             }
@@ -105,7 +146,11 @@ impl VehicleHost {
                 let y = arg_i32(stacks.pop());
                 let x = arg_i32(stacks.pop());
                 let i = arg_idx(stacks.pop());
-                if let Some(t) = self.script_textures.get_mut(i).filter(|_| draw_script_textures) {
+                if let Some(t) = self
+                    .script_textures
+                    .get_mut(i)
+                    .filter(|_| draw_script_textures)
+                {
                     let c = t.color;
                     t.put(x, y, c);
                 }
@@ -116,7 +161,11 @@ impl VehicleHost {
                 let y1 = arg_i32(stacks.pop());
                 let x1 = arg_i32(stacks.pop());
                 let i = arg_idx(stacks.pop());
-                if let Some(t) = self.script_textures.get_mut(i).filter(|_| draw_script_textures) {
+                if let Some(t) = self
+                    .script_textures
+                    .get_mut(i)
+                    .filter(|_| draw_script_textures)
+                {
                     t.rect(x1, y1, x2, y2);
                 }
             }
@@ -128,12 +177,29 @@ impl VehicleHost {
                 let y = arg_i32(stacks.pop());
                 let x = arg_i32(stacks.pop());
                 let i = arg_idx(stacks.pop());
-                if !draw_script_textures { return; }
+                if !draw_script_textures {
+                    return;
+                }
                 let atlas = self.font_atlas(font);
                 if debug_text() {
-                    log::info!("STTextOut(tex {i}, x {x}, y {y}, font {font}, spacing {spacing}, {text:?}) atlas {:?} from {:?} bitmap {:?} {}x{} E {:?}", atlas.as_ref().map(|a| a.font.name.clone()), atlas.as_ref().map(|a| a.font.path.clone()), atlas.as_ref().map(|a| a.font.alpha.clone()), atlas.as_ref().map(|a| a.width).unwrap_or(0), atlas.as_ref().map(|a| a.height).unwrap_or(0), atlas.as_ref().and_then(|a| a.font.glyph('E').map(|g| (g.x0, g.x1, g.y))));
+                    log::info!(
+                        "STTextOut(tex {i}, x {x}, y {y}, font {font}, spacing {spacing}, {text:?}) atlas {:?} from {:?} bitmap {:?} {}x{} E {:?}",
+                        atlas.as_ref().map(|a| a.font.name.clone()),
+                        atlas.as_ref().map(|a| a.font.path.clone()),
+                        atlas.as_ref().map(|a| a.font.alpha.clone()),
+                        atlas.as_ref().map(|a| a.width).unwrap_or(0),
+                        atlas.as_ref().map(|a| a.height).unwrap_or(0),
+                        atlas
+                            .as_ref()
+                            .and_then(|a| a.font.glyph('E').map(|g| (g.x0, g.x1, g.y)))
+                    );
                 }
-                if let (Some(t), Some(a)) = (self.script_textures.get_mut(i).filter(|_| draw_script_textures), atlas) {
+                if let (Some(t), Some(a)) = (
+                    self.script_textures
+                        .get_mut(i)
+                        .filter(|_| draw_script_textures),
+                    atlas,
+                ) {
                     t.text_out(&a, x, y, spacing, arg_i32(mode) as u8, &text);
                 }
             }
@@ -158,14 +224,23 @@ impl VehicleHost {
                     Some(Cb::StGetB) => 2,
                     _ => 3,
                 };
-                stacks.push(self.script_textures.get(i).map(|t| t.color[k] as f32).unwrap_or(0.0));
+                stacks.push(
+                    self.script_textures
+                        .get(i)
+                        .map(|t| t.color[k] as f32)
+                        .unwrap_or(0.0),
+                );
             }
             Some(Cb::StCopyColor) => {
                 // colour of texture a → texture b
                 let b = arg_idx(stacks.pop());
                 let a = arg_idx(stacks.pop());
                 if let Some(c) = self.script_textures.get(a).map(|t| t.color) {
-                    if let Some(t) = self.script_textures.get_mut(b).filter(|_| draw_script_textures) {
+                    if let Some(t) = self
+                        .script_textures
+                        .get_mut(b)
+                        .filter(|_| draw_script_textures)
+                    {
                         t.color = c;
                     }
                 }
@@ -173,26 +248,40 @@ impl VehicleHost {
             Some(Cb::StLoadTex) => {
                 let i = arg_idx(stacks.pop());
                 let path = stacks.pop_str();
-                if !draw_script_textures { return; }
+                if !draw_script_textures {
+                    return;
+                }
                 // relative to the vehicle's texture folder, like every texture name of the
                 // vehicle: the Krüger matrix loads `..\..\Anzeigen\Krueger\<bitmap>`,
                 // which is `Vehicles\Anzeigen\...` seen from `Vehicles\<bus>\Texture`
                 // (and found in whichever content root has it)
-                let mut full = omsi_cfg::resolve_path(&omsi_cfg::resolve_path(&self.content_dir, "Texture"), &path);
+                let mut full = omsi_cfg::resolve_path(
+                    &omsi_cfg::resolve_path(&self.content_dir, "Texture"),
+                    &path,
+                );
                 // (then the global `Texture` folder, as OMSI looks)
                 if !omsi_cfg::vfs::is_file(&full) {
-                    if let Some((_, p)) = omsi_cfg::find_in_roots(&format!("Texture/{}", path.replace('\\', "/"))) {
+                    if let Some((_, p)) =
+                        omsi_cfg::find_in_roots(&format!("Texture/{}", path.replace('\\', "/")))
+                    {
                         full = p;
                     }
                 }
                 // (OMSI pushes nothing: a file it cannot find goes to its log only)
                 match st_load(&full) {
                     Ok(img) => {
-                        if let Some(t) = self.script_textures.get_mut(i).filter(|_| draw_script_textures) {
+                        if let Some(t) = self
+                            .script_textures
+                            .get_mut(i)
+                            .filter(|_| draw_script_textures)
+                        {
                             t.load(img.width, img.height, &img.rgba);
                         }
                     }
-                    Err(e) => log::warn!("STLoadTex: did not find texture file {}: {e}", full.display()),
+                    Err(e) => log::warn!(
+                        "STLoadTex: did not find texture file {}: {e}",
+                        full.display()
+                    ),
                 }
             }
             _ => unreachable!("not a drawing callback: {cb:?}"),

@@ -201,6 +201,18 @@ pub struct Rainfall {
     pub quality: u8,
 }
 
+/// The camera group (`Renderer::rebuild_camera_bind_group`) for each module beside the scene
+/// shader that reads it: its places in the heap at that module's layout.
+pub(crate) struct CameraHeaps {
+    pub(crate) corona: HeapGroup,
+    pub(crate) snow: HeapGroup,
+    pub(crate) rain: HeapGroup,
+    pub(crate) sky: HeapGroup,
+    pub(crate) fog: HeapGroup,
+    /// (where the volumetric fog is drawn)
+    pub(crate) vol: Option<HeapGroup>,
+}
+
 pub struct Scene {
     /// Which scene this is, different for every one made (`Renderer::new_scene`): what keeps
     /// ids of the scene's meshes and instances can tell they belong to one replaced since.
@@ -248,16 +260,20 @@ pub struct Scene {
     pub(crate) corona_sent: Vec<u8>,
     /// The frame's draw list (see `Batch`), shared by the shadow, prepass and main passes.
     pub(crate) draw_buf: Option<GpuArray>,
-    pub(crate) camera_bind_group: Option<mx::BindGroup>,
-    /// Which snow track field `camera_bind_group` binds (see `LightRes::snow_track_made`).
+    /// How many times the camera group's places were made (`rebuild_camera_bind_group`):
+    /// what the main pass's kept bundles were recorded with.
+    pub(crate) camera_epoch: u64,
+    /// The frame's places in the heap (`FrameHeap`), written before its passes are encoded,
+    /// and the buffer views they name; the precipitation roof's, with its camera.
+    pub(crate) frame_heap: FrameHeap,
+    pub(crate) frame_views: Vec<mx::BufferView>,
+    pub(crate) precip_heap: FrameHeap,
+    /// The camera group's places in the heap for the modules beside the scene shader that read
+    /// it; none until they are made (again: `rebuild_camera_bind_group`).
+    pub(crate) camera_heaps: Option<CameraHeaps>,
+    /// Which snow track field `camera_heaps` holds (see `LightRes::snow_track_made`).
     pub(crate) snow_track_seen: u32,
-    /// The same with slot 8 not the ground albedo picture, for the pass that draws into it
-    /// (a texture is not read and drawn into at once).
-    pub(crate) ground_camera_bind_group: Option<mx::BindGroup>,
-    pub(crate) shadow_bind_group: Option<mx::BindGroup>,
-    /// As `shadow_bind_group`, with the precipitation roof map's camera.
-    pub(crate) precip_bind_group: Option<mx::BindGroup>,
-    pub(crate) sky_bind_group: Option<mx::BindGroup>,
+    pub(crate) sky_bind_group: Option<HeapGroup>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the
@@ -268,7 +284,7 @@ pub struct Scene {
     pub transposed: std::collections::HashSet<TextureId>,
     /// Per overlay: the texture its bind group was made for, its rect buffer and the group
     /// (kept between frames; only the rect is rewritten).
-    pub(crate) overlay_res: Vec<(TextureId, mx::Buffer, mx::BindGroup, [f32; 8])>,
+    pub(crate) overlay_res: Vec<(TextureId, mx::Buffer, HeapGroup, [f32; 8])>,
     /// Structural change (render origin moved, buffers too small): everything is rebuilt.
     pub(crate) dirty: bool,
     /// How many instances (and per-draw entries) the buffers hold; instances added since

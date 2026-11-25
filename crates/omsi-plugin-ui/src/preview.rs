@@ -157,7 +157,8 @@ fn preview() {
         );
         y += laid.h + TOAST_GAP;
     }
-    let out = omsi_cfg::flags::OMSI_UI_PREVIEW.live_var()
+    let out = omsi_cfg::flags::OMSI_UI_PREVIEW
+        .live_var()
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-preview.png")
@@ -167,7 +168,14 @@ fn preview() {
 
 /// Read a preview back, lay it over a stand-in for the road (sky, buildings, the street)
 /// and write it as a PNG.
-pub fn save(device: &wgpu::Device, queue: &wgpu::Queue, target: &wgpu::Texture, w: u32, h: u32, out: &str) {
+pub fn save(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    target: &wgpu::Texture,
+    w: u32,
+    h: u32,
+    out: &str,
+) {
     // read back and laid over a stand-in for the road: sky, buildings, the street
     let stride = (w * 4).div_ceil(256) * 256;
     let buf = device.create_buffer(&wgpu::BufferDescriptor {

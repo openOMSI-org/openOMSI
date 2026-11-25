@@ -44,12 +44,18 @@ pub(crate) fn wanted(adapter: &wgpu::Adapter) -> wgpu::Features {
 fn path(info: &wgpu::AdapterInfo) -> Option<PathBuf> {
     let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
     let home = PathBuf::from(home);
-    home.is_absolute().then(|| home.join(".openomsi/cache").join(file_name(info.backend, info.vendor, info.device)))
+    home.is_absolute().then(|| {
+        home.join(".openomsi/cache")
+            .join(file_name(info.backend, info.vendor, info.device))
+    })
 }
 
 // (one file per GPU: a laptop's two GPUs would throw each other's data away)
 fn file_name(backend: wgpu::Backend, vendor: u32, device: u32) -> String {
-    format!("pipelines-{}-{vendor:04x}-{device:04x}.bin", format!("{backend:?}").to_lowercase())
+    format!(
+        "pipelines-{}-{vendor:04x}-{device:04x}.bin",
+        format!("{backend:?}").to_lowercase()
+    )
 }
 
 /// Open the cache of a device made with [`wanted`]'s feature, from last run's file.
@@ -75,10 +81,23 @@ pub(crate) fn open(device: &wgpu::Device, info: &wgpu::AdapterInfo) {
             fallback: true,
         })
     };
-    log::info!("pipeline cache: {} ({})", path.display(), match &data { Some(d) => format!("{} KB from the last run", d.len() / 1024), None => "new".into() });
+    log::info!(
+        "pipeline cache: {} ({})",
+        path.display(),
+        match &data {
+            Some(d) => format!("{} KB from the last run", d.len() / 1024),
+            None => "new".into(),
+        }
+    );
     remove_stale_temporaries(&path);
     let on_disk = data.as_deref().map(digest);
-    *slot = Some(Slot { device: device.clone(), cache, path, written: Instant::now(), on_disk });
+    *slot = Some(Slot {
+        device: device.clone(),
+        cache,
+        path,
+        written: Instant::now(),
+        on_disk,
+    });
 }
 
 /// The cache to build `device`'s pipelines with, if it has one. While they are being made it
@@ -104,7 +123,9 @@ pub fn save() {
     let mut slot = SLOT.lock().unwrap_or_else(|e| e.into_inner());
     let Some(s) = slot.as_mut() else { return };
     s.written = Instant::now();
-    let Some(data) = s.cache.get_data() else { return };
+    let Some(data) = s.cache.get_data() else {
+        return;
+    };
     if data.is_empty() {
         return;
     }
@@ -126,7 +147,8 @@ fn digest(data: &[u8]) -> u64 {
 /// again). Returns whether it was written.
 fn write_if_changed(path: &Path, data: &[u8], on_disk: &mut Option<u64>) -> std::io::Result<bool> {
     let sum = digest(data);
-    if *on_disk == Some(sum) && std::fs::metadata(path).is_ok_and(|m| m.len() == data.len() as u64) {
+    if *on_disk == Some(sum) && std::fs::metadata(path).is_ok_and(|m| m.len() == data.len() as u64)
+    {
         return Ok(false);
     }
     if let Some(dir) = path.parent() {
@@ -150,16 +172,28 @@ fn write_if_changed(path: &Path, data: &[u8], on_disk: &mut Option<u64>) -> std:
 /// younger one may be another game's, writing right now.
 fn remove_stale_temporaries(path: &Path) {
     const OLD: Duration = Duration::from_secs(3600);
-    let (Some(dir), Some(stem)) = (path.parent(), path.file_stem().and_then(|s| s.to_str())) else { return };
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let (Some(dir), Some(stem)) = (path.parent(), path.file_stem().and_then(|s| s.to_str())) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
         // (the dot after the stem: a device id has no fixed width, "…-4305" begins "…-43050a01")
-        if !(name.strip_prefix(stem).is_some_and(|rest| rest.starts_with('.')) && name.ends_with(".tmp")) {
+        if !(name
+            .strip_prefix(stem)
+            .is_some_and(|rest| rest.starts_with('.'))
+            && name.ends_with(".tmp"))
+        {
             continue;
         }
-        let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|t| SystemTime::now().duration_since(t).is_ok_and(|age| age >= OLD));
+        let old = entry.metadata().and_then(|m| m.modified()).is_ok_and(|t| {
+            SystemTime::now()
+                .duration_since(t)
+                .is_ok_and(|age| age >= OLD)
+        });
         if old {
             let _ = std::fs::remove_file(entry.path());
         }
@@ -182,7 +216,8 @@ mod tests {
     struct Dir(PathBuf);
     impl Dir {
         fn new(name: &str) -> Dir {
-            let d = std::env::temp_dir().join(format!("omsi-pipeline-cache-{name}-{}", std::process::id()));
+            let d = std::env::temp_dir()
+                .join(format!("omsi-pipeline-cache-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&d);
             std::fs::create_dir_all(&d).unwrap();
             Dir(d)
@@ -195,7 +230,12 @@ mod tests {
     }
 
     fn temporaries(dir: &Path) -> Vec<String> {
-        let mut v: Vec<String> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".tmp")).collect();
+        let mut v: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".tmp"))
+            .collect();
         v.sort();
         v
     }
@@ -208,7 +248,10 @@ mod tests {
         let mut on_disk = None;
         assert!(write_if_changed(&file, &a, &mut on_disk).unwrap());
         assert_eq!(std::fs::read(&file).unwrap(), a);
-        assert!(write_if_changed(&file, &b, &mut on_disk).unwrap(), "same length, other bytes: must be written");
+        assert!(
+            write_if_changed(&file, &b, &mut on_disk).unwrap(),
+            "same length, other bytes: must be written"
+        );
         assert_eq!(std::fs::read(&file).unwrap(), b);
         assert!(temporaries(&d.0).is_empty());
     }
@@ -287,13 +330,26 @@ mod tests {
         make("pipelines-gl-0001-00020a01.5.tmp", true); // another GPU whose id begins like this one's
         make("pipelines-gl-0001-0002.bin", true); // the cache itself
         remove_stale_temporaries(&file);
-        assert_eq!(temporaries(&d.0), ["pipelines-gl-0001-0002.77.tmp", "pipelines-gl-0001-00020a01.5.tmp", "pipelines-vulkan-0001-0002.5.tmp"]);
+        assert_eq!(
+            temporaries(&d.0),
+            [
+                "pipelines-gl-0001-0002.77.tmp",
+                "pipelines-gl-0001-00020a01.5.tmp",
+                "pipelines-vulkan-0001-0002.5.tmp"
+            ]
+        );
         assert!(file.exists());
     }
 
     #[test]
     fn file_names_backend_and_gpu() {
-        assert_eq!(super::file_name(wgpu::Backend::Gl, 0x5143, 0x43050a01), "pipelines-gl-5143-43050a01.bin");
-        assert_eq!(super::file_name(wgpu::Backend::Vulkan, 0x10de, 0x2684), "pipelines-vulkan-10de-2684.bin");
+        assert_eq!(
+            super::file_name(wgpu::Backend::Gl, 0x5143, 0x43050a01),
+            "pipelines-gl-5143-43050a01.bin"
+        );
+        assert_eq!(
+            super::file_name(wgpu::Backend::Vulkan, 0x10de, 0x2684),
+            "pipelines-vulkan-10de-2684.bin"
+        );
     }
 }

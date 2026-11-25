@@ -22,7 +22,12 @@ impl EngineRenderer {
     }
 
     /// A page whose `window.omsi` is the one of `api` (see [`omsi_sim::htmltex::PageApi`]).
-    pub fn with_api(width: u32, height: u32, html: &str, api: omsi_sim::htmltex::PageApi) -> EngineRenderer {
+    pub fn with_api(
+        width: u32,
+        height: u32,
+        html: &str,
+        api: omsi_sim::htmltex::PageApi,
+    ) -> EngineRenderer {
         let (tx, rx) = mpsc::channel::<Job>();
         let (ready_tx, ready_rx) = mpsc::channel::<()>();
         let html = html.to_string();
@@ -35,7 +40,8 @@ impl EngineRenderer {
                 let _ = ready_tx.send(());
                 while let Ok(job) = rx.recv() {
                     // a script that brings Boa down takes the page with it, not the game
-                    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job(&mut core)));
+                    let r =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job(&mut core)));
                     if r.is_err() {
                         log::warn!("htmltexture: the page stopped after an internal error");
                         break;
@@ -44,12 +50,18 @@ impl EngineRenderer {
             })
             .ok();
         let up = worker.is_some() && ready_rx.recv().is_ok();
-        EngineRenderer { tx: up.then_some(tx), worker }
+        EngineRenderer {
+            tx: up.then_some(tx),
+            worker,
+        }
     }
 
     /// Run `f` on the page's thread and wait for its answer; `None` when the page has stopped.
     /// The page's scripts have run by then.
-    fn call<R: Send + 'static>(&self, f: impl FnOnce(&mut PageCore) -> R + Send + 'static) -> Option<R> {
+    fn call<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&mut PageCore) -> R + Send + 'static,
+    ) -> Option<R> {
         self.call_raw(move |c| {
             c.start();
             f(c)
@@ -57,7 +69,10 @@ impl EngineRenderer {
     }
 
     /// As `call`, before the scripts have run (telling the page its folders).
-    fn call_raw<R: Send + 'static>(&self, f: impl FnOnce(&mut PageCore) -> R + Send + 'static) -> Option<R> {
+    fn call_raw<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&mut PageCore) -> R + Send + 'static,
+    ) -> Option<R> {
         let tx = self.tx.as_ref()?;
         let (rtx, rrx) = mpsc::channel();
         tx.send(Box::new(move |core| {
@@ -91,12 +106,14 @@ impl EngineRenderer {
     #[cfg(test)]
     pub(crate) fn run_js(&self, src: &str) -> Result<(), String> {
         let src = src.to_string();
-        self.call(move |c| c.eval(&src)).unwrap_or_else(|| Err("page stopped".into()))
+        self.call(move |c| c.eval(&src))
+            .unwrap_or_else(|| Err("page stopped".into()))
     }
 
     #[cfg(test)]
     pub(crate) fn hit_node(&self, x: f32, y: f32) -> usize {
-        self.call(move |c| c.st.borrow_mut().hit_node(x, y)).unwrap_or(0)
+        self.call(move |c| c.st.borrow_mut().hit_node(x, y))
+            .unwrap_or(0)
     }
 
     #[cfg(test)]
@@ -107,7 +124,8 @@ impl EngineRenderer {
 
     #[cfg(test)]
     pub(crate) fn parent_of(&self, n: usize) -> Option<usize> {
-        self.call(move |c| c.st.borrow().dom.nodes[n].parent).flatten()
+        self.call(move |c| c.st.borrow().dom.nodes[n].parent)
+            .flatten()
     }
 
     #[cfg(test)]
@@ -192,11 +210,13 @@ impl HtmlRenderer for EngineRenderer {
     }
 
     fn take_events(&mut self) -> Vec<(String, f32)> {
-        self.call(|c| std::mem::take(&mut c.st.borrow_mut().events)).unwrap_or_default()
+        self.call(|c| std::mem::take(&mut c.st.borrow_mut().events))
+            .unwrap_or_default()
     }
 
     fn take_triggers(&mut self) -> Vec<String> {
-        self.call(|c| std::mem::take(&mut c.st.borrow_mut().triggers)).unwrap_or_default()
+        self.call(|c| std::mem::take(&mut c.st.borrow_mut().triggers))
+            .unwrap_or_default()
     }
 
     fn set_asset_dirs(&mut self, dirs: Vec<std::path::PathBuf>) {
@@ -215,7 +235,8 @@ impl HtmlRenderer for EngineRenderer {
     }
 
     fn take_requests(&mut self) -> Vec<omsi_sim::htmltex::HtmlRequest> {
-        self.call(|c| std::mem::take(&mut c.st.borrow_mut().requests)).unwrap_or_default()
+        self.call(|c| std::mem::take(&mut c.st.borrow_mut().requests))
+            .unwrap_or_default()
     }
 
     fn set_departures(&mut self, departures: &omsi_sim::vehicle_api::ApiValue) {
@@ -224,6 +245,7 @@ impl HtmlRenderer for EngineRenderer {
     }
 
     fn take_departure_wants(&mut self) -> Vec<String> {
-        self.call(|c| std::mem::take(&mut c.st.borrow_mut().departure_wants)).unwrap_or_default()
+        self.call(|c| std::mem::take(&mut c.st.borrow_mut().departure_wants))
+            .unwrap_or_default()
     }
 }

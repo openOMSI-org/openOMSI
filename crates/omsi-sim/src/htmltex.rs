@@ -81,7 +81,8 @@ pub trait HtmlRenderer: Send {
     }
 }
 
-pub type BackendFactory = fn(width: u32, height: u32, html: &str, api: PageApi) -> Box<dyn HtmlRenderer>;
+pub type BackendFactory =
+    fn(width: u32, height: u32, html: &str, api: PageApi) -> Box<dyn HtmlRenderer>;
 
 static BACKEND: OnceLock<BackendFactory> = OnceLock::new();
 
@@ -94,7 +95,9 @@ fn make_renderer(width: u32, height: u32, html: &str, api: PageApi) -> Box<dyn H
         Some(f) => f(width, height, html, api),
         None => {
             static WARNED: std::sync::Once = std::sync::Once::new();
-            WARNED.call_once(|| log::warn!("htmltexture: no page backend registered, the pages stay empty"));
+            WARNED.call_once(|| {
+                log::warn!("htmltexture: no page backend registered, the pages stay empty")
+            });
             Box::new(NoPage)
         }
     }
@@ -122,7 +125,9 @@ fn find_file(dirs: &[&Path], rel: &str) -> Option<PathBuf> {
     if let Some(parent) = dirs.first().and_then(|d| d.parent()) {
         all.push(parent.to_path_buf());
     }
-    all.iter().map(|d| omsi_cfg::resolve_path(d, rel)).find(|p| omsi_cfg::vfs::is_file(p))
+    all.iter()
+        .map(|d| omsi_cfg::resolve_path(d, rel))
+        .find(|p| omsi_cfg::vfs::is_file(p))
 }
 
 fn attr(tag: &str, name: &str) -> Option<String> {
@@ -139,7 +144,10 @@ fn attr(tag: &str, name: &str) -> Option<String> {
         let rest = rest[1..].trim_start();
         return match rest.chars().next()? {
             q @ ('"' | '\'') => rest[1..].split(q).next().map(str::to_string),
-            _ => rest.split(|c: char| c.is_whitespace() || c == '>').next().map(str::to_string),
+            _ => rest
+                .split(|c: char| c.is_whitespace() || c == '>')
+                .next()
+                .map(str::to_string),
         };
     }
     None
@@ -166,14 +174,19 @@ pub(crate) fn rebase_css_urls(css: &str, prefix: &str) -> String {
     let mut i = 0;
     while let Some(p) = lower[i..].find("url(") {
         let inner = i + p + 4;
-        let Some(e) = css[inner..].find(')').map(|e| inner + e) else { break };
+        let Some(e) = css[inner..].find(')').map(|e| inner + e) else {
+            break;
+        };
         out.push_str(&css[i..inner]);
         let raw = css[inner..e].trim();
         let (quote, path) = match raw.chars().next() {
             Some(c @ ('"' | '\'')) => (c.to_string(), raw.trim_matches(c)),
             _ => (String::new(), raw),
         };
-        let absolute = path.is_empty() || path.starts_with(['/', '\\', '#']) || path.starts_with("data:") || path.contains("://");
+        let absolute = path.is_empty()
+            || path.starts_with(['/', '\\', '#'])
+            || path.starts_with("data:")
+            || path.contains("://");
         if absolute {
             out.push_str(&css[inner..e]);
         } else {
@@ -215,7 +228,9 @@ pub fn load_page(dirs: &[&Path], rel: &str) -> String {
         log::debug!("htmltexture: {} cannot be read", path.display());
         return String::new();
     };
-    let html = String::from_utf8_lossy(&bytes).trim_start_matches('\u{feff}').to_string();
+    let html = String::from_utf8_lossy(&bytes)
+        .trim_start_matches('\u{feff}')
+        .to_string();
     let base = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let mut bases: Vec<&Path> = vec![base.as_path()];
     bases.extend(dirs.iter().copied());
@@ -223,7 +238,11 @@ pub fn load_page(dirs: &[&Path], rel: &str) -> String {
         let href = href.split(['?', '#']).next().unwrap_or(href);
         let text = find_file(&bases, href)
             .and_then(|p| omsi_cfg::vfs::read(&p).ok())
-            .map(|b| String::from_utf8_lossy(&b).trim_start_matches('\u{feff}').to_string());
+            .map(|b| {
+                String::from_utf8_lossy(&b)
+                    .trim_start_matches('\u{feff}')
+                    .to_string()
+            });
         match &text {
             Some(t) => log::debug!("htmltexture: inlined {href} ({} bytes)", t.len()),
             None => log::debug!("htmltexture: {href} not found, left as it is"),
@@ -234,7 +253,10 @@ pub fn load_page(dirs: &[&Path], rel: &str) -> String {
     let mut rest = html.as_str();
     loop {
         let lower = rest.to_ascii_lowercase();
-        let next = [lower.find("<link"), lower.find("<script")].into_iter().flatten().min();
+        let next = [lower.find("<link"), lower.find("<script")]
+            .into_iter()
+            .flatten()
+            .min();
         let Some(at) = next else { break };
         out.push_str(&rest[..at]);
         let Some(end) = rest[at..].find('>').map(|e| at + e + 1) else {
@@ -244,8 +266,11 @@ pub fn load_page(dirs: &[&Path], rel: &str) -> String {
         let tag = &rest[at..end];
         let is_link = lower[at..].starts_with("<link");
         if is_link {
-            let sheet = attr(tag, "rel").map_or(false, |r| r.to_ascii_lowercase().contains("stylesheet"));
-            let loaded = attr(tag, "href").filter(|_| sheet).and_then(|h| read(&h).map(|css| rebase_css_urls(&css, css_dir(&h))));
+            let sheet =
+                attr(tag, "rel").map_or(false, |r| r.to_ascii_lowercase().contains("stylesheet"));
+            let loaded = attr(tag, "href")
+                .filter(|_| sheet)
+                .and_then(|h| read(&h).map(|css| rebase_css_urls(&css, css_dir(&h))));
             match loaded {
                 Some(css) => out.push_str(&format!("<style>{css}</style>")),
                 None => out.push_str(tag),
@@ -256,25 +281,42 @@ pub fn load_page(dirs: &[&Path], rel: &str) -> String {
             // relative to it. A plain script is inlined exactly as it always was)
             let module = attr(tag, "type").is_some_and(|t| t.eq_ignore_ascii_case("module"));
             if module {
-                out.push_str(&format!("<script type=\"module\" data-omsi-src=\"{}\">{js}</script>", src.split(['?', '#']).next().unwrap_or(&src).replace('"', "")));
+                out.push_str(&format!(
+                    "<script type=\"module\" data-omsi-src=\"{}\">{js}</script>",
+                    src.split(['?', '#'])
+                        .next()
+                        .unwrap_or(&src)
+                        .replace('"', "")
+                ));
             } else {
                 out.push_str(&format!("<script>{js}</script>"));
             }
             let after = &rest[end..];
-            let close = after.to_ascii_lowercase().find("</script>").map(|c| c + "</script>".len()).unwrap_or(0);
+            let close = after
+                .to_ascii_lowercase()
+                .find("</script>")
+                .map(|c| c + "</script>".len())
+                .unwrap_or(0);
             rest = &after[close..];
         } else {
             // an inline script (or one that cannot be read) is copied whole, so text inside
             // it that looks like a tag (`"<link ..."`) is not taken for one
             let after = &rest[end..];
-            let close = after.to_ascii_lowercase().find("</script>").map(|c| c + "</script>".len()).unwrap_or(after.len());
+            let close = after
+                .to_ascii_lowercase()
+                .find("</script>")
+                .map(|c| c + "</script>".len())
+                .unwrap_or(after.len());
             out.push_str(tag);
             out.push_str(&after[..close]);
             rest = &after[close..];
         }
     }
     out.push_str(rest);
-    log::debug!("htmltexture: page {rel}: {} bytes after inlining", out.len());
+    log::debug!(
+        "htmltexture: page {rel}: {} bytes after inlining",
+        out.len()
+    );
     out
 }
 
@@ -301,9 +343,18 @@ impl HtmlTexture {
         HtmlTexture::with_api(script_index, width, height, html, PageApi::Vehicle)
     }
 
-    pub fn with_api(script_index: usize, width: i32, height: i32, html: &str, api: PageApi) -> HtmlTexture {
+    pub fn with_api(
+        script_index: usize,
+        width: i32,
+        height: i32,
+        html: &str,
+        api: PageApi,
+    ) -> HtmlTexture {
         let (w, h) = (width.max(1) as u32, height.max(1) as u32);
-        log::debug!("htmltexture #{script_index}: {w}x{h}, page of {} bytes", html.len());
+        log::debug!(
+            "htmltexture #{script_index}: {w}x{h}, page of {} bytes",
+            html.len()
+        );
         HtmlTexture {
             script_index,
             width: w,
@@ -328,7 +379,8 @@ impl HtmlTexture {
 
     /// The pointer at (`u`, `v`), both 0..1 across the texture (`v` down from the top).
     pub fn pointer(&mut self, u: f32, v: f32, kind: PointerKind) {
-        self.renderer.pointer(u * self.width as f32, v * self.height as f32, kind);
+        self.renderer
+            .pointer(u * self.width as f32, v * self.height as f32, kind);
     }
 }
 
@@ -377,7 +429,13 @@ pub(crate) fn drive_pages(
             .iter()
             .zip(vars.num)
             .enumerate()
-            .filter(|(i, (_, v))| t.last_num.get(*i).copied().flatten().is_none_or(|last| last != **v))
+            .filter(|(i, (_, v))| {
+                t.last_num
+                    .get(*i)
+                    .copied()
+                    .flatten()
+                    .is_none_or(|last| last != **v)
+            })
             .map(|(_, (n, v))| (n.clone(), *v))
             .collect();
         let ds: Vec<(String, String)> = vars
@@ -388,7 +446,13 @@ pub(crate) fn drive_pages(
             .filter(|(i, (_, v))| t.last_str.get(*i).and_then(|l| l.as_ref()) != Some(*v))
             .map(|(_, (n, v))| (n.clone(), v.clone()))
             .collect();
-        if !t.started || !dn.is_empty() || !ds.is_empty() || api_changed || env_changed || departures_changed {
+        if !t.started
+            || !dn.is_empty()
+            || !ds.is_empty()
+            || api_changed
+            || env_changed
+            || departures_changed
+        {
             log::debug!(
                 "htmltexture #{}: {} numeric and {} string variable(s) to the page{}",
                 t.script_index,
@@ -399,10 +463,16 @@ pub(crate) fn drive_pages(
             if !t.started && api.is_some() {
                 match depot {
                     Some(d) => {
-                        log::info!("htmltexture #{}: omsi.depot set on the page", t.script_index);
+                        log::info!(
+                            "htmltexture #{}: omsi.depot set on the page",
+                            t.script_index
+                        );
                         t.renderer.set_depot(d);
                     }
-                    None => log::debug!("htmltexture #{}: first update without a depot: omsi.depot is empty", t.script_index),
+                    None => log::debug!(
+                        "htmltexture #{}: first update without a depot: omsi.depot is empty",
+                        t.script_index
+                    ),
                 }
             }
             if let Some(a) = api.filter(|_| api_changed) {
@@ -432,7 +502,11 @@ pub(crate) fn drive_pages(
         }
         let page_events = t.renderer.take_events();
         if !page_events.is_empty() {
-            log::debug!("htmltexture #{}: the page sets {:?}", t.script_index, page_events);
+            log::debug!(
+                "htmltexture #{}: the page sets {:?}",
+                t.script_index,
+                page_events
+            );
         }
         out.events.extend(page_events);
         out.triggers.extend(t.renderer.take_triggers());
@@ -443,7 +517,11 @@ pub(crate) fn drive_pages(
             }
         }
         if let Some(rgba) = t.renderer.poll_frame() {
-            log::debug!("htmltexture #{}: new frame of {} bytes", t.script_index, rgba.len());
+            log::debug!(
+                "htmltexture #{}: new frame of {} bytes",
+                t.script_index,
+                rgba.len()
+            );
             out.frames.push((t.script_index, t.width, t.height, rgba));
         }
     }
@@ -452,12 +530,17 @@ pub(crate) fn drive_pages(
 
 /// The pages of a scenery object (`[htmltexture]` in its model), see
 /// [`crate::scenery::SceneryInstance`].
-pub fn scenery_pages(defs: &[omsi_model::HtmlTextureDef], model_dir: &Path, object_dir: &Path) -> Vec<HtmlTexture> {
+pub fn scenery_pages(
+    defs: &[omsi_model::HtmlTextureDef],
+    model_dir: &Path,
+    object_dir: &Path,
+) -> Vec<HtmlTexture> {
     defs.iter()
         .map(|d| {
             let dirs = [model_dir, object_dir];
             let html = load_page(&dirs, &d.path);
-            HtmlTexture::with_api(d.script_index, d.width, d.height, &html, PageApi::Scenery).with_asset_dirs(asset_dirs(&dirs, &d.path))
+            HtmlTexture::with_api(d.script_index, d.width, d.height, &html, PageApi::Scenery)
+                .with_asset_dirs(asset_dirs(&dirs, &d.path))
         })
         .collect()
 }
@@ -482,7 +565,11 @@ impl VehicleInstance {
     /// False when the vehicle has no such page. What the page does with it
     /// (`omsi.setVar`, `omsi.trigger`) is applied to the vehicle at once.
     pub fn html_pointer(&mut self, script_index: usize, u: f32, v: f32, kind: PointerKind) -> bool {
-        let Some(t) = self.html_textures.iter_mut().find(|t| t.script_index == script_index) else {
+        let Some(t) = self
+            .html_textures
+            .iter_mut()
+            .find(|t| t.script_index == script_index)
+        else {
             return false;
         };
         t.pointer(u, v, kind);
@@ -497,7 +584,9 @@ impl VehicleInstance {
         }
         for name in triggers {
             if !self.trigger(&name) {
-                log::debug!("htmltexture: the page presses {name}, which the vehicle does not have");
+                log::debug!(
+                    "htmltexture: the page presses {name}, which the vehicle does not have"
+                );
             }
         }
         true
@@ -525,11 +614,17 @@ impl VehicleInstance {
         let depot = if self.html_textures.iter().any(|t| !t.started) {
             match self.host.hof.as_ref() {
                 Some(h) => {
-                    log::info!("htmltexture: page starts, depot '{}' ({}) goes to omsi.depot", h.name.trim(), h.path.display());
+                    log::info!(
+                        "htmltexture: page starts, depot '{}' ({}) goes to omsi.depot",
+                        h.name.trim(),
+                        h.path.display()
+                    );
                     Some(crate::vehicle_api::depot(h))
                 }
                 None => {
-                    log::warn!("htmltexture: page starts, but the vehicle has no depot file (host.hof is None): omsi.depot stays empty");
+                    log::warn!(
+                        "htmltexture: page starts, but the vehicle has no depot file (host.hof is None): omsi.depot stays empty"
+                    );
                     None
                 }
             }
@@ -547,8 +642,16 @@ impl VehicleInstance {
         // one snapshot of the vehicle for all pages
         let api = self.html_api_snapshot();
         let env = self.html_env_snapshot();
-        let departures = (!self.host.html_departures.is_empty()).then(|| crate::vehicle_api::departures(&self.host.html_departures));
-        let out = drive_pages(&mut self.html_textures, &vars, Some(&api), &env, depot.as_ref(), departures.as_ref());
+        let departures = (!self.host.html_departures.is_empty())
+            .then(|| crate::vehicle_api::departures(&self.host.html_departures));
+        let out = drive_pages(
+            &mut self.html_textures,
+            &vars,
+            Some(&api),
+            &env,
+            depot.as_ref(),
+            departures.as_ref(),
+        );
         for key in out.departure_wants {
             self.host.want_departures(key);
         }
@@ -562,7 +665,9 @@ impl VehicleInstance {
         }
         for name in triggers {
             if !self.trigger(&name) {
-                log::debug!("htmltexture: the page presses {name}, which the vehicle does not have");
+                log::debug!(
+                    "htmltexture: the page presses {name}, which the vehicle does not have"
+                );
             }
         }
         for (index, w, h, rgba) in frames {
@@ -615,19 +720,36 @@ mod page_vars_tests {
         let env = crate::vehicle_api::ApiValue::Null;
         let mut drive = |num: [f32; 3], strs: [&str; 2]| {
             let strs = strs.map(String::from);
-            let vars = PageVars { num_names: &names, num: &num, str_names: &str_names, strs: &strs };
+            let vars = PageVars {
+                num_names: &names,
+                num: &num,
+                str_names: &str_names,
+                strs: &strs,
+            };
             drive_pages(&mut pages, &vars, None, &env, None, None);
         };
-        let s = |v: &[(&str, &str)]| -> Vec<(String, String)> { v.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect() };
+        let s = |v: &[(&str, &str)]| -> Vec<(String, String)> {
+            v.iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect()
+        };
         drive([1.0, 2.0, 3.0], ["x", ""]);
         drive([1.0, 2.0, 3.0], ["x", ""]);
         drive([1.0, 5.0, f32::NAN], ["x", "y"]);
         drive([1.0, 5.0, f32::NAN], ["x", "y"]);
         drive([0.0, 5.0, 3.0], ["z", "y"]);
         let got = sent.lock().unwrap().clone();
-        let num = |v: &[(&str, f32)]| -> Vec<(String, f32)> { v.iter().map(|(a, b)| (a.to_string(), *b)).collect() };
+        let num = |v: &[(&str, f32)]| -> Vec<(String, f32)> {
+            v.iter().map(|(a, b)| (a.to_string(), *b)).collect()
+        };
         assert_eq!(got.len(), 4, "{got:?}");
-        assert_eq!(got[0], (num(&[("a", 1.0), ("B", 2.0), ("c", 3.0)]), s(&[("s", "x"), ("t", "")])));
+        assert_eq!(
+            got[0],
+            (
+                num(&[("a", 1.0), ("B", 2.0), ("c", 3.0)]),
+                s(&[("s", "x"), ("t", "")])
+            )
+        );
         assert_eq!(got[1].0[0], ("B".to_string(), 5.0));
         assert!(got[1].0.len() == 2 && got[1].0[1].0 == "c" && got[1].0[1].1.is_nan());
         assert_eq!(got[1].1, s(&[("t", "y")]));

@@ -30,7 +30,10 @@ pub struct TicketPack {
 impl TicketPack {
     pub fn load(path: &Path) -> Result<TicketPack, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
-        let mut p = TicketPack { path: f.path.clone(), ..Default::default() };
+        let mut p = TicketPack {
+            path: f.path.clone(),
+            ..Default::default()
+        };
         let mut r = f.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
@@ -42,7 +45,17 @@ impl TicketPack {
                 }
                 "voicepath" => p.voice_path = Some(r.str().to_string()),
                 "ticket" | "ticket_2" => {
-                    let mut t = Ticket { name: r.str().to_string(), name_english: r.str().to_string(), max_stations: r.i32(), age_min: r.i32(), age_max: r.i32(), value: r.f32(), display_string: r.str().to_string(), day_ticket: false, probability: 1.0 };
+                    let mut t = Ticket {
+                        name: r.str().to_string(),
+                        name_english: r.str().to_string(),
+                        max_stations: r.i32(),
+                        age_min: r.i32(),
+                        age_max: r.i32(),
+                        value: r.f32(),
+                        display_string: r.str().to_string(),
+                        day_ticket: false,
+                        probability: 1.0,
+                    };
                     if k == "ticket_2" {
                         t.day_ticket = r.bool();
                         t.probability = r.f32();
@@ -70,7 +83,11 @@ impl TicketItems {
         let mut r = f.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
-                "item" => t.items.push((r.str().to_string(), r.str().to_string(), r.str().to_string())),
+                "item" => t.items.push((
+                    r.str().to_string(),
+                    r.str().to_string(),
+                    r.str().to_string(),
+                )),
                 "setvar" => t.set_vars.push((r.str().to_string(), r.f32())),
                 _ => {}
             }

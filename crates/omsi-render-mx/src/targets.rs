@@ -22,14 +22,14 @@ pub(crate) struct HdrTargets {
     pub(crate) ldr: mx::TextureView,
     /// down[i] reads the picture (i = 0) or down[i - 1]; up[i] reads up[i + 1] (or the
     /// last down level) and down[i].
-    pub(crate) down_bg: Vec<mx::BindGroup>,
-    pub(crate) up_bg: Vec<mx::BindGroup>,
-    pub(crate) meter_bg: mx::BindGroup,
+    pub(crate) down_bg: Vec<HeapGroup>,
+    pub(crate) up_bg: Vec<HeapGroup>,
+    pub(crate) meter_bg: HeapGroup,
     /// Tone mapping with the adapted exposure in `adapt[k]`.
-    pub(crate) tonemap_bg: [mx::BindGroup; 2],
-    pub(crate) fxaa_bg: mx::BindGroup,
+    pub(crate) tonemap_bg: [HeapGroup; 2],
+    pub(crate) fxaa_bg: HeapGroup,
     /// Classic shading is presented directly, without the Enhanced tone curve.
-    pub(crate) classic_bg: mx::BindGroup,
+    pub(crate) classic_bg: HeapGroup,
     /// Allocated only when wet roads need scene reflections in the main view.
     pub(crate) puddles: Option<puddles::Targets>,
 }
@@ -41,33 +41,26 @@ pub(crate) struct Probe {
     /// Per mip level, per face: the view the level is drawn into.
     pub(crate) faces: Vec<Vec<mx::TextureView>>,
     /// Per mip level, the two passes' bind groups (faces 0-2 and 3-5).
-    pub(crate) bind_groups: Vec<[mx::BindGroup; 2]>,
+    pub(crate) bind_groups: Vec<[HeapGroup; 2]>,
     pub(crate) sky_pipeline: mx::RenderPipeline,
     pub(crate) filter_pipeline: mx::RenderPipeline,
     /// The sky table scale it was drawn with (when, see `SkySched`).
     pub(crate) scale: f32,
-    /// The enhanced sky itself at `SKY_CUBE_SIZE` a face (clouds and all), drawn a face a
-    /// frame; the dome reads it (camera binding 17). The volumetric clouds cost 6-18 ms a
-    /// frame drawn for every pixel of a 1440p sky; a face a frame is well under one.
-    pub(crate) cube_view: mx::TextureView,
-    pub(crate) cube_tex: mx::Texture,
+    /// The enhanced sky itself at `SKY_CUBE_SIZE` a face (a cheaper march of the clouds),
+    /// drawn a slice a frame: the probe's sharpest level, which the reflections and the sky
+    /// of the mirrors read. The window's own sky has its clouds traced per pixel (`clouds`).
     pub(crate) cube_faces: Vec<mx::TextureView>,
-    pub(crate) cube_bind_groups: Vec<mx::BindGroup>,
+    pub(crate) cube_bind_groups: Vec<HeapGroup>,
     pub(crate) cube_pipeline: mx::RenderPipeline,
     pub(crate) cube_next: u32,
     pub(crate) cube_filled: bool,
     /// Redraws so far (picks the round of the next).
     pub(crate) cube_round: u32,
-    /// Where every face of the cube is drawn from (world). A face drawn from wherever the
-    /// camera stood at the time left six faces from six places: flying up towards the
-    /// clouds, the faces disagreed at their seams and the blended history dragged each one
-    /// behind the camera, so the clouds shook and lagged. The cube keeps one eye; the dome
-    /// takes the parallax out, and the eye moves on (the whole cube redrawn) once the
-    /// camera has gone far enough for the correction to show.
-    pub(crate) cube_eye: Option<DVec3>,
-    /// Which slices of the cube are drawn when, the cube for the next eye and the probe's
-    /// turn.
+    /// Which slices of the cube are drawn when, and the probe's turn.
     pub(crate) sched: SkySched,
+    /// The window's volumetric clouds (cloud_pass.rs): the dome reads them (camera binding
+    /// 17).
+    pub(crate) clouds: crate::cloud_pass::CloudPass,
 }
 
 /// The textures of the ambient-occlusion pass for one target size.
@@ -82,17 +75,17 @@ pub(crate) struct AoTargets {
     pub(crate) hist_view: mx::TextureView,
     /// Whether `hist_view` is a picture (not the single texel of the other pipelines).
     pub(crate) bounce: bool,
-    pub(crate) ssao_bg: mx::BindGroup,
-    pub(crate) blur_bg: mx::BindGroup,
+    pub(crate) ssao_bg: HeapGroup,
+    pub(crate) blur_bg: HeapGroup,
     /// The lamps' light in the fog (`fog_lamps.wgsl`): worked out at half size into
     /// `fog_view`, then added onto the picture (bind groups of the two passes).
     pub(crate) fog_view: mx::TextureView,
-    pub(crate) fog_bg: Option<[mx::BindGroup; 2]>,
+    pub(crate) fog_bg: Option<[HeapGroup; 2]>,
 }
 
 impl Renderer {
     /// The smaller colour target of the render scale for this size, with its bind group.
-    pub(crate) fn scale_target(&mut self, w: u32, h: u32) -> (mx::TextureView, mx::BindGroup) {
+    pub(crate) fn scale_target(&mut self, w: u32, h: u32) -> (mx::TextureView, HeapGroup) {
         self.targets
             .target_use
             .insert((w, h), std::time::Instant::now());
@@ -135,24 +128,28 @@ impl Renderer {
         (view, bg)
     }
 
-    pub(crate) fn picture_group(&self, view: &mx::TextureView) -> mx::BindGroup {
-        self.device.create_bind_group(&mx::BindGroupDescriptor {
-            label: Some("scene picture"),
-            entries: &[
-                mx::BindGroupEntry {
-                    binding: 0,
-                    resource: self.scale.upscale_buf.as_entire_binding(),
-                },
-                mx::BindGroupEntry {
-                    binding: 1,
-                    resource: mx::BindingResource::TextureView(view),
-                },
-                mx::BindGroupEntry {
-                    binding: 2,
-                    resource: mx::BindingResource::Sampler(&self.tone.post_sampler),
-                },
-            ],
-        })
+    pub(crate) fn picture_group(&self, view: &mx::TextureView) -> HeapGroup {
+        HeapGroup::of(
+            picture_layout(),
+            0,
+            &mx::BindGroupDescriptor {
+                label: Some("scene picture"),
+                entries: &[
+                    mx::BindGroupEntry {
+                        binding: 0,
+                        resource: self.scale.upscale_buf.as_entire_binding(),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 1,
+                        resource: mx::BindingResource::TextureView(view),
+                    },
+                    mx::BindGroupEntry {
+                        binding: 2,
+                        resource: mx::BindingResource::Sampler(&self.tone.post_sampler),
+                    },
+                ],
+            },
+        )
     }
 
     /// The scene's slot for the picture behind the glass (black until a frame is drawn).
@@ -193,16 +190,20 @@ impl Renderer {
                         height,
                         depth_or_array_layers: 1,
                     },
-                    mip_level_count: 1,
+                    mip_level_count: crate::glass_mips::glass_mip_levels(width, height, format),
                     sample_count: 1,
                     dimension: mx::TextureDimension::D2,
                     format,
                     usage: mx::TextureUsages::COPY_DST
                         | mx::TextureUsages::COPY_SRC
-                        | mx::TextureUsages::TEXTURE_BINDING,
+                        | mx::TextureUsages::TEXTURE_BINDING
+                        | mx::TextureUsages::RENDER_ATTACHMENT,
                     view_formats: &[],
                 })
                 .expect("mX: a texture");
+            // (the enhanced picture's copy keeps smaller levels for the wet panes' blur)
+            self.targets.glass_mips = (tex.mip_level_count() > 1)
+                .then(|| crate::glass_mips::GlassMips::new(&self.device, &tex));
             self.targets.glass_picture = Some(
                 tex.create_view(&Default::default())
                     .expect("mX: a texture view"),
@@ -218,11 +219,11 @@ impl Renderer {
 
     /// The ambient-occlusion textures for a target of this size (rebuilt on resize).
     /// The ground albedo picture at this size when `wanted`, let go of when not. True when it
-    /// came, went or changed size (the camera group must be made again).
+    /// came, went or changed size.
     pub(crate) fn ensure_ground(&mut self, w: u32, h: u32, wanted: bool) -> bool {
         match (&self.targets.ground, wanted) {
             (None, false) => false,
-            (Some((size, _)), true) if *size == (w, h) => false,
+            (Some((size, ..)), true) if *size == (w, h) => false,
             (_, false) => {
                 self.targets.ground = None;
                 true
@@ -248,7 +249,26 @@ impl Renderer {
                     .expect("mX: a texture")
                     .create_view(&Default::default())
                     .expect("mX: a texture view");
-                self.targets.ground = Some(((w, h), view));
+                let depth = self
+                    .device
+                    .create_texture(&mx::TextureDescriptor {
+                        label: Some("ground depth"),
+                        size: mx::Extent3d {
+                            width: w,
+                            height: h,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: mx::TextureDimension::D2,
+                        format: DEPTH_FORMAT,
+                        usage: mx::TextureUsages::RENDER_ATTACHMENT,
+                        view_formats: &[],
+                    })
+                    .expect("mX: a texture")
+                    .create_view(&Default::default())
+                    .expect("mX: a texture view");
+                self.targets.ground = Some(((w, h), view, depth));
                 true
             }
         }
@@ -355,27 +375,31 @@ impl Renderer {
             .expect("mX: a texture view");
 
         let bg = |label: &str, tex: &mx::TextureView| {
-            self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some(label),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: self.ao_buf.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::TextureView(&depth_view),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 2,
-                        resource: mx::BindingResource::TextureView(tex),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 3,
-                        resource: mx::BindingResource::TextureView(&hist_view),
-                    },
-                ],
-            })
+            HeapGroup::of(
+                pipelines::ssao::SSAO.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some(label),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: self.ao_buf.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::TextureView(&depth_view),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 2,
+                            resource: mx::BindingResource::TextureView(tex),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 3,
+                            resource: mx::BindingResource::TextureView(&hist_view),
+                        },
+                    ],
+                },
+            )
         };
         // the SSAO pass reads no AO texture, but the layout wants one: bind the blur target
         let ssao_bg = bg("ssao", &blur_view);
@@ -402,23 +426,27 @@ impl Renderer {
         let fog_bg = self.lights.fog_lamps_pipeline.is_some().then(|| {
             // (the half-size pass reads no result: the layout wants one, the AO's is bound)
             [&ao_view, &fog_view].map(|read| {
-                self.device.create_bind_group(&mx::BindGroupDescriptor {
-                    label: Some("fog lamps"),
-                    entries: &[
-                        mx::BindGroupEntry {
-                            binding: 0,
-                            resource: self.lights.fog_lamps_buf.as_entire_binding(),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 1,
-                            resource: mx::BindingResource::TextureView(&depth_view),
-                        },
-                        mx::BindGroupEntry {
-                            binding: 2,
-                            resource: mx::BindingResource::TextureView(read),
-                        },
-                    ],
-                })
+                HeapGroup::of(
+                    &self.lights.fog_lamps_layout,
+                    1,
+                    &mx::BindGroupDescriptor {
+                        label: Some("fog lamps"),
+                        entries: &[
+                            mx::BindGroupEntry {
+                                binding: 0,
+                                resource: self.lights.fog_lamps_buf.as_entire_binding(),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 1,
+                                resource: mx::BindingResource::TextureView(&depth_view),
+                            },
+                            mx::BindGroupEntry {
+                                binding: 2,
+                                resource: mx::BindingResource::TextureView(read),
+                            },
+                        ],
+                    },
+                )
             })
         });
         self.targets.ao = Some(AoTargets {
@@ -610,35 +638,39 @@ impl Renderer {
                        base: &mx::TextureView,
                        adapt: &mx::TextureView,
                        screen_mask: &mx::TextureView| {
-            self.device.create_bind_group(&mx::BindGroupDescriptor {
-                label: Some("post"),
-                entries: &[
-                    mx::BindGroupEntry {
-                        binding: 0,
-                        resource: self.tone.post_buf.as_entire_binding(),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 1,
-                        resource: mx::BindingResource::TextureView(src),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 2,
-                        resource: mx::BindingResource::Sampler(&self.tone.post_sampler),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 3,
-                        resource: mx::BindingResource::TextureView(base),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 4,
-                        resource: mx::BindingResource::TextureView(adapt),
-                    },
-                    mx::BindGroupEntry {
-                        binding: 5,
-                        resource: mx::BindingResource::TextureView(screen_mask),
-                    },
-                ],
-            })
+            HeapGroup::of(
+                pipelines::post::POST.layout(),
+                0,
+                &mx::BindGroupDescriptor {
+                    label: Some("post"),
+                    entries: &[
+                        mx::BindGroupEntry {
+                            binding: 0,
+                            resource: self.tone.post_buf.as_entire_binding(),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 1,
+                            resource: mx::BindingResource::TextureView(src),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 2,
+                            resource: mx::BindingResource::Sampler(&self.tone.post_sampler),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 3,
+                            resource: mx::BindingResource::TextureView(base),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 4,
+                            resource: mx::BindingResource::TextureView(adapt),
+                        },
+                        mx::BindGroupEntry {
+                            binding: 5,
+                            resource: mx::BindingResource::TextureView(screen_mask),
+                        },
+                    ],
+                },
+            )
         };
         let bg = |src: &mx::TextureView, base: &mx::TextureView, adapt: &mx::TextureView| {
             bg_with(src, base, adapt, &self.black_texture.view)
@@ -646,7 +678,7 @@ impl Renderer {
         let none = &self.white_texture.view;
         // (the first level of the glow reads the screen mask as its `t_base`: no light from
         // the screens)
-        let down_bg: Vec<mx::BindGroup> = (0..levels)
+        let down_bg: Vec<HeapGroup> = (0..levels)
             .map(|i| {
                 bg(
                     if i == 0 { &view } else { &down[i - 1] },
@@ -655,7 +687,7 @@ impl Renderer {
                 )
             })
             .collect();
-        let up_bg: Vec<mx::BindGroup> = (0..levels)
+        let up_bg: Vec<HeapGroup> = (0..levels)
             .map(|i| {
                 bg(
                     if i + 1 == levels {
@@ -737,15 +769,18 @@ pub(crate) struct Targets {
     pub(crate) msaa_targets: HashMap<(u32, u32), (Option<mx::TextureView>, mx::TextureView)>,
     /// Screen-space ambient occlusion: depth prepass and AO textures of the window's size.
     pub(crate) ao: Option<AoTargets>,
-    /// The ground albedo picture (`fs_ground`) of the window's size, made only while the
-    /// ground pass can run (`Renderer::ground_eligible`): the camera group's slot 8 holds it.
-    pub(crate) ground: Option<((u32, u32), mx::TextureView)>,
+    /// The ground albedo picture (`fs_ground`) of the window's size and the terrain's own
+    /// depth it is drawn with, made only while the ground pass can run
+    /// (`Renderer::ground_eligible`): the main pass reads it through the heap (`FrameHeap`).
+    pub(crate) ground: Option<((u32, u32), mx::TextureView, mx::TextureView)>,
     /// Enhanced path: the HDR targets per size, the post pipelines and their resources.
     pub(crate) hdr_targets: HashMap<(u32, u32), HdrTargets>,
-    pub(crate) scale_targets: HashMap<(u32, u32), (mx::TextureView, mx::BindGroup)>,
-    pub(crate) triple_targets: Option<((u32, u32), Vec<(mx::TextureView, mx::BindGroup)>)>,
+    pub(crate) scale_targets: HashMap<(u32, u32), (mx::TextureView, HeapGroup)>,
+    pub(crate) triple_targets: Option<((u32, u32), Vec<(mx::TextureView, HeapGroup)>)>,
     /// Full-resolution current scene before rain films, in its original colour format.
     pub(crate) glass_picture: Option<mx::TextureView>,
+    /// What makes the smaller levels of `glass_picture` (enhanced: the wet panes' blur).
+    pub(crate) glass_mips: Option<crate::glass_mips::GlassMips>,
     /// When each size of the size-keyed targets (scale, MSAA, HDR) was last asked for.
     pub(crate) target_use: HashMap<(u32, u32), std::time::Instant>,
     pub(crate) evicted_at: std::time::Instant,
@@ -760,7 +795,7 @@ pub(crate) struct FsrTarget {
     pub(crate) used: std::cell::Cell<std::time::Instant>,
     pub(crate) _texture: mx::Texture,
     pub(crate) view: mx::TextureView,
-    pub(crate) bind_group: mx::BindGroup,
+    pub(crate) bind_group: HeapGroup,
 }
 
 /// The render scale: the pipelines that scale the 3D picture up to the window or copy a panel, and the governor's factor.
@@ -779,7 +814,7 @@ pub(crate) struct Upscale {
     pub(crate) upscaler_asked: (bool, f32, f32),
     /// OMSI_FSR_RAW_INPUT: the scene picture it was made for and the bind group reading it
     /// through a view that is not sRGB (made again only for a new picture, not each frame).
-    pub(crate) fsr_raw_bg: std::cell::RefCell<Option<(mx::Texture, mx::BindGroup)>>,
+    pub(crate) fsr_raw_bg: std::cell::RefCell<Option<(mx::Texture, HeapGroup)>>,
     /// FSR 1 without its mip bias (OMSI_NO_FSR_MIP_BIAS; the tests compare with it).
     pub(crate) fsr_mip_bias_off: std::cell::Cell<bool>,
     pub(crate) copy_pipeline: mx::RenderPipeline,

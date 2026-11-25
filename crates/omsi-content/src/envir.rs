@@ -36,16 +36,30 @@ impl Envir {
         Ok(Self::parse(&f))
     }
     pub fn parse(f: &CfgFile) -> Envir {
-        let mut e = Envir { twilight_start_end: (-18.0, 10.0), ..Default::default() };
+        let mut e = Envir {
+            twilight_start_end: (-18.0, 10.0),
+            ..Default::default()
+        };
         let mut r = f.reader().disabled_blocks();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
-                "sky_textures" => e.sky_textures = [r.str().to_string(), r.str().to_string(), r.str().to_string()],
+                "sky_textures" => {
+                    e.sky_textures = [
+                        r.str().to_string(),
+                        r.str().to_string(),
+                        r.str().to_string(),
+                    ]
+                }
                 "twilight_start_end" => e.twilight_start_end = (r.f32(), r.f32()),
                 "lightcolor_a" => e.light_color_a = colors(&mut r),
                 "lightcolor_b" => e.light_color_b = colors(&mut r),
                 "lightcolor_c" => e.light_color_c = colors(&mut r),
-                "cloudtype" => e.cloud_types.push(CloudType { name: r.str().to_string(), texture: r.str().to_string(), height: r.f32(), code: r.str().to_string() }),
+                "cloudtype" => e.cloud_types.push(CloudType {
+                    name: r.str().to_string(),
+                    texture: r.str().to_string(),
+                    height: r.f32(),
+                    code: r.str().to_string(),
+                }),
                 _ => {}
             }
         }

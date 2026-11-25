@@ -170,7 +170,7 @@ impl Renderer {
             || vanilla_fxaa
             || (glass_on && !enhanced_view)
             || temporal_frame;
-        let scene_target: Option<(mx::TextureView, mx::BindGroup)> = if temporal_frame {
+        let scene_target: Option<(mx::TextureView, HeapGroup)> = if temporal_frame {
             // (the picture goes into the upscaler's input, not into the render scale's target)
             self.temporal
                 .as_ref()
@@ -238,8 +238,11 @@ impl Renderer {
             scene,
             &eye,
             enhanced_frame,
-            lighting.lamp_shadows
-                && self.options.light_shadows > 0
+            // (the saloon's lamps always have their maps in the Enhanced picture - the
+            // seats', the handrails' and the partitions' shadows under them; the street's
+            // and the headlamps' follow `light_shadows`, see `LampTiles::tiles`)
+            enhanced_frame
+                && lighting.lamp_shadows
                 && with_overlays
                 && projection.is_none()
                 && self.shadows.shadow_pipelines.len() > 6,
@@ -278,15 +281,13 @@ impl Renderer {
             || temporal_frame;
         let prepass_on = ao_on || depth_wanted;
         // the terrain's paint laid into one albedo picture first: the window's enhanced
-        // picture, single-sampled, with the camera group's slot 8 free of the AO
+        // picture (any number of samples, with or without the ambient occlusion: the picture
+        // has a depth of its own, and the main pass reads it through the heap)
         let ground_ok = with_overlays
             && enhanced
             && projection.is_none()
             && !second_eye
-            && !ao_on
-            && !rt_frame
             && prepass_on
-            && self.options.msaa <= 1
             && exclude_texture.is_none()
             && !env.no_ground_pass
             && self.ground_eligible();
@@ -305,17 +306,22 @@ impl Renderer {
             )
         {
             // a new AO texture: the camera bind group must point at it
-            scene.camera_bind_group = None;
+            scene.camera_heaps = None;
             self.targets.hdr_targets.clear();
         }
-        // (the ground albedo picture only while that pass can run)
-        if prepass_on && self.ensure_ground(width, height, self.ground_eligible()) {
-            scene.camera_bind_group = None;
+        // (the window's clouds at its size: the camera group reads them)
+        if enhanced && lead_view && self.ensure_cloud_targets(width, height) {
+            scene.camera_heaps = None;
         }
-        // (slot 8 holds the AO's picture or the ground albedo's: the group is made again when that changes)
-        if prepass_on && self.ground_bound.get() != self.ground_should_bind() {
-            scene.camera_bind_group = None;
+        // (the ground albedo picture only while that pass can run; read through the heap)
+        if prepass_on {
+            self.ensure_ground(width, height, self.ground_eligible());
         }
+        scene.frame_heap.ground = self
+            .targets
+            .ground
+            .as_ref()
+            .map_or(self.white_texture.view.index(), |g| g.1.index());
         if rt_frame
             && self
                 .rt
@@ -323,7 +329,7 @@ impl Renderer {
                 .is_some_and(|rt| rt.ensure_targets(&self.device, width, height))
         {
             // the camera bind group must point at the new lighting texture
-            scene.camera_bind_group = None;
+            scene.camera_heaps = None;
         }
         if masked_frame {
             self.hdr_targets(width, height, rt_gbuf() && !eye_color);
@@ -363,6 +369,11 @@ impl Renderer {
         if with_overlays {
             self.prepare_overlays(scene, full_w, full_h);
         }
+        let lean = FrameLean {
+            lean: !env.no_lean && crate::lighting::debug_view() == 0.0,
+            wet: lighting.wetness > 0.0,
+            snow: lighting.snow > 0.0 || lighting.road_snow.is_some(),
+        };
         FrameCtx {
             env,
             target,
@@ -398,6 +409,7 @@ impl Renderer {
             ground_ok,
             prepass_on,
             prepass_reach,
+            lean,
             dt,
             overlays,
         }
@@ -530,7 +542,12 @@ impl Renderer {
                     .unwrap_or(-1.0),
                 lighting.snow_fallen.rem_euclid(65536.0) as f32,
                 lighting.snow_ruts.clamp(0.0, 1.0),
-                0.0,
+                // (Enhanced: how far it thaws to slush, `precip::precip_ext`)
+                if enhanced {
+                    crate::precip::precip_ext(lighting)[1]
+                } else {
+                    0.0
+                },
             ];
             self.queue
                 .write_buffer(&self.lights.snow_track_uniform, 0, bytemuck::cast_slice(&v))
@@ -663,7 +680,7 @@ impl Renderer {
                 if lighting.detail { 1.0 } else { 0.0 },
                 if enhanced { 1.0 } else { 0.0 },
                 // (below zero: the rain films have the clean current picture to look through,
-                // see `rain_behind`; above zero is an old branch never taken)
+                // see `glass_film`; above zero is an old branch never taken)
                 if glass_on { -1.0 } else { 0.0 },
                 if shadows { SHADOW_RANGE_CLOSE } else { 0.0 },
             ],
@@ -672,7 +689,7 @@ impl Renderer {
                 lighting.glass_wind.x,
                 lighting.glass_wind.y,
                 lighting.glass_wind.z,
-                1.0,
+                1.0 + lighting.rain_lights.clamp(0.0, 1.0),
             ],
             lamp_view_proj: std::array::from_fn(|k| lamp_mats[k].to_cols_array_2d()),
             lamp_atlas: self.shadows.lamp_atlas.uniform(),
@@ -730,7 +747,7 @@ impl Renderer {
                 self.fsr_mip_bias(f),
                 0.0,
                 lighting.road_glare.clamp(0.0, 2.0),
-                0.0,
+                lighting.air_temp.clamp(-40.0, 45.0),
             ],
             spot: classic_spot(&scene.lights, ro),
         };

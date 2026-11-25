@@ -115,7 +115,17 @@ pub(crate) fn spline_layers(meshes: &[&MeshData], ground: &[[Vec3; 3]]) -> Vec<S
         let n = (t[1] - t[0]).cross(t[2] - t[0]);
         let len = n.length();
         if len > 1e-8 && (n.z / len).abs() > 0.5 {
-            add_face(&mut faces, &mut grid, Face { a: t[0], b: t[1], c: t[2], level: 0, object: true });
+            add_face(
+                &mut faces,
+                &mut grid,
+                Face {
+                    a: t[0],
+                    b: t[1],
+                    c: t[2],
+                    level: 0,
+                    object: true,
+                },
+            );
         }
     }
     let mut out = Vec::with_capacity(meshes.len());
@@ -163,7 +173,17 @@ pub(crate) fn spline_layers(meshes: &[&MeshData], ground: &[[Vec3; 3]]) -> Vec<S
             }
         }
         for t in tris {
-            add_face(&mut faces, &mut grid, Face { a: t[0], b: t[1], c: t[2], level: layer.level, object: false });
+            add_face(
+                &mut faces,
+                &mut grid,
+                Face {
+                    a: t[0],
+                    b: t[1],
+                    c: t[2],
+                    level: layer.level,
+                    object: false,
+                },
+            );
         }
         out.push(layer);
     }
@@ -188,7 +208,14 @@ mod tests {
             indices.extend_from_slice(&[a, a + 1, a + 2, a + 1, a + 3, a + 2]);
         }
         let count = indices.len() as u32;
-        MeshData { normals: vec![Vec3::Z; positions.len()], uvs: vec![Vec2::ZERO; positions.len()], positions, indices, ranges: vec![(0, count, 0)], one_sided: true }
+        MeshData {
+            normals: vec![Vec3::Z; positions.len()],
+            uvs: vec![Vec2::ZERO; positions.len()],
+            positions,
+            indices,
+            ranges: vec![(0, count, 0)],
+            one_sided: true,
+        }
     }
 
     fn spline_layer_levels(meshes: &[&MeshData]) -> Vec<u8> {
@@ -196,7 +223,16 @@ mod tests {
     }
 
     fn faces(m: &MeshData) -> Vec<[Vec3; 3]> {
-        m.indices.chunks_exact(3).map(|t| [m.positions[t[0] as usize], m.positions[t[1] as usize], m.positions[t[2] as usize]]).collect()
+        m.indices
+            .chunks_exact(3)
+            .map(|t| {
+                [
+                    m.positions[t[0] as usize],
+                    m.positions[t[1] as usize],
+                    m.positions[t[2] as usize],
+                ]
+            })
+            .collect()
     }
 
     /// Crystal Palace: the carriageway is a `[surface]` object, the red lanes are splines a
@@ -217,7 +253,12 @@ mod tests {
             let mut indices = Vec::new();
             for i in 0..=3u32 {
                 let y = 12.0 * i as f32 / 3.0;
-                for (x, z) in [(-3.18, -0.1), (-3.075, 0.005), (-2.925, 0.005), (-2.82, -0.1)] {
+                for (x, z) in [
+                    (-3.18, -0.1),
+                    (-3.075, 0.005),
+                    (-2.925, 0.005),
+                    (-2.82, -0.1),
+                ] {
                     positions.push(Vec3::new(x, y, z));
                 }
             }
@@ -235,11 +276,29 @@ mod tests {
             m
         };
         let layers = spline_layers(&[&red, &on_red, &footway, &deck, &tent], &carriageway);
-        assert_eq!(layers[0], SplineLayer { level: 1, on_object: true });
-        assert_eq!(layers[1], SplineLayer { level: 2, on_object: true });
+        assert_eq!(
+            layers[0],
+            SplineLayer {
+                level: 1,
+                on_object: true
+            }
+        );
+        assert_eq!(
+            layers[1],
+            SplineLayer {
+                level: 2,
+                on_object: true
+            }
+        );
         assert_eq!(layers[2], SplineLayer::default());
         assert_eq!(layers[3], SplineLayer::default());
-        assert_eq!(layers[4], SplineLayer { level: 1, on_object: true });
+        assert_eq!(
+            layers[4],
+            SplineLayer {
+                level: 1,
+                on_object: true
+            }
+        );
     }
 
     #[test]

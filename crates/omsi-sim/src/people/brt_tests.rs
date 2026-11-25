@@ -60,6 +60,7 @@ pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
         age: 40.0,
         stuck: 0.0,
         ghost: 0.0,
+        stuck_total: 0.0,
         car_wait: 0.0,
         detour: 0.0,
         detour_side: 0.0,
@@ -244,12 +245,26 @@ fn brt_ticket_buyers_fall_back_to_open_door_when_rear_boarding_is_disabled() {
     bus.entry_open[1] = true;
     bus.entry_open[2] = false;
 
-    // With rear door boarding off, passenger falls back to open {noticketsale} door
+    // With rear door boarding off, as Omsi.exe: the shut button door that sells counts
+    assert_eq!(choose(&mut h, &bus), 2, "waits at the selling button door");
+    // and without its button they fall back to the open {noticketsale} door
+    Arc::get_mut(&mut bus.cabin).unwrap().entries[2].button = false;
     assert_eq!(
         choose(&mut h, &bus),
         1,
         "falls back to open door when rear boarding is disabled"
     );
+}
+
+#[test]
+fn brt_rear_door_boarding_leaves_a_shut_button_door_after_the_wait() {
+    let (mut h, mut bus) = setup("rear-boarding-button-fallback", None);
+    bus.entry_open[1] = true;
+    h.pax_mut(0).unwrap().pos = DVec3::new(-3.0, -4.0, 0.0);
+    h.rear_door_boarding = true;
+    assert_eq!(choose(&mut h, &bus), 2, "the nearest door has a button");
+    h.pax_mut(0).unwrap().door_since = Some(h.time - DOOR_GIVE_UP * 0.6);
+    assert_eq!(choose(&mut h, &bus), 1, "the open door, after the wait");
 }
 
 #[test]

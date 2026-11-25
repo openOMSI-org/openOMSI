@@ -63,7 +63,12 @@ pub(crate) struct CookieAtlas {
 
 impl CookieAtlas {
     pub(crate) fn new() -> CookieAtlas {
-        CookieAtlas { pictures: RefCell::new(HashMap::new()), layers: RefCell::new([None; COOKIE_LAYERS]), frame: std::cell::Cell::new(0), base: std::cell::Cell::new(None) }
+        CookieAtlas {
+            pictures: RefCell::new(HashMap::new()),
+            layers: RefCell::new([None; COOKIE_LAYERS]),
+            frame: std::cell::Cell::new(0),
+            base: std::cell::Cell::new(None),
+        }
     }
 
     /// Keep a picture for the lamps that name it; a layer showing an older one under the
@@ -84,7 +89,10 @@ impl CookieAtlas {
     pub(crate) fn layer(&self, c: &Cookie) -> Option<u32> {
         let frame = self.frame.get();
         let mut layers = self.layers.borrow_mut();
-        if let Some(k) = layers.iter().position(|l| l.is_some_and(|l| l.picture == c.picture && l.tan == c.tan)) {
+        if let Some(k) = layers
+            .iter()
+            .position(|l| l.is_some_and(|l| l.picture == c.picture && l.tan == c.tan))
+        {
             if let Some(l) = layers[k].as_mut() {
                 l.used = frame;
             }
@@ -93,8 +101,14 @@ impl CookieAtlas {
         if !self.pictures.borrow().contains_key(&c.picture) {
             return None;
         }
-        let k = (0..COOKIE_LAYERS).filter(|&k| layers[k].is_none_or(|l| l.used != frame)).min_by_key(|&k| layers[k].map_or(0, |l| l.used + 1))?;
-        layers[k] = Some(Layer { picture: c.picture, tan: c.tan, used: frame });
+        let k = (0..COOKIE_LAYERS)
+            .filter(|&k| layers[k].is_none_or(|l| l.used != frame))
+            .min_by_key(|&k| layers[k].map_or(0, |l| l.used + 1))?;
+        layers[k] = Some(Layer {
+            picture: c.picture,
+            tan: c.tan,
+            used: frame,
+        });
         Some(k as u32)
     }
 
@@ -109,10 +123,21 @@ impl CookieAtlas {
         let base = out.len() as u32;
         let pictures = self.pictures.borrow();
         for layer in layers.iter() {
-            let texels = layer.filter(|l| l.used == frame).and_then(|l| pictures.get(&l.picture));
+            let texels = layer
+                .filter(|l| l.used == frame)
+                .and_then(|l| pictures.get(&l.picture));
             for r in 0..LAYER_RECORDS {
-                let t = |i: usize| texels.and_then(|t| t.get(r * 4 + i)).map_or([0.0; 4], |c| [c[0], c[1], c[2], 0.0]);
-                out.push(super::GpuPointLight { pos: t(0), color: t(1), dir: t(2), extra: t(3) });
+                let t = |i: usize| {
+                    texels
+                        .and_then(|t| t.get(r * 4 + i))
+                        .map_or([0.0; 4], |c| [c[0], c[1], c[2], 0.0])
+                };
+                out.push(super::GpuPointLight {
+                    pos: t(0),
+                    color: t(1),
+                    dir: t(2),
+                    extra: t(3),
+                });
             }
         }
         self.base.set(Some(base));
@@ -125,7 +150,9 @@ impl CookieAtlas {
         let base = self.base.get().unwrap_or(0);
         std::array::from_fn(|k| {
             let at = (base as usize + k * LAYER_RECORDS) as f32;
-            layers[k].map_or([1.0, 1.0, at, 0.0], |l| [l.tan[0].max(1e-3), l.tan[1].max(1e-3), at, 0.0])
+            layers[k].map_or([1.0, 1.0, at, 0.0], |l| {
+                [l.tan[0].max(1e-3), l.tan[1].max(1e-3), at, 0.0]
+            })
         })
     }
 }
@@ -141,7 +168,11 @@ fn resample(img: &omsi_texture::Image) -> Vec<[f32; 3]> {
     }
     let lin = |c: u8| {
         let c = c as f32 / 255.0;
-        if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
     };
     for y in 0..n {
         let (y0, y1) = (y * h / n, ((y + 1) * h / n).max(y * h / n + 1).min(h));
@@ -175,14 +206,26 @@ mod tests {
                 rgba.extend([v, v, v, 255]);
             }
         }
-        let out = resample(&omsi_texture::Image { width: w, height: h, rgba, has_alpha: false });
-        assert!(out.iter().all(|p| (p[0] - 0.5).abs() < 1e-3), "{:?}", &out[..2]);
+        let out = resample(&omsi_texture::Image {
+            width: w,
+            height: h,
+            rgba,
+            has_alpha: false,
+        });
+        assert!(
+            out.iter().all(|p| (p[0] - 0.5).abs() < 1e-3),
+            "{:?}",
+            &out[..2]
+        );
     }
 
     /// The cone round a picture of 40 x 20 degrees reaches its corners.
     #[test]
     fn the_bounding_cone_holds_the_corners() {
-        let c = Cookie { picture: 1, tan: [20f32.to_radians().tan(), 10f32.to_radians().tan()] };
+        let c = Cookie {
+            picture: 1,
+            tan: [20f32.to_radians().tan(), 10f32.to_radians().tan()],
+        };
         let corner = Vec3::new(c.tan[0], c.tan[1], 1.0).normalize();
         assert!((corner.z - c.bounding_cos()).abs() < 1e-5);
     }
@@ -192,19 +235,44 @@ mod tests {
     #[test]
     fn the_layers_ride_after_the_lights() {
         let atlas = CookieAtlas::new();
-        let img = omsi_texture::Image { width: 2, height: 2, rgba: vec![255; 16], has_alpha: false };
+        let img = omsi_texture::Image {
+            width: 2,
+            height: 2,
+            rgba: vec![255; 16],
+            has_alpha: false,
+        };
         atlas.set_picture(3, &img);
         atlas.begin_frame();
-        let mut out = vec![super::super::GpuPointLight { pos: [0.0; 4], color: [0.0; 4], dir: [0.0; 4], extra: [0.0; 4] }; 5];
+        let mut out = vec![
+            super::super::GpuPointLight {
+                pos: [0.0; 4],
+                color: [0.0; 4],
+                dir: [0.0; 4],
+                extra: [0.0; 4]
+            };
+            5
+        ];
         atlas.append(&mut out);
         assert_eq!(out.len(), 5);
-        let c = Cookie { picture: 3, tan: [0.5, 0.2] };
+        let c = Cookie {
+            picture: 3,
+            tan: [0.5, 0.2],
+        };
         assert_eq!(atlas.layer(&c), Some(0));
-        assert_eq!(atlas.layer(&Cookie { picture: 9, tan: [0.5, 0.2] }), None);
+        assert_eq!(
+            atlas.layer(&Cookie {
+                picture: 9,
+                tan: [0.5, 0.2]
+            }),
+            None
+        );
         atlas.append(&mut out);
         assert_eq!(out.len(), 5 + COOKIE_LAYERS * LAYER_RECORDS);
         assert_eq!(out[5].pos[0], 1.0);
         let f = atlas.fields();
-        assert_eq!((f[0][0], f[0][2], f[1][2]), (0.5, 5.0, (5 + LAYER_RECORDS) as f32));
+        assert_eq!(
+            (f[0][0], f[0][2], f[1][2]),
+            (0.5, 5.0, (5 + LAYER_RECORDS) as f32)
+        );
     }
 }

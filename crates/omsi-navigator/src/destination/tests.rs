@@ -1,5 +1,5 @@
 use super::*;
-use crate::destination::{route_to_destination, DestinationStatus, EntryMarker};
+use crate::destination::{DestinationStatus, EntryMarker, route_to_destination};
 use omsi_sim::traffic::{Lane, LaneBuilder};
 
 fn road(a: (f64, f64), b: (f64, f64)) -> Lane {
@@ -273,7 +273,7 @@ fn destination_buttons_do_not_set_or_replace_the_pin() {
 
 #[test]
 fn destination_route_drawing_clips_the_last_lane_only_when_requested() {
-    use mapmesh::roads::{build_route, build_route_to, RouteStyle};
+    use mapmesh::roads::{RouteStyle, build_route, build_route_to};
     let n = network();
     let style = RouteStyle {
         extra_m: 0.0,
@@ -445,7 +445,7 @@ fn destination_past_the_endpoint_replans_instead_of_sticking_at_zero_distance() 
 
 #[test]
 fn destination_drawing_keeps_the_target_lane_when_the_neighbour_has_a_different_origin() {
-    use mapmesh::roads::{build_route_to, RouteStyle};
+    use mapmesh::roads::{RouteStyle, build_route_to};
     let mut net = network();
     net.lanes.push(road((3.0, 120.0), (3.0, 220.0)));
     net.lanes[1].right = Some(2);

@@ -1433,7 +1433,10 @@ impl CamCarry {
 #[rustfmt::skip]
 crate::app::stage_ctx!(
     /// The streaming stage's part of the game.
-    StreamingCx { reads: [view, net, sound, weather, world], writes: [gfx, player, traffic, menus] }
+    StreamingCx {
+        reads: [view, net, sound, weather, world],
+        writes: [gfx, player, traffic, menus]
+    }
 );
 
 /// Stream the tiles around the camera and the player's bus (whose ground must stay when

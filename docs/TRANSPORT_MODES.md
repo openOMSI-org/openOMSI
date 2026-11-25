@@ -1,83 +1,89 @@
 # Transport modes
 
-OMSI 2 has buses and one flag for everything on rails. openOMSI lets a vehicle and a map say
-what kind of public transport they are for, so that a tram map holds trams, a metro map metro
-trains, and so that modders can make each kind properly (their own physics, wires, stations and
-routes are described in the pages for each mode, linked below as they arrive).
+OMSI 2 knows buses and has one flag for everything on rails. openOMSI lets a vehicle and a map
+say which kind of public transport they are for: bus, tram, railway, metro or trolleybus. This
+page is for map makers and vehicle modders.
 
-Nothing here changes how existing content loads. A map that names no mode takes every
-vehicle, a vehicle that names no mode is judged by its shape as before. A file that uses these
-keywords still loads in OMSI 2, which skips what it does not know (it may not work correctly
-there, which is expected).
+Existing content loads as before. A map that names no mode takes every vehicle. A vehicle that
+names no mode is judged by its shape. OMSI 2 skips the keywords, so files that use them still
+load there.
 
-## The five keywords
+## Declaring a mode
 
-One bare keyword line per mode, in a vehicle file (`.bus`, `.ovh`) or in a map's `global.cfg`:
+Add one bare keyword line per mode to a vehicle file (`.bus`, `.ovh`) or to a map's
+`global.cfg`.
 
-| Keyword | For |
-| --- | --- |
-| `[bus_transport]` | buses on streets |
-| `[tram_transport]` | trams on street track, with a contact wire |
-| `[railway_transport]` | trains on mainline track |
-| `[metro_transport]` | metro trains, normally with a third rail |
-| `[trolleybus_transport]` | trolleybuses under a two-wire overhead |
-
-A file may name several (a map for buses and trams: two keywords; a dual-mode vehicle too).
-The spelling of the keyword's case does not matter.
-
-```
-# the Tatra tram's .ovh
+```text
+# a tram's .ovh
 [tram_transport]
+```
 
-# a city map's global.cfg
+```text
+# global.cfg of a city map with buses, trams and trolleybuses
 [bus_transport]
 [tram_transport]
 [trolleybus_transport]
 ```
 
-## What the game does with them
+| Keyword | For |
+| --- | --- |
+| `[bus_transport]` | Buses on streets |
+| `[tram_transport]` | Trams on street track, with a contact wire |
+| `[railway_transport]` | Trains on mainline track |
+| `[metro_transport]` | Metro trains, usually with a third rail |
+| `[trolleybus_transport]` | Trolleybuses under a two-wire overhead line |
 
-A vehicle may run on a map when
+* A file may name several modes: a map for buses and trams, or a dual-mode vehicle.
+* Case does not matter.
 
-1. the map names no mode: any vehicle runs (all OMSI 2 maps and mods), or
-2. the vehicle and the map share a mode.
+## Which vehicle may run on which map
 
-A vehicle that names no mode is judged by its file, exactly as the game has always done:
+A vehicle may run on a map when:
 
-* a rail vehicle (`[type] 2`, `[boogies]`, `[contact_shoe]`, `[rail_body_osc]`) is a tram, a
-  metro train or a railway train (`[rail_class]` can say it, see [RAIL.md](RAIL.md));
-* a vehicle with `[trolley_pole]` gear is a bus and a trolleybus;
-* anything else is a bus.
+1. the map names no mode (all OMSI 2 maps and mods), or
+2. the vehicle and the map share at least one mode.
 
-The rule is applied at four places:
+### Vehicles without a keyword
 
-* the **launcher** lists a map's and a vehicle's modes (`MapInfo.transport`,
-  `VehicleInfo.transport`; `omsi_launcher_core::transport_refusal` gives the reason a pair does
-  not fit);
-* the **game** will not start a vehicle on a map built for other modes and says why
-  (`OMSI_IGNORE_TRANSPORT=1` overrides it for a test run);
-* **timetable vehicles** of the AI are not put on a map built for other modes;
-* the **random AI pool** leaves out vehicles that declare a mode the map does not have (cars and
-  lorries declare none and stay: they are scenery on any street).
+A vehicle that declares no mode is judged by its file:
 
-Example of the message: *Tatra T6 cannot run on this map. This map is made for bus only; the
-vehicle is made for tram.*
+| The file has | The vehicle counts as |
+| --- | --- |
+| `[type] 2`, `[boogies]`, `[contact_shoe]` or `[rail_body_osc]` | A rail vehicle: tram, metro or railway (see [Vehicle classes](RAIL.md#vehicle-classes)) |
+| `[trolley_pole]` blocks | A bus and a trolleybus |
+| Anything else | A bus |
+
+A declared mode always wins over the shape.
+
+## Where the rule applies
+
+| Place | What happens |
+| --- | --- |
+| Launcher | The map and vehicle pickers show a mode filter when content declares modes. A vehicle that does not fit the map gets a warning icon and a notice with the reason |
+| Game start | The game does not start a vehicle on a map built for other modes, and says why |
+| Timetable AI | Timetable vehicles are not put on a map built for other modes |
+| Random AI traffic | Vehicles that declare a mode the map does not have are left out. Cars and lorries declare none, so they stay on any street |
+
+Example message: *Tatra T6 cannot run on this map. This map is made for bus only; the vehicle is
+made for tram.*
+
+> **Tip:** For a test run you can override the rule with the environment variable
+> `OMSI_IGNORE_TRANSPORT=1` (see [Environment variables](DEBUG_FLAGS.md)).
 
 ## For modders
 
-* Put the keyword in the vehicle file by hand, or with the Development Tools' project
-  templates.
-* A map made for several modes lists them all; the stations, tracks and routes of each mode
-  are described in the pages for those modes.
-* If you are unsure how the game sees an old vehicle, the launcher shows its modes.
+* Add the keyword to your vehicle file by hand.
+* A map made for several modes lists them all.
+* Not sure how the game sees an old vehicle? The launcher's vehicle picker shows its modes.
 
-## Where each part is described
+## More on each mode
 
 | Topic | Page |
 | --- | --- |
-| Stations, routes without tours, overhead wire, third rail, switches, depots, signals | [TRANSPORT_FORMATS.md](TRANSPORT_FORMATS.md) |
-| Trams, metro and railway vehicles: classes, track, switches, movement | [RAIL.md](RAIL.md) |
-| Trolleybuses: the wire, the poles, the drive | [TROLLEYBUS.md](TROLLEYBUS.md), [TROLLEY_MODS.md](TROLLEY_MODS.md) |
-| Leaf, air and progressive suspension | [SUSPENSION.md](SUSPENSION.md) |
-| Screens as pages (`[htmltexture]`) | [HTMLTEXTURE.md](HTMLTEXTURE.md) |
-| Older additions that lift OMSI 2's limits | [MODDING.md](MODDING.md) |
+| Stations, routes without tours, overhead wire, third rail, switches, depots, signals | [Transport folder](TRANSPORT_FORMATS.md) |
+| Trams, metro and railway vehicles: classes, track, switches, movement | [Trams, metros and trains](RAIL.md) |
+| Trolleybuses: the wire, the poles, the drive | [Trolleybuses](TROLLEYBUS.md), [Real trolleybus add-ons](TROLLEY_MODS.md) |
+| Timetables, tours and chrono scenarios | [How routes work](ROUTES.md) |
+| Leaf, air and progressive suspension | [Suspension types](SUSPENSION.md) |
+| Screens as pages (`[htmltexture]`) | [HTML textures](HTMLTEXTURE.md) |
+| Older additions that lift OMSI 2's limits | [Modding overview](MODDING.md) |

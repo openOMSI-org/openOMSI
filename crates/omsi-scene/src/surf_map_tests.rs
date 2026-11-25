@@ -3,7 +3,9 @@ use std::io::Write;
 
 fn bmp(red: u8) -> Vec<u8> {
     let mut out = std::io::Cursor::new(Vec::new());
-    image::RgbImage::from_pixel(2, 2, image::Rgb([red, 0, 0])).write_to(&mut out, image::ImageFormat::Bmp).unwrap();
+    image::RgbImage::from_pixel(2, 2, image::Rgb([red, 0, 0]))
+        .write_to(&mut out, image::ImageFormat::Bmp)
+        .unwrap();
     out.into_inner()
 }
 
@@ -13,8 +15,12 @@ fn surf_map_beside_a_texture_in_a_mounted_archive() {
     std::fs::create_dir_all(&dir).unwrap();
     let zip_path = dir.join("roads.zip");
     let mut z = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
-    for (name, data) in [("Splines/Roads/texture/cobbles.bmp", bmp(128)), ("Splines/Roads/texture/cobbles.bmp.surf", bmp(255))] {
-        z.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+    for (name, data) in [
+        ("Splines/Roads/texture/cobbles.bmp", bmp(128)),
+        ("Splines/Roads/texture/cobbles.bmp.surf", bmp(255)),
+    ] {
+        z.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
         z.write_all(&data).unwrap();
     }
     z.finish().unwrap();

@@ -21,11 +21,7 @@ impl GroundTex {
     /// Edge length of this layer's painting mask in texels (`2^params[0]`).
     pub fn mask_size(&self) -> u32 {
         let p = self.params[0].round() as i32;
-        if (1..=13).contains(&p) {
-            1 << p
-        } else {
-            256
-        }
+        if (1..=13).contains(&p) { 1 << p } else { 256 }
     }
 
     /// How often the texture repeats across one tile.
@@ -95,7 +91,11 @@ pub fn curve_at(curve: &[(f32, f32)], hour: f32) -> f32 {
     }
     for w in pts.windows(2) {
         if hour >= w[0].0 && hour <= w[1].0 {
-            let t = if w[1].0 > w[0].0 { (hour - w[0].0) / (w[1].0 - w[0].0) } else { 0.0 };
+            let t = if w[1].0 > w[0].0 {
+                (hour - w[0].0) / (w[1].0 - w[0].0)
+            } else {
+                0.0
+            };
             return w[0].1 + (w[1].1 - w[0].1) * t;
         }
     }
@@ -158,7 +158,11 @@ pub struct GlobalCfg {
 impl GlobalCfg {
     /// Season kind for a day of the year (0 = summer / none).
     pub fn season_kind(&self, day_of_year: i32) -> i32 {
-        self.seasons.iter().find(|s| day_of_year >= s.start_day && day_of_year < s.end_day).map(|s| s.kind).unwrap_or(0)
+        self.seasons
+            .iter()
+            .find(|s| day_of_year >= s.start_day && day_of_year < s.end_day)
+            .map(|s| s.kind)
+            .unwrap_or(0)
     }
 
     /// Road traffic density factor at an hour of the day (1 without a curve).
@@ -181,7 +185,11 @@ impl GlobalCfg {
     }
 
     pub fn parse(file: &CfgFile) -> GlobalCfg {
-        let mut g = GlobalCfg { path: file.path.clone(), repair_time_min: 10.0, ..Default::default() };
+        let mut g = GlobalCfg {
+            path: file.path.clone(),
+            repair_time_min: 10.0,
+            ..Default::default()
+        };
         let mut r = file.reader();
         while let Some(k) = r.next_keyword() {
             match k.as_str() {
@@ -197,7 +205,9 @@ impl GlobalCfg {
                 k2 if omsi_cfg::transport::TransportMode::from_keyword(k2).is_some() => {
                     g.transport.declare_keyword(k2);
                 }
-                "backgroundimage" => g.background_image = (0..5).map(|_| r.str().to_string()).collect(),
+                "backgroundimage" => {
+                    g.background_image = (0..5).map(|_| r.str().to_string()).collect()
+                }
                 "mapcam" => g.map_cam = (0..8).map(|_| r.f64()).collect(),
                 "moneysystem" => g.money_system = r.str().to_string(),
                 "ticketpack" => g.ticket_pack = r.str().to_string(),
@@ -213,13 +223,21 @@ impl GlobalCfg {
                     let texture = r.str().to_string();
                     let detail_texture = r.str().to_string();
                     let params = r.f32s::<3>();
-                    g.ground_textures.push(GroundTex { texture, detail_texture, params });
+                    g.ground_textures.push(GroundTex {
+                        texture,
+                        detail_texture,
+                        params,
+                    });
                 }
                 "addseason" => {
                     let kind = r.i32();
                     let start_day = r.i32();
                     let end_day = r.i32();
-                    g.seasons.push(Season { kind, start_day, end_day });
+                    g.seasons.push(Season {
+                        kind,
+                        start_day,
+                        end_day,
+                    });
                 }
                 "trafficdensity_road" => {
                     let t = r.f32();
@@ -246,11 +264,31 @@ impl GlobalCfg {
                         let quat = r.f64s::<4>();
                         let group = r.i32();
                         let name = r.str().to_string();
-                        g.entry_points.push(EntryPoint { index, object_id, unknown, pos: [x, y, z], quat, group, name });
+                        g.entry_points.push(EntryPoint {
+                            index,
+                            object_id,
+                            unknown,
+                            pos: [x, y, z],
+                            quat,
+                            group,
+                            name,
+                        });
                     }
                 }
-                "splineobjtypes" => g.spline_obj_types = r.rest_of_block().into_iter().map(|s| s.to_string()).collect(),
-                "scenobjlist" => g.scen_obj_list = r.rest_of_block().into_iter().map(|s| s.to_string()).collect(),
+                "splineobjtypes" => {
+                    g.spline_obj_types = r
+                        .rest_of_block()
+                        .into_iter()
+                        .map(|s| s.to_string())
+                        .collect()
+                }
+                "scenobjlist" => {
+                    g.scen_obj_list = r
+                        .rest_of_block()
+                        .into_iter()
+                        .map(|s| s.to_string())
+                        .collect()
+                }
                 "map" => {
                     let x = r.i32();
                     let y = r.i32();
@@ -259,7 +297,11 @@ impl GlobalCfg {
                     // place: fences, houses, all of it flickering; the first entry counts)
                     let index = g.raw_tiles.len();
                     g.raw_tiles.push((x, y));
-                    if !g.tiles.iter().any(|t| (t.x == x && t.y == y) || t.file.eq_ignore_ascii_case(&file)) {
+                    if !g
+                        .tiles
+                        .iter()
+                        .any(|t| (t.x == x && t.y == y) || t.file.eq_ignore_ascii_case(&file))
+                    {
                         g.tiles.push(MapTileRef { x, y, file, index });
                     }
                 }
@@ -287,13 +329,24 @@ impl GlobalCfg {
             *kinds.entry(file.to_ascii_lowercase()).or_insert_with(|| {
                 omsi_cfg::find_in_roots(file)
                     .and_then(|(_, p)| CfgFile::read(&p).ok())
-                    .is_some_and(|f| f.lines.iter().any(|l| l.trim().eq_ignore_ascii_case("[entrypoint]")))
+                    .is_some_and(|f| {
+                        f.lines
+                            .iter()
+                            .any(|l| l.trim().eq_ignore_ascii_case("[entrypoint]"))
+                    })
             })
         };
-        let mut next = self.entry_points.iter().map(|e| e.index).max().map_or(0, |i| i + 1);
+        let mut next = self
+            .entry_points
+            .iter()
+            .map(|e| e.index)
+            .max()
+            .map_or(0, |i| i + 1);
         let mut added = 0;
         for t in self.tiles.clone() {
-            let Ok(file) = CfgFile::read(omsi_cfg::resolve_path(&dir, &t.file)) else { continue };
+            let Ok(file) = CfgFile::read(omsi_cfg::resolve_path(&dir, &t.file)) else {
+                continue;
+            };
             // (the whole tile is parsed only when it has an object of an entry point's type)
             let mut lines = file.lines.iter();
             let mut any = false;
@@ -323,7 +376,11 @@ impl GlobalCfg {
                 if !is_entry(&o.file) {
                     continue;
                 }
-                if self.entry_points.iter().any(|e| e.group == t.index as i32 && e.object_id == o.id) {
+                if self
+                    .entry_points
+                    .iter()
+                    .any(|e| e.group == t.index as i32 && e.object_id == o.id)
+                {
                     continue;
                 }
                 let half = o.rot[0].to_radians() * 0.5;
@@ -353,12 +410,19 @@ mod tests {
     /// Both winter kinds take the winter pictures; the snowy ones come with the weather (#2131).
     #[test]
     fn a_map_names_its_transport_modes() {
-        let f = omsi_cfg::CfgFile::from_str("global.cfg", "[name]\nT\n[tram_transport]\n[Metro_Transport]\n[LHT]\n");
+        let f = omsi_cfg::CfgFile::from_str(
+            "global.cfg",
+            "[name]\nT\n[tram_transport]\n[Metro_Transport]\n[LHT]\n",
+        );
         let g = GlobalCfg::parse(&f);
         assert_eq!(g.transport.describe(), "tram, metro");
         assert!(g.left_hand_traffic, "{:?}", g.unknown_keywords);
         assert!(g.unknown_keywords.is_empty(), "{:?}", g.unknown_keywords);
-        assert!(GlobalCfg::parse(&omsi_cfg::CfgFile::from_str("global.cfg", "[name]\nT\n")).transport.is_empty());
+        assert!(
+            GlobalCfg::parse(&omsi_cfg::CfgFile::from_str("global.cfg", "[name]\nT\n"))
+                .transport
+                .is_empty()
+        );
     }
 
     #[test]
@@ -373,7 +437,8 @@ mod tests {
     /// the tile after the repeat names index 2, which is tile (5, 5)).
     #[test]
     fn a_repeated_tile_keeps_the_numbering() {
-        let text = "[map]\n0\n0\ntile_0_0.map\n\n[map]\n0\n0\ntile_0_0.map\n\n[map]\n5\n5\ntile_5_5.map\n";
+        let text =
+            "[map]\n0\n0\ntile_0_0.map\n\n[map]\n0\n0\ntile_0_0.map\n\n[map]\n5\n5\ntile_5_5.map\n";
         let g = GlobalCfg::parse(&omsi_cfg::CfgFile::from_str("global.cfg", text));
         assert_eq!(g.tiles.len(), 2);
         assert_eq!(g.raw_tiles, vec![(0, 0), (0, 0), (5, 5)]);
@@ -387,7 +452,10 @@ mod tests {
         let g = GlobalCfg::parse(&omsi_cfg::CfgFile::from_str("global.cfg", text));
         assert_eq!(g.entry_points.len(), 1);
         assert_eq!(g.entry_points[0].name, "Depot");
-        let g = GlobalCfg::parse(&omsi_cfg::CfgFile::from_str("global.cfg", "[entrypoints]\n1000000000000\n"));
+        let g = GlobalCfg::parse(&omsi_cfg::CfgFile::from_str(
+            "global.cfg",
+            "[entrypoints]\n1000000000000\n",
+        ));
         assert!(g.entry_points.is_empty());
     }
 
@@ -400,14 +468,30 @@ mod tests {
         let map = root.join("maps").join("Old");
         std::fs::create_dir_all(&map).unwrap();
         std::fs::create_dir_all(root.join("Sceneryobjects").join("Generic")).unwrap();
-        std::fs::write(root.join("Sceneryobjects/Generic/entrypoint_bus.sco"), "[entrypoint]\n[onlyeditor]\n").unwrap();
-        std::fs::write(root.join("Sceneryobjects/Generic/tree.sco"), "[mesh]\ntree.o3d\n").unwrap();
+        std::fs::write(
+            root.join("Sceneryobjects/Generic/entrypoint_bus.sco"),
+            "[entrypoint]\n[onlyeditor]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("Sceneryobjects/Generic/tree.sco"),
+            "[mesh]\ntree.o3d\n",
+        )
+        .unwrap();
         std::fs::write(map.join("tile_0_0.map"), "[version]\n10\n\n\
 [object]\n0\nSceneryobjects\\Generic\\tree.sco\n5\n1\n2\n0\n0\n0\n\n\
 [object]\n0\nSceneryobjects\\Generic\\entrypoint_bus.sco\n7\n6.5\n225.5\n0.2\n90\n1\nAirport Maintenance Area\n").unwrap();
-        std::fs::write(map.join("tile_1_0.map"), "[version]\n10\n\n\
-[object]\n0\nSceneryobjects\\Generic\\entrypoint_bus.sco\n9\n10\n20\n0\n0\n1\nBauernhof\n").unwrap();
-        std::fs::write(map.join("global.cfg"), "[map]\n0\n0\ntile_0_0.map\n\n[map]\n1\n0\ntile_1_0.map\n").unwrap();
+        std::fs::write(
+            map.join("tile_1_0.map"),
+            "[version]\n10\n\n\
+[object]\n0\nSceneryobjects\\Generic\\entrypoint_bus.sco\n9\n10\n20\n0\n0\n1\nBauernhof\n",
+        )
+        .unwrap();
+        std::fs::write(
+            map.join("global.cfg"),
+            "[map]\n0\n0\ntile_0_0.map\n\n[map]\n1\n0\ntile_1_0.map\n",
+        )
+        .unwrap();
         omsi_cfg::add_content_root(root.clone());
         struct Cleanup(std::path::PathBuf);
         impl Drop for Cleanup {
@@ -419,8 +503,15 @@ mod tests {
         let _cleanup = Cleanup(root.clone());
         let mut g = GlobalCfg::load(&map.join("global.cfg")).unwrap();
         assert_eq!(g.add_object_entry_points(), 2);
-        let names: Vec<_> = g.entry_points.iter().map(|e| (e.name.as_str(), e.group, e.object_id)).collect();
-        assert_eq!(names, vec![("Airport Maintenance Area", 0, 7), ("Bauernhof", 1, 9)]);
+        let names: Vec<_> = g
+            .entry_points
+            .iter()
+            .map(|e| (e.name.as_str(), e.group, e.object_id))
+            .collect();
+        assert_eq!(
+            names,
+            vec![("Airport Maintenance Area", 0, 7), ("Bauernhof", 1, 9)]
+        );
         let e = &g.entry_points[0];
         // (the object's height is over the terrain: none for the list)
         assert_eq!((e.pos[0], e.pos[1]), (6.5, 225.5));

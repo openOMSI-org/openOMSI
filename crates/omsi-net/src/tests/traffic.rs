@@ -15,9 +15,26 @@ fn a_client_gets_the_hosts_traffic_over_real_sockets_and_the_host_hears_its_answ
     let put = |table: &mut TrafficTable, t: f64, cars: usize| {
         table.begin(t);
         for i in 0..cars {
-            let row = Row::from_state([at[0] + i as f64 * 7.0 + t * 10.0, at[1] + 5.0, at[2]], 90.0, 0.0, 0.0, 10.0, 0.0, 0, false, false, 0);
-            let look = || Look { file: "Vehicles/Golf/golf.bus".into(), scheme: None, paint: String::new() };
-            table.upsert(i as u64, Kind::Car, look, Meta::default, row).unwrap();
+            let row = Row::from_state(
+                [at[0] + i as f64 * 7.0 + t * 10.0, at[1] + 5.0, at[2]],
+                90.0,
+                0.0,
+                0.0,
+                10.0,
+                0.0,
+                0,
+                false,
+                false,
+                0,
+            );
+            let look = || Look {
+                file: "Vehicles/Golf/golf.bus".into(),
+                scheme: None,
+                paint: String::new(),
+            };
+            table
+                .upsert(i as u64, Kind::Car, look, Meta::default, row)
+                .unwrap();
         }
         table.finish();
     };
@@ -32,11 +49,21 @@ fn a_client_gets_the_hosts_traffic_over_real_sockets_and_the_host_hears_its_answ
         std::thread::sleep(Duration::from_millis(50));
     }
     assert_eq!(c.traffic_client().len(), 8, "four cars were over");
-    assert!(host.traffic_stats().acks_heard > 10, "the client answers: {:?}", host.traffic_stats());
+    assert!(
+        host.traffic_stats().acks_heard > 10,
+        "the client answers: {:?}",
+        host.traffic_stats()
+    );
     let st = host.traffic_stats();
     assert!(st.delta_rows > 0, "changes of acknowledged rows: {st:?}");
     let id = table.id_of(3).unwrap();
     let p = c.traffic_client().newest(id).unwrap();
     assert!((p.pos[1] - (at[1] + 5.0)).abs() < 0.02 && (p.speed - 10.0).abs() < 0.1);
-    assert_eq!(c.traffic_client().look(c.traffic_client().get(id).unwrap()).unwrap().file, "Vehicles/Golf/golf.bus");
+    assert_eq!(
+        c.traffic_client()
+            .look(c.traffic_client().get(id).unwrap())
+            .unwrap()
+            .file,
+        "Vehicles/Golf/golf.bus"
+    );
 }

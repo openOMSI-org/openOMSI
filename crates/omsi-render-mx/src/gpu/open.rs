@@ -4,6 +4,14 @@ use super::upscaler_device;
 use crate::*;
 
 /// The chosen MSAA is being tried again after a remembered fallback (see `build_with_fallbacks`).
+/// How many times this thread published the adapter's state, its texture options and
+/// its memory and name (tests: other tests open
+/// renderers on their own threads at the same time, so the global value alone races).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static ADAPTER_PUBLISHED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 static MSAA_RETRY: super::auxiliary::AdapterBool = super::auxiliary::AdapterBool::new(5);
 
 impl Renderer {
@@ -70,9 +78,40 @@ impl Renderer {
             .await
     }
 
+    /// [`Renderer::new_on`] again on the adapter whose device was just lost, keeping what the
+    /// loss took off (the basic pipelines, the rainfall, the MSAA retry): `open_on` starts a
+    /// new adapter or interface without them.
+    async fn reopen_on(
+        adapter: mx::Adapter,
+        format: mx::TextureFormat,
+        options: RenderOptions,
+    ) -> Result<Renderer> {
+        Self::open_device(adapter, None, Some(format), options)
+            .await?
+            .finish()
+            .await
+    }
+
     /// The graphics device for a renderer on this adapter, its pipelines not built yet: see
     /// [`Opened`].
     pub async fn open_on(
+        adapter: mx::Adapter,
+        surface: Option<&mx::Surface<'_>>,
+        format: Option<mx::TextureFormat>,
+        options: RenderOptions,
+    ) -> Result<Opened> {
+        // What one device had to do without is that device's: the flags are process-wide, and
+        // Direct3D 12 losing its device to ray tracing set the basic pipelines for the Vulkan
+        // device the game went on with - drawn at 1x MSAA, without the snowfall, the lamps in
+        // the fog and the street lamps' shadows, and remembered so for Vulkan as well.
+        // (What worked on this adapter before comes back from `fallback_load`.)
+        BASIC_PIPELINES.store(false, std::sync::atomic::Ordering::Relaxed);
+        RAINFALL_LEFT_OUT.store(false, std::sync::atomic::Ordering::Relaxed);
+        MSAA_RETRY.store(false, std::sync::atomic::Ordering::Relaxed);
+        Self::open_device(adapter, surface, format, options).await
+    }
+
+    async fn open_device(
         adapter: mx::Adapter,
         surface: Option<&mx::Surface<'_>>,
         format: Option<mx::TextureFormat>,
@@ -296,6 +335,8 @@ impl Renderer {
             };
         log::info!("graphics device opened; compiling renderer pipelines");
         if auxiliary_context().is_none() {
+            #[cfg(test)]
+            ADAPTER_PUBLISHED.with(|n| n.set(n.get() + 1));
             ADAPTER_TEXTURE_MB.store(guess_mb, std::sync::atomic::Ordering::Relaxed);
             ADAPTER_VRAM_MB.store(discrete_vram, std::sync::atomic::Ordering::Relaxed);
             *ADAPTER_INFO.lock().unwrap_or_else(|e| e.into_inner()) = Some(info.clone());
@@ -344,6 +385,8 @@ impl Renderer {
         let halve = halves_plain(adapter.supports_bc(), &options);
         if auxiliary_context().is_none() {
             omsi_texture::set_gpu_options(omsi_texture::GpuOptions { bc, compress });
+            #[cfg(test)]
+            ADAPTER_PUBLISHED.with(|n| n.set(n.get() + 1));
             omsi_texture::gpu::set_halve_plain(halve);
         }
         log::info!(
@@ -475,18 +518,16 @@ impl Opened {
                     "{}: the graphics device was lost while the chosen MSAA was tried again ({why}); keeping to what worked before",
                     info.name
                 );
-                return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options))
-                    .await;
+                return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
             }
             if basic_pipelines() && rainfall_pipeline() {
                 log::warn!(
-                    "{}: the graphics device was lost while the basic pipelines were made ({why}); opening it again without the rainfall",
+                    "{}: the graphics device was lost while the basic pipelines were made ({why}); opening it again without the rainfall and the snowfall",
                     info.name
                 );
                 RAINFALL_LEFT_OUT.store(true, std::sync::atomic::Ordering::Relaxed);
                 fallback_store(&name, Some((1, true)));
-                return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options))
-                    .await;
+                return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
             }
             if basic_pipelines() {
                 return Err(anyhow!(
@@ -501,7 +542,7 @@ impl Opened {
             // (and so from the start next time, see `fallback_load`)
             fallback_store(&name, Some((1, true)));
             // (the format chosen for the window before: the same the surface would give)
-            return Box::pin(Renderer::new_on(adapter, None, Some(format), asked_options)).await;
+            return Box::pin(Renderer::reopen_on(adapter, format, asked_options)).await;
         }
         // (the retry is over; a device lost later in the run takes the usual way)
         MSAA_RETRY.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -608,10 +649,12 @@ impl Renderer {
                             "{}: drawing with {}x MSAA{}",
                             info.name,
                             msaa,
-                            match (basic, rainfall_pipeline()) {
-                                (true, true) =>
+                            match (basic, rainfall_pipeline(), snowfall_pipeline()) {
+                                (true, true, true) =>
+                                    ", without the lamps in the fog and the street lamps' shadows",
+                                (true, true, false) =>
                                     ", without the snowfall, the lamps in the fog and the street lamps' shadows",
-                                (true, false) =>
+                                (true, false, _) =>
                                     ", without the snowfall, the rainfall, the lamps in the fog and the street lamps' shadows",
                                 _ => "",
                             }
@@ -641,6 +684,16 @@ impl Renderer {
                         if basic { ", basic pipelines" } else { "" }
                     );
                     made = Err(anyhow!("renderer pipelines: {e}"));
+                    // (a removed device fails every build after it the same way: the next
+                    // graphics interface is tried at once, rather than the basic pipelines on
+                    // the dead device - which took the reduction to that interface too)
+                    if device.is_lost() {
+                        log::error!(
+                            "{}: the graphics device was lost while the pipelines were made",
+                            info.name
+                        );
+                        break;
+                    }
                 }
             }
         }
@@ -691,8 +744,9 @@ impl Renderer {
         let defaults = defaults::build(&device, &queue, options.anisotropy);
         let (coronas, corona_texture) = coronas::Coronas::new(&device, &queue, &scene);
         let precip = crate::passes::PrecipMap::new(&device);
-        let snow = coronas::Precip::snow(&device, &precip.view);
-        let rain = coronas::Precip::rain(&device, &precip.view);
+        let flakes = crate::precip::FlakeAtlas::new(&device, &queue);
+        let snow = coronas::Precip::snow(&device, &precip.view, &flakes);
+        let rain = coronas::Precip::rain(&device, &precip.view, &flakes);
         drop(corona_texture);
         let sky = sky::SkyBase::new(&device, &queue, !leave_out_enhanced);
         let sky_pipelines = sky.pipeline_base();
@@ -751,6 +805,7 @@ impl Renderer {
                 scale_targets: HashMap::new(),
                 triple_targets: None,
                 glass_picture: None,
+                glass_mips: None,
                 target_use: HashMap::new(),
                 evicted_at: std::time::Instant::now(),
                 hdr_targets: HashMap::new(),
@@ -773,6 +828,7 @@ impl Renderer {
                 dynamic_scale: std::cell::Cell::new(1.0),
             },
             sky: SkyRes {
+                layout: sky.layout.clone(),
                 sky_lut: enhanced.sky_lut,
                 cloud_field: FieldState::default(),
                 sky_lut_view: enhanced.sky_lut_view,
@@ -786,6 +842,7 @@ impl Renderer {
                 cloud_detail_view: sky.cloud_detail_view,
                 cloud_sampler: sky.cloud_sampler,
                 cloud_shape_cpu: sky.cloud_shape_cpu,
+                cloud_view_buf: sky.cloud_view_buf,
                 cloud_sun: None,
                 sky_mesh,
             },
@@ -802,7 +859,14 @@ impl Renderer {
                 snow_track_uniform: scene.snow_track_uniform,
                 fog_lamps_pipeline: fog_lamps.pipeline,
                 fog_lamps_buf: fog_lamps.buf,
+                fog_lamps_layout: fog_lamps.layout,
+                vol_fog: (!leave_out_enhanced)
+                    .then(|| crate::vol_fog::VolFog::new(&device, &queue, hdr_format, gl))
+                    .flatten(),
                 corona_bind_group: coronas.bind_group,
+                corona_layout: coronas.layout,
+                snow_layout: snow.layout,
+                rain_layout: rain.layout,
                 snow_buf: snow.buf,
                 snow_bind_group: snow.bind_group,
                 rain_buf: rain.buf,
@@ -923,7 +987,6 @@ impl Renderer {
             pane_mask: prepass.pane_mask,
             pane_depth: None,
             ground_pipelines,
-            ground_bound: std::cell::Cell::new(false),
             ssao_pipeline: ssao.ssao_pipeline,
             blur_pipeline: ssao.blur_pipeline,
             plain_ssao_pipeline: ssao.plain_ssao_pipeline,
