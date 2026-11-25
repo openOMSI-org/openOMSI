@@ -2,10 +2,8 @@
 
 use super::*;
 
-#[rustfmt::skip]
 mod groups;
 pub(crate) use groups::*;
-#[rustfmt::skip]
 mod parts;
 pub(crate) use parts::*;
 

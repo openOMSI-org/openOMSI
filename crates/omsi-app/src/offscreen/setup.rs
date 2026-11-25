@@ -5,7 +5,6 @@ use super::*;
 use crate::view_sync::people::PeopleView;
 
 impl<'a> Offscreen<'a> {
-    #[rustfmt::skip]
     pub(super) fn setup(
         args: &'a Args,
         out: &'a PathBuf,
@@ -35,7 +34,9 @@ impl<'a> Offscreen<'a> {
         crate::lights::load_smoke_texture(&mut renderer, &args.root);
         crate::lights::set_corona_root(&args.root);
         let mut scene = renderer.new_scene();
-        let (world, camera) = lan::answering_while(&mut lan_off, args.bus.as_deref(), || load_world(args, &renderer, &mut scene))?;
+        let (world, camera) = lan::answering_while(&mut lan_off, args.bus.as_deref(), || {
+            load_world(args, &renderer, &mut scene)
+        })?;
         world.show_help_arrows(&renderer, &mut scene, settings.nav_map_arrows);
         let lan_seed = lan_off.as_ref().map(lan::population_seed);
         // (a player who joins another's game draws the host's traffic in it, whatever their own
@@ -64,7 +65,8 @@ impl<'a> Offscreen<'a> {
                     parse_time(&args.time),
                 )
             });
-            if let (Some(t), true) = (traffic.as_mut(), omsi_cfg::flags::OMSI_CHECK_TRIPS.is_set()) {
+            if let (Some(t), true) = (traffic.as_mut(), omsi_cfg::flags::OMSI_CHECK_TRIPS.is_set())
+            {
                 s.check_routes(&world, t);
             }
         }
@@ -94,42 +96,39 @@ impl<'a> Offscreen<'a> {
             .as_deref()
             .map(|d| career::Career::load(&args.root, d))
             .unwrap_or_default();
-        let humans_off = new_humans(args, &settings, &world, &renderer, &mut scene, &mut sim_view.people, schedule.as_ref(), player.as_mut(), lan_seed, center);
+        let humans_off = new_humans(
+            args,
+            &settings,
+            &world,
+            &renderer,
+            &mut scene,
+            &mut sim_view.people,
+            schedule.as_ref(),
+            player.as_mut(),
+            lan_seed,
+            center,
+        );
         let player_ref: Option<Player> = None;
         let envir = omsi_content::Envir::load(&args.root.join("envir.cfg")).ok();
-        let (weather, model) = crate::weather_setup::load_weather_run(args);
-        let mut sky = crate::weather_setup::SkyState { clouds: None, model, look: args.session_settings };
-        setup_sky(args, &renderer, &mut scene, envir.as_ref(), Some(&weather), &mut sky.clouds);
-        if let Some(p) = player.as_mut() {
-            apply_weather(&mut p.vehicle, &weather, initial_wetness(&weather));
-        }
-        // the workshop's waiting time moves the clock on, so the sky has to follow it
-        let mut service_seconds = 0.0f64;
-        let daylight0 = omsi_sim::Daylight::compute(&start_clock(args), envir.as_ref());
-        if let Some(p) = player.as_mut() {
-            p.vehicle.set_var("Envir_Brightness", daylight0.envir_brightness(world.light_map_light_at(p.vehicle.position)));
-            let mut clock = p.vehicle.host.clock.clone();
-            let was = clock.time;
-            let at_station = at_petrol_station(&world, &p.vehicle);
-            for line in run_services(
-                args,
-                &mut p.vehicle,
-                &mut clock,
-                world.global.repair_time_min,
-                at_station,
-            ) {
-                log::info!("{line}");
-            }
-            service_seconds = clock.time - was;
-            p.vehicle.host.clock = clock;
-        }
+        let (weather, sky, service_seconds) = load_weather_and_services(
+            args,
+            &world,
+            &renderer,
+            &mut scene,
+            envir.as_ref(),
+            player.as_mut(),
+        );
         // one simulation loop for everything: traffic, the player's vehicle (test profile and
         // timed triggers) and the passengers, so that they see each other every frame
         let dt = super::run_dt();
         let drive_frames = args.drive.map(|s| (s / dt) as usize).unwrap_or(0);
         let wheel_worst: Option<(DVec3, f64)> = None;
         let total_frames = drive_frames
-            .max(if humans_off.is_some() { super::steps_in(1.0) } else { 0 })
+            .max(if humans_off.is_some() {
+                super::steps_in(1.0)
+            } else {
+                0
+            })
             .max(if traffic.is_some() { 1 } else { 0 });
         // a dedicated server runs until it is told to stop (SIGTERM, Ctrl+C)
         let server = args.server.is_some();
@@ -154,23 +153,7 @@ impl<'a> Offscreen<'a> {
             .as_ref()
             .map(|p| p.vehicle.position)
             .unwrap_or(DVec3::ZERO);
-        // test harness for crashes, kerbs and reversing: OMSI_DRIVE_PROFILE="t throttle brake
-        // [steer]/ …" holds piecewise constant pedals from each t on, OMSI_DRIVE_V0 gives the
-        // bus a speed (km/h) on the first frame, OMSI_DEBUG_PHYSICS=secs logs the pose
-        let drive_profile: Vec<[f32; 4]> = omsi_cfg::flags::OMSI_DRIVE_PROFILE.var()
-            .unwrap_or_default()
-            .split(['/', ';'])
-            .filter_map(|s| {
-                let v: Vec<f32> = s
-                    .split_whitespace()
-                    .filter_map(|x| x.parse().ok())
-                    .collect();
-                (v.len() >= 3).then(|| [v[0], v[1], v[2], v.get(3).copied().unwrap_or(0.0)])
-            })
-            .collect();
-        let drive_v0: Option<f32> = omsi_cfg::flags::OMSI_DRIVE_V0.parse();
-        let physics_log: f32 = omsi_cfg::flags::OMSI_DEBUG_PHYSICS.parse()
-            .unwrap_or(0.0);
+        let (drive_profile, drive_v0, physics_log) = drive_settings();
         let last_reasons: Vec<String> = Vec::new();
         if args.autostart && !args.is_resuming() {
             if let Some(p) = player.as_mut() {
@@ -192,19 +175,33 @@ impl<'a> Offscreen<'a> {
             );
             steps::set_ai_daylight(t, daylight, steps::gloomy_weather(Some(&weather)));
             t.populate(&world, center);
-            crate::view_sync::apply_traffic(t, &mut sim_view.traffic, &world, &renderer, &mut scene);
+            crate::view_sync::apply_traffic(
+                t,
+                &mut sim_view.traffic,
+                &world,
+                &renderer,
+                &mut scene,
+            );
         }
         ground_sample(&world, traffic.as_ref(), center)?;
         // LAN in an offscreen run too, so that one game's view of another can be rendered
         // (`OMSI_LAN_AUDIO=1`: with the other buses' sounds, heard at the camera - for the logs)
-        let lan_audio = (lan_off.is_some() && omsi_cfg::flags::OMSI_LAN_AUDIO.is_set())
-            .then(|| {
+        let lan_audio =
+            (lan_off.is_some() && omsi_cfg::flags::OMSI_LAN_AUDIO.is_set()).then(|| {
                 let a = omsi_audio::AudioEngine::new();
                 a.set_doppler(settings.doppler);
                 a
             });
         if let (Some(l), Some(p)) = (lan_off.as_mut(), player.as_mut()) {
-            lan::settle_spawn(l, &mut remotes_off, p, args, &world, traffic.as_ref().map(|t| &t.net), lan::WELCOME_WAIT);
+            lan::settle_spawn(
+                l,
+                &mut remotes_off,
+                p,
+                args,
+                &world,
+                traffic.as_ref().map(|t| &t.net),
+                lan::WELCOME_WAIT,
+            );
         }
         let mut run_clock = start_clock(args);
         run_clock.advance(service_seconds as f32);
@@ -214,25 +211,26 @@ impl<'a> Offscreen<'a> {
         let srv_clock = 0.0f64;
         // the METAR sync of a dedicated server: the report is downloaded in the background (at
         // once, then every ten minutes) and its values are told to the players
-        let srv_metar: Option<String> = if server { crate::server::SERVER_METAR.get().cloned().flatten() } else { None };
+        let srv_metar: Option<String> = if server {
+            crate::server::SERVER_METAR.get().cloned().flatten()
+        } else {
+            None
+        };
         let srv_metar_due = std::time::Instant::now();
-        let srv_metar_rx: Option<std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>> = None;
+        let srv_metar_rx: Option<
+            std::sync::mpsc::Receiver<Option<omsi_content::weather::Weather>>,
+        > = None;
         // (the weather's name on the status page)
         let srv_weather_name = if weather.path.to_string_lossy().starts_with("metar:") {
             weather.name.clone()
         } else {
-            weather.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+            weather
+                .path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default()
         };
-        if let (true, Some((pw, moderator, speed))) = (server, crate::server::SERVER_ADMIN.get()) {
-            srv_admin.password = pw.clone();
-            srv_admin.moderator_password = moderator.clone();
-            if let Some((on, density)) = crate::server::SERVER_PASSENGERS.get() {
-                (srv_admin.passengers_on, srv_admin.passenger_density) = (*on, *density);
-            }
-            if let Some(l) = lan_off.as_mut() {
-                l.clock_speed = *speed;
-            }
-        }
+        apply_server_admin(server, &mut srv_admin, lan_off.as_mut());
         let ground_gap = crate::ground_gap::GroundGap::from_env();
         if let Some(t) = traffic.as_ref() {
             crate::ground_gap::check_lanes(&world.data, t);
@@ -305,6 +303,99 @@ impl<'a> Offscreen<'a> {
             drive_extremes: super::NO_EXTREMES,
             sky,
         })
+    }
+}
+
+fn load_weather_and_services(
+    args: &Args,
+    world: &World,
+    renderer: &Renderer,
+    scene: &mut Scene,
+    envir: Option<&omsi_content::Envir>,
+    mut player: Option<&mut Player>,
+) -> (
+    omsi_content::weather::Weather,
+    crate::weather_setup::SkyState,
+    f64,
+) {
+    let (weather, model) = crate::weather_setup::load_weather_run(args);
+    let mut sky = crate::weather_setup::SkyState {
+        clouds: None,
+        model,
+        look: args.session_settings,
+    };
+    setup_sky(
+        args,
+        renderer,
+        scene,
+        envir,
+        Some(&weather),
+        &mut sky.clouds,
+    );
+    if let Some(p) = player.as_mut() {
+        apply_weather(&mut p.vehicle, &weather, initial_wetness(&weather));
+    }
+    // the workshop's waiting time moves the clock on, so the sky has to follow it
+    let mut service_seconds = 0.0f64;
+    let daylight0 = omsi_sim::Daylight::compute(&start_clock(args), envir);
+    if let Some(p) = player.as_mut() {
+        p.vehicle.set_var(
+            "Envir_Brightness",
+            daylight0.envir_brightness(world.light_map_light_at(p.vehicle.position)),
+        );
+        let mut clock = p.vehicle.host.clock.clone();
+        let was = clock.time;
+        let at_station = at_petrol_station(world, &p.vehicle);
+        for line in run_services(
+            args,
+            &mut p.vehicle,
+            &mut clock,
+            world.global.repair_time_min,
+            at_station,
+        ) {
+            log::info!("{line}");
+        }
+        service_seconds = clock.time - was;
+        p.vehicle.host.clock = clock;
+    }
+    (weather, sky, service_seconds)
+}
+
+fn drive_settings() -> (Vec<[f32; 4]>, Option<f32>, f32) {
+    // test harness for crashes, kerbs and reversing: OMSI_DRIVE_PROFILE="t throttle brake
+    // [steer]/ …" holds piecewise constant pedals from each t on, OMSI_DRIVE_V0 gives the
+    // bus a speed (km/h) on the first frame, OMSI_DEBUG_PHYSICS=secs logs the pose
+    let drive_profile: Vec<[f32; 4]> = omsi_cfg::flags::OMSI_DRIVE_PROFILE
+        .var()
+        .unwrap_or_default()
+        .split(['/', ';'])
+        .filter_map(|s| {
+            let v: Vec<f32> = s
+                .split_whitespace()
+                .filter_map(|x| x.parse().ok())
+                .collect();
+            (v.len() >= 3).then(|| [v[0], v[1], v[2], v.get(3).copied().unwrap_or(0.0)])
+        })
+        .collect();
+    let drive_v0: Option<f32> = omsi_cfg::flags::OMSI_DRIVE_V0.parse();
+    let physics_log: f32 = omsi_cfg::flags::OMSI_DEBUG_PHYSICS.parse().unwrap_or(0.0);
+    (drive_profile, drive_v0, physics_log)
+}
+
+fn apply_server_admin(
+    server: bool,
+    admin: &mut crate::admin::ServerAdmin,
+    lan_off: Option<&mut omsi_net::LanSession>,
+) {
+    if let (true, Some((pw, moderator, speed))) = (server, crate::server::SERVER_ADMIN.get()) {
+        admin.password = pw.clone();
+        admin.moderator_password = moderator.clone();
+        if let Some((on, density)) = crate::server::SERVER_PASSENGERS.get() {
+            (admin.passengers_on, admin.passenger_density) = (*on, *density);
+        }
+        if let Some(l) = lan_off {
+            l.clock_speed = *speed;
+        }
     }
 }
 
