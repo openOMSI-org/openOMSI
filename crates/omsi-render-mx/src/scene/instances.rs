@@ -41,6 +41,7 @@ impl Renderer {
             precip_heap: FrameHeap::default(),
             camera_heaps: None,
             sky_bind_group: None,
+            sky_textures: None,
             overlays: Vec::new(),
             premultiplied: Default::default(),
             transposed: Default::default(),

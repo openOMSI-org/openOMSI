@@ -86,6 +86,11 @@ impl Renderer {
             && (self.temporal_failed || self.temporal_pipes.is_none())
         {
             self.fall_back_without_upscaler(scene);
+        } else if self
+            .upscaler_retry
+            .is_some_and(|(at, _)| at.elapsed() >= crate::pipelines::errors::OUT_OF_MEMORY_SPELL)
+        {
+            self.retry_upscaler(scene);
         }
         true
     }
