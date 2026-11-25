@@ -504,11 +504,35 @@ fn portuguese_panes_are_glass() {
 #[test]
 fn reflective_car_body_stays_solid_while_unnamed_pane_on_non_body_mesh_is_see_through() {
     use crate::vehicles::is_reflective_body;
-    // An envmapped reflective car body with volume is treated as solid paint:
-    assert!(is_reflective_body(true, false, false, true, true));
-    // An unnamed envmapped pane with volume on a mesh NOT named body stays see-through:
-    assert!(!is_reflective_body(false, false, false, true, true));
-    // A named pane or a slot with a transmap is never classified as reflective bodywork:
-    assert!(!is_reflective_body(true, true, false, true, true));
-    assert!(!is_reflective_body(true, false, true, true, true));
+    assert!(is_reflective_body(true, false, false, true, true, false));
+    assert!(!is_reflective_body(false, false, false, true, true, false));
+    assert!(!is_reflective_body(true, true, false, true, true, false));
+    assert!(!is_reflective_body(true, false, true, true, true, false));
+}
+
+#[test]
+fn envmapped_atlas_window_on_body_named_mesh_is_see_through() {
+    use crate::vehicle_materials::{slot_is_clear_window, slot_is_see_through, ALPHA_MASK};
+    use crate::vehicles::is_reflective_body;
+    use glam::Vec2;
+    use omsi_geometry::MeshData;
+
+    let mesh = MeshData {
+        positions: vec![],
+        normals: vec![],
+        uvs: vec![Vec2::new(0.1, 0.1), Vec2::new(0.1, 0.2), Vec2::new(0.2, 0.1)],
+        ranges: vec![(0, 3, 0)],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    let paint = vec![40u8; ALPHA_MASK * ALPHA_MASK];
+    let mut atlas = vec![255u8; ALPHA_MASK * ALPHA_MASK];
+    atlas[34 * ALPHA_MASK + 34] = 0;
+
+    assert!(slot_is_see_through(&mesh, 0, &paint));
+    assert!(!slot_is_clear_window(&mesh, 0, &paint));
+    assert!(is_reflective_body(true, false, false, true, true, false));
+    assert!(slot_is_see_through(&mesh, 0, &atlas));
+    assert!(slot_is_clear_window(&mesh, 0, &atlas));
+    assert!(!is_reflective_body(true, false, false, true, true, true));
 }

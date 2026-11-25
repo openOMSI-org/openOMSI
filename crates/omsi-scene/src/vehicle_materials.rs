@@ -635,6 +635,27 @@ pub(super) fn texture_is_clear(mask: &[u8]) -> bool {
     !mask.is_empty() && mask.iter().all(|&a| a <= 8)
 }
 
+pub(super) fn slot_is_clear_window(mesh: &MeshData, slot: usize, mask: &[u8]) -> bool {
+    let (mut clear, mut all) = (0usize, 0usize);
+    for &(first, count, material) in &mesh.ranges {
+        if material as usize != slot {
+            continue;
+        }
+        let start = first as usize;
+        let end = start.saturating_add(count as usize).min(mesh.indices.len());
+        for tri in mesh.indices.get(start..end).unwrap_or_default().chunks_exact(3) {
+            let Some(uv) = tri.iter().map(|&i| mesh.uvs.get(i as usize).copied()).sum::<Option<glam::Vec2>>() else { continue };
+            let uv = uv / 3.0;
+            let at = |t: f32| ((t.rem_euclid(1.0) * ALPHA_MASK as f32) as usize).min(ALPHA_MASK - 1);
+            all += 1;
+            if mask[at(uv.y) * ALPHA_MASK + at(uv.x)] <= 8 {
+                clear += 1;
+            }
+        }
+    }
+    all > 0 && clear * 3 >= all * 2
+}
+
 /// Whether an alpha-tested texture (`mask`, see [`alpha_mask`]) is a tint: a quarter of it
 /// partly clear above Omsi.exe's cut (129 to 254) and nearly nothing that the cut throws
 /// away (1 to 128), like the darkened glass a livery paints on a window layer (GPM C2's

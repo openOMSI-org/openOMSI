@@ -1313,8 +1313,9 @@ pub(super) fn is_reflective_body(
     has_transmap: bool,
     has_envmap: bool,
     has_volume: bool,
+    clear_window: bool,
 ) -> bool {
-    named_body && has_volume && !named_pane && !has_transmap && has_envmap
+    named_body && has_volume && !named_pane && !has_transmap && has_envmap && !clear_window
 }
 
 /// The alpha mode of a vehicle's material slot: what the model.cfg declares, mended for dirt films, shadow decals, panes and (on request) bodies.
@@ -1386,18 +1387,19 @@ fn slot_alpha(cx: &SlotCx, ov: &[&MaterialDef], tex: Option<TextureId>, transmap
     }
     let named_body = ["body", "wagenkasten", "karos", "chassis", "kuzov"].iter().any(|part| mesh_name.contains(part));
     let has_volume = material_has_vehicle_volume(&vm.data, slot);
+    let texture_see_through = declared_alpha == AlphaMode::Blend
+        && coverage.as_ref().is_some_and(|mask| slot_is_see_through(&vm.data, slot, mask));
+    let clear_window = declared_alpha == AlphaMode::Blend
+        && coverage.as_ref().is_some_and(|mask| slot_is_clear_window(&vm.data, slot, mask));
     let is_env_body = is_reflective_body(
         named_body,
         named_pane,
         transmap.is_some(),
         ov.iter().any(|o| o.envmap.is_some()),
         has_volume,
+        clear_window,
     );
-    let see_through = !named_pane
-        && !cover
-        && !is_env_body
-        && declared_alpha == AlphaMode::Blend
-        && coverage.as_ref().is_some_and(|mask| slot_is_see_through(&vm.data, slot, mask));
+    let see_through = !named_pane && !cover && !is_env_body && texture_see_through;
     if see_through {
         log::debug!("  {} slot {slot} '{}': see-through by its texture's alpha, writes no depth", def.file, m.texture);
     }
