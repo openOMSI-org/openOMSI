@@ -401,10 +401,11 @@ pub struct PeopleSim {
     /// wants one of them and boards only a bus showing one of its termini; at a stop no trip
     /// goes on from, anybody takes the first bus (0x61c33c).
     pub stop_targets: Option<HashMap<i64, Vec<(String, HashSet<String>)>>>,
-    /// Per bus stop, the destinations of the trips due there soon (`Schedule::
-    /// due_destinations`, made anew every game minute): the people turning up draw theirs
-    /// from these alone, and the stop fills to the share of its number those trips ask for
-    /// (`DueTrips::share_of`). None: from all of the stop's (no timetable).
+    /// Per bus stop, the destinations of the trips due there soon (`Schedule::due_trips`,
+    /// made anew every game minute, where their buses are every frame): the people turning
+    /// up draw theirs from these alone, and the stop fills to the share of its number those
+    /// trips ask for until their bus has passed it (`DueTrips::share_of`). None: from all of
+    /// the stop's (no timetable).
     pub due_dests: Option<crate::timetable_run::DueTrips>,
     /// Game time `due_dests` was made at.
     pub due_at: f64,
