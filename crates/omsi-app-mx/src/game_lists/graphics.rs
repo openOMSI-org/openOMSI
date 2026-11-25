@@ -150,6 +150,7 @@ fn restore_runtime_graphics(
     target.rain_lights = source.rain_lights;
     target.detailed_trees = source.detailed_trees;
     target.road_snow = source.road_snow.clone();
+    target.procedural_dirt = source.procedural_dirt;
     target.ray_tracing_on = source.ray_tracing_on.clone();
     target.light_shadows = source.light_shadows.clone();
     target.cloud_shadows = source.cloud_shadows.clone();

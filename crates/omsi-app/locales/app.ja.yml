@@ -3377,3 +3377,9 @@
 "no plugin is listening for commands": "コマンドを受信しているプラグインはありません"
 "plugin command queue is full": "プラグインのコマンドキューがいっぱいです"
 
+"Passengers add weight to the bus": "乗客の重さをバスに加える"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "各乗客の .hum ファイルの重さを、座っている・立っている位置でバスに加えます。満員のバスは重い車両として発進・制動・登坂します。オフにするとバスはファイルどおりの重さです"
+"Passenger weight": "乗客の体重"
+"For passengers whose file gives no weight; default 75 kg": "ファイルに重さがない乗客の値。既定は 75 kg"
+"Road dirt on the vehicles": "車両に付く路面の汚れ"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: 車両は汚れが当たる場所に路面の汚れを集めます。濡れた路面では車輪の後ろと側面下部に跳ね、後部に膜、乾燥時はほこり、冬はシャーベット状の雪。雨で洗い流されます。オフ: OMSI 2 と同じくバス独自の汚れ"

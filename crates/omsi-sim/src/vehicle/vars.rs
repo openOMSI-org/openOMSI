@@ -407,6 +407,7 @@ impl VehicleInstance {
     /// Run the bus through the wash until it stops getting cleaner.
     pub fn wash(&mut self) -> Option<f32> {
         self.dirt = 0.0;
+        self.road_dirt = RoadDirt::default();
         self.set_engine_var("Dirt_Norm", 0.0);
         let mut last = f32::INFINITY;
         for _ in 0..600 {

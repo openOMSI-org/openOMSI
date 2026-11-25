@@ -1428,6 +1428,7 @@ impl World {
                 textured,
             );
             let mut it_extra = material_extra(&ov_item, env_mask, bump, it_specular);
+            it_extra.pbr = mesh_pbr(it_extra.pbr, m);
             it_extra.ambient = Some(it_ambient);
             // (an item with no light map or glow of its own keeps its base's)
             it_extra.glow = if own_light_slot(ov_item) {
@@ -2002,6 +2003,7 @@ fn slot_extra(
     let (color, emissive, specular, ambient) =
         d3d_material(m, ov.iter().find_map(|o| o.allcolor), textured);
     let mut extra = material_extra(ov, env_mask, bump, specular);
+    extra.pbr = mesh_pbr(extra.pbr, m);
     extra.ambient = Some(ambient);
     // A vehicle's [matl_nightmap] is added whenever the mesh is drawn, by day
     // as well, as OMSI 2 does - with or without a [matl_change] around it.

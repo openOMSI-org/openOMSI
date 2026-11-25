@@ -37,6 +37,8 @@ pub(crate) struct VanillaSkyUniform {
     pub(crate) cloud: [f32; 4],
     /// fog range, visibility, 1 for an overcast type, the render origin's height
     pub(crate) haze: [f32; 4],
+    /// towards the moon (world space), w its angular radius
+    pub(crate) moon: [f32; 4],
 }
 
 /// The enhanced clouds' noise textures (clouds.rs), made once, with their mip chains: the
@@ -51,6 +53,75 @@ pub(crate) struct CloudTextures {
     pub curl: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
     pub cpu: crate::lighting::CloudCpu,
+}
+
+/// Edge of `assets/moon.png` in texels.
+const MOON_MAP_SIZE: u32 = 512;
+
+/// The moon's face (sky.wgsl `t_moon`) and its mip levels, level 0 first.
+fn moon_map() -> Vec<Vec<u8>> {
+    let png = include_bytes!("../assets/moon.png");
+    let face = image::load_from_memory_with_format(png, image::ImageFormat::Png)
+        .expect("the moon's map")
+        .into_luma8();
+    assert_eq!(face.dimensions(), (MOON_MAP_SIZE, MOON_MAP_SIZE));
+    let mut levels = vec![face.into_raw()];
+    let mut size = MOON_MAP_SIZE as usize;
+    while size > 1 {
+        let above = &levels[levels.len() - 1];
+        let half = size / 2;
+        let level = (0..half * half)
+            .map(|i| {
+                let at = i / half * 2 * size + i % half * 2;
+                let four = [at, at + 1, at + size, at + size + 1];
+                ((four.iter().map(|&p| u32::from(above[p])).sum::<u32>() + 2) / 4) as u8
+            })
+            .collect();
+        levels.push(level);
+        size = half;
+    }
+    levels
+}
+
+/// The moon's face as a texture, for both skies.
+pub(crate) fn moon_texture(device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::TextureView {
+    let tex = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("moon"),
+        size: wgpu::Extent3d {
+            width: MOON_MAP_SIZE,
+            height: MOON_MAP_SIZE,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: MOON_MAP_SIZE.ilog2() + 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    for (level, data) in moon_map().iter().enumerate() {
+        let edge = MOON_MAP_SIZE >> level;
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &tex,
+                mip_level: level as u32,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(edge),
+                rows_per_image: Some(edge),
+            },
+            wgpu::Extent3d {
+                width: edge,
+                height: edge,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+    tex.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
 pub(crate) fn cloud_noise_textures(
@@ -267,6 +338,10 @@ impl Renderer {
                     binding: 12,
                     resource: self.sky.cloud_view_buf.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 13,
+                    resource: wgpu::BindingResource::TextureView(&self.sky.moon_view),
+                },
             ],
         });
         scene.sky_bind_group = Some(bg);
@@ -287,6 +362,8 @@ pub(crate) struct SkyRes {
     pub(crate) cloud_shape_view: wgpu::TextureView,
     pub(crate) cloud_detail_view: wgpu::TextureView,
     pub(crate) cloud_sampler: wgpu::Sampler,
+    /// The moon's face (sky bind group binding 13).
+    pub(crate) moon_view: wgpu::TextureView,
     /// Where the screen's clouds were traced from (cloud_pass.rs `CloudView`, sky bind group
     /// binding 12): the dome looks them up through it.
     pub(crate) cloud_view_buf: wgpu::Buffer,

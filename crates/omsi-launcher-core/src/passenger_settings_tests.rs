@@ -48,3 +48,21 @@ fn optional_full_bus_preference_survives_launcher_saves() {
         }
     }
 }
+
+#[test]
+fn passenger_mass_preferences_survive_launcher_saves() {
+    for phone in [false, true] {
+        let fresh = settings_from_text_on(None, phone);
+        assert_eq!(fresh["passenger_mass"], false);
+        assert_eq!(fresh["passenger_weight_kg"], 75.0);
+        let old = "passenger_mass=1\npassenger_weight_kg=82\npassenger_weight_spread=10\n";
+        let settings = settings_from_text_on(Some(old), phone);
+        assert_eq!(settings["passenger_mass"], true);
+        let text = settings_to_text(&settings, Some(old));
+        let again = settings_from_text_on(Some(&text), phone);
+        assert_eq!(again["passenger_mass"], true);
+        assert_eq!(again["passenger_weight_kg"], 82.0);
+        assert_eq!(again["passenger_weight_spread"], 10.0);
+        assert_eq!(again["passenger_weight_fixed"], false);
+    }
+}

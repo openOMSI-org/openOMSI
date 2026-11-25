@@ -16,6 +16,7 @@ pub mod human;
 pub mod human_omsi;
 pub mod ibis;
 pub mod image_decode;
+pub mod incidents;
 pub mod input;
 pub mod particles;
 pub mod people;

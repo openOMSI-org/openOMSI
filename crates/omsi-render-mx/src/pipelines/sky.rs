@@ -13,6 +13,7 @@ pub(crate) struct SkyBase {
     pub cloud_base_view: mx::TextureView,
     pub cloud_curl_view: mx::TextureView,
     pub cloud_sampler: mx::Sampler,
+    pub moon_view: mx::TextureView,
     pub cloud_shape_cpu: crate::lighting::CloudCpu,
     /// Where the screen's clouds were traced from (`CloudView`, binding 12).
     pub cloud_view_buf: mx::Buffer,
@@ -54,6 +55,7 @@ impl SkyBase {
             cloud_base_view: clouds.base,
             cloud_curl_view: clouds.curl,
             cloud_sampler: clouds.sampler,
+            moon_view: crate::sky::moon_texture(device, queue),
             cloud_shape_cpu: clouds.cpu,
             cloud_view_buf,
             vanilla_buf,

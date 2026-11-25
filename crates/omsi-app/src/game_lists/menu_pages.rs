@@ -42,6 +42,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "passenger_connections", "Passenger connections between lines", "Optional onward trips in single player only; disabled in multiplayer"),
         slider_row(app, "passenger_transfer_percent", "Connection chance", "Probability for eligible transfers; default 20%", &|v|format!("{v:.0}%")).filter(|_|s.passenger_connections),
         switch_row(app, "passenger_hailing", "Passengers signal approaching buses", "Optional visual hailing; only effective with supported natural animations"),
+        switch_row(app, "passenger_mass", "Passengers add weight to the bus", "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says"),
+        slider_row(app, "passenger_weight_kg", "Passenger weight", "For passengers whose file gives no weight; default 75 kg", &|v| format!("{v:.0} kg")).filter(|_| s.passenger_mass),
         switch_row(app, "passenger_full_bus_reaction", "Passengers react to full buses", "Optional visual acknowledgement when an approaching compatible bus is at passenger capacity"),
         switch_row(app, "pax_short_rides_stand", "Short rides stand by a door", "Passengers with no set stop who ride only a few kilometres take a free standing place near an exit rather than a seat"),
         switch_row(app, "auto_announce", "Arrival announcements at the stop", "On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS's next stop key, pressed as the driver would"),
@@ -90,6 +92,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still"),
         switch_row(app, "detailed_trees", "Detailed trees", "Close up, the trees' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time"),
         switch_row(app, "road_snow", "Built-up snow on roads and roofs", "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2").filter(|_| shown("road_snow")),
+        switch_row(app, "procedural_dirt", "Road dirt on the vehicles", "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2").filter(|_| shown("procedural_dirt")),
     ]
         .into_iter()
         .flatten()
@@ -1041,7 +1044,8 @@ fn shown_in_mode(mode: &str, key: &str) -> bool {
         "shadows" | "ssao" => !matches!(mode, "vanilla" | "enhanced_plus"),
         "shadow_size" | "shadow_casters" | "detail_textures" | "road_snow" => mode != "vanilla",
         "reflections" => mode != "enhanced_plus",
-        "night_brightness" | "led_glow" | "led_mips" | "mirror_quality" | "cloud_quality" => {
+        "night_brightness" | "led_glow" | "led_mips" | "mirror_quality" | "cloud_quality"
+        | "procedural_dirt" => {
             matches!(mode, "enhanced" | "enhanced_plus")
         }
         // (the ray-traced picture has its own occlusion)

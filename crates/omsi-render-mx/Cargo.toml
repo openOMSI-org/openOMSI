@@ -25,6 +25,8 @@ rayon.workspace = true
 hashbrown.workspace = true
 log.workspace = true
 anyhow.workspace = true
+# (the moon's map, `moon_map`)
+image.workspace = true
 winit.workspace = true
 
 [target.'cfg(windows)'.dependencies]
@@ -32,7 +34,6 @@ winit.workspace = true
 windows = { workspace = true, features = ["Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Foundation"] }
 
 [dev-dependencies]
-image.workspace = true
 naga = { version = "30", features = ["spv-out", "glsl-out", "hlsl-out"] }
 env_logger.workspace = true
 

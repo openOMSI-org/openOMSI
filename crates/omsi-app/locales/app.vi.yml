@@ -3032,3 +3032,9 @@
 "no plugin is listening for commands": "không có plugin nào đang lắng nghe lệnh"
 "plugin command queue is full": "hàng đợi lệnh của plugin đã đầy"
 
+"Passengers add weight to the bus": "Hành khách làm xe buýt nặng thêm"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Cân nặng của mỗi hành khách, lấy từ tệp .hum, được cộng vào xe buýt ở chỗ họ ngồi hoặc đứng: xe đầy khởi hành, phanh và leo dốc như một xe nặng hơn; khi tắt, xe nặng đúng như tệp của nó ghi"
+"Passenger weight": "Cân nặng hành khách"
+"For passengers whose file gives no weight; default 75 kg": "Cho hành khách mà tệp không ghi cân nặng; mặc định 75 kg"
+"Road dirt on the vehicles": "Bụi bẩn đường trên xe"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: xe bám bụi bẩn đường ở chỗ nó văng tới - nước bắn sau bánh và hông dưới khi đường ướt, lớp bẩn ở đuôi, bụi khi khô, tuyết lẫn bùn vào mùa đông - và mưa rửa trôi; khi tắt: bụi bẩn riêng của xe, như trong OMSI 2"

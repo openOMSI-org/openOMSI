@@ -426,6 +426,7 @@ mod reach_tests {
             emissive: [0.0; 3],
             specular_power: 0.0,
             texture: texture.into(),
+            metallic_roughness: None,
         };
         let glass = omsi_model::MaterialDef {
             texture: texture.into(),
