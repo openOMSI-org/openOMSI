@@ -8427,6 +8427,12 @@ _version: 2
   en: "Projects made for openOMSI by others. Their own websites say what they do and how to get them."
 "No add-on yet":
   en: "No add-on yet"
+"The add-on list could not be loaded. Check the internet connection and try again.":
+  en: "The add-on list could not be loaded. Check the internet connection and try again."
+"No longer in the catalog":
+  en: "No longer in the catalog"
+"This plugin was taken out of the catalog. It stays in your game until you remove it.":
+  en: "This plugin was taken out of the catalog. It stays in your game until you remove it."
 "by {author}":
   en: "by {author}"
 "Open website":
