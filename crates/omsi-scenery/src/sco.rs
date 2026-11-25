@@ -835,4 +835,23 @@ mod tests {
         assert!(!o.surface_explicit && !o.surface);
         assert_eq!(o.model.meshes.len(), 1);
     }
+
+    #[test]
+    fn a_continuation_across_the_north_heading_inherits_the_switch_dir() {
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[path]\n0\n0\n0.449\n359\n0\n10\n0\n0\n2\n2.5\n2\n0\n[switchdir]\n1\n\
+             [path]\n-0.1745\n9.9985\n0.449\n1\n0\n5\n0\n0\n2\n2.5\n2\n0\n",
+        ));
+        assert_eq!(o.path_switch_dir, [Some(1), None]);
+        assert_eq!(o.inherit_switch_dirs(), [Some(1), Some(1)]);
+
+        // control: the same joint with a 20° kink is no continuation
+        let kinked = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[path]\n0\n0\n0.449\n359\n0\n10\n0\n0\n2\n2.5\n2\n0\n[switchdir]\n1\n\
+             [path]\n-0.1745\n9.9985\n0.449\n20\n0\n5\n0\n0\n2\n2.5\n2\n0\n",
+        ));
+        assert_eq!(kinked.inherit_switch_dirs(), [Some(1), None]);
+    }
 }
