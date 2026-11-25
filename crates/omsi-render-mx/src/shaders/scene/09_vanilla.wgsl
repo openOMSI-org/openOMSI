@@ -472,7 +472,23 @@ fn glass_film_classic(in: FsIn, water: f32) -> vec4<f32> {
         let cp = camera.view_proj * vec4<f32>(in.world + thr * 6.0, 1.0);
         if (has_picture && cp.w > 0.05) {
             let ndc = cp.xy / cp.w;
-            let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+            var uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+            // (no further across the screen than a few of the drop's own widths: zoomed in,
+            // the same six metres spread over many times the pixels and every drop low on
+            // the windscreen looked onto the dashboard below it, a black blot, #4258)
+            let shift = (uv - uv0) * dims;
+            let most = clamp(g.size_px * 6.0, 3.0, dims.y * 0.025);
+            uv = uv0 + shift * min(1.0, most / max(length(shift), 1e-4)) / dims;
+            // (only what lies beyond the glass, where the depth prepass tells it: on the cab's
+            // own pillar or dashboard the drop shows what is straight behind it, as the
+            // enhanced film does, enhanced/07_glass.wgsl)
+            if (camera.clouds.w > 0.5 && camera.clouds.w < 1.5) {
+                let asz = vec2<f32>(textureDimensions(t_ao));
+                let z = textureLoad(t_ao, min(vec2<i32>(uv * asz), vec2<i32>(asz) - vec2<i32>(1)), 0).g;
+                let zg = (camera.view_proj * vec4<f32>(in.world, 1.0)).w;
+                let beyond = select(smoothstep(zg + 0.05, zg + 0.4, z), 1.0, z <= 0.0);
+                uv = mix(uv0, uv, beyond);
+            }
             let inside = smoothstep(0.0, 0.06, min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y)));
             let far = finite_or(glass_blur(clamp(uv, vec2<f32>(0.001), vec2<f32>(0.999)), 0.8 + 1.5 * g.mist), behind);
             seen = mix(behind, far, inside);
