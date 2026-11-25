@@ -407,6 +407,7 @@ fn a_frame_reads_each_variable_once() {
         muffled: false,
         parts: Vec::new(),
         vars: None,
+        pack: Default::default(),
     };
     let reads = std::cell::Cell::new(0);
     let var = |n: &str| {
@@ -467,6 +468,7 @@ fn a_triggered_sound_reads_its_curve_when_it_fires() {
         muffled: false,
         parts: Vec::new(),
         vars: None,
+        pack: Default::default(),
     };
     assert_eq!(set.curve_triggers(), vec!["ev_doorhitclose_0".to_string()]);
 }
@@ -503,6 +505,7 @@ fn articulated_parts_use_trigger_time_curves_and_keep_them() {
         muffled: false,
         parts: Vec::new(),
         vars: None,
+        pack: Default::default(),
     };
     let mut set = make();
     set.add_part(0, make());

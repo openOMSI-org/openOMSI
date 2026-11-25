@@ -13,6 +13,15 @@ mod scripts_props;
 mod trams;
 mod zweiachser;
 
+/// Without a driven axle `Velocity` is 0 however the vehicle rolls (Omsi.exe 0x7e2574 turns
+/// `n_Wheel`, then 0, into it); only a vehicle without axles shows the body's speed.
+#[test]
+fn velocity_without_driven_axles_is_zero() {
+    assert_eq!(speedometer_speed(Some(7.0), true, 10.0), 7.0);
+    assert_eq!(speedometer_speed(None, true, 10.0), 0.0);
+    assert_eq!(speedometer_speed(None, false, 10.0), 10.0);
+}
+
 #[test]
 fn velocity_is_the_driven_wheels_speed() {
     // a front axle rolling at 10 m/s, the driven rear axle spinning at twice that
@@ -1250,4 +1259,17 @@ fn a_trolleybus_moves_only_on_current() {
     };
     assert!(at(0.0));
     assert!(!at(30.0));
+}
+
+/// An AI vehicle's `n_Wheel` is its speed over the first axle's wheel (Omsi.exe 0x7debb0),
+/// not a driven wheel's own turning through the bend.
+#[test]
+fn ai_n_wheel_is_the_speed_over_the_first_wheel() {
+    let pi = std::f32::consts::PI;
+    // 10 m/s on wheels of 1 m: 600/π rpm, backwards the same turned round
+    assert!((ai_n_wheel(10.0, Some(1.0)) - 600.0 / pi).abs() < 1e-3);
+    assert!((ai_n_wheel(-10.0, Some(1.0)) + 600.0 / pi).abs() < 1e-3);
+    // wheels half the size turn twice as fast
+    assert!((ai_n_wheel(10.0, Some(0.5)) - 1200.0 / pi).abs() < 1e-3);
+    assert_eq!(ai_n_wheel(10.0, None), 0.0);
 }

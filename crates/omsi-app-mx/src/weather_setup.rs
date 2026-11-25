@@ -546,12 +546,9 @@ pub(crate) fn weather_lighting(
     }
     lighting.wetness = wetness;
     lighting.air_temp = w.temp.0;
-    // [wind] direction (deg) and speed (m/s): the snowfall drifts with it
-    lighting.wind = glam::Vec3::new(
-        w.wind.0.to_radians().sin() * w.wind.1,
-        w.wind.0.to_radians().cos() * w.wind.1,
-        0.0,
-    );
+    // [wind]: the air the snowfall, the smoke, the fog and the trees move with, blowing
+    // from its direction as Omsi.exe's (0x753428)
+    lighting.wind = crate::rain::weather_wind(w);
     omsi_sim::particles::set_wind(lighting.wind);
     // Omsi.exe hides the sun under an 'ovc' cloud type (the Overcast ones in clouds.cfg) and
     // draws no sun shadows below 350 m visibility
@@ -604,7 +601,8 @@ pub(crate) fn apply_weather(
 ) {
     let (kind, rate) = precip_of(w);
     v.host.precip_type = kind as f32;
-    v.host.precip_rate = rate;
+    // (the strength whatever falls, as Omsi.exe's `PrecipRate`)
+    v.host.precip_rate = omsi_weather::conditions::precip_strength(w);
     v.host.wind = crate::rain::weather_wind(w);
     v.host.street_cond = street_condition(w, wetness);
     v.set_var("PrecipType", kind as f32);

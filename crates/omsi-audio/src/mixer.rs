@@ -52,8 +52,7 @@ pub struct VoiceParams {
     /// bodywork from the cabin loses its edge, not just some volume (a straight gain cut
     /// still reads as "the same sound, turned down" rather than "coming from outside").
     pub lowpass_hz: f32,
-    /// OMSI's `[important]`: keep this sound ahead of ordinary voices when the
-    /// mixer limit is reached.
+    /// OMSI's `[important]` (kept for the traces: the mixer cuts no voice).
     pub important: bool,
 }
 
@@ -96,9 +95,6 @@ impl Default for Listener {
         }
     }
 }
-
-/// At most this many clip voices are mixed at once (OMSI's `[sound_maxcount]` default).
-pub const MAX_VOICES: usize = 200;
 
 /// Commands the ring between the game and the mixer holds; more wait on the game's side.
 const RING: usize = 8192;
@@ -234,6 +230,8 @@ pub struct AudioEngine {
     capture: bool,
     /// Mixed never (see [`AudioEngine::silent`]): the voices are kept as they are told.
     silent: bool,
+    /// The sound sets updated, sorted once a frame for `[sound_maxcount]` (see `packs`).
+    packs: Mutex<crate::packs::Packs>,
 }
 
 struct DeviceState {
@@ -335,6 +333,7 @@ impl AudioEngine {
             enabled: true,
             capture,
             silent,
+            packs: Default::default(),
         }
     }
 
@@ -703,6 +702,20 @@ impl AudioEngine {
         // (once a frame: what waits on the game's side goes on, what came back is let go of)
         g.flush();
         g.take_back();
+        drop(g);
+        // (and the sound packs of the frame are sorted for the next: `[sound_maxcount]`)
+        self.packs.lock().end_frame(crate::packs::sound_maxcount());
+    }
+
+    /// A sound set (a pack, see `packs`) is updated: whether it may be heard, as the packs
+    /// were sorted at the end of the last frame.
+    pub(crate) fn pack_heard(&self, p: crate::packs::Pack) -> bool {
+        self.packs.lock().heard(p)
+    }
+
+    /// Whether the sound set (pack) `id` was too far at the end of the last frame.
+    pub(crate) fn pack_too_far(&self, id: u64) -> bool {
+        self.packs.lock().is_too_far(id)
     }
 
     /// OMSI's `sound_doppler`: a sound coming closer is higher, one going away lower (on
@@ -1118,46 +1131,23 @@ mod tests {
         assert!(!w.lp_fresh);
     }
 
+    /// The mixer cuts no voice, near or far: `[sound_maxcount]` cuts whole sound packs
+    /// before they play (`crate::packs`).
     #[test]
-    fn important_voices_win_the_mixer_limit() {
+    fn every_voice_is_mixed_however_many_there_are() {
         let clip = Arc::new(Clip {
             sample_rate: 48_000,
             channels: 1,
             samples: vec![64; 100],
         });
         let (mut s, _, _) = shared();
-        for _ in 0..MAX_VOICES {
-            s.voices.push(far_voice(clip.clone(), 10.0));
-        }
-        // the farthest of all, but [important]: it stays, one of the near ones goes
-        let mut far_important = far_voice(clip, 500.0);
-        far_important.id = 9_999;
-        far_important.params.important = true;
-        s.voices.push(far_important);
-        let mut out = vec![0.0f32; 16];
-        s.render(&mut out);
-        let expect = MAX_VOICES as f32 * 64.0 / 32_768.0;
-        assert!((out[0] - expect).abs() < 1e-3, "{} vs {expect}", out[0]);
-    }
-
-    #[test]
-    fn the_nearest_voices_are_mixed_and_the_driven_bus_is_never_cut() {
-        let clip = Arc::new(Clip {
-            sample_rate: 48_000,
-            channels: 1,
-            samples: vec![64; 100],
-        });
-        let (mut s, _, _) = shared();
-        // 50 far voices, MAX_VOICES near ones, and the bus's own (non-spatial) at half gain
-        for k in 0..MAX_VOICES + 50 {
+        for k in 0..250 {
             s.voices
                 .push(far_voice(clip.clone(), if k < 50 { 900.0 } else { 5.0 }));
         }
-        s.voices.push(voice(clip, 0.5));
         let mut out = vec![0.0f32; 16];
         s.render(&mut out);
-        // the bus kept, then the nearest: MAX_VOICES - 1 near ones at full gain + 0.5
-        let expect = ((MAX_VOICES - 1) as f32 + 0.5) * 64.0 / 32_768.0;
+        let expect = 250.0 * 64.0 / 32_768.0;
         assert!((out[0] - expect).abs() < 1e-3, "{} vs {expect}", out[0]);
     }
 

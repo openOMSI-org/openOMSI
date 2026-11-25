@@ -58,7 +58,7 @@ impl VehicleInstance {
     /// (`dirt.osc` adds it up into `Dirt_Wiped`, which the wipers clear), and `PrecipRate`
     /// is signed, so rain wets the glass in `rain.osc` and dry weather dries it again.
     pub(super) fn update_dirt(&mut self, dt: f32) {
-        let rain = self.host.precip_rate.clamp(0.0, 1.0);
+        let rain = self.host.falling_precip().clamp(0.0, 1.0);
         let speed = (self.physics.velocity_kmh().abs() / 50.0).min(2.0);
         // a dry duty adds a few percent, a wet one soils the bus in a couple of hours
         // a dry duty of a couple of hours shows; a wet one soils the bus in half an hour
@@ -81,6 +81,26 @@ impl VehicleInstance {
         self.set_engine_ev(Ev::PrecipRate, glass_precip_rate(rain));
         // the state of the road, for the tyre sounds and the wheel spray
         self.set_engine_ev(Ev::StreetCond, self.host.street_cond);
+        // While it rains or snows, the glass wets as Omsi.exe has it (0x7d22d8): by how hard
+        // the fall, carried by the wind, meets the windscreen of the moving body - this takes
+        // over from the flat rate above, which stays the dry one.
+        if rain > 0.0 {
+            let velocity = self.rigid.as_ref().map_or_else(
+                || {
+                    let h = self.heading.to_radians();
+                    Vec3::new(h.sin() as f32, h.cos() as f32, 0.0) * self.physics.speed
+                },
+                |rb| rb.velocity,
+            );
+            let wetting = glass_wetting(
+                self.host.precip_type as i32,
+                rain,
+                self.host.wind,
+                velocity,
+                self.body_rotation(),
+            );
+            self.set_engine_ev(Ev::PrecipRate, wetting);
+        }
         // what is coupled to this vehicle (the train scripts light their ends by it: a head
         // lamp only where nothing is coupled, the tail lamps at the last car)
         self.set_coupling_evs();
@@ -439,15 +459,8 @@ impl VehicleInstance {
                 self.put(w[3], suspension);
             }
         }
-        let n_wheel = self
-            .physics
-            .wheels
-            .iter()
-            .find(|w| w[0].driven)
-            .or(self.physics.wheels.first())
-            .map(|w| w[0].rpm)
-            .unwrap_or(0.0);
-        self.put(self.v_n_wheel, n_wheel);
+        let first_diameter = self.ty.def.axles.first().map(|a| a.wheel_diameter);
+        self.put(self.v_n_wheel, ai_n_wheel(ai.speed, first_diameter));
         let a = self.physics.accel;
         self.physics.a_trans = a;
         self.put(self.v_accel[0], a.x);
@@ -777,6 +790,19 @@ impl OmsiFrames {
 /// The body-frame acceleration the scripts see as `A_Trans_*` (Omsi.exe 0x7d5124: the
 /// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
 /// an accelerometer would read, less gravity's share in the body frame.
+/// `n_Wheel` (rpm) of a vehicle the AI moves along its path: Omsi.exe (0x7debb0) takes it
+/// straight from the speed, 60·v / (π·d) with `d` the first axle's wheel size, the rpm a
+/// wheel of that size turns at rolling straight ahead - whichever axle drives and however
+/// the vehicle steers; 0 for a vehicle without axles. (Omsi.exe turns it round for a car
+/// turned round in its train, +0x4e0, as its speed there is the head car's; `speed` here is
+/// already the vehicle's own, backwards negative.)
+pub(super) fn ai_n_wheel(speed: f32, first_diameter: Option<f32>) -> f32 {
+    match first_diameter {
+        Some(d) if d > 0.0 => 60.0 * speed / (std::f32::consts::PI * d),
+        _ => 0.0,
+    }
+}
+
 pub(super) fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
     accel_body - orientation.inverse().mul_vec3(Vec3::new(0.0, 0.0, 9.81))
 }

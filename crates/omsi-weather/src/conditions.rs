@@ -31,16 +31,32 @@ pub fn cloud_drift_at(w: &Weather, time: f64) -> [f64; 4] {
 /// whole sky by time x change.) `d[2..4]`: the classic sky's clouds, in metres (modulo
 /// `VANILLA_CLOUD_PERIOD`) as Omsi.exe moves them (0x753428) - by the wind's speed along
 /// its direction taken as degrees x pi/200, its slip from pi/180 kept, so that they drift
-/// the way the original's do.
+/// the way the original's do. The enhanced clouds take the same direction: they go with
+/// the air the smoke and the rain below them move in (`wind_vector`; the sky samples at
+/// the place plus the drift, so the clouds move against it).
 pub fn cloud_drift_step(d: &mut [f64; 4], w: &Weather, secs: f64) {
-    let (dir, speed) = (w.wind.0.to_radians() as f64, w.wind.1 as f64);
-    let s = secs * speed / 2500.0;
-    d[0] = (d[0] + dir.sin() * s).rem_euclid(CLOUD_DRIFT_WRAP);
-    d[1] = (d[1] + dir.cos() * s).rem_euclid(CLOUD_DRIFT_WRAP);
     let omsi_dir = w.wind.0 as f64 * std::f64::consts::PI / 200.0;
+    let speed = w.wind.1 as f64;
+    let s = secs * speed / 2500.0;
+    d[0] = (d[0] + omsi_dir.sin() * s).rem_euclid(CLOUD_DRIFT_WRAP);
+    d[1] = (d[1] + omsi_dir.cos() * s).rem_euclid(CLOUD_DRIFT_WRAP);
     let period = CLOUD_PERIOD as f64;
     d[2] = (d[2] + omsi_dir.sin() * speed * secs).rem_euclid(period);
     d[3] = (d[3] + omsi_dir.cos() * speed * secs).rem_euclid(period);
+}
+
+/// The air's velocity (m/s, world: x east, y north, z up) in this weather, as Omsi.exe
+/// works it out every frame (`TWeather.Calculate`, 0x753428, its `ActualWindVec`):
+/// `-speed * (sin, cos)` of the direction times pi/200. The wind blows *from* the
+/// direction given, as the METAR reader at 0x63ce40 stores it (degrees), but Omsi.exe
+/// turns it with pi/200 - as if it were in gradians - so a 90 deg wind comes from 81 deg,
+/// and 360 deg from 324. The smoke (0x5a238c), the rain and snow (`precipVec`, the fall
+/// plus this, 0x755798) and the classic clouds (see `cloud_drift_step`) all move with it,
+/// so everything here that the air carries takes this one vector.
+pub fn wind_vector(w: &Weather) -> glam::Vec3 {
+    let (dir, speed) = w.wind;
+    let a = dir * std::f32::consts::PI / 200.0;
+    -speed * glam::Vec3::new(a.sin(), a.cos(), 0.0)
 }
 
 /// How wet the roads are: rain soaks them in a few minutes, sunshine dries them in about
@@ -162,6 +178,34 @@ pub fn overcast(kind: &str) -> Option<bool> {
     o
 }
 
+/// The weather's precipitation strength (0..1, of its 255) whatever falls, or nothing: the
+/// scripts' `PrecipRate` system variable, which Omsi.exe sets every frame to the
+/// strength / 255 alone (0x6ff020) - a `#CAVOK` weather's `0` / `32` reads 0.125 there,
+/// where `precip_of` says nothing falls.
+pub fn precip_strength(w: &Weather) -> f32 {
+    (w.precip.get(1).copied().unwrap_or(0.0) / 255.0).clamp(0.0, 1.0)
+}
+
+#[cfg(test)]
+mod strength_tests {
+    use super::*;
+
+    #[test]
+    fn the_strength_reads_whatever_falls() {
+        let w = |precip: Vec<f32>| Weather {
+            precip,
+            ..Weather::default()
+        };
+        // #CAVOK's "0 / 32": nothing falls, yet the scripts read 32 / 255
+        let cavok = w(vec![0.0, 32.0]);
+        assert_eq!(precip_of(&cavok), (0, 0.0));
+        assert_eq!(precip_strength(&cavok), 32.0 / 255.0);
+        assert_eq!(precip_strength(&w(vec![1.0, 255.0])), 1.0);
+        assert_eq!(precip_strength(&w(vec![2.0])), 0.0);
+        assert_eq!(precip_strength(&w(vec![])), 0.0);
+    }
+}
+
 /// The road under the wheels as the scripts and the sound configurations read it
 /// (`StreetCond`): 0 dry, 1 wet, 2 covered in snow. A snowfall (or a weather with
 /// `[snowOnRoad]`) puts it into the upper half, everything else follows the water film.
@@ -243,5 +287,47 @@ mod tests {
         // and a sky without clouds needs no clouds.cfg
         assert_eq!(overcast("-1"), None);
         assert_eq!(overcast(""), None);
+    }
+
+    fn windy(dir: f32, speed: f32) -> Weather {
+        Weather {
+            wind: (dir, speed),
+            ..Weather::default()
+        }
+    }
+
+    #[test]
+    fn the_wind_blows_from_its_direction_turned_as_omsi_does() {
+        // from the north: the air moves south
+        let v = wind_vector(&windy(0.0, 4.0));
+        assert!(v.abs_diff_eq(glam::Vec3::new(0.0, -4.0, 0.0), 1e-5), "{v}");
+        // 100 is a right angle to Omsi.exe (pi/200): from the east, the air moves west
+        let v = wind_vector(&windy(100.0, 2.0));
+        assert!(v.abs_diff_eq(glam::Vec3::new(-2.0, 0.0, 0.0), 1e-5), "{v}");
+        // 90 comes from 81 deg: the air moves a little south of west
+        let v = wind_vector(&windy(90.0, 1.0));
+        let a = 90.0f32 * std::f32::consts::PI / 200.0;
+        assert!(
+            v.abs_diff_eq(glam::Vec3::new(-a.sin(), -a.cos(), 0.0), 1e-6),
+            "{v}"
+        );
+        assert!(v.y < 0.0);
+        // a calm moves nothing, and the vector is level
+        assert_eq!(wind_vector(&windy(123.0, 0.0)), glam::Vec3::ZERO);
+        assert_eq!(wind_vector(&windy(57.0, 9.0)).z, 0.0);
+    }
+
+    #[test]
+    fn both_skies_drift_along_omsis_angle() {
+        // 100 taken as pi/2: the drift grows east only, 50 m in 10 s at 5 m/s
+        let d = cloud_drift_at(&windy(100.0, 5.0), 10.0);
+        assert!(
+            (d[0] - 50.0 / 2500.0).abs() < 1e-9 && d[1].abs() < 1e-9,
+            "{d:?}"
+        );
+        assert!((d[2] - 50.0).abs() < 1e-6 && d[3].abs() < 1e-6, "{d:?}");
+        // the drift runs against the air: the sky samples at the place plus the drift
+        let v = wind_vector(&windy(100.0, 5.0));
+        assert!(v.x < 0.0 && d[0] > 0.0);
     }
 }

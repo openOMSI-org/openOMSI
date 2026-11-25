@@ -116,9 +116,8 @@ pub(crate) fn set_ai_environment(
     host.clock.paused = paused;
     host.auto_clutch = if auto_clutch { 1.0 } else { 0.0 };
     if let Some(w) = weather {
-        let (kind, rate) = precip_of(w);
-        host.precip_type = kind as f32;
-        host.precip_rate = rate;
+        host.precip_type = precip_of(w).0 as f32;
+        host.precip_rate = omsi_weather::conditions::precip_strength(w);
         host.temperature = w.temp.0;
         host.abs_humidity = w.temp.1;
         host.wind = crate::rain::weather_wind(w);
@@ -279,14 +278,10 @@ pub(crate) fn cabin_air_step(
     cabin.step(dt, &ci);
 }
 
-/// The [wind] at the height of the tyres' spray: direction (deg) and speed (m/s) in the lee
-/// of the street.
+/// The [wind] at the height of the tyres' spray (m/s, world) in the lee of the street: the
+/// weather's air (`rain::weather_wind`, blowing from its direction), slowed.
 pub(crate) fn spray_wind(weather: &omsi_content::weather::Weather) -> Vec3 {
-    Vec3::new(
-        weather.wind.0.to_radians().sin() * weather.wind.1,
-        weather.wind.0.to_radians().cos() * weather.wind.1,
-        0.0,
-    ) * puddles::GROUND_WIND
+    crate::rain::weather_wind(weather) * puddles::GROUND_WIND
 }
 
 /// The people's step, and what it means for the buses: the validators used (the bus's

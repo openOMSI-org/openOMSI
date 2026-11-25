@@ -35,9 +35,11 @@ pub fn quality_of(q: &str) -> u8 {
     }
 }
 
+/// The weather's wind (m/s, world): the air the rain, the snow and the glass's water move
+/// in - Omsi.exe's own vector, blowing from the direction (see
+/// `omsi_weather::conditions::wind_vector`).
 pub fn weather_wind(weather: &omsi_content::weather::Weather) -> Vec3 {
-    let heading = weather.wind.0.to_radians();
-    Vec3::new(heading.sin(), heading.cos(), 0.0) * weather.wind.1
+    omsi_weather::conditions::wind_vector(weather)
 }
 
 /// How much of the ground and of what faces up the snow covers (0..1) after `secs` more of

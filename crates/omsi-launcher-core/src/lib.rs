@@ -246,6 +246,12 @@ pub fn omsi_options(root: &Path) -> Option<OmsiOptions> {
     if let Some(d) = o.str("sound_doppler") {
         v["doppler"] = json!(!d.trim().eq_ignore_ascii_case("off"));
     }
+    // (Omsi.exe sets 100 before it reads the file, 0x82f4b4, and `StrToInt`s the line)
+    v["sound_maxcount"] = json!(
+        o.str("sound_maxcount")
+            .and_then(|x| x.trim().parse::<i64>().ok())
+            .unwrap_or(100)
+    );
     if let Some(l) = o.str("language").filter(|l| !l.trim().is_empty()) {
         v["language"] = json!(language_code(l));
     }
@@ -3426,6 +3432,22 @@ pub fn route_arrows_from_text(text: &str) -> (bool, bool) {
 }
 
 /// The page's view of a `settings.cfg` text (None: no file yet, the game's defaults).
+/// #3124: the door set the passengers board through, as the settings file spells it.
+fn entry_doors_setting(door: Option<&str>) -> &'static str {
+    match door
+        .map(|s| s.trim().to_ascii_lowercase().replace([' ', '-', '/'], "_"))
+        .as_deref()
+    {
+        Some("first") | Some("front") | Some("front_door") | Some("first_door") => "first",
+        Some("first_two") | Some("first2") | Some("front_two") | Some("front2") | Some("both") => {
+            "first_two"
+        }
+        Some("last") | Some("rear") | Some("back") | Some("rear_door") | Some("last_door")
+        | Some("back_door") => "last",
+        _ => "as_bus",
+    }
+}
+
 pub fn settings_from_text(text: Option<&str>) -> Value {
     settings_from_text_on(text, cfg!(any(target_os = "android", target_os = "ios")))
 }
@@ -3559,6 +3581,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     }
     // Human posing; the original OMSI behavior remains the default.
     v["passenger_animation"] = json!("original");
+    // Which doors the passengers get in through (#3124): as the vehicle says
+    v["pax_entry_doors"] = json!("as_bus");
     // A fare paid without a ticket (#2742); off, as OMSI has always sold tickets
     v["pax_no_ticket"] = json!(false);
     v["photo_mode"] = json!("simple");
@@ -3578,6 +3602,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // an early timetable bus waits only at the stops the timetable times (off: at every
     // stop, as in OMSI; #1773)
     v["ai_wait_timed_stops_only"] = json!(false);
+    v["ibis_auto_stop"] = json!(false);
     v["pax_bad_driving"] = json!(true);
     v["pax_late_tolerance_min"] = json!(5.0);
     v["pax_free_drive"] = json!("auto");
@@ -3595,6 +3620,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         ("ai_max_parked", json!(0)),
         ("ai_max_humans", json!(200)),
         ("parked_buses_drawn", json!(-1)),
+        ("sound_maxcount", json!(200)),
         ("use_real_time", json!(false)),
         ("use_real_date", json!(false)),
         ("use_real_year", json!(false)),
@@ -3897,6 +3923,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 ))
             }
             "max_fps" => v[&k] = json!(val.parse::<f64>().map(|x| x as i64).unwrap_or(0)),
+            "sound_maxcount" => v[&k] = json!(val.trim().parse::<i64>().unwrap_or(200)),
             "max_obj_dist" => {
                 v[&k] = if val.eq_ignore_ascii_case("auto") {
                     json!("auto")
@@ -4003,6 +4030,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     "original"
                 })
             }
+            "pax_entry_doors" => v[&k] = json!(entry_doors_setting(Some(val))),
             "pax_free_drive" => {
                 v[&k] = json!(match val.trim().to_ascii_lowercase().as_str() {
                     "on" | "1" | "yes" | "true" | "always" => "on",
@@ -4435,6 +4463,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "mirror_shadows"
             | "mirror_particles"
             | "ai_wait_timed_stops_only"
+            | "ibis_auto_stop"
             | "pax_bad_driving"
             | "pax_no_ticket"
             | "pax_board_when_stopped"
@@ -5192,6 +5221,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("mirror_particles", false)
     ));
     text.push_str(&format!("mirror_hud={}\n", n("mirror_hud", 0).clamp(0, 7)));
+    // OMSI's [sound_maxcount] (options.cfg; 200 in the one it comes with)
+    text.push_str(&format!("sound_maxcount={}\n", n("sound_maxcount", 200)));
     text.push_str(&format!(
         "standing_chance={}\n",
         n("standing_chance", 5).clamp(0, 100)
@@ -5216,6 +5247,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("trip_summary", true),
         b("full_tank", true)
     ));
+    text.push_str(&format!("ibis_auto_stop={}\n", b("ibis_auto_stop", false)));
     text.push_str(&format!("pax_bad_driving={}\n", b("pax_bad_driving", true)));
     text.push_str(&format!(
         "pax_late_tolerance_min={}\n",
@@ -5257,8 +5289,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         "pax_short_rides_stand={}\n",
         b("pax_short_rides_stand", false)
     ));
-    text.push_str(&format!("auto_announce={}\n", b("auto_announce", false)));
-    text.push_str(&format!("pax_no_ticket={}\n", b("pax_no_ticket", false)));
+    let ed = entry_doors_setting(v.get("pax_entry_doors").and_then(|x| x.as_str()));
+    text.push_str(&format!("auto_announce={}\npax_no_ticket={}\npax_entry_doors={ed}\n", b("auto_announce", false), b("pax_no_ticket", false)));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),

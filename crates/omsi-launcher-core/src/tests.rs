@@ -1135,6 +1135,66 @@ upscale_quality=native
     assert_eq!(mac["upscaler"].as_str(), Some("metalfx"));
     assert!(super::settings_to_text(&mac, None).contains("upscaler=metalfx\n"));
 }
+#[test]
+fn the_doors_the_passengers_board_at_are_kept_in_the_settings_file() {
+    // (#3124) as the vehicle says (the default), the front door only, the first two, or the
+    // rear one only.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(
+        fresh["pax_entry_doors"],
+        serde_json::json!("as_bus"),
+        "as OMSI has always boarded"
+    );
+    let front = super::settings_from_text(Some("pax_entry_doors=first\n"));
+    assert_eq!(front["pax_entry_doors"], serde_json::json!("first"));
+    let text = super::settings_to_text(&front, None);
+    assert!(
+        text.lines().any(|l| l.trim() == "pax_entry_doors=first"),
+        "{text}"
+    );
+    // (the spellings a hand-edited file or the settings page may use)
+    for (written, kept) in [
+        ("rear", "last"),
+        ("back door", "last"),
+        ("front two", "first_two"),
+        ("both", "first_two"),
+        ("first", "first"),
+        ("vehicle", "as_bus"),
+        ("nonsense", "as_bus"),
+        ("", "as_bus"),
+    ] {
+        let v = super::settings_from_text(Some(&format!("pax_entry_doors={written}\n")));
+        assert_eq!(v["pax_entry_doors"], serde_json::json!(kept), "{written:?}");
+    }
+    // (and what is written is what the game reads back)
+    let rear = super::settings_from_text(Some("pax_entry_doors=rear\n"));
+    assert!(
+        super::settings_to_text(&rear, None)
+            .lines()
+            .any(|l| l.trim() == "pax_entry_doors=last")
+    );
+}
+
+#[test]
+#[test]
+fn whether_the_ibis_follows_the_stops_is_kept_in_the_settings_file() {
+    // (#2267) off by default - the driver presses the IBIS's "next stop" key, as in OMSI.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["ibis_auto_stop"], serde_json::json!(false));
+    let on = super::settings_from_text(Some("ibis_auto_stop=1\n"));
+    assert_eq!(on["ibis_auto_stop"], serde_json::json!(true));
+    assert!(
+        super::settings_to_text(&on, None)
+            .lines()
+            .any(|l| l.trim() == "ibis_auto_stop=1")
+    );
+    let off = super::settings_from_text(Some("ibis_auto_stop=0\n"));
+    assert!(
+        super::settings_to_text(&off, None)
+            .lines()
+            .any(|l| l.trim() == "ibis_auto_stop=0")
+    );
+}
 
 #[test]
 fn how_late_the_bus_may_be_is_kept_in_the_settings_file() {

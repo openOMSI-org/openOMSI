@@ -7,12 +7,7 @@ impl RigidBody {
     /// `hub_heights[a]`: unloaded hub height of axle `a` above the model origin; the tyre
     /// radius when the model does not say (see `VehicleType::wheel_geometry`).
     pub fn from_definition(def: &Vehicle, hub_heights: &[Option<f32>]) -> RigidBody {
-        let mass = if def.mass < 100.0 {
-            def.mass * 1000.0
-        } else {
-            def.mass
-        }
-        .max(500.0);
+        let mass = def.mass_kg().max(500.0);
         let moi = def.moment_of_inertia;
         let scale = if moi[0] < 5000.0 { 1000.0 } else { 1.0 };
         // `[momentofintertia]` goes to ODE as I11, I22, I33 of Omsi.exe's y-up body frame

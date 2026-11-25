@@ -1,25 +1,102 @@
-# HTML Textures
+# HTML textures
 
-**Note:** This API is still under development, so breaking changes may occur at any time.
+An `[htmltexture]` draws a texture from an HTML page with JavaScript: an IBIS, a passenger
+information screen, a ticket machine, a road sign. It replaces OMSI 2's pixel-by-pixel
+`[scriptTexture]` drawing for most displays. This page is for vehicle and scenery modders.
 
-Previously, you had to use `scriptTexture` in Omsi 2; to make things easier for both modders and developers, openOmsi
-now offers `htmlTexture`.
-These can be used, for example, as IBIS or other information in vehicles, giving you a few more design options.
+> **Note:** This API is still under development. Breaking changes may occur.
 
-This documentation explains how to use the API in HTML. If anything is missing or you encounter any issues, please feel
-free to open an issue with relevant information and steps to reproduce the problem.
+## Which engine
 
-Working html example: `docs/examples/htmltexture/demo.html`.
+openOMSI has two HTML engines. Both use the same `[htmltexture]` setup and the same
+`window.omsi` API described on this page.
 
-### Example model config:
+| | Classic engine (default) | Modern engine (opt-in) |
+|---|---|---|
+| Use it for | Simple screens, fastest on slow devices | Complex layouts, code from the web |
+| CSS | Block flow, basic properties | Flexbox, positioning, borders, gradients, `calc()` |
+| JavaScript | ES5 subset plus arrow functions | Full modern JavaScript, modules, `fetch` of the page's files |
+| Files | One HTML file with images | A small site: `.html`, `.css`, `.js` files |
+| Turn on | Nothing to do | `<meta name="omsi-engine" content="modern">` in the page |
+| Reference | [Classic engine](#classic-engine) | [Modern HTML engine](HTMLTEXTURE_MODERN.md) |
 
+Start with the classic engine. Switch a page to the modern one when you miss flexbox,
+positioning or modern JavaScript. Pages without the `<meta>` line always run on the classic
+engine.
+
+## Minimal example
+
+A speed display on a bus. A working demo page is in `docs/examples/htmltexture/demo.html` in
+the openOMSI repository.
+
+### 1. The model.cfg
+
+```text
+[htmltexture]
+512
+256
+html\speed.html
+
+##########################################
+
+[mesh]
+display.o3d
+
+[matl]
+display.dds
+0
+
+[useHtmlTexture]
+0
 ```
+
+1. `[htmltexture]` declares the page: width and height in pixels, then the page's path.
+2. On the display's `[matl]`, `[useHtmlTexture]` names the page by its number, counted from 0.
+   The material's texture (`display.dds`) is replaced by the page.
+
+### 2. The page
+
+`html\speed.html`:
+
+```html
+<style>
+  body { background: black; color: #ffb000; font-size: 96px; text-align: center; }
+</style>
+<div id="speed">--</div>
+<script>
+  window.omsi = window.omsi || {};
+  window.omsi.update = function (d) {
+    document.getElementById('speed').textContent =
+      d.vehicle.motion.speedKmh + ' km/h';
+  };
+</script>
+```
+
+The game calls `omsi.update` whenever something the page might care about has changed. Do not
+poll: wait for `update`, read the data and redraw what changed.
+
+### Where the page is found
+
+- The path is relative to the vehicle. `Vehicles\MAN_NewLionsCity\html\index.html` is written as
+  `html\index.html`.
+- The game looks in the model's folder first, then in the folder of the `.bus` (or the `.sco` for
+  scenery objects).
+- Images and other files the page names are looked up next to the page.
+- Pages are read as UTF-8.
+
+### Script texture numbers
+
+An `[htmltexture]` is also counted as a `[scriptTexture]`. If it follows script texture 6, it is
+script texture 7, but still HTML texture 0. So `[matl_transmap]` `\S:7` uses its alpha, and
+`[useScriptTexture] 7` binds it as well.
+
+A full example with a light map, a freetex and a transparency mask:
+
+```text
 [htmltexture]
 1024
 512
 html\index.html
-
-##########################################
 
 [mesh]
 generic\AFR4\AFR4_Display.o3d
@@ -50,31 +127,18 @@ AFR4_ST_texture
 3
 ```
 
-`[useHtmlTexture]` describes which `[htmlTexture]` it is; `\S:7` is the corresponding script texture ID in this case.
-Note: An `[htmlTexture]` is registered as a `[scriptTexture]`, but it is also registered as an `[htmlTexture]`.
+## Displays and surfaces
 
-This means: If an `htmlTexture` follows `scriptTexture 6`, the `htmlTexture` is automatically `scriptTexture 7`. But it
-is not `htmlTexture 7`.
+### Displays (default)
 
-### LED destination signs
+A page is a **display** by default: drawn unlit, at its own brightness, like a bus's own screen.
 
-A page drawn on an LED matrix burns like the Krueger and K++ panels in Enhanced when it is
-declared `lit` (below) and its material has a dot mask and a white light map: either the
-`\S:n` mask above, or a plain picture of the dots as `[matl_transmap]` (black between the
-dots), with a `[matl_lightmap]` that is white all over. The lit dots then burn at the
-`LED glow` setting's brightness and bloom, and, like the Krueger's and K++ panels', the
-slot stays one of the bus's own screens: its dots keep the display's glow over the burn.
-A page's sign keeps that brightness at night
-even where it sits inside the cab (behind a coach's windscreen); a script texture's panel
-in the cab (a dashboard's LCD) dims.
+### Surfaces: `lit`
 
-### A page as a surface: `lit`
+A road sign, a poster or a notice board should take the world's light instead. Put `lit` on the
+line after the page's path:
 
-A page is a **display** by default: drawn at its own brightness, which is what a bus's own
-panel is. A page that is a **surface** - a road sign, a poster, a notice board - wants the
-world's light instead, so put `lit` on the line after its path:
-
-```
+```text
 [htmltexture]
 512
 160
@@ -82,146 +146,147 @@ sign\route.html
 lit
 ```
 
-With it the page is shaded like every other material - the sun, the street's lamps, the fog,
-the eye's own adaptation - so a sign face dims with the night it stands in, and the slot
-showing it stops being the bus's own screen with it (its bright pixels glow as a surface's
-do - an LED page, above, keeps the screen and its dots' glow). The word is the page's own: it reaches every slot that shows the page, wherever that
-slot is - a scenery object's and a vehicle's alike. Without the word nothing changes at all,
-and the word is openOMSI's own: Omsi.exe knows neither `[htmltexture]` nor `lit` and draws
-the slot unlit.
+- The page is shaded like every other material: sun, street lamps, fog and eye adaptation. A sign
+  dims at night.
+- Its bright pixels glow as a surface's do, and the slot is no longer one of the bus's own screens.
+- `lit` belongs to the page. It applies to every material that shows the page, on scenery objects
+  and vehicles alike.
+- Omsi.exe knows neither `[htmltexture]` nor `lit`.
 
-### Html file
+### LED destination signs
 
-`html\index.html` is the relative path from the bus path. Example: `Data\Vehicles\MAN_NewLionsCity\html\index.html` =
-`html\index.html`
+A page on an LED matrix glows like the Krueger and K++ panels in the Enhanced renderers when:
 
-## The basic idea
+- the page is not `lit`, and
+- its material has a dot mask: the `\S:n` mask above, or a picture of the dots as
+  `[matl_transmap]` (black between the dots), and
+- a `[matl_lightmap]` that is white all over.
 
-Your page is normal HTML with a `<script>`. The game gives it one global object, `window.omsi`
-(you can also just write `omsi`), and the page uses it for three things:
+The lit dots then glow at the **LED glow** setting's brightness, with bloom. The sign keeps that
+brightness at night, even inside the cab (behind a coach's windscreen). A script texture panel in
+the cab, such as a dashboard LCD, dims instead. `[led_glow_effect]` sets the strength per material
+(see [Modding](MODDING.md#glowing-materials)).
 
-1. **Read** what the bus is doing: speed, doors, the current line, the next stop.
-2. **Write** back: set a script variable, press a trigger, choose a route.
-3. **React** to touches and clicks on the texture.
+## The omsi object
 
-The smallest useful page:
+The game gives the page one global object, `window.omsi` (also just `omsi`). The page uses it to:
 
-```html
-<div id="speed">--</div>
-<script>
-    window.omsi = window.omsi || {};
-    window.omsi.update = function (d) {
-        document.getElementById('speed').textContent = d.vehicle.motion.speedKmh + ' km/h';
-    };
-</script>
-```
+1. **read** what the vehicle is doing: speed, doors, line, next stop;
+2. **write** back: set a script variable, press a trigger, choose a route;
+3. **react** to touches and clicks on the texture.
 
-The game calls `omsi.update` whenever something the page could care about has changed. You
-don't poll. You wait for `update`, look at the data and redraw what you need.
+| Member | What it is |
+|---|---|
+| `omsi.update = function (d) {…}` | Your function. Called when data changed. |
+| `d.num`, `d.str` | Script variables that changed since the last call (all on the first call) |
+| `d.vehicle` | The same object as `omsi.vehicle` |
+| `d.vars` | The same object as `omsi.vars` |
+| `omsi.vehicle` | The vehicle's state with the same names on every bus. Readable from timers too. |
+| `omsi.vars.num`, `omsi.vars.str` | Latest value of every variable of the bus's variable lists, by lower-case name |
+| `omsi.getVar(name)` | One variable, any letter case: a number, else text, else `undefined` |
+| `omsi.apiVersion` | `1` |
 
-## Reading the vehicle
+### Why `omsi.vehicle`
 
-```js
-window.omsi.update = function (d) {
-    d.num, d.str      // script variables that changed since the last call (everything on the first call)
-    d.vehicle         // the normalised snapshot, the same object as omsi.vehicle
-    d.vars            // every variable so far, the same object as omsi.vars
-};
-```
+OMSI buses name their variables as their authors like (`door_0`, `Fahrertuer_Rechts`,
+`elec_busbar_main` …). `omsi.vehicle` translates them into one fixed layout, so a page works on
+every bus.
 
-|                                  |                                                                                                                      |
-|----------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| `omsi.vehicle`                   | The normalised state of the bus, with **the same names on every bus** (see below). You can also read it from timers. |
-| `omsi.vars.num`, `omsi.vars.str` | The latest value of every variable in the bus's own variable list, keyed by lower-case name.                         |
-| `omsi.getVar(name)`              | One variable, any letter case. Gives a number, else text, else `undefined`.                                          |
-| `omsi.apiVersion`                | `1`                                                                                                                  |
+- Things a bus does not have are `null` (numbers) or `false` (switches), never missing. So
+  `omsi.vehicle.engine.rpm` never throws.
+- Numbers are rounded (speed to 0.1, rpm to 1 …), so a value that only wobbles in the last digit
+  does not cause a redraw every frame.
+- Values specific to one bus (a mod's own switch, a battery voltage) are not standardised. Read
+  them with `omsi.getVar("their_variable_name")`.
 
-Why two ways? OMSI buses name their variables however the author likes (`door_0`,
-`Fahrertuer_Rechts`, `elec_busbar_main` ...). If your page wanted to know whether the engine
-runs, it would have to know every single bus. `omsi.vehicle` solves that: the game translates
-the variables into one fixed layout, using the same rules it uses itself. Things a bus doesn't
-have show up as `null` (numbers) or `false` (switches), never as a missing property. So
-`omsi.vehicle.engine.rpm` never throws, even on a bus without an engine model.
+## Time, date and weather
 
-Numbers are rounded (speed to 0.1, rpm to 1 and so on). That way a value that only wobbles in
-the last digit doesn't trigger a redraw every frame.
-
-Things that are specific to one bus (a mod's own switch, a battery voltage) are not
-standardised by OMSI. Read those with `omsi.getVar("their_variable_name")`.
-
-## Time, date, locale
-
-|                                        |                                                                                         |
-|----------------------------------------|-----------------------------------------------------------------------------------------|
-| `omsi.time.hour`, `.minute`, `.second` | Simulation clock, as numbers                                                            |
-| `omsi.time.asString`                   | `HH:MM:SS`                                                                              |
-| `omsi.timestamp`                       | Now as a timestamp: seconds since 1970-01-01 on the simulation's calendar, no time zone |
-| `omsi.date.day`, `.month`, `.year`     | Simulation date, as numbers                                                             |
-| `omsi.date.asString`                   | `DD.MM.YYYY`, or `MM/DD/YYYY` when `locale` is `en`                                     |
-| `omsi.locale`                          | Interface language as an ISO 639-1 code (`en`, `de` ...)                                |
-| `omsi.weather`                         | The weather, `null` until it is known: `temperature` (°C), `humidity` (relative, 0..1), `visibility` (m, the weather's fog range), `clouds` (the weather's cloud type, `-1` clear), `precip` (0 none, 1 rain, 2 snow), `precipRate` (0..1) |
+| Member | What it is |
+|---|---|
+| `omsi.time.hour`, `.minute`, `.second` | Simulation clock, as numbers |
+| `omsi.time.asString` | `HH:MM:SS` |
+| `omsi.timestamp` | Seconds since 1970-01-01 on the simulation calendar, no time zone |
+| `omsi.date.day`, `.month`, `.year` | Simulation date, as numbers |
+| `omsi.date.asString` | `DD.MM.YYYY`, or `MM/DD/YYYY` when `locale` is `en` |
+| `omsi.locale` | Interface language as an ISO 639-1 code (`en`, `de` …) |
+| `omsi.weather` | The weather, `null` until known (below) |
 
 These are set before `omsi.update` runs and change with the simulation clock, once per second.
-Use `omsi.locale` to pick your texts, and fall back to English for languages you didn't write.
+Use `omsi.locale` to pick your texts, with English as fallback.
 
-## `omsi.vehicle` (version 1)
+| `omsi.weather.` | Meaning |
+|---|---|
+| `temperature` | °C |
+| `humidity` | Relative, 0-1 |
+| `visibility` | Fog range, m |
+| `clouds` | The weather's cloud type, for example `-1` (clear) or `Cumulus 2` |
+| `precip` | 0 none, 1 rain, 2 snow |
+| `precipRate` | 0-1 |
 
-| path                                                                                              | meaning                                                                                                      |
-|---------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
-| `info.number`, `.ident`, `.yard`, `.route`, `.nextStop`                                           | text variables of the bus                                                                                    |
-| `motion.speedKmh`, `.heading`, `.pitch`, `.bank`, `.steeringDeg`, `.x`, `.y`, `.z`, `.odometerKm` | movement and position                                                                                        |
-| `engine.running`, `.rpm`, `.throttle`, `.brake`, `.clutch`, `.gear`, `.tankContent`               | drive train and pedals                                                                                       |
-| `electrics.on`, `.busbarMain`, `.busbarAvailable`, `.failure`                                     | on-board network                                                                                             |
-| `battery.on`                                                                                      | battery switch, `null` when the bus has none                                                                 |
-| `doors.count`, `.anyOpen`                                                                         | number of door leaves (`door_0`, `door_1` ...) and whether any is open                                       |
-| `doors.list[i].number`, `.open` (0..1), `.isOpen`                                                 | `list[0]` is door 1                                                                                          |
-| `passengers.onboard`                                                                              | people aboard                                                                                                |
-| `passengers.entries[i]`, `.exits[i]`                                                              | `number`, `open`, `requested` (`PAX_Entry/Exit<n>_Open/_Req`)                                                |
-| `lights.headlights`                                                                               | 0 off, 1 parking, 2 dipped, 3 main beam                                                                      |
-| `lights.brake`, `.reverse`, `.fog`, `.interior`                                                   | lamps (`interior` is 0..1)                                                                                   |
-| `lights.indicator`                                                                                | 0 off, 1 left, 2 right, 3 hazard. `.indicatorLeft` and `.indicatorRight` are the lamps, `.hazard` the switch |
-| `brakes.parking`, `.stop`, `.kneeling`                                                            | switches                                                                                                     |
-| `wipers.running`                                                                                  | windscreen wipers                                                                                            |
-| `cabin.temperature`                                                                               | cabin air in °C                                                                                              |
-| `condition.dirt`, `.crashes`, `.lastImpactKJ`, `.streetCondition`                                 | wear and road                                                                                                |
-| `train.trailers`                                                                                  | coupled vehicles behind this one                                                                             |
-| `route.*`                                                                                         | line, stops, delay: see the next section                                                                     |
+## Vehicle state
 
-`doors.anyOpen` follows what the passengers are told is open (`PAX_*_Open`) if the bus has
-those variables, and the door leaves (`door_<n>`) if not. Some mod buses use `door_<n>` for
-other things, so don't be surprised if a strange bus behaves oddly here.
+`omsi.vehicle` (version 1):
 
-## The route and the timetable
+| Path | Meaning |
+|---|---|
+| `api` | `1` |
+| `info.number`, `.ident`, `.yard`, `.route`, `.nextStop` | Text variables of the bus |
+| `motion.speedKmh`, `.heading`, `.pitch`, `.bank`, `.steeringDeg` | Movement |
+| `motion.x`, `.y`, `.z`, `.odometerKm` | Position and distance |
+| `engine.running`, `.rpm`, `.throttle`, `.brake`, `.clutch`, `.gear`, `.tankContent` | Drive train and pedals |
+| `electrics.on`, `.busbarMain`, `.busbarAvailable`, `.failure` | On-board electrics |
+| `battery.on` | Battery switch, `null` if the bus has none |
+| `doors.count`, `.anyOpen` | Number of door leaves (`door_0`, `door_1` …), whether any is open |
+| `doors.list[i].number`, `.open` (0-1), `.isOpen` | One door; `list[0]` is door 1 |
+| `passengers.onboard` | People aboard |
+| `passengers.entries[i]`, `.exits[i]` | `number`, `open`, `requested` (from `PAX_Entry/Exit<n>_Open/_Req`) |
+| `lights.headlights` | 0 off, 1 parking, 2 dipped, 3 main beam |
+| `lights.brake`, `.reverse`, `.fog`, `.interior` | Lamps (`interior` 0-1) |
+| `lights.indicator` | 0 off, 1 left, 2 right, 3 hazard |
+| `lights.indicatorLeft`, `.indicatorRight`, `.hazard` | The indicator lamps and the hazard switch |
+| `brakes.parking`, `.stop`, `.kneeling` | Switches |
+| `wipers.running` | Windscreen wipers |
+| `cabin.temperature` | Cabin air, °C |
+| `condition.dirt`, `.crashes`, `.lastImpactKJ`, `.streetCondition` | Wear and road |
+| `train.trailers` | Coupled vehicles behind this one |
+| `route.*` | Line, stops and delay (next section) |
 
-Everything about the current trip lives in `omsi.vehicle.route`.
+`doors.anyOpen` follows the passenger door variables (`PAX_*_Open`) when the bus has them, and
+the door leaves (`door_<n>`) otherwise. Some mods use `door_<n>` for other things, so a few buses
+may behave oddly here.
 
-| path                                                                           | meaning                                                                                                                                   |
-|--------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| `route.active`                                                                 | `true` when the bus has a timetable (a duty)                                                                                              |
-| `route.source`                                                                 | where the stops come from: `"timetable"`, `"ibis"` or `"none"`                                                                            |
-| `route.line`                                                                   | the line text                                                                                                                             |
-| `route.destination`                                                            | the text on the destination sign                                                                                                          |
-| `route.stops[i]`                                                               | one stop: `index`, `name`, `arrival`, `departure` (`"HH:MM"`), `arrivalSec`, `departureSec` (seconds after midnight), `served`, `current` |
-| `route.current`                                                                | the stop the bus is at or heading for (same fields as a stop)                                                                             |
-| `route.terminus`                                                               | the last stop (same fields)                                                                                                               |
-| `route.nextIndex`                                                              | index of the next stop. `null` when `active` is `false`                                                                                   |
-| `route.delaySec`                                                               | delay in seconds. Negative means early                                                                                                    |
-| `route.ibis.line`, `.suffix`, `.routeIndex`, `.terminusIndex`, `.terminusCode` | the raw numbers the IBIS itself holds                                                                                                     |
+## Route and timetable
 
-A few things worth knowing:
+Everything about the current trip is in `omsi.vehicle.route`.
 
-* `served` is `true` once a stop has been handled. When the last stop of a trip is served, the
-  trip is over. A page can use that to start the return trip.
-* `route.stops` can be empty. If the bus has no timetable and nobody typed a route into the
-  IBIS, there is simply nothing to show. Check `stops.length` before you draw.
-* Without a duty (`active` is `false`) the game doesn't advance the stops on its own. A page
-  that wants to show progress then has to keep its own counter.
+| Path | Meaning |
+|---|---|
+| `route.active` | `true` when the bus has a timetable (a duty) |
+| `route.source` | Where the stops come from: `"timetable"`, `"ibis"` or `"none"` |
+| `route.line` | The line text |
+| `route.destination` | The text on the destination sign |
+| `route.stops[i]` | One stop (fields below) |
+| `route.current` | The stop the bus is at or heading for |
+| `route.terminus` | The last stop |
+| `route.nextIndex` | Index of the next stop; `null` when `active` is `false` |
+| `route.delaySec` | Delay in seconds; negative is early |
+| `route.ibis.line`, `.suffix`, `.routeIndex`, `.terminusIndex`, `.terminusCode` | The raw numbers the IBIS holds |
+
+A stop has `index`, `name`, `arrival` and `departure` (`"HH:MM"`), `arrivalSec` and
+`departureSec` (seconds after midnight), `served` and `current`.
+
+- `served` becomes `true` once a stop has been handled. When the last stop is served, the trip is
+  over. A page can use that to start the return trip.
+- `route.stops` can be empty: without a timetable and with nothing typed into the IBIS, there is
+  nothing to show. Check `stops.length` before drawing.
+- Without a duty (`active` is `false`) the game does not advance the stops. A page that shows
+  progress must keep its own counter.
 
 ## Departures of a stop
 
-`omsi.getDepartures(stop)` gives the departures at a bus stop for the next 2 hours, soonest
-first, at most 20. `stop` is the stop's name as in the timetable (`Busstops.cfg`), any letter
-case. Works on vehicle and scenery pages.
+`omsi.getDepartures(stop)` returns the departures at a stop in the next 2 hours, soonest first,
+at most 20. `stop` is the stop's name as in the timetable (`Busstops.cfg`), any letter case. It
+works on vehicle and scenery pages.
 
 ```js
 omsi.update = function () {
@@ -233,77 +298,74 @@ omsi.update = function () {
 };
 ```
 
-| field         | meaning                                                                  |
-|---------------|--------------------------------------------------------------------------|
-| `line`        | the line text                                                            |
-| `destination` | the destination text                                                     |
-| `time`        | departure as a timestamp, same scale as `omsi.timestamp`, delay included |
-| `stopsAway`   | stops the bus still calls at up to this one, this one counted (`1`: this is its next stop, `0`: it stands here); `null` while it is not on the road |
-| `load`        | how full it is, 0..1 of its seats and standing places; `null` unless its passengers are simulated |
-| `delaySec`    | how late it runs (s) once it is on the road, else `null`                  |
-| `lastTrip`    | `true` for the last departure of its line at this stop today              |
+| Field | Meaning |
+|---|---|
+| `line` | The line text |
+| `destination` | The destination text |
+| `time` | Departure as a timestamp (scale of `omsi.timestamp`), delay included |
+| `stopsAway` | Stops until this one, this one counted (`1`: next stop, `0`: standing here); `null` while not on the road |
+| `load` | How full, 0-1 of seats and standing places; `null` unless passengers are simulated |
+| `delaySec` | Delay in seconds once on the road, else `null` |
+| `lastTrip` | `true` for the line's last departure at this stop today |
 
-* The first call for a stop returns `[]`. The game fills the stop a moment later and then calls
+- The first call for a stop returns `[]`. The game fills the stop a moment later and calls
   `omsi.update` again, so ask inside `update`.
-* The game keeps the 8 stops a page asked for most recently. Asking for a ninth pushes out the one asked longest ago;
-  asking for that one again later gives `[]` for a moment until it is made anew. The list is renewed about once a
-  second.
-* Without a timetable on the map the list stays empty.
+- The game keeps the 8 stops asked for most recently. Asking for a ninth drops the oldest; asking
+  for that one again gives `[]` for a moment.
+- The lists are renewed about once a second.
+- Without a timetable on the map the list stays empty.
 
-## Acting on the vehicle
+## Controlling the vehicle
 
-|                              |                                                                                                                                                           |
-|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `omsi.setVar(name, value)`   | Write a script variable.                                                                                                                                  |
-| `omsi.trigger(name)`         | Press a trigger of the bus's scripts, like a button in the cab does.                                                                                      |
-| `omsi.setRoute(index)`       | Type route `omsi.depot.routes[index]` into the IBIS: line, route and destination, the way a driver would.                                                 |
-| `omsi.setLine(text)`         | Set a line by its text. The game takes the first route of that line in the depot file. It matches the whole text (any letter case) or the leading digits. |
-| `omsi.setDestination(index)` | Only change the destination sign, using `omsi.depot.destinations[index]`. The line and route stay as they are.                                            |
-| `omsi.clearLine()`           | Clear the IBIS: no line, no route. Use it before a route is chosen, or to throw the current one away.                                                     |
-| `omsi.setNextStop(index)`    | With a timetable: jump to stop `index` of the trip, forwards or backwards. Skipped stops are not served; going back makes them due again.                 |
+| Function | What it does |
+|---|---|
+| `omsi.setVar(name, value)` | Writes a script variable |
+| `omsi.trigger(name)` | Presses a trigger of the bus's scripts, like a cab button |
+| `omsi.setRoute(index)` | Types route `omsi.depot.routes[index]` into the IBIS: line, route and destination |
+| `omsi.setLine(text)` | Sets the first route of that line in the depot file. Matches the whole text (any case) or the leading digits. |
+| `omsi.setDestination(index)` | Changes only the destination sign, to `omsi.depot.destinations[index]` |
+| `omsi.clearLine()` | Clears the IBIS: no line, no route |
+| `omsi.setNextStop(index)` | With a timetable: jumps to stop `index` of the trip, forwards or backwards |
 
-Two details that trip people up:
+- These calls are applied by the game a moment later, not within the same script run. Read
+  `omsi.vehicle` again in the next `update`.
+- `setNextStop` works **both ways**. Forwards, the stops in between are skipped (not served).
+  Backwards (a "back one stop" button), the stops from `index` on are due again and their `served`
+  is `false`. Asking for the stop the bus already heads for changes nothing.
+- `clearLine()` only touches the IBIS. It does not end the duty, so `route.active` may still be
+  `true` afterwards. Do not switch screens on that alone.
 
-* `setNextStop` goes **both ways**. Forwards, the stops in between are skipped. Backwards (a "back
-  one stop" button), the stops from `index` on are due again and `served` is `false` for them. A
-  request for the stop the bus is already heading for changes nothing. The game applies it on its
-  next tick, so `route.nextIndex` follows a moment later.
-* `clearLine()` only touches the IBIS. It does not end the duty in the game. If the page
-  reads `route.active` afterwards it may still be `true`, so don't switch screens based on
-  that alone.
+## The depot file
 
-Calls like these are handed to the game, which applies them a moment later. They don't take
-effect inside the same script run. Read `omsi.vehicle` again in the next `update`.
+`omsi.depot` describes what the bus's depot file (`.hof`) offers, so a page can build a line
+picker or destination list without hard-coding anything. It is filled once, before the first
+`update`. Without a depot file it stays empty.
 
-## The depot file: `omsi.depot`
+| Member | What it is |
+|---|---|
+| `omsi.depot.name` | The depot file's name |
+| `omsi.depot.routes[i]` | Every route (fields below) |
+| `omsi.depot.lines[]` | The same routes grouped by line: each entry has `line` and its `routes` |
+| `omsi.depot.destinations[i]` | `index`, `code`, `id`, `name` |
 
-`omsi.depot` describes what the bus's depot file (`.hof`) offers, so your page can build a
-line picker or destination list without hard-coding anything. It is filled once, before the
-first `update`. If the bus has no depot file it stays empty.
+A route has:
 
-**`omsi.depot.routes[i]`**
+| Field | Meaning |
+|---|---|
+| `index` | Position in the list; the number for `setRoute` |
+| `code` | The IBIS route code (line × 100 + route number, by the depot file's rule) |
+| `name` | Name of the trip |
+| `line` | The line text |
+| `terminusCode` | The route's destination code |
+| `destinationIndex` | Index in `destinations`, or `-1` |
+| `destination` | Text of that destination sign |
+| `first`, `last` | Names of the first and last stop |
+| `stops` | Names of all stops, in order |
 
-| field              | meaning                                                                       |
-|--------------------|-------------------------------------------------------------------------------|
-| `index`            | position in the list, the number you give to `setRoute`                       |
-| `code`             | the IBIS route code (line × 100 + route number, by the depot file's own rule) |
-| `name`             | name of the trip                                                              |
-| `line`             | the line text                                                                 |
-| `terminusCode`     | the destination code of the route                                             |
-| `destinationIndex` | index in `destinations`, or `-1` if there is none                             |
-| `destination`      | the text of that destination sign                                             |
-| `first`, `last`    | name of the first and last stop                                               |
-| `stops`            | names of all stops, in order                                                  |
+Many depot files leave the line column as a placeholder like `XXX`. The game then takes the line
+from the route code (code 1203 gives line `12`).
 
-Many depot files leave the line column as a placeholder like `XXX`. When that happens the
-game works the line out from the route code instead (code 1203 becomes line `12`).
-
-**`omsi.depot.lines[]`** groups the same route objects by line: each entry has `line` and its
-`routes`, in the order of the depot file.
-
-**`omsi.depot.destinations[i]`** has `index`, `code`, `id` and `name`.
-
-A small example, a line picker that starts the first route it finds:
+A line picker that starts the first route of a line:
 
 ```js
 function pickLine(text) {
@@ -317,177 +379,121 @@ function pickLine(text) {
 }
 ```
 
-A return trip is usually a route on the same line whose `first` is your `last` and whose
-`last` is your `first`. Look for that pair and call `setRoute` with it.
+A return trip is usually a route on the same line whose `first` is your `last` and whose `last`
+is your `first`.
 
 ## Touch and mouse
 
-The app passes presses, releases and movements of the pointer on the texture to the page.
-They turn into events on the element under the pointer and bubble up through its parents:
+Presses, releases and moves of the pointer on the texture become events on the element under the
+pointer, bubbling up through its parents: `pointerdown`, `pointerup`, `mousedown`, `mouseup`,
+`click`, `mousemove`. A click needs both press and release on the page.
 
-* `pointerdown`, `pointerup`, `mousedown`, `mouseup`, `click`, `mousemove`
-
-You can listen in three ways:
+Three ways to listen:
 
 ```html
 <button onclick="doSomething()">Press</button>
 ```
 
 ```js
-el.onclick = function (event) { ...
-};
-el.addEventListener('click', function (event) { ...
-});
+el.onclick = function (event) { /* ... */ };
+el.addEventListener('click', function (event) { /* ... */ });
 ```
 
-The event object has `type`, `x`, `y` (in texture pixels), `target`, `stopPropagation()` and
-`preventDefault()`. A click needs both the press and the release on the page.
+The event has `type`, `x`, `y` (texture pixels), `target`, `stopPropagation()` and
+`preventDefault()`.
 
-There is no keyboard input, no hover and no drag and drop. Build keypads and lists from
-buttons or boxes and react to `click`.
+There is no keyboard input, no hover and no drag and drop. Build keypads and lists from buttons
+or boxes and react to `click`.
 
 ## Scenery objects
 
 A scenery object (`.sco`) can show pages too: `[htmltexture]` in its model config and
-`[useHtmlTexture]` on the material, the same as in a vehicle - and the `lit` word after the
-page's path works there as it does on a vehicle (above). The page is looked up in the
-model folder, then in the folder of the `.sco`.
+`[useHtmlTexture]` on the material, as in a vehicle. `lit` works the same way. The page is looked
+up in the model's folder, then in the `.sco`'s folder.
 
-A scenery page only gets the basic API: `omsi.setVar`, `omsi.trigger`, `omsi.getVar`,
-`omsi.vars`, `omsi.time`, `omsi.date` and `omsi.locale`. `omsi.vehicle`, `omsi.depot` and
-`setRoute`, `setLine`, `setDestination`, `clearLine` and `setNextStop` do not exist there (`d.vehicle` in `update`
-neither). The variables are those of the object's script; an object
-without a script still shows its page.
+- A scenery page has everything above **except** `omsi.vehicle`, `omsi.depot` and the IBIS
+  functions (`setRoute`, `setLine`, `setDestination`, `clearLine`, `setNextStop`). `d.vehicle` is
+  absent too.
+- The variables are those of the object's script. An object without a script still shows its page.
+- Pages run only within 60 m of the camera.
+- Clicks reach them from up to 4 m away, unless the bus is in front of the page.
 
-The pages run only within 60 m of the camera. Clicks reach them from up to 4 m away, unless the
-bus is in front of the page.
+## Classic engine
 
-## What the HTML engine supports
-
-The engine is deliberately small. It is not a browser, so a page that looks fine in Chrome may
-need a few changes. When something doesn't show up, check this list first.
+The classic engine is small and fast. It is not a browser, so a page that looks fine in Chrome may
+need changes. When something does not show, check these lists first. For more, use the
+[modern engine](HTMLTEXTURE_MODERN.md).
 
 ### HTML
 
-* Nested elements, `<style>`, `<script>`, inline `style=""`, `id`, `class`, entities such as
+- Nested elements, `<style>`, `<script>`, inline `style=""`, `id`, `class`, entities such as
   `&amp;`.
-* Block elements: `div`, `p`, `h1`, `h2`, `h3` (with browser-like default sizes and margins).
-* Inline elements: `span`, `b`, `strong`, `i`, `em`, `a`, `small`, `u`, `label`, `code`, and
-  `<br>`.
-* `<button>` comes with a default look (grey, rounded, padded). Boxes with
-  `display:inline-block` are laid out in rows that wrap, which is what you want for keypads
-  and lists. A box without a `width` is as wide as its content.
-* `<img src width height>` (bmp, dds, tga, jpg, png). The file is looked up next to the page (see
-  `htmlengine/images.rs`). `img.src` can be changed from a script. Pictures are cached,
-  a missing file is cached too.
-* `<head>`, `<title>`, `<meta>`, `<link>` are read and then ignored.
+- Block elements: `div`, `p`, `h1`, `h2`, `h3`, with browser-like default sizes and margins.
+- Inline elements: `span`, `b`, `strong`, `i`, `em`, `a`, `small`, `u`, `label`, `code`, `<br>`.
+- `<button>` has a default look: grey, rounded, padded.
+- `<img src width height>` with bmp, dds, tga, jpg and png, looked up next to the page. `img.src`
+  can be changed from a script. Pictures are cached, missing ones too.
+- `<head>`, `<title>`, `<meta>`, `<link>` are read and ignored.
 
-Not available: canvas, tables, lists (`ul`/`li`), forms and `input` fields, iframes, video, svg.
+Not available: canvas, tables, lists (`ul`/`li`), forms and `input`, iframes, video, SVG.
 
 ### CSS
 
-* Selectors: tag, `#id`, `.class`, `*`, combinations like `div.a#b`, descendant chains (`.panel span`) and comma lists.
-* Properties: `color`, `background` / `background-color`, `background-image: url()`,
+- Selectors: tag, `#id`, `.class`, `*`, compounds (`div.a#b`), descendant chains
+  (`.panel span`) and comma lists.
+- Properties: `color`, `background`, `background-color`, `background-image: url()`,
   `background-size`, `background-repeat`, `background-position`, `font-size`, `font-weight`,
-  `text-align`, `line-height`, `margin` (and `-top/-right/-bottom/-left`), `padding` (same),
-  `width`, `height`, `display` (`none`, `inline`, `inline-block`), `visibility`,
-  `border-radius`.
-* Units: `px`, `%`, `em`, `rem`, `pt`, `vw`, `vh`.
-* Layout is plain block flow with wrapped inline text.
+  `text-align`, `line-height`, `margin` and `padding` (with `-top`/`-right`/`-bottom`/`-left`),
+  `width`, `height`, `display` (`none`, `inline`, `inline-block`), `visibility`, `border-radius`.
+- Units: `px`, `%`, `em`, `rem`, `pt`, `vw`, `vh`.
+- Layout is block flow with wrapped inline text. `display: inline-block` boxes (and buttons) are
+  laid out in rows that wrap, good for keypads and lists. A box without `width` is as wide as its
+  content.
 
 Not available: flexbox, grid, floats, `position`, borders, gradients, shadows, `opacity`,
-`overflow`, animations and transitions, custom fonts. Text is drawn in Inter.
-
-Since there is no `overflow`, a box doesn't clip its content. If a text is too long for its
-box, shorten it yourself.
+`overflow`, animations and transitions, custom fonts. A box does not clip its content, so shorten
+texts that are too long yourself.
 
 ### JavaScript
 
-The language is ES5 plus arrow functions.
+ES5 plus arrow functions:
 
-* Language: `var`, `let`, `const`, functions, `if`, `for`, `while`, objects, arrays.
-* Globals: `Math` (`round`, `floor`, `ceil`, `abs`, `min`, `max`, `sqrt`, `pow`, `trunc`,
-  `sin`, `cos`, `PI`), `parseInt`, `parseFloat`, `String`, `Number`, `isNaN`, `NaN`,
-  `Infinity`, `Object.keys`, `console.log/warn/error`.
-* Strings: `split`, `replace`, `trim`, `indexOf`, `charAt`, `slice`, `substring`,
-  `startsWith`, `endsWith`, `includes`, `toUpperCase`, `toLowerCase`, `padStart`, `padEnd`,
-  `repeat`. Numbers: `toFixed`, `toString`.
-* Arrays: `push`, `pop`, `shift`, `slice`, `join`, `indexOf`, `includes`, `map`, `filter`,
-  `forEach`.
-* Timers: `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`. They run while the
-  page is being drawn and use real time, not simulation time.
-* DOM: `document.getElementById`, `document.querySelector`, `document.body`,
-  `createElement`, `appendChild`, `removeChild`, `remove`, `parentNode`, `getAttribute`,
-  `setAttribute`, `classList` (`add`, `remove`, `toggle`, `contains`), `textContent`,
-  `innerText`, `innerHTML` (with markup), `className`, `id`, and `element.style.*`.
+| Area | Available |
+|---|---|
+| Language | `var`, `let`, `const`, functions, `if`, `for`, `while`, `break`, `continue`, `typeof`, objects, arrays |
+| Globals | `Math` (`round`, `floor`, `ceil`, `abs`, `min`, `max`, `sqrt`, `pow`, `trunc`, `sin`, `cos`, `PI`), `parseInt`, `parseFloat`, `String`, `Number`, `isNaN`, `NaN`, `Infinity`, `Object.keys`, `console.log/warn/error` |
+| Strings | `split`, `replace`, `trim`, `indexOf`, `charAt`, `slice`, `substring`, `startsWith`, `endsWith`, `includes`, `toUpperCase`, `toLowerCase`, `padStart`, `padEnd`, `repeat` |
+| Numbers | `toFixed`, `toString` |
+| Arrays | `push`, `pop`, `shift`, `slice`, `join`, `indexOf`, `includes`, `map`, `filter`, `forEach` |
+| Timers | `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` (real time, at most 64 active) |
+| DOM | `document.getElementById`, `document.querySelector`, `document.body`, `createElement`, `appendChild`, `removeChild`, `remove`, `parentNode`, `getAttribute`, `setAttribute`, `classList` (`add`, `remove`, `toggle`, `contains`), `textContent`, `innerText`, `innerHTML` (with markup), `className`, `id`, `element.style.*` |
 
-Not available: `Date` (read the time from `omsi.time` instead), `JSON`, `fetch` and any
-network access, `localStorage`, `Promise`/`async`, classes, `new`, regular expressions, and
-the statements `switch`, `do ... while` and `try/catch`. Use `if/else` chains and `while`
-loops instead. `typeof`, `break` and `continue` do work.
+Not available: `Date` (use `omsi.time`), `JSON`, `fetch` and any network access, `localStorage`,
+`Promise`/`async`, classes, `new`, regular expressions, `switch`, `do … while`, `try/catch`. Use
+`if/else` chains and `while` loops instead.
 
-At most 64 timers can be active at once. Further `setTimeout`/`setInterval` calls are
-ignored.
-
-Two limits protect the game from runaway pages. A single run of your script may execute about
-400,000 steps, and nesting (function calls, elements) is capped at 48 levels. Normal pages
-never get near either. An endless loop just gets cut off.
+- Timers run while the page is drawn and use real time, not simulation time. Calls beyond 64
+  active timers are ignored.
+- A single script run may execute about 400,000 steps, and nesting (function calls, elements) is
+  capped at 48 levels. An endless loop is cut off.
 
 ### Redrawing
 
-A page is redrawn when the DOM or the styles change. The simplest pattern, and the one that
-works best in this engine, is to rebuild a block with `innerHTML` in your `update` function
-and only do that when the data actually changed (compare against the last values you saw).
+A page is redrawn when the DOM or the styles change. The best pattern: in `update`, rebuild a
+block with `innerHTML`, and only when the data actually changed (compare with the last values).
 Redrawing on every call wastes time on a slow phone.
 
-## Tips for beginners
+## Tips
 
-* **Start from `demo.html`** and change one thing at a time. If the texture goes blank, the
-  last thing you touched is the culprit.
-* **Write to the log.** `console.log(...)` ends up in the game's log with the prefix
-  `htmltexture console:`, which is the quickest way to see what `omsi.vehicle` or `omsi.depot` really contain on your
-  bus.
-* **Guard for missing data.** A bus without a depot file has no `omsi.depot.routes`, a bus
-  without a timetable has no stops. Check the length before you loop.
-* **Test on the real bus.** Each bus fills the variable list differently, and some values
-  you expect will simply be `null`.
-* **Keep buttons big.** The texture is often small on screen and people press it with a
-  finger or a mouse. 60 px high is a good minimum.
-
-## For developers
-
-The snapshot is built by `omsi_sim::vehicle_api` (`snapshot` and `depot`, both unit-tested
-without any game content) and handed to the backend through `HtmlRenderer::set_vehicle` and
-`set_depot`, which a backend may ignore. The requests from `setRoute`, `setLine`,
-`setDestination`, `clearLine` and `setNextStop` become `HtmlRequest` values that the game
-picks up between two frames (`take_requests`, at most 32 per frame).
-
-A scenery object's page is created with `PageApi::Scenery` (`HtmlTexture::with_api`), whose
-`window.omsi` has none of the vehicle's parts; `drive_pages` then gets no snapshot and no depot.
-
-To add a signal, add it to `vehicle_api::snapshot`, write a test next to the others, and list
-it in the table above and in the module docs. Existing names stay stable within an API
-version.
-
-What the engine itself understands is listed at the top of
-`crates/omsi-sim/src/htmlengine/mod.rs`. If you add a feature there, add it to the "What the
-HTML engine supports" section here as well.
-
-### Benchmark
-
-`bench_htmlengine` times the engine (parse + scripts, cold and warm render, an update with a
-frame, the pointer hit test) at 512x256, 1024x512 and 2048x1024. It is ignored in the normal
-test run; start it in release mode, debug numbers mean nothing:
-
-```
-cargo test -p omsi-sim --release --lib bench_htmlengine -- --ignored --nocapture
-```
-
-`HTMLBENCH_PAGE=path/to/page.html` measures your own page instead of `demo.html`, and
-`HTMLBENCH_RUNS=n` sets the number of timed runs (default 200).
-
-## The modern engine (opt-in)
-
-A second engine with flexbox, positioning, modern CSS and JavaScript (modules, `Promise`,
-`fetch`) is available for pages that ask for it with `<meta name="omsi-engine" content="modern">`.
-Pages that do not are unchanged. See [HTMLTEXTURE_MODERN.md](HTMLTEXTURE_MODERN.md).
+- **Start from `demo.html`** and change one thing at a time. If the texture goes blank, the last
+  change is the culprit.
+- **Log.** `console.log(...)` writes to the game's log with the prefix `htmltexture console:`. It
+  is the quickest way to see what `omsi.vehicle` or `omsi.depot` contain on your bus.
+- **Guard for missing data.** A bus without a depot file has no routes, a bus without a timetable
+  has no stops. Check lengths before looping.
+- **Test on the real bus.** Each bus fills its variables differently, and some values will be
+  `null`.
+- **Keep buttons big.** The texture is often small on screen. 60 px high is a good minimum.
+- **Text is drawn in Inter.** Characters Inter lacks (Hangul, CJK …) use Malgun Gothic on
+  Windows or AppleGothic on macOS. `OMSI_HTML_FALLBACK_FONT` (and `OMSI_HTML_FALLBACK_FONT_BOLD`)
+  can name another font file.

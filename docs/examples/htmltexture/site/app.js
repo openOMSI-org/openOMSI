@@ -12,11 +12,11 @@ class Dashboard {
     this.el(id).textContent = value;
   }
   update({ vehicle, num }) {
-    const kmh = Math.round(vehicle?.speed?.kmh ?? num.velocity ?? 0);
+    const kmh = Math.round(vehicle?.motion?.speedKmh ?? num.velocity ?? 0);
     this.set('speed', String(kmh));
     this.set('clock', fmtTime(omsi.time));
-    this.set('line', vehicle?.route?.line ?? '-');
-    this.set('stop', vehicle?.route?.nextStop ?? '-');
+    this.set('line', vehicle?.info?.route ?? '-');
+    this.set('stop', vehicle?.info?.nextStop ?? '-');
     const doors = (vehicle?.doors?.list ?? []).map((d, i) => `<div class="door${d.isOpen ? ' open' : ''}">${i + 1}</div>`).join('');
     if (this.#last.doors !== doors) {
       this.#last.doors = doors;

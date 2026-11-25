@@ -166,6 +166,7 @@ impl PeopleSim {
             visual_hailing: false,
             visual_full_bus_reaction: false,
             bad_driving: true,
+            entry_doors: Default::default(),
             no_ticket: false,
             fares_no_ticket: 0,
             board_when_stopped: false,

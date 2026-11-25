@@ -30,9 +30,9 @@ file 2707 crates/omsi-input/src/controllers.rs
 file 2758 crates/omsi-lan/src/game.rs
 file 1569 crates/omsi-launcher-api/src/lib.rs
 file 5731 crates/omsi-launcher-core/src/lib.rs
-file 1585 crates/omsi-model/src/lib.rs
+file 2051 crates/omsi-model/src/lib.rs
 file 3646 crates/omsi-net/src/lib.rs
-file 1517 crates/omsi-net/src/tests.rs
+file 1674 crates/omsi-net/src/tests.rs
 file 1821 crates/omsi-plugin/src/lib.rs
 file 1521 crates/omsi-navigator-mx/src/city_map.rs
 file 1617 crates/omsi-render-mx/src/resources/textures.rs
@@ -58,8 +58,28 @@ file 1566 crates/omsi-scene/src/stage.rs
 file 2067 crates/omsi-scene/src/vehicles.rs
 file 1916 crates/omsi-sim/src/people/tests.rs
 file 2393 crates/omsi-ui-mx/src/kit.rs
-file 1609 crates/omsi-ui/src/kit.rs
+file 2393 crates/omsi-ui/src/kit.rs
 file 2386 crates/omsi-world/src/map_index.rs
+file 1812 crates/omsi-audio/src/soundset.rs
+file 1582 crates/omsi-input/src/dinput.rs
+file 1925 crates/omsi-lan/src/mods.rs
+file 1913 crates/omsi-launcher-core/src/install.rs
+file 1523 crates/omsi-navigator/src/city_map.rs
+file 1998 crates/omsi-net/src/ws.rs
+file 1563 crates/omsi-o3d/src/xfile.rs
+file 1615 crates/omsi-render/src/resources/textures.rs
+file 2097 crates/omsi-render/src/tests.rs
+file 1876 crates/omsi-scene/src/props.rs
+file 1540 crates/omsi-scene/src/road_snow.rs
+file 2075 crates/omsi-scene/src/tests.rs
+file 1534 crates/omsi-scene/src/window_wipers.rs
+file 1625 crates/omsi-sim/src/ai_traffic/junctions.rs
+file 1514 crates/omsi-sim/src/ai_traffic/planning.rs
+file 1951 crates/omsi-sim/src/ai_traffic/tick.rs
+file 1926 crates/omsi-sim/src/rigid/tests.rs
+file 2208 crates/omsi-sim/src/traffic/tests.rs
+file 1899 crates/omsi-sim/src/vehicle/types.rs
+file 2243 crates/omsi-trolley/src/pole.rs
 fn 354 crates/omsi-app-mx::act crates/omsi-app-mx/src/apple_bridge.rs
 fn 315 crates/omsi-app-mx::assemble_app crates/omsi-app-mx/src/lib.rs
 fn 422 crates/omsi-app-mx::draw crates/omsi-app-mx/src/ui.rs
@@ -148,3 +168,24 @@ fn 333 crates/omsi-scene::type_info crates/omsi-scene/src/mapgen.rs
 fn 625 crates/omsi-scene::vehicle_slot_material crates/omsi-scene/src/vehicles.rs
 fn 334 crates/omsi-sim::load_train crates/omsi-sim/src/people/cabin.rs
 fn 313 crates/omsi-sim::new crates/omsi-sim/src/vehicle/instance.rs
+fn 354 crates/omsi-app::act crates/omsi-app/src/apple_bridge.rs
+fn 463 crates/omsi-htmlpage::flex_layout crates/omsi-htmlpage/src/layout.rs
+fn 386 crates/omsi-lan::fetch_with crates/omsi-lan/src/mods.rs
+fn 306 crates/omsi-lan::session_files crates/omsi-lan/src/mods.rs
+fn 360 crates/omsi-lan::two_versions_of_a_bus_are_kept_side_by_side_by_their_content crates/omsi-lan/src/mods/upload/tests.rs
+fn 403 crates/omsi-launcher-core::run crates/omsi-launcher-core/src/install.rs
+fn 395 crates/omsi-model::handle_keyword crates/omsi-model/src/lib.rs
+fn 612 crates/omsi-navigator::city crates/omsi-navigator/src/city_map.rs
+fn 535 crates/omsi-navigator::lines_panel crates/omsi-navigator/src/lines_panel.rs
+fn 318 crates/omsi-scene::export_glb crates/omsi-scene/src/export.rs
+fn 407 crates/omsi-scene::texture_budget_pass crates/omsi-scene/src/props.rs
+fn 373 crates/omsi-scene::update crates/omsi-scene/src/tiles.rs
+fn 327 crates/omsi-sim::bones crates/omsi-sim/src/human/bones.rs
+fn 371 crates/omsi-sim::learn crates/omsi-sim/src/ibis.rs
+fn 359 crates/omsi-sim::load_with crates/omsi-sim/src/vehicle/types.rs
+fn 318 crates/omsi-sim::plan_pass crates/omsi-sim/src/ai_traffic/planning.rs
+fn 388 crates/omsi-sim::step_slice crates/omsi-sim/src/rigid/body.rs
+fn 410 crates/omsi-sim::step_trolley crates/omsi-sim/src/vehicle/trolley.rs
+fn 391 crates/omsi-sim::weigh_crossings crates/omsi-sim/src/ai_traffic/junctions.rs
+fn 441 crates/omsi-soundscape::events crates/omsi-soundscape/src/rules.rs
+fn 386 crates/omsi-trolley::sub crates/omsi-trolley/src/pole.rs

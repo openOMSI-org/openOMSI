@@ -158,6 +158,8 @@ pub struct SoundSet {
     /// loops its revolutions and throttle), and every read was a lookup by name. Made at
     /// the first update.
     vars: Option<(Vec<String>, Vec<Option<f32>>)>,
+    /// This set as a sound pack, for `[sound_maxcount]` (see `crate::packs`).
+    pack: crate::packs::PackInfo,
 }
 
 /// The file a `(T.F.)` trigger names, as Omsi.exe opens it (0x74f2e8 through 0x7eed78): the
@@ -310,6 +312,7 @@ impl SoundSet {
             muffled: false,
             parts: Vec::new(),
             vars: None,
+            pack: crate::packs::PackInfo::of(&cfg.sounds),
         }
     }
 
@@ -460,7 +463,10 @@ impl SoundSet {
 
     /// Play the sound of a `(T.F.trigger)` event: the entry listening to `trigger` loads
     /// `file` (relative to the sound folder) into a new buffer and plays it as if its
-    /// trigger had fired (0x74f2e8).
+    /// trigger had fired (0x74f2e8). An empty `file` loads nothing: 0x74f2e8 skips the
+    /// load for an empty string and fires the entry all the same, so it plays again the
+    /// file it already has (its own, or the one the last `(T.F.)` gave it) from the start.
+    /// A name of blanks only names no file that exists: silent.
     pub fn play_file_trigger(
         &mut self,
         engine: &AudioEngine,
@@ -469,8 +475,12 @@ impl SoundSet {
         var: &dyn Fn(&str) -> Option<f32>,
         object_to_world: &Mat4,
     ) {
+        // too far for `[sound_maxcount]`: 0x74f2e8 plays nothing
+        if engine.pack_too_far(self.pack.id) {
+            return;
+        }
         if !engine.enabled
-            || file.trim().is_empty()
+            || (!file.is_empty() && file.trim().is_empty())
             || !self.sounds.iter().any(|s| {
                 s.def
                     .triggers
@@ -480,10 +490,15 @@ impl SoundSet {
         {
             return;
         }
-        let path = omsi_cfg::resolve_path(&self.dir, &file_trigger_name(file));
-        let Some(clip) = engine.load_clip(&path) else {
-            warn_missing_once(trigger, &path);
-            return;
+        let loaded = if file.is_empty() {
+            None
+        } else {
+            let path = omsi_cfg::resolve_path(&self.dir, &file_trigger_name(file));
+            let Some(clip) = engine.load_clip(&path) else {
+                warn_missing_once(trigger, &path);
+                return;
+            };
+            Some(clip)
         };
         let ctx = self.ctx(engine);
         for s in self.sounds.iter_mut() {
@@ -498,13 +513,16 @@ impl SoundSet {
             if let Some(id) = s.voice.take() {
                 engine.stop(id);
             }
-            s.clip = Some(clip.clone());
+            if let Some(clip) = &loaded {
+                s.clip = Some(clip.clone());
+            }
+            // (none yet: its own file was not found and no `(T.F.)` gave it one)
+            let Some(clip) = s.clip.clone() else { continue };
             s.last_gain = 1.0;
             s.last_pitch = 1.0;
             let e = ctx.eval(s, var, object_to_world);
             if e.audible && !e.wrong_view {
-                s.voice =
-                    Some(engine.play(clip.clone(), ctx.params(s, &e, false, object_to_world)));
+                s.voice = Some(engine.play(clip, ctx.params(s, &e, false, object_to_world)));
             }
         }
     }
@@ -644,6 +662,10 @@ impl SoundSet {
         at_fire: &dyn Fn(&str, &str) -> Option<f32>,
     ) {
         if !engine.enabled {
+            return;
+        }
+        // `[sound_maxcount]`: a pack too far is silent and not updated (0x74f224)
+        if !self.pack_heard(engine, object_to_world) {
             return;
         }
         let ctx = self.ctx(engine);
@@ -941,6 +963,35 @@ impl SoundSet {
         for (_, p) in &mut self.parts {
             p.stop_all(engine);
         }
+    }
+
+    /// `[sound_maxcount]`: say where this set is as a sound pack and whether it may be
+    /// heard (see `crate::packs`); the sounds of one too far are stopped ("Stopped Sound
+    /// ... too far", 0x750340). Its coupled parts are packs of their own.
+    fn pack_heard(&mut self, engine: &AudioEngine, object_to_world: &Mat4) -> bool {
+        // The user's vehicles go in at 0 (0x751398 with +0x26c): the sets made with `new`
+        // are the bus the player drives (and one ridden in, heard from inside - the
+        // nearest pack anyway). The others at their distance from the camera over their
+        // range (0x74f4fc).
+        let key = if !self.ai && !self.scenery {
+            0.0
+        } else {
+            let at = object_to_world.transform_point3(Vec3::ZERO);
+            (at - engine.listener_position()).length() / self.pack.range
+        };
+        let heard = engine.pack_heard(crate::packs::Pack {
+            id: self.pack.id,
+            key,
+            entries: self.pack.entries,
+        });
+        if !heard {
+            for s in self.sounds.iter_mut() {
+                if let Some(id) = s.voice.take() {
+                    engine.stop(id);
+                }
+            }
+        }
+        heard
     }
 }
 
@@ -1263,3 +1314,6 @@ pub(crate) fn outside_vol() -> f32 {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod file_trigger_tests;

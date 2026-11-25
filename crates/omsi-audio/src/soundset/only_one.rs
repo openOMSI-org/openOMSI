@@ -127,14 +127,9 @@ impl Drop for OnlyOne {
 }
 
 /// How far a sound pack reaches, what Omsi.exe divides its distance by to sort the packs
-/// (the loader's end, 0x74ee68): the largest `[3d]` range among its entries that can be
-/// heard from outside (`[viewpoint]` 0, or one with bit 1 or 4), 10 m when none has one.
+/// (see [`crate::packs::pack_range`]).
 pub(super) fn pack_range<'a>(entries: impl Iterator<Item = &'a SoundEntry>) -> f32 {
-    let r = entries
-        .filter(|d| d.pos.is_some() && (d.viewpoint == 0 || d.viewpoint & 5 != 0))
-        .map(|d| d.range)
-        .fold(0.0f32, f32::max);
-    if r == 0.0 { 10.0 } else { r }
+    crate::packs::pack_range(entries)
 }
 
 #[cfg(test)]
@@ -230,6 +225,7 @@ mod tests {
             muffled: false,
             parts: Vec::new(),
             vars: None,
+            pack: Default::default(),
         }
     }
 
