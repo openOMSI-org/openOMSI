@@ -3909,7 +3909,11 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 })
             }
             "fsr_sharpness" | "dlss_sharpness" => {
-                let default = if k == "fsr_sharpness" { 0.8 } else { DLSS_SHARPNESS };
+                let default = if k == "fsr_sharpness" {
+                    0.8
+                } else {
+                    DLSS_SHARPNESS
+                };
                 v[&k] = json!(
                     val.parse::<f64>()
                         .ok()
