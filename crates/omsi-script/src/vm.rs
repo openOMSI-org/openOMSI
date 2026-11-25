@@ -502,10 +502,9 @@ fn exec_cold(s: &mut Stacks, op: &Op, p: &Program, state: &mut State, host: &mut
         }
         Op::Callback(n) => host.callback(p.name(*n), *n, s, state),
         Op::SoundTrigger(n) => host.sound_trigger_vars(p.name(*n), *n, &state.vars),
-        Op::SoundTriggerFile(n) => {
-            let file = s.pop_str();
-            host.sound_trigger_file(p.name(*n), &file);
-        }
+        // the file stays on the string stack: Omsi.exe sub_5d4860 (`TXPC_calcblock_soundtrigger`)
+        // reads it there and does not pop it
+        Op::SoundTriggerFile(n) => host.sound_trigger_file(p.name(*n), s.top_str()),
         // (The string operations work on the stack's own buffers: a pop followed by a push
         // leaves the stack as changing `sst[0]` in place does, and a push takes over the
         // buffer of the string that falls off the bottom. Each of them used to allocate.)
@@ -962,6 +961,31 @@ mod tests {
         assert_eq!(st.get(p.var("b").unwrap()), 50.0);
         assert_eq!(st.get(p.var("result").unwrap()), 4.0);
         assert_eq!(vm.stacks.st[0], 7.0);
+    }
+
+    #[test]
+    fn a_sound_trigger_with_a_file_leaves_the_file_on_the_stack() {
+        struct Files(Vec<String>);
+        impl Host for Files {
+            fn sys_var(&mut self, _v: SysVar) -> f32 {
+                0.0
+            }
+            fn callback(&mut self, _: &str, _: NameId, _: &mut Stacks, _: &mut State) {}
+            fn sound_trigger(&mut self, _name: &str, _id: NameId) {}
+            fn sound_trigger_file(&mut self, _name: &str, file: &str) {
+                self.0.push(file.to_string());
+            }
+        }
+        let p = prog("{init}\n\"x\" \"a.wav\" (T.F.snd) \"b.wav\" $+ (T.F.snd)\n{end}\n");
+        assert!(p.errors.is_empty(), "{:?}", p.errors);
+        let mut vm = Vm::new();
+        let mut host = Files(Vec::new());
+        vm.run_init(&p, &mut State::new(&p), &mut host);
+        assert_eq!(host.0, ["a.wav", "a.wavb.wav"]);
+        assert_eq!(
+            vm.stacks.sst[..2],
+            ["a.wavb.wav".to_string(), "x".to_string()]
+        );
     }
 
     #[test]
