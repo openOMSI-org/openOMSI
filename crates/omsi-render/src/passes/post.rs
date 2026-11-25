@@ -38,8 +38,8 @@ impl Renderer {
             m[0],
         );
         m[3] = brighten;
-        let grade = crate::lighting::color_grade(lighting)
-            .uniform(crate::lighting::tone_curve_choice());
+        let grade =
+            crate::lighting::color_grade(lighting).uniform(crate::lighting::tone_curve_choice());
         let pu = PostUniform {
             // the metering may take a little off a bright picture and add a little to a
             // dark one: a night stays a night, snow stays white

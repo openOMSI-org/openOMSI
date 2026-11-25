@@ -2739,7 +2739,9 @@ fn a_normal_map_tilts_the_surface_the_way_its_channels_say() {
             near: 0.1,
             far: 200.0,
         };
-        let rgba = renderer.render_to_image(&mut scene, 32, 32, &camera, &lighting).unwrap();
+        let rgba = renderer
+            .render_to_image(&mut scene, 32, 32, &camera, &lighting)
+            .unwrap();
         renderer.remove_instance(&mut scene, i);
         let k = (16 * 32 + 16) * 4;
         (rgba[k] as f32 + rgba[k + 1] as f32 + rgba[k + 2] as f32) / 3.0
@@ -2750,17 +2752,26 @@ fn a_normal_map_tilts_the_surface_the_way_its_channels_say() {
         lit([230, 128, 200], false, Vec3::new(0.9, 0.0, 0.45)),
         lit([230, 128, 200], false, Vec3::new(-0.9, 0.0, 0.45)),
     );
-    assert!(east > west + 3.0, "red leans to +u (east): {east} with the sun in the east, {west} in the west");
+    assert!(
+        east > west + 3.0,
+        "red leans to +u (east): {east} with the sun in the east, {west} in the west"
+    );
     // green high, Direct3D: the normal leans down the texture, +v = south
     let (south, north) = (
         lit([128, 230, 200], false, Vec3::new(0.0, -0.9, 0.45)),
         lit([128, 230, 200], false, Vec3::new(0.0, 0.9, 0.45)),
     );
-    assert!(south > north + 3.0, "Direct3D green leans to +v (south): {south} south, {north} north");
+    assert!(
+        south > north + 3.0,
+        "Direct3D green leans to +v (south): {south} south, {north} north"
+    );
     // and an OpenGL map the other way
     let (south_gl, north_gl) = (
         lit([128, 230, 200], true, Vec3::new(0.0, -0.9, 0.45)),
         lit([128, 230, 200], true, Vec3::new(0.0, 0.9, 0.45)),
     );
-    assert!(north_gl > south_gl + 3.0, "OpenGL green leans to -v (north): {north_gl} north, {south_gl} south");
+    assert!(
+        north_gl > south_gl + 3.0,
+        "OpenGL green leans to -v (north): {north_gl} north, {south_gl} south"
+    );
 }

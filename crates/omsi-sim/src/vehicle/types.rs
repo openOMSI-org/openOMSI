@@ -517,7 +517,11 @@ impl VehicleType {
             }
         }
         // `[light_emitter_interior]`: lamps made from the light-mapped meshes' textures
-        if model.meshes.iter().any(|m| m.light_emitter_interior.is_some()) {
+        if model
+            .meshes
+            .iter()
+            .any(|m| m.light_emitter_interior.is_some())
+        {
             let dirs = [
                 omsi_cfg::resolve_path(def.dir(), "Texture"),
                 omsi_cfg::resolve_path(&model_dir, "Texture"),

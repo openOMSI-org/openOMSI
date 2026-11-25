@@ -864,8 +864,7 @@ impl Model {
                         (1, Ok(v)) => e.max_lamps = (v as u32).clamp(1, 16),
                         // (a free text line - a comment - is no variable name)
                         (_, Err(_))
-                            if t
-                                .chars()
+                            if t.chars()
                                 .next()
                                 .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
                                 && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') =>

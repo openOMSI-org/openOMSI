@@ -475,7 +475,13 @@ pub(crate) fn slots(
 /// low sun's beams through a street's trees - the weather's fog alone is zero then, and
 /// the air was as clear as a vacuum to them.
 pub(crate) fn ground_haze(lighting: &Lighting) -> f32 {
-    let alt = lighting.sun_dir.normalize_or_zero().z.clamp(-1.0, 1.0).asin().to_degrees();
+    let alt = lighting
+        .sun_dir
+        .normalize_or_zero()
+        .z
+        .clamp(-1.0, 1.0)
+        .asin()
+        .to_degrees();
     let low_sun = (-((alt - 3.0) / 10.0).powi(2)).exp();
     let night = crate::atmosphere::smoothstep(-2.0, -10.0, alt);
     let base = HAZE_NOON + (HAZE_LOW_SUN - HAZE_NOON) * low_sun;

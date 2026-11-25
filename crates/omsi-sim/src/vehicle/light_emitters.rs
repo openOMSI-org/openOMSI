@@ -172,7 +172,9 @@ pub(crate) fn add(model: &mut Model, meshes: &[VehicleMesh], dirs: &[&Path]) {
             .len(),
         made.first().map(|(_, f)| f.as_str()).unwrap_or("")
     );
-    model.interior_lights.extend(made.into_iter().map(|(l, _)| l));
+    model
+        .interior_lights
+        .extend(made.into_iter().map(|(l, _)| l));
     for md in &mut model.meshes {
         if md.illumination_interior.iter().any(|&i| i >= 0) {
             for k in first..first + n {
@@ -238,7 +240,10 @@ fn cluster(lit: &[Lit], k: usize) -> Vec<Vec<&Lit>> {
             owner[i] = centres
                 .iter()
                 .enumerate()
-                .min_by(|a, b| a.1.distance_squared(l.pos).total_cmp(&b.1.distance_squared(l.pos)))
+                .min_by(|a, b| {
+                    a.1.distance_squared(l.pos)
+                        .total_cmp(&b.1.distance_squared(l.pos))
+                })
                 .map(|(j, _)| j)
                 .unwrap_or(0);
         }

@@ -69,13 +69,59 @@ fn by_altitude(alt: f32) -> ColorGrade {
     // a dusk whose pink and violet the eye takes most of out (the magenta that every lit wall
     // took at sunset), a blue hour a little cool, a night whose dark keeps the sky's blue
     let keys: [(f32, ColorGrade); 7] = [
-        (-18.0, key([0.96, 1.0, 1.06], 0.82, [0.010, 0.015, 0.026], [1.0, 1.0, 1.0])),
-        (-9.0, key([0.96, 1.0, 1.05], 0.86, [0.008, 0.012, 0.022], [1.0, 1.0, 1.0])),
-        (-4.0, key([0.97, 1.03, 1.02], 0.92, [0.003, 0.005, 0.011], [1.0, 1.0, 0.99])),
-        (0.5, key([1.02, 1.02, 0.94], 1.10, [0.002, 0.002, 0.004], [1.05, 1.0, 0.90])),
-        (6.0, key([1.06, 1.0, 0.90], 1.18, [0.001, 0.001, 0.002], [1.06, 1.0, 0.90])),
-        (20.0, key([1.02, 1.0, 0.97], 1.13, [0.0, 0.0, 0.0], [1.02, 1.0, 0.97])),
-        (45.0, key([1.0, 1.0, 1.0], 1.12, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0])),
+        (
+            -18.0,
+            key(
+                [0.96, 1.0, 1.06],
+                0.82,
+                [0.010, 0.015, 0.026],
+                [1.0, 1.0, 1.0],
+            ),
+        ),
+        (
+            -9.0,
+            key(
+                [0.96, 1.0, 1.05],
+                0.86,
+                [0.008, 0.012, 0.022],
+                [1.0, 1.0, 1.0],
+            ),
+        ),
+        (
+            -4.0,
+            key(
+                [0.97, 1.03, 1.02],
+                0.92,
+                [0.003, 0.005, 0.011],
+                [1.0, 1.0, 0.99],
+            ),
+        ),
+        (
+            0.5,
+            key(
+                [1.02, 1.02, 0.94],
+                1.10,
+                [0.002, 0.002, 0.004],
+                [1.05, 1.0, 0.90],
+            ),
+        ),
+        (
+            6.0,
+            key(
+                [1.06, 1.0, 0.90],
+                1.18,
+                [0.001, 0.001, 0.002],
+                [1.06, 1.0, 0.90],
+            ),
+        ),
+        (
+            20.0,
+            key([1.02, 1.0, 0.97], 1.13, [0.0, 0.0, 0.0], [1.02, 1.0, 0.97]),
+        ),
+        (
+            45.0,
+            key([1.0, 1.0, 1.0], 1.12, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
+        ),
     ];
     if alt <= keys[0].0 {
         return keys[0].1;
@@ -119,7 +165,13 @@ pub(crate) fn color_grade(l: &Lighting) -> ColorGrade {
     if !grade_on() || NEUTRAL.load(std::sync::atomic::Ordering::Relaxed) {
         return ColorGrade::NEUTRAL;
     }
-    let alt = l.sun_dir.normalize_or_zero().z.clamp(-1.0, 1.0).asin().to_degrees();
+    let alt = l
+        .sun_dir
+        .normalize_or_zero()
+        .z
+        .clamp(-1.0, 1.0)
+        .asin()
+        .to_degrees();
     let mut g = by_altitude(alt);
     let day = crate::atmosphere::smoothstep(-6.0, 4.0, alt);
     // a grey sky: colour goes out of everything, the light a little cooler, and a low sun's
@@ -149,11 +201,13 @@ pub(crate) fn tone_curve_choice() -> f32 {
         return 0.0;
     }
     static C: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-    *C.get_or_init(|| match std::env::var("OMSI_TONEMAP").ok().as_deref().map(str::trim) {
-        Some("natural") | Some("0") => 0.0,
-        Some("neutral") | Some("pbr") | Some("2") => 2.0,
-        _ => 1.0,
-    })
+    *C.get_or_init(
+        || match std::env::var("OMSI_TONEMAP").ok().as_deref().map(str::trim) {
+            Some("natural") | Some("0") => 0.0,
+            Some("neutral") | Some("pbr") | Some("2") => 2.0,
+            _ => 1.0,
+        },
+    )
 }
 
 fn grade_on() -> bool {
