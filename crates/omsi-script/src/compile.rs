@@ -1209,11 +1209,10 @@ mod tests {
     use super::*;
 
     fn program_of(script: &str) -> Program {
-        let dir = std::env::temp_dir().join(format!(
-            "omsi_gearbox_{}_{}",
-            std::process::id(),
-            script.len()
-        ));
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("omsi_gearbox_{}_{id}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let osc = dir.join("g.osc");
         std::fs::write(&osc, script).unwrap();
