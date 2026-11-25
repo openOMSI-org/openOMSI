@@ -103,7 +103,15 @@ pub fn indicated_requests(near: &[(usize, usize, i32, f32)], blinker: u8) -> Vec
     let marked = |turn: i32| matches!(turn, 1 | 2);
     let shown = |turn: i32| marked(turn) && matches!(blinker, 1 | 2) && turn == blinker as i32;
     near.iter()
-        .filter(|&&(_, _, turn, d)| if marked(turn) { shown(turn) } else { !near.iter().any(|&(_, _, t, e)| shown(t) && (e - d).abs() <= SAME_JUNCTION) })
+        .filter(|&&(_, _, turn, d)| {
+            if marked(turn) {
+                shown(turn)
+            } else {
+                !near
+                    .iter()
+                    .any(|&(_, _, t, e)| shown(t) && (e - d).abs() <= SAME_JUNCTION)
+            }
+        })
         .map(|&(ci, li, _, _)| (ci, li))
         .collect()
 }
@@ -117,7 +125,11 @@ mod tests {
     #[test]
     fn the_indicator_picks_the_stage_it_asks() {
         for (left, straight, right) in [((0, 0), (0, 1), (0, 2)), ((0, 0), (1, 0), (2, 0))] {
-            let near = [(left.0, left.1, 1, 40.0), (straight.0, straight.1, 0, 41.0), (right.0, right.1, 2, 40.5)];
+            let near = [
+                (left.0, left.1, 1, 40.0),
+                (straight.0, straight.1, 0, 41.0),
+                (right.0, right.1, 2, 40.5),
+            ];
             assert_eq!(indicated_requests(&near, 1), vec![left]);
             assert_eq!(indicated_requests(&near, 2), vec![right]);
             assert_eq!(indicated_requests(&near, 0), vec![straight]);
@@ -132,14 +144,25 @@ mod tests {
     use crate::traffic::{Lane, LaneBuilder};
 
     fn path(x: f64, y: f64, length: f64, width: f32, turn: i32) -> Lane {
-        let mut lane = LaneBuilder::arc(DVec3::new(x, y, 0.0), 0.0, length, 0.0, 0.0, LaneKind::Street, width);
+        let mut lane = LaneBuilder::arc(
+            DVec3::new(x, y, 0.0),
+            0.0,
+            length,
+            0.0,
+            0.0,
+            LaneKind::Street,
+            width,
+        );
         lane.turn = turn;
         lane.traffic_light = Some((0, 0));
         lane
     }
 
     fn network(lanes: Vec<Lane>) -> Network {
-        let mut net = Network { lanes, ..Default::default() };
+        let mut net = Network {
+            lanes,
+            ..Default::default()
+        };
         net.build_grid();
         net
     }
@@ -159,7 +182,9 @@ mod tests {
     }
 
     fn asks(net: &Network, vehicles: &[(PlayerBox, u8)]) -> bool {
-        vehicles.iter().any(|(b, blinker)| !indicated_light_paths(net, b, *blinker).is_empty())
+        vehicles
+            .iter()
+            .any(|(b, blinker)| !indicated_light_paths(net, b, *blinker).is_empty())
     }
 
     #[test]
@@ -188,7 +213,15 @@ mod tests {
 
     #[test]
     fn rotated_detectors_are_found_across_a_grid_cell_boundary() {
-        let mut detector = LaneBuilder::arc(DVec3::new(49.0, 0.0, 0.0), 90.0, 6.0, 0.0, 0.0, LaneKind::Street, 3.0);
+        let mut detector = LaneBuilder::arc(
+            DVec3::new(49.0, 0.0, 0.0),
+            90.0,
+            6.0,
+            0.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        );
         detector.turn = 2;
         detector.traffic_light = Some((0, 0));
         let net = network(vec![detector]);
@@ -199,7 +232,10 @@ mod tests {
 
     #[test]
     fn neighbouring_opposite_and_overhead_vehicles_do_not_ask() {
-        for net in [overlapping(0.0), network(vec![path(0.15, 10.0, 6.0, 2.8, 2)])] {
+        for net in [
+            overlapping(0.0),
+            network(vec![path(0.15, 10.0, 6.0, 2.8, 2)]),
+        ] {
             assert!(!asks(&net, &[(bus(2.0, 13.0), 2)]));
             let mut opposite = bus(0.0, 13.0);
             opposite.1 = 180.0;

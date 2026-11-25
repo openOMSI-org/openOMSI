@@ -12,7 +12,10 @@
 //! it. A call into the module that runs too long (its fuel, about 50 ms of work, burnt) is stopped
 //! and the plugin disabled, as a Lua plugin's runaway loop is; its memory is held to 256 MB.
 
-use wasmi::{Caller, Config, Engine, Extern, Linker, Memory, Module, Store, StoreLimits, StoreLimitsBuilder, TypedFunc};
+use wasmi::{
+    Caller, Config, Engine, Extern, Linker, Memory, Module, Store, StoreLimits, StoreLimitsBuilder,
+    TypedFunc,
+};
 
 /// The ABI version a module's `oop_abi` must return.
 pub const ABI: i32 = 1;
@@ -73,9 +76,15 @@ impl WasmPlugin {
         let mut config = Config::default();
         config.consume_fuel(true);
         let engine = Engine::new(&config);
-        let module = Module::new(&engine, wasm).map_err(|e| format!("{name}: not a usable WebAssembly module: {e}"))?;
+        let module = Module::new(&engine, wasm)
+            .map_err(|e| format!("{name}: not a usable WebAssembly module: {e}"))?;
         let state = HostState {
-            limits: StoreLimitsBuilder::new().memory_size(MEMORY_LIMIT).instances(1).memories(1).tables(4).build(),
+            limits: StoreLimitsBuilder::new()
+                .memory_size(MEMORY_LIMIT)
+                .instances(1)
+                .memories(1)
+                .tables(4)
+                .build(),
             dispatch: None,
             last_error: String::new(),
         };
@@ -85,21 +94,32 @@ impl WasmPlugin {
         link(&mut linker).map_err(|e| format!("{name}: {e}"))?;
         // (the start section runs with fuel too: a module looping there must not hang the game)
         store.set_fuel(FUEL_PER_CALL).map_err(|e| e.to_string())?;
-        let instance = linker.instantiate_and_start(&mut store, &module).map_err(|e| format!("{name}: {e}"))?;
-        let memory = instance.get_memory(&store, "memory").ok_or_else(|| format!("{name}: the module exports no memory"))?;
+        let instance = linker
+            .instantiate_and_start(&mut store, &module)
+            .map_err(|e| format!("{name}: {e}"))?;
+        let memory = instance
+            .get_memory(&store, "memory")
+            .ok_or_else(|| format!("{name}: the module exports no memory"))?;
         let abi = instance
             .get_typed_func::<(), i32>(&store, "oop_abi")
             .map_err(|_| format!("{name}: no oop_abi export - not an openOMSI plugin (build it with the openOMSI plugin SDK)"))?
             .call(&mut store, ())
             .map_err(|e| format!("{name}: oop_abi: {e}"))?;
         if abi != ABI {
-            return Err(format!("{name}: made for plugin ABI {abi}, this openOMSI runs ABI {ABI} - update {}", if abi > ABI { "openOMSI" } else { "the plugin" }));
+            return Err(format!(
+                "{name}: made for plugin ABI {abi}, this openOMSI runs ABI {ABI} - update {}",
+                if abi > ABI { "openOMSI" } else { "the plugin" }
+            ));
         }
         let typed = |f: &str| format!("{name}: {f} is missing or has the wrong type");
         Ok(WasmPlugin {
             name: name.to_string(),
-            alloc: instance.get_typed_func(&store, "oop_alloc").map_err(|_| typed("oop_alloc"))?,
-            free: instance.get_typed_func(&store, "oop_free").map_err(|_| typed("oop_free"))?,
+            alloc: instance
+                .get_typed_func(&store, "oop_alloc")
+                .map_err(|_| typed("oop_alloc"))?,
+            free: instance
+                .get_typed_func(&store, "oop_free")
+                .map_err(|_| typed("oop_free"))?,
             callback: instance.get_typed_func(&store, "oop_callback").ok(),
             start: instance.get_typed_func(&store, "oop_start").ok(),
             stop: instance.get_typed_func(&store, "oop_stop").ok(),
@@ -123,12 +143,16 @@ impl WasmPlugin {
             return;
         }
         let text = args;
-        let Some(ptr) = self.write_buffer(dispatch, text.as_bytes()) else { return };
+        let Some(ptr) = self.write_buffer(dispatch, text.as_bytes()) else {
+            return;
+        };
         let len = text.len() as i32;
         // (the module frees the arguments: whoever is handed a buffer frees it, as the
         // module does with a call's result - freed here as well, the SDK's allocator aborted
         // on the second free)
-        self.enter(dispatch, "oop_callback", |store| f.call(store, (id, ptr, len)));
+        self.enter(dispatch, "oop_callback", |store| {
+            f.call(store, (id, ptr, len))
+        });
     }
 
     /// Runs the module's `oop_stop`, if it has one (the game ends or the plugin goes).
@@ -143,7 +167,11 @@ impl WasmPlugin {
         let alloc = self.alloc;
         let len = bytes.len() as i32;
         let ptr = self.enter(dispatch, "oop_alloc", |store| alloc.call(store, len))?;
-        if self.memory.write(&mut self.store, ptr as u32 as usize, bytes).is_err() {
+        if self
+            .memory
+            .write(&mut self.store, ptr as u32 as usize, bytes)
+            .is_err()
+        {
             self.disable(format!("oop_alloc returned {ptr:#x}, outside its memory"));
             return None;
         }
@@ -165,7 +193,9 @@ impl WasmPlugin {
         // called from inside it, on this thread) and is cleared below before `dispatch`'s
         // borrow ends; the lifetime is erased only to keep it in the store meanwhile.
         let erased: *mut (dyn Dispatch + '_) = dispatch;
-        self.store.data_mut().dispatch = Some(unsafe { std::mem::transmute::<*mut (dyn Dispatch + '_), *mut (dyn Dispatch + 'static)>(erased) });
+        self.store.data_mut().dispatch = Some(unsafe {
+            std::mem::transmute::<*mut (dyn Dispatch + '_), *mut (dyn Dispatch + 'static)>(erased)
+        });
         let _ = self.store.set_fuel(FUEL_PER_CALL);
         let result = f(&mut self.store);
         self.store.data_mut().dispatch = None;
@@ -199,14 +229,20 @@ fn guest_memory(caller: &Caller<'_, HostState>) -> Result<Memory, wasmi::Error> 
 }
 
 fn read_bytes(caller: &Caller<'_, HostState>, ptr: i32, len: i32) -> Result<Vec<u8>, wasmi::Error> {
-    let len = usize::try_from(len).ok().filter(|&l| l <= MAX_MESSAGE).ok_or_else(|| wasmi::Error::new("a message of a bad length"))?;
+    let len = usize::try_from(len)
+        .ok()
+        .filter(|&l| l <= MAX_MESSAGE)
+        .ok_or_else(|| wasmi::Error::new("a message of a bad length"))?;
     let mut buf = vec![0; len];
-    guest_memory(caller)?.read(caller, ptr as u32 as usize, &mut buf).map_err(|_| wasmi::Error::new("a pointer outside the module's memory"))?;
+    guest_memory(caller)?
+        .read(caller, ptr as u32 as usize, &mut buf)
+        .map_err(|_| wasmi::Error::new("a pointer outside the module's memory"))?;
     Ok(buf)
 }
 
 fn read_text(caller: &Caller<'_, HostState>, ptr: i32, len: i32) -> Result<String, wasmi::Error> {
-    String::from_utf8(read_bytes(caller, ptr, len)?).map_err(|_| wasmi::Error::new("a text that is not UTF-8"))
+    String::from_utf8(read_bytes(caller, ptr, len)?)
+        .map_err(|_| wasmi::Error::new("a text that is not UTF-8"))
 }
 
 /// Hands `bytes` to the module in a buffer of its allocator: `(ptr << 32) | len`.
@@ -216,36 +252,67 @@ fn hand_over(caller: &mut Caller<'_, HostState>, bytes: &[u8]) -> Result<i64, wa
         _ => return Err(wasmi::Error::new("the module exports no oop_alloc")),
     };
     let ptr = alloc.call(&mut *caller, bytes.len() as i32)?;
-    guest_memory(caller)?.write(&mut *caller, ptr as u32 as usize, bytes).map_err(|_| wasmi::Error::new("oop_alloc returned a pointer outside the module's memory"))?;
+    guest_memory(caller)?
+        .write(&mut *caller, ptr as u32 as usize, bytes)
+        .map_err(|_| {
+            wasmi::Error::new("oop_alloc returned a pointer outside the module's memory")
+        })?;
     Ok((i64::from(ptr as u32) << 32) | bytes.len() as i64)
 }
 
-fn with_dispatch<R>(caller: &mut Caller<'_, HostState>, f: impl FnOnce(&mut dyn Dispatch) -> R) -> Result<R, wasmi::Error> {
-    let ptr = caller.data().dispatch.ok_or_else(|| wasmi::Error::new("the game is not in a call"))?;
+fn with_dispatch<R>(
+    caller: &mut Caller<'_, HostState>,
+    f: impl FnOnce(&mut dyn Dispatch) -> R,
+) -> Result<R, wasmi::Error> {
+    let ptr = caller
+        .data()
+        .dispatch
+        .ok_or_else(|| wasmi::Error::new("the game is not in a call"))?;
     // SAFETY: see `WasmPlugin::enter` - set for exactly the duration of the call we are in.
     Ok(f(unsafe { &mut *ptr }))
 }
 
 fn link(linker: &mut Linker<HostState>) -> Result<(), wasmi::Error> {
-    linker.func_wrap("openomsi", "call", |mut caller: Caller<'_, HostState>, name_ptr: i32, name_len: i32, args_ptr: i32, args_len: i32| -> Result<i64, wasmi::Error> {
-        let name = read_text(&caller, name_ptr, name_len)?;
-        let args = read_text(&caller, args_ptr, args_len)?;
-        let result = with_dispatch(&mut caller, |d| d.call(&name, &args))?;
-        match result {
-            Ok(v) => hand_over(&mut caller, v.as_bytes()),
-            Err(e) => {
-                caller.data_mut().last_error = e;
-                Ok(-1)
+    linker.func_wrap(
+        "openomsi",
+        "call",
+        |mut caller: Caller<'_, HostState>,
+         name_ptr: i32,
+         name_len: i32,
+         args_ptr: i32,
+         args_len: i32|
+         -> Result<i64, wasmi::Error> {
+            let name = read_text(&caller, name_ptr, name_len)?;
+            let args = read_text(&caller, args_ptr, args_len)?;
+            let result = with_dispatch(&mut caller, |d| d.call(&name, &args))?;
+            match result {
+                Ok(v) => hand_over(&mut caller, v.as_bytes()),
+                Err(e) => {
+                    caller.data_mut().last_error = e;
+                    Ok(-1)
+                }
             }
-        }
-    })?;
-    linker.func_wrap("openomsi", "last_error", |mut caller: Caller<'_, HostState>| -> Result<i64, wasmi::Error> {
-        let text = std::mem::take(&mut caller.data_mut().last_error);
-        hand_over(&mut caller, text.as_bytes())
-    })?;
-    linker.func_wrap("openomsi", "log", |mut caller: Caller<'_, HostState>, level: i32, ptr: i32, len: i32| -> Result<(), wasmi::Error> {
-        let text = read_text(&caller, ptr, len)?;
-        with_dispatch(&mut caller, |d| d.log(level, &text))
-    })?;
+        },
+    )?;
+    linker.func_wrap(
+        "openomsi",
+        "last_error",
+        |mut caller: Caller<'_, HostState>| -> Result<i64, wasmi::Error> {
+            let text = std::mem::take(&mut caller.data_mut().last_error);
+            hand_over(&mut caller, text.as_bytes())
+        },
+    )?;
+    linker.func_wrap(
+        "openomsi",
+        "log",
+        |mut caller: Caller<'_, HostState>,
+         level: i32,
+         ptr: i32,
+         len: i32|
+         -> Result<(), wasmi::Error> {
+            let text = read_text(&caller, ptr, len)?;
+            with_dispatch(&mut caller, |d| d.log(level, &text))
+        },
+    )?;
     Ok(())
 }

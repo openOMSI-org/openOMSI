@@ -17,8 +17,8 @@
 //! going round something that stands in the way; and else the middle of the lane, or a
 //! swerve round a car at the kerb.
 
-use super::*;
 use super::planning::lane_open_to;
+use super::*;
 
 /// Seconds a driver has to want a lane change of their own choosing before acting on it:
 /// conditions that flicker (a leader just under the speed that is worth overtaking) do not
@@ -146,10 +146,19 @@ impl TrafficSim {
     pub fn collect_change_claims(&mut self) {
         let mut claims = Vec::new();
         for i in 0..self.cars.len() {
-            if let Some(Required { to: Some((to, _)), .. }) = self.required_change(i) {
+            if let Some(Required {
+                to: Some((to, _)), ..
+            }) = self.required_change(i)
+            {
                 let st = &self.cars[i].state;
                 let s = self.net.beside_s(st.lane, to, st.s);
-                claims.push(ChangeClaim { lane: to, s, required: true, id: self.cars[i].id, started: false });
+                claims.push(ChangeClaim {
+                    lane: to,
+                    s,
+                    required: true,
+                    id: self.cars[i].id,
+                    started: false,
+                });
             }
         }
         claims.sort_by_key(|c| c.id);
@@ -203,7 +212,11 @@ impl TrafficSim {
             self.cars[i].make_way = None;
         }
         // the change the car's way requires
-        let required = if why.is_empty() { self.required_change(i) } else { None };
+        let required = if why.is_empty() {
+            self.required_change(i)
+        } else {
+            None
+        };
         match required {
             Some(r) => {
                 out.merge_wait = self.make_required_change(i, r, ts);
@@ -252,9 +265,16 @@ impl TrafficSim {
         let car = &self.cars[i];
         let st = &car.state;
         let Some((l, who)) = lead else { return false };
-        let real = l.gap + if who == Some(usize::MAX) { PLAYER_BOX_MARGIN } else { 0.0 };
-        car.next_stop()
-            .is_some_and(|(ri, ss)| ri >= st.route_index && st.route_distance(&self.net, ri, ss) < real + obstacle_len + st.front + 15.0)
+        let real = l.gap
+            + if who == Some(usize::MAX) {
+                PLAYER_BOX_MARGIN
+            } else {
+                0.0
+            };
+        car.next_stop().is_some_and(|(ri, ss)| {
+            ri >= st.route_index
+                && st.route_distance(&self.net, ri, ss) < real + obstacle_len + st.front + 15.0
+        })
     }
 
     /// The change car `i`'s way requires, if any (see `Required`).
@@ -265,19 +285,33 @@ impl TrafficSim {
             return None;
         }
         if !st.route.is_empty() {
-            if car.next_stop().is_some_and(|(ri, s)| ri == st.route_index && self.net.lanes[st.lane].length() - s >= 8.0) {
+            if car.next_stop().is_some_and(|(ri, s)| {
+                ri == st.route_index && self.net.lanes[st.lane].length() - s >= 8.0
+            }) {
                 return None;
             }
             let (to, dir) = st.route_change_due(&self.net)?;
-            return Some(Required { need: Need::Route, to: Some((to, dir)), end: f32::MAX });
+            return Some(Required {
+                need: Need::Route,
+                to: Some((to, dir)),
+                end: f32::MAX,
+            });
         }
         if self.net.lanes[st.lane].kind != LaneKind::Street {
             return None;
         }
         if let Some(end) = self.closing_ahead(i) {
-            return Some(Required { need: Need::Closing, to: self.open_neighbour(i, end), end });
+            return Some(Required {
+                need: Need::Closing,
+                to: self.open_neighbour(i, end),
+                end,
+            });
         }
-        self.turn_lane_wanted(i).map(|to| Required { need: Need::TurnLane, to: Some(to), end: f32::MAX })
+        self.turn_lane_wanted(i).map(|to| Required {
+            need: Need::TurnLane,
+            to: Some(to),
+            end: f32::MAX,
+        })
     }
 
     /// Where car `i`'s way closes to it within `CLOSING_LOOK`: the distance from its origin
@@ -299,7 +333,12 @@ impl TrafficSim {
             return None;
         }
         let lane = &self.net.lanes[last];
-        (!lane.next.is_empty() && lane.next.iter().all(|&n| !lane_open_to(&self.net.lanes[n], st))).then_some(d)
+        (!lane.next.is_empty()
+            && lane
+                .next
+                .iter()
+                .all(|&n| !lane_open_to(&self.net.lanes[n], st)))
+        .then_some(d)
     }
 
     /// The lane beside car `i` that stays open to it well past `end` (where its own way
@@ -308,11 +347,17 @@ impl TrafficSim {
     fn open_neighbour(&self, i: usize, end: f32) -> Option<(usize, i32)> {
         let st = &self.cars[i].state;
         let lane = &self.net.lanes[st.lane];
-        let sides = if self.net.left_hand { [(lane.left, 1), (lane.right, 2)] } else { [(lane.right, 2), (lane.left, 1)] };
+        let sides = if self.net.left_hand {
+            [(lane.left, 1), (lane.right, 2)]
+        } else {
+            [(lane.right, 2), (lane.left, 1)]
+        };
         let need = end + 30.0;
         let mut best: Option<(usize, i32, f32)> = None;
         for (side, dir) in sides {
-            let Some(l) = side.filter(|&l| self.open_to(i, l)) else { continue };
+            let Some(l) = side.filter(|&l| self.open_to(i, l)) else {
+                continue;
+            };
             let s_l = self.net.beside_s(st.lane, l, st.s);
             let run = self.open_run(st, l, s_l, need + 50.0);
             if run >= need && best.is_none_or(|b| run > b.2 + 1.0) {
@@ -327,7 +372,14 @@ impl TrafficSim {
     /// counts as open road (the cars leave the map there); a lane whose every way on is
     /// closed to the vehicle ends it.
     pub fn open_run(&self, st: &AiState, lane: usize, s: f32, limit: f32) -> f32 {
-        fn walk(t: &TrafficSim, st: &AiState, lane: usize, run: f32, limit: f32, depth: u32) -> f32 {
+        fn walk(
+            t: &TrafficSim,
+            st: &AiState,
+            lane: usize,
+            run: f32,
+            limit: f32,
+            depth: u32,
+        ) -> f32 {
             let l = &t.net.lanes[lane];
             if run >= limit || depth >= 8 || l.next.is_empty() {
                 return limit.max(run);
@@ -335,7 +387,14 @@ impl TrafficSim {
             let mut best = run;
             for &n in &l.next {
                 if lane_open_to(&t.net.lanes[n], st) {
-                    best = best.max(walk(t, st, n, run + t.net.lanes[n].length(), limit, depth + 1));
+                    best = best.max(walk(
+                        t,
+                        st,
+                        n,
+                        run + t.net.lanes[n].length(),
+                        limit,
+                        depth + 1,
+                    ));
                     if best >= limit {
                         break;
                     }
@@ -343,7 +402,9 @@ impl TrafficSim {
             }
             best
         }
-        let Some(l) = self.net.lanes.get(lane) else { return 0.0 };
+        let Some(l) = self.net.lanes.get(lane) else {
+            return 0.0;
+        };
         walk(self, st, lane, l.length() - s, limit, 0).min(limit)
     }
 
@@ -366,7 +427,12 @@ impl TrafficSim {
             2 => lane.right,
             _ => None,
         }?;
-        (self.open_to(i, side) && self.net.lanes[side].next.iter().any(|&n| self.net.lanes[n].turn == turn)).then_some((side, turn))
+        (self.open_to(i, side)
+            && self.net.lanes[side]
+                .next
+                .iter()
+                .any(|&n| self.net.lanes[n].turn == turn))
+        .then_some((side, turn))
     }
 
     /// The change car `i`'s way requires: begun as soon as the lane beside lets it in;
@@ -379,7 +445,11 @@ impl TrafficSim {
             if !car.gone && !car.is_bus() {
                 car.gone = true;
                 if ts.debug {
-                    log::info!("t={:.1}: car {} finds its lane closing to it ahead and no open way on: it leaves", self.time, car.id);
+                    log::info!(
+                        "t={:.1}: car {} finds its lane closing to it ahead and no open way on: it leaves",
+                        self.time,
+                        car.id
+                    );
                 }
             }
             return None;
@@ -395,7 +465,12 @@ impl TrafficSim {
             || self.cars[i].sideways.signalled > LATE_CHANGE_AFTER;
         if possible && self.try_change(i, to, dir, ChangeKind::Required(r.need), ts, None) {
             if ts.debug {
-                log::info!("t={:.1}: car {} moves over to lane {to} ({:?})", self.time, self.cars[i].id, r.need);
+                log::info!(
+                    "t={:.1}: car {} moves over to lane {to} ({:?})",
+                    self.time,
+                    self.cars[i].id,
+                    r.need
+                );
             }
             self.cars[i].sideways.signalled = 0.0;
             return None;
@@ -416,7 +491,11 @@ impl TrafficSim {
         car.state.signal_time = 1.0;
         car.sideways.signalled += ts.dt;
         car.sideways.waiting = Some((to, self.time));
-        if ts.debug && [30.0, 90.0, 240.0].iter().any(|t| (car.sideways.signalled - t).abs() < ts.dt * 0.5) {
+        if ts.debug
+            && [30.0, 90.0, 240.0]
+                .iter()
+                .any(|t| (car.sideways.signalled - t).abs() < ts.dt * 0.5)
+        {
             let (id, s) = (car.id, car.state.s);
             let s_to = self.net.beside_s(self.cars[i].state.lane, to, s);
             let near: Vec<String> = ts
@@ -425,7 +504,15 @@ impl TrafficSim {
                 .into_iter()
                 .flatten()
                 .filter(|e| (e.1 - s_to).abs() < 45.0)
-                .map(|e| format!("car {} {:+.1} m v {:.1}{}", self.cars[e.0].id, e.1 - s_to, self.cars[e.0].state.speed, if e.3 { " foreign" } else { "" }))
+                .map(|e| {
+                    format!(
+                        "car {} {:+.1} m v {:.1}{}",
+                        self.cars[e.0].id,
+                        e.1 - s_to,
+                        self.cars[e.0].state.speed,
+                        if e.3 { " foreign" } else { "" }
+                    )
+                })
                 .collect();
             log::info!(
                 "t={:.1}: car {id} has waited {:.0} s on lane {} (s {s:.1}) to move over to lane {to} ({:?}): may merge {}, claim free {}, cars there: {:?}",
@@ -445,7 +532,15 @@ impl TrafficSim {
     /// the other changes of this step (`claim_free`), the gaps on that lane (`can_merge`)
     /// and the whole way over against what stands there, the people on foot and the scenery
     /// (`ghost_blocked`; `skip`: what it pulls out round). True when it has begun.
-    pub fn try_change(&mut self, i: usize, to: usize, dir: i32, kind: ChangeKind, ts: &TickScene, skip: Option<usize>) -> bool {
+    pub fn try_change(
+        &mut self,
+        i: usize,
+        to: usize,
+        dir: i32,
+        kind: ChangeKind,
+        ts: &TickScene,
+        skip: Option<usize>,
+    ) -> bool {
         let car = &self.cars[i];
         let st = &car.state;
         let id = car.id;
@@ -491,13 +586,23 @@ impl TrafficSim {
             // (what stands ahead in its own lane it keeps behind anyway, the way it follows
             // it: the trajectory reaches it only if the car does not slow down for it)
             let mut skip: Vec<usize> = skip.into_iter().collect();
-            let own = std::iter::once((st.lane, -st.s)).chain(st.upcoming().scan(self.net.lanes[st.lane].length() - st.s, |d, l| {
-                let at = *d;
-                *d += self.net.lanes[l].length();
-                Some((l, at))
-            }));
+            let own = std::iter::once((st.lane, -st.s)).chain(st.upcoming().scan(
+                self.net.lanes[st.lane].length() - st.s,
+                |d, l| {
+                    let at = *d;
+                    *d += self.net.lanes[l].length();
+                    Some((l, at))
+                },
+            ));
             for (l, dl) in own.take_while(|e| e.1 < len) {
-                skip.extend(ts.by_lane.get(&l).into_iter().flatten().filter(|e| !e.3 && e.0 != i && dl + e.1 > 0.0).map(|e| e.0));
+                skip.extend(
+                    ts.by_lane
+                        .get(&l)
+                        .into_iter()
+                        .flatten()
+                        .filter(|e| !e.3 && e.0 != i && dl + e.1 > 0.0)
+                        .map(|e| e.0),
+                );
             }
             let net = &self.net;
             let way = |d: f32| hyp.way_point(net, d);
@@ -505,7 +610,10 @@ impl TrafficSim {
         };
         if let Some(what) = blocked {
             if ts.debug {
-                log::info!("t={:.1}: car {id} does not move over to lane {to}: {what} on the way", self.time);
+                log::info!(
+                    "t={:.1}: car {id} does not move over to lane {to}: {what} on the way",
+                    self.time
+                );
             }
             self.cars[i].sideways.retry = self.time + 0.5;
             return false;
@@ -514,7 +622,13 @@ impl TrafficSim {
         car.state = hyp;
         car.sideways.last = Some((dir, self.time));
         car.sideways.wish = None;
-        self.change_claims.push(ChangeClaim { lane: to, s: s_to, required, id, started: true });
+        self.change_claims.push(ChangeClaim {
+            lane: to,
+            s: s_to,
+            required,
+            id,
+            started: true,
+        });
         true
     }
 
@@ -539,7 +653,10 @@ impl TrafficSim {
             }
         }
         let since = car.sideways.wish.map(|w| w.1).unwrap_or(now);
-        let swing_back = car.sideways.last.is_some_and(|(d, t)| d != dir && now - t < NO_SWING_BACK);
+        let swing_back = car
+            .sideways
+            .last
+            .is_some_and(|(d, t)| d != dir && now - t < NO_SWING_BACK);
         if now - since < WISH_HOLD - 1e-3 || swing_back || now < car.sideways.retry {
             return false;
         }
@@ -551,7 +668,18 @@ impl TrafficSim {
         }
         if ts.debug {
             let c = &self.cars[i];
-            log::info!("t={now:.1}: car {} {}: lane {} -> {to} at ({:.1}, {:.1})", c.id, if overtake { "overtakes" } else { "keeps to its side" }, c.state.lane, c.vehicle.position.x, c.vehicle.position.y);
+            log::info!(
+                "t={now:.1}: car {} {}: lane {} -> {to} at ({:.1}, {:.1})",
+                c.id,
+                if overtake {
+                    "overtakes"
+                } else {
+                    "keeps to its side"
+                },
+                c.state.lane,
+                c.vehicle.position.x,
+                c.vehicle.position.y
+            );
         }
         true
     }
@@ -562,7 +690,12 @@ impl TrafficSim {
     fn discretionary_wish(&self, i: usize, by_lane: &ByLane) -> Option<(usize, i32, bool)> {
         let car = &self.cars[i];
         let st = &car.state;
-        if st.change.is_some() || !st.route.is_empty() || st.change_cooldown > 0.0 || st.speed < 4.0 || car.passing.is_some() {
+        if st.change.is_some()
+            || !st.route.is_empty()
+            || st.change_cooldown > 0.0
+            || st.speed < 4.0
+            || car.passing.is_some()
+        {
             return None;
         }
         let lane = &self.net.lanes[st.lane];
@@ -580,10 +713,16 @@ impl TrafficSim {
         }
         let limit = (lane.speed_limit_kmh * st.desire).min(st.max_speed_kmh) / 3.6;
         // (on a left-hand-traffic map overtaking is on the right and the keeping to the left)
-        let (pass_side, keep_side, pass_dir, keep_dir) = if self.net.left_hand { (lane.right, lane.left, 2, 1) } else { (lane.left, lane.right, 1, 2) };
+        let (pass_side, keep_side, pass_dir, keep_dir) = if self.net.left_hand {
+            (lane.right, lane.left, 2, 1)
+        } else {
+            (lane.left, lane.right, 1, 2)
+        };
         if let Some(side) = pass_side.filter(|&l| self.open_to(i, l)) {
             let plan: Vec<usize> = st.upcoming().collect();
-            if let Some((d, v, _)) = self.obstacle_from(i, st.lane, st.s, Some(&plan), 45.0, by_lane) {
+            if let Some((d, v, _)) =
+                self.obstacle_from(i, st.lane, st.s, Some(&plan), 45.0, by_lane)
+            {
                 let s_side = self.net.beside_s(st.lane, side, st.s);
                 let room = (5.5 * st.speed + 10.0).max(40.0);
                 if v < limit * 0.7
@@ -629,7 +768,11 @@ impl TrafficSim {
     fn finish_pass(&mut self, i: usize) {
         let car = &mut self.cars[i];
         let Some(mut p) = car.passing else { return };
-        if !p.aborted && car.stopped > 8.0 && car.state.odometer < p.until && car.state.lateral.abs() < p.side * 0.5 {
+        if !p.aborted
+            && car.stopped > 8.0
+            && car.state.odometer < p.until
+            && car.state.lateral.abs() < p.side * 0.5
+        {
             // held before it got out: back in behind the obstacle rather than wait half in
             // the oncoming lane
             p.until = car.state.odometer;
@@ -737,7 +880,13 @@ impl TrafficSim {
         }
         let target = kerb_swerve.unwrap_or(0.0);
         if debug && (target - car.state.lateral_target).abs() > 0.3 {
-            log::info!("t={:.2}: car {} swerves to {target:+.2} (was {:+.2}, now at {:+.2})", self.time, car.id, car.state.lateral_target, car.state.lateral);
+            log::info!(
+                "t={:.2}: car {} swerves to {target:+.2} (was {:+.2}, now at {:+.2})",
+                self.time,
+                car.id,
+                car.state.lateral_target,
+                car.state.lateral
+            );
         }
         car.state.lateral_target = target;
     }

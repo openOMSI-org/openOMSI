@@ -104,7 +104,10 @@ fn inline_blocks_wrap_and_shrink_to_fit() {
     let plain = "<body style='margin:0'><button id=x onclick=\"omsi.setVar('x',1)\" style='padding:0'>Hi</button></body>";
     let mut r = EngineRenderer::new(200, 50, plain);
     click(&mut r, 190.0, 5.0);
-    assert!(r.take_events().is_empty(), "the button does not fill the row");
+    assert!(
+        r.take_events().is_empty(),
+        "the button does not fill the row"
+    );
     click(&mut r, 3.0, 5.0);
     assert_eq!(r.take_events().len(), 1);
 }
@@ -117,7 +120,10 @@ fn clicks_bubble_and_can_be_stopped() {
     let mut r = EngineRenderer::new(200, 100, html);
     click(&mut r, 10.0, 5.0);
     let ev = r.take_events();
-    assert_eq!(ev, vec![("inner".to_string(), 1.0), ("outer".to_string(), 1.0)]);
+    assert_eq!(
+        ev,
+        vec![("inner".to_string(), 1.0), ("outer".to_string(), 1.0)]
+    );
     click(&mut r, 150.0, 5.0);
     assert_eq!(r.take_events(), vec![("inner".to_string(), 1.0)]);
     click(&mut r, 10.0, 40.0);
@@ -194,7 +200,10 @@ fn arrays_objects_and_strings() {
         document.getElementById('o').textContent = b.join('') + '|' + Object.keys(o).join('') + '|' + s.length + s[2] + '|' + sum + '|'\
           + a.indexOf(2) + a.includes(9) + '|' + a.slice(1).join('') + '|' + 'x.y'.replace('.', '+') + '|' + a.pop() + a.length;</script></body>";
     let r = EngineRenderer::new(8, 8, html);
-    assert_eq!(r.text_of("o").as_deref(), Some("64|az|3c|5|2false|12|x+y|22"));
+    assert_eq!(
+        r.text_of("o").as_deref(),
+        Some("64|az|3c|5|2false|12|x+y|22")
+    );
 }
 
 #[test]
@@ -218,16 +227,33 @@ fn a_click_can_press_a_trigger() {
 }
 
 fn map(items: Vec<(&str, omsi_sim::vehicle_api::ApiValue)>) -> omsi_sim::vehicle_api::ApiValue {
-    omsi_sim::vehicle_api::ApiValue::Map(items.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
+    omsi_sim::vehicle_api::ApiValue::Map(
+        items.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
+    )
 }
 
 fn sample_vehicle() -> omsi_sim::vehicle_api::ApiValue {
     use omsi_sim::vehicle_api::ApiValue as A;
-    let door = |n: f64, open: f64| map(vec![("number", A::Num(n)), ("open", A::Num(open)), ("isOpen", A::Bool(open > 0.05))]);
+    let door = |n: f64, open: f64| {
+        map(vec![
+            ("number", A::Num(n)),
+            ("open", A::Num(open)),
+            ("isOpen", A::Bool(open > 0.05)),
+        ])
+    };
     map(vec![
         ("info", map(vec![("number", A::Str("4711".into()))])),
-        ("engine", map(vec![("running", A::Bool(true)), ("rpm", A::Null)])),
-        ("doors", map(vec![("count", A::Num(2.0)), ("list", A::List(vec![door(1.0, 0.0), door(2.0, 1.0)]))])),
+        (
+            "engine",
+            map(vec![("running", A::Bool(true)), ("rpm", A::Null)]),
+        ),
+        (
+            "doors",
+            map(vec![
+                ("count", A::Num(2.0)),
+                ("list", A::List(vec![door(1.0, 0.0), door(2.0, 1.0)])),
+            ]),
+        ),
     ])
 }
 
@@ -248,7 +274,11 @@ fn a_page_reads_the_vehicle_object() {
     assert_eq!(r.text_of("e").as_deref(), Some("on"));
     assert_eq!(r.text_of("d").as_deref(), Some("true:2:1"));
     assert_eq!(r.text_of("n").as_deref(), Some("4711"));
-    assert_eq!(r.text_of("r").as_deref(), Some("none"), "a signal the bus lacks is null");
+    assert_eq!(
+        r.text_of("r").as_deref(),
+        Some("none"),
+        "a signal the bus lacks is null"
+    );
 }
 
 #[test]
@@ -290,25 +320,54 @@ fn a_timer_sees_the_latest_vehicle_without_an_update_function() {
 
 /// The vehicle object `demo.html` reads. `bare`: a bus without doors, boarding doors and
 /// rpm signal (those come as `null` / empty).
-fn demo_vehicle(speed: f64, engine_on: bool, door_open: bool, bare: bool) -> omsi_sim::vehicle_api::ApiValue {
+fn demo_vehicle(
+    speed: f64,
+    engine_on: bool,
+    door_open: bool,
+    bare: bool,
+) -> omsi_sim::vehicle_api::ApiValue {
     use omsi_sim::vehicle_api::ApiValue as A;
     let s = |t: &str| A::Str(t.to_string());
-    let num = |items: Vec<(&str, f64)>| map(items.into_iter().map(|(k, v)| (k, A::Num(v))).collect());
-    let flags = |items: Vec<(&str, bool)>| map(items.into_iter().map(|(k, v)| (k, A::Bool(v))).collect());
+    let num =
+        |items: Vec<(&str, f64)>| map(items.into_iter().map(|(k, v)| (k, A::Num(v))).collect());
+    let flags =
+        |items: Vec<(&str, bool)>| map(items.into_iter().map(|(k, v)| (k, A::Bool(v))).collect());
     let open = if door_open && !bare { 1.0 } else { 0.0 };
-    let door = |n: f64, o: f64| map(vec![("number", A::Num(n)), ("open", A::Num(o)), ("isOpen", A::Bool(o > 0.05))]);
+    let door = |n: f64, o: f64| {
+        map(vec![
+            ("number", A::Num(n)),
+            ("open", A::Num(o)),
+            ("isOpen", A::Bool(o > 0.05)),
+        ])
+    };
     let (count, doors, entries, exits) = if bare {
         (0.0, vec![], vec![], vec![])
     } else {
         (
             2.0,
             vec![door(1.0, open), door(2.0, 0.0)],
-            vec![map(vec![("number", A::Num(1.0)), ("open", A::Bool(door_open)), ("requested", A::Bool(false))])],
-            vec![map(vec![("number", A::Num(2.0)), ("open", A::Bool(false)), ("requested", A::Bool(true))])],
+            vec![map(vec![
+                ("number", A::Num(1.0)),
+                ("open", A::Bool(door_open)),
+                ("requested", A::Bool(false)),
+            ])],
+            vec![map(vec![
+                ("number", A::Num(2.0)),
+                ("open", A::Bool(false)),
+                ("requested", A::Bool(true)),
+            ])],
         )
     };
     map(vec![
-        ("info", map(vec![("number", s("42")), ("ident", s("DEMO")), ("route", s("Line 7")), ("nextStop", s("Central Station"))])),
+        (
+            "info",
+            map(vec![
+                ("number", s("42")),
+                ("ident", s("DEMO")),
+                ("route", s("Line 7")),
+                ("nextStop", s("Central Station")),
+            ]),
+        ),
         (
             "motion",
             num(vec![
@@ -337,7 +396,14 @@ fn demo_vehicle(speed: f64, engine_on: bool, door_open: bool, bare: bool) -> oms
         ),
         ("electrics", flags(vec![("on", false), ("failure", false)])),
         ("battery", map(vec![("on", A::Null)])),
-        ("brakes", flags(vec![("parking", false), ("stop", false), ("kneeling", false)])),
+        (
+            "brakes",
+            flags(vec![
+                ("parking", false),
+                ("stop", false),
+                ("kneeling", false),
+            ]),
+        ),
         ("wipers", flags(vec![("running", false)])),
         ("train", num(vec![("trailers", 0.0)])),
         (
@@ -353,10 +419,32 @@ fn demo_vehicle(speed: f64, engine_on: bool, door_open: bool, bare: bool) -> oms
                 ("interior", A::Num(0.0)),
             ]),
         ),
-        ("doors", map(vec![("count", A::Num(count)), ("anyOpen", A::Bool(open > 0.05)), ("list", A::List(doors))])),
-        ("passengers", map(vec![("onboard", A::Num(23.0)), ("entries", A::List(entries)), ("exits", A::List(exits))])),
+        (
+            "doors",
+            map(vec![
+                ("count", A::Num(count)),
+                ("anyOpen", A::Bool(open > 0.05)),
+                ("list", A::List(doors)),
+            ]),
+        ),
+        (
+            "passengers",
+            map(vec![
+                ("onboard", A::Num(23.0)),
+                ("entries", A::List(entries)),
+                ("exits", A::List(exits)),
+            ]),
+        ),
         ("cabin", num(vec![("temperature", 21.5)])),
-        ("condition", num(vec![("dirt", 0.12), ("crashes", 0.0), ("lastImpactKJ", 0.0), ("streetCondition", 1.0)])),
+        (
+            "condition",
+            num(vec![
+                ("dirt", 0.12),
+                ("crashes", 0.0),
+                ("lastImpactKJ", 0.0),
+                ("streetCondition", 1.0),
+            ]),
+        ),
     ])
 }
 
@@ -370,7 +458,9 @@ fn demo_page(v: &omsi_sim::vehicle_api::ApiValue) -> EngineRenderer {
 }
 
 fn has_colour(frame: &[u8], rgb: [u8; 3]) -> bool {
-    frame.chunks(4).any(|p| p[0] == rgb[0] && p[1] == rgb[1] && p[2] == rgb[2])
+    frame
+        .chunks(4)
+        .any(|p| p[0] == rgb[0] && p[1] == rgb[1] && p[2] == rgb[2])
 }
 
 /// `.warn` (open door, brake held) and `.on` (engine lamp, open boarding door).
@@ -393,7 +483,10 @@ fn inside(r: &EngineRenderer, mut n: usize, ancestor: usize) -> bool {
 /// `x` where a press would reach the element (the page's height depends on what the script
 /// has built, so no fixed coordinates).
 fn point_in(r: &EngineRenderer, id: &str, x: f32) -> (f32, f32) {
-    let node = r.js.dom.by_id(id).unwrap_or_else(|| panic!("no element {id}"));
+    let node =
+        r.js.dom
+            .by_id(id)
+            .unwrap_or_else(|| panic!("no element {id}"));
     let mut y = 0.0;
     while y < 900.0 {
         if inside(r, r.hit_node(x, y), node) {
@@ -423,15 +516,27 @@ fn the_demo_shows_the_header_and_the_speed() {
     assert_eq!(r.text_of("ident").as_deref(), Some("DEMO"));
     assert_eq!(r.text_of("route").as_deref(), Some("Line 7"));
     assert_eq!(r.text_of("stop").as_deref(), Some("Central Station"));
-    assert_eq!(r.text_of("kmh").as_deref(), Some("37"), "the speed is shown without its sign");
+    assert_eq!(
+        r.text_of("kmh").as_deref(),
+        Some("37"),
+        "the speed is shown without its sign"
+    );
     assert_eq!(r.text_of("rpm").as_deref(), Some("800"));
     assert_eq!(r.text_of("gear").as_deref(), Some("3"));
     assert_eq!(r.text_of("tank").as_deref(), Some("180"));
     assert_eq!(r.text_of("thr").as_deref(), Some("0.40"));
     let a = r.poll_frame().unwrap();
     assert_eq!(a.len(), 800 * 480 * 4);
-    assert_eq!(px(&a, 800, 799, 200), [0x09, 0x0e, 0x14, 255], "the page background");
-    assert_eq!(px(&a, 800, 799, 10), [0x11, 0x19, 0x25, 255], "the header bar");
+    assert_eq!(
+        px(&a, 800, 799, 200),
+        [0x09, 0x0e, 0x14, 255],
+        "the page background"
+    );
+    assert_eq!(
+        px(&a, 800, 799, 10),
+        [0x11, 0x19, 0x25, 255],
+        "the header bar"
+    );
     r.set_vehicle(&demo_vehicle(7.0, true, false, false));
     r.set_vars(&[], &[]);
     assert_eq!(r.text_of("kmh").as_deref(), Some("7"));
@@ -446,11 +551,20 @@ fn the_demo_footer_counts_updates_and_reads_variables() {
     r.set_vehicle(&demo_vehicle(0.0, true, false, false));
     r.set_vars(&[("Engine_N".into(), 812.0)], &[]);
     let foot = r.text_of("foot").unwrap();
-    assert!(foot.contains("api 1 | updates 1 | vars 1 | Engine_N 812"), "{foot}");
-    assert!(!foot.contains("DEMO |"), "the host is there, so it is no browser demo: {foot}");
+    assert!(
+        foot.contains("api 1 | updates 1 | vars 1 | Engine_N 812"),
+        "{foot}"
+    );
+    assert!(
+        !foot.contains("DEMO |"),
+        "the host is there, so it is no browser demo: {foot}"
+    );
     r.set_vars(&[("Engine_N".into(), 900.0)], &[]);
     let foot = r.text_of("foot").unwrap();
-    assert!(foot.contains("updates 2") && foot.contains("Engine_N 900"), "{foot}");
+    assert!(
+        foot.contains("updates 2") && foot.contains("Engine_N 900"),
+        "{foot}"
+    );
 }
 
 #[test]
@@ -460,9 +574,15 @@ fn the_demo_lists_doors_and_boarding() {
     assert!(sum.contains("2 door(s), any open: yes"), "{sum}");
     let pax = r.text_of("pax").unwrap();
     assert!(pax.contains("IN 1"), "{pax}");
-    assert!(pax.contains("OUT 2 REQ"), "the requested exit is marked: {pax}");
+    assert!(
+        pax.contains("OUT 2 REQ"),
+        "the requested exit is marked: {pax}"
+    );
     let doors = r.text_of("doors").unwrap();
-    assert!(doors.contains("OPEN 100%") && doors.contains("shut"), "{doors}");
+    assert!(
+        doors.contains("OPEN 100%") && doors.contains("shut"),
+        "{doors}"
+    );
     let r = demo_page(&demo_vehicle(0.0, true, false, false));
     assert!(r.text_of("doorsum").unwrap().contains("any open: no"));
 }
@@ -470,17 +590,31 @@ fn the_demo_lists_doors_and_boarding() {
 #[test]
 fn the_demo_copes_with_a_bus_that_lacks_signals() {
     let r = demo_page(&demo_vehicle(0.0, false, false, true));
-    assert_eq!(r.text_of("rpm").as_deref(), Some("--"), "a signal the bus lacks is null");
+    assert_eq!(
+        r.text_of("rpm").as_deref(),
+        Some("--"),
+        "a signal the bus lacks is null"
+    );
     assert!(r.text_of("doorsum").unwrap().contains("(none reported)"));
-    assert_eq!(r.text_of("pax").as_deref(), Some("no boarding doors reported"));
-    assert_eq!(r.text_of("kmh").as_deref(), Some("0"), "the rest of the page still updates");
+    assert_eq!(
+        r.text_of("pax").as_deref(),
+        Some("no boarding doors reported")
+    );
+    assert_eq!(
+        r.text_of("kmh").as_deref(),
+        Some("0"),
+        "the rest of the page still updates"
+    );
 }
 
 #[test]
 fn the_demo_draws_open_doors_and_the_running_engine() {
     let mut r = EngineRenderer::new(800, 480, DEMO);
     let idle = r.poll_frame().unwrap();
-    assert!(!has_colour(&idle, RED) && !has_colour(&idle, GREEN), "everything is dark before the first update");
+    assert!(
+        !has_colour(&idle, RED) && !has_colour(&idle, GREEN),
+        "everything is dark before the first update"
+    );
     r.set_vehicle(&demo_vehicle(0.0, true, false, false));
     r.set_vars(&[], &[]);
     let f = r.poll_frame().unwrap();
@@ -496,12 +630,35 @@ fn the_demo_draws_open_doors_and_the_running_engine() {
 fn the_demo_stop_request_and_outside_opener_press_their_triggers() {
     let mut r = demo_page(&demo_vehicle(0.0, true, false, false));
     click_on(&mut r, "b_stop", X_STOP);
-    assert_eq!(r.take_triggers(), vec!["door_haltewunsch".to_string(), "door_haltewunsch_off".to_string()]);
-    assert!(r.text_of("foot").unwrap().contains("last: trigger door_haltewunsch"));
-    assert!(r.take_events().is_empty(), "the buttons only press triggers");
+    assert_eq!(
+        r.take_triggers(),
+        vec![
+            "door_haltewunsch".to_string(),
+            "door_haltewunsch_off".to_string()
+        ]
+    );
+    assert!(
+        r.text_of("foot")
+            .unwrap()
+            .contains("last: trigger door_haltewunsch")
+    );
+    assert!(
+        r.take_events().is_empty(),
+        "the buttons only press triggers"
+    );
     click_on(&mut r, "b_open", X_OPEN);
-    assert_eq!(r.take_triggers(), vec!["door_aussenoeffner".to_string(), "door_aussenoeffner_off".to_string()]);
-    assert!(r.text_of("foot").unwrap().contains("last: trigger door_aussenoeffner"));
+    assert_eq!(
+        r.take_triggers(),
+        vec![
+            "door_aussenoeffner".to_string(),
+            "door_aussenoeffner_off".to_string()
+        ]
+    );
+    assert!(
+        r.text_of("foot")
+            .unwrap()
+            .contains("last: trigger door_aussenoeffner")
+    );
     // beside the buttons nothing happens
     click(&mut r, 790.0, 5.0);
     assert!(r.take_triggers().is_empty() && r.take_events().is_empty());
@@ -513,10 +670,17 @@ fn the_demo_brake_button_holds_while_pressed() {
     let (x, y) = point_in(&r, "b_brake", X_BRAKE);
     r.pointer(x, y, PointerKind::Down);
     assert_eq!(r.take_events(), vec![("Brake".to_string(), 1.0)]);
-    assert!(has_colour(&r.poll_frame().unwrap(), RED), "the held button turns red");
+    assert!(
+        has_colour(&r.poll_frame().unwrap(), RED),
+        "the held button turns red"
+    );
     assert!(r.text_of("foot").unwrap().contains("last: setVar Brake 1"));
     r.pointer(x, y, PointerKind::Up);
-    assert_eq!(r.take_events(), vec![("Brake".to_string(), 0.0)], "released once, not twice");
+    assert_eq!(
+        r.take_events(),
+        vec![("Brake".to_string(), 0.0)],
+        "released once, not twice"
+    );
     assert!(!has_colour(&r.poll_frame().unwrap(), RED));
     assert!(r.text_of("foot").unwrap().contains("last: setVar Brake 0"));
 }
@@ -546,8 +710,14 @@ fn the_demo_redraws_from_the_latest_snapshot_every_second() {
                 *val = map(vec![
                     ("number", omsi_sim::vehicle_api::ApiValue::Str("42".into())),
                     ("ident", omsi_sim::vehicle_api::ApiValue::Str("DEMO".into())),
-                    ("route", omsi_sim::vehicle_api::ApiValue::Str("Line 9".into())),
-                    ("nextStop", omsi_sim::vehicle_api::ApiValue::Str("Depot".into())),
+                    (
+                        "route",
+                        omsi_sim::vehicle_api::ApiValue::Str("Line 9".into()),
+                    ),
+                    (
+                        "nextStop",
+                        omsi_sim::vehicle_api::ApiValue::Str("Depot".into()),
+                    ),
                 ]);
             }
         }
@@ -562,7 +732,7 @@ fn the_demo_redraws_from_the_latest_snapshot_every_second() {
 
 #[test]
 fn the_demo_shows_a_real_vehicle_snapshot() {
-    use omsi_sim::vehicle_api::{snapshot, Inputs};
+    use omsi_sim::vehicle_api::{Inputs, snapshot};
     let var = |n: &str| match n.to_ascii_lowercase().as_str() {
         "door_0" => Some(0.0),
         "door_1" => Some(1.0),
@@ -636,20 +806,36 @@ fn a_scenery_page_has_only_the_basic_api() {
         "<div id='a'></div><div id='b'></div>         <script>          document.getElementById('a').textContent = [typeof omsi.vehicle, typeof omsi.depot, typeof omsi.setRoute, typeof omsi.setNextStop].join(',');          omsi.update = function (d) {            document.getElementById('b').textContent = [typeof d.vehicle, typeof omsi.setVar, typeof omsi.trigger, typeof omsi.time, omsi.locale].join(',');          };         </script>",
         omsi_sim::htmltex::PageApi::Scenery,
     );
-    r.set_env(&omsi_sim::vehicle_api::environment(&omsi_sim::SimClock::default(), "de"));
+    r.set_env(&omsi_sim::vehicle_api::environment(
+        &omsi_sim::SimClock::default(),
+        "de",
+    ));
     r.set_vars(&[], &[]);
-    assert_eq!(r.text_of("a").as_deref(), Some("undefined,undefined,undefined,undefined"));
-    assert_eq!(r.text_of("b").as_deref(), Some("undefined,function,function,object,de"));
+    assert_eq!(
+        r.text_of("a").as_deref(),
+        Some("undefined,undefined,undefined,undefined")
+    );
+    assert_eq!(
+        r.text_of("b").as_deref(),
+        Some("undefined,function,function,object,de")
+    );
 }
 
 #[test]
 fn the_english_date_is_month_first() {
-    use omsi_sim::vehicle_api::{environment, ApiValue};
+    use omsi_sim::vehicle_api::{ApiValue, environment};
     let mut c = omsi_sim::SimClock::default();
     c.set_date(2026, 9, 30);
-    let ApiValue::Map(m) = environment(&c, "en") else { panic!() };
-    let ApiValue::Map(d) = &m.iter().find(|(k, _)| k == "date").unwrap().1 else { panic!() };
-    assert_eq!(d.iter().find(|(k, _)| k == "asString").unwrap().1, ApiValue::Str("09/30/2026".into()));
+    let ApiValue::Map(m) = environment(&c, "en") else {
+        panic!()
+    };
+    let ApiValue::Map(d) = &m.iter().find(|(k, _)| k == "date").unwrap().1 else {
+        panic!()
+    };
+    assert_eq!(
+        d.iter().find(|(k, _)| k == "asString").unwrap().1,
+        ApiValue::Str("09/30/2026".into())
+    );
 }
 
 #[test]
@@ -715,7 +901,12 @@ fn picture_page(name: &str, html: &str, w: u32, h: u32) -> EngineRenderer {
 
 #[test]
 fn img_is_drawn_at_its_own_size() {
-    let mut r = picture_page("own", "<body style='margin:0'><img src='red.bmp'></body>", 12, 12);
+    let mut r = picture_page(
+        "own",
+        "<body style='margin:0'><img src='red.bmp'></body>",
+        12,
+        12,
+    );
     let f = r.poll_frame().unwrap();
     assert_eq!(px(&f, 12, 0, 0), [255, 0, 0, 255]);
     assert_eq!(px(&f, 12, 3, 3), [255, 0, 0, 255]);
@@ -738,7 +929,8 @@ fn img_takes_css_and_attribute_sizes() {
 
 #[test]
 fn a_missing_picture_draws_nothing_and_does_not_stop_the_page() {
-    let html = "<body style='margin:0;background:#00ff00'><img src='nope.png'><div id=t>x</div></body>";
+    let html =
+        "<body style='margin:0;background:#00ff00'><img src='nope.png'><div id=t>x</div></body>";
     let mut r = picture_page("missing", html, 8, 8);
     let f = r.poll_frame().unwrap();
     assert_eq!(px(&f, 8, 7, 0), [0, 255, 0, 255]);
@@ -832,10 +1024,16 @@ fn pictures_are_resized_once_and_kept() {
 
 #[test]
 fn background_values_are_split_and_read() {
-    assert_eq!(split_top("url(a b.png) rgba(0, 0, 0, .5) center/cover"), vec!["url(a b.png)", "rgba(0, 0, 0, .5)", "center", "/", "cover"]);
+    assert_eq!(
+        split_top("url(a b.png) rgba(0, 0, 0, .5) center/cover"),
+        vec!["url(a b.png)", "rgba(0, 0, 0, .5)", "center", "/", "cover"]
+    );
     let (p, s, e) = find_url("#fff URL( 'img/a.png' ) no-repeat").unwrap();
     assert_eq!(p, "img/a.png");
-    assert_eq!(&"#fff URL( 'img/a.png' ) no-repeat"[s..e], "URL( 'img/a.png' )");
+    assert_eq!(
+        &"#fff URL( 'img/a.png' ) no-repeat"[s..e],
+        "URL( 'img/a.png' )"
+    );
     assert!(find_url("#fff").is_none());
 }
 
@@ -845,8 +1043,16 @@ fn linked_style_sheet_and_script_are_inlined_with_their_pictures() {
     std::fs::create_dir_all(dir.join("css")).unwrap();
     std::fs::create_dir_all(dir.join("img")).unwrap();
     std::fs::write(dir.join("img").join("red.bmp"), bmp(4, 4, [255, 0, 0])).unwrap();
-    std::fs::write(dir.join("css").join("s.css"), "#a{width:6px;height:6px;background:url(../img/red.bmp)}").unwrap();
-    std::fs::write(dir.join("index.html"), "<link rel='stylesheet' href='css/s.css'><body style='margin:0'><div id=a></div></body>").unwrap();
+    std::fs::write(
+        dir.join("css").join("s.css"),
+        "#a{width:6px;height:6px;background:url(../img/red.bmp)}",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("index.html"),
+        "<link rel='stylesheet' href='css/s.css'><body style='margin:0'><div id=a></div></body>",
+    )
+    .unwrap();
     let dirs = [dir.as_path()];
     let html = omsi_sim::htmltex::load_page(&dirs, "index.html");
     assert!(html.contains("url(css/../img/red.bmp)"));
@@ -869,11 +1075,25 @@ fn bench_htmlengine() {
 
     fn stats(mut v: Vec<Duration>) -> String {
         v.sort();
-        format!("median {:>9.3?}  min {:>9.3?}  p95 {:>9.3?}", v[v.len() / 2], v[0], v[v.len() * 95 / 100])
+        format!(
+            "median {:>9.3?}  min {:>9.3?}  p95 {:>9.3?}",
+            v[v.len() / 2],
+            v[0],
+            v[v.len() * 95 / 100]
+        )
     }
 
-    let page = std::env::var("HTMLBENCH_PAGE").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/examples/htmltexture/demo.html").to_string());
-    let runs: usize = std::env::var("HTMLBENCH_RUNS").ok().and_then(|v| v.parse().ok()).unwrap_or(200);
+    let page = std::env::var("HTMLBENCH_PAGE").unwrap_or_else(|_| {
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/examples/htmltexture/demo.html"
+        )
+        .to_string()
+    });
+    let runs: usize = std::env::var("HTMLBENCH_RUNS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(200);
     let html = std::fs::read_to_string(&page).unwrap();
     println!("page: {page} ({} bytes), {runs} runs", html.len());
 
@@ -887,9 +1107,28 @@ fn bench_htmlengine() {
         for _ in 0..10 {
             let _ = r.render();
         }
-        let render: Vec<_> = (0..runs).map(|_| { let t = Instant::now(); let _ = r.render(); t.elapsed() }).collect();
-        let frame: Vec<_> = (0..runs).map(|i| { let t = Instant::now(); r.set_vars(&[("engine_n".to_string(), i as f32)], &[]); let _ = r.poll_frame(); t.elapsed() }).collect();
-        let hit: Vec<_> = (0..runs).map(|_| { let t = Instant::now(); let _ = r.hit_node(100.0, 100.0); t.elapsed() }).collect();
+        let render: Vec<_> = (0..runs)
+            .map(|_| {
+                let t = Instant::now();
+                let _ = r.render();
+                t.elapsed()
+            })
+            .collect();
+        let frame: Vec<_> = (0..runs)
+            .map(|i| {
+                let t = Instant::now();
+                r.set_vars(&[("engine_n".to_string(), i as f32)], &[]);
+                let _ = r.poll_frame();
+                t.elapsed()
+            })
+            .collect();
+        let hit: Vec<_> = (0..runs)
+            .map(|_| {
+                let t = Instant::now();
+                let _ = r.hit_node(100.0, 100.0);
+                t.elapsed()
+            })
+            .collect();
         println!("--- {w}x{h}: parse + scripts {parse:?}, first render {cold:?}");
         println!("    render          {}", stats(render));
         println!("    update + frame  {}", stats(frame));
@@ -904,9 +1143,16 @@ fn hit_test_follows_layout_changes_and_idle_updates_draw_nothing() {
     assert_eq!(r.hit_node(5.0, 15.0), b);
     assert!(r.poll_frame().is_some());
     r.set_vars(&[("x".to_string(), 1.0)], &[]);
-    assert!(r.poll_frame().is_none(), "an update that changes nothing draws nothing");
+    assert!(
+        r.poll_frame().is_none(),
+        "an update that changes nothing draws nothing"
+    );
     r.js.run("grow()").unwrap();
-    assert_eq!(r.hit_node(5.0, 15.0), a, "the cached layout is dropped when the page changes");
+    assert_eq!(
+        r.hit_node(5.0, 15.0),
+        a,
+        "the cached layout is dropped when the page changes"
+    );
     assert!(r.poll_frame().is_some());
 }
 
@@ -923,7 +1169,10 @@ fn departures_are_asked_by_stop_and_handed_back() {
         ("destination".into(), ApiValue::Str("Hbf".into())),
         ("time".into(), ApiValue::Num(1000.0)),
     ]);
-    r.set_departures(&ApiValue::Map(vec![("central".into(), ApiValue::List(vec![entry]))]));
+    r.set_departures(&ApiValue::Map(vec![(
+        "central".into(),
+        ApiValue::List(vec![entry]),
+    )]));
     r.set_vars(&[], &[]);
     assert_eq!(r.text_of("o").as_deref(), Some("1:5|Hbf|1000"));
 }
@@ -934,7 +1183,9 @@ fn hangul_is_drawn_with_the_fallback_face() {
         return;
     }
     let ink = |text: &str| {
-        let html = format!("<body style='margin:0;background:#000;color:#fff;font-size:20px'>{text}</body>");
+        let html = format!(
+            "<body style='margin:0;background:#000;color:#fff;font-size:20px'>{text}</body>"
+        );
         let mut r = EngineRenderer::new(120, 30, &html);
         let f = r.poll_frame().unwrap();
         f.chunks(4).filter(|p| p[0] > 128).count()
@@ -950,7 +1201,12 @@ fn hangul_is_drawn_with_the_fallback_face() {
 fn install_decoder() {
     omsi_sim::image_decode::install(|path| {
         omsi_texture::decode_file(path)
-            .map(|i| omsi_sim::image_decode::DecodedImage { width: i.width, height: i.height, rgba: i.rgba, has_alpha: i.has_alpha })
+            .map(|i| omsi_sim::image_decode::DecodedImage {
+                width: i.width,
+                height: i.height,
+                rgba: i.rgba,
+                has_alpha: i.has_alpha,
+            })
             .map_err(|e| e.to_string())
     });
 }

@@ -34,7 +34,11 @@ pub(crate) fn withheld_of(fp: &str) -> Vec<Withheld> {
 }
 
 pub(crate) fn kept_fingerprints() -> Vec<String> {
-    buses().lock().as_ref().map(|v| v.manifests.iter().map(|m| m.0.clone()).collect()).unwrap_or_default()
+    buses()
+        .lock()
+        .as_ref()
+        .map(|v| v.manifests.iter().map(|m| m.0.clone()).collect())
+        .unwrap_or_default()
 }
 
 pub(in crate::mods) fn put(e: &Entry, data: &[u8]) -> Result<(), String> {
@@ -96,14 +100,18 @@ pub(crate) fn bus_file(fp: &str) -> Option<PathBuf> {
 /// own `.bus` - a player could otherwise make any bus they know undrawable for everybody.
 pub(super) fn held_key(e: &Entry) -> String {
     let name = e.path.rsplit('/').next().unwrap_or("");
-    let ext = name.rsplit_once('.').map(|(_, x)| x.to_ascii_lowercase()).unwrap_or_default();
+    let ext = name
+        .rsplit_once('.')
+        .map(|(_, x)| x.to_ascii_lowercase())
+        .unwrap_or_default();
     format!("{}.{ext}", e.sha256.to_ascii_lowercase())
 }
 
 /// How long putting a file together waits for room in the transfers' budget
 /// (`budget::transfers`); past it the file is left in its pieces and its last piece is asked
 /// for again (`missing_pieces`).
-pub(super) const FINISH_WAIT: std::time::Duration = std::time::Duration::from_secs(if cfg!(test) { 1 } else { 60 });
+pub(super) const FINISH_WAIT: std::time::Duration =
+    std::time::Duration::from_secs(if cfg!(test) { 1 } else { 60 });
 
 /// At most this many bytes of the files served last are kept unsealed (`served`).
 pub(super) const SERVED_BYTES: usize = 512 << 20;
@@ -138,10 +146,22 @@ impl Buses {
         std::fs::create_dir_all(&vdir).map_err(|e| format!("{}: {e}", vdir.display()))?;
         let mut found: Vec<(std::time::SystemTime, String, VehicleManifest)> = Vec::new();
         let (mut withheld, mut withheld_of) = (HashMap::new(), HashMap::new());
-        for e in std::fs::read_dir(&vdir).map_err(|e| e.to_string())?.flatten() {
+        for e in std::fs::read_dir(&vdir)
+            .map_err(|e| e.to_string())?
+            .flatten()
+        {
             let name = e.file_name().to_string_lossy().to_string();
-            let Some(fp) = name.strip_suffix(".json").filter(|f| omsi_net::is_fingerprint(f)) else { continue };
-            let Some(m) = std::fs::read(e.path()).ok().and_then(|b| serde_json::from_slice::<VehicleManifest>(&b).ok()).and_then(|m| m.validated().ok()) else {
+            let Some(fp) = name
+                .strip_suffix(".json")
+                .filter(|f| omsi_net::is_fingerprint(f))
+            else {
+                continue;
+            };
+            let Some(m) = std::fs::read(e.path())
+                .ok()
+                .and_then(|b| serde_json::from_slice::<VehicleManifest>(&b).ok())
+                .and_then(|m| m.validated().ok())
+            else {
                 log::warn!("vehicles: {name} is no valid list; left aside");
                 continue;
             };
@@ -151,9 +171,19 @@ impl Buses {
                 continue;
             }
             // (the files it was kept without are none of its files to have)
-            let held: Vec<Withheld> = std::fs::read(vdir.join(format!("{fp}.withheld.json"))).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
-            if let Some(lost) = m.entries.iter().find(|e| store.has(e).is_none() && !held.iter().any(|w| w.path == e.path)) {
-                log::warn!("vehicles: {name} lacks {} in the store; left aside", lost.path);
+            let held: Vec<Withheld> = std::fs::read(vdir.join(format!("{fp}.withheld.json")))
+                .ok()
+                .and_then(|b| serde_json::from_slice(&b).ok())
+                .unwrap_or_default();
+            if let Some(lost) = m
+                .entries
+                .iter()
+                .find(|e| store.has(e).is_none() && !held.iter().any(|w| w.path == e.path))
+            {
+                log::warn!(
+                    "vehicles: {name} lacks {} in the store; left aside",
+                    lost.path
+                );
                 continue;
             }
             if !held.is_empty() {
@@ -164,7 +194,10 @@ impl Buses {
                 }
                 withheld_of.insert(fp.to_string(), held);
             }
-            let t = e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+            let t = e
+                .metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::UNIX_EPOCH);
             found.push((t, fp.to_string(), m));
         }
         found.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
@@ -175,10 +208,20 @@ impl Buses {
             }
         }
         log::info!("vehicles: {} buses players sent are kept", found.len());
-        *self.lock() = Some(Vehicles { store, dir: vdir, manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(), sizes, mounted: HashSet::new(), withheld, withheld_of });
+        *self.lock() = Some(Vehicles {
+            store,
+            dir: vdir,
+            manifests: found.into_iter().map(|(_, fp, m)| (fp, m)).collect(),
+            sizes,
+            mounted: HashSet::new(),
+            withheld,
+            withheld_of,
+        });
         // (what nobody has used for longer than buses are kept goes at once)
         self.collect(0, IN_USE);
-        if let Some(v) = self.lock().as_ref() { write_cache_pins(v); }
+        if let Some(v) = self.lock().as_ref() {
+            write_cache_pins(v);
+        }
         Ok(())
     }
 
@@ -188,26 +231,45 @@ impl Buses {
 
     /// The manifest of the bus `fp`, if it is kept here.
     pub(super) fn manifest(&self, fp: &str) -> Option<VehicleManifest> {
-        self.lock().as_ref()?.manifests.iter().find(|(f, _)| f == fp).map(|(_, m)| m.clone())
+        self.lock()
+            .as_ref()?
+            .manifests
+            .iter()
+            .find(|(f, _)| f == fp)
+            .map(|(_, m)| m.clone())
     }
 
     /// Roughly the memory the list of the kept bus `fp` takes (`VehicleManifest::memory`),
     /// worked out without a copy of it.
     pub(super) fn list_memory(&self, fp: &str) -> Option<u64> {
-        self.lock().as_ref()?.manifests.iter().find(|(f, _)| f == fp).map(|(_, m)| m.memory())
+        self.lock()
+            .as_ref()?
+            .manifests
+            .iter()
+            .find(|(f, _)| f == fp)
+            .map(|(_, m)| m.memory())
     }
 
     /// Is the bus `fp` kept here?
     fn is_kept(&self, fp: &str) -> bool {
-        self.lock().as_ref().is_some_and(|v| v.manifests.iter().any(|(f, _)| f == fp))
+        self.lock()
+            .as_ref()
+            .is_some_and(|v| v.manifests.iter().any(|(f, _)| f == fp))
     }
 
     /// Which files of `m` are not kept here (their index in the list) - but for those refused
     /// for what they are (`withhold`): the bus is kept without them.
     pub(super) fn missing(&self, m: &VehicleManifest) -> Vec<usize> {
         let g = self.lock();
-        let Some(v) = g.as_ref() else { return (0..m.entries.len()).collect() };
-        m.entries.iter().enumerate().filter(|(_, e)| v.store.has(e).is_none() && !v.withheld.contains_key(&held_key(e))).map(|(k, _)| k).collect()
+        let Some(v) = g.as_ref() else {
+            return (0..m.entries.len()).collect();
+        };
+        m.entries
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| v.store.has(e).is_none() && !v.withheld.contains_key(&held_key(e)))
+            .map(|(k, _)| k)
+            .collect()
     }
 
     /// `e` was refused for what it is (`why`, `quarantine`): a bus is kept and drawn without
@@ -220,12 +282,17 @@ impl Buses {
 
     /// Was `e` refused for what it is (`withhold`)?
     pub(super) fn is_withheld(&self, e: &Entry) -> bool {
-        self.lock().as_ref().is_some_and(|v| v.withheld.contains_key(&held_key(e)))
+        self.lock()
+            .as_ref()
+            .is_some_and(|v| v.withheld.contains_key(&held_key(e)))
     }
 
     /// The files the kept bus `fp` is without (`withhold`).
     pub(super) fn withheld_of(&self, fp: &str) -> Vec<Withheld> {
-        self.lock().as_ref().and_then(|v| v.withheld_of.get(fp).cloned()).unwrap_or_default()
+        self.lock()
+            .as_ref()
+            .and_then(|v| v.withheld_of.get(fp).cloned())
+            .unwrap_or_default()
     }
 
     /// Keep a file (checked against `e` already) this game fetched or has itself.
@@ -239,7 +306,12 @@ impl Buses {
         self.put_making_room(e, data, SENT_MAKES_ROOM_OF)
     }
 
-    pub(super) fn put_making_room(&self, e: &Entry, data: &[u8], unused_for: std::time::Duration) -> Result<(), String> {
+    pub(super) fn put_making_room(
+        &self,
+        e: &Entry,
+        data: &[u8],
+        unused_for: std::time::Duration,
+    ) -> Result<(), String> {
         self.make_room(e.size, unused_for)?;
         // (sealed and written with the store let go, as a piece is: a file of a GB held the
         // store - and the host's frame asking which buses are in use, or mounting one - for
@@ -261,7 +333,13 @@ impl Buses {
             let v = g.as_ref()?;
             (v.store.clone(), *v.sizes.get(&sha)?)
         };
-        store.read(&Entry { path: String::new(), size, sha256: sha }).ok()
+        store
+            .read(&Entry {
+                path: String::new(),
+                size,
+                sha256: sha,
+            })
+            .ok()
     }
 
     /// The file with that SHA-256, if it is kept here - from the files served last when it is
@@ -298,12 +376,16 @@ impl Buses {
     /// The pieces of `e` not here (`pieces`): none when the file is kept whole.
     pub(super) fn missing_pieces(&self, e: &Entry) -> Vec<u64> {
         let g = self.lock();
-        let Some(v) = g.as_ref() else { return (0..pieces::count(e.size)).collect() };
+        let Some(v) = g.as_ref() else {
+            return (0..pieces::count(e.size)).collect();
+        };
         if v.store.has(e).is_some() || v.withheld.contains_key(&held_key(e)) {
             return Vec::new();
         }
         let count = pieces::count(e.size);
-        let missing: Vec<u64> = (0..count).filter(|i| !v.store.has_piece(&e.sha256, *i, pieces::span(e.size, *i).1)).collect();
+        let missing: Vec<u64> = (0..count)
+            .filter(|i| !v.store.has_piece(&e.sha256, *i, pieces::span(e.size, *i).1))
+            .collect();
         // (every piece here, the file never put together - no room for it in the budget then:
         // its last piece is asked for again, and the file is put together when it comes)
         if missing.is_empty() && count > 0 {
@@ -323,20 +405,32 @@ impl Buses {
         self.put_piece_making_room(e, i, data, SENT_MAKES_ROOM_OF)
     }
 
-    pub(super) fn put_piece_making_room(&self, e: &Entry, i: u64, data: &[u8], unused_for: std::time::Duration) -> Result<bool, String> {
+    pub(super) fn put_piece_making_room(
+        &self,
+        e: &Entry,
+        i: u64,
+        data: &[u8],
+        unused_for: std::time::Duration,
+    ) -> Result<bool, String> {
         if i >= pieces::count(e.size) || data.len() as u64 != pieces::span(e.size, i).1 {
             return Err(format!("{}: not a piece of it", e.path));
         }
         // (a piece takes room as a file does: pieces of files never finished filled the disk)
         self.make_room(data.len() as u64, unused_for)?;
         let store = self.lock().as_ref().ok_or("no store")?.store.clone();
-        store.put_piece(&e.sha256, i, data).map_err(|x| format!("{}: {x}", e.path))?;
+        store
+            .put_piece(&e.sha256, i, data)
+            .map_err(|x| format!("{}: {x}", e.path))?;
         self.finish(e, unused_for)
     }
 
     /// `e` put together from its pieces, if they are all here: checked (its SHA-256, no
     /// program, what it says it is), kept whole, its pieces gone. True when it is kept.
-    pub(super) fn finish(&self, e: &Entry, unused_for: std::time::Duration) -> Result<bool, String> {
+    pub(super) fn finish(
+        &self,
+        e: &Entry,
+        unused_for: std::time::Duration,
+    ) -> Result<bool, String> {
         let _one = self.finishing.lock().unwrap_or_else(|x| x.into_inner());
         let count = pieces::count(e.size);
         // (read with the store let go: a file of a GB held every other request up)
@@ -351,12 +445,17 @@ impl Buses {
             // (the whole file in memory while it is checked and kept: held against the
             // transfers' budget, as a file sent whole is; with no room before `FINISH_WAIT` the
             // pieces stay and the sender is told to come back)
-            let Some(held) = crate::mods::budget::transfers().hold_waiting(e.size, FINISH_WAIT) else {
+            let Some(held) = crate::mods::budget::transfers().hold_waiting(e.size, FINISH_WAIT)
+            else {
                 return Err(crate::mods::failure::says::BUSY.to_string());
             };
             let mut data = Vec::with_capacity(e.size as usize);
             for i in 0..count {
-                data.extend(store.piece(&e.sha256, i, pieces::span(e.size, i).1).map_err(|x| format!("{}: {x}", e.path))?);
+                data.extend(
+                    store
+                        .piece(&e.sha256, i, pieces::span(e.size, i).1)
+                        .map_err(|x| format!("{}: {x}", e.path))?,
+                );
             }
             (data, held)
         };
@@ -398,14 +497,27 @@ impl Buses {
         let mut held = Vec::new();
         for e in m.entries.iter().filter(|e| v.store.has(e).is_none()) {
             match v.withheld.get(&held_key(e)) {
-                Some(why) if identity::key(&e.path) != bus_key => held.push(Withheld { path: e.path.clone(), why: why.clone() }),
+                Some(why) if identity::key(&e.path) != bus_key => held.push(Withheld {
+                    path: e.path.clone(),
+                    why: why.clone(),
+                }),
                 _ => return Err(format!("{} has not come", e.path)),
             }
         }
         if !held.is_empty() {
             let file = v.dir.join(format!("{fp}.withheld.json"));
-            std::fs::write(&file, serde_json::to_vec(&held).unwrap_or_default()).map_err(|e| format!("{}: {e}", file.display()))?;
-            log::warn!("vehicles: {} is kept without {} of its files ({})", m.bus, held.len(), held.iter().take(4).map(|w| w.why.as_str()).collect::<Vec<_>>().join("; "));
+            std::fs::write(&file, serde_json::to_vec(&held).unwrap_or_default())
+                .map_err(|e| format!("{}: {e}", file.display()))?;
+            log::warn!(
+                "vehicles: {} is kept without {} of its files ({})",
+                m.bus,
+                held.len(),
+                held.iter()
+                    .take(4)
+                    .map(|w| w.why.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
             v.withheld_of.insert(fp.clone(), held);
         }
         // (what is served by its SHA-256 is known by the kept lists after a restart: a file
@@ -416,7 +528,9 @@ impl Buses {
         }
         let file = v.dir.join(format!("{fp}.json"));
         let tmp = file.with_extension("part");
-        std::fs::write(&tmp, serde_json::to_vec(&m).unwrap_or_default()).and_then(|_| std::fs::rename(&tmp, &file)).map_err(|e| format!("{}: {e}", file.display()))?;
+        std::fs::write(&tmp, serde_json::to_vec(&m).unwrap_or_default())
+            .and_then(|_| std::fs::rename(&tmp, &file))
+            .map_err(|e| format!("{}: {e}", file.display()))?;
         v.manifests.push((fp.clone(), m));
         write_cache_pins(v);
         drop(g);
@@ -453,19 +567,29 @@ impl Buses {
             let Some(left) = until.checked_duration_since(std::time::Instant::now()) else {
                 return false;
             };
-            seen = arrived.wait_timeout(seen, left.min(std::time::Duration::from_secs(1))).unwrap_or_else(|e| e.into_inner()).0;
+            seen = arrived
+                .wait_timeout(seen, left.min(std::time::Duration::from_secs(1)))
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
         }
     }
 
     /// A server's game, every second: the buses its players announce.
     pub(super) fn announce<'a>(&self, fps: impl Iterator<Item = &'a str>) {
-        *self.announced.lock().unwrap_or_else(|e| e.into_inner()) = Some(fps.map(str::to_string).collect());
+        *self.announced.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(fps.map(str::to_string).collect());
     }
 
     /// Is the bus `fp` on its way here: announced by a player of the session, or being sent
     /// (`lease`)? (Before any player was announced - no game of a session - every one is.)
     pub(super) fn on_its_way(&self, fp: &str) -> bool {
-        self.leased(fp) || self.announced.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_none_or(|a| a.contains(fp))
+        self.leased(fp)
+            || self
+                .announced
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+                .is_none_or(|a| a.contains(fp))
     }
 
     /// Where the bus `fp` can be read: its files under `lan-vehicles/<fp>`, mounted once.
@@ -500,7 +624,12 @@ impl Buses {
     pub(super) fn bus_file(&self, fp: &str) -> Option<PathBuf> {
         let m = self.manifest(fp)?;
         let at = self.mount(fp)?;
-        let rel = m.entries.iter().find(|e| identity::key(&e.path) == identity::key(&m.bus))?.path.clone();
+        let rel = m
+            .entries
+            .iter()
+            .find(|e| identity::key(&e.path) == identity::key(&m.bus))?
+            .path
+            .clone();
         Some(rel.split('/').fold(at, |p, c| p.join(c)))
     }
 }
@@ -512,14 +641,22 @@ pub(super) fn write_cache_pins(v: &Vehicles) {
     for (_, m) in &v.manifests {
         for e in &m.entries {
             if let Some(f) = v.store.has(e) {
-                if let Some(name) = f.blob.file_name() { pins.insert(name.to_string_lossy().into_owned()); }
+                if let Some(name) = f.blob.file_name() {
+                    pins.insert(name.to_string_lossy().into_owned());
+                }
             }
         }
     }
-    let text = pins.into_iter().map(|p| format!("{p}\n")).collect::<String>();
+    let text = pins
+        .into_iter()
+        .map(|p| format!("{p}\n"))
+        .collect::<String>();
     let file = v.dir.join("cache-pins");
     let tmp = v.dir.join("cache-pins.tmp");
-    if std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, &file)).is_err() {
+    if std::fs::write(&tmp, text)
+        .and_then(|_| std::fs::rename(&tmp, &file))
+        .is_err()
+    {
         // A stale index must not make a newly retained bus evictable.
         let _ = std::fs::remove_file(file);
     }

@@ -82,7 +82,11 @@ impl Parser {
                     let mut decls = Vec::new();
                     loop {
                         let name = self.ident()?;
-                        let init = if self.eat("=") { Some(self.assign()?) } else { None };
+                        let init = if self.eat("=") {
+                            Some(self.assign()?)
+                        } else {
+                            None
+                        };
                         decls.push((name, init));
                         if !self.eat(",") {
                             break;
@@ -121,16 +125,32 @@ impl Parser {
                 "for" => {
                     self.i += 1;
                     self.expect("(")?;
-                    let init = if self.eat(";") { None } else { Some(Box::new(self.stmt()?)) };
-                    let cond = if self.is_p(";") { None } else { Some(self.assign()?) };
+                    let init = if self.eat(";") {
+                        None
+                    } else {
+                        Some(Box::new(self.stmt()?))
+                    };
+                    let cond = if self.is_p(";") {
+                        None
+                    } else {
+                        Some(self.assign()?)
+                    };
                     self.expect(";")?;
-                    let upd = if self.is_p(")") { None } else { Some(self.assign()?) };
+                    let upd = if self.is_p(")") {
+                        None
+                    } else {
+                        Some(self.assign()?)
+                    };
                     self.expect(")")?;
                     return Ok(Stmt::For(init, cond, upd, Box::new(self.stmt()?)));
                 }
                 "return" => {
                     self.i += 1;
-                    let e = if self.is_p(";") || self.is_p("}") || *self.peek() == Tok::Eof { None } else { Some(self.assign()?) };
+                    let e = if self.is_p(";") || self.is_p("}") || *self.peek() == Tok::Eof {
+                        None
+                    } else {
+                        Some(self.assign()?)
+                    };
                     self.eat(";");
                     return Ok(Stmt::Return(e));
                 }
@@ -168,7 +188,9 @@ impl Parser {
 
     pub(crate) fn is_arrow(&self) -> bool {
         match self.t.get(self.i) {
-            Some(Tok::Id(n)) if !KEYWORDS.contains(&n.as_str()) => matches!(self.t.get(self.i + 1), Some(Tok::P(p)) if p == "=>"),
+            Some(Tok::Id(n)) if !KEYWORDS.contains(&n.as_str()) => {
+                matches!(self.t.get(self.i + 1), Some(Tok::P(p)) if p == "=>")
+            }
             Some(Tok::P(p)) if p == "(" => {
                 let mut depth = 0;
                 let mut j = self.i;
@@ -206,7 +228,11 @@ impl Parser {
             params.push(self.ident()?);
         }
         self.expect("=>")?;
-        let body = if self.is_p("{") { self.block()? } else { vec![Stmt::Return(Some(self.assign()?))] };
+        let body = if self.is_p("{") {
+            self.block()?
+        } else {
+            vec![Stmt::Return(Some(self.assign()?))]
+        };
         Ok(Expr::Func(Arc::new(FuncDef { params, body })))
     }
 
@@ -287,7 +313,11 @@ impl Parser {
             if !matches!(target, Expr::Ident(_) | Expr::Member(..)) {
                 return Err("invalid increment target".into());
             }
-            return Ok(Expr::Assign(op.into(), Box::new(target), Box::new(Expr::Num(1.0))));
+            return Ok(Expr::Assign(
+                op.into(),
+                Box::new(target),
+                Box::new(Expr::Num(1.0)),
+            ));
         }
         if self.is_id("typeof") {
             self.i += 1;

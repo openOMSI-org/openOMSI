@@ -87,14 +87,26 @@ pub struct LookLimits {
 fn lamps_on(ty: &VehicleType, var: impl Fn(&str) -> Option<f32>, out: &mut Vec<bool>) -> Span {
     let start = out.len() as u32;
     for il in &ty.model.interior_lights {
-        out.push(il.variable.trim().parse::<f32>().ok().or_else(|| var(&il.variable)).unwrap_or(0.0) >= 0.5);
+        out.push(
+            il.variable
+                .trim()
+                .parse::<f32>()
+                .ok()
+                .or_else(|| var(&il.variable))
+                .unwrap_or(0.0)
+                >= 0.5,
+        );
     }
-    Span { start, len: out.len() as u32 - start }
+    Span {
+        start,
+        len: out.len() as u32 - start,
+    }
 }
 
 /// The meshes of `ty` drawn as bellows (`[smoothskin]` with geometry).
 fn skin_meshes(ty: &VehicleType) -> impl Iterator<Item = usize> + '_ {
-    (0..ty.meshes.len()).filter(|&i| !ty.meshes[i].skin.is_empty() && !ty.meshes[i].data.positions.is_empty())
+    (0..ty.meshes.len())
+        .filter(|&i| !ty.meshes[i].skin.is_empty() && !ty.meshes[i].data.positions.is_empty())
 }
 
 impl FrameSnapshot {
@@ -105,7 +117,11 @@ impl FrameSnapshot {
 
     /// Whether each interior lamp of part `part` (0: the body) of `looks` is on.
     pub fn lamps(&self, looks: &CarLooks, part: usize) -> &[bool] {
-        looks.lamps.get(part).map(|s| &self.lamps[s.range()]).unwrap_or(&[])
+        looks
+            .lamps
+            .get(part)
+            .map(|s| &self.lamps[s.range()])
+            .unwrap_or(&[])
     }
 
     /// The looks of `car`, when it is in view.
@@ -118,7 +134,12 @@ impl crate::ai_traffic::TrafficSim {
     /// The looks of every car in view into `out` (whose cars, taken by `snapshot_into`, are
     /// these cars in this order), doing the simulation's side of drawing them as the view
     /// sync did it: their pages and text textures run, the uploads taken.
-    pub fn snapshot_looks(&mut self, out: &mut FrameSnapshot, tracker: &mut LookTracker, limits: &LookLimits) {
+    pub fn snapshot_looks(
+        &mut self,
+        out: &mut FrameSnapshot,
+        tracker: &mut LookTracker,
+        limits: &LookLimits,
+    ) {
         out.looks.clear();
         out.vars.clear();
         out.lamps.clear();
@@ -149,7 +170,13 @@ impl crate::ai_traffic::TrafficSim {
             for i in v.update_text_textures() {
                 let tt = &mut v.text_textures[i];
                 if let Some(img) = tt.pending.take() {
-                    text_uploads.push((0, i, tt.def.width.max(1) as u32, tt.def.height.max(1) as u32, img));
+                    text_uploads.push((
+                        0,
+                        i,
+                        tt.def.width.max(1) as u32,
+                        tt.def.height.max(1) as u32,
+                        img,
+                    ));
                 }
             }
             let mut script_uploads = Vec::new();
@@ -161,9 +188,17 @@ impl crate::ai_traffic::TrafficSim {
                 if budget == 0 {
                     continue;
                 }
-                let Some(rgba) = st.take_upload() else { continue };
+                let Some(rgba) = st.take_upload() else {
+                    continue;
+                };
                 budget = budget.saturating_sub(rgba.len());
-                script_uploads.push(ScriptUpload { index: i, width: st.width, height: st.height, mipmaps: st.mipmaps, rgba });
+                script_uploads.push(ScriptUpload {
+                    index: i,
+                    width: st.width,
+                    height: st.height,
+                    mipmaps: st.mipmaps,
+                    rgba,
+                });
             }
             // the glass it cracked and the dents it took
             let cracks = v
@@ -171,7 +206,12 @@ impl crate::ai_traffic::TrafficSim {
                 .into_iter()
                 .filter_map(|g| {
                     let transform = v.mesh_transforms.get(g.mesh)?;
-                    Some((g.mesh, transform.inverse().transform_point3(g.point), g.energy, v.mesh_local_transform(g.mesh)))
+                    Some((
+                        g.mesh,
+                        transform.inverse().transform_point3(g.point),
+                        g.energy,
+                        v.mesh_local_transform(g.mesh),
+                    ))
                 })
                 .collect();
             let dents = v.take_damage_dents();
@@ -182,15 +222,26 @@ impl crate::ai_traffic::TrafficSim {
                 for i in part.update_text_textures(v) {
                     let tt = &mut part.text_textures[i];
                     if let Some(img) = tt.pending.take() {
-                        text_uploads.push((k as u32 + 1, i, tt.def.width.max(1) as u32, tt.def.height.max(1) as u32, img));
+                        text_uploads.push((
+                            k as u32 + 1,
+                            i,
+                            tt.def.width.max(1) as u32,
+                            tt.def.height.max(1) as u32,
+                            img,
+                        ));
                     }
                 }
             }
             v.trailers = trailers;
             // the bellows, near enough for their fold to show, whose bones moved
             let mut skins = Vec::new();
-            let has_skin = skin_meshes(&v.ty).next().is_some() || v.trailers.iter().any(|p| skin_meshes(&p.ty).next().is_some());
-            if has_skin && camera.is_none_or(|cam| (v.position - cam).length() < limits.skin_distance) {
+            let has_skin = skin_meshes(&v.ty).next().is_some()
+                || v.trailers
+                    .iter()
+                    .any(|p| skin_meshes(&p.ty).next().is_some());
+            if has_skin
+                && camera.is_none_or(|cam| (v.position - cam).length() < limits.skin_distance)
+            {
                 let mut keys = std::mem::take(&mut t.skin_keys);
                 let mut reshape = |part: u32, i: usize, key: Vec<Mat4>, skinned: &mut dyn FnMut() -> Option<(Vec<Vec3>, Vec<Vec3>)>| {
                     match keys.iter_mut().find(|(p, m, _)| *p == part && *m == i) {
@@ -222,7 +273,12 @@ impl crate::ai_traffic::TrafficSim {
             let mut str_changes = Vec::new();
             if t.strs.len() != v.state.str_vars.len() {
                 t.strs = v.state.str_vars.clone();
-                str_changes.extend(t.strs.iter().enumerate().map(|(i, s)| (i as u32, s.clone())));
+                str_changes.extend(
+                    t.strs
+                        .iter()
+                        .enumerate()
+                        .map(|(i, s)| (i as u32, s.clone())),
+                );
             } else {
                 for (i, (sent, now)) in t.strs.iter_mut().zip(&v.state.str_vars).enumerate() {
                     if sent != now {

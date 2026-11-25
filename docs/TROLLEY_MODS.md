@@ -1,152 +1,188 @@
-# Real OMSI 2 trolleybus content: how it is made, and how openOMSI runs it
+# OMSI 2 trolleybus add-ons
 
-What this records was read off three real add-ons, with their files only read, never run:
+How openOMSI runs trolleybus add-ons made for OMSI 2, which carry no wire logic of their own.
+This page is for modders who want to know what the game reads from such content, and how to make
+an existing trolleybus or map work well. The native formats are in
+[Trolleybuses](TROLLEYBUS.md).
+
+## What OMSI 2 trolleybus content contains
+
+These findings come from reading three real add-ons:
 
 | Add-on | What it is | Control |
-|---|---|---|
-| ЗиУ-682Г 016.02 (Trolza), remake by Wlad209, 136 MB | The old Russian trolleybus | rheostat-contactor ("реостатно-контакторная") |
-| Trolza-5275.03 / .05 "Optima", 96 MB | The new low-floor trolleybus | thyristor-pulse ("тиристорно-импульсная"), the IGBT kind |
-| Bronitsyn ("БРОНИЦЫН"), by liaz677, 305 MB | A fictional trolleybus town, route 1 | - |
+| --- | --- | --- |
+| ZiU-682G 016.02 (Trolza), remake by Wlad209 | The classic Russian trolleybus | Rheostat-contactor |
+| Trolza-5275.03 / .05 "Optima" | A low-floor trolleybus | Thyristor-pulse (IGBT kind) |
+| Bronitsyn, by liaz677 | A fictional trolleybus town, route 1 | - |
 
-None of them carries a plugin, a DLL or a script that touches the overhead wire. (There is no
-`.dll` in any of the three archives.) That is the central finding: **in these add-ons the
-trolleybus is a bus with a decoration**, and everything that makes it electric in openOMSI
-has to come from the host, read off what the files do say.
+None of them has a plugin, a DLL or a script that touches the overhead wire. In these add-ons
+**the trolleybus is a bus with decoration**. Everything that makes it electric in openOMSI comes
+from the game, worked out from what the files do say.
 
-## The buses
+### The buses
 
-**Poles.** Each pole is two meshes in the model.cfg (the Russian names say "folded" and
-"raised": `Штанга левая слож.o3d`, `Штанга левая подн.o3d`, and the same for the right), each with a
-`[visible]` on a cockpit variable and a `[mouseevent]` on the same name:
+**Poles.** Each pole is two meshes in `model.cfg`, a folded one and a raised one (for example
+`Штанга левая слож.o3d` and `Штанга левая подн.o3d`, the same for the right). Each has a
+`[visible]` on a cockpit variable and a `[mouseevent]` with the same name:
 
-```
+```text
 [mesh]  ...Штанга левая слож.o3d     [mouseevent] cp_SHTANGALEV   [visible] cp_SHTANGALEV 0
 [mesh]  ...Штанга левая подн.o3d     [mouseevent] cp_SHTANGALEV   [visible] cp_SHTANGALEV 1
 (and cp_SHTANGAPRAV for the right pole)
 ```
 
-`cockpit.osc` has `{trigger:cp_SHTANGALEV}` / `{trigger:cp_SHTANGAPRAV}` toggling the variable
-(`(L.L.cp_SHTANGALEV) ! (S.L.cp_SHTANGALEV)`), and **nothing reads it**: not the drive, not the
-electrics (`elec_busbar_main` comes from the battery switch alone). The raised mesh stands at a
-fixed pose (about 19 degrees: hinge on the roof 0.26 m behind the middle, 3.3 m up, the shoe
-6.9 m back and 5.5 m up, 0.2 to 0.3 m either side of the centre line). The Optima does the same,
-only with the meshes in `Kuzov/` and the hinge a little further out. There are no pole angles
-as variables, no contact variable, no voltage.
+* `cockpit.osc` toggles the variable in `{trigger:cp_SHTANGALEV}` / `{trigger:cp_SHTANGAPRAV}`:
+  `(L.L.cp_SHTANGALEV) ! (S.L.cp_SHTANGALEV)`.
+* Nothing reads the variable: not the drive, not the electrics. The main busbar
+  (`elec_busbar_main`) comes from the battery switch alone.
+* The raised mesh stands at a fixed pose, about 19°. On the ZiU the hinge is on the roof 0.26 m
+  behind the middle, 3.3 m up; the shoe is 6.9 m back and 5.5 m up, 0.2 to 0.3 m either side of
+  the centre line. The Optima is the same, with the meshes in `Kuzov/` and the hinges a little
+  further out.
+* There are no pole angle variables, no contact variable and no voltage.
 
-**Drive.** Both are ordinary bus scripts: the ZiU runs `Praga_2m70.osc` and a diesel engine
-script (an engine file for a Raba diesel), the Optima `antrieb.osc` (ZF automatic gearbox,
-retarder) with a 100+ kW diesel curve. "Controller", "contactors" and "thyristors" are
-meshes, textures and sounds (`Дугогасящие контакторов`, `Индикатор сети`, the thyristor sound
-that a key adds - see the readme of the Optima), driven by script variables of the bus,
-not by electrics. The mesh `Индикатор сети` (the mains lamp) is lit by `elec_busbar_main`.
+**Drive.** Both buses use ordinary bus scripts. The ZiU runs `Praga_2m70.osc` with a diesel
+engine script. The Optima runs `antrieb.osc` (ZF automatic gearbox, retarder) with a diesel curve
+over 100 kW. The "controller", "contactors" and "thyristors" are meshes, textures and sounds
+driven by bus script variables. The mains lamp mesh (`Индикатор сети`) is lit by
+`elec_busbar_main`.
 
-**What differs between the two drive types, as the files have it.**
-The *only* machine-readable difference is the description in the `.bus` (and the textures and
-sounds): "реостатно-контакторная" against "тиристорно-импульсная". The poles, their
-variables, the scripts' structure, the cockpit triggers are the same. A host that wants to
-treat them differently must read the description (we do: see below) or take the
-`[trolley_rheostat]` / `[trolley_async]` blocks of this host's own format. A pulse-controlled
-bus draws no starting current beyond what its power asks and does not click; a rheostat bus
-draws a starting current while its controller holds the motors back and clicks its contactors.
+**Rheostat or chopper.** The only machine-readable difference between the two control types is
+the description in the `.bus`: "реостатно-контакторная" against "тиристорно-импульсная". Poles,
+variables, script structure and cockpit triggers are the same. A chopper bus draws no starting
+current beyond what its power asks and does not click. A rheostat bus draws a starting current
+while its controller holds the motors back, and clicks its contactors.
 
-## The map
+### The map
 
 Bronitsyn draws its wire with **splines**, not with an object per span:
 
-* `Splines/Jonpol/troll_ks.sli` ("ks" - контактная сеть, the contact network): two profiles, each
-  a thin strip (2 cm wide, 2 cm high) at height 5.04 to 5.06 m over the spline, at lateral
-  positions -0.26 and +0.26. The strips are the two wires; the spline's centre line is where
-  the pair runs. `tram_ks.sli` is the same with one strip (a tram's one wire). 262
-  `[spline]` records in the map's 23 tiles use `troll_ks.sli`.
-* The hangers and bends are plain scenery objects (`Sceneryobjects/ks/podves*.sco`,
-  `kriva*.sco`: mesh and `[nocollision]`, group "Контактная сеть троллейбуса"), 98 of them
-  placed singly. Poles of the street lamps double as masts.
-* A **frog** is three of these splines meeting end to end (one toe, a straight and a branch); the
-  map has one (at 1252, 1287, a junction by a playground). Nothing operates it: the map has no
-  switch object, no script and no variable for it.
-* There are **no dead sections**, insulators or substations: the wire is a picture.
-* The map ships a `Vehicles/Ziu` folder with two `.bus` files that borrow the models of the
-  ZiU add-on (they name `model\model_682b.cfg`, which is not in the map), and the map's
-  `.hof` files.
+* `Splines/Jonpol/troll_ks.sli` ("ks" stands for contact network) has two profiles. Each is a thin
+  strip, 2 cm wide and 2 cm high, 5.04 to 5.06 m above the spline, at -0.26 m and +0.26 m to the
+  side. The strips are the two wires; the spline's centre line is where the pair runs.
+  `tram_ks.sli` is the same with one strip. 262 splines in the map's 23 tiles use `troll_ks.sli`.
+* Hangers and bends are plain scenery objects (`Sceneryobjects/ks/podves*.sco`, `kriva*.sco`),
+  98 of them placed one by one. Street lamp poles double as masts.
+* A **frog** is three such splines meeting end to end. The map has one, and nothing operates it:
+  no switch object, script or variable.
+* There are **no dead sections**, insulators or substations. The wire is a picture.
+* The map ships a `Vehicles/Ziu` folder with two `.bus` files that borrow the ZiU add-on's models,
+  and the map's `.hof` files.
 
-## What a host must provide to make this content work
+## What openOMSI does with it
 
-This is the interface the real content leaves to its host (openOMSI provides all of it):
+### The wire from the map's splines
 
-1. **Read the wire off the map**: any spline whose profile is two thin, high strips is a pair
-   of wires (centre = the middle of the strips, spacing = their distance, height = their height);
-   three of them ending at one point are a frog.
-2. **Make the poles from the model**: a bus that has no `[trolley_pole]` or `[trolley_none]` blocks but two
-   meshes visible on a variable called `*SHTANG*` / `*pole*` with value 1 has two poles, whose
-   hinges and lengths are those meshes' (hinge: the low end of the box furthest forward; shoe:
-   the high end furthest back). The variable is the cab's switch.
-   A bus whose poles are two plain meshes always shown, raised (the ZiU-682B that ships with
-   Bronitsyn: `animation\palkalev.o3d` / `palkaprav.o3d`, no `[visible]`, no animation), has two
-   poles too, told by the meshes' shape: under 0.6 m wide, on the roof (2 m up or more), at
-   least 3 m long and rising 1 m or more towards the back. It has no cab switch.
-   The same shape test takes a pole mesh that its model animates or shows on another variable
-   when its file is named like a pole (`shtang`, `stange`, `palk`, `pole`...): the Ikarus 280T
-   (GVM) has `GVM\Shtanga_podn_L/R.o3d` on its rear section, shown by the battery switch
-   `knopka_massa` and turned by `articulation_0_alpha/beta` to look as if they followed a wire.
-   Those conditions and animations are dropped, and the rope meshes beside them (`Verevka_*`)
-   are hidden (the game draws the ropes).
-3. **Make the electrics from the poles**: the bus's own script keeps driving it (that is the only
-   drive it has); the host takes its driving torque away when the poles do not bring current,
-   and says how much current it draws from what the script asks.
-4. Everything else a real trolleybus does - the pole's spring, its coming off, arcs, dead
-   sections, switches by current or indicator - is the host's own, layered over this.
+When the player drives a trolleybus on a map without `trolley.txt`, the game reads the wire from
+the map's splines:
 
-## What openOMSI does
+* A spline whose profile is two thin, high strips is a pair of wires. The centre is the middle of
+  the strips, the spacing their distance, the height their height.
+* Three of them ending at one point are a frog. It works in `power` mode: power on at the plate
+  before the frog takes the branch, coasting goes straight.
+* The whole map is one live section.
+* The game draws no wire of its own over the map's. Switches get a generated body, tongue and
+  lamp.
 
-* `omsi_scene::trolley_derive` reads a map's wire splines as above (for any map, only when a
-  trolleybus is the player's vehicle; `trolley.txt` beside the map, in an overlay root or named
-  by `OMSI_TROLLEY_FILE` overrides it). Frogs are found where three ends meet, in `power` mode
-  (power on at the plate before the frog takes the branch, coasting goes straight; `trolley.txt`
-  can say `indicator` or `fixed`). The game draws no wire of its own over the map's (`drawn_by_map`).
-  The whole map is one live section; `OMSI_TROLLEY_DEAD_AT=x,y,r;...` makes a dead stretch (with an
-  insulator at each end) for a test, and a `trolley.txt` can have the real ones.
-* `omsi_sim::vehicle::types::legacy_trolley` makes the poles of a plain bus (see 2 above) and
-  reads rheostat or chopper off its description (`реостат`, `тиристор`, `IGBT`, `импульс`,
-  `асинхрон`, `инвертор`...). The cab's switches `cp_SHTANGALEV`/`PRAV` stay the way the player
-  asks for the poles: a click or the key (1) raises ours (the motor does it, finding the wire),
-  and while ours are up the variable reads 2, which hides both of the model's meshes (ours are drawn
-  instead); the key (the script turns the 2 into a 0) pulls them down; down, the variable is 0 and
-  the model's folded poles show.
-* A bus with always-shown pole meshes (no switch) gets its poles from those meshes, for the
-  player's bus only (an AI copy keeps them as they are drawn). The model's own meshes are turned
-  about their hinges by the pole angles, so they fold on the roof when down and follow the wire
-  when up. They are raised with R in the cab (the motor finds the wire), or by hand from outside.
-  Poles on the rear section of an articulated bus belong to the front part's gear (its script,
-  its traction), and stand on the rear section: the hinge, the hands and the drawing follow it.
-* Everything of the first version stays: the poles' mechanics and dewiring, current needed to
-  move, arcs, the hands (R/T from outside, the same keys; scripted by `OMSI_TROLLEY_HANDS`),
-  sound. With the script's own drive the line current is estimated from the force and speed
-  the script asks for, plus the starting current of a rheostat bus.
+A `trolley.txt` next to the map, or in a mod's content root, replaces this. It can set frogs to
+`indicator` or `fixed` and add real sections and insulators (see
+[The wire: trolley.txt](TROLLEYBUS.md#the-wire-trolleytxt)).
 
-## Walk-through (offscreen, dev build, `OMSI_SEED=1`)
+### Poles from the model
+
+A bus without `[trolley_pole]` or `[trolley_none]` blocks gets poles from its model in three
+cases.
+
+**1. Poles shown by a cab switch.** Two meshes visible on a variable whose name contains `SHTANG`
+(or `штанг`, `pole`) with value 1 are two poles. Each hinge and length comes from its mesh: the
+hinge is the low end of the box furthest forward, the shoe the high end furthest back. The
+variable is the cab's switch.
+
+**2. Poles always shown.** Two plain meshes always shown, raised (the ZiU-682B that ships with
+Bronitsyn: `animation\palkalev.o3d` / `palkaprav.o3d`, no `[visible]`, no animation) are two
+poles too. They are recognised by shape:
+
+* under 0.6 m wide;
+* on the roof, 2 m up or more;
+* at least 3 m long;
+* rising 1 m or more towards the back.
+
+Such a bus has no cab switch.
+
+**3. Poles named like poles.** The same shape test takes a pole mesh that the model animates or
+shows on another variable, when its file name says pole: `shtang`, `штанг`, `stange`, `palk`,
+`палк`, `pole`, `boom`, `szedo`, `szedő`. The Ikarus 280T (GVM) has `GVM\Shtanga_podn_L/R.o3d`
+on its rear section, shown by the battery switch `knopka_massa` and turned by
+`articulation_0_alpha/beta`. Those conditions and animations are dropped. Rope meshes beside them
+(`verevk`, `веревк`, `канат`, `seil` in the name) are hidden, because the game draws the ropes.
+
+### Rheostat or chopper
+
+The game reads the `.bus` text. A bus whose file mentions `тиристор`, `IGBT`, `импульс`,
+`асинхрон`, `инвертор`, `транзистор`, `thyristor`, `chopper` or `inverter` is a chopper bus.
+Anything else is a rheostat bus. A plain trolleybus takes 3 kW of auxiliary load from the line
+(4 kW for a chopper bus).
+
+### The electrics
+
+* The bus's own script keeps driving it. That is the only drive it has.
+* The game takes the driving torque away when the poles bring no current.
+* It estimates the line current from the force and speed the script asks for, plus the starting
+  current of a rheostat bus.
+
+### The cab switches
+
+The cab's switches (`cp_SHTANGALEV` / `cp_SHTANGAPRAV`) still do what the player expects:
+
+* A click, or the key, raises the game's pole: the motor does it and finds the wire.
+* While the game's poles are up the variable reads 2. That hides both of the model's meshes, and
+  the game's poles are drawn instead.
+* The key pulls them down (the script turns the 2 into a 0). Down, the variable is 0 and the
+  model's folded poles show.
+
+### Always-shown poles
+
+For a bus whose pole meshes are always shown (no switch):
+
+* The poles are taken from those meshes for the player's bus only. An AI copy keeps them as
+  drawn.
+* The model's own meshes are turned about their hinges by the pole angles. They fold onto the
+  roof when down and follow the wire when up.
+* They are raised with **R** in the cab (the motor finds the wire), or by hand from outside.
+* Poles on the rear section of an articulated bus belong to the front part's gear (its script,
+  its traction) but stand on the rear section. The hinge, the hands and the drawing follow it.
+
+Everything else is the game's own, as for native gear: the poles' mechanics and dewiring, current
+needed to move, arcs, the hands, and the sounds (see [Trolleybuses](TROLLEYBUS.md)).
+
+### Keep the game out
+
+A bus whose own script or plugin moves its poles should say `[trolley_none]` in its `.bus`. The
+game then reads no poles from its model.
+
+## Tested behaviour
+
+Walk-through on a development build, offscreen, with a fixed seed:
 
 | Check | Result |
-|---|---|
-| ZiU on Bronitsyn, `cp_SHTANGALEV`/`PRAV` clicked at 0.5 s | both poles rise, on the wire 2.2 s later, 600 V, circuit true |
-| The same, driving north along the wire from (181, 110) | 55 km/h after 36 s; 130 to 260 A (start current high, falling with speed) |
-| Dead stretch (181, 330, r 25) | bus loses current at the insulator (y 304), 0 V 0 A across, rolls on at about 49 km/h, power again at y 355 |
-| Hand re-wiring (pole 1 pulled, circuit dead, raised again) | works on the real wire, see below |
-| Frog at (1252, 1287), coasting | straight: no event, poles stay on |
-| Frog, power on | plate at y 1278, shoes take the branch, the bus goes straight on, both poles come off 1.2 s later (out of reach) with arcs |
-| Optima (chopper) on the same wire | poles up and on the wire, 7 A (the aux load only) |
+| --- | --- |
+| ZiU on Bronitsyn, `cp_SHTANGALEV` / `PRAV` clicked at 0.5 s | Both poles rise and are on the wire 2.2 s later. 600 V, circuit closed |
+| The same, driving north along the wire | 55 km/h after 36 s. 130 to 260 A: high at the start, falling with speed |
+| Dead stretch (test variable) | The bus loses current at the insulator, rolls on at about 49 km/h with 0 V and 0 A, and has power again after it |
+| Re-wiring by hand (one pole pulled, raised again) | Works on the map's wire |
+| Frog, coasting | Straight on: no event, the poles stay on |
+| Frog, power on | The shoes take the branch while the bus goes straight. Both poles come off 1.2 s later, with arcs |
+| Optima (chopper) on the same wire | Poles up and on the wire, 7 A (auxiliary load only) |
 
-Images read: `real/evidence/ev_13.5.png` (ZiU, poles on the map's wire), `h_13.0.png` (re-raising by hand),
-`fr_7.6.png` (the dewiring flash at the frog).
+## Known gaps
 
-## What does not work, and why
-
-* The Optima's own gearbox script did not go into D with the triggers I could fire offscreen
-  (`automatic_N/D` need a state of its own scripts), so it was not driven under power: its poles,
-  circuit and current were checked standing. This is a test-recipe gap, not a trolley one.
-* With an explicit `trolley.txt`, the game leaves the map's switch models alone; only
-  `OMSI_DEBUG_TROLLEY` adds a marker, tongue and lamp. Spline-derived networks retain those
-  generated switch visuals without the debug flag.
-* No add-on here has real sections or insulators; they are tested with `OMSI_TROLLEY_DEAD_AT`.
-* AI trolleybuses (the map's route 1 is run by AI vehicles) are not powered by the wire.
-* The engine of these plain buses keeps running with the poles down (their scripts are diesel
-  scripts): the bus stops moving, the engine sound goes on.
+* The Optima's own gearbox script did not go into D with the triggers that could be fired
+  offscreen, so it was checked standing. This is a gap in the test, not in the trolley code.
+* With a `trolley.txt`, the game leaves the map's switch models alone. Only
+  `OMSI_DEBUG_TROLLEY` adds a marker, tongue and lamp. Spline-derived wires keep their generated
+  switch visuals without it.
+* None of these add-ons has real sections or insulators. They were tested with the
+  `OMSI_TROLLEY_DEAD_AT` test variable.
+* AI trolleybuses (Bronitsyn's route 1 is run by AI) are not powered by the wire.
+* The engine of these buses keeps running with the poles down, because their scripts are diesel
+  scripts. The bus stops moving, but the engine sound goes on.

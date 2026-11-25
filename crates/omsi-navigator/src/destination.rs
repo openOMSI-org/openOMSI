@@ -4,8 +4,8 @@ use super::*;
 mod draw;
 mod route;
 mod waypoints;
-pub(super) use route::route_to_destination;
 use route::DestinationPath;
+pub(super) use route::route_to_destination;
 
 pub(super) struct EntryMarker {
     pub at: DVec2,

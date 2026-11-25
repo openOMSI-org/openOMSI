@@ -5,8 +5,8 @@
 //! This module says which entries of a depot file's `[infosystem_busstop_list]` are one
 //! stop's two recordings, and where its first "next stop is …" one stands.
 
-use omsi_vehicle::hof::{ident_names, stop_words};
 use omsi_vehicle::Hof;
+use omsi_vehicle::hof::{ident_names, stop_words};
 
 /// A depot file that keeps two recordings per stop: where the list's first "next stop is …"
 /// entry stands, and how many of the list's entries are pairs at all.
@@ -27,7 +27,8 @@ fn stem(ident: &str) -> String {
         Some((line, rest)) if !line.is_empty() && line.bytes().all(|b| b.is_ascii_digit()) => rest,
         _ => lower.as_str(),
     };
-    body.trim_end_matches(|c: char| c.is_ascii_digit()).to_string()
+    body.trim_end_matches(|c: char| c.is_ascii_digit())
+        .to_string()
 }
 
 /// Whether `b` is the second recording of the stop whose "next stop is …" recording is `a`.
@@ -46,7 +47,8 @@ pub fn is_pair(a: &str, b: &str) -> bool {
 /// recording, the line's start recording (`welcome…`, `1041`) or a placeholder a map author
 /// left, and one or two entries before the first pair.
 pub fn first_preview(list: &[String]) -> Option<usize> {
-    (1..list.len().saturating_sub(1)).find(|&j| is_pair(&list[j], &list[j + 1]) && !is_pair(&list[j - 1], &list[j]))
+    (1..list.len().saturating_sub(1))
+        .find(|&j| is_pair(&list[j], &list[j + 1]) && !is_pair(&list[j - 1], &list[j]))
 }
 
 /// The two-recordings layout of `route`, when it has one: at least three pairs, and its first
@@ -146,7 +148,10 @@ fn name_score(raw: &str, words: &[String], flat_name: &str, words_name: &[String
 /// A name as its letters only, lowercased: `Shuixiulu Zhong.` is `shuixiuluzhong`, which is
 /// how the depot files spell it.
 fn flat(name: &str) -> String {
-    name.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
 }
 
 /// Whether two names of the same length, or one letter apart, differ by one letter at most -
@@ -201,21 +206,44 @@ mod tests {
     #[test]
     fn the_first_next_stop_follows_the_start_recording() {
         // (the terminus' own recording, then the line's start recording, then the pairs)
-        let beijing = list(&["Wuluju", "1041", "Anzhenli1", "Anzhenli2", "Anwai1", "Anwai2"]);
+        let beijing = list(&[
+            "Wuluju",
+            "1041",
+            "Anzhenli1",
+            "Anzhenli2",
+            "Anwai1",
+            "Anwai2",
+        ]);
         assert_eq!(first_preview(&beijing), Some(2));
         // (a map that also repeats the terminus' arrival before the first pair)
-        let zhengzhou = list(&["Zhan", "Zhan1", "Zhan2", "Xilu", "Xilu1", "Donglu", "Donglu1"]);
+        let zhengzhou = list(&[
+            "Zhan", "Zhan1", "Zhan2", "Xilu", "Xilu1", "Donglu", "Donglu1",
+        ]);
         assert_eq!(first_preview(&zhengzhou), Some(3));
         // (one recording per stop)
-        assert_eq!(first_preview(&list(&["Alpha", "Beta", "Gamma", "Delta"])), None);
+        assert_eq!(
+            first_preview(&list(&["Alpha", "Beta", "Gamma", "Delta"])),
+            None
+        );
     }
 
     #[test]
     fn a_depot_file_of_one_recording_per_stop_has_no_layout() {
         let mut hof = Hof::default();
-        hof.info_busstop_lists = vec![list(&["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"])];
+        hof.info_busstop_lists = vec![list(&[
+            "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta",
+        ])];
         assert_eq!(layout(&hof, 0), None);
-        hof.info_busstop_lists = vec![list(&["Start", "welcome19", "FRoad", "FRoad1", "QRoad", "QRoad1", "DRoad", "DRoad1"])];
+        hof.info_busstop_lists = vec![list(&[
+            "Start",
+            "welcome19",
+            "FRoad",
+            "FRoad1",
+            "QRoad",
+            "QRoad1",
+            "DRoad",
+            "DRoad1",
+        ])];
         assert_eq!(layout(&hof, 0), Some(TwoRecordings { first: 2, pairs: 3 }));
         // (a route the depot file has no list for)
         assert_eq!(layout(&hof, 1), None);

@@ -22,12 +22,22 @@ fn info_carries_what_the_bus_is_and_its_height_and_an_older_info_has_neither() {
     // what is no fingerprint is not taken for one
     for bad in ["v1-xyz", "v2-0123", &fp.to_uppercase(), "Vehicles/x.bus"] {
         let t = text.replace(&fp, bad);
-        assert!(Pose::decode_info(&t.split('|').collect::<Vec<_>>()).unwrap().content.is_empty(), "{bad}");
+        assert!(
+            Pose::decode_info(&t.split('|').collect::<Vec<_>>())
+                .unwrap()
+                .content
+                .is_empty(),
+            "{bad}"
+        );
     }
     // with everything else at its longest the fingerprint still goes whole
-    p.freetex = (0..MAX_FREETEX).map(|k| format!("{k}{}", "é".repeat(200))).collect();
+    p.freetex = (0..MAX_FREETEX)
+        .map(|k| format!("{k}{}", "é".repeat(200)))
+        .collect();
     p.bus = format!("Vehicles/{}/{}.bus", "Ü".repeat(60), "b".repeat(120));
-    p.texts = (0..MAX_TEXTS).map(|k| format!("{k}ß{}", "ñ".repeat(40))).collect();
+    p.texts = (0..MAX_TEXTS)
+        .map(|k| format!("{k}ß{}", "ñ".repeat(40)))
+        .collect();
     p.name = "Ж".repeat(40);
     p.paint = "Ö".repeat(70);
     p.line = "Щ".repeat(20);
@@ -36,7 +46,12 @@ fn info_carries_what_the_bus_is_and_its_height_and_an_older_info_has_neither() {
     p.figure = format!("Humans/{}/{}.hum", "é".repeat(60), "f".repeat(120));
     let text = p.encode_info();
     assert!(text.len() <= MAX_DATAGRAM, "{} bytes", text.len());
-    assert_eq!(Pose::decode_info(&text.split('|').collect::<Vec<_>>()).unwrap().content, fp);
+    assert_eq!(
+        Pose::decode_info(&text.split('|').collect::<Vec<_>>())
+            .unwrap()
+            .content,
+        fp
+    );
     // the state keeps it, as it keeps the rest of the info
     let mut kept = Pose::decode_info(&text.split('|').collect::<Vec<_>>()).unwrap();
     kept.set_state(pose(2.0));

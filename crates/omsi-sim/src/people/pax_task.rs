@@ -1,5 +1,6 @@
 //! Passengers' tasks (sub_62e42c): setting one up and what each task does every frame.
 
+use super::entry_doors::EntryDoors;
 use super::pax_stops::entry_on_platform;
 use super::*;
 
@@ -340,9 +341,24 @@ impl PeopleSim {
             .and_then(|stop| self.preferred_entry_side(stop, bn, p.pos));
         // Never select the opposite doors just because they are closer or open:
         // on central BRT platforms this sent people straight through the bus.
-        let list: Vec<_> = bn
-            .cabin
-            .in_group(bn.cabin.entry_points(), group)
+        // (#3124) the doors the player's bus lets the passengers in through, and none
+        // other - a line boarding at the front door only leaves the rest of them shut to
+        // the people, however near or however open they are. AI and remote buses keep
+        // their own door choices.
+        let is_player = bn.id == BusId::Player;
+        let doors = self.entry_doors;
+        let entry_count = bn.cabin.entries.len();
+        let group_entries = bn.cabin.in_group(bn.cabin.entry_points(), group);
+        let has_allowed = group_entries.iter().enumerate().any(|(k, point)| {
+            point.is_some()
+                && bn
+                    .cabin
+                    .entries
+                    .get(k)
+                    .is_some_and(|door| entry_on_platform(side, door.side))
+                && doors.allows(k, entry_count)
+        });
+        let list: Vec<_> = group_entries
             .into_iter()
             .enumerate()
             .map(|(k, point)| {
@@ -351,6 +367,7 @@ impl PeopleSim {
                     .entries
                     .get(k)
                     .is_some_and(|door| entry_on_platform(side, door.side))
+                    && (!is_player || !has_allowed || doors.allows(k, entry_count))
                 {
                     point
                 } else {
@@ -362,29 +379,41 @@ impl PeopleSim {
         let open: Vec<bool> = (0..list.len())
             .map(|k| bn.entry_open.get(k).copied().unwrap_or(false))
             .collect();
-        // A filtered list can begin with a door on the opposite side (None).
-        // With every matching door still shut, omsi_nearest's rigid-bus fallback
-        // returns the first slot, which might be None. Retry without the open mask
-        // to keep ticket-sale restrictions and the nearest platform-facing target.
+        let is_buying = p.ticket == TICKET_BUY;
+        // A buyer skips the `{noticketsale}` doors only as `omsi_nearest` does (sub_625b98
+        // asks sub_72506c to avoid them for a passenger in state 3): with every door that sells shut and no
+        // button, Omsi.exe searches again without it and the buyer walks to an open door
+        // that sells none (#3759: they went to the shut front door while the rear stood
+        // open). Only the player's own door set (#3124, not Omsi.exe's) keeps them off
+        // those doors for good.
+        let restrict_noticketsale = is_buying && is_player && doors != EntryDoors::AsBus;
+        let search_list: Vec<_> = if restrict_noticketsale {
+            list.iter()
+                .enumerate()
+                .map(|(k, pt)| {
+                    if flags.get(k).is_some_and(|f| f.0) {
+                        None
+                    } else {
+                        *pt
+                    }
+                })
+                .collect()
+        } else {
+            list.clone()
+        };
         let pt = bn
             .cabin
             .omsi_nearest(
                 here,
-                &list,
-                p.ticket == TICKET_BUY,
+                &search_list,
+                is_buying,
                 false,
                 Some(&flags),
                 Some(&open),
             )
             .or_else(|| {
-                bn.cabin.omsi_nearest(
-                    here,
-                    &list,
-                    p.ticket == TICKET_BUY,
-                    false,
-                    Some(&flags),
-                    None,
-                )
+                bn.cabin
+                    .omsi_nearest(here, &search_list, is_buying, false, Some(&flags), None)
             });
         let p = self.pax_mut(i).unwrap();
         if let Some(q) = pt.and_then(|k| bn.cabin.graph.points.get(k)) {

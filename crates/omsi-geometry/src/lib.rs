@@ -3,22 +3,23 @@
 //! World frame: x east, y north, z up, metres. Headings in degrees, 0 = +y, clockwise.
 
 use glam::{DVec2, DVec3, Mat4, Quat, Vec2, Vec3};
-use omsi_map::{tile_size, MapSpline, Terrain};
+use omsi_map::{MapSpline, Terrain, tile_size};
 use omsi_scenery::Spline;
 
-mod hole_rims;
 mod ground_sound;
+mod hole_rims;
 pub use ground_sound::{GroundSound, LineKind, SoundLine, SoundSpot};
+mod terrain_portal;
+pub use terrain_portal::{Portal, hole_portal, portal_clearing, portal_is_buried, portal_outline};
 mod terrain_walls;
 pub use terrain_walls::{terrain_hole_walls, terrain_hole_walls_with_roads};
+mod terrain_constraints;
 mod terrain_fit;
 mod terrain_fit_surface;
-mod terrain_constraints;
 pub use terrain_fit::{
-    profile_in_cutting,
-    TerrainFitError, SplineTerrainProfile, build_fitted_terrain_mesh, build_fitted_terrain_mesh_with_neighbors,
-    try_build_fitted_terrain_mesh_with_roads,
-    build_fitted_terrain_mesh_with_roads,
+    SplineTerrainProfile, TerrainFitError, build_fitted_terrain_mesh,
+    build_fitted_terrain_mesh_with_neighbors, build_fitted_terrain_mesh_with_roads,
+    profile_in_cutting, try_build_fitted_terrain_mesh_with_roads,
 };
 
 /// A renderable triangle mesh with one texture per material slot.
@@ -41,8 +42,13 @@ impl MeshData {
     /// keeps its place in the material order, but draws all segments in one call.
     /// Positions must already be expressed in the same coordinate frame.
     pub fn merge_static(meshes: &[&MeshData]) -> MeshData {
-        let Some(first) = meshes.first() else { return MeshData::default() };
-        let mut out = MeshData { one_sided: first.one_sided, ..Default::default() };
+        let Some(first) = meshes.first() else {
+            return MeshData::default();
+        };
+        let mut out = MeshData {
+            one_sided: first.one_sided,
+            ..Default::default()
+        };
         let mut ranges = vec![Vec::new(); first.ranges.len()];
         for mesh in meshes {
             assert_eq!(mesh.one_sided, first.one_sided);
@@ -53,7 +59,11 @@ impl MeshData {
             out.uvs.extend_from_slice(&mesh.uvs);
             for (i, &(start, count, slot)) in mesh.ranges.iter().enumerate() {
                 assert_eq!(slot, first.ranges[i].2);
-                ranges[i].extend(mesh.indices[start as usize..(start + count) as usize].iter().map(|v| base + v));
+                ranges[i].extend(
+                    mesh.indices[start as usize..(start + count) as usize]
+                        .iter()
+                        .map(|v| base + v),
+                );
             }
         }
         for (indices, &(_, _, slot)) in ranges.into_iter().zip(&first.ranges) {
@@ -75,7 +85,11 @@ impl MeshData {
 
     /// Bytes the mesh holds on the heap.
     pub fn heap_bytes(&self) -> usize {
-        self.positions.capacity() * 12 + self.normals.capacity() * 12 + self.uvs.capacity() * 8 + self.indices.capacity() * 4 + self.ranges.capacity() * 12
+        self.positions.capacity() * 12
+            + self.normals.capacity() * 12
+            + self.uvs.capacity() * 8
+            + self.indices.capacity() * 4
+            + self.ranges.capacity() * 12
     }
 }
 
@@ -120,26 +134,40 @@ pub fn half_cant_width(def: &Spline) -> f64 {
     if let Some(w) = def.half_cant_width.filter(|w| w.is_finite() && *w >= 0.0) {
         return w as f64;
     }
-    let (lo, hi) = def.height_profiles.iter().fold((0.0f64, 0.0f64), |(lo, hi), h| (lo.min(h.x0 as f64), hi.max(h.x1 as f64)));
+    let (lo, hi) = def
+        .height_profiles
+        .iter()
+        .fold((0.0f64, 0.0f64), |(lo, hi), h| {
+            (lo.min(h.x0 as f64), hi.max(h.x1 as f64))
+        });
     (-lo).max(hi).max(-1.0)
 }
 
 /// The half cant width of a spline without a .sli object (OMSI: 10 m).
 pub const DEFAULT_HALF_CANT_WIDTH: f64 = 10.0;
 
-static HALF_CANT_WIDTHS: std::sync::OnceLock<std::sync::RwLock<std::collections::HashMap<String, f64>>> = std::sync::OnceLock::new();
+static HALF_CANT_WIDTHS: std::sync::OnceLock<
+    std::sync::RwLock<std::collections::HashMap<String, f64>>,
+> = std::sync::OnceLock::new();
 
 /// Remember a spline type's half cant width by its file name (as a tile names it), for
 /// what is placed on its splines without the type at hand (objects in rows).
 pub fn register_half_cant_width(file: &str, def: &Spline) {
     let key = file.trim().to_ascii_lowercase().replace('\\', "/");
-    HALF_CANT_WIDTHS.get_or_init(Default::default).write().unwrap_or_else(|e| e.into_inner()).insert(key, half_cant_width(def));
+    HALF_CANT_WIDTHS
+        .get_or_init(Default::default)
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(key, half_cant_width(def));
 }
 
 /// The half cant width of the spline type `file` names, as registered (else the default).
 pub fn half_cant_width_of(file: &str) -> f64 {
     let key = file.trim().to_ascii_lowercase().replace('\\', "/");
-    HALF_CANT_WIDTHS.get().and_then(|m| m.read().ok().and_then(|m| m.get(&key).copied())).unwrap_or(DEFAULT_HALF_CANT_WIDTH)
+    HALF_CANT_WIDTHS
+        .get()
+        .and_then(|m| m.read().ok().and_then(|m| m.get(&key).copied()))
+        .unwrap_or(DEFAULT_HALF_CANT_WIDTH)
 }
 
 impl SplineCurve {
@@ -164,7 +192,10 @@ impl SplineCurve {
 
     /// The same curve with its spline type's half cant width.
     pub fn with_sli(self, def: &Spline) -> SplineCurve {
-        SplineCurve { half_cant_width: half_cant_width(def), ..self }
+        SplineCurve {
+            half_cant_width: half_cant_width(def),
+            ..self
+        }
     }
 
     /// Direction vector (unit, horizontal) for a heading.
@@ -194,7 +225,10 @@ impl SplineCurve {
             Some(dh) => {
                 let (m0, m1) = (self.grad_start / 100.0 * l, self.grad_end / 100.0 * l);
                 let (t2, t3) = (t * t, t * t * t);
-                self.start.z + (t3 - 2.0 * t2 + t) * m0 + (3.0 * t2 - 2.0 * t3) * dh + (t3 - t2) * m1
+                self.start.z
+                    + (t3 - 2.0 * t2 + t) * m0
+                    + (3.0 * t2 - 2.0 * t3) * dh
+                    + (t3 - t2) * m1
             }
             None => {
                 let g = self.grad_start + (self.grad_end - self.grad_start) * t * 0.5;
@@ -210,7 +244,10 @@ impl SplineCurve {
         match self.delta_h {
             Some(dh) => {
                 let (m0, m1) = (self.grad_start / 100.0 * l, self.grad_end / 100.0 * l);
-                ((3.0 * t * t - 4.0 * t + 1.0) * m0 + (6.0 * t - 6.0 * t * t) * dh + (3.0 * t * t - 2.0 * t) * m1) / l
+                ((3.0 * t * t - 4.0 * t + 1.0) * m0
+                    + (6.0 * t - 6.0 * t * t) * dh
+                    + (3.0 * t * t - 2.0 * t) * m1)
+                    / l
             }
             None => (self.grad_start + (self.grad_end - self.grad_start) * t) / 100.0,
         }
@@ -266,12 +303,19 @@ pub fn spline_station_count(def: &Spline, curve: &SplineCurve) -> usize {
     const HALF_DEGREE: f64 = 0.008726647;
     let l = curve.length.max(0.0);
     // (the turn: Generate's curvature times length)
-    let turn = if curve.radius != 0.0 { (l / curve.radius).abs() } else { 0.0 };
+    let turn = if curve.radius != 0.0 {
+        (l / curve.radius).abs()
+    } else {
+        0.0
+    };
     let horizontal = (turn / HALF_DEGREE) as usize + 1;
     // the height polynomial g0 s + a s^2 + b s^3 (sub_5ab108)
     let (g0, g1) = (curve.grad_start / 100.0, curve.grad_end / 100.0);
     let (a, b) = match curve.delta_h {
-        Some(dh) if l > 1e-6 => ((3.0 * (dh - g0 * l) - (g1 - g0) * l) / (l * l), ((g1 - g0) * l - 2.0 * (dh - g0 * l)) / (l * l * l)),
+        Some(dh) if l > 1e-6 => (
+            (3.0 * (dh - g0 * l) - (g1 - g0) * l) / (l * l),
+            ((g1 - g0) * l - 2.0 * (dh - g0 * l)) / (l * l * l),
+        ),
         _ if l > 1e-6 => ((g1 - g0) / (2.0 * l), 0.0),
         _ => (0.0, 0.0),
     };
@@ -289,7 +333,11 @@ pub fn spline_station_count(def: &Spline, curve: &SplineCurve) -> usize {
 /// and 3870 indices over all its profiles).
 fn station_cap(def: &Spline) -> usize {
     let points: usize = def.profiles.iter().map(|p| p.points.len()).sum();
-    let segments: usize = def.profiles.iter().map(|p| p.points.len().saturating_sub(1)).sum();
+    let segments: usize = def
+        .profiles
+        .iter()
+        .map(|p| p.points.len().saturating_sub(1))
+        .sum();
     if points == 0 || segments == 0 {
         return usize::MAX;
     }
@@ -317,7 +365,12 @@ struct Patchwork {
 /// `stations` is made a multiple of the stretches.
 fn patchwork(def: &Spline, curve: &SplineCurve, stations: &mut usize) -> Option<Patchwork> {
     // (OMSI keeps one chain per spline type, the last one defined)
-    let (texture, pc) = def.textures.iter().enumerate().rev().find_map(|(i, t)| t.patchwork.as_ref().filter(|p| p.valid()).map(|p| (i, p)))?;
+    let (texture, pc) = def
+        .textures
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, t)| t.patchwork.as_ref().filter(|p| p.valid()).map(|p| (i, p)))?;
     let chain = pc.chain.as_bytes();
     let n_parts = pc.weights.len();
     let weight = |k: usize| pc.weights.as_bytes()[k].wrapping_sub(b'0').min(9) as usize;
@@ -377,19 +430,36 @@ fn patchwork(def: &Spline, curve: &SplineCurve, stations: &mut usize) -> Option<
         } else {
             cands[((cands.len() as f64 * r) as usize).min(cands.len() - 1)]
         };
-        state = if part < 0 { chain[(-part - 1) as usize] } else { chain[part as usize] };
+        state = if part < 0 {
+            chain[(-part - 1) as usize]
+        } else {
+            chain[part as usize]
+        };
         order.push(part);
     }
-    Some(Patchwork { texture, parts: n_parts, per, order })
+    Some(Patchwork {
+        texture,
+        parts: n_parts,
+        per,
+        order,
+    })
 }
 
 /// The point of a spline mesh at distance `s` along it, `x` across (right positive, already
 /// mirrored) and `z` up: the cross-section shifted along the spline by the skew (Omsi.exe
 /// sub_5aaef4: `x * (skew_start (1 - s/L) + skew_end s/L)`), and that shifted distance.
 pub fn skewed_point(curve: &SplineCurve, s: f64, x: f64, z: f64) -> (DVec3, f64) {
-    let t = if curve.length > 0.0 { s / curve.length } else { 0.0 };
+    let t = if curve.length > 0.0 {
+        s / curve.length
+    } else {
+        0.0
+    };
     let skew = curve.skew_start * (1.0 - t) + curve.skew_end * t;
-    let s = if skew.is_finite() { s + x * skew.clamp(-32.0, 32.0) } else { s };
+    let s = if skew.is_finite() {
+        s + x * skew.clamp(-32.0, 32.0)
+    } else {
+        s
+    };
     (curve.offset_point(s, x, z), s)
 }
 
@@ -399,7 +469,12 @@ pub fn skewed_point(curve: &SplineCurve, s: f64, x: f64, z: f64) -> (DVec3, f64)
 /// (`[scaleTexByLength]`: from 0 to `v_scale` over the whole spline; a `[patchwork_chain]`:
 /// part by part); a mirrored spline is flipped across and its v turned round.
 /// Positions are relative to `origin` (f64 subtraction keeps precision on large maps).
-pub fn build_spline_mesh(def: &Spline, curve: &SplineCurve, mirror: bool, origin: DVec3) -> MeshData {
+pub fn build_spline_mesh(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    origin: DVec3,
+) -> MeshData {
     let mut mesh = MeshData::default();
     if curve.length <= 0.0 {
         return mesh;
@@ -433,14 +508,20 @@ pub fn build_spline_mesh(def: &Spline, curve: &SplineCurve, mirror: bool, origin
                 for i in 0..n {
                     let block = i / pw.per;
                     let part = pw.order.get(block).copied().unwrap_or(1);
-                    let p0 = (part.unsigned_abs() as usize).saturating_sub(1) as f64 / pw.parts as f64;
+                    let p0 =
+                        (part.unsigned_abs() as usize).saturating_sub(1) as f64 / pw.parts as f64;
                     let q = base + (i as u32) * 2 * pn;
                     for e in 0..2 {
                         let r = (i + e - block * pw.per) as f64;
                         let r = if part < 0 { pw.per as f64 - r } else { r };
                         let v = r / (pw.per * pw.parts) as f64 + p0;
                         for pt in &profile.points {
-                            let (p, _) = skewed_point(curve, station(i + e), pt.x as f64 * mirror_sign, pt.z as f64);
+                            let (p, _) = skewed_point(
+                                curve,
+                                station(i + e),
+                                pt.x as f64 * mirror_sign,
+                                pt.z as f64,
+                            );
                             mesh.positions.push((p - origin).as_vec3());
                             mesh.normals.push(Vec3::Z);
                             mesh.uvs.push(Vec2::new(pt.u, (v * mirror_sign) as f32));
@@ -455,11 +536,19 @@ pub fn build_spline_mesh(def: &Spline, curve: &SplineCurve, mirror: bool, origin
                 let by_length = tex.is_some_and(|t| t.scale_by_length);
                 // (v can run to thousands on a long chain: drop whole repeats, which change
                 // nothing, where the profile's points share one scale)
-                let shared = profile.points.iter().all(|p| p.v_scale == profile.points[0].v_scale);
-                let whole = if shared && !by_length { (profile.points[0].v_scale as f64 * curve.tex_offset * mirror_sign).floor() } else { 0.0 };
+                let shared = profile
+                    .points
+                    .iter()
+                    .all(|p| p.v_scale == profile.points[0].v_scale);
+                let whole = if shared && !by_length {
+                    (profile.points[0].v_scale as f64 * curve.tex_offset * mirror_sign).floor()
+                } else {
+                    0.0
+                };
                 for i in 0..=n {
                     for pt in &profile.points {
-                        let (p, s) = skewed_point(curve, station(i), pt.x as f64 * mirror_sign, pt.z as f64);
+                        let (p, s) =
+                            skewed_point(curve, station(i), pt.x as f64 * mirror_sign, pt.z as f64);
                         mesh.positions.push((p - origin).as_vec3());
                         mesh.normals.push(Vec3::Z);
                         let v = if by_length {
@@ -479,7 +568,8 @@ pub fn build_spline_mesh(def: &Spline, curve: &SplineCurve, mirror: bool, origin
             }
         }
         let count = mesh.indices.len() as u32 - first_index;
-        mesh.ranges.push((first_index, count, profile.texture as u32));
+        mesh.ranges
+            .push((first_index, count, profile.texture as u32));
     }
     compute_normals(&mut mesh);
     // Drawn from the side a profile faces only, as OMSI draws splines: the makers orient
@@ -514,7 +604,11 @@ pub fn terrain_hole_profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
     }
     const JOIN: f32 = 0.01;
     const INSET: f32 = 0.03;
-    let profiles: Vec<Vec<(f32, f32)>> = def.profiles.iter().map(|p| p.points.iter().map(|q| (q.x, q.z)).collect()).collect();
+    let profiles: Vec<Vec<(f32, f32)>> = def
+        .profiles
+        .iter()
+        .map(|p| p.points.iter().map(|q| (q.x, q.z)).collect())
+        .collect();
     let mut used = vec![false; profiles.len()];
     let mut out = Vec::new();
     while used.iter().any(|u| !u) {
@@ -525,7 +619,9 @@ pub fn terrain_hole_profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
                     && match chain.last() {
                         None => true,
                         Some(&l) => match (profiles[l].last(), profiles[j].first()) {
-                            (Some(a), Some(b)) => (a.0 - b.0).abs() < JOIN && (a.1 - b.1).abs() < JOIN,
+                            (Some(a), Some(b)) => {
+                                (a.0 - b.0).abs() < JOIN && (a.1 - b.1).abs() < JOIN
+                            }
                             _ => false,
                         },
                     }
@@ -558,17 +654,26 @@ pub fn terrain_hole_profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
         let points = || chain.iter().flat_map(|&j| profiles[j].iter().copied());
         let low = points().fold(zl.min(zr), |m, (_, z)| m.min(z));
         let bottom_left = if low < zl {
-            points().filter(|p| zl > p.1).fold(xr, |m, (x, z)| m.min((x - xl) / (zl - z) * (zl - low) + xl))
+            points()
+                .filter(|p| zl > p.1)
+                .fold(xr, |m, (x, z)| m.min((x - xl) / (zl - z) * (zl - low) + xl))
         } else {
             (xr - xl) / 4.0 + xl
         };
         let bottom_right = if low < zr {
-            points().filter(|p| zr > p.1).fold(xl, |m, (x, z)| m.max(xr - (xr - x) / (zr - z) * (zr - low)))
+            points()
+                .filter(|p| zr > p.1)
+                .fold(xl, |m, (x, z)| m.max(xr - (xr - x) / (zr - z) * (zr - low)))
         } else {
             (xr - xl) * 3.0 / 4.0 + xl
         };
         let low = low - 0.1;
-        out.push(vec![[xl + INSET, zl - 0.003, 0.0], [bottom_left, low, -0.5], [bottom_right, low, -0.5], [xr - INSET, zr - 0.003, 0.0]]);
+        out.push(vec![
+            [xl + INSET, zl - 0.003, 0.0],
+            [bottom_left, low, -0.5],
+            [bottom_right, low, -0.5],
+            [xr - INSET, zr - 0.003, 0.0],
+        ]);
     }
     out
 }
@@ -582,14 +687,26 @@ pub fn terrain_hole_profiles(def: &Spline) -> Vec<Vec<[f32; 3]>> {
 /// `[spline_terrain_align_2]` says otherwise: `mode` 2 and 4 keep the far end at the end,
 /// 3 and 4 the near end at the start. A mirrored spline takes the profile backwards and
 /// turned across.
-pub fn spline_hole_outlines(def: &Spline, curve: &SplineCurve, mirror: bool, mode: u8) -> Vec<Vec<DVec2>> {
-    spline_hole_rims(def, curve, mirror, mode).into_iter()
-        .map(|ring| ring.into_iter().map(DVec3::truncate).collect()).collect()
+pub fn spline_hole_outlines(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    mode: u8,
+) -> Vec<Vec<DVec2>> {
+    spline_hole_rims(def, curve, mirror, mode)
+        .into_iter()
+        .map(|ring| ring.into_iter().map(DVec3::truncate).collect())
+        .collect()
 }
 
 /// The same boundary as [`spline_hole_outlines`], retaining each profile point's height
 /// (including gradient, cant and skew) for the ground's connection to the spline.
-pub fn spline_hole_rims(def: &Spline, curve: &SplineCurve, mirror: bool, mode: u8) -> Vec<Vec<DVec3>> {
+pub fn spline_hole_rims(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    mode: u8,
+) -> Vec<Vec<DVec3>> {
     spline_hole_rims_with_stations(def, curve, mirror, mode).0
 }
 
@@ -613,7 +730,11 @@ pub fn spline_hole_rims_with_stations(
         .into_iter()
         .filter(|p| !p.is_empty())
         .map(|p| {
-            let p: Vec<[f32; 3]> = if mirror { p.iter().rev().map(|q| [-q[0], q[1], q[2]]).collect() } else { p };
+            let p: Vec<[f32; 3]> = if mirror {
+                p.iter().rev().map(|q| [-q[0], q[1], q[2]]).collect()
+            } else {
+                p
+            };
             let k = p.len();
             let mut ring = Vec::with_capacity(2 * (k + n - 1));
             for i in 1..n {
@@ -707,7 +828,8 @@ pub fn outline_crosses_itself(ring: &[DVec2]) -> bool {
     let hits = |p1: DVec2, p2: DVec2, q1: DVec2, q2: DVec2| {
         let (d1, d2) = (cross(q1, q2, p1), cross(q1, q2, p2));
         let (d3, d4) = (cross(p1, p2, q1), cross(p1, p2, q2));
-        ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
+        ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0))
+            && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
     };
     for i in 0..n {
         let (a, b) = (ring[i], ring[(i + 1) % n]);
@@ -730,8 +852,10 @@ pub fn outline_crosses_itself(ring: &[DVec2]) -> bool {
 /// incident faces. A closed cutter (no rim) gives no ring.
 /// Positions are the mesh's after `transform`, relative to `origin`.
 pub fn hole_mesh_outlines(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Vec<Vec<DVec2>> {
-    hole_mesh_rims(mesh, transform, origin).into_iter()
-        .map(|ring| ring.into_iter().map(DVec3::truncate).collect()).collect()
+    hole_mesh_rims(mesh, transform, origin)
+        .into_iter()
+        .map(|ring| ring.into_iter().map(DVec3::truncate).collect())
+        .collect()
 }
 
 /// The open rims of an object cutter, retaining their transformed world heights.
@@ -741,7 +865,13 @@ pub fn hole_mesh_outlines(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> V
 pub fn hole_mesh_rims(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Vec<Vec<DVec3>> {
     use std::collections::HashMap;
     // (a model repeats a vertex for every face and UV seam: the corners by place, to the mm)
-    let key = |v: Vec3| ((v.x * 1000.0).round() as i64, (v.y * 1000.0).round() as i64, (v.z * 1000.0).round() as i64);
+    let key = |v: Vec3| {
+        (
+            (v.x * 1000.0).round() as i64,
+            (v.y * 1000.0).round() as i64,
+            (v.z * 1000.0).round() as i64,
+        )
+    };
     let mut place: HashMap<(i64, i64, i64), DVec3> = HashMap::new();
     let mut edges: HashMap<((i64, i64, i64), (i64, i64, i64)), Vec<usize>> = HashMap::new();
     let mut faces = Vec::new();
@@ -749,7 +879,9 @@ pub fn hole_mesh_rims(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Vec<V
         let k = [0, 1, 2].map(|i| {
             let v = mesh.positions[t[i] as usize];
             let kv = key(v);
-            place.entry(kv).or_insert_with(|| origin + transform.transform_point3(v).as_dvec3());
+            place
+                .entry(kv)
+                .or_insert_with(|| origin + transform.transform_point3(v).as_dvec3());
             kv
         });
         if k[0] == k[1] || k[1] == k[2] || k[2] == k[0] {
@@ -759,7 +891,10 @@ pub fn hole_mesh_rims(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Vec<V
         faces.push(k);
         for i in 0..3 {
             let (a, b) = (k[i], k[(i + 1) % 3]);
-            edges.entry(if a < b { (a, b) } else { (b, a) }).or_default().push(face);
+            edges
+                .entry(if a < b { (a, b) } else { (b, a) })
+                .or_default()
+                .push(face);
         }
     }
     let mut next: HashMap<(i64, i64, i64), Vec<(i64, i64, i64)>> = HashMap::new();
@@ -800,7 +935,12 @@ pub fn hole_mesh_rims(mesh: &MeshData, transform: &Mat4, origin: DVec3) -> Vec<V
 /// on. OMSI keeps it apart from the graphics - a railway's third rail or a tunnel's walls are
 /// drawn but not driven on, a fence or the Berlin Wall has no height profile at all, and a
 /// street's lies exactly on its carriageway and pavements. Positions are relative to `origin`.
-pub fn build_height_profile_mesh(def: &Spline, curve: &SplineCurve, mirror: bool, origin: DVec3) -> MeshData {
+pub fn build_height_profile_mesh(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    origin: DVec3,
+) -> MeshData {
     let mut mesh = MeshData::default();
     if curve.length <= 0.0 || def.height_profiles.is_empty() {
         return mesh;
@@ -843,7 +983,8 @@ pub fn build_height_profile_mesh(def: &Spline, curve: &SplineCurve, mirror: bool
     }
     mesh.ranges.push((0, flat_end, 0));
     if mesh.indices.len() as u32 > flat_end {
-        mesh.ranges.push((flat_end, mesh.indices.len() as u32 - flat_end, 1));
+        mesh.ranges
+            .push((flat_end, mesh.indices.len() as u32 - flat_end, 1));
     }
     mesh
 }
@@ -887,12 +1028,22 @@ pub fn compute_normals(mesh: &mut MeshData) {
     let mut acc = vec![Vec3::ZERO; mesh.positions.len()];
     for tri in mesh.indices.chunks_exact(3) {
         let (a, b, c) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
-        let n = (mesh.positions[b] - mesh.positions[a]).cross(mesh.positions[c] - mesh.positions[a]);
+        let n =
+            (mesh.positions[b] - mesh.positions[a]).cross(mesh.positions[c] - mesh.positions[a]);
         acc[a] += n;
         acc[b] += n;
         acc[c] += n;
     }
-    mesh.normals = acc.into_iter().map(|n| if n.length_squared() > 0.0 { n.normalize() } else { Vec3::Z }).collect();
+    mesh.normals = acc
+        .into_iter()
+        .map(|n| {
+            if n.length_squared() > 0.0 {
+                n.normalize()
+            } else {
+                Vec3::Z
+            }
+        })
+        .collect();
 }
 
 /// Smooth vertex normals from the faces as D3DXComputeNormals makes them for a mesh read
@@ -932,7 +1083,8 @@ pub fn build_terrain_mesh(t: &Terrain) -> MeshData {
             let x = i as f32 * cell;
             let y = j as f32 * cell;
             mesh.positions.push(Vec3::new(x, y, t.height_at(i, j)));
-            mesh.uvs.push(Vec2::new(x / tile_size() as f32, y / tile_size() as f32));
+            mesh.uvs
+                .push(Vec2::new(x / tile_size() as f32, y / tile_size() as f32));
             mesh.normals.push(Vec3::Z);
         }
     }
@@ -974,7 +1126,8 @@ pub fn object_rotation(rot_deg: [f64; 3]) -> Mat4 {
     let heading = (-rot_deg[0]).to_radians() as f32; // clockwise heading → counter-clockwise rotation about +z
     let pitch = rot_deg[1].to_radians() as f32;
     let bank = rot_deg[2].to_radians() as f32;
-    let q = Quat::from_rotation_z(heading) * Quat::from_rotation_y(bank) * Quat::from_rotation_x(pitch);
+    let q =
+        Quat::from_rotation_z(heading) * Quat::from_rotation_y(bank) * Quat::from_rotation_x(pitch);
     Mat4::from_quat(q)
 }
 
@@ -985,7 +1138,9 @@ pub fn object_rotation_ypr(rot_deg: [f64; 3]) -> Mat4 {
     let heading = (-rot_deg[0]).to_radians() as f32;
     let pitch = rot_deg[1].to_radians() as f32;
     let bank = rot_deg[2].to_radians() as f32;
-    Mat4::from_quat(Quat::from_rotation_z(heading) * Quat::from_rotation_x(pitch) * Quat::from_rotation_y(bank))
+    Mat4::from_quat(
+        Quat::from_rotation_z(heading) * Quat::from_rotation_x(pitch) * Quat::from_rotation_y(bank),
+    )
 }
 
 /// A map file's heading, pitch and bank (`[object]`, `[attachObj]`, `[splineAttachement]`)
@@ -1011,9 +1166,16 @@ pub fn mesh_from_o3d_turning(m: &omsi_o3d::Mesh, may_turn: bool) -> MeshData {
     // to apply. Mesh files use Direct3D's frame (x right, y up, z forward); the world uses
     // x right, y forward, z up, so y and z are swapped.
     let swap = |v: Vec3| Vec3::new(v.x, v.z, v.y);
-    let mut out = MeshData { one_sided: true, ..Default::default() };
+    let mut out = MeshData {
+        one_sided: true,
+        ..Default::default()
+    };
     out.positions = m.vertices.iter().map(|v| swap(v.position)).collect();
-    out.normals = m.vertices.iter().map(|v| swap(v.normal).normalize_or_zero()).collect();
+    out.normals = m
+        .vertices
+        .iter()
+        .map(|v| swap(v.normal).normalize_or_zero())
+        .collect();
     out.uvs = m.vertices.iter().map(|v| v.uv).collect();
     let turn = may_turn && turns_round(m);
     // group triangles by material, preserving material index as slot
@@ -1041,7 +1203,6 @@ pub fn mesh_from_o3d_turning(m: &omsi_o3d::Mesh, may_turn: bool) -> MeshData {
     }
     out
 }
-
 
 pub fn turns_round(m: &omsi_o3d::Mesh) -> bool {
     // A mesh whose faces all turn their backs on their own normals was mirrored in the
@@ -1145,14 +1306,28 @@ pub use drive_grid::*;
 mod tile_surface;
 pub use tile_surface::*;
 
-
 #[cfg(test)]
 mod cant_tests {
     use super::*;
 
     #[test]
     fn cant_is_a_percentage_within_the_half_cant_width() {
-        let c = SplineCurve { start: DVec3::ZERO, heading_deg: 0.0, length: 10.0, radius: 0.0, grad_start: 0.0, grad_end: 0.0, delta_h: None, cant_start: 5.0, cant_end: 5.0, skew_start: 0.0, skew_end: 0.0, tex_offset: 0.0, seed: 0, half_cant_width: 3.0 };
+        let c = SplineCurve {
+            start: DVec3::ZERO,
+            heading_deg: 0.0,
+            length: 10.0,
+            radius: 0.0,
+            grad_start: 0.0,
+            grad_end: 0.0,
+            delta_h: None,
+            cant_start: 5.0,
+            cant_end: 5.0,
+            skew_start: 0.0,
+            skew_end: 0.0,
+            tex_offset: 0.0,
+            seed: 0,
+            half_cant_width: 3.0,
+        };
         // 2 m right at 5 %: 10 cm down
         assert!((c.offset_point(5.0, 2.0, 0.0).z + 0.10).abs() < 1e-9);
         // beyond the half cant width the height stays what it is at its edge
@@ -1169,9 +1344,19 @@ mod ray_hit_tests {
     /// u runs with x, v runs down (v = 0 at z = 1).
     fn quad() -> MeshData {
         MeshData {
-            positions: vec![Vec3::new(-1.0, 0.0, 1.0), Vec3::new(1.0, 0.0, 1.0), Vec3::new(1.0, 0.0, -1.0), Vec3::new(-1.0, 0.0, -1.0)],
+            positions: vec![
+                Vec3::new(-1.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, -1.0),
+                Vec3::new(-1.0, 0.0, -1.0),
+            ],
             normals: vec![Vec3::Y; 4],
-            uvs: vec![Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0), Vec2::new(0.0, 1.0)],
+            uvs: vec![
+                Vec2::new(0.0, 0.0),
+                Vec2::new(1.0, 0.0),
+                Vec2::new(1.0, 1.0),
+                Vec2::new(0.0, 1.0),
+            ],
             ranges: vec![(0, 3, 0), (3, 3, 1)],
             indices: vec![0, 1, 2, 0, 2, 3],
             one_sided: false,
@@ -1196,14 +1381,21 @@ mod ray_hit_tests {
     fn the_mesh_transform_is_undone() {
         let m = quad();
         // the quad moved 10 m east and doubled in size: its middle is at x = 10, z = 0
-        let xf = Mat4::from_translation(Vec3::new(10.0, 0.0, 0.0)) * Mat4::from_scale(Vec3::splat(2.0));
+        let xf =
+            Mat4::from_translation(Vec3::new(10.0, 0.0, 0.0)) * Mat4::from_scale(Vec3::splat(2.0));
         let h = ray_mesh_hit(Vec3::new(11.0, -3.0, 0.5), Vec3::Y, &m, &xf).unwrap();
         assert!((h.t - 3.0).abs() < 1e-4);
-        assert!((h.uv - Vec2::new(0.75, 0.375)).length() < 1e-4, "{:?}", h.uv);
-        assert_eq!(ray_mesh_hit(Vec3::new(11.0, -3.0, 0.5), Vec3::Y, &m, &xf).map(|h| h.t), ray_mesh(Vec3::new(11.0, -3.0, 0.5), Vec3::Y, &m, &xf));
+        assert!(
+            (h.uv - Vec2::new(0.75, 0.375)).length() < 1e-4,
+            "{:?}",
+            h.uv
+        );
+        assert_eq!(
+            ray_mesh_hit(Vec3::new(11.0, -3.0, 0.5), Vec3::Y, &m, &xf).map(|h| h.t),
+            ray_mesh(Vec3::new(11.0, -3.0, 0.5), Vec3::Y, &m, &xf)
+        );
     }
 }
-
 
 #[cfg(test)]
 mod winding_transform_tests {

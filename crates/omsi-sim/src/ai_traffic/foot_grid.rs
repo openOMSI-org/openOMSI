@@ -39,8 +39,16 @@ impl Feet {
                 // (a footprint is reached within its own half length and half width of its
                 // centre, see `body_in_way`: it goes into every cell that square touches)
                 let r = f.half_len + f.half_w;
-                let (x0, x1, y0, y1) = (cell(f.center.x - r), cell(f.center.x + r), cell(f.center.y - r), cell(f.center.y + r));
-                if !(f.center.is_finite() && r.is_finite()) || x1 - x0 > MAX_SPAN || y1 - y0 > MAX_SPAN {
+                let (x0, x1, y0, y1) = (
+                    cell(f.center.x - r),
+                    cell(f.center.x + r),
+                    cell(f.center.y - r),
+                    cell(f.center.y + r),
+                );
+                if !(f.center.is_finite() && r.is_finite())
+                    || x1 - x0 > MAX_SPAN
+                    || y1 - y0 > MAX_SPAN
+                {
                     g.always.push(k as u32);
                     continue;
                 }
@@ -58,21 +66,28 @@ impl Feet {
     /// The footprints whose centre may lie within `r` plus their own half length and half
     /// width of `pos` (and perhaps some more), in the order of the list.
     pub fn near(&self, pos: DVec2, r: f64) -> impl Iterator<Item = &Footprint> + '_ {
-        let picked = self.grid.as_ref().filter(|_| pos.is_finite() && r.is_finite() && r < CELL * MAX_SPAN as f64).map(|g| {
-            let mut ks: Vec<u32> = g.always.clone();
-            for x in cell(pos.x - r)..=cell(pos.x + r) {
-                for y in cell(pos.y - r)..=cell(pos.y + r) {
-                    if let Some(v) = g.cells.get(&(x, y)) {
-                        ks.extend_from_slice(v);
+        let picked = self
+            .grid
+            .as_ref()
+            .filter(|_| pos.is_finite() && r.is_finite() && r < CELL * MAX_SPAN as f64)
+            .map(|g| {
+                let mut ks: Vec<u32> = g.always.clone();
+                for x in cell(pos.x - r)..=cell(pos.x + r) {
+                    for y in cell(pos.y - r)..=cell(pos.y + r) {
+                        if let Some(v) = g.cells.get(&(x, y)) {
+                            ks.extend_from_slice(v);
+                        }
                     }
                 }
-            }
-            ks.sort_unstable();
-            ks.dedup();
-            ks
-        });
+                ks.sort_unstable();
+                ks.dedup();
+                ks
+            });
         let (all, some) = match picked {
-            Some(ks) => (None, Some(ks.into_iter().map(move |k| &self.list[k as usize]))),
+            Some(ks) => (
+                None,
+                Some(ks.into_iter().map(move |k| &self.list[k as usize])),
+            ),
             None => (Some(self.list.iter()), None),
         };
         all.into_iter().flatten().chain(some.into_iter().flatten())

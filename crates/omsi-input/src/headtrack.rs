@@ -26,13 +26,18 @@ impl HeadPose {
     /// (0x829860) moves its camera across by `-x` of the TrackIR pose, which opentrack fills
     /// with its own x: a head moved to the right took the camera to the left (#1157).
     pub fn seat_offset(&self) -> glam::Vec3 {
-        glam::Vec3::new(-self.pos[0], -self.pos[2], self.pos[1]).clamp(glam::Vec3::splat(-60.0), glam::Vec3::splat(60.0)) / 100.0
+        glam::Vec3::new(-self.pos[0], -self.pos[2], self.pos[1])
+            .clamp(glam::Vec3::splat(-60.0), glam::Vec3::splat(60.0))
+            / 100.0
     }
 
     /// The pose seen from `centre`: the head's way from there, its turn the short way round.
     pub fn from_centre(&self, centre: &HeadPose) -> HeadPose {
         let turn = |a: f32, b: f32| (a - b + 180.0).rem_euclid(360.0) - 180.0;
-        HeadPose { pos: [0, 1, 2].map(|i| self.pos[i] - centre.pos[i]), rot: [0, 1, 2].map(|i| turn(self.rot[i], centre.rot[i])) }
+        HeadPose {
+            pos: [0, 1, 2].map(|i| self.pos[i] - centre.pos[i]),
+            rot: [0, 1, 2].map(|i| turn(self.rot[i], centre.rot[i])),
+        }
     }
 }
 
@@ -53,7 +58,12 @@ fn put(slot: &Mutex<Option<Udp>>, pose: HeadPose) {
         Some(u) => (u.seq + 1, now.saturating_duration_since(u.at).as_secs_f32()),
         None => (0, 0.004),
     };
-    *l = Some(Udp { pose, at: now, seq, interval });
+    *l = Some(Udp {
+        pose,
+        at: now,
+        seq,
+        interval,
+    });
 }
 
 pub struct HeadTracker {
@@ -77,7 +87,9 @@ impl HeadTracker {
         let sock = match std::net::UdpSocket::bind(("0.0.0.0", port)) {
             Ok(s) => Some(s),
             Err(e) if cfg!(windows) => {
-                log::warn!("head tracking: cannot listen on UDP port {port} ({e}), reading opentrack's freetrack output only");
+                log::warn!(
+                    "head tracking: cannot listen on UDP port {port} ({e}), reading opentrack's freetrack output only"
+                );
                 None
             }
             Err(e) => {
@@ -128,7 +140,9 @@ impl HeadTracker {
                     if n < 48 {
                         continue;
                     }
-                    let d = |i: usize| f64::from_le_bytes(buf[i * 8..i * 8 + 8].try_into().unwrap()) as f32;
+                    let d = |i: usize| {
+                        f64::from_le_bytes(buf[i * 8..i * 8 + 8].try_into().unwrap()) as f32
+                    };
                     let v = [d(0), d(1), d(2), d(3), d(4), d(5)];
                     if v.iter().any(|x| !x.is_finite()) {
                         continue;
@@ -141,14 +155,24 @@ impl HeadTracker {
                     {
                         last_udp = Some(Instant::now());
                     }
-                    put(&out, HeadPose { pos: [v[0], v[1], v[2]], rot: [v[3], v[4], v[5]] });
+                    put(
+                        &out,
+                        HeadPose {
+                            pos: [v[0], v[1], v[2]],
+                            rot: [v[3], v[4], v[5]],
+                        },
+                    );
                 }
             })
             .ok()?;
         if listening {
             log::info!("head tracking: listening for opentrack on UDP port {port}");
         }
-        Some(HeadTracker { last, centre: Mutex::default(), tobii: None })
+        Some(HeadTracker {
+            last,
+            centre: Mutex::default(),
+            tobii: None,
+        })
     }
 
     /// The source the setting `head_tracking_source` names: "opentrack" (its UDP output,
@@ -157,15 +181,29 @@ impl HeadTracker {
     /// else the tracker's). On Windows, `window_handle` is the native game window used by
     /// NPClient. (Tobii's runtime is Windows' only: elsewhere this is `start`, a port that
     /// cannot be had tried again as before.)
-    pub fn start_with(port: u16, source: &str, tobii: crate::tobii::Options, window_handle: Option<isize>) -> Option<HeadTracker> {
-        let reader = (cfg!(windows) && source != "opentrack").then(|| crate::tobii::Tobii::start(tobii));
-        let udp = if source == "tobii" { None } else { HeadTracker::start(port, window_handle) };
+    pub fn start_with(
+        port: u16,
+        source: &str,
+        tobii: crate::tobii::Options,
+        window_handle: Option<isize>,
+    ) -> Option<HeadTracker> {
+        let reader =
+            (cfg!(windows) && source != "opentrack").then(|| crate::tobii::Tobii::start(tobii));
+        let udp = if source == "tobii" {
+            None
+        } else {
+            HeadTracker::start(port, window_handle)
+        };
         match (udp, reader) {
             (Some(mut t), r) => {
                 t.tobii = r;
                 Some(t)
             }
-            (None, Some(r)) => Some(HeadTracker { last: Arc::default(), centre: Mutex::default(), tobii: Some(r) }),
+            (None, Some(r)) => Some(HeadTracker {
+                last: Arc::default(),
+                centre: Mutex::default(),
+                tobii: Some(r),
+            }),
             (None, None) => None,
         }
     }
@@ -201,13 +239,24 @@ impl HeadTracker {
     /// frame and not in the tracker's steps (#2216, #1983).
     pub fn sample(&self) -> Option<crate::head_filter::Sample> {
         let centre = self.centre.lock().map(|c| *c).unwrap_or_default();
-        let udp = self.udp().map(|u| crate::head_filter::Sample { pose: u.pose.from_centre(&centre), gain: [1.0; 3], edge: 0.0, seq: u.seq, at: u.at, interval: u.interval, tobii: false });
+        let udp = self.udp().map(|u| crate::head_filter::Sample {
+            pose: u.pose.from_centre(&centre),
+            gain: [1.0; 3],
+            edge: 0.0,
+            seq: u.seq,
+            at: u.at,
+            interval: u.interval,
+            tobii: false,
+        });
         udp.or_else(|| self.tobii.as_ref().and_then(|t| t.sample()))
     }
 
     /// opentrack's (native TrackIR's, freetrack's) pose as it came, while poses keep coming.
     fn udp(&self) -> Option<Udp> {
-        self.last.lock().ok().and_then(|l| l.filter(|u| u.at.elapsed() < Duration::from_millis(500)))
+        self.last
+            .lock()
+            .ok()
+            .and_then(|l| l.filter(|u| u.at.elapsed() < Duration::from_millis(500)))
     }
 }
 
@@ -224,11 +273,11 @@ fn freetrack_pose(yaw: f32, pitch: f32, roll: f32, x: f32, y: f32, z: f32) -> He
 
 #[cfg(windows)]
 mod freetrack {
-    use super::{freetrack_pose, HeadPose};
+    use super::{HeadPose, freetrack_pose};
     use std::time::{Duration, Instant};
-    use windows::core::w;
     use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::Memory::{MapViewOfFile, OpenFileMappingW, FILE_MAP_READ};
+    use windows::Win32::System::Memory::{FILE_MAP_READ, MapViewOfFile, OpenFileMappingW};
+    use windows::core::w;
 
     /// `FTData`: DataID, CamWidth, CamHeight (i32), Yaw, Pitch, Roll, X, Y, Z (f32), ...
     const FIELDS: usize = 9;
@@ -249,13 +298,17 @@ mod freetrack {
         /// A new pose, when opentrack has written one since the last call.
         pub fn poll(&mut self) -> Option<HeadPose> {
             if self.view.is_none() {
-                if self.tried.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
+                if self
+                    .tried
+                    .is_some_and(|t| t.elapsed() < Duration::from_secs(1))
+                {
                     return None;
                 }
                 self.tried = Some(Instant::now());
                 // SAFETY: plain Win32 calls; the view stays mapped for the life of the game.
                 unsafe {
-                    let handle = OpenFileMappingW(FILE_MAP_READ.0, false, w!("FT_SharedMem")).ok()?;
+                    let handle =
+                        OpenFileMappingW(FILE_MAP_READ.0, false, w!("FT_SharedMem")).ok()?;
                     let view = MapViewOfFile(handle, FILE_MAP_READ, 0, 0, FIELDS * 4);
                     if view.Value.is_null() {
                         let _ = windows::Win32::Foundation::CloseHandle(handle);
@@ -286,7 +339,6 @@ mod freetrack {
     }
 }
 
-
 #[cfg(windows)]
 mod npclient {
     use super::HeadPose;
@@ -294,12 +346,12 @@ mod npclient {
     use std::mem::transmute_copy;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
-    use windows::core::{s, w, PCWSTR};
     use windows::Win32::Foundation::HMODULE;
     use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
     use windows::Win32::System::Registry::{
-        RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
+        HKEY_CURRENT_USER, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ, RegGetValueW,
     };
+    use windows::core::{PCWSTR, s, w};
 
     type NpResult = i32;
 
@@ -381,11 +433,14 @@ mod npclient {
 
     impl Reader {
         pub fn new(hwnd: Option<isize>) -> Self {
-            let native_enabled = omsi_cfg::flags::OMSI_TRACKIR_NATIVE.live_os()
+            let native_enabled = omsi_cfg::flags::OMSI_TRACKIR_NATIVE
+                .live_os()
                 .map(|v| v != "0")
                 .unwrap_or(true);
             if !native_enabled {
-                log::info!("head tracking: native TrackIR NPClient disabled by OMSI_TRACKIR_NATIVE=0");
+                log::info!(
+                    "head tracking: native TrackIR NPClient disabled by OMSI_TRACKIR_NATIVE=0"
+                );
             }
             Self {
                 native: None,
@@ -434,7 +489,10 @@ mod npclient {
             let mut candidates = Vec::new();
 
             if let Some(dir) = Self::dll_path() {
-                if dir.extension().is_some_and(|e| e.eq_ignore_ascii_case("dll")) {
+                if dir
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("dll"))
+                {
                     candidates.push(dir.clone());
                 } else {
                     candidates.push(dir.join("NPClient64.dll"));
@@ -444,14 +502,23 @@ mod npclient {
 
             // Keep conventional fallbacks as well. This helps installations where
             // the registry value is missing or stale but the standard TrackIR 5 directory exists.
-            candidates.push(Path::new(r"C:\Program Files (x86)\NaturalPoint\TrackIR5\NPClient64.dll").to_path_buf());
-            candidates.push(Path::new(r"C:\Program Files\NaturalPoint\TrackIR5\NPClient64.dll").to_path_buf());
+            candidates.push(
+                Path::new(r"C:\Program Files (x86)\NaturalPoint\TrackIR5\NPClient64.dll")
+                    .to_path_buf(),
+            );
+            candidates.push(
+                Path::new(r"C:\Program Files\NaturalPoint\TrackIR5\NPClient64.dll").to_path_buf(),
+            );
 
             for path in candidates {
                 if !path.is_file() {
                     continue;
                 }
-                let wide: Vec<u16> = path.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
+                let wide: Vec<u16> = path
+                    .to_string_lossy()
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
                 if let Ok(dll) = unsafe { LoadLibraryW(PCWSTR(wide.as_ptr())) } {
                     return Some((dll, path));
                 }
@@ -471,7 +538,10 @@ mod npclient {
             if self.native.is_some() {
                 return Some(());
             }
-            if self.tried.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+            if self
+                .tried
+                .is_some_and(|t| t.elapsed() < Duration::from_secs(2))
+            {
                 return None;
             }
             self.tried = Some(Instant::now());
@@ -481,7 +551,10 @@ mod npclient {
                 Some((
                     Self::symbol::<RegisterWindowHandle>(dll, s!("NP_RegisterWindowHandle"))?,
                     Self::symbol::<UnregisterWindowHandle>(dll, s!("NP_UnregisterWindowHandle"))?,
-                    Self::symbol::<RegisterProgramProfileId>(dll, s!("NP_RegisterProgramProfileID"))?,
+                    Self::symbol::<RegisterProgramProfileId>(
+                        dll,
+                        s!("NP_RegisterProgramProfileID"),
+                    )?,
                     Self::symbol::<QueryVersion>(dll, s!("NP_QueryVersion"))?,
                     Self::symbol::<RequestData>(dll, s!("NP_RequestData"))?,
                     Self::symbol::<GetData>(dll, s!("NP_GetData"))?,
@@ -501,10 +574,13 @@ mod npclient {
                 stop_transmission,
             ) = symbols;
 
-            let hwnd = self.hwnd.map(|h| h as *mut c_void).unwrap_or(std::ptr::null_mut());
+            let hwnd = self
+                .hwnd
+                .map(|h| h as *mut c_void)
+                .unwrap_or(std::ptr::null_mut());
             let register_result = unsafe { register_window(hwnd) };
             if register_result != 0 {
-                                return None;
+                return None;
             }
 
             let mut version = 0u16;
@@ -518,7 +594,9 @@ mod npclient {
 
             let profile_result = unsafe { register_profile(PROFILE_ID) };
             if profile_result != 0 {
-                log::warn!("head tracking: TrackIR NPClient rejected profile ID {PROFILE_ID} (result {profile_result})");
+                log::warn!(
+                    "head tracking: TrackIR NPClient rejected profile ID {PROFILE_ID} (result {profile_result})"
+                );
             }
 
             let request_result = unsafe { request_data(NP_REQUEST) };
@@ -566,7 +644,8 @@ mod npclient {
                 return None;
             }
 
-            if native.last_frame.replace(data.w_p_frame_signature) == Some(data.w_p_frame_signature) {
+            if native.last_frame.replace(data.w_p_frame_signature) == Some(data.w_p_frame_signature)
+            {
                 return None;
             }
 
@@ -616,8 +695,19 @@ mod tests {
 
     #[test]
     fn freetrack_pose_is_in_cm_and_degrees() {
-        let p = freetrack_pose(-0.5f32.to_radians() * 60.0, 10f32.to_radians(), 5f32.to_radians(), 15.0, -20.0, 100.0);
-        assert!((p.rot[0] - 30.0).abs() < 1e-3 && (p.rot[1] + 10.0).abs() < 1e-3 && (p.rot[2] - 5.0).abs() < 1e-3);
+        let p = freetrack_pose(
+            -0.5f32.to_radians() * 60.0,
+            10f32.to_radians(),
+            5f32.to_radians(),
+            15.0,
+            -20.0,
+            100.0,
+        );
+        assert!(
+            (p.rot[0] - 30.0).abs() < 1e-3
+                && (p.rot[1] + 10.0).abs() < 1e-3
+                && (p.rot[2] - 5.0).abs() < 1e-3
+        );
         assert_eq!(p.pos, [1.5, -2.0, 10.0]);
     }
 
@@ -625,15 +715,34 @@ mod tests {
     /// right, up and back with it (#1157).
     #[test]
     fn the_eye_follows_the_head_across() {
-        let p = HeadPose { pos: [-10.0, 5.0, 20.0], rot: [0.0; 3] };
+        let p = HeadPose {
+            pos: [-10.0, 5.0, 20.0],
+            rot: [0.0; 3],
+        };
         let o = p.seat_offset();
-        assert!((o.x - 0.1).abs() < 1e-6 && (o.y + 0.2).abs() < 1e-6 && (o.z - 0.05).abs() < 1e-6, "{o}");
+        assert!(
+            (o.x - 0.1).abs() < 1e-6 && (o.y + 0.2).abs() < 1e-6 && (o.z - 0.05).abs() < 1e-6,
+            "{o}"
+        );
         // (held within 60 cm)
-        assert!((HeadPose { pos: [-200.0, 0.0, 0.0], rot: [0.0; 3] }.seat_offset().x - 0.6).abs() < 1e-6);
+        assert!(
+            (HeadPose {
+                pos: [-200.0, 0.0, 0.0],
+                rot: [0.0; 3]
+            }
+            .seat_offset()
+            .x - 0.6)
+                .abs()
+                < 1e-6
+        );
     }
 
     fn tracker(tobii: Option<crate::tobii::Tobii>) -> HeadTracker {
-        HeadTracker { last: Arc::default(), centre: Mutex::default(), tobii }
+        HeadTracker {
+            last: Arc::default(),
+            centre: Mutex::default(),
+            tobii,
+        }
     }
 
     fn close(a: HeadPose, b: HeadPose) -> bool {
@@ -645,22 +754,46 @@ mod tests {
     #[test]
     fn opentracks_pose_is_given_from_the_middle_taken() {
         let t = tracker(None);
-        let turned = HeadPose { pos: [-4.0, 2.0, 6.0], rot: [175.0, -8.0, 3.0] };
+        let turned = HeadPose {
+            pos: [-4.0, 2.0, 6.0],
+            rot: [175.0, -8.0, 3.0],
+        };
         put(&t.last, turned);
         t.recenter();
         assert!(close(t.sample().unwrap().pose, turned));
         t.recenter_every_source();
         assert!(close(t.sample().unwrap().pose, HeadPose::default()));
-        put(&t.last, HeadPose { pos: [-1.0, 2.0, 6.0], rot: [-175.0, -8.0, 3.0] });
-        assert!(close(t.sample().unwrap().pose, HeadPose { pos: [3.0, 0.0, 0.0], rot: [10.0, 0.0, 0.0] }));
+        put(
+            &t.last,
+            HeadPose {
+                pos: [-1.0, 2.0, 6.0],
+                rot: [-175.0, -8.0, 3.0],
+            },
+        );
+        assert!(close(
+            t.sample().unwrap().pose,
+            HeadPose {
+                pos: [3.0, 0.0, 0.0],
+                rot: [10.0, 0.0, 0.0]
+            }
+        ));
     }
 
     /// With opentrack's poses coming and a Tobii reader there as well ("auto"), the recentre
     /// takes opentrack's pose as the middle and the Tobii tracker's middle anew.
     #[test]
     fn the_recentre_takes_opentracks_pose_while_a_tobii_reader_is_there_too() {
-        let t = tracker(Some(crate::tobii::Tobii::holding([0.0, 0.0, 600.0], [0.0; 3])));
-        put(&t.last, HeadPose { pos: [5.0, -3.0, 1.0], rot: [20.0, 4.0, -2.0] });
+        let t = tracker(Some(crate::tobii::Tobii::holding(
+            [0.0, 0.0, 600.0],
+            [0.0; 3],
+        )));
+        put(
+            &t.last,
+            HeadPose {
+                pos: [5.0, -3.0, 1.0],
+                rot: [20.0, 4.0, -2.0],
+            },
+        );
         t.recenter_every_source();
         let s = t.sample().unwrap();
         assert!(!s.tobii && close(s.pose, HeadPose::default()));

@@ -41,8 +41,14 @@ impl Row {
     }
 
     fn late_early(&self) -> (bool, bool) {
-        let late = !self.first && self.arrived.is_some_and(|a| (a - self.plan.0).round() > LATE_ARRIVAL);
-        let early = !self.last && self.left.is_some_and(|l| (l - self.plan.1).round() < EARLY_DEPARTURE);
+        let late = !self.first
+            && self
+                .arrived
+                .is_some_and(|a| (a - self.plan.0).round() > LATE_ARRIVAL);
+        let early = !self.last
+            && self
+                .left
+                .is_some_and(|l| (l - self.plan.1).round() < EARLY_DEPARTURE);
         (late, early)
     }
 }
@@ -95,7 +101,20 @@ impl TripSummary {
 
     pub fn text_in(&self, tr: impl Fn(&str) -> String) -> String {
         let head = ["Bus stop", "Plan", "Actual", "Diff", "Status", "Odometer"].map(&tr);
-        let width = |k: usize| self.rows.iter().map(|r| if k == 4 { tr(&r[k]).chars().count() } else { r[k].chars().count() }).chain([head[k].chars().count()]).max().unwrap_or(0);
+        let width = |k: usize| {
+            self.rows
+                .iter()
+                .map(|r| {
+                    if k == 4 {
+                        tr(&r[k]).chars().count()
+                    } else {
+                        r[k].chars().count()
+                    }
+                })
+                .chain([head[k].chars().count()])
+                .max()
+                .unwrap_or(0)
+        };
         let w: Vec<usize> = (0..6).map(width).collect();
         let line = |cells: [&str; 6]| -> String {
             let mut out = format!("{:<w0$}", cells[0], w0 = w[0]);
@@ -104,7 +123,12 @@ impl TripSummary {
             }
             out.trim_end().to_string()
         };
-        let mut out = format!("{}\n{}\n\n{}\n", self.head, self.title, line(head.each_ref().map(String::as_str)));
+        let mut out = format!(
+            "{}\n{}\n\n{}\n",
+            self.head,
+            self.title,
+            line(head.each_ref().map(String::as_str))
+        );
         out.push_str(&"-".repeat(w.iter().sum::<usize>() + 10));
         out.push('\n');
         for r in &self.rows {
@@ -114,19 +138,35 @@ impl TripSummary {
         }
         out.push('\n');
         out.push_str(&match self.km {
-            Some(km) => tr(&format!("Stops served: {} of {}, {km:.1} km", self.served.0, self.served.1)),
-            None => tr(&format!("Stops served: {} of {}", self.served.0, self.served.1)),
+            Some(km) => tr(&format!(
+                "Stops served: {} of {}, {km:.1} km",
+                self.served.0, self.served.1
+            )),
+            None => tr(&format!(
+                "Stops served: {} of {}",
+                self.served.0, self.served.1
+            )),
         });
         out.push('\n');
-        out.push_str(&tr(&format!("On time: {} of {}", self.on_time, self.served.0)));
+        out.push_str(&tr(&format!(
+            "On time: {} of {}",
+            self.on_time, self.served.0
+        )));
         if let Some(d) = self.driven {
             out.push('\n');
             out.push_str(&tr("Time driven: {}").replace("{}", &hms(d)));
         }
         if let Some(r) = self.rating {
-            let percent = |p: Option<f64>| p.map(|p| format!("{p:.0} %")).unwrap_or_else(|| "-".into());
+            let percent =
+                |p: Option<f64>| p.map(|p| format!("{p:.0} %")).unwrap_or_else(|| "-".into());
             out.push('\n');
-            out.push_str(&tr(&format!("Passengers: {}, driving {:.0} %, comfort {}, ticket selling {}", r.passengers, r.driving, percent(r.comfort_rated()), percent(r.tickets_rated()))));
+            out.push_str(&tr(&format!(
+                "Passengers: {}, driving {:.0} %, comfort {}, ticket selling {}",
+                r.passengers,
+                r.driving,
+                percent(r.comfort_rated()),
+                percent(r.tickets_rated())
+            )));
         }
         out.push('\n');
         out.push_str(&tr(&format!("Rating: {} of 5", self.stars())));
@@ -178,7 +218,13 @@ impl TripSummary {
     pub fn save_in(&self, tr: impl Fn(&str) -> String) -> std::io::Result<PathBuf> {
         std::fs::create_dir_all(&self.dir)?;
         let path = (1..100)
-            .map(|n| self.dir.join(if n == 1 { format!("{}.txt", self.stem) } else { format!("{} ({n}).txt", self.stem) }))
+            .map(|n| {
+                self.dir.join(if n == 1 {
+                    format!("{}.txt", self.stem)
+                } else {
+                    format!("{} ({n}).txt", self.stem)
+                })
+            })
             .find(|p| !p.exists())
             .unwrap_or_else(|| self.dir.join(format!("{}.txt", self.stem)));
         std::fs::write(&path, self.text_in(tr))?;
@@ -206,21 +252,56 @@ pub struct Journey {
 impl Journey {
     /// The log of the duty `key` (line, tour, where its `trips` begin in the tour), nothing
     /// driven yet; `head` comes first in it.
-    fn new(key: (String, String, usize), trips_planned: &[PlannedTrip], head: &str, dir: PathBuf) -> Journey {
+    fn new(
+        key: (String, String, usize),
+        trips_planned: &[PlannedTrip],
+        head: &str,
+        dir: PathBuf,
+    ) -> Journey {
         let mut trips = Vec::new();
         let mut rows = Vec::new();
         for (t, trip) in trips_planned.iter().enumerate() {
-            let line = if trip.line.trim().is_empty() { key.0.trim() } else { trip.line.trim() };
-            trips.push(format!("Trip {}  |  {} to {}  |  {}", key.2 + t + 1, line, trip.terminus.trim(), hms(trip.departure)));
+            let line = if trip.line.trim().is_empty() {
+                key.0.trim()
+            } else {
+                trip.line.trim()
+            };
+            trips.push(format!(
+                "Trip {}  |  {} to {}  |  {}",
+                key.2 + t + 1,
+                line,
+                trip.terminus.trim(),
+                hms(trip.departure)
+            ));
             let n = trip.stops.len();
             // (the stations a depot run passes are not stops)
             for (k, s) in trip.stops.iter().enumerate().filter(|(_, s)| s.stops) {
-                rows.push(Row { trip: t, stop: k, name: s.name.trim().to_string(), plan: (s.arr, s.dep), arrived: None, left: None, first: k == 0, last: k + 1 == n, odo: None });
+                rows.push(Row {
+                    trip: t,
+                    stop: k,
+                    name: s.name.trim().to_string(),
+                    plan: (s.arr, s.dep),
+                    arrived: None,
+                    left: None,
+                    first: k == 0,
+                    last: k + 1 == n,
+                    odo: None,
+                });
             }
         }
         let line = format!("Line {}, tour {}", key.0.trim(), key.1.trim());
         let head = format!("{}\n{line}", head.trim_end());
-        Journey { key, head, trips, rows, dir, path: None, ready: None, last: None, still: 0.0 }
+        Journey {
+            key,
+            head,
+            trips,
+            rows,
+            dir,
+            path: None,
+            ready: None,
+            last: None,
+            still: 0.0,
+        }
     }
 
     /// The odometer (km) at the stop the bus has just come to or left, if it has none yet.
@@ -232,7 +313,12 @@ impl Journey {
 
     /// Trip `t` (its index in the duty's trips) has ended: its summary is made. `distance`
     /// writes an odometer reading (km) in the player's units.
-    pub fn trip_ended(&mut self, t: usize, rating: Option<TripRating>, distance: impl Fn(f64) -> String) {
+    pub fn trip_ended(
+        &mut self,
+        t: usize,
+        rating: Option<TripRating>,
+        distance: impl Fn(f64) -> String,
+    ) {
         let rows: Vec<&Row> = self.rows.iter().filter(|r| r.trip == t).collect();
         if rows.iter().all(|r| r.arrived.is_none() && r.left.is_none()) {
             return;
@@ -240,13 +326,27 @@ impl Journey {
         let cells = rows
             .iter()
             .map(|r| {
-                let (plan, real) = if r.first { (r.plan.1, r.left) } else { (r.plan.0, r.arrived) };
+                let (plan, real) = if r.first {
+                    (r.plan.1, r.left)
+                } else {
+                    (r.plan.0, r.arrived)
+                };
                 let [p, a, d] = times(plan, real);
-                [r.name.clone(), p, a, d, r.status().to_string(), r.odo.map(&distance).unwrap_or_default()]
+                [
+                    r.name.clone(),
+                    p,
+                    a,
+                    d,
+                    r.status().to_string(),
+                    r.odo.map(&distance).unwrap_or_default(),
+                ]
             })
             .collect();
         let served = rows.iter().filter(|r| r.served()).count();
-        let on_time = rows.iter().filter(|r| r.served() && r.late_early() == (false, false)).count();
+        let on_time = rows
+            .iter()
+            .filter(|r| r.served() && r.late_early() == (false, false))
+            .count();
         let start = rows.iter().find_map(|r| r.left.or(r.arrived));
         let end = rows.iter().rev().find_map(|r| r.arrived.or(r.left));
         let driven = start.zip(end).map(|(a, b)| b - a).filter(|d| *d > 0.0);
@@ -254,9 +354,25 @@ impl Journey {
         let km = (odo.len() >= 2).then(|| odo[odo.len() - 1] - odo[0]);
         let stem = match self.path.as_ref().and_then(|p| p.file_stem()) {
             Some(s) => format!("{} trip {}", s.to_string_lossy(), self.key.2 + t + 1),
-            None => format!("line {} tour {} trip {}", self.key.0.trim(), self.key.1.trim(), self.key.2 + t + 1),
+            None => format!(
+                "line {} tour {} trip {}",
+                self.key.0.trim(),
+                self.key.1.trim(),
+                self.key.2 + t + 1
+            ),
         };
-        let s = TripSummary { title: self.trips.get(t).cloned().unwrap_or_default(), head: self.head.clone(), rows: cells, km, served: (served, rows.len()), on_time, driven, rating, stem, dir: self.dir.clone() };
+        let s = TripSummary {
+            title: self.trips.get(t).cloned().unwrap_or_default(),
+            head: self.head.clone(),
+            rows: cells,
+            km,
+            served: (served, rows.len()),
+            on_time,
+            driven,
+            rating,
+            stem,
+            dir: self.dir.clone(),
+        };
         self.ready = Some(s.clone());
         self.last = Some(s);
     }
@@ -269,7 +385,11 @@ impl Journey {
     /// Keep the automatic summary pending while driving: opening it takes the mouse
     /// away from the bus. Use the timetable's standstill threshold (0.1 m/s).
     pub fn take_summary_when_stopped(&mut self, speed_kmh: f32, dt: f32) -> Option<TripSummary> {
-        self.still = if speed_kmh.abs() < 0.36 { self.still + dt } else { 0.0 };
+        self.still = if speed_kmh.abs() < 0.36 {
+            self.still + dt
+        } else {
+            0.0
+        };
         if self.still >= SUMMARY_DELAY {
             self.take_summary()
         } else {
@@ -303,7 +423,9 @@ impl Journey {
     }
 
     fn row(&mut self, (trip, stop): (usize, usize)) -> Option<&mut Row> {
-        self.rows.iter_mut().find(|r| r.trip == trip && r.stop == stop)
+        self.rows
+            .iter_mut()
+            .find(|r| r.trip == trip && r.stop == stop)
     }
 
     /// The log as it is written.
@@ -319,8 +441,16 @@ impl Journey {
             }
             out.push_str(&format!("\n{title}\n{rule}\n{:<30}  {:>9} {:>9} {:>10}   {:>9} {:>9} {:>10}   Status\n{rule}\n", "Stop", "Arr. plan", "Arr. real", "Diff", "Dep. plan", "Dep. real", "Diff"));
             for (i, r) in rows.iter().enumerate() {
-                let arr = if r.first { [String::new(), String::new(), String::new()] } else { times(r.plan.0, r.arrived) };
-                let dep = if r.last { [String::new(), String::new(), String::new()] } else { times(r.plan.1, r.left) };
+                let arr = if r.first {
+                    [String::new(), String::new(), String::new()]
+                } else {
+                    times(r.plan.0, r.arrived)
+                };
+                let dep = if r.last {
+                    [String::new(), String::new(), String::new()]
+                } else {
+                    times(r.plan.1, r.left)
+                };
                 let (is_late, is_early) = r.late_early();
                 let status = if r.served() {
                     served += 1;
@@ -332,17 +462,28 @@ impl Journey {
                         (false, true) => "left early",
                         _ => "OK",
                     }
-                } else if rows[i + 1..].iter().any(|x| x.arrived.is_some() || x.left.is_some()) {
+                } else if rows[i + 1..]
+                    .iter()
+                    .any(|x| x.arrived.is_some() || x.left.is_some())
+                {
                     "missed"
                 } else {
                     ""
                 };
                 let name: String = r.name.chars().take(30).collect();
-                out.push_str(format!("{name:<30}  {:>9} {:>9} {:>10}   {:>9} {:>9} {:>10}   {status}", arr[0], arr[1], arr[2], dep[0], dep[1], dep[2]).trim_end());
+                out.push_str(
+                    format!(
+                        "{name:<30}  {:>9} {:>9} {:>10}   {:>9} {:>9} {:>10}   {status}",
+                        arr[0], arr[1], arr[2], dep[0], dep[1], dep[2]
+                    )
+                    .trim_end(),
+                );
                 out.push('\n');
             }
         }
-        out.push_str(&format!("{rule}\nStops served: {served}, late: {late}, left early: {early}\n"));
+        out.push_str(&format!(
+            "{rule}\nStops served: {served}, late: {late}, left early: {early}\n"
+        ));
         out
     }
 
@@ -350,16 +491,47 @@ impl Journey {
     fn write(&mut self) {
         if self.path.is_none() {
             let (y, mo, d, h, mi) = crate::real_time::now()
-                .map(|n| (n.year, n.month, n.day, (n.secs / 3600.0) as i32, (n.secs % 3600.0 / 60.0) as i32))
+                .map(|n| {
+                    (
+                        n.year,
+                        n.month,
+                        n.day,
+                        (n.secs / 3600.0) as i32,
+                        (n.secs % 3600.0 / 60.0) as i32,
+                    )
+                })
                 .unwrap_or((1970, 1, 1, 0, 0));
-            let clean = |s: &str| s.trim().chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect::<String>();
-            let stem = format!("{y:04}-{mo:02}-{d:02} {h:02}-{mi:02} line {} tour {}", clean(&self.key.0), clean(&self.key.1));
+            let clean = |s: &str| {
+                s.trim()
+                    .chars()
+                    .map(|c| {
+                        if c.is_alphanumeric() || c == '-' || c == '_' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect::<String>()
+            };
+            let stem = format!(
+                "{y:04}-{mo:02}-{d:02} {h:02}-{mi:02} line {} tour {}",
+                clean(&self.key.0),
+                clean(&self.key.1)
+            );
             if let Err(e) = std::fs::create_dir_all(&self.dir) {
                 log::warn!("journey log: {}: {e}", self.dir.display());
                 return;
             }
             // (another session begun in the same minute keeps its own)
-            let path = (1..100).map(|n| self.dir.join(if n == 1 { format!("{stem}.txt") } else { format!("{stem} ({n}).txt") })).find(|p| !p.exists());
+            let path = (1..100)
+                .map(|n| {
+                    self.dir.join(if n == 1 {
+                        format!("{stem}.txt")
+                    } else {
+                        format!("{stem} ({n}).txt")
+                    })
+                })
+                .find(|p| !p.exists());
             let Some(path) = path else { return };
             log::info!("journey log: {}", path.display());
             self.path = Some(path);
@@ -377,18 +549,38 @@ impl Journey {
 /// `served` seconds late (arrival, departure: what `PlayerDuty::update` returned), and
 /// arrived at the one it is due at now (`PlayerDuty::arrived`). `head` (driver, map, bus,
 /// date) is asked for when a log begins.
-pub fn note(slot: &mut Option<Journey>, duty: &PlayerDuty, due: (usize, usize), served: Option<(f64, f64)>, odo_km: f64, root: &std::path::Path, head: impl FnOnce() -> String) {
+pub fn note(
+    slot: &mut Option<Journey>,
+    duty: &PlayerDuty,
+    due: (usize, usize),
+    served: Option<(f64, f64)>,
+    odo_km: f64,
+    root: &std::path::Path,
+    head: impl FnOnce() -> String,
+) {
     // (every frame: the key is compared, not made)
-    if slot.as_ref().is_none_or(|j| (j.key.0.as_str(), j.key.1.as_str(), j.key.2) != (duty.line.as_str(), duty.tour.as_str(), duty.first_trip)) {
-        let dir = omsi_cfg::content_dir().unwrap_or_else(|| root.to_path_buf()).join("Journeys");
-        *slot = Some(Journey::new((duty.line.clone(), duty.tour.clone(), duty.first_trip), &duty.trips, &head(), dir));
+    if slot.as_ref().is_none_or(|j| {
+        (j.key.0.as_str(), j.key.1.as_str(), j.key.2)
+            != (duty.line.as_str(), duty.tour.as_str(), duty.first_trip)
+    }) {
+        let dir = omsi_cfg::content_dir()
+            .unwrap_or_else(|| root.to_path_buf())
+            .join("Journeys");
+        *slot = Some(Journey::new(
+            (duty.line.clone(), duty.tour.clone(), duty.first_trip),
+            &duty.trips,
+            &head(),
+            dir,
+        ));
     }
     let Some(j) = slot.as_mut() else { return };
     let left = served.is_some_and(|s| j.left(due, s));
     if left {
         j.odometer(due, odo_km);
     }
-    let arrived = duty.arrived().is_some_and(|late| j.arrived((duty.trip_index, duty.next_stop), late));
+    let arrived = duty
+        .arrived()
+        .is_some_and(|late| j.arrived((duty.trip_index, duty.next_stop), late));
     if arrived {
         j.odometer((duty.trip_index, duty.next_stop), odo_km);
     }
@@ -398,12 +590,34 @@ pub fn note(slot: &mut Option<Journey>, duty: &PlayerDuty, due: (usize, usize), 
 }
 
 /// The log's first line: the driver, the map, the bus and the game's date.
-pub fn head(career: &crate::career::Career, map: &str, bus: &omsi_sim::VehicleInstance, clock: &omsi_sim::SimClock) -> String {
-    let driver = career.driver.as_ref().map(|d| d.name.clone()).or_else(|| career.path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().into_owned()));
+pub fn head(
+    career: &crate::career::Career,
+    map: &str,
+    bus: &omsi_sim::VehicleInstance,
+    clock: &omsi_sim::SimClock,
+) -> String {
+    let driver = career.driver.as_ref().map(|d| d.name.clone()).or_else(|| {
+        career
+            .path
+            .as_ref()
+            .and_then(|p| p.file_stem())
+            .map(|s| s.to_string_lossy().into_owned())
+    });
     let (day, month) = clock.day_month();
-    let bus = format!("{} {}", bus.ty.def.manufacturer.trim(), bus.ty.def.type_name.trim());
-    let mut parts: Vec<String> = driver.map(|d| format!("Driver {}", d.trim())).into_iter().collect();
-    parts.extend([map.trim().to_string(), bus.trim().to_string(), format!("{:04}-{month:02}-{day:02}", clock.year)]);
+    let bus = format!(
+        "{} {}",
+        bus.ty.def.manufacturer.trim(),
+        bus.ty.def.type_name.trim()
+    );
+    let mut parts: Vec<String> = driver
+        .map(|d| format!("Driver {}", d.trim()))
+        .into_iter()
+        .collect();
+    parts.extend([
+        map.trim().to_string(),
+        bus.trim().to_string(),
+        format!("{:04}-{month:02}-{day:02}", clock.year),
+    ]);
     parts.join("  |  ")
 }
 
@@ -419,7 +633,17 @@ fn times(plan: f64, real: Option<f64>) -> [String; 3] {
         Some(r) => {
             let d = (r - plan).round() as i64;
             let a = d.abs();
-            [hms(plan), hms(r), format!("{}{:02}:{:02}:{:02}", if d < 0 { "-" } else { "+" }, a / 3600, a / 60 % 60, a % 60)]
+            [
+                hms(plan),
+                hms(r),
+                format!(
+                    "{}{:02}:{:02}:{:02}",
+                    if d < 0 { "-" } else { "+" },
+                    a / 3600,
+                    a / 60 % 60,
+                    a % 60
+                ),
+            ]
         }
         None => [hms(plan), String::new(), String::new()],
     }
@@ -442,7 +666,19 @@ mod tests {
             terminus: "Muzealna".into(),
             departure: stops[0].1,
             end: stops[stops.len() - 1].1,
-            stops: stops.iter().map(|(n, t)| PlannedStop { object_id: 0, name: n.to_string(), arr: *t, dep: *t, position: None, dir: Default::default(), stops: true, closed: None }).collect(),
+            stops: stops
+                .iter()
+                .map(|(n, t)| PlannedStop {
+                    object_id: 0,
+                    name: n.to_string(),
+                    arr: *t,
+                    dep: *t,
+                    position: None,
+                    dir: Default::default(),
+                    stops: true,
+                    closed: None,
+                })
+                .collect(),
         }
     }
 
@@ -452,14 +688,29 @@ mod tests {
         let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Test", PathBuf::new());
         j.arrived((0, 1), 0.0);
         j.trip_ended(0, None, km);
-        let expected = j.last_summary().expect("the completed trip is already recorded");
+        let expected = j
+            .last_summary()
+            .expect("the completed trip is already recorded");
 
         for speed in [20.0, -20.0, 1.0, -1.0, 0.36, -0.36] {
-            assert!(j.take_summary_when_stopped(speed, 10.0).is_none(), "still moving at {speed} km/h");
+            assert!(
+                j.take_summary_when_stopped(speed, 10.0).is_none(),
+                "still moving at {speed} km/h"
+            );
         }
-        assert_eq!(j.take_summary_when_stopped(0.0, 10.0), Some(expected.clone()));
-        assert!(j.take_summary_when_stopped(0.0, 10.0).is_none(), "closing it must not reopen it");
-        assert_eq!(j.last_summary(), Some(expected), "statistics remain available in the quick menu");
+        assert_eq!(
+            j.take_summary_when_stopped(0.0, 10.0),
+            Some(expected.clone())
+        );
+        assert!(
+            j.take_summary_when_stopped(0.0, 10.0).is_none(),
+            "closing it must not reopen it"
+        );
+        assert_eq!(
+            j.last_summary(),
+            Some(expected),
+            "statistics remain available in the quick menu"
+        );
     }
 
     #[test]
@@ -469,8 +720,14 @@ mod tests {
             let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Test", PathBuf::new());
             j.arrived((0, 1), 0.0);
             j.trip_ended(0, None, km);
-            assert!(j.take_summary_when_stopped(speed, 0.0).is_none(), "the doors first");
-            assert!(j.take_summary_when_stopped(speed, 5.0).is_some(), "stopped at {speed} km/h");
+            assert!(
+                j.take_summary_when_stopped(speed, 0.0).is_none(),
+                "the doors first"
+            );
+            assert!(
+                j.take_summary_when_stopped(speed, 5.0).is_some(),
+                "stopped at {speed} km/h"
+            );
         }
     }
 
@@ -480,25 +737,84 @@ mod tests {
         let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Test", PathBuf::new());
         j.left((0, 0), (0.0, 0.0));
         j.arrived((0, 1), 0.0);
-        j.trip_ended(0, Some(TripRating { driving: 95.0, comfort: 100.0, tickets: 90.0, passengers: 12, tickets_asked: 8 }), km);
+        j.trip_ended(
+            0,
+            Some(TripRating {
+                driving: 95.0,
+                comfort: 100.0,
+                tickets: 90.0,
+                passengers: 12,
+                tickets_asked: 8,
+            }),
+            km,
+        );
         let s = j.take_summary().expect("a summary");
         assert_eq!((s.served, s.on_time, s.driven), ((2, 2), 2, Some(60.0)));
         assert_eq!(s.stars(), 5);
         assert_eq!(s.mood(), Some("Your passengers enjoyed the ride"));
         let t = s.text();
-        assert!(t.contains("On time: 2 of 2") && t.contains("Time driven: 00:01:00") && t.contains("Passengers: 12, driving 95 %, comfort 100 %, ticket selling 90 %") && t.contains("Rating: 5 of 5"), "{t}");
+        assert!(
+            t.contains("On time: 2 of 2")
+                && t.contains("Time driven: 00:01:00")
+                && t.contains("Passengers: 12, driving 95 %, comfort 100 %, ticket selling 90 %")
+                && t.contains("Rating: 5 of 5"),
+            "{t}"
+        );
 
-        let rough = TripSummary { on_time: 0, rating: Some(TripRating { driving: 30.0, comfort: 40.0, tickets: 100.0, passengers: 5, tickets_asked: 3 }), ..s.clone() };
+        let rough = TripSummary {
+            on_time: 0,
+            rating: Some(TripRating {
+                driving: 30.0,
+                comfort: 40.0,
+                tickets: 100.0,
+                passengers: 5,
+                tickets_asked: 3,
+            }),
+            ..s.clone()
+        };
         assert_eq!(rough.stars(), 2);
         assert_eq!(rough.mood(), Some("Your passengers were unhappy"));
-        let middling = TripSummary { rating: Some(TripRating { driving: 70.0, comfort: 50.0, tickets: 100.0, passengers: 5, tickets_asked: 3 }), ..s.clone() };
+        let middling = TripSummary {
+            rating: Some(TripRating {
+                driving: 70.0,
+                comfort: 50.0,
+                tickets: 100.0,
+                passengers: 5,
+                tickets_asked: 3,
+            }),
+            ..s.clone()
+        };
         assert_eq!(middling.stars(), 4);
         assert_eq!(middling.mood(), Some("Your passengers were not very happy"));
-        let nobody = TripSummary { rating: Some(TripRating { driving: 50.0, comfort: 100.0, tickets: 100.0, passengers: 0, tickets_asked: 0 }), ..s.clone() };
+        let nobody = TripSummary {
+            rating: Some(TripRating {
+                driving: 50.0,
+                comfort: 100.0,
+                tickets: 100.0,
+                passengers: 0,
+                tickets_asked: 0,
+            }),
+            ..s.clone()
+        };
         assert_eq!(nobody.mood(), None);
-        assert_eq!(nobody.stars(), 4, "comfort and tickets nobody rated do not count");
-        assert!(nobody.text().contains("Passengers: 0, driving 50 %, comfort -, ticket selling -"), "{}", nobody.text());
-        let skipped = TripSummary { served: (2, 10), on_time: 2, rating: None, ..s.clone() };
+        assert_eq!(
+            nobody.stars(),
+            4,
+            "comfort and tickets nobody rated do not count"
+        );
+        assert!(
+            nobody
+                .text()
+                .contains("Passengers: 0, driving 50 %, comfort -, ticket selling -"),
+            "{}",
+            nobody.text()
+        );
+        let skipped = TripSummary {
+            served: (2, 10),
+            on_time: 2,
+            rating: None,
+            ..s.clone()
+        };
         assert_eq!(skipped.stars(), 1, "stops driven past are not on time");
         let unrated = TripSummary { rating: None, ..s };
         assert_eq!(unrated.stars(), 5);
@@ -513,13 +829,25 @@ mod tests {
         j.arrived((0, 1), 0.0);
         j.trip_ended(0, None, km);
         for _ in 0..299 {
-            assert!(j.take_summary_when_stopped(0.0, 1.0 / 60.0).is_none(), "the doors are still opening");
+            assert!(
+                j.take_summary_when_stopped(0.0, 1.0 / 60.0).is_none(),
+                "the doors are still opening"
+            );
         }
-        assert!(j.take_summary_when_stopped(20.0, 1.0 / 60.0).is_none(), "moved off before it showed");
+        assert!(
+            j.take_summary_when_stopped(20.0, 1.0 / 60.0).is_none(),
+            "moved off before it showed"
+        );
         for _ in 0..299 {
-            assert!(j.take_summary_when_stopped(0.0, 1.0 / 60.0).is_none(), "the wait starts again at the next stop");
+            assert!(
+                j.take_summary_when_stopped(0.0, 1.0 / 60.0).is_none(),
+                "the wait starts again at the next stop"
+            );
         }
-        assert!(j.take_summary_when_stopped(0.0, 2.0 / 60.0).is_some(), "five seconds at a standstill");
+        assert!(
+            j.take_summary_when_stopped(0.0, 2.0 / 60.0).is_some(),
+            "five seconds at a standstill"
+        );
     }
 
     /// A trip driven stop by stop: the first stop tells its departure only, the last its
@@ -528,10 +856,23 @@ mod tests {
     #[test]
     fn the_log_has_every_stop_with_its_times() {
         let t0 = 8.0 * 3600.0;
-        let trips = [trip(&[("Metro Mlociny", t0), ("Zajezdnia", t0 + 300.0), ("Prozy", t0 + 600.0), ("Muzealna", t0 + 900.0)]), trip(&[("Muzealna", t0 + 1200.0), ("Metro Mlociny", t0 + 2100.0)])];
+        let trips = [
+            trip(&[
+                ("Metro Mlociny", t0),
+                ("Zajezdnia", t0 + 300.0),
+                ("Prozy", t0 + 600.0),
+                ("Muzealna", t0 + 900.0),
+            ]),
+            trip(&[("Muzealna", t0 + 1200.0), ("Metro Mlociny", t0 + 2100.0)]),
+        ];
         let dir = std::env::temp_dir().join(format!("omsi-journey-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Driver Test | Grundorf | MAN SD77 | 1989-05-30", dir.clone());
+        let mut j = Journey::new(
+            ("5".into(), "1".into(), 0),
+            &trips,
+            "Driver Test | Grundorf | MAN SD77 | 1989-05-30",
+            dir.clone(),
+        );
         assert!(j.arrived((0, 0), 20.0));
         assert!(!j.arrived((0, 0), 30.0), "the first arrival counts");
         assert!(j.left((0, 0), (20.0, 57.0)));
@@ -544,17 +885,45 @@ mod tests {
         assert!(j.arrived((0, 3), -30.0));
         j.write();
         let text = std::fs::read_to_string(&path).unwrap();
-        let line = |name: &str| text.lines().find(|l| l.starts_with(name)).unwrap_or_else(|| panic!("no {name} in\n{text}")).to_string();
-        assert!(text.contains("Line 5, tour 1") && text.contains("Driver Test") && text.contains("Trip 1  |  5 to Muzealna  |  08:00:00"), "{text}");
-        assert!(line("Metro Mlociny").contains("08:00:00  08:00:57  +00:00:57"), "{text}");
+        let line = |name: &str| {
+            text.lines()
+                .find(|l| l.starts_with(name))
+                .unwrap_or_else(|| panic!("no {name} in\n{text}"))
+                .to_string()
+        };
+        assert!(
+            text.contains("Line 5, tour 1")
+                && text.contains("Driver Test")
+                && text.contains("Trip 1  |  5 to Muzealna  |  08:00:00"),
+            "{text}"
+        );
+        assert!(
+            line("Metro Mlociny").contains("08:00:00  08:00:57  +00:00:57"),
+            "{text}"
+        );
         assert!(line("Metro Mlociny").ends_with("OK"), "{text}");
-        assert!(line("Zajezdnia").contains("08:05:00  08:09:00  +00:04:00"), "{text}");
-        assert!(line("Zajezdnia").contains("08:05:00  08:09:30  +00:04:30"), "{text}");
+        assert!(
+            line("Zajezdnia").contains("08:05:00  08:09:00  +00:04:00"),
+            "{text}"
+        );
+        assert!(
+            line("Zajezdnia").contains("08:05:00  08:09:30  +00:04:30"),
+            "{text}"
+        );
         assert!(line("Zajezdnia").ends_with("late"), "{text}");
         assert!(line("Prozy").ends_with("missed"), "{text}");
-        assert!(line("Muzealna").contains("08:15:00  08:14:30  -00:00:30"), "{text}");
-        assert!(!text.contains("Trip 2"), "a trip not begun is not in it yet: {text}");
-        assert!(text.contains("Stops served: 3, late: 1, left early: 0"), "{text}");
+        assert!(
+            line("Muzealna").contains("08:15:00  08:14:30  -00:00:30"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("Trip 2"),
+            "a trip not begun is not in it yet: {text}"
+        );
+        assert!(
+            text.contains("Stops served: 3, late: 1, left early: 0"),
+            "{text}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
         // the trip's summary: every stop, by its arrival (the first by its departure), the
         // odometer where it was read
@@ -565,15 +934,38 @@ mod tests {
         let s = j.take_summary().expect("a summary");
         assert!(j.take_summary().is_none() && j.last_summary().is_some());
         assert_eq!(s.rows.len(), 4);
-        assert_eq!(s.rows[0], ["Metro Mlociny".to_string(), "08:00:00".into(), "08:00:57".into(), "+00:00:57".into(), "On time".into(), "1234.0 km".into()]);
+        assert_eq!(
+            s.rows[0],
+            [
+                "Metro Mlociny".to_string(),
+                "08:00:00".into(),
+                "08:00:57".into(),
+                "+00:00:57".into(),
+                "On time".into(),
+                "1234.0 km".into()
+            ]
+        );
         assert_eq!(s.rows[2][2], "", "passed by");
-        assert_eq!((s.rows[1][4].as_str(), s.rows[2][4].as_str(), s.rows[3][4].as_str()), ("Delayed", "Not served", "On time"));
+        assert_eq!(
+            (
+                s.rows[1][4].as_str(),
+                s.rows[2][4].as_str(),
+                s.rows[3][4].as_str()
+            ),
+            ("Delayed", "Not served", "On time")
+        );
         assert_eq!(s.served, (3, 4));
         assert_eq!(s.on_time, 2, "late at Zajezdnia");
         assert_eq!(s.driven, Some(813.0));
         assert_eq!(s.km, Some(2.5));
         let t = s.text();
-        assert!(t.contains("Zajezdnia") && t.contains("+00:04:00") && t.contains("1235.2 km") && t.contains("Stops served: 3 of 4, 2.5 km"), "{t}");
+        assert!(
+            t.contains("Zajezdnia")
+                && t.contains("+00:04:00")
+                && t.contains("1235.2 km")
+                && t.contains("Stops served: 3 of 4, 2.5 km"),
+            "{t}"
+        );
         let saved = s.save().expect("saved");
         assert!(saved.starts_with(&dir) && std::fs::read_to_string(&saved).unwrap() == t);
         let _ = std::fs::remove_dir_all(&dir);
@@ -581,6 +973,9 @@ mod tests {
         let mut j = Journey::new(("5".into(), "1".into(), 0), &trips, "Grundorf", dir.clone());
         assert!(j.arrived((1, 0), -60.0));
         let text = j.text();
-        assert!(text.contains("Trip 2  |  5 to Muzealna  |  08:20:00") && !text.contains("Trip 1"), "{text}");
+        assert!(
+            text.contains("Trip 2  |  5 to Muzealna  |  08:20:00") && !text.contains("Trip 1"),
+            "{text}"
+        );
     }
 }

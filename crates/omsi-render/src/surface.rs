@@ -30,14 +30,23 @@ impl Drop for SurfaceState<'_> {
         // session ending in order. The window goes with the process anyway. So on a panic:
         // the frame being drawn is let go of while unwinding, and the same message then
         // took the place of the panic that ended the game in its report (#112: a sort).
-        if !std::thread::panicking() && self.lost.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+        if !std::thread::panicking()
+            && self
+                .lost
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_none()
+        {
             // SAFETY: dropped only here, once
             unsafe { std::mem::ManuallyDrop::drop(&mut self.surface) };
         }
     }
 }
 
-pub fn create_surface(instance: &wgpu::Instance, window: &Arc<winit_window::Window>) -> Result<wgpu::Surface<'static>> {
+pub fn create_surface(
+    instance: &wgpu::Instance,
+    window: &Arc<winit_window::Window>,
+) -> Result<wgpu::Surface<'static>> {
     crate::catch(|| instance.create_surface(window.clone()))
         .ok_or_else(|| anyhow!("the graphics driver refused the window (still held after a lost graphics device? restarting the game frees it)"))?
         .context("create_surface")
@@ -47,13 +56,21 @@ pub fn create_surface(instance: &wgpu::Instance, window: &Arc<winit_window::Wind
 /// (`Fifo` for everybody would make a game that runs just below the refresh rate wait a whole
 /// blank for each late frame, where `AutoVsync` tears a little). `OMSI_PRESENT_MODE` picks a
 /// mode for an A/B run, when the surface lists it among `supported` (None: not known yet).
-pub(crate) fn present_mode(vsync: bool, capped: bool, supported: Option<&[wgpu::PresentMode]>) -> wgpu::PresentMode {
+pub(crate) fn present_mode(
+    vsync: bool,
+    capped: bool,
+    supported: Option<&[wgpu::PresentMode]>,
+) -> wgpu::PresentMode {
     let auto = match (vsync, capped) {
         (false, _) => wgpu::PresentMode::AutoNoVsync,
         (true, true) => wgpu::PresentMode::Fifo,
         (true, false) => wgpu::PresentMode::AutoVsync,
     };
-    let asked = match omsi_cfg::flags::OMSI_PRESENT_MODE.var().map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+    let asked = match omsi_cfg::flags::OMSI_PRESENT_MODE
+        .var()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .as_deref()
+    {
         Some("fifo") => wgpu::PresentMode::Fifo,
         Some("fifo_relaxed") | Some("relaxed") => wgpu::PresentMode::FifoRelaxed,
         Some("mailbox") => wgpu::PresentMode::Mailbox,
@@ -71,9 +88,15 @@ pub(crate) fn present_mode(vsync: bool, capped: bool, supported: Option<&[wgpu::
 }
 
 /// The surface's present modes, asked of the driver only for `OMSI_PRESENT_MODE` (`set_vsync` runs every frame).
-fn listed_modes(surface: &wgpu::Surface<'_>, renderer: &Renderer) -> Option<Vec<wgpu::PresentMode>> {
+fn listed_modes(
+    surface: &wgpu::Surface<'_>,
+    renderer: &Renderer,
+) -> Option<Vec<wgpu::PresentMode>> {
     omsi_cfg::flags::OMSI_PRESENT_MODE.var()?;
-    renderer.adapter.as_ref().map(|a| surface.get_capabilities(a).present_modes)
+    renderer
+        .adapter
+        .as_ref()
+        .map(|a| surface.get_capabilities(a).present_modes)
 }
 
 impl<'w> SurfaceState<'w> {
@@ -102,7 +125,9 @@ impl<'w> SurfaceState<'w> {
         // (copied from only for a glass theme: `set_glass`)
         let mut config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: encode.as_ref().map_or(renderer.format(), |e| e.window_format()),
+            format: encode
+                .as_ref()
+                .map_or(renderer.format(), |e| e.window_format()),
             width: width.max(1),
             height: height.max(1),
             present_mode: present_mode(vsync, false, modes.as_deref()),
@@ -118,13 +143,29 @@ impl<'w> SurfaceState<'w> {
         config.width = width.max(1);
         config.height = height.max(1);
         surface.configure(&renderer.device, &config);
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false, generation: None, generation_refused: false })
+        Ok(SurfaceState {
+            surface: std::mem::ManuallyDrop::new(surface),
+            config,
+            lost: renderer.errors.device_lost.clone(),
+            encode,
+            glass: false,
+            generation: None,
+            generation_refused: false,
+        })
     }
 
     /// The window's surface on a device whose renderer is still being built ([`Opened`]'s
     /// device and format): pictures without the renderer (a clear, an interface) can be
     /// shown until [`Self::adopt`] hands it over.
-    pub fn early(instance: &wgpu::Instance, window: Arc<winit_window::Window>, device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32, vsync: bool) -> Result<Self> {
+    pub fn early(
+        instance: &wgpu::Instance,
+        window: Arc<winit_window::Window>,
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+        vsync: bool,
+    ) -> Result<Self> {
         let surface = create_surface(instance, &window)?;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -138,7 +179,15 @@ impl<'w> SurfaceState<'w> {
             view_formats: vec![],
         };
         surface.configure(device, &config);
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false, generation: None, generation_refused: false })
+        Ok(SurfaceState {
+            surface: std::mem::ManuallyDrop::new(surface),
+            config,
+            lost: Default::default(),
+            encode: None,
+            glass: false,
+            generation: None,
+            generation_refused: false,
+        })
     }
 
     /// The renderer built for the device this surface was made on ([`Self::early`]) takes
@@ -162,8 +211,18 @@ impl<'w> SurfaceState<'w> {
             return;
         }
         self.glass = on;
-        let copy = on && renderer.adapter.as_ref().is_some_and(|a| self.surface.get_capabilities(a).usages.contains(wgpu::TextureUsages::COPY_SRC));
-        let usage = if copy { wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::RENDER_ATTACHMENT };
+        let copy = on
+            && renderer.adapter.as_ref().is_some_and(|a| {
+                self.surface
+                    .get_capabilities(a)
+                    .usages
+                    .contains(wgpu::TextureUsages::COPY_SRC)
+            });
+        let usage = if copy {
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
+        } else {
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+        };
         if self.config.usage != usage {
             self.config.usage = usage;
             self.surface.configure(&renderer.device, &self.config);
@@ -175,7 +234,11 @@ impl<'w> SurfaceState<'w> {
     /// [`Self::present`] shows a generated one before each. The handle is the renderer's
     /// ([`Renderer::set_frame_generation`]); None where it is off, cannot run (logged once) or
     /// gave up.
-    pub fn set_frame_generation(&mut self, renderer: &Renderer, on: bool) -> Option<temporal::FrameGeneration> {
+    pub fn set_frame_generation(
+        &mut self,
+        renderer: &Renderer,
+        on: bool,
+    ) -> Option<temporal::FrameGeneration> {
         if !on || renderer.device_lost().is_some() {
             if let Some(g) = self.generation.take() {
                 g.handle().wait();
@@ -194,7 +257,12 @@ impl<'w> SurfaceState<'w> {
         let size = (self.config.width, self.config.height);
         match self.generation.as_mut() {
             Some(g) => g.resize(&renderer.device, &renderer.queue, size),
-            None => match temporal::GenerationWindow::new(&renderer.device, &renderer.queue, self.config.format, size) {
+            None => match temporal::GenerationWindow::new(
+                &renderer.device,
+                &renderer.queue,
+                self.config.format,
+                size,
+            ) {
                 Ok(g) => self.generation = Some(g),
                 Err(e) => {
                     log::warn!("frame generation is off: {e:#}");
@@ -231,7 +299,9 @@ impl<'w> SurfaceState<'w> {
             Some(e) => e.texture()?,
             None => frame.texture.clone(),
         };
-        t.usage().contains(wgpu::TextureUsages::COPY_SRC).then_some(t)
+        t.usage()
+            .contains(wgpu::TextureUsages::COPY_SRC)
+            .then_some(t)
     }
 
     /// Shows `frame`, drawn into [`Self::view`].

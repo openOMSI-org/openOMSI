@@ -6,7 +6,7 @@ import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import { S, useStore, set, toast, remembered, remember } from '../store.js';
 import { t, ago, language } from '../i18n.js';
 import { call } from '../api.js';
-import { fixChoice, updateHof, pollNow } from '../data.js';
+import { fixChoice, updateHof, pollNow, reread } from '../data.js';
 import { Icon } from '../icons.js';
 import { Button, Card, Empty, Notice, PageHead, Search, Spinner, Tabs, Tag, useConfirm } from '../ui.js';
 import { ContentTest } from './content-test.js';
@@ -128,8 +128,9 @@ function Overview({ onCheck }) {
     setBusy(true);
     const before = lastKeys ?? new Set(problems(S).flatMap((g) => g.issues.map((i) => i.key)));
     try {
-      const [mods, vehicles] = await Promise.all([call('mods_status'), call('vehicles'), pollNow()]);
-      set({ cache: { ...S.cache, mods }, vehicles, scannedAt: Date.now() / 1000 });
+      // (through reread, so a scan asked before a switch or a delete cannot confirm it)
+      const [, vehicles] = await Promise.all([reread('mods', 'mods_status'), call('vehicles'), pollNow()]);
+      set({ vehicles, scannedAt: Date.now() / 1000 });
       // (as the content loading does: a bus taken away since must not stay the chosen one)
       fixChoice();
       updateHof();

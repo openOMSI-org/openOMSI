@@ -22,7 +22,7 @@
 use anyhow::{Context, Result};
 use glam::{Affine3A, DVec2, DVec3, Mat3A, Quat, Vec2, Vec3, Vec3A};
 use omsi_content::Human;
-use omsi_geometry::{mesh_from_o3d, MeshData};
+use omsi_geometry::{MeshData, mesh_from_o3d};
 use omsi_model::Model;
 use std::f32::consts::{PI, TAU};
 use std::path::{Path, PathBuf};
@@ -33,13 +33,13 @@ mod support;
 mod contact_tests;
 
 pub mod avatar;
-pub mod clips;
 mod bones;
+pub mod clips;
 mod gesture;
 mod hail_look;
 mod hail_motion;
 pub use gesture::accessory_hail_arm;
-pub use hail_look::{hail_look_target, HailLook, FullBusHail, visual_hail_action};
+pub use hail_look::{FullBusHail, HailLook, hail_look_target, visual_hail_action};
 pub use hail_motion::HailWrist;
 pub mod face;
 mod motion;
@@ -48,10 +48,10 @@ mod skin;
 #[cfg(test)]
 mod tests;
 
-pub use rig::{HumanMesh, HumanType, Influence, Joints, Rig};
-pub use skin::{curl_hands, grip_centres, hand_slot, skin, skin_from, slots_from_omsi};
 #[cfg(test)]
 use rig::split_feet;
+pub use rig::{HumanMesh, HumanType, Influence, Joints, Rig};
+pub use skin::{curl_hands, grip_centres, hand_slot, skin, skin_from, slots_from_omsi};
 
 /// Engine bone ids of `[setbone]`.
 pub const BONE_OS_L: i32 = -2;

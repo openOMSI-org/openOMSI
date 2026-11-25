@@ -23,9 +23,15 @@ pub fn look(given: Option<PathBuf>, docs: impl FnOnce() -> Option<PathBuf>) -> L
     if let Some(p) = given {
         crate::content_changed();
         let missing = crate::missing_original_essentials(&p);
-        return if missing.is_empty() { Look::Root(p) } else { Look::Missing(missing.into_iter().take(6).collect()) };
+        return if missing.is_empty() {
+            Look::Root(p)
+        } else {
+            Look::Missing(missing.into_iter().take(6).collect())
+        };
     }
-    let Some(docs) = docs() else { return Look::Waiting };
+    let Some(docs) = docs() else {
+        return Look::Waiting;
+    };
     let cands = candidates(&docs);
     if cands.is_empty() {
         *WATCH.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -36,7 +42,12 @@ pub fn look(given: Option<PathBuf>, docs: impl FnOnce() -> Option<PathBuf>) -> L
     let watch = match w.as_mut() {
         Some(x) if x.signature == signature => x,
         _ => {
-            *w = Some(Watch { signature, since: Instant::now(), verdict: None, missing: Vec::new() });
+            *w = Some(Watch {
+                signature,
+                since: Instant::now(),
+                verdict: None,
+                missing: Vec::new(),
+            });
             return Look::Waiting;
         }
     };
@@ -45,9 +56,22 @@ pub fn look(given: Option<PathBuf>, docs: impl FnOnce() -> Option<PathBuf>) -> L
     }
     if watch.verdict.is_none() {
         crate::content_changed();
-        let checked: Vec<(PathBuf, Vec<String>)> = cands.iter().map(|p| (p.clone(), crate::missing_original_essentials(p))).collect();
-        let found = checked.iter().find(|(_, m)| m.is_empty()).map(|(p, _)| p.clone());
-        watch.missing = checked.into_iter().map(|(_, m)| m).min_by_key(|m| m.len()).unwrap_or_default().into_iter().take(6).collect();
+        let checked: Vec<(PathBuf, Vec<String>)> = cands
+            .iter()
+            .map(|p| (p.clone(), crate::missing_original_essentials(p)))
+            .collect();
+        let found = checked
+            .iter()
+            .find(|(_, m)| m.is_empty())
+            .map(|(p, _)| p.clone());
+        watch.missing = checked
+            .into_iter()
+            .map(|(_, m)| m)
+            .min_by_key(|m| m.len())
+            .unwrap_or_default()
+            .into_iter()
+            .take(6)
+            .collect();
         watch.verdict = Some(found);
     }
     match watch.verdict.clone().flatten() {
@@ -57,11 +81,23 @@ pub fn look(given: Option<PathBuf>, docs: impl FnOnce() -> Option<PathBuf>) -> L
 }
 
 fn has_exe(p: &Path) -> bool {
-    std::fs::read_dir(p).into_iter().flatten().flatten().any(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case("Omsi.exe"))
+    std::fs::read_dir(p)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case("Omsi.exe")
+        })
 }
 
 fn looks_like_game(p: &Path) -> bool {
-    let named = p.file_name().is_some_and(|f| crate::install_search::NAMES.iter().any(|n| f.to_string_lossy().eq_ignore_ascii_case(n)));
+    let named = p.file_name().is_some_and(|f| {
+        crate::install_search::NAMES
+            .iter()
+            .any(|n| f.to_string_lossy().eq_ignore_ascii_case(n))
+    });
     p.is_dir() && (named || has_exe(p))
 }
 
@@ -94,7 +130,11 @@ fn tree_signature(root: &Path) -> (usize, u128) {
     let mut dirs = vec![root.to_path_buf()];
     while let Some(d) = dirs.pop() {
         if let Ok(t) = std::fs::metadata(&d).and_then(|m| m.modified()) {
-            latest = latest.max(t.duration_since(std::time::UNIX_EPOCH).map(|x| x.as_millis()).unwrap_or(0));
+            latest = latest.max(
+                t.duration_since(std::time::UNIX_EPOCH)
+                    .map(|x| x.as_millis())
+                    .unwrap_or(0),
+            );
         }
         for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
             entries += 1;

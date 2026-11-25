@@ -3,8 +3,8 @@
 //! block-compressed one (BC1-BC7, ETC1/ETC2/EAC, ASTC). A KTX 2 file must not be
 //! supercompressed (Basis Universal, zstd).
 
-use crate::blocks::{self, Block};
 use crate::Image;
+use crate::blocks::{self, Block};
 
 const KTX1: &[u8; 12] = b"\xABKTX 11\xBB\r\n\x1A\n";
 const KTX2: &[u8; 12] = b"\xABKTX 20\xBB\r\n\x1A\n";
@@ -14,7 +14,9 @@ pub fn is_ktx(b: &[u8]) -> bool {
 }
 
 fn u32_at(b: &[u8], o: usize) -> Result<u32, String> {
-    b.get(o..o + 4).map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]])).ok_or_else(|| "truncated header".to_string())
+    b.get(o..o + 4)
+        .map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
+        .ok_or_else(|| "truncated header".to_string())
 }
 
 fn u64_at(b: &[u8], o: usize) -> Result<u64, String> {
@@ -33,11 +35,20 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
         let (w, h) = (u32_at(b, 20)? as usize, (u32_at(b, 24)? as usize).max(1));
         let scheme = u32_at(b, 44)?;
         if scheme != 0 {
-            return Err(format!("supercompressed KTX 2 (scheme {scheme}) is not read"));
+            return Err(format!(
+                "supercompressed KTX 2 (scheme {scheme}) is not read"
+            ));
         }
         let (off, len) = (u64_at(b, 80)? as usize, u64_at(b, 88)? as usize);
-        let data = b.get(off..off.saturating_add(len)).ok_or("level 0 lies outside the file")?;
-        (vk_kind(vk).ok_or_else(|| format!("KTX 2 format {vk} is not read"))?, w, h, data)
+        let data = b
+            .get(off..off.saturating_add(len))
+            .ok_or("level 0 lies outside the file")?;
+        (
+            vk_kind(vk).ok_or_else(|| format!("KTX 2 format {vk} is not read"))?,
+            w,
+            h,
+            data,
+        )
     } else if b.starts_with(KTX1) {
         if u32_at(b, 12)? != 0x0403_0201 {
             return Err("big-endian KTX".into());
@@ -47,8 +58,16 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
         let kvd = u32_at(b, 60)? as usize;
         let at = 64 + kvd;
         let size = u32_at(b, at)? as usize;
-        let data = b.get(at + 4..at + 4 + size).ok_or("level 0 lies outside the file")?;
-        (gl_kind(gl_type, gl_format, internal).ok_or_else(|| format!("KTX format 0x{internal:x} is not read"))?, w, h, data)
+        let data = b
+            .get(at + 4..at + 4 + size)
+            .ok_or("level 0 lies outside the file")?;
+        (
+            gl_kind(gl_type, gl_format, internal)
+                .ok_or_else(|| format!("KTX format 0x{internal:x} is not read"))?,
+            w,
+            h,
+            data,
+        )
     } else {
         return Err("not a KTX file".into());
     };
@@ -68,7 +87,12 @@ pub fn decode(b: &[u8]) -> Result<Image, String> {
                 rgba.extend_from_slice(&read(px));
             }
             let has_alpha = rgba.chunks_exact(4).any(|p| p[3] < 255);
-            Ok(Image { width: w as u32, height: h as u32, rgba, has_alpha })
+            Ok(Image {
+                width: w as u32,
+                height: h as u32,
+                rgba,
+                has_alpha,
+            })
         }
     }
 }
@@ -91,7 +115,22 @@ fn rg(p: &[u8]) -> [u8; 4] {
 
 /// The Vulkan formats of a KTX 2 file.
 fn vk_kind(vk: u32) -> Option<Kind> {
-    const ASTC: [(u8, u8); 14] = [(4, 4), (5, 4), (5, 5), (6, 5), (6, 6), (8, 5), (8, 6), (8, 8), (10, 5), (10, 6), (10, 8), (10, 10), (12, 10), (12, 12)];
+    const ASTC: [(u8, u8); 14] = [
+        (4, 4),
+        (5, 4),
+        (5, 5),
+        (6, 5),
+        (6, 6),
+        (8, 5),
+        (8, 6),
+        (8, 8),
+        (10, 5),
+        (10, 6),
+        (10, 8),
+        (10, 10),
+        (12, 10),
+        (12, 12),
+    ];
     Some(match vk {
         37 | 43 => Kind::Plain(4, rgba),
         44 | 50 => Kind::Plain(4, bgra),
@@ -145,7 +184,22 @@ fn gl_kind(gl_type: u32, gl_format: u32, internal: u32) -> Option<Kind> {
         0x9270 => Kind::Block(Block::EacR),
         0x9272 => Kind::Block(Block::EacRg),
         0x93B0..=0x93BD | 0x93D0..=0x93DD => {
-            const ASTC: [(u8, u8); 14] = [(4, 4), (5, 4), (5, 5), (6, 5), (6, 6), (8, 5), (8, 6), (8, 8), (10, 5), (10, 6), (10, 8), (10, 10), (12, 10), (12, 12)];
+            const ASTC: [(u8, u8); 14] = [
+                (4, 4),
+                (5, 4),
+                (5, 5),
+                (6, 5),
+                (6, 6),
+                (8, 5),
+                (8, 6),
+                (8, 8),
+                (10, 5),
+                (10, 6),
+                (10, 8),
+                (10, 10),
+                (12, 10),
+                (12, 12),
+            ];
             let (w, h) = ASTC[(internal & 0xF) as usize];
             Kind::Block(Block::Astc(w, h))
         }

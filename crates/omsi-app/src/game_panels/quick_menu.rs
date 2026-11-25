@@ -14,56 +14,56 @@
 //! the personnel file when there is none.
 
 use super::{card, el, note, text, theme_color};
-use omsi_ui::theme::Palette;
 use omsi_plugin::ui::{Align, Anchor, Element, Kind, Panel, Rgba, RowAlign, Weight};
+use omsi_ui::theme::Palette;
 use omsi_ui::tr;
 
 /// OMSI 2's lit tile: a deep orange-brown, the white icon on it.
 const LIT: Rgba = Rgba([138, 72, 26, 255]);
 pub(crate) const COLUMNS: usize = 5;
 pub(crate) const PER_PAGE: usize = 15;
-/// Five tiles of 84 and four gaps of 8, with the card's padding round them.
-const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 8.0 + 2.0 * 14.0;
+/// Five tiles of 84 and four gaps of 4, with the card's padding round them.
+const WIDTH: f32 = 5.0 * 84.0 + 4.0 * 4.0 + 2.0 * 10.0;
 
 /// The tiles: id, label, icon - in OMSI's order, five to a row, fifteen to a page.
 pub(crate) const TILES: [(&str, &str, &str); 30] = [
-    ("place", "Place a vehicle", "add"),
-    ("switch", "Change vehicle", "sync_alt"),
-    ("remove", "Remove vehicle", "delete"),
-    ("reset", "Reset vehicle", "restart_alt"),
-    ("map", "City map", "map"),
-    ("duty", "Timetable", "departure_board"),
-    ("dest", "Destination", "directions_bus"),
-    ("repair", "Repair", "construction"),
-    ("refuel", "Refuel", "local_gas_station"),
-    ("wash", "Wash", "local_car_wash"),
-    ("arrows", "Dynamic route arrows", "navigation"),
-    ("time", "Time", "schedule"),
-    ("weather", "Weather", "partly_cloudy_day"),
-    ("controls", "Controls", "sports_esports"),
-    ("stats", "Statistics", "receipt_long"),
+    ("place", "Place a vehicle", "omsi_place"),
+    ("switch", "Change vehicle", "omsi_switch"),
+    ("remove", "Remove vehicle", "omsi_remove"),
+    ("reset", "Reset vehicle", "omsi_reset"),
+    ("map", "City map", "omsi_map"),
+    ("duty", "Timetable", "omsi_duty"),
+    ("dest", "Destination", "omsi_dest"),
+    ("repair", "Repair", "omsi_repair"),
+    ("refuel", "Refuel", "omsi_refuel"),
+    ("wash", "Wash", "omsi_wash"),
+    ("arrows", "Dynamic route arrows", "omsi_arrows"),
+    ("time", "Time", "omsi_time"),
+    ("weather", "Weather", "omsi_weather"),
+    ("controls", "Controls", "omsi_controls"),
+    ("stats", "Statistics", "omsi_stats"),
     // the second page: the game menu's lines
-    ("camera", "Camera", "videocam"),
-    ("view_editor", "Seat, view and mirrors", "airline_seat_recline_normal"),
-    ("vehicle", "Vehicle options...", "tune"),
-    ("world", "World options...", "public"),
-    ("options", "Options", "settings"),
-    ("tobus", "Back to my bus", "directions_walk"),
-    ("save", "Save the situation", "save"),
-    ("saveslot", "Save to a slot...", "sd_card"),
-    ("shot", "Screenshot", "photo_camera"),
-    ("photo", "Photo mode", "visibility"),
-    ("skipstop", "Skip the next stop", "stop_request"),
-    ("endduty", "End the tour", "sports_score"),
-    ("players", "Player list", "group"),
-    ("admin", "Administration", "dns"),
-    ("radio", "Radio", "radio"),
+    ("camera", "Camera", "omsi_camera"),
+    ("view_editor", "Seat, view and mirrors", "omsi_view_editor"),
+    ("vehicle", "Vehicle options...", "omsi_vehicle"),
+    ("world", "World options...", "omsi_world"),
+    ("options", "Options", "omsi_options"),
+    ("tobus", "Back to my bus", "omsi_tobus"),
+    ("save", "Save the situation", "omsi_save"),
+    ("saveslot", "Save to a slot...", "omsi_saveslot"),
+    ("shot", "Screenshot", "omsi_shot"),
+    ("photo", "Photo mode", "omsi_photo"),
+    ("skipstop", "Skip the next stop", "omsi_skipstop"),
+    ("endduty", "End the tour", "omsi_endduty"),
+    ("players", "Player list", "omsi_players"),
+    ("admin", "Administration", "omsi_admin"),
+    ("radio", "Radio", "omsi_radio"),
 ];
 
 /// The tiles that are the game menu's lines, offered only when it offers them now.
 const MENU_LINES: [&str; 16] = [
-    "map", "controls", "camera", "vehicle", "world", "options", "tobus", "save", "saveslot", "shot", "photo", "skipstop", "endduty",
-    "players", "admin", "duty",
+    "map", "controls", "camera", "vehicle", "world", "options", "tobus", "save", "saveslot",
+    "shot", "photo", "skipstop", "endduty", "players", "admin", "duty",
 ];
 
 pub(crate) fn pages() -> usize {
@@ -78,7 +78,10 @@ fn page_tiles(page: usize) -> &'static [(&'static str, &'static str, &'static st
 
 /// A label as a name: without the dots of a menu line that opens a window.
 fn name(label: &str) -> String {
-    tr(label).trim_end_matches("...").trim_end_matches('…').to_string()
+    tr(label)
+        .trim_end_matches("...")
+        .trim_end_matches('…')
+        .to_string()
 }
 
 /// The menu: its page and the tile chosen on it (by the mouse or the keys).
@@ -100,7 +103,11 @@ pub(crate) struct TileState {
 impl TileState {
     pub(crate) fn of(app: &crate::App) -> TileState {
         let offered: Vec<&'static str> = app.game_menu_items().iter().map(|l| l.0).collect();
-        let mut off: Vec<&'static str> = MENU_LINES.iter().copied().filter(|id| !offered.contains(id)).collect();
+        let mut off: Vec<&'static str> = MENU_LINES
+            .iter()
+            .copied()
+            .filter(|id| !offered.contains(id))
+            .collect();
         let mut lit = Vec::new();
         if app.settings.nav_dynamic_arrows {
             lit.push("arrows");
@@ -117,7 +124,10 @@ impl TileState {
 
 impl QuickMenu {
     pub(crate) fn panel(&self, app: &crate::App) -> Panel {
-        self.panel_of(&TileState::of(app), crate::themes::palette(app.settings.is_light_theme()))
+        self.panel_of(
+            &TileState::of(app),
+            crate::themes::palette(app.settings.is_light_theme()),
+        )
     }
 
     /// The tile chosen: its id.
@@ -140,44 +150,112 @@ impl QuickMenu {
                         let focus = r * COLUMNS + c == self.focus;
                         let off = state.off.contains(id);
                         // (no text: a square of the icon alone, its name under the grid)
-                        let kind = Kind::Tile { text: String::new(), icon: icon.to_string(), focus, off };
-                        Element { color: (!off && state.lit.contains(id)).then_some(LIT), ..el(Some(id), kind) }
+                        let kind = Kind::Tile {
+                            text: String::new(),
+                            icon: icon.to_string(),
+                            focus,
+                            off,
+                        };
+                        Element {
+                            color: (!off && state.lit.contains(id)).then_some(LIT),
+                            ..el(Some(id), kind)
+                        }
                     })
                     .collect();
-                el(None, Kind::Row { children: row, gap: 8.0, align: RowAlign::Start })
+                el(
+                    None,
+                    Kind::Row {
+                        children: row,
+                        gap: 4.0,
+                        align: RowAlign::Start,
+                    },
+                )
             })
             .collect();
         let (caption, off) = match tiles.get(self.focus) {
             Some((id, label, _)) => (name(label), state.off.contains(id)),
             None => (String::new(), false),
         };
-        let mut foot = vec![Element { grow: true, ..text(&caption, 15.0, Weight::Bold) }];
+        let mut foot = vec![Element {
+            grow: true,
+            ..text(&caption, 15.0, Weight::Bold)
+        }];
         if off {
             foot[0].color = Some(muted);
-            foot.push(Element { color: Some(muted), ..el(None, Kind::Text { text: tr("Currently unavailable").into_owned(), size: 12.0, weight: Weight::Regular, align: Align::Right, wrap: false }) });
+            foot.push(Element {
+                color: Some(muted),
+                ..el(
+                    None,
+                    Kind::Text {
+                        text: tr("Currently unavailable").into_owned(),
+                        size: 12.0,
+                        weight: Weight::Regular,
+                        align: Align::Right,
+                        wrap: false,
+                    },
+                )
+            });
         }
         if pages() > 1 {
             let at = format!("{} / {}", self.page + 1, pages());
-            foot.push(Element { color: Some(muted), ..el(None, Kind::Text { text: at, size: 12.0, weight: Weight::Regular, align: Align::Right, wrap: false }) });
-            foot.push(el(Some("next"), Kind::Button { text: String::new(), icon: Some("chevron_right".into()) }));
+            foot.push(Element {
+                color: Some(muted),
+                ..el(
+                    None,
+                    Kind::Text {
+                        text: at,
+                        size: 12.0,
+                        weight: Weight::Regular,
+                        align: Align::Right,
+                        wrap: false,
+                    },
+                )
+            });
+            foot.push(el(
+                Some("next"),
+                Kind::Button {
+                    text: String::new(),
+                    icon: Some("chevron_right".into()),
+                },
+            ));
         }
-        children.push(el(None, Kind::Row { children: foot, gap: 10.0, align: RowAlign::Start }));
-        children.push(note(&tr("Alt or Esc closes the menu; the game goes on."), pal));
-        Panel { padding: 14.0, gap: 8.0, ..card(Anchor::BottomRight, 32.0, 32.0, WIDTH, 215, pal, children) }
+        children.push(el(
+            None,
+            Kind::Row {
+                children: foot,
+                gap: 10.0,
+                align: RowAlign::Start,
+            },
+        ));
+        children.push(note(
+            &tr("Alt or Esc closes the menu; the game goes on."),
+            pal,
+        ));
+        Panel {
+            padding: 10.0,
+            gap: 4.0,
+            radius: 3.0,
+            ..card(Anchor::BottomRight, 32.0, 32.0, WIDTH, 230, pal, children)
+        }
     }
 
     /// The next page (after the last, the first), its first tile chosen.
     pub(crate) fn turn(&mut self, by: isize) {
         let n = pages() as isize;
         self.page = (self.page as isize + by).rem_euclid(n) as usize;
-        self.focus = self.focus.min(page_tiles(self.page).len().saturating_sub(1));
+        self.focus = self
+            .focus
+            .min(page_tiles(self.page).len().saturating_sub(1));
     }
 
     /// An arrow key: the choice moves in the grid; past the side of a page, onto the next
     /// page's row (or the one before's), as OMSI's arrow turns it.
     pub(crate) fn step(&mut self, dx: isize, dy: isize) {
         let n = page_tiles(self.page).len() as isize;
-        let (r, c) = (self.focus as isize / COLUMNS as isize, self.focus as isize % COLUMNS as isize);
+        let (r, c) = (
+            self.focus as isize / COLUMNS as isize,
+            self.focus as isize % COLUMNS as isize,
+        );
         if dy != 0 {
             let to = (r + dy) * COLUMNS as isize + c;
             if (0..n).contains(&to) {
@@ -219,7 +297,10 @@ pub(crate) fn toggle(app: &mut crate::App) {
     let gp = &mut app.menus.game_panels;
     gp.quick = match gp.quick.take() {
         Some(_) => None,
-        None => Some(QuickMenu { cursor: Some(app.input.cursor), ..Default::default() }),
+        None => Some(QuickMenu {
+            cursor: Some(app.input.cursor),
+            ..Default::default()
+        }),
     };
 }
 
@@ -227,7 +308,15 @@ pub(crate) fn toggle(app: &mut crate::App) {
 /// the page keys turn the page. True when the key was the menu's.
 pub(crate) fn key(app: &mut crate::App, code: winit::keyboard::KeyCode) -> bool {
     use winit::keyboard::KeyCode as K;
-    let Some(q) = app.menus.game_panels.quick.as_mut().filter(|q| !q.mouse_kept) else { return false };
+    let Some(q) = app
+        .menus
+        .game_panels
+        .quick
+        .as_mut()
+        .filter(|q| !q.mouse_kept)
+    else {
+        return false;
+    };
     match code {
         K::ArrowLeft => q.step(-1, 0),
         K::ArrowRight => q.step(1, 0),
@@ -271,7 +360,11 @@ fn start(app: &mut crate::App, id: &str, mouse: bool) {
             );
         }
         "time" | "weather" => {
-            let tab = crate::game_lists::tab_of(app, crate::game_lists::ListKind::World(0), if id == "time" { "Time" } else { "Weather" });
+            let tab = crate::game_lists::tab_of(
+                app,
+                crate::game_lists::ListKind::World(0),
+                if id == "time" { "Time" } else { "Weather" },
+            );
             app.open_list(crate::game_lists::ListKind::World(tab));
         }
         "stats" => match app.session.journey.as_ref().and_then(|j| j.last_summary()) {
@@ -294,186 +387,13 @@ fn start(app: &mut crate::App, id: &str, mouse: bool) {
         || app.menus.navigator.as_ref().is_some_and(|n| n.map_open())
         || app.menus.game_panels.any();
     if !elsewhere {
-        app.menus.game_panels.quick = kept.map(|q| QuickMenu { mouse_kept: q.mouse_kept || mouse, ..q });
+        app.menus.game_panels.quick = kept.map(|q| QuickMenu {
+            mouse_kept: q.mouse_kept || mouse,
+            ..q
+        });
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn app() -> crate::App {
-        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
-        crate::assemble_app(args, Default::default())
-    }
-
-    #[test]
-    fn the_tiles_have_icons_and_omsis_first_page() {
-        for (id, _, icon) in TILES {
-            assert!(omsi_ui::icons::svg(icon).is_some(), "{id}: no icon {icon}");
-        }
-        let ids: std::collections::HashSet<_> = TILES.iter().map(|t| t.0).collect();
-        assert_eq!(ids.len(), TILES.len());
-        assert_eq!(pages(), 2);
-        assert_eq!(page_tiles(0).len(), 15);
-        assert!(omsi_ui::icons::svg("chevron_right").is_some());
-    }
-
-    #[test]
-    fn every_menu_line_tile_is_a_line_of_the_game_menu() {
-        for id in MENU_LINES {
-            assert!(TILES.iter().any(|t| t.0 == id), "{id}");
-        }
-        let all: Vec<&str> = crate::app_impl::GAME_MENU.iter().map(|l| l.0).chain(["tobus", "players", "admin"]).collect();
-        for id in MENU_LINES {
-            assert!(all.contains(&id), "{id} is no game menu line");
-        }
-    }
-
-    #[test]
-    fn after_a_tile_clicked_the_arrows_drive_the_bus_again() {
-        use winit::keyboard::KeyCode as K;
-        let mut a = app();
-        a.menus.game_panels.quick = Some(QuickMenu::default());
-        assert!(key(&mut a, K::ArrowUp), "worked from the keys, the menu has the arrows");
-        a.menus.game_panels.quick = Some(QuickMenu { mouse_kept: true, ..Default::default() });
-        for k in [K::ArrowUp, K::ArrowDown, K::ArrowLeft, K::ArrowRight, K::Enter, K::Tab, K::PageUp] {
-            assert!(!key(&mut a, k), "{k:?} goes to the game");
-        }
-    }
-
-    #[test]
-    fn the_arrows_walk_the_grid_and_turn_the_page() {
-        let mut q = QuickMenu::default();
-        q.step(1, 0);
-        assert_eq!((q.page, q.focus), (0, 1));
-        q.step(0, 1);
-        assert_eq!((q.page, q.focus), (0, 6));
-        q.step(0, 1);
-        q.step(0, 1);
-        assert_eq!(q.focus, 11, "no row under the last");
-        q.focus = 14;
-        q.step(1, 0);
-        // the second page has 14 tiles: its third row ends at 13
-        assert_eq!((q.page, q.focus), (1, 10));
-        q.step(-1, 0);
-        assert_eq!((q.page, q.focus), (0, 14));
-        q.focus = 0;
-        q.step(-1, 0);
-        assert_eq!((q.page, q.focus), (1, 4));
-        q.turn(1);
-        assert_eq!(q.page, 0);
-    }
-
-    #[test]
-    fn a_still_cursor_leaves_the_keys_choice() {
-        let mut q = QuickMenu { cursor: Some((5.0, 5.0)), ..Default::default() };
-        q.hover("remove", (5.0, 5.0));
-        assert_eq!(q.focus, 0);
-        q.hover("remove", (6.0, 5.0));
-        assert_eq!(q.focus, 2);
-        q.step(1, 0);
-        q.hover("remove", (6.0, 5.0));
-        assert_eq!(q.focus, 3);
-    }
-
-    #[test]
-    fn the_panel_shows_the_chosen_tiles_name_and_the_lit_and_greyed_ones() {
-        let q = QuickMenu { focus: 7, ..Default::default() };
-        let p = q.panel_of(&TileState { off: vec!["map"], lit: vec!["arrows"] }, Palette::OPENOMSI);
-        let tiles: Vec<&Element> = p.children.iter().take(3).flat_map(|r| match &r.kind {
-            Kind::Row { children, .. } => children.iter().collect::<Vec<_>>(),
-            _ => vec![],
-        }).collect();
-        assert_eq!(tiles.len(), 15);
-        let of = |id: &str| tiles.iter().find(|t| t.id.as_deref() == Some(id)).unwrap();
-        assert!(matches!(of("repair").kind, Kind::Tile { focus: true, .. }));
-        assert!(matches!(of("map").kind, Kind::Tile { off: true, .. }));
-        assert!(!of("map").takes_clicks());
-        assert_eq!(of("arrows").color, Some(LIT));
-        let Kind::Row { children: foot, .. } = &p.children[3].kind else { panic!() };
-        assert!(matches!(&foot[0].kind, Kind::Text { text, .. } if text == "Repair"));
-        assert!(foot.iter().any(|e| e.id.as_deref() == Some("next")));
-    }
-
-    #[test]
-    fn keys_open_and_start_tiles() {
-        use winit::keyboard::KeyCode as K;
-        let mut app = app();
-        assert!(!key(&mut app, K::ArrowRight), "no menu, no key");
-        toggle(&mut app);
-        // to "Time" (row 3, column 2) and Enter: the world window's Time page
-        for k in [K::ArrowDown, K::ArrowDown, K::ArrowRight] {
-            assert!(key(&mut app, k));
-        }
-        assert_eq!(app.menus.game_panels.quick.as_ref().and_then(|q| q.chosen()), Some("time"));
-        assert!(key(&mut app, K::Enter));
-        assert!(app.menus.game_panels.quick.is_none());
-        assert!(app.menus.chooser.is_some());
-        app.close_list();
-        app.close_game_menu();
-    }
-
-    #[test]
-    fn game_panels_follow_the_light_theme_setting() {
-        let args = <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]);
-        let mut app = crate::assemble_app(args, Default::default());
-        app.settings.ui_theme = "light".into();
-        toggle(&mut app);
-        app.frame_game_panels(0.0, [0.0, 0.0, 1280.0, 720.0], false);
-
-        let panel = app.menus.game_panels.ui.panels().iter().find(|p| p.id == "quick").unwrap();
-        let background = panel.panel.background.unwrap();
-        assert!(background.0[0] > 230 && background.0[1] > 230 && background.0[2] > 230, "{background:?}");
-    }
-
-    #[test]
-    fn a_tile_that_opens_a_list_opens_the_game_menu_under_it() {
-        let mut app = app();
-        for tile in ["time", "weather", "stats", "controls", "options", "camera"] {
-            toggle(&mut app);
-            click(&mut app, tile);
-            assert!(app.menus.chooser.is_some(), "{tile}: no list");
-            assert!(app.menus.game_menu.is_some(), "{tile}: the list gets no input");
-            app.close_list();
-            app.close_game_menu();
-        }
-    }
-
-    #[test]
-    fn a_tile_done_in_place_keeps_the_menu_open_on_its_page() {
-        let mut app = app();
-        toggle(&mut app);
-        click(&mut app, "next");
-        click(&mut app, "arrows");
-        assert!(app.menus.game_panels.quick.as_ref().is_some_and(|q| q.page == 1), "the menu stays, as in OMSI 2");
-        assert!(app.settings.nav_dynamic_arrows);
-        assert!(!app.settings.nav_map_arrows);
-        click(&mut app, "time");
-        assert!(app.menus.game_panels.quick.is_none(), "a list takes over");
-    }
-
-    #[test]
-    fn the_page_arrow_turns_the_page_and_keeps_the_menu() {
-        let mut app = app();
-        toggle(&mut app);
-        click(&mut app, "next");
-        assert_eq!(app.menus.game_panels.quick.as_ref().map(|q| q.page), Some(1));
-        click(&mut app, "next");
-        assert_eq!(app.menus.game_panels.quick.as_ref().map(|q| q.page), Some(0));
-    }
-
-    #[test]
-    fn a_tile_leaves_the_pause_as_it_was() {
-        let mut app = app();
-        for (paused, stale) in [(true, false), (false, true)] {
-            for tile in ["reset", "remove", "repair"] {
-                app.paused = paused;
-                app.menus.menu_prev_pause = stale;
-                toggle(&mut app);
-                click(&mut app, tile);
-                assert_eq!(app.paused, paused, "{tile}");
-            }
-        }
-    }
-}
+#[path = "quick_menu_tests.rs"]
+mod tests;

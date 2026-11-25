@@ -3,6 +3,7 @@
 
 mod cloud_field;
 mod enhanced;
+mod grade;
 mod lamp_sight;
 mod lamp_slots;
 mod lamp_tiles;
@@ -12,6 +13,7 @@ mod sky_sched;
 
 pub(crate) use cloud_field::*;
 pub(crate) use enhanced::*;
+pub(crate) use grade::*;
 pub(crate) use lamp_sight::*;
 pub(crate) use lamp_slots::*;
 pub(crate) use lamp_tiles::*;

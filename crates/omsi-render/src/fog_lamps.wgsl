@@ -145,7 +145,9 @@ fn sun_shafts(c: vec3<f32>, d: vec3<f32>, len: f32, jitter: f32) -> vec3<f32> {
     // (the clouds' shadow field: the shafts through a broken sky, followed to kilometres)
     let sky_gaps = enh.cloud_f1.w > 0.5 && s.z >= 0.06;
     let shadows = camera.shadow.x > 0.5;
-    if ((!shadows && !sky_gaps) || s.z <= 0.0 || max(e_sun.r, e_sun.g) < 1e-4) {
+    // (with the volumetric fog on, its march has the shadows in the air already:
+    // volumetric_fog.wgsl, enh.vol_fog.x)
+    if (enh.vol_fog.x > 0.5 || (!shadows && !sky_gaps) || s.z <= 0.0 || max(e_sun.r, e_sun.g) < 1e-4) {
         return vec3<f32>(0.0);
     }
     let end = min(len, SHAFT_NEAR);
@@ -229,8 +231,10 @@ fn fs_fog_lamps(in: FogVsOut) -> @location(0) vec4<f32> {
     let r = pixel_ray(floor(in.clip.xy) * 2.0 + vec2<f32>(0.5));
     let q = vec2<i32>(in.clip.xy) & vec2<i32>(1);
     let ign = (f32(q.x * 2 + (q.x ^ q.y)) + 0.5) * 0.25;
+    // Use the same midpoint phase for each lamp ray so the 2×2 dither does
+    // not imprint a grid on bright beams. Keep the sun-shaft dither.
     // (the lamps' halo and cones only from the mist's and fog's droplets: fp.size.w)
-    let l = (lamp_airlight(camera.cam_pos.xyz, r.xyz, 0.0, r.w, ign, fp.size.w) + sun_shafts(camera.cam_pos.xyz, r.xyz, r.w, ign)) * enh.exposure.x;
+    let l = (lamp_airlight(camera.cam_pos.xyz, r.xyz, 0.0, r.w, 0.5, fp.size.w) + sun_shafts(camera.cam_pos.xyz, r.xyz, r.w, ign)) * enh.exposure.x;
     return vec4<f32>(clamp(l, vec3<f32>(-4000.0), vec3<f32>(4000.0)), r.w);
 }
 
@@ -346,18 +350,15 @@ fn gathered_air_light(at: vec2<f32>, len: f32) -> vec3<f32> {
     for (var k = 0; k < 16; k = k + 1) {
         let o = vec2<i32>(k & 3, k >> 2) - vec2<i32>(1);
         let s = textureLoad(t_fog, clamp(base + o, vec2<i32>(0), hd), 0);
-        let dx = abs(f32(o.x) - f.x);
-        let dy = abs(f32(o.y) - f.y);
-        let bil = max(1.0 - dx * 0.5, 0.0) * max(1.0 - dy * 0.5, 0.0);
+        // A cubic B-spline has continuous slope across the half-size texel grid.
+        // Keep depth weighting so nearby geometry still occludes the far haze.
+        let a = abs(vec2<f32>(o) - f);
+        let outer = max(vec2<f32>(2.0) - a, vec2<f32>(0.0));
+        let cubic = select(outer * outer * outer / 6.0,
+            (4.0 - 6.0 * a * a + 3.0 * a * a * a) / 6.0, a < vec2<f32>(1.0));
+        let tol = abs(s.a - len) / (0.05 * len + 0.5) * 1.2;
+        let w = cubic.x * cubic.y * exp(-tol * tol);
         let dd = abs(s.a - len);
-        // (a Gaussian of the distance difference, not an exponential: a road's rows differ by
-        // a few per cent of its length from one half-size row to the next, and an exponential
-        // weighted every row differently - the offsets of the staggered steps, which cancel
-        // over the tent exactly when its weights are even, then came out as a stripe along
-        // every other row of a bright beam. A step in depth, a pole against what is behind it,
-        // still keeps the taps of the far side out.)
-        let tol = (dd / (0.05 * len + 0.5)) * 1.2;
-        let w = (bil + 1e-3) * exp(-tol * tol);
         sum = sum + s.rgb * w;
         wsum = wsum + w;
         if (dd < best_d) {

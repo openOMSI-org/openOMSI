@@ -21,7 +21,11 @@ type Stamp = Option<(u64, std::time::SystemTime)>;
 static MODELS: Mutex<Option<HashMap<String, Arc<Model>>>> = Mutex::new(None);
 
 fn paints_of(ty: &omsi_sim::VehicleType) -> Vec<String> {
-    ty.paint_schemes.iter().take(128).map(|p| p.name.clone()).collect()
+    ty.paint_schemes
+        .iter()
+        .take(128)
+        .map(|p| p.name.clone())
+        .collect()
 }
 
 fn stamp(p: &Path) -> Stamp {
@@ -29,20 +33,38 @@ fn stamp(p: &Path) -> Stamp {
     Some((m.len(), m.modified().ok()?))
 }
 
-fn keep_model(bus: &str, paints: Vec<String>, manifest: &identity::VehicleManifest, sources: &[PathBuf]) {
+fn keep_model(
+    bus: &str,
+    paints: Vec<String>,
+    manifest: &identity::VehicleManifest,
+    sources: &[PathBuf],
+) {
     let model = Model {
         paints,
         manifest: manifest.clone(),
         stamps: sources.iter().map(|p| stamp(p)).collect(),
         sources: sources.to_vec(),
     };
-    MODELS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(omsi_cfg::name_key(bus), Arc::new(model));
+    MODELS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get_or_insert_with(HashMap::new)
+        .insert(omsi_cfg::name_key(bus), Arc::new(model));
 }
 
 /// The kept list of `bus`, while every one of its files has the size and time it had.
 fn kept_model(bus: &str) -> Option<Arc<Model>> {
-    let m = MODELS.lock().unwrap_or_else(|e| e.into_inner()).as_ref()?.get(&omsi_cfg::name_key(bus)).cloned()?;
-    m.sources.iter().zip(&m.stamps).all(|(p, s)| stamp(p) == *s).then_some(m)
+    let m = MODELS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()?
+        .get(&omsi_cfg::name_key(bus))
+        .cloned()?;
+    m.sources
+        .iter()
+        .zip(&m.stamps)
+        .all(|(p, s)| stamp(p) == *s)
+        .then_some(m)
 }
 type Cached = Arc<std::sync::OnceLock<Result<Package, String>>>;
 pub(super) type Cache = Mutex<HashMap<String, (Instant, Cached)>>;
@@ -50,16 +72,33 @@ pub(super) type Cache = Mutex<HashMap<String, (Instant, Cached)>>;
 /// Bound memory while keeping every request cached, including negative answers.
 /// One builder per key runs outside the map lock, so case variants and simultaneous
 /// requests cannot repeatedly load and hash the same vehicle.
-pub(super) fn cached(cache: &Cache, key: String, build: impl FnOnce() -> Result<(Manifest, Vec<PathBuf>), String>) -> Result<Package, String> {
+pub(super) fn cached(
+    cache: &Cache,
+    key: String,
+    build: impl FnOnce() -> Result<(Manifest, Vec<PathBuf>), String>,
+) -> Result<Package, String> {
     let entry = {
         let mut map = cache.lock().unwrap_or_else(|e| e.into_inner());
-        map.retain(|_, (at, value)| at.elapsed() < Duration::from_secs(if value.get().is_some_and(Result::is_err) { 30 } else { 600 }));
+        map.retain(|_, (at, value)| {
+            at.elapsed()
+                < Duration::from_secs(if value.get().is_some_and(Result::is_err) {
+                    30
+                } else {
+                    600
+                })
+        });
         if let Some((at, hit)) = map.get_mut(&key) {
             *at = Instant::now();
             hit.clone()
         } else {
             if map.len() >= 128 {
-                if let Some(oldest) = map.iter().min_by_key(|(_, (at, _))| *at).map(|(key, _)| key.clone()) { map.remove(&oldest); }
+                if let Some(oldest) = map
+                    .iter()
+                    .min_by_key(|(_, (at, _))| *at)
+                    .map(|(key, _)| key.clone())
+                {
+                    map.remove(&oldest);
+                }
             }
             let entry = Arc::new(std::sync::OnceLock::new());
             map.insert(key, (Instant::now(), entry.clone()));
@@ -70,7 +109,12 @@ pub(super) fn cached(cache: &Cache, key: String, build: impl FnOnce() -> Result<
 }
 
 pub(super) fn cache_key(exact: bool, bus: &str, paint: &str) -> String {
-    format!("{}:{}\u{1f}{}", exact, omsi_cfg::name_key(&bus.replace('\\', "/")), omsi_cfg::name_key(paint))
+    format!(
+        "{}:{}\u{1f}{}",
+        exact,
+        omsi_cfg::name_key(&bus.replace('\\', "/")),
+        omsi_cfg::name_key(paint)
+    )
 }
 
 // A name inside Vehicles/ or another content folder is not enough to make a
@@ -100,16 +144,28 @@ pub(super) fn trusted_source(root: &Path, source: &Path) -> bool {
 }
 
 /// The selected bus is offered only when its canonical path is explicitly configured.
-pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
+pub(super) fn package(
+    root: &Path,
+    base: &(Manifest, Vec<PathBuf>),
+    bus: &str,
+    paint: &str,
+) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
     let Some(allowed) = SERVER_VEHICLES.get().filter(|v| !v.is_empty()) else {
         return Err("fleet not configured".into());
     };
-    if !allowed.iter().any(|v| omsi_net::vehicle_path(v).is_some_and(|b| b.eq_ignore_ascii_case(&bus))) {
+    if !allowed
+        .iter()
+        .any(|v| omsi_net::vehicle_path(v).is_some_and(|b| b.eq_ignore_ascii_case(&bus)))
+    {
         return Err("that bus is not in the dedicated server's vehicles list".into());
     }
-    if refuse_path(&bus).is_some() { return Err("refused vehicle path".into()); }
-    let path = omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus));
+    if refuse_path(&bus).is_some() {
+        return Err("refused vehicle path".into());
+    }
+    let path = omsi_cfg::find_in_roots(&bus)
+        .map(|(_, p)| p)
+        .unwrap_or_else(|| root.join(&bus));
     if !trusted_source(root, &path) {
         return Err("the selected bus resolves outside the trusted content roots".into());
     }
@@ -133,7 +189,12 @@ pub(super) fn package(root: &Path, base: &(Manifest, Vec<PathBuf>), bus: &str, p
 }
 
 /// `package` with the bus's kept list: the paint asked for checked, the map's files beside.
-fn finish_package(base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str, model: Arc<Model>) -> Result<(Manifest, Vec<PathBuf>), String> {
+fn finish_package(
+    base: &(Manifest, Vec<PathBuf>),
+    bus: &str,
+    paint: &str,
+    model: Arc<Model>,
+) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = bus.to_string();
     if !paint.is_empty() && !model.paints.iter().any(|p| p.eq_ignore_ascii_case(paint)) {
         return Err("the selected repaint is not offered by the server".into());
@@ -143,35 +204,65 @@ fn finish_package(base: &(Manifest, Vec<PathBuf>), bus: &str, paint: &str, model
     let entries = manifest.entries.clone();
     // Add the selected version on top of the optional map manifest. Keep GET indexes
     // aligned with the source paths; prefer this exact vehicle over map dependencies.
-    let mut combined: HashMap<String, (Entry, PathBuf)> = base.0.entries.iter().cloned()
-        .zip(base.1.iter().cloned()).map(|(e,p)| (omsi_cfg::name_key(&e.path), (e,p))).collect();
+    let mut combined: HashMap<String, (Entry, PathBuf)> = base
+        .0
+        .entries
+        .iter()
+        .cloned()
+        .zip(base.1.iter().cloned())
+        .map(|(e, p)| (omsi_cfg::name_key(&e.path), (e, p)))
+        .collect();
     for (entry, source) in entries.into_iter().zip(sources) {
         combined.insert(omsi_cfg::name_key(&entry.path), (entry, source));
     }
     let mut combined: Vec<_> = combined.into_values().collect();
-    combined.sort_by(|a,b| a.0.path.cmp(&b.0.path));
-    let total: u64 = combined.iter().map(|(e,_)| e.size).sum();
-    if combined.len() > MAX_FILES || total > MAX_TOTAL { return Err("the combined package exceeds session limits".into()); }
+    combined.sort_by(|a, b| a.0.path.cmp(&b.0.path));
+    let total: u64 = combined.iter().map(|(e, _)| e.size).sum();
+    if combined.len() > MAX_FILES || total > MAX_TOTAL {
+        return Err("the combined package exceeds session limits".into());
+    }
     let (entries, sources) = combined.into_iter().unzip();
-    log::info!("LAN mods: server fleet offers {bus} ({paint}), {} files ({:.1} MB)", manifest.entries.len(), manifest.size() as f64 / 1e6);
-    Ok((Manifest { map: base.0.map.clone(), bus, entries }, sources))
+    log::info!(
+        "LAN mods: server fleet offers {bus} ({paint}), {} files ({:.1} MB)",
+        manifest.entries.len(),
+        manifest.size() as f64 / 1e6
+    );
+    Ok((
+        Manifest {
+            map: base.0.map.clone(),
+            bus,
+            entries,
+        },
+        sources,
+    ))
 }
 
 /// The installed complete model fingerprint, with no network downloads or mounts.
 /// This permits a local-only join when the mod transport is unavailable.
 pub fn fingerprint(root: &Path, bus: &str) -> Result<String, String> {
     let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
-    let path = omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus));
-    if !trusted_source(root, &path) { return Err("untrusted bus path".into()); }
+    let path = omsi_cfg::find_in_roots(&bus)
+        .map(|(_, p)| p)
+        .unwrap_or_else(|| root.join(&bus));
+    if !trusted_source(root, &path) {
+        return Err("untrusted bus path".into());
+    }
     let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| e.to_string())?;
     model_manifest(root, &bus, &ty).map(|(m, _)| m.fingerprint())
 }
 
 /// `fingerprint` of a bus already loaded from `path` (the server's fleet check loads each
 /// once, not twice).
-pub fn fingerprint_loaded(root: &Path, bus: &str, path: &Path, ty: &omsi_sim::VehicleType) -> Result<String, String> {
+pub fn fingerprint_loaded(
+    root: &Path,
+    bus: &str,
+    path: &Path,
+    ty: &omsi_sim::VehicleType,
+) -> Result<String, String> {
     let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
-    if !trusted_source(root, path) { return Err("untrusted bus path".into()); }
+    if !trusted_source(root, path) {
+        return Err("untrusted bus path".into());
+    }
     let t = std::time::Instant::now();
     let gathered = gathered(root, ty)?;
     let listed = t.elapsed().as_secs_f64();
@@ -190,15 +281,23 @@ pub fn fingerprint_loaded(root: &Path, bus: &str, path: &Path, ty: &omsi_sim::Ve
 
 /// Every file of the bus in every paint it offers (the first 128), as `listed` names them.
 fn gathered(root: &Path, ty: &omsi_sim::VehicleType) -> Result<Vec<(String, PathBuf)>, String> {
-    let schemes: Vec<Option<usize>> = std::iter::once(None).chain((0..ty.paint_schemes.len().min(128)).map(Some)).collect();
+    let schemes: Vec<Option<usize>> = std::iter::once(None)
+        .chain((0..ty.paint_schemes.len().min(128)).map(Some))
+        .collect();
     let all = bus_files::of_type_paints(root, ty, &schemes);
     if all.iter().any(|path| !trusted_source(root, path)) {
-        return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
+        return Err(
+            "selected vehicle dependencies resolve outside the trusted content roots".into(),
+        );
     }
     Ok(upload::listed(root, all.into_iter().collect()))
 }
 
-fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
+fn model_manifest(
+    root: &Path,
+    bus: &str,
+    ty: &omsi_sim::VehicleType,
+) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
     // The server offers the *complete configured model*, including the default
     // and all advertised repaint dependencies. A player with the same bus but
     // without a server repaint must obtain that repaint without replacing OMSI 2.
@@ -208,18 +307,37 @@ fn model_manifest(root: &Path, bus: &str, ty: &omsi_sim::VehicleType) -> Result<
     manifest_of(bus, files, entries)
 }
 
-fn manifest_of(bus: &str, files: Vec<(String, PathBuf)>, entries: Vec<Entry>) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
+fn manifest_of(
+    bus: &str,
+    files: Vec<(String, PathBuf)>,
+    entries: Vec<Entry>,
+) -> Result<(identity::VehicleManifest, Vec<PathBuf>), String> {
     // Hashing skips files it cannot safely read. Never zip a shortened hash
     // list with the original paths: that could serve the wrong bytes for a hash.
     if entries.len() != files.len() {
-        return Err(format!("{} of {} selected vehicle files could not be verified", files.len() - entries.len(), files.len()));
+        return Err(format!(
+            "{} of {} selected vehicle files could not be verified",
+            files.len() - entries.len(),
+            files.len()
+        ));
     }
-    let manifest = identity::VehicleManifest { bus: bus.to_string(), entries }.validated()?;
+    let manifest = identity::VehicleManifest {
+        bus: bus.to_string(),
+        entries,
+    }
+    .validated()?;
     if manifest.entries.len() > MAX_FILES || manifest.size() > MAX_TOTAL {
         return Err("server vehicle package exceeds the download limits".into());
     }
-    if let Some(e) = manifest.entries.iter().find(|e| refuse_path(&e.path).is_some() || e.size > MAX_FILE) {
-        return Err(format!("server vehicle contains a refused file: {}", e.path));
+    if let Some(e) = manifest
+        .entries
+        .iter()
+        .find(|e| refuse_path(&e.path).is_some() || e.size > MAX_FILE)
+    {
+        return Err(format!(
+            "server vehicle contains a refused file: {}",
+            e.path
+        ));
     }
     let sources = sources_in_order(&manifest, files)?;
     Ok((manifest, sources))
@@ -227,66 +345,128 @@ fn manifest_of(bus: &str, files: Vec<(String, PathBuf)>, entries: Vec<Entry>) ->
 
 // validated() sorts by normalized identity keys, whereas listed() sorts by the
 // displayed path. Preserve GET indexes even with mixed-case or Unicode names.
-fn sources_in_order(manifest: &identity::VehicleManifest, files: Vec<(String, PathBuf)>) -> Result<Vec<PathBuf>, String> {
-    let mut sources: HashMap<_, _> = files.into_iter().filter_map(|(name, path)| identity::key(&name).map(|key| (key, path))).collect();
-    manifest.entries.iter().map(|entry| {
-        identity::key(&entry.path).and_then(|key| sources.remove(&key)).ok_or_else(|| format!("{}: no verified source", entry.path))
-    }).collect()
+fn sources_in_order(
+    manifest: &identity::VehicleManifest,
+    files: Vec<(String, PathBuf)>,
+) -> Result<Vec<PathBuf>, String> {
+    let mut sources: HashMap<_, _> = files
+        .into_iter()
+        .filter_map(|(name, path)| identity::key(&name).map(|key| (key, path)))
+        .collect();
+    manifest
+        .entries
+        .iter()
+        .map(|entry| {
+            identity::key(&entry.path)
+                .and_then(|key| sources.remove(&key))
+                .ok_or_else(|| format!("{}: no verified source", entry.path))
+        })
+        .collect()
 }
 
 /// The exact bus and selected paint used for remote-player fingerprint checks.
 /// Unlike LISTBUS (which offers every advertised repaint for the local driver),
 /// this must contain only the selected paint's dependencies. A different version
 /// must never be passed off as another player's fingerprint.
-pub(super) fn exact(root: &Path, bus: &str, paint: &str) -> Result<(Manifest, Vec<PathBuf>), String> {
+pub(super) fn exact(
+    root: &Path,
+    bus: &str,
+    paint: &str,
+) -> Result<(Manifest, Vec<PathBuf>), String> {
     let bus = omsi_net::vehicle_path(bus).ok_or("invalid bus path")?;
     let Some(allowed) = SERVER_VEHICLES.get().filter(|v| !v.is_empty()) else {
         return Err("fleet not configured".into());
     };
-    if !allowed.iter().any(|v| omsi_net::vehicle_path(v).is_some_and(|b| b.eq_ignore_ascii_case(&bus))) {
+    if !allowed
+        .iter()
+        .any(|v| omsi_net::vehicle_path(v).is_some_and(|b| b.eq_ignore_ascii_case(&bus)))
+    {
         return Err("that bus is not in the dedicated server's vehicles list".into());
     }
-    if refuse_path(&bus).is_some() { return Err("refused vehicle path".into()); }
-    let path = omsi_cfg::find_in_roots(&bus).map(|(_, p)| p).unwrap_or_else(|| root.join(&bus));
+    if refuse_path(&bus).is_some() {
+        return Err("refused vehicle path".into());
+    }
+    let path = omsi_cfg::find_in_roots(&bus)
+        .map(|(_, p)| p)
+        .unwrap_or_else(|| root.join(&bus));
     if !trusted_source(root, &path) {
         return Err("the selected bus resolves outside the trusted content roots".into());
     }
     let ty = omsi_sim::VehicleType::load(root, &path).map_err(|e| format!("{bus}: {e}"))?;
-    let scheme = if paint.is_empty() { None } else {
-        Some(ty.paint_schemes.iter().take(128).position(|p| p.name.eq_ignore_ascii_case(paint))
-            .ok_or("the selected repaint is not offered by the server")?)
+    let scheme = if paint.is_empty() {
+        None
+    } else {
+        Some(
+            ty.paint_schemes
+                .iter()
+                .take(128)
+                .position(|p| p.name.eq_ignore_ascii_case(paint))
+                .ok_or("the selected repaint is not offered by the server")?,
+        )
     };
     let dependencies = bus_files::of_type(root, &ty, scheme, None);
     if dependencies.iter().any(|path| !trusted_source(root, path)) {
-        return Err("selected vehicle dependencies resolve outside the trusted content roots".into());
+        return Err(
+            "selected vehicle dependencies resolve outside the trusted content roots".into(),
+        );
     }
     let files = upload::listed(root, dependencies);
     let entries = upload::hashed(&files);
     if entries.len() != files.len() {
-        return Err(format!("{} of {} selected vehicle files could not be verified", files.len() - entries.len(), files.len()));
+        return Err(format!(
+            "{} of {} selected vehicle files could not be verified",
+            files.len() - entries.len(),
+            files.len()
+        ));
     }
-    let m = identity::VehicleManifest { bus: bus.clone(), entries }.validated()?;
+    let m = identity::VehicleManifest {
+        bus: bus.clone(),
+        entries,
+    }
+    .validated()?;
     if m.entries.len() > MAX_FILES || m.size() > MAX_TOTAL {
         return Err("server vehicle exceeds the transfer limits".into());
     }
-    if let Some(e) = m.entries.iter().find(|e| refuse_path(&e.path).is_some() || e.size > MAX_FILE) {
-        return Err(format!("server vehicle contains a refused file: {}", e.path));
+    if let Some(e) = m
+        .entries
+        .iter()
+        .find(|e| refuse_path(&e.path).is_some() || e.size > MAX_FILE)
+    {
+        return Err(format!(
+            "server vehicle contains a refused file: {}",
+            e.path
+        ));
     }
     let sources = sources_in_order(&m, files)?;
-    Ok((Manifest { map: String::new(), bus, entries: m.entries }, sources))
+    Ok((
+        Manifest {
+            map: String::new(),
+            bus,
+            entries: m.entries,
+        },
+        sources,
+    ))
 }
 
 /// A bounded ASCII request: paths and paint names are hex-encoded UTF-8 to preserve spaces.
 pub(super) fn hex_text(text: &str) -> String {
-    if text.is_empty() { return "-".to_string(); }
+    if text.is_empty() {
+        return "-".to_string();
+    }
     text.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
 pub(super) fn unhex_text(text: &str) -> Option<String> {
-    if text == "-" { return Some(String::new()); }
-    if text.len() > 1024 || text.len() % 2 != 0 || !text.bytes().all(|c| c.is_ascii_hexdigit()) { return None; }
-    let bytes: Option<Vec<u8>> = text.as_bytes().chunks(2).map(|pair| {
-        u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()
-    }).collect();
+    if text == "-" {
+        return Some(String::new());
+    }
+    if text.len() > 1024 || text.len() % 2 != 0 || !text.bytes().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let bytes: Option<Vec<u8>> = text
+        .as_bytes()
+        .chunks(2)
+        .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok())
+        .collect();
     String::from_utf8(bytes?).ok()
 }
 #[cfg(test)]
@@ -294,10 +474,29 @@ mod tests {
     use super::*;
     #[test]
     fn normalized_manifest_order_keeps_get_sources_aligned() {
-        let names = ["Vehicles/Test/main.bus", "Vehicles/Test/Z.dds", "Vehicles/Test/a.dds"];
-        let entries = names.iter().map(|path| Entry { path: path.to_string(), size: 1, sha256: "ab".repeat(32) }).collect();
-        let manifest = identity::VehicleManifest { bus: names[0].into(), entries }.validated().unwrap();
-        let files = names.iter().map(|name| (name.to_string(), PathBuf::from(name))).collect();
+        let names = [
+            "Vehicles/Test/main.bus",
+            "Vehicles/Test/Z.dds",
+            "Vehicles/Test/a.dds",
+        ];
+        let entries = names
+            .iter()
+            .map(|path| Entry {
+                path: path.to_string(),
+                size: 1,
+                sha256: "ab".repeat(32),
+            })
+            .collect();
+        let manifest = identity::VehicleManifest {
+            bus: names[0].into(),
+            entries,
+        }
+        .validated()
+        .unwrap();
+        let files = names
+            .iter()
+            .map(|name| (name.to_string(), PathBuf::from(name)))
+            .collect();
         let sources = sources_in_order(&manifest, files).unwrap();
         for (entry, source) in manifest.entries.iter().zip(sources) {
             assert_eq!(Path::new(&entry.path), source);
@@ -311,7 +510,10 @@ mod tests {
         let second = cache_key(true, "vehicles\\bus.BUS", "BLUE");
         assert_eq!(first, second);
         assert!(cached(&cache, first, || Err("not offered".into())).is_err());
-        assert_eq!(cached(&cache, second, || panic!("a failed request must be cached")).unwrap_err(), "not offered");
+        assert_eq!(
+            cached(&cache, second, || panic!("a failed request must be cached")).unwrap_err(),
+            "not offered"
+        );
     }
 
     #[test]
@@ -321,12 +523,18 @@ mod tests {
             let _ = cached(&cache, i.to_string(), || Err("not offered".into()));
         }
         assert_eq!(cache.lock().unwrap().len(), 128);
-        assert!(cached(&cache, "139".into(), || panic!("new entries must still be cached")).is_err());
+        assert!(
+            cached(&cache, "139".into(), || panic!(
+                "new entries must still be cached"
+            ))
+            .is_err()
+        );
     }
 
     #[test]
     fn refuses_untrusted_files_outside_content_roots() {
-        let base = std::env::temp_dir().join(format!("openomsi-fleet-sources-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("openomsi-fleet-sources-{}", std::process::id()));
         let root = base.join("game");
         let inside = root.join("Vehicles").join("Bus");
         std::fs::create_dir_all(&inside).unwrap();
@@ -351,7 +559,11 @@ mod tests {
 
     #[test]
     fn selected_names_round_trip_and_reject_malformed_encoding() {
-        for text in ["", "Vehicles/Marcopolo Torino 1999/torino.bus", "Bahia - São João"] {
+        for text in [
+            "",
+            "Vehicles/Marcopolo Torino 1999/torino.bus",
+            "Bahia - São João",
+        ] {
             assert_eq!(unhex_text(&hex_text(text)).as_deref(), Some(text));
         }
         assert_eq!(unhex_text("f"), None);
@@ -367,13 +579,31 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("kept.bus");
         std::fs::write(&file, b"[name]\nkept\n").unwrap();
-        let entry = Entry { path: "Vehicles/Kept/kept.bus".into(), size: 13, sha256: crate::mods::sha256_of(b"[name]\nkept\n") };
-        let m = identity::VehicleManifest { bus: "Vehicles/Kept/kept.bus".into(), entries: vec![entry] };
-        keep_model("Vehicles/Kept/kept.bus", vec!["Blue".into()], &m, std::slice::from_ref(&file));
+        let entry = Entry {
+            path: "Vehicles/Kept/kept.bus".into(),
+            size: 13,
+            sha256: crate::mods::sha256_of(b"[name]\nkept\n"),
+        };
+        let m = identity::VehicleManifest {
+            bus: "Vehicles/Kept/kept.bus".into(),
+            entries: vec![entry],
+        };
+        keep_model(
+            "Vehicles/Kept/kept.bus",
+            vec!["Blue".into()],
+            &m,
+            std::slice::from_ref(&file),
+        );
         let kept = kept_model("vehicles/kept/KEPT.bus").expect("kept, whatever the case");
-        assert_eq!((kept.paints.clone(), kept.sources.clone()), (vec!["Blue".to_string()], vec![file.clone()]));
+        assert_eq!(
+            (kept.paints.clone(), kept.sources.clone()),
+            (vec!["Blue".to_string()], vec![file.clone()])
+        );
         std::fs::write(&file, b"[name]\nother bytes\n").unwrap();
-        assert!(kept_model("Vehicles/Kept/kept.bus").is_none(), "a file changed: listed again");
+        assert!(
+            kept_model("Vehicles/Kept/kept.bus").is_none(),
+            "a file changed: listed again"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -11,6 +11,8 @@ pub(crate) fn api_to_val(a: &ApiValue) -> Val {
         ApiValue::Num(n) => Val::Num(*n),
         ApiValue::Str(s) => Val::Str(s.clone()),
         ApiValue::List(l) => Val::Arr(Arc::new(Mutex::new(l.iter().map(api_to_val).collect()))),
-        ApiValue::Map(m) => Val::Obj(Arc::new(Mutex::new(m.iter().map(|(k, v)| (k.clone(), api_to_val(v))).collect()))),
+        ApiValue::Map(m) => Val::Obj(Arc::new(Mutex::new(
+            m.iter().map(|(k, v)| (k.clone(), api_to_val(v))).collect(),
+        ))),
     }
 }

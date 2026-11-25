@@ -27,7 +27,7 @@ impl World {
         } = made;
         let (parent, index, any_light) = lamp;
         let names: Mutex<Vec<LightSwitch>> = Mutex::new(Vec::new());
-        let lights = model_lights_owned(
+        let lights = model_lights_owned_with_texture_dirs(
             &ot.model,
             &|_| xf,
             pos,
@@ -36,6 +36,7 @@ impl World {
                 1.0
             },
             &[],
+            &self.publisher_texture_dirs,
         );
         let names = names.into_inner();
         let sources = model_light_sources(&ot.model);
@@ -145,6 +146,7 @@ impl World {
                 tkey,
                 &texture_selection,
                 &self.root,
+                &self.publisher_texture_dirs,
                 images,
             ) {
                 for (mi, row) in rows.iter().enumerate() {
@@ -217,7 +219,7 @@ impl World {
             }
         }
         let script_lamps = if lamp.is_none() {
-            crate::place::lamps_switched_by_script(ot, pos, xf)
+            crate::place::lamps_switched_by_script(ot, pos, xf, &self.publisher_texture_dirs)
         } else {
             Vec::new()
         };

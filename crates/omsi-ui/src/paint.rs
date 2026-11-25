@@ -38,7 +38,12 @@ impl Color {
 
     /// From `0xRRGGBB`.
     pub const fn hex(rgb: u32) -> Color {
-        Color([((rgb >> 16) & 255) as f32 / 255.0, ((rgb >> 8) & 255) as f32 / 255.0, (rgb & 255) as f32 / 255.0, 1.0])
+        Color([
+            ((rgb >> 16) & 255) as f32 / 255.0,
+            ((rgb >> 8) & 255) as f32 / 255.0,
+            (rgb & 255) as f32 / 255.0,
+            1.0,
+        ])
     }
     pub const fn rgba(r: u8, g: u8, b: u8, a: f32) -> Color {
         Color([r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a])
@@ -48,7 +53,12 @@ impl Color {
     }
     pub fn mix(self, o: Color, t: f32) -> Color {
         let m = |a: f32, b: f32| a + (b - a) * t;
-        Color([m(self.0[0], o.0[0]), m(self.0[1], o.0[1]), m(self.0[2], o.0[2]), m(self.0[3], o.0[3])])
+        Color([
+            m(self.0[0], o.0[0]),
+            m(self.0[1], o.0[1]),
+            m(self.0[2], o.0[2]),
+            m(self.0[3], o.0[3]),
+        ])
     }
     pub fn lighten(self, t: f32) -> Color {
         self.mix(Color([1.0, 1.0, 1.0, self.0[3]]), t)
@@ -84,23 +94,45 @@ impl Rect {
         p.x >= self.x && p.y >= self.y && p.x < self.right() && p.y < self.bottom()
     }
     pub fn inset(&self, d: f32) -> Rect {
-        Rect::new(self.x + d, self.y + d, (self.w - 2.0 * d).max(0.0), (self.h - 2.0 * d).max(0.0))
+        Rect::new(
+            self.x + d,
+            self.y + d,
+            (self.w - 2.0 * d).max(0.0),
+            (self.h - 2.0 * d).max(0.0),
+        )
     }
     pub fn pad(&self, dx: f32, dy: f32) -> Rect {
-        Rect::new(self.x + dx, self.y + dy, (self.w - 2.0 * dx).max(0.0), (self.h - 2.0 * dy).max(0.0))
+        Rect::new(
+            self.x + dx,
+            self.y + dy,
+            (self.w - 2.0 * dx).max(0.0),
+            (self.h - 2.0 * dy).max(0.0),
+        )
     }
     /// Split off the left `w` pixels: (left, rest).
     pub fn cut_left(&self, w: f32) -> (Rect, Rect) {
-        (Rect::new(self.x, self.y, w, self.h), Rect::new(self.x + w, self.y, (self.w - w).max(0.0), self.h))
+        (
+            Rect::new(self.x, self.y, w, self.h),
+            Rect::new(self.x + w, self.y, (self.w - w).max(0.0), self.h),
+        )
     }
     pub fn cut_right(&self, w: f32) -> (Rect, Rect) {
-        (Rect::new(self.right() - w, self.y, w, self.h), Rect::new(self.x, self.y, (self.w - w).max(0.0), self.h))
+        (
+            Rect::new(self.right() - w, self.y, w, self.h),
+            Rect::new(self.x, self.y, (self.w - w).max(0.0), self.h),
+        )
     }
     pub fn cut_top(&self, h: f32) -> (Rect, Rect) {
-        (Rect::new(self.x, self.y, self.w, h), Rect::new(self.x, self.y + h, self.w, (self.h - h).max(0.0)))
+        (
+            Rect::new(self.x, self.y, self.w, h),
+            Rect::new(self.x, self.y + h, self.w, (self.h - h).max(0.0)),
+        )
     }
     pub fn cut_bottom(&self, h: f32) -> (Rect, Rect) {
-        (Rect::new(self.x, self.bottom() - h, self.w, h), Rect::new(self.x, self.y, self.w, (self.h - h).max(0.0)))
+        (
+            Rect::new(self.x, self.bottom() - h, self.w, h),
+            Rect::new(self.x, self.y, self.w, (self.h - h).max(0.0)),
+        )
     }
 }
 
@@ -116,7 +148,12 @@ pub enum Align {
 pub fn rounded_outline(r: Rect, radius: f32) -> Vec<Vec2> {
     let rad = radius.min(r.w * 0.5).min(r.h * 0.5).max(0.0);
     if rad < 0.5 {
-        return vec![Vec2::new(r.x, r.y), Vec2::new(r.right(), r.y), Vec2::new(r.right(), r.bottom()), Vec2::new(r.x, r.bottom())];
+        return vec![
+            Vec2::new(r.x, r.y),
+            Vec2::new(r.right(), r.y),
+            Vec2::new(r.right(), r.bottom()),
+            Vec2::new(r.x, r.bottom()),
+        ];
     }
     let n = ((rad * 0.6) as usize).clamp(3, 12);
     let corners = [
@@ -153,21 +190,39 @@ impl Default for Painter {
 
 impl Painter {
     pub fn new() -> Painter {
-        Painter { verts: Vec::new(), scale: 1.0, vertex_budget: None, ground_budget: None }
+        Painter {
+            verts: Vec::new(),
+            scale: 1.0,
+            vertex_budget: None,
+            ground_budget: None,
+        }
     }
     pub fn with_scale(scale: f32) -> Painter {
-        Painter { scale: scale.max(0.25), ..Painter::new() }
+        Painter {
+            scale: scale.max(0.25),
+            ..Painter::new()
+        }
     }
     /// A bounded painter used by the map builders; general HUD painters remain unlimited.
     pub fn with_vertex_budget(max_vertices: usize) -> Painter {
-        Painter { vertex_budget: Some(max_vertices), ..Painter::new() }
+        Painter {
+            vertex_budget: Some(max_vertices),
+            ..Painter::new()
+        }
     }
     /// Flat map geometry: keep exact triangles while they fit, then coarsen the whole
     /// ground into a bounded grid. Later roads must not disappear behind a full land layer.
     /// Positions are relative to the map anchor, within +/- `reach` metres. Finish with
     /// `finish_ground`, rather than reading `verts` (a reduced ground is held as cells).
     pub fn with_ground_budget(max_vertices: usize, reach: f32, metres_per_pixel: f32) -> Painter {
-        Painter { ground_budget: Some(ground_budget::GroundBudget::new(max_vertices, reach, metres_per_pixel)), ..Painter::new() }
+        Painter {
+            ground_budget: Some(ground_budget::GroundBudget::new(
+                max_vertices,
+                reach,
+                metres_per_pixel,
+            )),
+            ..Painter::new()
+        }
     }
     pub fn ground_reduced(&self) -> bool {
         self.ground_budget.as_ref().is_some_and(|b| b.reduced())
@@ -188,7 +243,8 @@ impl Painter {
         !self.room_for(3)
     }
     fn room_for(&self, count: usize) -> bool {
-        self.vertex_budget.is_none_or(|limit| self.verts.len().saturating_add(count) <= limit)
+        self.vertex_budget
+            .is_none_or(|limit| self.verts.len().saturating_add(count) <= limit)
     }
     fn snap(&self, v: f32) -> f32 {
         (v * self.scale).round() / self.scale
@@ -201,16 +257,23 @@ impl Painter {
     }
     pub fn clear(&mut self) {
         self.verts.clear();
-        if let Some(b) = self.ground_budget.as_mut() { b.clear(); }
+        if let Some(b) = self.ground_budget.as_mut() {
+            b.clear();
+        }
     }
 
     fn px(p: Vec2, c: Color) -> Vertex {
-        Vertex { pos: [p.x, p.y, 0.0], color: c.0, ..Default::default() }
+        Vertex {
+            pos: [p.x, p.y, 0.0],
+            color: c.0,
+            ..Default::default()
+        }
     }
 
     /// A triangle in pixels with a colour per corner.
     pub fn tri(&mut self, a: Vec2, b: Vec2, c: Vec2, ca: Color, cb: Color, cc: Color) {
-        self.verts.extend([Self::px(a, ca), Self::px(b, cb), Self::px(c, cc)]);
+        self.verts
+            .extend([Self::px(a, ca), Self::px(b, cb), Self::px(c, cc)]);
     }
 
     /// A convex polygon in pixels.
@@ -221,19 +284,37 @@ impl Painter {
     }
 
     pub fn rect(&mut self, r: Rect, c: Color) {
-        self.convex(&[Vec2::new(r.x, r.y), Vec2::new(r.right(), r.y), Vec2::new(r.right(), r.bottom()), Vec2::new(r.x, r.bottom())], c);
+        self.convex(
+            &[
+                Vec2::new(r.x, r.y),
+                Vec2::new(r.right(), r.y),
+                Vec2::new(r.right(), r.bottom()),
+                Vec2::new(r.x, r.bottom()),
+            ],
+            c,
+        );
     }
 
     /// A box with a vertical gradient, top to bottom.
     pub fn gradient(&mut self, r: Rect, top: Color, bottom: Color) {
-        let (a, b, c, d) = (Vec2::new(r.x, r.y), Vec2::new(r.right(), r.y), Vec2::new(r.right(), r.bottom()), Vec2::new(r.x, r.bottom()));
+        let (a, b, c, d) = (
+            Vec2::new(r.x, r.y),
+            Vec2::new(r.right(), r.y),
+            Vec2::new(r.right(), r.bottom()),
+            Vec2::new(r.x, r.bottom()),
+        );
         self.tri(a, b, c, top, top, bottom);
         self.tri(a, c, d, top, bottom, bottom);
     }
 
     /// A box with a horizontal gradient, left to right.
     pub fn gradient_h(&mut self, r: Rect, left: Color, right: Color) {
-        let (a, b, c, d) = (Vec2::new(r.x, r.y), Vec2::new(r.right(), r.y), Vec2::new(r.right(), r.bottom()), Vec2::new(r.x, r.bottom()));
+        let (a, b, c, d) = (
+            Vec2::new(r.x, r.y),
+            Vec2::new(r.right(), r.y),
+            Vec2::new(r.right(), r.bottom()),
+            Vec2::new(r.x, r.bottom()),
+        );
         self.tri(a, b, c, left, right, right);
         self.tri(a, c, d, left, right, left);
     }
@@ -304,7 +385,14 @@ impl Painter {
         for k in 0..n {
             let a0 = std::f32::consts::TAU * k as f32 / n as f32;
             let a1 = std::f32::consts::TAU * (k + 1) as f32 / n as f32;
-            self.tri(center, center + Vec2::new(a0.cos(), a0.sin()) * radius, center + Vec2::new(a1.cos(), a1.sin()) * radius, c, c, c);
+            self.tri(
+                center,
+                center + Vec2::new(a0.cos(), a0.sin()) * radius,
+                center + Vec2::new(a1.cos(), a1.sin()) * radius,
+                c,
+                c,
+                c,
+            );
         }
     }
 
@@ -316,7 +404,12 @@ impl Painter {
             let t0 = a0 + (a1 - a0) * k as f32 / n as f32;
             let t1 = a0 + (a1 - a0) * (k + 1) as f32 / n as f32;
             let (d0, d1) = (Vec2::new(t0.cos(), t0.sin()), Vec2::new(t1.cos(), t1.sin()));
-            let (i0, o0, i1, o1) = (center + d0 * r0, center + d0 * r1, center + d1 * r0, center + d1 * r1);
+            let (i0, o0, i1, o1) = (
+                center + d0 * r0,
+                center + d0 * r1,
+                center + d1 * r0,
+                center + d1 * r1,
+            );
             self.tri(i0, o0, o1, c, c, c);
             self.tri(i0, o1, i1, c, c, c);
         }
@@ -333,14 +426,42 @@ impl Painter {
 
     /// A sprite of the atlas with its top left at `at`, tinted `c`.
     pub fn sprite(&mut self, s: Sprite, at: Vec2, size: Vec2, c: Color) {
-        let v = |p: Vec2, u: f32, w: f32| Vertex { pos: [p.x, p.y, 0.0], uv: [u, w], color: c.0, mode: [0.0, 1.0], ..Default::default() };
-        let (a, b, cc, d) = (at, at + Vec2::new(size.x, 0.0), at + size, at + Vec2::new(0.0, size.y));
-        self.verts.extend([v(a, s.uv[0], s.uv[1]), v(b, s.uv[2], s.uv[1]), v(cc, s.uv[2], s.uv[3]), v(a, s.uv[0], s.uv[1]), v(cc, s.uv[2], s.uv[3]), v(d, s.uv[0], s.uv[3])]);
+        let v = |p: Vec2, u: f32, w: f32| Vertex {
+            pos: [p.x, p.y, 0.0],
+            uv: [u, w],
+            color: c.0,
+            mode: [0.0, 1.0],
+            ..Default::default()
+        };
+        let (a, b, cc, d) = (
+            at,
+            at + Vec2::new(size.x, 0.0),
+            at + size,
+            at + Vec2::new(0.0, size.y),
+        );
+        self.verts.extend([
+            v(a, s.uv[0], s.uv[1]),
+            v(b, s.uv[2], s.uv[1]),
+            v(cc, s.uv[2], s.uv[3]),
+            v(a, s.uv[0], s.uv[1]),
+            v(cc, s.uv[2], s.uv[3]),
+            v(d, s.uv[0], s.uv[3]),
+        ]);
     }
 
     /// Text on the baseline at `at` (pixels): returns its width.
     #[allow(clippy::too_many_arguments)]
-    pub fn text(&mut self, atlas: &mut Atlas, fonts: &Fonts, text: &str, px: f32, weight: Weight, at: Vec2, align: Align, c: Color) -> f32 {
+    pub fn text(
+        &mut self,
+        atlas: &mut Atlas,
+        fonts: &Fonts,
+        text: &str,
+        px: f32,
+        weight: Weight,
+        at: Vec2,
+        align: Align,
+        c: Color,
+    ) -> f32 {
         if text.is_empty() {
             return 0.0;
         }
@@ -391,7 +512,17 @@ impl Painter {
     /// Text centred vertically in `r` (capitals centred), aligned as asked, cut with an
     /// ellipsis to fit.
     #[allow(clippy::too_many_arguments)]
-    pub fn text_in(&mut self, atlas: &mut Atlas, fonts: &Fonts, text: &str, px: f32, weight: Weight, r: Rect, align: Align, c: Color) -> f32 {
+    pub fn text_in(
+        &mut self,
+        atlas: &mut Atlas,
+        fonts: &Fonts,
+        text: &str,
+        px: f32,
+        weight: Weight,
+        r: Rect,
+        align: Align,
+        c: Color,
+    ) -> f32 {
         let text = crate::i18n::tr(text);
         let t = fonts.fit(&text, px, weight, r.w);
         let base = r.y + r.h * 0.5 + fonts.cap_height(px, weight) * 0.5;
@@ -417,18 +548,31 @@ impl Painter {
     // --- world space -----------------------------------------------------------------
 
     fn wv(p: Vec3, ext: Vec2, w_m: f32, w_px: f32, c: Color) -> Vertex {
-        Vertex { pos: p.to_array(), ext: ext.to_array(), width: [w_m, w_px], color: c.0, mode: [1.0, 0.0], ..Default::default() }
+        Vertex {
+            pos: p.to_array(),
+            ext: ext.to_array(),
+            width: [w_m, w_px],
+            color: c.0,
+            mode: [1.0, 0.0],
+            ..Default::default()
+        }
     }
 
     /// A band along `pts` (world), `w_m` metres wide but at least `w_px` pixels, with
     /// round ends when `caps`. Gentle bends are mitred; sharper ones get a round joint (a
     /// clamped mitre left notches in hairpins and turning loops).
     pub fn ribbon(&mut self, pts: &[Vec3], w_m: f32, w_px: f32, c: Color, caps: bool) {
-        if !self.room_for(6) { return; }
+        if !self.room_for(6) {
+            return;
+        }
         // (points closer than a centimetre make no direction)
         let mut clean: Vec<Vec3> = Vec::with_capacity(pts.len());
         for &q in pts {
-            if clean.last().map(|l: &Vec3| (q - *l).truncate().length_squared() > 1e-4).unwrap_or(true) {
+            if clean
+                .last()
+                .map(|l: &Vec3| (q - *l).truncate().length_squared() > 1e-4)
+                .unwrap_or(true)
+            {
                 clean.push(q);
             }
         }
@@ -445,8 +589,16 @@ impl Painter {
         let mut start_n = vec![Vec2::ZERO; n];
         let mut joints = Vec::new();
         for i in 0..n {
-            let d0 = if i > 0 { dir(pts[i - 1], pts[i]) } else { dir(pts[0], pts[1]) };
-            let d1 = if i + 1 < n { dir(pts[i], pts[i + 1]) } else { d0 };
+            let d0 = if i > 0 {
+                dir(pts[i - 1], pts[i])
+            } else {
+                dir(pts[0], pts[1])
+            };
+            let d1 = if i + 1 < n {
+                dir(pts[i], pts[i + 1])
+            } else {
+                d0
+            };
             let (n0, n1) = (perp(d0), perp(d1));
             let cos = d0.dot(d1);
             if cos > 0.94 {
@@ -466,7 +618,9 @@ impl Painter {
             let (na, nb) = (start_n[i], end_n[i + 1]);
             let (a0, a1) = (Self::wv(a, na, hm, hp, c), Self::wv(a, -na, hm, hp, c));
             let (b0, b1) = (Self::wv(b, nb, hm, hp, c), Self::wv(b, -nb, hm, hp, c));
-            if !self.room_for(6) { return; }
+            if !self.room_for(6) {
+                return;
+            }
             self.world_vertices([a0, b0, b1, a0, b1, a1]);
         }
         // round joints: a fan on both sides from one segment's edge to the next one's
@@ -484,8 +638,14 @@ impl Painter {
                 for k in 0..steps {
                     let t0 = a0 + da * k as f32 / steps as f32;
                     let t1 = a0 + da * (k + 1) as f32 / steps as f32;
-                    if !self.room_for(3) { return; }
-                    self.world_vertices([Self::wv(p, Vec2::ZERO, hm, hp, c), Self::wv(p, Vec2::new(t0.cos(), t0.sin()), hm, hp, c), Self::wv(p, Vec2::new(t1.cos(), t1.sin()), hm, hp, c)]);
+                    if !self.room_for(3) {
+                        return;
+                    }
+                    self.world_vertices([
+                        Self::wv(p, Vec2::ZERO, hm, hp, c),
+                        Self::wv(p, Vec2::new(t0.cos(), t0.sin()), hm, hp, c),
+                        Self::wv(p, Vec2::new(t1.cos(), t1.sin()), hm, hp, c),
+                    ]);
                 }
             }
         }
@@ -499,7 +659,17 @@ impl Painter {
 
     /// Text turned by `angle` (radians, clockwise on screen) about its centre `at`.
     #[allow(clippy::too_many_arguments)]
-    pub fn text_rotated(&mut self, atlas: &mut Atlas, fonts: &Fonts, text: &str, px: f32, weight: Weight, at: Vec2, angle: f32, c: Color) -> Vec2 {
+    pub fn text_rotated(
+        &mut self,
+        atlas: &mut Atlas,
+        fonts: &Fonts,
+        text: &str,
+        px: f32,
+        weight: Weight,
+        at: Vec2,
+        angle: f32,
+        c: Color,
+    ) -> Vec2 {
         let text = &*crate::i18n::tr(text);
         if text.is_empty() {
             return Vec2::ZERO;
@@ -509,61 +679,118 @@ impl Painter {
         let (w, h) = (s.w / k, s.h / k);
         let (sn, cs) = angle.sin_cos();
         let rot = |v: Vec2| at + Vec2::new(v.x * cs - v.y * sn, v.x * sn + v.y * cs);
-        let v = |p: Vec2, u: f32, t: f32| Vertex { pos: [p.x, p.y, 0.0], uv: [u, t], color: c.0, mode: [0.0, 1.0], ..Default::default() };
+        let v = |p: Vec2, u: f32, t: f32| Vertex {
+            pos: [p.x, p.y, 0.0],
+            uv: [u, t],
+            color: c.0,
+            mode: [0.0, 1.0],
+            ..Default::default()
+        };
         let (hw, hh) = (w * 0.5, h * 0.5);
-        let (a, b, cc, d) = (rot(Vec2::new(-hw, -hh)), rot(Vec2::new(hw, -hh)), rot(Vec2::new(hw, hh)), rot(Vec2::new(-hw, hh)));
-        self.verts.extend([v(a, s.uv[0], s.uv[1]), v(b, s.uv[2], s.uv[1]), v(cc, s.uv[2], s.uv[3]), v(a, s.uv[0], s.uv[1]), v(cc, s.uv[2], s.uv[3]), v(d, s.uv[0], s.uv[3])]);
+        let (a, b, cc, d) = (
+            rot(Vec2::new(-hw, -hh)),
+            rot(Vec2::new(hw, -hh)),
+            rot(Vec2::new(hw, hh)),
+            rot(Vec2::new(-hw, hh)),
+        );
+        self.verts.extend([
+            v(a, s.uv[0], s.uv[1]),
+            v(b, s.uv[2], s.uv[1]),
+            v(cc, s.uv[2], s.uv[3]),
+            v(a, s.uv[0], s.uv[1]),
+            v(cc, s.uv[2], s.uv[3]),
+            v(d, s.uv[0], s.uv[3]),
+        ]);
         Vec2::new(w, h)
     }
 
     /// A half disc at `p` bulging towards `d`.
     fn cap(&mut self, p: Vec3, d: Vec2, hm: f32, hp: f32, c: Color) {
-        if !self.room_for(3) { return; }
+        if !self.room_for(3) {
+            return;
+        }
         let n = 5;
         let base = d.y.atan2(d.x) - std::f32::consts::FRAC_PI_2;
         for k in 0..n {
             let a0 = base + std::f32::consts::PI * k as f32 / n as f32;
             let a1 = base + std::f32::consts::PI * (k + 1) as f32 / n as f32;
-            if !self.room_for(3) { return; }
-            self.world_vertices([Self::wv(p, Vec2::ZERO, hm, hp, c), Self::wv(p, Vec2::new(a0.cos(), a0.sin()), hm, hp, c), Self::wv(p, Vec2::new(a1.cos(), a1.sin()), hm, hp, c)]);
+            if !self.room_for(3) {
+                return;
+            }
+            self.world_vertices([
+                Self::wv(p, Vec2::ZERO, hm, hp, c),
+                Self::wv(p, Vec2::new(a0.cos(), a0.sin()), hm, hp, c),
+                Self::wv(p, Vec2::new(a1.cos(), a1.sin()), hm, hp, c),
+            ]);
         }
     }
 
     /// A disc on the ground: radius `r_m` metres but at least `r_px` pixels.
     pub fn world_disc(&mut self, p: Vec3, r_m: f32, r_px: f32, c: Color) {
-        if !self.room_for(3) { return; }
+        if !self.room_for(3) {
+            return;
+        }
         let n = 24;
         for k in 0..n {
             let a0 = std::f32::consts::TAU * k as f32 / n as f32;
             let a1 = std::f32::consts::TAU * (k + 1) as f32 / n as f32;
-            if !self.room_for(3) { return; }
-            self.world_vertices([Self::wv(p, Vec2::ZERO, r_m, r_px, c), Self::wv(p, Vec2::new(a0.cos(), a0.sin()), r_m, r_px, c), Self::wv(p, Vec2::new(a1.cos(), a1.sin()), r_m, r_px, c)]);
+            if !self.room_for(3) {
+                return;
+            }
+            self.world_vertices([
+                Self::wv(p, Vec2::ZERO, r_m, r_px, c),
+                Self::wv(p, Vec2::new(a0.cos(), a0.sin()), r_m, r_px, c),
+                Self::wv(p, Vec2::new(a1.cos(), a1.sin()), r_m, r_px, c),
+            ]);
         }
     }
 
     /// A flat shape standing on `p`: `shape` is its outline (convex, any unit), scaled by
     /// `s_m` metres but at least `s_px` pixels.
     pub fn world_shape(&mut self, p: Vec3, shape: &[Vec2], s_m: f32, s_px: f32, c: Color) {
-        if !self.room_for(3) { return; }
+        if !self.room_for(3) {
+            return;
+        }
         for k in 1..shape.len().saturating_sub(1) {
-            if !self.room_for(3) { return; }
-            self.world_vertices([Self::wv(p, shape[0], s_m, s_px, c), Self::wv(p, shape[k], s_m, s_px, c), Self::wv(p, shape[k + 1], s_m, s_px, c)]);
+            if !self.room_for(3) {
+                return;
+            }
+            self.world_vertices([
+                Self::wv(p, shape[0], s_m, s_px, c),
+                Self::wv(p, shape[k], s_m, s_px, c),
+                Self::wv(p, shape[k + 1], s_m, s_px, c),
+            ]);
         }
     }
 
     /// A triangle in the world at its own depth (a [`crate::Layer::depth`] layer: walls and
     /// roofs), one colour per corner.
     pub fn solid_tri(&mut self, a: Vec3, b: Vec3, c: Vec3, ca: Color, cb: Color, cc: Color) {
-        if !self.room_for(3) { return; }
-        let v = |p: Vec3, col: Color| Vertex { pos: p.to_array(), color: col.0, mode: [2.0, 0.0], ..Default::default() };
+        if !self.room_for(3) {
+            return;
+        }
+        let v = |p: Vec3, col: Color| Vertex {
+            pos: p.to_array(),
+            color: col.0,
+            mode: [2.0, 0.0],
+            ..Default::default()
+        };
         self.world_vertices([v(a, ca), v(b, cb), v(c, cc)]);
     }
 
     /// A shadow triangle on the ground (see `Vertex::mode`): each corner a point and how far
     /// the shadow moves it (scaled with the layer's `height`).
     pub fn shadow_tri(&mut self, p: [(Vec2, Vec2); 3], col: Color) {
-        if !self.room_for(3) { return; }
-        let v = |(q, d): (Vec2, Vec2)| Vertex { pos: [q.x, q.y, 0.0], uv: d.to_array(), color: col.0, mode: [3.0, 0.0], ..Default::default() };
+        if !self.room_for(3) {
+            return;
+        }
+        let v = |(q, d): (Vec2, Vec2)| Vertex {
+            pos: [q.x, q.y, 0.0],
+            uv: d.to_array(),
+            color: col.0,
+            mode: [3.0, 0.0],
+            ..Default::default()
+        };
         self.world_vertices([v(p[0]), v(p[1]), v(p[2])]);
     }
 
@@ -571,10 +798,16 @@ impl Painter {
     /// under the same triangles at their own size, a seamless outline of any shape made of
     /// triangles (the casing of the roads' surfaces).
     pub fn grown_tri(&mut self, p: [Vec3; 3], w_m: f32, w_px: f32, c: Color) {
-        if !self.room_for(3) { return; }
+        if !self.room_for(3) {
+            return;
+        }
         let mut ext = [Vec2::ZERO; 3];
         for i in 0..3 {
-            let (a, b, q) = (p[i].truncate(), p[(i + 1) % 3].truncate(), p[(i + 2) % 3].truncate());
+            let (a, b, q) = (
+                p[i].truncate(),
+                p[(i + 1) % 3].truncate(),
+                p[(i + 2) % 3].truncate(),
+            );
             let (e1, e2) = ((a - b).normalize_or_zero(), (a - q).normalize_or_zero());
             let bis = (e1 + e2).normalize_or_zero();
             // (as far along the bisector as keeps both edges a whole width out; a sliver's
@@ -582,15 +815,25 @@ impl Painter {
             let s = (1.0 - e1.dot(bis).powi(2)).max(1e-4).sqrt();
             ext[i] = bis * (1.0 / s).min(3.0);
         }
-        self.world_vertices(std::array::from_fn::<_, 3, _>(|i| Self::wv(p[i], ext[i], w_m, w_px, c)));
+        self.world_vertices(std::array::from_fn::<_, 3, _>(|i| {
+            Self::wv(p[i], ext[i], w_m, w_px, c)
+        }));
     }
 
     /// A convex polygon on the ground (world points).
     pub fn world_poly(&mut self, pts: &[Vec3], c: Color) {
-        if !self.room_for(3) { return; }
+        if !self.room_for(3) {
+            return;
+        }
         for k in 1..pts.len().saturating_sub(1) {
-            if !self.room_for(3) { return; }
-            self.world_vertices([Self::wv(pts[0], Vec2::ZERO, 0.0, 0.0, c), Self::wv(pts[k], Vec2::ZERO, 0.0, 0.0, c), Self::wv(pts[k + 1], Vec2::ZERO, 0.0, 0.0, c)]);
+            if !self.room_for(3) {
+                return;
+            }
+            self.world_vertices([
+                Self::wv(pts[0], Vec2::ZERO, 0.0, 0.0, c),
+                Self::wv(pts[k], Vec2::ZERO, 0.0, 0.0, c),
+                Self::wv(pts[k + 1], Vec2::ZERO, 0.0, 0.0, c),
+            ]);
         }
     }
 }
@@ -628,13 +871,28 @@ mod tests {
     fn shapes_make_whole_triangles() {
         let mut p = Painter::new();
         p.rounded(Rect::new(0.0, 0.0, 100.0, 40.0), 8.0, Color::WHITE);
-        p.shadow(Rect::new(0.0, 0.0, 100.0, 40.0), 8.0, 12.0, Color::BLACK.alpha(0.5));
+        p.shadow(
+            Rect::new(0.0, 0.0, 100.0, 40.0),
+            8.0,
+            12.0,
+            Color::BLACK.alpha(0.5),
+        );
         p.rounded_border(Rect::new(0.0, 0.0, 100.0, 40.0), 8.0, 1.0, Color::WHITE);
         p.arc(Vec2::ZERO, 10.0, 12.0, 0.0, 3.0, Color::WHITE);
-        p.ribbon(&[Vec3::ZERO, Vec3::X * 10.0, Vec3::new(10.0, 10.0, 0.0)], 3.0, 4.0, Color::WHITE, true);
+        p.ribbon(
+            &[Vec3::ZERO, Vec3::X * 10.0, Vec3::new(10.0, 10.0, 0.0)],
+            3.0,
+            4.0,
+            Color::WHITE,
+            true,
+        );
         assert_eq!(p.verts.len() % 3, 0);
         // a ribbon's corners are extruded both ways from the centre line
-        let r: Vec<&Vertex> = p.verts.iter().filter(|v| v.mode[0] == 1.0 && v.ext != [0.0, 0.0]).collect();
+        let r: Vec<&Vertex> = p
+            .verts
+            .iter()
+            .filter(|v| v.mode[0] == 1.0 && v.ext != [0.0, 0.0])
+            .collect();
         assert!(r.iter().any(|v| v.ext[1] > 0.5) && r.iter().any(|v| v.ext[1] < -0.5));
     }
 

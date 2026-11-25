@@ -32,6 +32,7 @@
 //!   gone 6, each: kind 1 (1 person; 0 is no longer used), id 24
 //!   (first datagram, once a second) parked 1: then complete 1, count 7, each: the map
 //!   id of a parking space whose car has driven off 32
+//!   (first datagram) points 1: then count 7, each: the points' object 32, value 4 (signed)
 //! ```
 //!
 //! A person takes 12 bytes (17 while waiting at a stop), a light program 6.
@@ -149,7 +150,14 @@ pub struct WorldFrame {
     /// puts back those the host has had park again. Without it every client kept the
     /// car the host had driven off, and the players' buses drove through it.
     pub parked: Option<(bool, Vec<u32>)>,
+    /// Rail points (their object) and the value each is set to: the host's around a
+    /// player, or those a player's game threw itself (up to the host).
+    pub points: Vec<(i64, f32)>,
 }
+
+/// Points sent at most in one frame.
+pub const MAX_POINTS: usize = 127;
+const POINT_BITS: usize = 32 + 4;
 
 fn anchor_of(frame: &WorldFrame) -> (i32, i32, i16) {
     // the first person on foot decides; they all lie within a few km of it
@@ -168,7 +176,11 @@ fn anchor_of(frame: &WorldFrame) -> (i32, i32, i16) {
             0
         }
     };
-    (r(p.0), r(p.1), r(p.2).clamp(i16::MIN as i32, i16::MAX as i32) as i16)
+    (
+        r(p.0),
+        r(p.1),
+        r(p.2).clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+    )
 }
 
 /// `frame` as datagrams of at most `MAX_WORLD_DATAGRAM` bytes: the lights and the gone
@@ -205,13 +217,42 @@ pub fn encode(frame: &WorldFrame, protocol: u8) -> Vec<Vec<u8>> {
         } else {
             &[]
         };
-        let parked: Option<(bool, &[u32])> = if first { frame.parked.as_ref().map(|(c, k)| (*c && k.len() <= 127, &k[..k.len().min(127)])) } else { None };
-        left = left.saturating_sub(lights.len() * LIGHT_BITS + gone.len() * GONE_BITS + 1 + parked.map(|p| 8 + p.1.len() * 32).unwrap_or(0));
+        let parked: Option<(bool, &[u32])> = if first {
+            frame
+                .parked
+                .as_ref()
+                .map(|(c, k)| (*c && k.len() <= 127, &k[..k.len().min(127)]))
+        } else {
+            None
+        };
+        let points: &[(i64, f32)] = if first {
+            &frame.points[..frame.points.len().min(MAX_POINTS)]
+        } else {
+            &[]
+        };
+        left = left.saturating_sub(
+            lights.len() * LIGHT_BITS
+                + gone.len() * GONE_BITS
+                + 1
+                + parked.map(|p| 8 + p.1.len() * 32).unwrap_or(0),
+        );
+        left = left.saturating_sub(
+            1 + if points.is_empty() {
+                0
+            } else {
+                7 + points.len() * POINT_BITS
+            },
+        );
         let p0 = pi;
         while pi < people.len() && pi - p0 < 255 {
             let bits = match people[pi].place {
                 PersonPlace::Foot { waiting, .. } => {
-                    PERSON_FOOT_BITS + if waiting.is_some() { PERSON_WAIT_BITS } else { 0 }
+                    PERSON_FOOT_BITS
+                        + if waiting.is_some() {
+                            PERSON_WAIT_BITS
+                        } else {
+                            0
+                        }
                 }
                 PersonPlace::Aboard { .. } => PERSON_ABOARD_BITS,
             };
@@ -307,6 +348,14 @@ pub fn encode(frame: &WorldFrame, protocol: u8) -> Vec<Vec<u8>> {
             w.put(keys.len() as u64, 7);
             for k in keys {
                 w.put(*k as u64, 32);
+            }
+        }
+        w.put(!points.is_empty() as u64, 1);
+        if !points.is_empty() {
+            w.put(points.len() as u64, 7);
+            for (object, value) in points {
+                w.put(*object as u32 as u64, 32);
+                w.put_fixed(value.round() as f64, 1.0, 4);
             }
         }
         out.push(w.finish());
@@ -406,6 +455,15 @@ pub fn decode(data: &[u8], protocol: u8) -> Option<WorldFrame> {
         }
         f.parked = Some((complete, keys));
     }
+    // (and an older game's here)
+    if r.get(1).unwrap_or(0) == 1 {
+        let n = r.get(7)?;
+        for _ in 0..n {
+            let object = r.get(32)? as i64;
+            let value = r.get_signed(4)? as f32;
+            f.points.push((object, value));
+        }
+    }
     Some(f)
 }
 
@@ -470,7 +528,11 @@ impl Desc {
         if parts.len() < 4 || parts[0] != "DESC" {
             return None;
         }
-        let id = parts[2].trim().parse::<u32>().ok().filter(|i| *i <= MAX_ID)?;
+        let id = parts[2]
+            .trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|i| *i <= MAX_ID)?;
         match parts[1] {
             "p" => Some(Desc::Person {
                 id,
@@ -497,7 +559,12 @@ pub fn content_file(p: &str, exts: &[&str]) -> Option<String> {
     {
         return None;
     }
-    let ext = p.rsplit('/').next()?.rsplit_once('.')?.1.to_ascii_lowercase();
+    let ext = p
+        .rsplit('/')
+        .next()?
+        .rsplit_once('.')?
+        .1
+        .to_ascii_lowercase();
     exts.contains(&ext.as_str()).then_some(p)
 }
 
@@ -567,6 +634,7 @@ mod tests {
             }],
             gone: vec![(true, 3), (true, 99)],
             parked: Some((true, vec![242685, 7])),
+            points: Vec::new(),
         };
         let d = encode(&f, 4);
         assert_eq!(d.len(), 1);
@@ -591,7 +659,9 @@ mod tests {
         }
         // a rider of player 3's bus
         match g.people[3].place {
-            PersonPlace::Aboard { bus, seat, .. } => assert!(bus == PLAYER_BUS | 3 && seat.is_none()),
+            PersonPlace::Aboard { bus, seat, .. } => {
+                assert!(bus == PLAYER_BUS | 3 && seat.is_none())
+            }
             _ => panic!(),
         }
         assert_eq!(g.lights.len(), 1);
@@ -606,17 +676,52 @@ mod tests {
         }
     }
 
+    /// The host's points reach a player with the lights, and a frame without points ends
+    /// as an older game's did (its padding reads as none).
+    #[test]
+    fn points_go_with_the_first_datagram() {
+        let frame = WorldFrame {
+            lights: vec![LightState {
+                object: 1,
+                time: 3.0,
+                held: false,
+            }],
+            points: vec![(70_001, 1.0), (70_002, 0.0), (70_003, -1.0)],
+            ..WorldFrame::default()
+        };
+        let g = decode(&encode(&frame, 4)[0], 4).unwrap();
+        assert_eq!(g.points, frame.points);
+        assert_eq!(g.lights.len(), 1);
+        let none = decode(&encode(&WorldFrame::default(), 4)[0], 4).unwrap();
+        assert!(none.points.is_empty());
+        let many = WorldFrame {
+            points: (0..300).map(|k| (k, 2.0)).collect(),
+            ..WorldFrame::default()
+        };
+        let d = encode(&many, 4);
+        assert!(d[0].len() <= MAX_WORLD_DATAGRAM);
+        assert_eq!(decode(&d[0], 4).unwrap().points.len(), MAX_POINTS);
+    }
+
     #[test]
     fn a_held_clock_just_before_a_phase_change_is_encoded_before_it() {
         // Green until 22 s, yellow after: the host holds at 22.0 - 1e-5 while a bus asks.
         let frame = WorldFrame {
-            lights: vec![LightState { object: 1, time: 22.0 - 1e-5, held: true }],
+            lights: vec![LightState {
+                object: 1,
+                time: 22.0 - 1e-5,
+                held: true,
+            }],
             ..WorldFrame::default()
         };
         let g = decode(&encode(&frame, 4)[0], 4).unwrap();
         assert!(g.lights[0].held);
         assert!(g.lights[0].time < 22.0, "held at {}", g.lights[0].time);
-        assert!(22.0 - g.lights[0].time <= 0.05 + 1e-9, "held at {}", g.lights[0].time);
+        assert!(
+            22.0 - g.lights[0].time <= 0.05 + 1e-9,
+            "held at {}",
+            g.lights[0].time
+        );
     }
 
     #[test]
@@ -652,12 +757,23 @@ mod tests {
         assert_eq!(frames.iter().map(|g| g.lights.len()).sum::<usize>(), 10);
         let bytes: usize = d.iter().map(|x| x.len()).sum();
         // 12 to 17 bytes a person
-        assert!(bytes < 300 * 15 + 200, "{bytes} bytes in {} datagrams", d.len());
+        assert!(
+            bytes < 300 * 15 + 200,
+            "{bytes} bytes in {} datagrams",
+            d.len()
+        );
         // something 5 km away from the rest does not fit the anchor and is left out
         let person = |x: f64| PersonState {
             id: 1,
             activity: Activity::Walk,
-            place: PersonPlace::Foot { x, y: 0.0, z: 0.0, heading: 0.0, speed: 0.0, waiting: None },
+            place: PersonPlace::Foot {
+                x,
+                y: 0.0,
+                z: 0.0,
+                heading: 0.0,
+                speed: 0.0,
+                waiting: None,
+            },
         };
         let far = WorldFrame {
             people: vec![person(0.0), person(5000.0)],
@@ -691,8 +807,14 @@ mod tests {
             }
         );
         let refs = vec![
-            EntityRef { person: false, id: 3 },
-            EntityRef { person: true, id: 16_777_215 },
+            EntityRef {
+                person: false,
+                id: 3,
+            },
+            EntityRef {
+                person: true,
+                id: 16_777_215,
+            },
         ];
         assert_eq!(EntityRef::parse_list(&EntityRef::list(&refs)), refs);
         assert!(EntityRef::parse_list("x1,c,p99999999,c-1").is_empty());

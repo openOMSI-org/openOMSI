@@ -437,7 +437,7 @@ impl World {
         pl.next += 1;
         let skey = Arc::as_ptr(st) as usize;
         if !gpu.splines.contains_key(&skey) {
-            let dirs = texture_dirs(&self.root, &st.dir);
+            let dirs = self.texture_dirs(&self.root, &st.dir);
             let mut sg = SplineGpu {
                 _st: st.clone(),
                 materials: Vec::new(),
@@ -607,7 +607,7 @@ impl World {
         for (ot, texture, pos, height, width, heading) in &p.trees[pl.next..end] {
             let tkey = texture.to_ascii_lowercase();
             if !gpu.trees.contains_key(&tkey) {
-                let dirs = ot.texture_dirs(&self.root);
+                let dirs = self.object_texture_dirs(ot);
                 let found = gpu.texture(renderer, scene, texture, &dirs, images);
                 // (not repeated: the picture's bottom row, a wide trunk or grass, drew a line along the top of the card)
                 renderer.address_next.set(omsi_render::TexAddressing::Clamp);
@@ -1106,7 +1106,7 @@ impl World {
                 ) else {
                     continue;
                 };
-                let dirs = ot.texture_dirs(&self.root);
+                let dirs = self.object_texture_dirs(ot);
                 let Some((tex, path)) = gpu.texture(renderer, scene, name, &dirs, images) else {
                     continue;
                 };

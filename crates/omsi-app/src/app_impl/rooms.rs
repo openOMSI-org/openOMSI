@@ -280,6 +280,7 @@ fn prepare_room(room: PreparedJoin, mut args: Args, reload: bool) -> Result<Load
         args.situation_others.clear();
         args.situation_vars.clear();
         args.situation_strvars.clear();
+        args.situation_cars.clear();
     }
     lan::adopt_host_world(
         &mut config,

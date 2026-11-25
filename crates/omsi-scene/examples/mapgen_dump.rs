@@ -13,16 +13,30 @@ fn main() {
     }
     let _ = env_logger_init();
     let map_dir = std::path::PathBuf::from(&args[1]);
-    let root = map_dir.parent().and_then(|p| p.parent()).unwrap_or(&map_dir).to_path_buf();
-    let global = omsi_map::global::GlobalCfg::load(&map_dir.join("global.cfg")).expect("global.cfg");
+    let root = map_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .unwrap_or(&map_dir)
+        .to_path_buf();
+    let global =
+        omsi_map::global::GlobalCfg::load(&map_dir.join("global.cfg")).expect("global.cfg");
     omsi_map::configure_grid(&global);
-    let tiles: Vec<(i32, i32, std::path::PathBuf)> = global.tiles.iter().map(|t| (t.x, t.y, omsi_cfg::resolve_path(&map_dir, &t.file))).filter(|t| t.2.is_file()).collect();
+    let tiles: Vec<(i32, i32, std::path::PathBuf)> = global
+        .tiles
+        .iter()
+        .map(|t| (t.x, t.y, omsi_cfg::resolve_path(&map_dir, &t.file)))
+        .filter(|t| t.2.is_file())
+        .collect();
     let l = omsi_scene::mapgen::cached(&root, &map_dir, &global.ground_textures, &tiles, &[]);
     let (lo, hi) = match args.get(3..6) {
         Some([x, y, s]) => {
-            let (x, y, s): (f64, f64, f64) = (x.parse().unwrap(), y.parse().unwrap(), s.parse().unwrap());
+            let (x, y, s): (f64, f64, f64) =
+                (x.parse().unwrap(), y.parse().unwrap(), s.parse().unwrap());
             let c = Vec2::new((x - l.origin.x) as f32, (y - l.origin.y) as f32);
-            (c - Vec2::splat(s as f32 * 0.5), c + Vec2::splat(s as f32 * 0.5))
+            (
+                c - Vec2::splat(s as f32 * 0.5),
+                c + Vec2::splat(s as f32 * 0.5),
+            )
         }
         _ => l.bounds().expect("tiles"),
     };
@@ -54,15 +68,41 @@ fn main() {
             }
         }
     };
-    let land = [[200, 226, 178, 255], [160, 205, 140, 255], [236, 232, 196, 255], [236, 234, 230, 255], [240, 230, 200, 255], [150, 200, 240, 255]];
-    for class in [layers::LAND_GRASS, layers::LAND_FIELD, layers::LAND_SAND, layers::LAND_PAVED, layers::LAND_FOREST, layers::LAND_WATER] {
+    let land = [
+        [200, 226, 178, 255],
+        [160, 205, 140, 255],
+        [236, 232, 196, 255],
+        [236, 234, 230, 255],
+        [240, 230, 200, 255],
+        [150, 200, 240, 255],
+    ];
+    for class in [
+        layers::LAND_GRASS,
+        layers::LAND_FIELD,
+        layers::LAND_SAND,
+        layers::LAND_PAVED,
+        layers::LAND_FOREST,
+        layers::LAND_WATER,
+    ] {
         for t in l.land_of(class).chunks_exact(3) {
             tri(&mut img, t[0], t[1], t[2], land[class]);
         }
     }
     // (with OMSI_DUMP_CLASSES the road is beige, the footway pink and the yard blue)
     let classes = std::env::var_os("OMSI_DUMP_CLASSES").is_some();
-    let paved = if classes { [[255, 235, 205, 255], [255, 205, 215, 255], [170, 200, 240, 255]] } else { [[255, 255, 255, 255], [246, 244, 240, 255], [226, 226, 230, 255]] };
+    let paved = if classes {
+        [
+            [255, 235, 205, 255],
+            [255, 205, 215, 255],
+            [170, 200, 240, 255],
+        ]
+    } else {
+        [
+            [255, 255, 255, 255],
+            [246, 244, 240, 255],
+            [226, 226, 230, 255],
+        ]
+    };
     for class in [layers::PAVE_FOOT, layers::PAVE_AREA, layers::PAVE_ROAD] {
         for t in l.paved_of(class).chunks_exact(3) {
             tri(&mut img, t[0], t[1], t[2], paved[class]);
@@ -80,11 +120,21 @@ fn main() {
         for k in 0..8 {
             let a0 = k as f32 / 8.0 * std::f32::consts::TAU;
             let a1 = (k + 1) as f32 / 8.0 * std::f32::consts::TAU;
-            tri(&mut img, c, c + Vec2::new(a0.cos(), a0.sin()) * r, c + Vec2::new(a1.cos(), a1.sin()) * r, [120, 180, 100, 200]);
+            tri(
+                &mut img,
+                c,
+                c + Vec2::new(a0.cos(), a0.sin()) * r,
+                c + Vec2::new(a1.cos(), a1.sin()) * r,
+                [120, 180, 100, 200],
+            );
         }
     }
     for line in &l.lines {
-        let col = if line.class == layers::LINE_RAIL { [140, 140, 150, 255] } else { [170, 150, 190, 255] };
+        let col = if line.class == layers::LINE_RAIL {
+            [140, 140, 150, 255]
+        } else {
+            [170, 150, 190, 255]
+        };
         for ab in line.points.windows(2) {
             let d = (ab[1] - ab[0]).normalize_or_zero().perp() * 0.9;
             tri(&mut img, ab[0] + d, ab[1] + d, ab[1] - d, col);
@@ -94,11 +144,28 @@ fn main() {
     for b in &l.buildings {
         let shade = (230.0 - (b.height.min(40.0) * 2.0)) as u8;
         for t in &b.roof {
-            tri(&mut img, b.outline[t[0] as usize], b.outline[t[1] as usize], b.outline[t[2] as usize], [shade, shade.saturating_sub(4), shade.saturating_sub(10), 255]);
+            tri(
+                &mut img,
+                b.outline[t[0] as usize],
+                b.outline[t[1] as usize],
+                b.outline[t[2] as usize],
+                [
+                    shade,
+                    shade.saturating_sub(4),
+                    shade.saturating_sub(10),
+                    255,
+                ],
+            );
         }
     }
     img.save(&args[2]).expect("png");
-    println!("{} houses, {} trees, {:?}..{:?}", l.buildings.len(), l.trees.len(), lo, hi);
+    println!(
+        "{} houses, {} trees, {:?}..{:?}",
+        l.buildings.len(),
+        l.trees.len(),
+        lo,
+        hi
+    );
 }
 
 fn env_logger_init() -> Option<()> {

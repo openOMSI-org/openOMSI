@@ -4,7 +4,9 @@ fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
     let lim: f32 = a[0].parse().unwrap();
     for p in &a[1..] {
-        let Ok(m) = omsi_o3d::load_mesh(std::path::Path::new(p)) else { continue };
+        let Ok(m) = omsi_o3d::load_mesh(std::path::Path::new(p)) else {
+            continue;
+        };
         let (mut out, mut inn) = (0, 0);
         for t in &m.triangles {
             let v = t.indices.map(|i| m.vertices[i as usize].position);
@@ -14,7 +16,11 @@ fn main() {
             }
             // the front face's normal is against the cross product (see winding.rs)
             let front = -(v[1] - v[0]).cross(v[2] - v[0]);
-            if front.x * c.x.signum() > 0.0 { out += 1 } else { inn += 1 }
+            if front.x * c.x.signum() > 0.0 {
+                out += 1
+            } else {
+                inn += 1
+            }
         }
         println!("{out:6} out {inn:6} in  {p}");
     }
