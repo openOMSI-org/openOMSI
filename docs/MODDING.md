@@ -54,6 +54,7 @@ Each keyword is described in a section below or on its own page.
 | `[spotlight_2]` | An extra switchable spotlight (pair or single) | [Lights](#extra-spotlights) |
 | `[spotlight_cookie]` | A spotlight whose beam is a picture | [Lights](#picture-spotlights) |
 | `[matl_glow]` | A material that is its own light source | [Glowing materials](#glowing-materials) |
+| `[light_emitter_interior]` | A light-mapped mesh lights the saloon | [Light-emitting meshes](#light-emitting-meshes) |
 | `[led_glow_effect]` | How strongly an LED panel's dots glow | [Glowing materials](#glowing-materials) |
 | `[htmltexture]`, `[useHtmlTexture]` | A display drawn from an HTML page | [HTML textures](HTMLTEXTURE.md) |
 | `[navigatortexture]`, `[useNavigatorTexture]` | A GPS screen showing the navigator | [Navigator textures](NAVIGATORTEXTURE.md) |
@@ -206,6 +207,35 @@ saloon.o3d
 ```
 
 OMSI 2 reads the first four and skips the rest. The same works in `passengercabin.cfg`.
+
+### Light-emitting meshes
+
+`[light_emitter_interior]` after a `[mesh]` turns the mesh's light-mapped parts into lamps that
+light the saloon, from what the texture shows. Use it for ceiling light strips, a lit
+destination sign's back, an illuminated advert, a ticket machine's glow.
+
+```text
+[mesh]
+saloon_lights.o3d
+
+[light_emitter_interior]
+1.5
+4
+lights_innen
+```
+
+- Every line after the tag is optional. A blank line or the next keyword ends it.
+  - Line 1: the strength (`1` = as bright as the texture shows). Default `1`.
+  - Line 2: the most lamps it may make (1 to 16). Default `4`.
+  - Line 3: the variable that switches the light. Default: the `[matl_lightmap]`'s variable.
+- The mesh needs a `[matl_lightmap]` or `[matl_nightmap]`. A night map alone has no switch:
+  give the variable on line 3.
+- openOMSI samples the map on every triangle of those materials. The lit triangles are
+  gathered into groups, and each group becomes an `[interiorlight]` at the centre of its light,
+  in its light's colour. A bigger and brighter lit area reaches further.
+- The lamps are added to every mesh that has an `[illumination_interior]`, so the seats,
+  floor and walls are lit by them, and they cast shadows like the other saloon lamps.
+- OMSI 2 skips the tag.
 
 ### Glowing materials
 
