@@ -1,68 +1,77 @@
-# Multiplayer freetex images
+# Free textures in multiplayer
 
-Players with the same vehicle see the owner's `[matl_freetex]` pictures, including
-externally regenerated pictures whose filename did not change. A receiver does not
-need those files. An unrelated local picture at the same path is never substituted.
-Both players and the host/server must support the freetex pixel stream. Older builds
-ignore its separate packet type. Pose and script-texture streams remain unchanged.
-The same bus and approved variable-schema/name-mapping checks as scripttex apply.
+How a bus's `[matl_freetex]` pictures reach the other players. This is a technical reference for bus modders and developers.
+
+When two players have the same bus, each sees the owner's free-texture pictures exactly as the owner's game shows them.
+This includes pictures that a program outside the game regenerates under the same file name.
+The receiving player does not need those files.
+
+## What players see
+
+- The owner's current picture, on every player's copy of that bus, rear sections included.
+- Until the first picture arrives, the bus's original material.
+- An empty slot on the owner's side restores the original material on the others.
+- An unrelated local picture with the same path is never used in its place.
+
+Requirements:
+
+- Both players and the host or server need a version with the free-texture stream. Older builds ignore its packet type.
+- Both need the same bus. The same bus and variable checks apply as for script textures.
+- Stand-ins and fallback vehicles get no pictures.
+
+The pose and script-texture streams are not affected.
 
 ## Content matching
 
-Before pixels, the owner sends a small SHA-256 content reference. The identity includes
-the SHA-256 of the source file and the dimensions and displayed RGBA pixels. Equal names
-alone never authorize reuse. The displayed pixels also protect against the file being
-rewritten while the GPU still shows an earlier version, or different texture settings.
+Before sending pixels, the owner sends a small SHA-256 content reference. It covers the source file's SHA-256, the image size and the displayed RGBA pixels.
 
-The receiver checks its currently displayed images and the local image named by the
-owner's synchronized freetex variable, even if its own bus is not displaying that file.
-File reads, SHA calculation and decoding run on the worker. Matching references resolve
-locally without image bytes on the wire. Missing or different content requests pixels;
-it never requests the original file. A brief grace period accommodates names/variables
-arriving after a content reference. Lost references and replies are retried.
+- A name alone never allows reuse. The displayed pixels also catch a file rewritten while the GPU still shows the older version, or different texture settings.
+- The receiver checks the images it displays now, and the local image named by the owner's synchronized freetex variable, even if its own bus does not show that file.
+- If the content matches, the picture is resolved locally and no image bytes travel.
+- If it is missing or different, the receiver asks for pixels, never for the original file.
+- A short grace period lets names and variables arrive after a content reference. Lost references and replies are retried.
+- File reads, hashing and decoding run on a worker thread.
 
-Received images remain in memory and separate per-owner GPU textures. They are never
-saved into the content directories and never overwrite the receiver's images. Remote
-names cannot cause the lookup cache to open files outside the local content root.
+## Where pictures come from and go
 
-## Source and destination
+**On the owner's side.** The stream takes the texture data already uploaded for the selected freetex slots, including updates from the reload worker and texture upgrades.
+A slot is identified by the bus path, the section number and the freetex variable. Absolute folders and generated file names are not part of it.
 
-The view snapshots texture data already uploaded for the owner's selected freetex
-slots, including updates from the reload worker and texture upgrades. Only these captured sources are published. A slot is identified by the canonical bus path,
-section number and freetex variable; rear sections are included. Absolute directories
-and generated filenames are not part of this identity.
+**On the receiver's side.**
 
-Receivers allocate separate GPU textures per owner and slot. These never enter the
-shared filesystem texture cache, never overwrite a content file, and are released
-with that remote vehicle. Empty slots explicitly restore the original material.
-Until initialization completes, the original material is shown. Stand-ins and
-fallback vehicles are not subscribed. A replacement vehicle or reconnect starts a
-new subscription, preventing stale packets from changing the replacement bus.
+- Each owner and slot gets its own GPU texture. It never enters the shared texture cache.
+- Received pictures stay in memory. They are never saved into the content folders and never overwrite the receiver's images.
+- Remote names cannot make the lookup open files outside the local content root.
+- Textures are released with the remote vehicle.
+- A replacement vehicle or a reconnect starts a new subscription, so stale packets cannot change the new bus.
 
 ## Work and bandwidth
 
-Snapshots are sampled at most ten times per second. Block decoding, RGBA copies,
-delta generation, compression, decompression and packet assembly run on one worker.
-The frame uses nonblocking, bounded channels. At most one complete image is uploaded
-per frame. Same-size updates reuse their GPU allocation and materials; resize
-updates rebind the surface.
+- Snapshots are taken at most ten times a second.
+- Block decoding, RGBA copies, delta generation, compression and packet assembly run on one worker. The frame uses non-blocking, bounded channels.
+- At most one complete image is uploaded per frame. Same-size updates reuse their GPU allocation; a size change rebinds the surface.
 
-The stream reuses the acknowledged script-texture protocol on packet magic `0xBD`:
-lossless zlib-compressed initial pixels, then changed pixel runs relative to each
-subscriber's acknowledged image. Unchanged images are not resent. Partial, reordered
-or lost transactions are retried and never displayed as incomplete images.
+The stream reuses the acknowledged script-texture protocol on packet type `0xBD`:
 
-Data packets have a 1,200-byte payload and at most 1,245 bytes in total. Eight data
-packets per 50 ms are shared round-robin by subscribers: about 195 KiB/s of data
-datagrams in total per publisher, plus small subscription/acknowledgement packets.
-This is a ceiling; simple display changes normally use much less. Session
-authentication, sender-address checks and the existing texture rate limiter also
-apply when the host relays between clients.
+1. The first picture goes as lossless zlib-compressed pixels.
+2. Later ones send only the changed pixel runs against each subscriber's acknowledged image.
+3. Unchanged images are not resent. Partial, reordered or lost transfers are retried and never shown half-done.
 
-The stream accepts up to 64 slots, 16 MiB of RGBA per image, and 64 MiB of local
-decoded images or received baselines. Source snapshots and remote GPU surfaces have
-separate 64 MiB budgets, as does the optional local lookup cache (at most 64 candidates).
-File hashing is capped at 64 MiB per source. Oversized/unreadable source files disable
-reference reuse; valid captured pixels can still be sent. Images beyond a pixel or
-device budget are not uploaded. Local candidates are checked at most twice a second,
-one lookup per worker iteration; idle unchanged images are not rehashed or resent.
+| Limit | Value |
+|---|---|
+| Data packet | 1200-byte payload, at most 1245 bytes in all |
+| Send rate | 8 data packets per 50 ms per publisher, shared round-robin by subscribers: about 195 KiB/s at most, plus small subscription and acknowledgement packets |
+| Slots | 64 |
+| One image | 16 MiB of RGBA |
+| Local decoded images or received baselines | 64 MiB |
+| Source snapshots | 64 MiB |
+| Remote GPU surfaces | 64 MiB |
+| Local lookup cache | 64 MiB, at most 64 candidates |
+| File hashing | 64 MiB per source |
+
+The send rate is a ceiling; simple display changes use much less.
+Session authentication, sender-address checks and the texture rate limiter also apply when the host relays between players.
+
+- A source file too large or unreadable disables reference reuse. Valid captured pixels can still be sent.
+- Images beyond a pixel or device budget are not uploaded.
+- Local candidates are checked at most twice a second, one lookup per worker pass. Idle unchanged images are not rehashed or resent.
