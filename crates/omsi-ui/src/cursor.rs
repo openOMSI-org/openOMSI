@@ -38,6 +38,7 @@ const CROSS_H: &[[f32; 2]] = &[[0.00, 0.42], [1.00, 0.42], [1.00, 0.58], [0.00, 
 const MOVE_TOP: &[[f32; 2]] = &[[0.50, 0.00], [0.80, 0.30], [0.20, 0.30]];
 const MOVE_BOTTOM: &[[f32; 2]] = &[[0.50, 1.00], [0.20, 0.70], [0.80, 0.70]];
 const MOVE_SHAFT: &[[f32; 2]] = &[[0.42, 0.28], [0.58, 0.28], [0.58, 0.72], [0.42, 0.72]];
+// The horizontal arrows make kind 3 the four-way move cursor; kind 4 is zoom's resize only.
 const MOVE_LEFT: &[[f32; 2]] = &[[0.00, 0.50], [0.30, 0.20], [0.30, 0.80]];
 const MOVE_RIGHT: &[[f32; 2]] = &[[1.00, 0.50], [0.70, 0.20], [0.70, 0.80]];
 const MOVE_HSHAFT: &[[f32; 2]] = &[[0.28, 0.42], [0.72, 0.42], [0.72, 0.58], [0.28, 0.58]];
@@ -56,6 +57,7 @@ const GRAB: &[[f32; 2]] = &[
 /// The convex parts of cursor `kind` (the kinds `App::set_cursor_kind` uses), the arrow for
 /// anything else.
 pub fn outline(kind: u8) -> &'static [&'static [[f32; 2]]] {
+    // 0 arrow, 1 pointing hand, 2 cross, 3 four-way move, 4 up-down resize, 5 closed hand.
     match kind {
         1 => &[HAND],
         2 => &[CROSS_V, CROSS_H],
@@ -177,7 +179,7 @@ mod tests {
     #[test]
     fn the_shapes_differ_from_one_another() {
         for a in 0..=5u8 {
-            for b in (a + 1)..=4u8 {
+            for b in (a + 1)..=5u8 {
                 assert_ne!(outline(a), outline(b), "kinds {a} and {b}");
             }
         }

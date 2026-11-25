@@ -176,6 +176,8 @@ impl App {
             && self.player.is_some()
             && self.input.both_drag.is_none()
             && matches!(self.view.as_str(), "driver" | "outside" | "pax" | "free");
+        // 5 is the closed hand for a drag; 4 stays the up-down resize the right-button zoom
+        // shows - they used to share a kind, so the software cursor drew a fist while zooming.
         let kind: u8 = if self.input.both_drag.is_some() && self.menus.game_menu.is_none() {
             5
         } else if rmb_zoom && self.menus.game_menu.is_none() {
@@ -251,7 +253,7 @@ impl App {
             || self.menus.dd_scroll_drag.is_some()
             || self.menus.pane_scroll_drag.is_some()
         {
-            return 5;
+            return 5; // the closed hand, not the kind 4 the zoom resize uses
         }
         let Some(u) = self.ui.as_ref() else { return 0 };
         let (x, y) = self.input.cursor;
