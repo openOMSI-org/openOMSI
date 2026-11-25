@@ -453,6 +453,9 @@ pub struct PeopleSim {
     /// Optional visual-only response to an approaching full bus.
     pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
+    /// Which doors the passengers may get in through (#3124): as the vehicle says, the
+    /// front one only, the first two, or the rear one. Set by the app from the settings.
+    pub entry_doors: crate::people::entry_doors::EntryDoors,
     /// The fare is paid without a ticket (#2742): the passenger pays, gets the change and
     /// goes to their place instead of waiting at the desk for a ticket - and no ticket
     /// sound or ticket hand-over is made. Set by the app from the settings.
