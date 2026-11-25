@@ -1019,12 +1019,6 @@ impl TrailerPart {
         // the driven wheels spinning on the road turn as fast as they spin
         let spinning = self.drive_slipping.then_some(self.drive_spin);
         for a in 0..self.axle_count {
-            let (step, rpm) = match spinning {
-                Some(w) if self.ty.def.axles.get(a).is_some_and(|x| x.driven) => {
-                    (w * dt, w * 60.0 / std::f32::consts::TAU)
-                }
-                _ => (step, rpm),
-            };
             let steer = self.axle_steer(a);
             let diameter = self
                 .ty
@@ -1034,6 +1028,12 @@ impl TrailerPart {
                 .map_or(2.0 * self.wheel_radius, |x| x.wheel_diameter.max(0.2));
             let rpm = super::update::ai_wheel_rpm(speed, diameter);
             let step = rolled / (diameter / 2.0);
+            let (step, rpm) = match spinning {
+                Some(w) if self.ty.def.axles.get(a).is_some_and(|x| x.driven) => {
+                    (w * dt, w * 60.0 / std::f32::consts::TAU)
+                }
+                _ => (step, rpm),
+            };
             for side in 0..2 {
                 if let (Some(Some(id)), Some(s)) =
                     (self.axle_ids.steering.get(a).map(|s| s[side]), steer)
