@@ -45,12 +45,41 @@ pub(crate) struct VanillaSkyUniform {
 /// worked out from. Without `enhanced_noise` (the launcher's preview, which draws no
 /// enhanced sky) each is a texel, and nothing is generated.
 pub(crate) struct CloudTextures {
+    pub moon: mx::TextureView,
     pub weather: mx::TextureView,
     pub detail: mx::TextureView,
     pub base: mx::TextureView,
     pub curl: mx::TextureView,
     pub sampler: mx::Sampler,
     pub cpu: crate::lighting::CloudCpu,
+}
+
+/// Edge of `assets/moon.png` in texels.
+const MOON_MAP_SIZE: u32 = 512;
+
+/// The moon's face (sky_enhanced.wgsl `t_moon`) and its mip levels, level 0 first.
+fn moon_map() -> Vec<Vec<u8>> {
+    let png = include_bytes!("../../omsi-render/assets/moon.png");
+    let face = image::load_from_memory_with_format(png, image::ImageFormat::Png)
+        .expect("the moon's map")
+        .into_luma8();
+    assert_eq!(face.dimensions(), (MOON_MAP_SIZE, MOON_MAP_SIZE));
+    let mut levels = vec![face.into_raw()];
+    let mut size = MOON_MAP_SIZE as usize;
+    while size > 1 {
+        let above = &levels[levels.len() - 1];
+        let half = size / 2;
+        let level = (0..half * half)
+            .map(|i| {
+                let at = i / half * 2 * size + i % half * 2;
+                let four = [at, at + 1, at + size, at + size + 1];
+                ((four.iter().map(|&p| u32::from(above[p])).sum::<u32>() + 2) / 4) as u8
+            })
+            .collect();
+        levels.push(level);
+        size = half;
+    }
+    levels
 }
 
 pub(crate) fn cloud_noise_textures(
@@ -170,7 +199,20 @@ pub(crate) fn cloud_noise_textures(
     } else {
         Default::default()
     };
+    let moon = make(
+        "moon",
+        MOON_MAP_SIZE,
+        D2,
+        R8Unorm,
+        1,
+        &if enhanced_noise {
+            moon_map()
+        } else {
+            vec![vec![0]]
+        },
+    );
     CloudTextures {
+        moon,
         weather,
         detail,
         base,
@@ -276,6 +318,10 @@ impl Renderer {
                         binding: 12,
                         resource: self.sky.cloud_view_buf.as_entire_binding(),
                     },
+                    mx::BindGroupEntry {
+                        binding: 13,
+                        resource: mx::BindingResource::TextureView(&self.sky.moon_view),
+                    },
                 ],
             },
         );
@@ -298,6 +344,8 @@ pub(crate) struct SkyRes {
     pub(crate) cloud_shape_view: mx::TextureView,
     pub(crate) cloud_detail_view: mx::TextureView,
     pub(crate) cloud_sampler: mx::Sampler,
+    /// The moon's face (sky bind group binding 13).
+    pub(crate) moon_view: mx::TextureView,
     /// Where the screen's clouds were traced from (cloud_pass.rs `CloudView`, sky bind group
     /// binding 12): the dome looks them up through it.
     pub(crate) cloud_view_buf: mx::Buffer,

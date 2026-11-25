@@ -23,6 +23,8 @@ rayon.workspace = true
 hashbrown.workspace = true
 log.workspace = true
 anyhow.workspace = true
+# (the moon's map, `moon_map`)
+image.workspace = true
 winit.workspace = true
 
 [target.'cfg(windows)'.dependencies]
@@ -47,7 +49,6 @@ objc2-metal = { version = "0.3.2", default-features = false, features = ["std", 
 libc.workspace = true
 
 [dev-dependencies]
-image.workspace = true
 naga = { workspace = true, features = ["spv-out", "glsl-out", "hlsl-out"] }
 env_logger.workspace = true
 
