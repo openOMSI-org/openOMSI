@@ -847,41 +847,7 @@ impl Model {
             "vfdmaxmin" => self.vfd_max_min = Some(r.f32s::<6>()),
             "detail_factor" => self.detail_factor = r.f32(),
             "tex_detail_factor" => self.tex_detail_factor = r.f32(),
-            "light_emitter_interior" => {
-                // (every line optional: a number for the strength, a whole number for the
-                // most lamps, a name for the variable; the next keyword ends it)
-                let mut e = LightEmitterInterior::default();
-                for k in 0..3 {
-                    let save = r.pos();
-                    let t = r.str().trim();
-                    if t.is_empty() || omsi_cfg::keyword_of(t).is_some() {
-                        r.seek(save);
-                        break;
-                    }
-                    let num = t.replace(',', ".").parse::<f32>();
-                    match (k, num) {
-                        (0, Ok(v)) => e.strength = v.max(0.0),
-                        (1, Ok(v)) => e.max_lamps = (v as u32).clamp(1, 16),
-                        // (a free text line - a comment - is no variable name)
-                        (_, Err(_))
-                            if t.chars()
-                                .next()
-                                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-                                && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') =>
-                        {
-                            e.variable = Some(t.to_string());
-                            break;
-                        }
-                        _ => {
-                            r.seek(save);
-                            break;
-                        }
-                    }
-                }
-                if let Some(m) = self.cur_mesh() {
-                    m.light_emitter_interior = Some(e);
-                }
-            }
+            "light_emitter_interior" => self.read_light_emitter_interior(r),
             "nodistancecheck" => {
                 if let Some(m) = self.cur_mesh() {
                     m.no_distance_check = true;

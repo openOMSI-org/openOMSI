@@ -202,7 +202,7 @@ pub(crate) fn tone_curve_choice() -> f32 {
     }
     static C: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *C.get_or_init(
-        || match std::env::var("OMSI_TONEMAP").ok().as_deref().map(str::trim) {
+        || match omsi_cfg::flags::OMSI_TONEMAP.var().map(str::trim) {
             Some("natural") | Some("0") => 0.0,
             Some("neutral") | Some("pbr") | Some("2") => 2.0,
             _ => 1.0,
@@ -212,7 +212,11 @@ pub(crate) fn tone_curve_choice() -> f32 {
 
 fn grade_on() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("OMSI_GRADE").map_or(true, |v| v.trim() != "0"))
+    *ON.get_or_init(|| {
+        omsi_cfg::flags::OMSI_GRADE
+            .var()
+            .is_none_or(|v| v.trim() != "0")
+    })
 }
 
 #[cfg(test)]

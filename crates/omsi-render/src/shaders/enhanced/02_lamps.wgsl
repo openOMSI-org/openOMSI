@@ -93,6 +93,9 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
 }
 
 const CABIN_FILL: f32 = 0.2;
+// Past this distance (m) a saloon lamp's light is weak against the nearer ones' and its
+// shadow is not looked up: it counts as unshadowed.
+const CABIN_SHADOW_REACH: f32 = 4.5;
 
 // How a saloon lamp's light reaches a surface turned at `c` (the cosine) to it: a tube's
 // length lights what faces a little away from its middle too.
@@ -135,6 +138,31 @@ fn interior_lamps_area(p: vec3<f32>, n: vec3<f32>, code: f32) -> vec3<f32> {
     return min(sum / (vec3<f32>(1.0) + 0.25 * sum), vec3<f32>(1.25));
 }
 
+// One tap of a saloon lamp's shadow tile at `p` (see `lamp_shadow_at`, which takes four).
+fn cabin_lamp_shadow(li: u32, p: vec3<f32>, n: vec3<f32>) -> f32 {
+    let marks = light_marks(lights[li]);
+    if (marks.z < 0.5) {
+        return 1.0;
+    }
+    let k = u32(marks.z - 0.5);
+    let d = length(p - lights[li].pos.xyz);
+    let q = camera.lamp_view_proj[k] * vec4<f32>(p + n * (0.03 + 0.012 * d), 1.0);
+    if (q.w <= 0.0) {
+        return 1.0;
+    }
+    let ndc = q.xyz / q.w;
+    if (abs(ndc.x) >= 1.0 || abs(ndc.y) >= 1.0 || ndc.z >= 1.0 || ndc.z <= 0.0) {
+        return 1.0;
+    }
+    let tuv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    let dims = vec2<f32>(1.0 / camera.shadow.y, camera.lamp_atlas.z);
+    let tile = camera.lamp_atlas.x;
+    let cols = camera.lamp_atlas.y;
+    let tx = clamp(tuv * tile, vec2<f32>(1.0), vec2<f32>(tile - 1.0));
+    let base = vec2<f32>(f32(k % u32(cols)) * tile, dims.x + f32(k / u32(cols)) * tile) + tx;
+    return textureSampleCompareLevel(t_shadow_far, s_shadow, base / dims, ndc.z - 0.00002);
+}
+
 // How much of the player's saloon lamps' light reaches a point past what stands in it, 1 where
 // nothing does: each lamp that has a shadow map (`camera.cabin_lamps`: the first sixteen, by
 // their records in the light buffer, -1 for none) weighs by what it would give the point
@@ -160,7 +188,14 @@ fn cabin_visibility(p: vec3<f32>, n: vec3<f32>) -> f32 {
         let core = max(l.extra.y, 0.01);
         let share = (l.color.r + l.color.g + l.color.b) * l.color.w * core * core / (dist2 + 0.5 * core * core) * ndl;
         open_light = open_light + share;
-        seen_light = seen_light + share * lamp_shadow_at(li, p, n, false);
+        // (one filtered tap a lamp: the saloon's tiles are a few centimetres a texel, and the
+        // comparison sampler's own bilinear filter is soft enough there; nine or four taps
+        // for every lamp of every saloon pixel cost the main pass half a millisecond)
+        var vis = 1.0;
+        if (dist2 < CABIN_SHADOW_REACH * CABIN_SHADOW_REACH) {
+            vis = cabin_lamp_shadow(li, p, n);
+        }
+        seen_light = seen_light + share * vis;
     }
     // (the light a closed room's lining sends back where the lamps do not reach: a saloon's
     // walls, ceiling and seats, a third reflecting, lit by the lamps again and again - about

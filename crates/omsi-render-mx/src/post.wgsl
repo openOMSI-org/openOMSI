@@ -370,8 +370,12 @@ fn tone_curve(c: vec3<f32>, contrast: f32) -> vec3<f32> {
         // shadows keep the natural curve's nearly linear foot, and AgX takes over from the
         // middle tones up, where its roll-off of bright colour is what it is for)
         let n = natural_tone(c, contrast);
-        let a = agx_tone(c, contrast);
-        return mix(n, a, smoothstep(0.03, 0.2, luma(n)));
+        let t = smoothstep(0.03, 0.2, luma(n));
+        // (the dark pixels - most of a night's picture - need no AgX at all)
+        if (t <= 0.0) {
+            return n;
+        }
+        return mix(n, agx_tone(c, contrast), t);
     }
     if (which == 2u) {
         return pbr_neutral(c, contrast);
