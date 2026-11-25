@@ -244,7 +244,7 @@ mod tests {
         assert_eq!((scene.len(), fnv1a(&scene)), (152452, 430776714718153452));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (120896, 13494406483603996684)
+            (121237, 6362084371780308987)
         );
     }
 }

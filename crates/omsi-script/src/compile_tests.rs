@@ -242,3 +242,28 @@ fn reads_sys_answers_as_the_bytecode_scan() {
     });
     assert!(p.reads_sys(SysVar::SunAlt));
 }
+
+/// Omsi.exe sub_5d1db8 finds a `(M.L.name)` only among the macros defined below the call:
+/// one defined above it, or the macro itself, is `macroinvalid` and the call does nothing.
+#[test]
+fn a_macro_call_finds_only_a_macro_defined_below_it() {
+    let p = program_of(
+        "{macro:above}\n1 (S.L.a)\n{end}\n{frame}\n(M.L.above) (M.L.below)\n{end}\n{macro:below}\n(M.L.below) 2 (S.L.b)\n{end}\n",
+    );
+    let frame = &p.blocks[p.frame[0] as usize].ops;
+    let below = p.macro_block("below").unwrap();
+    assert!(!matches!(frame[0], Op::Macro(_)), "{frame:?}");
+    assert_eq!(frame[1], Op::Macro(below));
+    let body = &p.blocks[below as usize].ops;
+    assert!(!matches!(body[0], Op::Macro(_)), "{body:?}");
+    let msgs: Vec<&str> = p.errors.iter().map(|e| e.message.as_str()).collect();
+    assert_eq!(msgs.len(), 2, "{msgs:?}");
+    assert!(
+        msgs[0].contains("macroinvalid: macro \"above\""),
+        "{msgs:?}"
+    );
+    assert!(
+        msgs[1].contains("macroinvalid: macro \"below\""),
+        "{msgs:?}"
+    );
+}

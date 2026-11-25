@@ -398,18 +398,30 @@ impl VehicleInstance {
         ok
     }
 
-    /// Refuel until the tank stops filling. Returns the tank content the script reports.
+    /// Refuel until the pump stops changing anything. Returns the tank content the script
+    /// reports.
+    ///
+    /// `veh_tank` is the bus's whole "fill up" handling, not only the diesel tank's: an
+    /// electric bus charges its battery there, and its (often vestigial) diesel tank may
+    /// already be full. So the pump runs until no variable of the script moves any more,
+    /// not until `engine_tank_content` stops rising, which had cut the charge off after
+    /// two seconds (#3784).
     pub fn refuel(&mut self) -> Option<f32> {
-        let mut last = f32::NEG_INFINITY;
+        let mut last = self.state.vars.clone();
         for _ in 0..600 {
             if !self.service("veh_tank", 1.0) {
                 return None;
             }
-            let now = self.var("engine_tank_content")?;
-            if now <= last + 1e-3 {
+            let settled = self
+                .state
+                .vars
+                .iter()
+                .zip(&last)
+                .all(|(now, was)| (now - was).abs() <= 1e-3 || (now.is_nan() && was.is_nan()));
+            if settled {
                 break;
             }
-            last = now;
+            last.clone_from(&self.state.vars);
         }
         self.var("engine_tank_content")
     }

@@ -536,16 +536,22 @@ pub fn compile(input: &CompileInput) -> Program {
         *op = Op::Jump(u32::MAX);
     }
     p.consts = consts;
-    // Resolve macro calls.
+    // Resolve macro calls. Omsi.exe sub_5d1db8 reads all script files as one stream of words
+    // and builds it from the last word to the first, registering each `{macro:}` header as it
+    // passes it: a `(M.L.name)` can only find a macro whose header comes after the call (the
+    // last definition of the name, if that is below the call). One defined above its call - or
+    // a macro calling itself - is `SC_ErrorInCommand_macroinvalid` there and does nothing.
+    // Blocks are numbered in the order of their headers, so "after the call" is a higher id.
     for (block, op, name) in pending {
         match p.macros.get(&name).copied() {
-            Some(id) => p.blocks[block].ops[op] = Op::Macro(id),
-            None => {
+            Some(id) if id as usize > block => p.blocks[block].ops[op] = Op::Macro(id),
+            found => {
                 let (file, line) = (p.blocks[block].file.clone(), p.blocks[block].line);
+                let why = found.map_or("not found", |_| "is defined above its call");
                 p.errors.push(ScriptError {
                     file,
                     line,
-                    message: format!("SC_ErrorInCommand_macroinvalid: macro \"{name}\" not found"),
+                    message: format!("SC_ErrorInCommand_macroinvalid: macro \"{name}\" {why}"),
                 });
                 // A missing macro leaves the stack untouched in the original; emulate by
                 // replacing with a no-op pair.
@@ -619,29 +625,14 @@ impl<'a> Compiler<'a> {
         let mut lines = f.lines.iter().enumerate().peekable();
         while let Some((ln, raw)) = lines.next() {
             let line_no = ln + 1;
-            let mut logical_line = raw.clone();
-            let mut unterminated = false;
-            while has_unclosed_string(&logical_line) {
-                let Some((_, next)) = lines.peek() else {
-                    unterminated = true;
-                    break;
-                };
-                // Keep the next block available for normal parsing if a quote never closed.
-                if is_script_block_header(next.as_str()) {
-                    unterminated = true;
-                    break;
-                }
-                let (_, next) = lines.next().unwrap();
-                logical_line.push_str(next.trim_start_matches('\t'));
-            }
-            if unterminated {
+            let Some(logical_line) = logical_script_line(raw, &mut lines) else {
                 self.err(
                     &f.path,
                     line_no,
                     "SC_ErrorInCommand: unterminated string literal".into(),
                 );
                 continue;
-            }
+            };
             let toks = tokenize(&logical_line);
             for t in toks {
                 match t {
@@ -1250,6 +1241,23 @@ impl<'a> Compiler<'a> {
         };
         Some(op)
     }
+}
+
+fn logical_script_line<'a>(
+    raw: &str,
+    lines: &mut std::iter::Peekable<impl Iterator<Item = (usize, &'a String)>>,
+) -> Option<String> {
+    let mut line = raw.to_owned();
+    while has_unclosed_string(&line) {
+        let (_, next) = lines.peek()?;
+        // Leave the next block available if the quote never closed.
+        if is_script_block_header(next) {
+            return None;
+        }
+        let (_, next) = lines.next()?;
+        line.push_str(next.trim_start_matches('\t'));
+    }
+    Some(line)
 }
 
 fn patch(op: &mut Op, target: u32) {

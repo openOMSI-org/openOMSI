@@ -14,10 +14,35 @@ fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ibox_digit_entry")
 }
 
-/// Minimal original script that triggers the Aachen ibox compat recognition pattern
+/// Minimal original script (its `{frame}` first: a macro is called only from above its
+/// definition) that triggers the Aachen ibox compat recognition pattern
 /// (`GetRouteIndex` packing + stock `$IntToStr` / PIN mask + `clickspots_reset`).
 fn synthetic_ibox_script() -> String {
-    r#"{trigger:ibox_taste_D1}
+    r#"{frame}
+	(M.L.clickspots_reset)
+	(L.L.ibox_modus) 2 =
+	{if}
+		(M.L.ibox_tastatur)
+		(L.L.ibox_eingabe) $IntToStr $length s0
+		"*" l0 $* (S.$.ibox_Zahleingabe)
+	{endif}
+	(L.L.ibox_modus) 7 =
+	{if}
+		(M.L.ibox_tastatur)
+		(L.L.ibox_eingabe) $IntToStr (S.$.ibox_Zahleingabe)
+	{endif}
+	(L.L.ibox_modus) 10 =
+	{if}
+		(M.L.ibox_tastatur)
+		(L.L.ibox_eingabe) (S.L.ibox_Route)
+		(L.L.ibox_eingabe) $IntToStr (S.$.ibox_Zahleingabe)
+	{endif}
+	(L.L.ibox_eingabe) 0 =
+	{if}
+		"" (S.$.ibox_Zahleingabe)
+	{endif}
+{end}
+{trigger:ibox_taste_D1}
 	1 (S.L.ibox_taste_D1)
 {end}
 {trigger:ibox_taste_D1_drag}
@@ -77,30 +102,6 @@ fn synthetic_ibox_script() -> String {
 {macro:ibox_route_lookup}
 	(L.L.ibox_eingabe) s4 (S.L.ibox_Route)
 	(L.L.IBIS_LinieKurs) 100 * l4 + (M.V.GetRouteIndex) (S.L.ibox_routenindex)
-{end}
-{frame}
-	(M.L.clickspots_reset)
-	(L.L.ibox_modus) 2 =
-	{if}
-		(M.L.ibox_tastatur)
-		(L.L.ibox_eingabe) $IntToStr $length s0
-		"*" l0 $* (S.$.ibox_Zahleingabe)
-	{endif}
-	(L.L.ibox_modus) 7 =
-	{if}
-		(M.L.ibox_tastatur)
-		(L.L.ibox_eingabe) $IntToStr (S.$.ibox_Zahleingabe)
-	{endif}
-	(L.L.ibox_modus) 10 =
-	{if}
-		(M.L.ibox_tastatur)
-		(L.L.ibox_eingabe) (S.L.ibox_Route)
-		(L.L.ibox_eingabe) $IntToStr (S.$.ibox_Zahleingabe)
-	{endif}
-	(L.L.ibox_eingabe) 0 =
-	{if}
-		"" (S.$.ibox_Zahleingabe)
-	{endif}
 {end}
 "#
     .to_string()
