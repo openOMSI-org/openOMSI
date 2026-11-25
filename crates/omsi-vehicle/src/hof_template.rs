@@ -184,17 +184,20 @@ pub fn template_for(hof_path: &Path, hof_name: &str) -> Option<PathBuf> {
     if !hof_name.trim().is_empty() {
         wanted.push(format!("{}.tchof.xml", hof_name.trim()));
     }
-    let files: Vec<PathBuf> = omsi_cfg::vfs::read_dir_paths(dir)
-        .into_iter()
-        .filter(|p| {
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for d in omsi_cfg::mirrored_dirs(dir) {
+        for p in omsi_cfg::vfs::read_dir_paths(&d) {
             let n = p
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_ascii_lowercase();
-            n.ends_with(".tchof.xml")
-        })
-        .collect();
+            if n.ends_with(".tchof.xml") && seen.insert(n) {
+                files.push(p);
+            }
+        }
+    }
     for w in &wanted {
         let w = w.to_ascii_lowercase();
         if let Some(p) = files.iter().find(|p| {
@@ -307,5 +310,26 @@ mod tests {
         // the depot file's own name still wins
         assert_eq!(template_for(&hof, "shared"), Some(one));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_template_is_found_in_a_mirrored_content_root() {
+        let root = std::env::temp_dir().join(format!("omsi-tchof-root-{}", std::process::id()));
+        let mod_root = std::env::temp_dir().join(format!("omsi-tchof-mod-{}", std::process::id()));
+        let vehicles = root.join("Vehicles/Bus");
+        let mod_vehicles = mod_root.join("Vehicles/Bus");
+        std::fs::create_dir_all(&vehicles).unwrap();
+        std::fs::create_dir_all(&mod_vehicles).unwrap();
+        let hof = vehicles.join("Line.hof");
+        std::fs::write(&hof, b"[name]\nLine\n").unwrap();
+        let mirrored = mod_vehicles.join("Line.tchof.xml");
+        std::fs::write(&mirrored, CREATORS.as_bytes()).unwrap();
+        omsi_cfg::add_content_root(root.clone());
+        omsi_cfg::add_content_root(mod_root.clone());
+        assert_eq!(template_for(&hof, "Line"), Some(mirrored));
+        omsi_cfg::remove_content_root(&root);
+        omsi_cfg::remove_content_root(&mod_root);
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&mod_root).ok();
     }
 }
