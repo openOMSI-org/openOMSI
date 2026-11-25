@@ -1,7 +1,7 @@
 // node --test services/serverlist
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cleanText, tunnelAddress, listingAddress, checkRegistration, checkIcon, statusProves, sourceKey, Limiter } from "./logic.js";
+import { cleanText, tunnelAddress, listingAddress, checkRegistration, checkIcon, statusProves, sourceKey, Limiter, ListingStore } from "./logic.js";
 
 test("texts: folded, cut, and refused when they carry hidden characters, addresses or blocked words", () => {
   assert.equal(cleanText("  Berlin   24/7  ", 48), "Berlin 24/7");
@@ -91,4 +91,28 @@ test("a source may register only so often", () => {
   assert.ok(l.allow("a", 1500));
   l.sweep(5000);
   assert.equal(l.hits.size, 0);
+});
+
+test("listings outlive the object's memory: a woken object reads them back from storage (#4165)", async () => {
+  const kept = new Map();
+  const storage = {
+    async list({ prefix }) { return new Map([...kept].filter(([k]) => k.startsWith(prefix))); },
+    async put(k, v) { kept.set(k, structuredClone(v)); },
+    async delete(k) { kept.delete(k); },
+  };
+  const before = new ListingStore(storage);
+  await before.load();
+  await before.save({ id: "a1", name: "Berlin", beat: 1 });
+  await before.save({ id: "b2", name: "Spandau", beat: 1 });
+  const l = before.get("a1");
+  l.beat = 2;
+  await before.save(l);
+  await before.delete("b2");
+  // (hibernated: a new object over the same storage)
+  const after = new ListingStore(storage);
+  await after.load();
+  assert.equal(after.size, 1);
+  assert.equal(after.get("a1").beat, 2);
+  assert.equal(after.get("b2"), undefined);
+  assert.deepEqual([...after].map(([id]) => id), ["a1"]);
 });

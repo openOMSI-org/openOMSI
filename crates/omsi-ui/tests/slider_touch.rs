@@ -1,6 +1,6 @@
 use glam::Vec2;
-use omsi_ui::kit::Ui;
 use omsi_ui::Rect;
+use omsi_ui::kit::Ui;
 
 fn frame(ui: &mut Ui, sliders: &[(&str, Rect)], v: &mut f32) -> bool {
     ui.begin(Vec2::new(800.0, 600.0), 1.0, 1.0 / 60.0);
@@ -35,8 +35,14 @@ fn onto_slider_keeps_a_finger_on_the_visible_sliders_of_the_last_frame() {
     let clipped = Rect::new(100.0, 300.0, 258.0, 34.0);
     frame(&mut ui, &[("a", shown), ("b", clipped)], &mut v);
     let start = Vec2::new(110.0, 117.0);
-    assert_eq!(ui.onto_slider(start, Vec2::new(40.0, 150.0)), Some(Vec2::new(shown.x - 8.0, 117.0)));
-    assert_eq!(ui.onto_slider(start, Vec2::new(200.0, 90.0)), Some(Vec2::new(200.0, 117.0)));
+    assert_eq!(
+        ui.onto_slider(start, Vec2::new(40.0, 150.0)),
+        Some(Vec2::new(shown.x - 8.0, 117.0))
+    );
+    assert_eq!(
+        ui.onto_slider(start, Vec2::new(200.0, 90.0)),
+        Some(Vec2::new(200.0, 117.0))
+    );
     assert_eq!(ui.onto_slider(Vec2::new(150.0, 60.0), start), None);
     assert_eq!(ui.onto_slider(Vec2::new(150.0, 317.0), start), None);
     frame(&mut ui, &[], &mut v);

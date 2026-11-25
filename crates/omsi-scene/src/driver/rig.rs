@@ -17,9 +17,15 @@ pub(super) fn lever_knob(positions: &[Vec3], pivot: Option<Vec3>) -> Option<(Vec
         let low: Vec<&Vec3> = positions.iter().filter(|p| p.z <= z).collect();
         low.iter().fold(Vec3::ZERO, |s, p| s + **p) / low.len().max(1) as f32
     });
-    let max = positions.iter().map(|p| (*p - base).length()).fold(0.0f32, f32::max);
+    let max = positions
+        .iter()
+        .map(|p| (*p - base).length())
+        .fold(0.0f32, f32::max);
     let (tip, axis) = if max >= 0.06 {
-        let far: Vec<&Vec3> = positions.iter().filter(|p| (**p - base).length() >= max * 0.9).collect();
+        let far: Vec<&Vec3> = positions
+            .iter()
+            .filter(|p| (**p - base).length() >= max * 0.9)
+            .collect();
         let tip = far.iter().fold(Vec3::ZERO, |s, p| s + **p) / far.len().max(1) as f32;
         (tip, (tip - base).normalize_or(Vec3::Z))
     } else {
@@ -28,7 +34,10 @@ pub(super) fn lever_knob(positions: &[Vec3], pivot: Option<Vec3>) -> Option<(Vec
         zs.sort_by(|a, b| a.total_cmp(b));
         let z = zs[(zs.len() - 1) * 9 / 10];
         let top: Vec<&Vec3> = positions.iter().filter(|p| p.z >= z).collect();
-        (top.iter().fold(Vec3::ZERO, |s, p| s + **p) / top.len().max(1) as f32, Vec3::Z)
+        (
+            top.iter().fold(Vec3::ZERO, |s, p| s + **p) / top.len().max(1) as f32,
+            Vec3::Z,
+        )
     };
     if !tip.is_finite() || !axis.is_finite() {
         return None;
@@ -62,8 +71,41 @@ const STRONG: &[&str] = &[
     "antrieb_hebel",
 ];
 // "Antrieb" is what OMSI models usually call the gearbox / its lever.
-const WEAK: &[&str] = &["antrieb", "gear", "shift", "schalt", "getriebe", "transmission", "gear_selector", "кпп"];
-const NOT: &[&str] = &["light", "lamp", "display", "indic", "anzeige", "sound", "retard", "park", "door", "wiper", "wisch", "blink", "drehschalt", "kippschalt", "text", "warn", "oil", "temp", "rpm", "tacho", "taster", "button", "btn"];
+const WEAK: &[&str] = &[
+    "antrieb",
+    "gear",
+    "shift",
+    "schalt",
+    "getriebe",
+    "transmission",
+    "gear_selector",
+    "кпп",
+];
+const NOT: &[&str] = &[
+    "light",
+    "lamp",
+    "display",
+    "indic",
+    "anzeige",
+    "sound",
+    "retard",
+    "park",
+    "door",
+    "wiper",
+    "wisch",
+    "blink",
+    "drehschalt",
+    "kippschalt",
+    "text",
+    "warn",
+    "oil",
+    "temp",
+    "rpm",
+    "tacho",
+    "taster",
+    "button",
+    "btn",
+];
 const BY_FILE: &[&str] = &["antrieb", "transmission", "кпп"];
 
 fn has_weak_gang_hint(name: &str) -> bool {
@@ -72,7 +114,10 @@ fn has_weak_gang_hint(name: &str) -> bool {
 }
 
 fn lever_file(path: &std::path::Path, forced: Option<&str>) -> bool {
-    let file = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let file = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
     match forced {
         Some(f) => file.contains(f),
         None => STRONG.iter().chain(BY_FILE).any(|w| file.contains(w)),
@@ -159,7 +204,9 @@ pub(super) fn find_shifter(v: &impl DriverCar, hip: Vec3, heading: f32) -> Optio
         if dist > 1.4 {
             continue;
         }
-        let Some((grab, axis)) = lever_knob(&positions, pivot) else { continue };
+        let Some((grab, axis)) = lever_knob(&positions, pivot) else {
+            continue;
+        };
         if (grab - shoulder).length() > LEVER_REACH {
             continue;
         }
@@ -174,12 +221,22 @@ pub(super) fn find_shifter(v: &impl DriverCar, hip: Vec3, heading: f32) -> Optio
             vars.push(n.to_string());
         }
     }
-    let clutch = CLUTCH_VARS.iter().find(|n| v.var(n).is_some()).map(|n| n.to_string());
+    let clutch = CLUTCH_VARS
+        .iter()
+        .find(|n| v.var(n).is_some())
+        .map(|n| n.to_string());
     let h = heading.to_radians();
     let d = grab - hip;
     let side = d.x * h.cos() - d.y * h.sin();
     let hand = if side >= 0.0 { 1 } else { 0 };
-    Some(Shifter { mesh, vars, clutch, grab, axis, hand })
+    Some(Shifter {
+        mesh,
+        vars,
+        clutch,
+        grab,
+        axis,
+        hand,
+    })
 }
 
 /// The steering wheel: the mesh turned by `Axle_Steering_*` with the largest factor (a
@@ -215,7 +272,9 @@ pub(super) fn find_wheel(v: &impl DriverCar, hip: Vec3) -> Option<Wheel> {
     // axis came out pointing down and the hands held the air under the rim); a wheel that
     // lies anywhere near flat faces up
     let shoulders = hip + Vec3::Z * 0.5;
-    if (axis.z.abs() > 0.4 && axis.z < 0.0) || (axis.z.abs() <= 0.4 && axis.dot(shoulders - centre) < 0.0) {
+    if (axis.z.abs() > 0.4 && axis.z < 0.0)
+        || (axis.z.abs() <= 0.4 && axis.dot(shoulders - centre) < 0.0)
+    {
         axis = -axis;
     }
     let mut up = (Vec3::Z - axis * axis.dot(Vec3::Z)).normalize_or_zero();
@@ -247,7 +306,11 @@ pub(super) fn find_wheel(v: &impl DriverCar, hip: Vec3) -> Option<Wheel> {
     let mut radii: Vec<f32> = positions.iter().map(radius_of).collect();
     radii.sort_by(|a, b| a.total_cmp(b));
     // (an AI copy of a bus keeps no vertices on the CPU: a bus wheel's size then)
-    let rim = if radii.len() < 12 { 0.26 } else { radii[(radii.len() as f32 * 0.93) as usize] };
+    let rim = if radii.len() < 12 {
+        0.26
+    } else {
+        radii[(radii.len() as f32 * 0.93) as usize]
+    };
     // The rim's cross-section, from the ring of its vertices (a spoke or the hub is nearer
     // the axis): the middle of the tube across and along the axis, and how thick it is. The
     // animation's origin may be anywhere on the axis, the foot of the column as often as the
@@ -257,20 +320,40 @@ pub(super) fn find_wheel(v: &impl DriverCar, hip: Vec3) -> Option<Wheel> {
         v.sort_by(|a, b| a.total_cmp(b));
         v[((v.len() - 1) as f32 * f) as usize]
     };
-    let ring: Vec<&Vec3> = positions.iter().filter(|p| radius_of(p) > rim * 0.8).collect();
+    let ring: Vec<&Vec3> = positions
+        .iter()
+        .filter(|p| radius_of(p) > rim * 0.8)
+        .collect();
     let (radius, along, tube) = if ring.len() >= 8 {
         let mut rs: Vec<f32> = ring.iter().map(|p| radius_of(p)).collect();
         let mut zs: Vec<f32> = ring.iter().map(|p| axis.dot(**p - origin_point)).collect();
         let (r0, r1) = (pct(&mut rs, 0.02), pct(&mut rs, 0.98));
         let (z0, z1) = (pct(&mut zs, 0.02), pct(&mut zs, 0.98));
-        ((r0 + r1) * 0.5, (z0 + z1) * 0.5, ((r1 - r0).max(z1 - z0) * 0.5).clamp(0.01, 0.03))
+        (
+            (r0 + r1) * 0.5,
+            (z0 + z1) * 0.5,
+            ((r1 - r0).max(z1 - z0) * 0.5).clamp(0.01, 0.03),
+        )
     } else {
         (rim * 0.93, 0.0, 0.017)
     };
     let centre = origin_point + axis * along.clamp(-0.3, 0.3);
     let radius = radius.clamp(0.14, 0.32);
-    log::debug!("driver: steering wheel rim {radius:.3} m round the axis, tube {tube:.3} m thick (radius)");
-    Some(Wheel { mesh, anim, var, factor, axis, centre, up, right, radius, tube })
+    log::debug!(
+        "driver: steering wheel rim {radius:.3} m round the axis, tube {tube:.3} m thick (radius)"
+    );
+    Some(Wheel {
+        mesh,
+        anim,
+        var,
+        factor,
+        axis,
+        centre,
+        up,
+        right,
+        radius,
+        tube,
+    })
 }
 
 #[cfg(test)]
@@ -300,7 +383,10 @@ mod grade_tests {
         assert!(lever_file(Path::new("model/рычаг_КПП.o3d"), None));
         assert!(lever_file(Path::new("model/Transmission_lever.o3d"), None));
         assert!(lever_file(Path::new("model/ganghebel.o3d"), None));
-        assert!(!lever_file(Path::new("Vehicles/Bus_КПП/model/wiper.o3d"), None));
+        assert!(!lever_file(
+            Path::new("Vehicles/Bus_КПП/model/wiper.o3d"),
+            None
+        ));
         assert!(lever_file(Path::new("model/x_hebel.o3d"), Some("x_hebel")));
     }
 }

@@ -1,7 +1,7 @@
 use std::ffi::c_void;
-use windows::core::{s, w};
 use windows::Win32::Foundation::HMODULE;
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use windows::core::{s, w};
 
 use crate::controllers::HAT_BUTTONS;
 
@@ -46,8 +46,20 @@ pub const BUTTON_MAP: [(u16, gilrs::Button, usize); 14] = [
 ];
 
 pub const DEFAULT_INDICES: [usize; 14] = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-    HAT_BUTTONS, HAT_BUTTONS + 1, HAT_BUTTONS + 2, HAT_BUTTONS + 3,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    HAT_BUTTONS,
+    HAT_BUTTONS + 1,
+    HAT_BUTTONS + 2,
+    HAT_BUTTONS + 3,
 ];
 
 #[derive(Debug, Clone)]
@@ -118,13 +130,19 @@ impl Reader {
         for (idx, slot) in self.slots.iter_mut().enumerate() {
             match raw[idx] {
                 Some(curr) => {
-                    let prev_buttons = if slot.connected { slot.state.buttons } else { 0 };
-                    pending[idx] = button_edges(prev_buttons, curr.buttons, &slot.indices).collect();
+                    let prev_buttons = if slot.connected {
+                        slot.state.buttons
+                    } else {
+                        0
+                    };
+                    pending[idx] =
+                        button_edges(prev_buttons, curr.buttons, &slot.indices).collect();
                     slot.connected = true;
                     slot.state = curr;
                 }
                 None if slot.connected => {
-                    let edges: Vec<_> = button_edges(slot.state.buttons, 0, &slot.indices).collect();
+                    let edges: Vec<_> =
+                        button_edges(slot.state.buttons, 0, &slot.indices).collect();
                     if let Some(name) = slot.name.take() {
                         if !edges.is_empty() {
                             updates.push((idx, name, edges));
@@ -139,14 +157,21 @@ impl Reader {
         }
 
         let mut available: Vec<bool> = vec![true; wgi_pads.len()];
-        let live_names: Vec<Option<String>> = self.slots.iter().map(|s| s.connected.then(|| s.name.clone()).flatten()).collect();
+        let live_names: Vec<Option<String>> = self
+            .slots
+            .iter()
+            .map(|s| s.connected.then(|| s.name.clone()).flatten())
+            .collect();
         for (idx, slot) in self.slots.iter_mut().enumerate() {
             if !slot.connected {
                 slot.name = None;
                 continue;
             }
             if let Some(existing) = live_names[idx].as_deref() {
-                let live_named = live_names.iter().filter(|n| n.as_deref() == Some(existing)).count();
+                let live_named = live_names
+                    .iter()
+                    .filter(|n| n.as_deref() == Some(existing))
+                    .count();
                 let wgi_named = wgi_pads.iter().filter(|(n, _)| *n == existing).count();
                 if live_named <= wgi_named {
                     if let Some(pos) = wgi_pads
@@ -197,7 +222,11 @@ impl Reader {
 }
 
 pub fn normalize_thumb(v: i16) -> f32 {
-    if v < 0 { v as f32 / 32768.0 } else { v as f32 / 32767.0 }
+    if v < 0 {
+        v as f32 / 32768.0
+    } else {
+        v as f32 / 32767.0
+    }
 }
 
 pub fn normalize_trigger(v: u8) -> f32 {
@@ -210,9 +239,12 @@ pub fn button_edges<'a>(
     indices: &'a [usize; 14],
 ) -> impl Iterator<Item = (gilrs::Button, usize, bool)> + 'a {
     let changed = prev ^ curr;
-    BUTTON_MAP.iter().zip(indices.iter()).filter_map(move |(&(mask, btn, _), &idx)| {
-        (changed & mask != 0).then_some((btn, idx, curr & mask != 0))
-    })
+    BUTTON_MAP
+        .iter()
+        .zip(indices.iter())
+        .filter_map(move |(&(mask, btn, _), &idx)| {
+            (changed & mask != 0).then_some((btn, idx, curr & mask != 0))
+        })
 }
 
 fn bind_xinput() -> Option<GetStateFn> {
@@ -221,7 +253,8 @@ fn bind_xinput() -> Option<GetStateFn> {
             continue;
         };
         if let Some(proc) = unsafe { GetProcAddress(module, s!("XInputGetState")) } {
-            let fn_ptr = unsafe { std::mem::transmute::<*const c_void, GetStateFn>(proc as *const c_void) };
+            let fn_ptr =
+                unsafe { std::mem::transmute::<*const c_void, GetStateFn>(proc as *const c_void) };
             return Some(fn_ptr);
         }
     }
@@ -255,17 +288,35 @@ mod tests {
         assert_eq!(u1[0].0, 1);
         assert_eq!(u1[0].1, "Xbox One Game Controller");
         assert!(u1[0].2.contains(&(gilrs::Button::South, 0, true)));
-        assert!(u1[0].2.contains(&(gilrs::Button::DPadUp, HAT_BUTTONS, true)));
+        assert!(
+            u1[0]
+                .2
+                .contains(&(gilrs::Button::DPadUp, HAT_BUTTONS, true))
+        );
         assert_eq!(r.state_for_name("Xbox One Game Controller"), s0);
 
-        s0 = Some(GamepadState { buttons: 0x2000, ..Default::default() });
+        s0 = Some(GamepadState {
+            buttons: 0x2000,
+            ..Default::default()
+        });
         let u2 = r.poll_with(&pads, |i| if i == 1 { s0 } else { None });
         assert!(u2[0].2.contains(&(gilrs::Button::South, 0, false)));
-        assert!(u2[0].2.contains(&(gilrs::Button::DPadUp, HAT_BUTTONS, false)));
+        assert!(
+            u2[0]
+                .2
+                .contains(&(gilrs::Button::DPadUp, HAT_BUTTONS, false))
+        );
         assert!(u2[0].2.contains(&(gilrs::Button::East, 7, true)));
 
         let u3 = r.poll_with(&[], |_| None);
-        assert_eq!(u3, vec![(1, "Xbox One Game Controller".into(), vec![(gilrs::Button::East, 7, false)])]);
+        assert_eq!(
+            u3,
+            vec![(
+                1,
+                "Xbox One Game Controller".into(),
+                vec![(gilrs::Button::East, 7, false)]
+            )]
+        );
         assert_eq!(r.state_for_name("Xbox One Game Controller"), None);
     }
 
@@ -276,7 +327,10 @@ mod tests {
             ("Xbox One Game Controller", DEFAULT_INDICES),
             ("Flydigi Direwolf 4", DEFAULT_INDICES),
         ];
-        let active = Some(GamepadState { buttons: 0x1000, ..Default::default() });
+        let active = Some(GamepadState {
+            buttons: 0x1000,
+            ..Default::default()
+        });
         let updates = r.poll_with(&pads, |i| if i < 2 { active } else { None });
         assert!(updates.is_empty());
         assert_eq!(r.state_for_name("Xbox One Game Controller"), None);

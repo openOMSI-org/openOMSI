@@ -92,16 +92,32 @@ impl PassengerCabin {
                 omsi_cfg::Entry::Keyword(k) => k,
             };
             match k.as_str() {
-                "entry" => c.entries.push(Entry { path_point: r.i32(), ..Default::default() }),
+                "entry" => c.entries.push(Entry {
+                    path_point: r.i32(),
+                    ..Default::default()
+                }),
                 "exit" => c.exits.push(r.i32()),
                 "linktonextveh" => c.link_to_next_veh = Some(r.i32()),
                 "linktoprevveh" => c.link_to_prev_veh = Some(r.i32()),
-                "stamper" => c.stampers.push(Point3 { path_point: r.i32(), pos: r.f32s::<3>() }),
-                "ticket_sale" => c.ticket_sales.push(Point3 { path_point: r.i32(), pos: r.f32s::<3>() }),
-                "ticket_sale_money_point" | "ticket_sale_money_point_2" | "ticket_sale_change_point" | "ticket_sale_change_point_2" => {
+                "stamper" => c.stampers.push(Point3 {
+                    path_point: r.i32(),
+                    pos: r.f32s::<3>(),
+                }),
+                "ticket_sale" => c.ticket_sales.push(Point3 {
+                    path_point: r.i32(),
+                    pos: r.f32s::<3>(),
+                }),
+                "ticket_sale_money_point"
+                | "ticket_sale_money_point_2"
+                | "ticket_sale_change_point"
+                | "ticket_sale_change_point_2" => {
                     let pos = r.f32s::<3>();
                     let var = r.f32s::<2>();
-                    let parent = if k.ends_with("_2") { Some(r.str().to_string()) } else { None };
+                    let parent = if k.ends_with("_2") {
+                        Some(r.str().to_string())
+                    } else {
+                        None
+                    };
                     let p = VarPoint { pos, var, parent };
                     if k.contains("money") {
                         c.money_points.push(p);
@@ -124,7 +140,11 @@ impl PassengerCabin {
                     // OMSI 2 file reads as before, and Omsi.exe passes over the lines)
                     let mut more = || {
                         let l = r.lines().get(r.pos())?.trim();
-                        if k != "passpos" || l.is_empty() || l.starts_with('[') || l.starts_with('{') {
+                        if k != "passpos"
+                            || l.is_empty()
+                            || l.starts_with('[')
+                            || l.starts_with('{')
+                        {
                             return None;
                         }
                         r.line();
@@ -132,7 +152,15 @@ impl PassengerCabin {
                     };
                     let switch_var = more();
                     let taken_var = switch_var.as_ref().and_then(|_| more());
-                    let p = PassPos { pos, height, rot, illumination, file_index, switch_var, taken_var };
+                    let p = PassPos {
+                        pos,
+                        height,
+                        rot,
+                        illumination,
+                        file_index,
+                        switch_var,
+                        taken_var,
+                    };
                     if k == "passpos" {
                         c.pass_positions.push(p);
                         last = Some((false, c.pass_positions.len() - 1));
@@ -175,7 +203,10 @@ mod tests {
         assert_eq!(c.pass_positions[0].illumination, [4, 5, -1, -1]);
         assert_eq!(c.pass_positions[1].illumination, [6, 7, 8, 9]);
         assert_eq!(c.pass_positions[2].illumination, [6, 7, 8, 9]);
-        let c = PassengerCabin::parse(&CfgFile::from_str("passengercabin.cfg", "[passpos]\n0\n0\n1\n0.5\n0\n"));
+        let c = PassengerCabin::parse(&CfgFile::from_str(
+            "passengercabin.cfg",
+            "[passpos]\n0\n0\n1\n0.5\n0\n",
+        ));
         assert_eq!(c.pass_positions[0].illumination, [0, 1, 2, 3]);
     }
 
@@ -187,8 +218,20 @@ mod tests {
         let text = "[entry]\r\n0\r\n\r\n[entry]\r\n4\r\n\r\n{noticketsale}\r\n\r\n[exit]\r\n7\r\n\r\n\
                     [entry]\r\n9\r\n{withbutton}\r\n{noticketsale}\r\n\r\n[entry]\r\n11\r\n\r\n[exit]\r\n12\r\n\r\n{withbutton}\r\n";
         let c = PassengerCabin::parse(&CfgFile::from_str("passengercabin.cfg", text));
-        let flags: Vec<(i32, bool, bool)> = c.entries.iter().map(|e| (e.path_point, e.no_ticket_sale, e.with_button)).collect();
-        assert_eq!(flags, [(0, false, false), (4, true, false), (9, true, true), (11, false, true)]);
+        let flags: Vec<(i32, bool, bool)> = c
+            .entries
+            .iter()
+            .map(|e| (e.path_point, e.no_ticket_sale, e.with_button))
+            .collect();
+        assert_eq!(
+            flags,
+            [
+                (0, false, false),
+                (4, true, false),
+                (9, true, true),
+                (11, false, true)
+            ]
+        );
         assert_eq!(c.exits, [7, 12]);
     }
 
@@ -197,8 +240,15 @@ mod tests {
     fn stock_sd200_entry_flags() {
         // the stock SD200: its second entry (path point 4) sells no tickets
         let root = original_root();
-        let c = PassengerCabin::load(&root.join("Vehicles/MAN_SD200/Model/passengercabin.cfg")).expect("SD200 passengercabin.cfg");
-        assert_eq!(c.entries.iter().map(|e| (e.path_point, e.no_ticket_sale)).collect::<Vec<_>>(), [(0, false), (4, true)]);
+        let c = PassengerCabin::load(&root.join("Vehicles/MAN_SD200/Model/passengercabin.cfg"))
+            .expect("SD200 passengercabin.cfg");
+        assert_eq!(
+            c.entries
+                .iter()
+                .map(|e| (e.path_point, e.no_ticket_sale))
+                .collect::<Vec<_>>(),
+            [(0, false), (4, true)]
+        );
     }
 
     /// #721: a `[passpos]` may name a variable that switches it on and off and one the
@@ -209,8 +259,20 @@ mod tests {
                     [passpos]\n0.5\n2\n1\n0.5\n0\nlayout_long\n\n[passpos]\n0.5\n1\n1\n0.5\n0\n\n\
                     [passpos]\n0.5\n0\n1\n0.5\n0\n[entry]\n0\n{noticketsale}\n[drivpos]\n-0.8\n4.5\n1.0\n0.5\n0\nnot_a_place_var\n";
         let c = PassengerCabin::parse(&CfgFile::from_str("passengercabin.cfg", text));
-        let vars: Vec<(Option<&str>, Option<&str>)> = c.pass_positions.iter().map(|p| (p.switch_var.as_deref(), p.taken_var.as_deref())).collect();
-        assert_eq!(vars, [(Some("seat_folded_down"), Some("seat_taken")), (Some("layout_long"), None), (None, None), (None, None)]);
+        let vars: Vec<(Option<&str>, Option<&str>)> = c
+            .pass_positions
+            .iter()
+            .map(|p| (p.switch_var.as_deref(), p.taken_var.as_deref()))
+            .collect();
+        assert_eq!(
+            vars,
+            [
+                (Some("seat_folded_down"), Some("seat_taken")),
+                (Some("layout_long"), None),
+                (None, None),
+                (None, None)
+            ]
+        );
         assert_eq!(c.pass_positions[0].pos, [0.94, 0.04, 0.92]);
         assert_eq!(c.entries[0].path_point, 0);
         assert!(c.entries[0].no_ticket_sale);
@@ -224,6 +286,12 @@ mod tests {
         let c = PassengerCabin::parse(&CfgFile::from_str("passengercabin.cfg", text));
         let seats: Vec<usize> = c.pass_positions.iter().map(|p| p.file_index).collect();
         assert_eq!(seats, [1, 2, 4]);
-        assert_eq!(c.driver_positions.iter().map(|p| p.file_index).collect::<Vec<_>>(), [0, 3]);
+        assert_eq!(
+            c.driver_positions
+                .iter()
+                .map(|p| p.file_index)
+                .collect::<Vec<_>>(),
+            [0, 3]
+        );
     }
 }

@@ -24,7 +24,19 @@ pub enum Filter {
 }
 
 impl Filter {
-    pub const ALL: [Filter; 11] = [Filter::None, Filter::Vivid, Filter::Warm, Filter::Cool, Filter::Vintage, Filter::Sepia, Filter::Mono, Filter::Noir, Filter::BleachBypass, Filter::TealOrange, Filter::Faded];
+    pub const ALL: [Filter; 11] = [
+        Filter::None,
+        Filter::Vivid,
+        Filter::Warm,
+        Filter::Cool,
+        Filter::Vintage,
+        Filter::Sepia,
+        Filter::Mono,
+        Filter::Noir,
+        Filter::BleachBypass,
+        Filter::TealOrange,
+        Filter::Faded,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -104,7 +116,13 @@ pub enum Border {
 }
 
 impl Border {
-    pub const ALL: [Border; 5] = [Border::None, Border::White, Border::Black, Border::Instant, Border::Gallery];
+    pub const ALL: [Border; 5] = [
+        Border::None,
+        Border::White,
+        Border::Black,
+        Border::Instant,
+        Border::Gallery,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -125,7 +143,9 @@ impl Border {
             Border::None => None,
             Border::White => (!inside(s * 0.03, s * 0.03, s * 0.03, s * 0.03)).then_some([1.0; 3]),
             Border::Black => (!inside(s * 0.03, s * 0.03, s * 0.03, s * 0.03)).then_some([0.0; 3]),
-            Border::Instant => (!inside(s * 0.05, s * 0.05, s * 0.05, s * 0.2)).then_some([0.96, 0.95, 0.92]),
+            Border::Instant => {
+                (!inside(s * 0.05, s * 0.05, s * 0.05, s * 0.2)).then_some([0.96, 0.95, 0.92])
+            }
             Border::Gallery => {
                 let m = s * 0.08;
                 if !inside(m, m, m, m) {
@@ -143,7 +163,10 @@ impl Border {
 impl Grade {
     /// Settings that leave the picture as it was taken.
     pub fn neutral() -> Grade {
-        Grade { filter_strength: 1.0, ..Default::default() }
+        Grade {
+            filter_strength: 1.0,
+            ..Default::default()
+        }
     }
 }
 
@@ -162,7 +185,11 @@ fn lut() -> &'static [f32; 256] {
         let mut t = [0.0f32; 256];
         for (i, v) in t.iter_mut().enumerate() {
             let c = i as f32 / 255.0;
-            *v = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+            *v = if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            };
         }
         t
     })
@@ -180,7 +207,12 @@ fn to_srgb(l: f32) -> f32 {
 
 impl Accum {
     pub fn new(w: u32, h: u32) -> Accum {
-        Accum { w, h, sum: vec![0.0; (w * h * 3) as usize], n: 0 }
+        Accum {
+            w,
+            h,
+            sum: vec![0.0; (w * h * 3) as usize],
+            n: 0,
+        }
     }
 
     /// One more picture of the shot, already in linear light (RGB, `w` x `h`).
@@ -188,7 +220,10 @@ impl Accum {
         if lin.len() < self.sum.len() {
             return;
         }
-        self.sum.par_iter_mut().zip(lin.par_iter()).for_each(|(s, l)| *s += *l);
+        self.sum
+            .par_iter_mut()
+            .zip(lin.par_iter())
+            .for_each(|(s, l)| *s += *l);
         self.n += 1;
     }
 
@@ -201,13 +236,21 @@ impl Accum {
     /// The mean picture's luminance (linear), for the meter.
     pub fn luma(&self) -> Vec<f32> {
         let inv = 1.0 / self.n.max(1) as f32;
-        self.sum.par_chunks(3).map(|c| (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) * inv).collect()
+        self.sum
+            .par_chunks(3)
+            .map(|c| (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) * inv)
+            .collect()
     }
 
     /// A copy whose picture went through `f` (linear RGB mean in, out), one picture's worth.
     fn through(&self, f: impl FnOnce(Vec<f32>) -> Vec<f32>) -> Accum {
         let sum = f(self.mean());
-        Accum { w: self.w, h: self.h, sum, n: 1 }
+        Accum {
+            w: self.w,
+            h: self.h,
+            sum,
+            n: 1,
+        }
     }
 
     /// One more picture of the shot (RGBA, sRGB, `w` x `h`).
@@ -219,13 +262,16 @@ impl Accum {
         if rgba.len() < (self.w * self.h * 4) as usize {
             return;
         }
-        self.sum.par_chunks_mut(self.w as usize * 3).zip(rgba.par_chunks(self.w as usize * 4)).for_each(|(s, px)| {
-            for (o, p) in s.chunks_exact_mut(3).zip(px.chunks_exact(4)) {
-                o[0] += lut[p[0] as usize];
-                o[1] += lut[p[1] as usize];
-                o[2] += lut[p[2] as usize];
-            }
-        });
+        self.sum
+            .par_chunks_mut(self.w as usize * 3)
+            .zip(rgba.par_chunks(self.w as usize * 4))
+            .for_each(|(s, px)| {
+                for (o, p) in s.chunks_exact_mut(3).zip(px.chunks_exact(4)) {
+                    o[0] += lut[p[0] as usize];
+                    o[1] += lut[p[1] as usize];
+                    o[2] += lut[p[2] as usize];
+                }
+            });
         self.n += 1;
     }
 
@@ -235,7 +281,11 @@ impl Accum {
         let y = y.clamp(0, self.h as i64 - 1) as usize;
         let k = (y * self.w as usize + x) * 3;
         let inv = 1.0 / self.n.max(1) as f32;
-        [self.sum[k] * inv, self.sum[k + 1] * inv, self.sum[k + 2] * inv]
+        [
+            self.sum[k] * inv,
+            self.sum[k + 1] * inv,
+            self.sum[k + 2] * inv,
+        ]
     }
 
     /// The mean between pixels (bilinear), at pixel coordinates `fx`, `fy`.
@@ -260,7 +310,9 @@ impl Accum {
 /// The part of a `w` x `h` picture kept by the aspect ratio `aspect` (width / height; None:
 /// the whole): x, y, width, height.
 pub fn crop_rect(w: u32, h: u32, aspect: Option<f32>) -> (u32, u32, u32, u32) {
-    let Some(a) = aspect.filter(|a| *a > 0.0) else { return (0, 0, w, h) };
+    let Some(a) = aspect.filter(|a| *a > 0.0) else {
+        return (0, 0, w, h);
+    };
     let (fw, fh) = (w as f32, h as f32);
     if fw / fh > a {
         let cw = (fh * a).round().clamp(1.0, fw) as u32;
@@ -276,7 +328,11 @@ fn luma(c: [f32; 3]) -> f32 {
 }
 
 fn mix3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
 }
 
 fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
@@ -313,7 +369,11 @@ fn film(c: [f32; 3], f: Filter) -> [f32; 3] {
         Filter::Cool => sat([c[0] * 0.90, c[1] * 0.99, c[2] * 1.10], 0.95),
         Filter::Vintage => {
             let c = sat(c, 0.72);
-            [0.07 + c[0] * 0.90 * 1.04, 0.06 + c[1] * 0.88, 0.05 + c[2] * 0.80]
+            [
+                0.07 + c[0] * 0.90 * 1.04,
+                0.06 + c[1] * 0.88,
+                0.05 + c[2] * 0.80,
+            ]
         }
         Filter::Sepia => [l * 1.07 + 0.03, l * 0.92 + 0.02, l * 0.72],
         Filter::Mono => {
@@ -327,7 +387,13 @@ fn film(c: [f32; 3], f: Filter) -> [f32; 3] {
         }
         Filter::BleachBypass => {
             // the silver left in: the luma laid over the colour, half the colour gone
-            let over = |a: f32, b: f32| if a < 0.5 { 2.0 * a * b } else { 1.0 - 2.0 * (1.0 - a) * (1.0 - b) };
+            let over = |a: f32, b: f32| {
+                if a < 0.5 {
+                    2.0 * a * b
+                } else {
+                    1.0 - 2.0 * (1.0 - a) * (1.0 - b)
+                }
+            };
             let o = [over(l, c[0]), over(l, c[1]), over(l, c[2])];
             sat(mix3(c, o, 0.75), 0.55)
         }
@@ -335,7 +401,11 @@ fn film(c: [f32; 3], f: Filter) -> [f32; 3] {
             // the shadows to teal, the light (skin, lamps, sunlit paint) to orange
             let w = smoothstep(0.15, 0.85, l);
             let shade = mix3(c, [c[0] * 0.80, c[1] * 1.02, c[2] * 1.12], 1.0 - w);
-            let lit = mix3(shade, [shade[0] * 1.12, shade[1] * 1.00, shade[2] * 0.84], w);
+            let lit = mix3(
+                shade,
+                [shade[0] * 1.12, shade[1] * 1.00, shade[2] * 0.84],
+                w,
+            );
             sat(lit, 1.1)
         }
         Filter::Faded => {
@@ -358,14 +428,28 @@ fn grain_at(x: u32, y: u32) -> f32 {
 /// bars of the frame.
 pub fn develop(acc: &Accum, g: &Grade, crop: Option<(u32, u32, u32, u32)>) -> Vec<u8> {
     let mut out = vec![0u8; acc.w as usize * acc.h as usize * 4];
-    develop_into(acc, g, crop, &mut out, |v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8, 255);
+    develop_into(
+        acc,
+        g,
+        crop,
+        &mut out,
+        |v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
+        255,
+    );
     out
 }
 
 /// The developed picture with 16 bits a channel (RGBA), for a photo to be worked on further.
 pub fn develop16(acc: &Accum, g: &Grade, crop: Option<(u32, u32, u32, u32)>) -> Vec<u16> {
     let mut out = vec![0u16; acc.w as usize * acc.h as usize * 4];
-    develop_into(acc, g, crop, &mut out, |v| (v.clamp(0.0, 1.0) * 65535.0 + 0.5) as u16, 65535);
+    develop_into(
+        acc,
+        g,
+        crop,
+        &mut out,
+        |v| (v.clamp(0.0, 1.0) * 65535.0 + 0.5) as u16,
+        65535,
+    );
     out
 }
 
@@ -388,7 +472,14 @@ fn hue_rgb(h: f32) -> [f32; 3] {
     [f(5.0), f(3.0), f(1.0)]
 }
 
-fn develop_into<T: Copy + Send + Sync>(acc: &Accum, g: &Grade, crop: Option<(u32, u32, u32, u32)>, out: &mut [T], conv: impl Fn(f32) -> T + Sync, one: T) {
+fn develop_into<T: Copy + Send + Sync>(
+    acc: &Accum,
+    g: &Grade,
+    crop: Option<(u32, u32, u32, u32)>,
+    out: &mut [T],
+    conv: impl Fn(f32) -> T + Sync,
+    one: T,
+) {
     let (w, h) = (acc.w as usize, acc.h as usize);
     if acc.n == 0 || w == 0 || h == 0 {
         return;
@@ -435,7 +526,8 @@ fn develop_into<T: Copy + Send + Sync>(acc: &Accum, g: &Grade, crop: Option<(u32
         for x in 0..w {
             let px = &mut row[x * 4..x * 4 + 4];
             px[3] = one;
-            if (x as u32) < kx || (x as u32) >= kx + kw || (y as u32) < ky || (y as u32) >= ky + kh {
+            if (x as u32) < kx || (x as u32) >= kx + kw || (y as u32) < ky || (y as u32) >= ky + kh
+            {
                 px[0] = zero;
                 px[1] = zero;
                 px[2] = zero;
@@ -482,13 +574,19 @@ fn develop_into<T: Copy + Send + Sync>(acc: &Accum, g: &Grade, crop: Option<(u32
                     let sd = (l * shot_k + read * read).sqrt();
                     let lum = noise_at(x as u32, y as u32, 3) * sd * 0.7;
                     for (i, v) in c.iter_mut().enumerate() {
-                        *v = (*v + lum + noise_at(x as u32, y as u32, i as u32) * sd * 0.55).max(0.0);
+                        *v = (*v + lum + noise_at(x as u32, y as u32, i as u32) * sd * 0.55)
+                            .max(0.0);
                     }
                 }
             }
             if g.sharpen > 0.0 {
                 let (xi, yi) = (x as i64, y as i64);
-                let n = [acc.at(xi - 1, yi), acc.at(xi + 1, yi), acc.at(xi, yi - 1), acc.at(xi, yi + 1)];
+                let n = [
+                    acc.at(xi - 1, yi),
+                    acc.at(xi + 1, yi),
+                    acc.at(xi, yi - 1),
+                    acc.at(xi, yi + 1),
+                ];
                 for i in 0..3 {
                     let avg = (n[0][i] + n[1][i] + n[2][i] + n[3][i]) * 0.25;
                     c[i] = (c[i] + (c[i] - avg) * g.sharpen * 1.5).max(0.0);
@@ -499,13 +597,22 @@ fn develop_into<T: Copy + Send + Sync>(acc: &Accum, g: &Grade, crop: Option<(u32
             // values)
             for i in 0..3 {
                 let v = c[i] * gain * wb[i];
-                c[i] = if v <= 0.8 || gain * wb[i] <= 1.0 { v } else { 0.8 + 0.2 * (1.0 - (-(v - 0.8) / 0.2).exp()) / (1.0 - (-(gain * wb[i] - 0.8) / 0.2).exp()) };
+                c[i] = if v <= 0.8 || gain * wb[i] <= 1.0 {
+                    v
+                } else {
+                    0.8 + 0.2 * (1.0 - (-(v - 0.8) / 0.2).exp())
+                        / (1.0 - (-(gain * wb[i] - 0.8) / 0.2).exp())
+                };
             }
             let mut d = [to_srgb(c[0]), to_srgb(c[1]), to_srgb(c[2])];
             // shadows and highlights: the brightness moved where it is dark or light
             let l = luma(d);
             if g.shadows != 0.0 || g.highlights != 0.0 {
-                let lift = g.shadows * 0.35 * (1.0 - l) * (1.0 - l) * (1.0 - smoothstep(0.0, 0.6, l) * 0.5);
+                let lift = g.shadows
+                    * 0.35
+                    * (1.0 - l)
+                    * (1.0 - l)
+                    * (1.0 - smoothstep(0.0, 0.6, l) * 0.5);
                 let roll = g.highlights * 0.30 * l * l;
                 let to = (l + lift + roll).clamp(0.0, 1.0);
                 let k = if l > 1e-4 { to / l } else { 1.0 };
@@ -516,7 +623,11 @@ fn develop_into<T: Copy + Send + Sync>(acc: &Accum, g: &Grade, crop: Option<(u32
                 let k = g.contrast;
                 for v in d.iter_mut() {
                     let s = *v - 0.5;
-                    *v = if k > 0.0 { 0.5 + s * (1.0 + k) / (1.0 + k * 2.0 * s.abs()) } else { 0.5 + s * (1.0 + k * 0.7) };
+                    *v = if k > 0.0 {
+                        0.5 + s * (1.0 + k) / (1.0 + k * 2.0 * s.abs())
+                    } else {
+                        0.5 + s * (1.0 + k * 0.7)
+                    };
                 }
             }
             // saturation, and vibrance (more where the colour is weak)
@@ -537,7 +648,9 @@ fn develop_into<T: Copy + Send + Sync>(acc: &Accum, g: &Grade, crop: Option<(u32
                 let ws = 1.0 - smoothstep(0.0, mid, l);
                 let wh = smoothstep(mid, 1.0, l);
                 for i in 0..3 {
-                    d[i] += ((split_s[i] - luma(split_s)) * ws + (split_h[i] - luma(split_h)) * wh) * g.split_amount * 0.22;
+                    d[i] += ((split_s[i] - luma(split_s)) * ws + (split_h[i] - luma(split_h)) * wh)
+                        * g.split_amount
+                        * 0.22;
                 }
             }
             if g.vignette > 0.0 {
@@ -547,7 +660,10 @@ fn develop_into<T: Copy + Send + Sync>(acc: &Accum, g: &Grade, crop: Option<(u32
             if g.grain > 0.0 {
                 let l = luma(d).clamp(0.0, 1.0);
                 // (strongest in the mid-tones, as film's)
-                let n = grain_at(x as u32, y as u32) * g.grain * 0.16 * (1.0 - (2.0 * l - 1.0).abs() * 0.6);
+                let n = grain_at(x as u32, y as u32)
+                    * g.grain
+                    * 0.16
+                    * (1.0 - (2.0 * l - 1.0).abs() * 0.6);
                 d = [d[0] + n, d[1] + n, d[2] + n];
             }
             px[0] = conv(d[0]);
@@ -565,7 +681,9 @@ pub fn histogram(rgba: &[u8], w: u32, crop: (u32, u32, u32, u32)) -> [[u32; 64];
     for y in (y0..y0 + ch).step_by(2) {
         for x in (x0..x0 + cw).step_by(2) {
             let k = ((y * w + x) * 4) as usize;
-            let Some(p) = rgba.get(k..k + 3) else { continue };
+            let Some(p) = rgba.get(k..k + 3) else {
+                continue;
+            };
             for c in 0..3 {
                 hist[c][(p[c] >> 2) as usize] += 1;
             }
@@ -585,41 +703,48 @@ pub fn overlays(rgba: &mut [u8], w: u32, h: u32, zebra: bool, focus: Option<&[f3
     }
     let (wu, hu) = (w as usize, h as usize);
     let src = focus.map(|_| rgba.to_vec());
-    rgba.par_chunks_mut(wu * 4).enumerate().for_each(|(y, row)| {
-        for x in 0..wu {
-            let p = &mut row[x * 4..x * 4 + 4];
-            if zebra && ((x + y) / 5) % 2 == 0 {
-                if p[0].max(p[1]).max(p[2]) >= 252 {
-                    p[0] = 255;
-                    p[1] = 30;
-                    p[2] = 60;
-                    continue;
+    rgba.par_chunks_mut(wu * 4)
+        .enumerate()
+        .for_each(|(y, row)| {
+            for x in 0..wu {
+                let p = &mut row[x * 4..x * 4 + 4];
+                if zebra && ((x + y) / 5) % 2 == 0 {
+                    if p[0].max(p[1]).max(p[2]) >= 252 {
+                        p[0] = 255;
+                        p[1] = 30;
+                        p[2] = 60;
+                        continue;
+                    }
+                    if p[0].max(p[1]).max(p[2]) <= 2 {
+                        p[0] = 40;
+                        p[1] = 90;
+                        p[2] = 255;
+                        continue;
+                    }
                 }
-                if p[0].max(p[1]).max(p[2]) <= 2 {
-                    p[0] = 40;
-                    p[1] = 90;
-                    p[2] = 255;
-                    continue;
+                if let (Some(f), Some(s)) = (focus, src.as_ref()) {
+                    if x == 0
+                        || y == 0
+                        || x + 1 >= wu
+                        || y + 1 >= hu
+                        || f.get(y * wu + x).is_none_or(|r| *r > 0.7)
+                    {
+                        continue;
+                    }
+                    let l = |xx: usize, yy: usize| {
+                        let k = (yy * wu + xx) * 4;
+                        0.3 * s[k] as f32 + 0.59 * s[k + 1] as f32 + 0.11 * s[k + 2] as f32
+                    };
+                    let gx = l(x + 1, y) - l(x - 1, y);
+                    let gy = l(x, y + 1) - l(x, y - 1);
+                    if gx * gx + gy * gy > 40.0 * 40.0 {
+                        p[0] = 255;
+                        p[1] = 40;
+                        p[2] = 40;
+                    }
                 }
             }
-            if let (Some(f), Some(s)) = (focus, src.as_ref()) {
-                if x == 0 || y == 0 || x + 1 >= wu || y + 1 >= hu || f.get(y * wu + x).is_none_or(|r| *r > 0.7) {
-                    continue;
-                }
-                let l = |xx: usize, yy: usize| {
-                    let k = (yy * wu + xx) * 4;
-                    0.3 * s[k] as f32 + 0.59 * s[k + 1] as f32 + 0.11 * s[k + 2] as f32
-                };
-                let gx = l(x + 1, y) - l(x - 1, y);
-                let gy = l(x, y + 1) - l(x, y - 1);
-                if gx * gx + gy * gy > 40.0 * 40.0 {
-                    p[0] = 255;
-                    p[1] = 40;
-                    p[2] = 40;
-                }
-            }
-        }
-    });
+        });
 }
 
 /// The developed picture cut to its frame (RGBA).
@@ -656,7 +781,9 @@ mod tests {
     #[test]
     fn a_neutral_development_gives_the_picture_back() {
         let mut a = Accum::new(4, 3);
-        let px: Vec<u8> = (0..12u32).flat_map(|i| [(i * 20) as u8, (255 - i * 20) as u8, 128, 255]).collect();
+        let px: Vec<u8> = (0..12u32)
+            .flat_map(|i| [(i * 20) as u8, (255 - i * 20) as u8, 128, 255])
+            .collect();
         a.add(&px);
         let out = develop(&a, &Grade::neutral(), None);
         for (o, p) in out.chunks(4).zip(px.chunks(4)) {
@@ -681,7 +808,14 @@ mod tests {
         let mut a = Accum::new(1, 1);
         a.add(&flat(1, 1, [100, 100, 100]));
         let base = lut()[100];
-        let out = develop(&a, &Grade { exposure: 1.0, ..Grade::neutral() }, None);
+        let out = develop(
+            &a,
+            &Grade {
+                exposure: 1.0,
+                ..Grade::neutral()
+            },
+            None,
+        );
         let back = lut()[out[0] as usize];
         assert!((back - base * 2.0).abs() < 0.01, "{back} vs {}", base * 2.0);
     }
@@ -691,8 +825,19 @@ mod tests {
         let mut a = Accum::new(1, 1);
         a.add(&flat(1, 1, [200, 60, 30]));
         for f in [Filter::Mono, Filter::Noir] {
-            let out = develop(&a, &Grade { filter: f, ..Grade::neutral() }, None);
-            assert!(out[0] == out[1] && out[1] == out[2], "{f:?}: {:?}", &out[..3]);
+            let out = develop(
+                &a,
+                &Grade {
+                    filter: f,
+                    ..Grade::neutral()
+                },
+                None,
+            );
+            assert!(
+                out[0] == out[1] && out[1] == out[2],
+                "{f:?}: {:?}",
+                &out[..3]
+            );
         }
     }
 
@@ -700,7 +845,14 @@ mod tests {
     fn the_vignette_darkens_the_corners_and_leaves_the_middle() {
         let mut a = Accum::new(64, 40);
         a.add(&flat(64, 40, [180, 180, 180]));
-        let out = develop(&a, &Grade { vignette: 1.0, ..Grade::neutral() }, None);
+        let out = develop(
+            &a,
+            &Grade {
+                vignette: 1.0,
+                ..Grade::neutral()
+            },
+            None,
+        );
         let at = |x: usize, y: usize| out[(y * 64 + x) * 4];
         assert!((at(32, 20) as i32 - 180).abs() <= 1);
         assert!(at(0, 0) < 90, "{}", at(0, 0));
@@ -710,7 +862,14 @@ mod tests {
     fn warmer_is_redder_and_less_blue() {
         let mut a = Accum::new(1, 1);
         a.add(&flat(1, 1, [128, 128, 128]));
-        let out = develop(&a, &Grade { temperature: 1.0, ..Grade::neutral() }, None);
+        let out = develop(
+            &a,
+            &Grade {
+                temperature: 1.0,
+                ..Grade::neutral()
+            },
+            None,
+        );
         assert!(out[0] > 128 && out[2] < 128, "{:?}", &out[..3]);
     }
 
@@ -722,7 +881,15 @@ mod tests {
         assert_eq!((x, w), (0, 1920));
         assert_eq!(h, 823);
         assert_eq!(y, (1080 - 823) / 2);
-        let px = develop(&{ let mut a = Accum::new(4, 2); a.add(&flat(4, 2, [255, 255, 255])); a }, &Grade::neutral(), Some((1, 0, 2, 2)));
+        let px = develop(
+            &{
+                let mut a = Accum::new(4, 2);
+                a.add(&flat(4, 2, [255, 255, 255]));
+                a
+            },
+            &Grade::neutral(),
+            Some((1, 0, 2, 2)),
+        );
         assert_eq!(px[0], 0, "outside the frame: the bar");
         assert_eq!(px[4], 255);
         assert_eq!(cropped(&px, 4, (1, 0, 2, 2)).len(), 2 * 2 * 4);
@@ -733,23 +900,57 @@ mod tests {
         let mut a = Accum::new(32, 32);
         a.add(&flat(32, 32, [150, 150, 150]));
         // two stops over: white, and no darkroom brings it back
-        let over = develop(&a, &Grade { camera_ev: 2.0, exposure: -2.0, ..Grade::neutral() }, None);
+        let over = develop(
+            &a,
+            &Grade {
+                camera_ev: 2.0,
+                exposure: -2.0,
+                ..Grade::neutral()
+            },
+            None,
+        );
         assert!(over[0] < 200 && over[0] > 120, "{}", over[0]);
         let spread = |px: &[u8]| {
             let v: Vec<f32> = px.chunks(4).map(|p| p[1] as f32).collect();
             let m = v.iter().sum::<f32>() / v.len() as f32;
             (v.iter().map(|x| (x - m) * (x - m)).sum::<f32>() / v.len() as f32).sqrt()
         };
-        let low = develop(&a, &Grade { iso: 100.0, ..Grade::neutral() }, None);
-        let high = develop(&a, &Grade { iso: 12800.0, ..Grade::neutral() }, None);
-        assert!(spread(&high) > 4.0 * spread(&low).max(0.5), "{} {}", spread(&low), spread(&high));
+        let low = develop(
+            &a,
+            &Grade {
+                iso: 100.0,
+                ..Grade::neutral()
+            },
+            None,
+        );
+        let high = develop(
+            &a,
+            &Grade {
+                iso: 12800.0,
+                ..Grade::neutral()
+            },
+            None,
+        );
+        assert!(
+            spread(&high) > 4.0 * spread(&low).max(0.5),
+            "{} {}",
+            spread(&low),
+            spread(&high)
+        );
     }
 
     #[test]
     fn a_border_frames_the_photo() {
         let mut a = Accum::new(100, 80);
         a.add(&flat(100, 80, [20, 20, 20]));
-        let px = develop(&a, &Grade { border: Border::White, ..Grade::neutral() }, None);
+        let px = develop(
+            &a,
+            &Grade {
+                border: Border::White,
+                ..Grade::neutral()
+            },
+            None,
+        );
         assert_eq!(px[0], 255);
         assert!(px[((40 * 100 + 50) * 4) as usize] < 30);
         let px16 = develop16(&a, &Grade::neutral(), None);

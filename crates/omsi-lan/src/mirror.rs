@@ -127,8 +127,13 @@ pub fn relative_file(path: &Path, root: &Path) -> String {
 /// files `Vehicles/...` as the other games find them, not `OMSI 2/Vehicles/...`, which no
 /// other game has (a Linux server's AI cars were left out on every client, #1097).
 pub fn relative_to_roots(path: &Path, roots: &[PathBuf]) -> Option<String> {
-    let r = roots.iter().filter(|r| path.starts_with(r)).max_by_key(|r| r.components().count())?;
-    path.strip_prefix(r).ok().map(|rel| rel.to_string_lossy().replace('\\', "/"))
+    let r = roots
+        .iter()
+        .filter(|r| path.starts_with(r))
+        .max_by_key(|r| r.components().count())?;
+    path.strip_prefix(r)
+        .ok()
+        .map(|rel| rel.to_string_lossy().replace('\\', "/"))
 }
 
 /// A content-relative file from the host as a file here, when it exists here.
@@ -139,8 +144,13 @@ pub fn local_file(root: &Path, rel: &str) -> Option<PathBuf> {
     }
     // (a host that named it under a folder of its own, "OMSI 2/Vehicles/...": the same
     // vehicle under any content root here, as a remote player's bus is looked for)
-    let k = rel.to_ascii_lowercase().replace('\\', "/").find("vehicles/")?;
-    omsi_cfg::find_in_roots(&rel.replace('\\', "/")[k..]).map(|(_, p)| p).filter(|p| omsi_cfg::vfs::is_file(p))
+    let k = rel
+        .to_ascii_lowercase()
+        .replace('\\', "/")
+        .find("vehicles/")?;
+    omsi_cfg::find_in_roots(&rel.replace('\\', "/")[k..])
+        .map(|(_, p)| p)
+        .filter(|p| omsi_cfg::vfs::is_file(p))
 }
 
 pub fn net_activity(a: Activity) -> NetActivity {
@@ -166,13 +176,25 @@ mod tests {
     #[test]
     fn a_file_is_named_relative_to_the_deepest_root_holding_it() {
         // the content folder first, the OMSI 2 folder inside it after (a server's layout)
-        let roots = [PathBuf::from("/srv/openOMSI"), PathBuf::from("/srv/openOMSI/OMSI 2")];
+        let roots = [
+            PathBuf::from("/srv/openOMSI"),
+            PathBuf::from("/srv/openOMSI/OMSI 2"),
+        ];
         let golf = Path::new("/srv/openOMSI/OMSI 2/Vehicles/VW_Golf_2/ai_vw_golf_2.bus");
-        assert_eq!(relative_to_roots(golf, &roots).as_deref(), Some("Vehicles/VW_Golf_2/ai_vw_golf_2.bus"));
+        assert_eq!(
+            relative_to_roots(golf, &roots).as_deref(),
+            Some("Vehicles/VW_Golf_2/ai_vw_golf_2.bus")
+        );
         // a mod in the content folder itself stays relative to that
         let m = Path::new("/srv/openOMSI/Vehicles/Mod/mod.bus");
-        assert_eq!(relative_to_roots(m, &roots).as_deref(), Some("Vehicles/Mod/mod.bus"));
-        assert_eq!(relative_to_roots(Path::new("/elsewhere/x.bus"), &roots), None);
+        assert_eq!(
+            relative_to_roots(m, &roots).as_deref(),
+            Some("Vehicles/Mod/mod.bus")
+        );
+        assert_eq!(
+            relative_to_roots(Path::new("/elsewhere/x.bus"), &roots),
+            None
+        );
     }
 
     #[test]
@@ -189,8 +211,15 @@ mod tests {
             t = n;
         }
         // never back, never on more than a few per cent faster or slower than the clock
-        assert!(steps.iter().all(|d| *d > 16.0 * 0.93 && *d < 16.0 * 1.07), "{steps:?}");
-        assert!((t - (now - 190.0)).abs() < 1e-6, "caught up: {}", t - (now - 190.0));
+        assert!(
+            steps.iter().all(|d| *d > 16.0 * 0.93 && *d < 16.0 * 1.07),
+            "{steps:?}"
+        );
+        assert!(
+            (t - (now - 190.0)).abs() < 1e-6,
+            "caught up: {}",
+            t - (now - 190.0)
+        );
         // a new session: taken at once
         now += 16.0;
         assert_eq!(c.step(now, now + 5000.0, 500.0), now + 5000.0);

@@ -17,7 +17,10 @@
 
 use objc2::rc::Retained;
 use objc2::runtime::Bool;
-use objc2_game_controller::{GCController, GCControllerButtonInput, GCControllerDirectionPad, GCDevice, GCExtendedGamepad, GCProductCategoryXboxOne};
+use objc2_game_controller::{
+    GCController, GCControllerButtonInput, GCControllerDirectionPad, GCDevice, GCExtendedGamepad,
+    GCProductCategoryXboxOne,
+};
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
@@ -26,7 +29,11 @@ use std::sync::{Arc, Mutex};
 const BUTTONS: usize = 16;
 
 fn button_index(i: usize) -> usize {
-    if i < 12 { i } else { crate::controllers::HAT_BUTTONS + (i - 12) }
+    if i < 12 {
+        i
+    } else {
+        crate::controllers::HAT_BUTTONS + (i - 12)
+    }
 }
 
 fn read_buttons(pad: &GCExtendedGamepad, dpad: &GCControllerDirectionPad) -> [bool; BUTTONS] {
@@ -80,40 +87,48 @@ fn register_axis_handlers(gamepad: &GCExtendedGamepad, axes: &Arc<Mutex<[f32; 6]
     unsafe {
         let left = gamepad.leftThumbstick();
         let store = axes.clone();
-        let handler = block2::RcBlock::new(move |_pad: NonNull<GCControllerDirectionPad>, x: f32, y: f32| {
-            if let Ok(mut store) = store.lock() {
-                store[0] = x;
-                store[1] = y;
-            }
-        });
+        let handler = block2::RcBlock::new(
+            move |_pad: NonNull<GCControllerDirectionPad>, x: f32, y: f32| {
+                if let Ok(mut store) = store.lock() {
+                    store[0] = x;
+                    store[1] = y;
+                }
+            },
+        );
         left.setValueChangedHandler(block2::RcBlock::as_ptr(&handler));
 
         let right = gamepad.rightThumbstick();
         let store = axes.clone();
-        let handler = block2::RcBlock::new(move |_pad: NonNull<GCControllerDirectionPad>, x: f32, y: f32| {
-            if let Ok(mut store) = store.lock() {
-                store[2] = x;
-                store[3] = y;
-            }
-        });
+        let handler = block2::RcBlock::new(
+            move |_pad: NonNull<GCControllerDirectionPad>, x: f32, y: f32| {
+                if let Ok(mut store) = store.lock() {
+                    store[2] = x;
+                    store[3] = y;
+                }
+            },
+        );
         right.setValueChangedHandler(block2::RcBlock::as_ptr(&handler));
 
         let left_trigger = gamepad.leftTrigger();
         let store = axes.clone();
-        let handler = block2::RcBlock::new(move |_button: NonNull<GCControllerButtonInput>, v: f32, _pressed: Bool| {
-            if let Ok(mut store) = store.lock() {
-                store[4] = v * 2.0 - 1.0;
-            }
-        });
+        let handler = block2::RcBlock::new(
+            move |_button: NonNull<GCControllerButtonInput>, v: f32, _pressed: Bool| {
+                if let Ok(mut store) = store.lock() {
+                    store[4] = v * 2.0 - 1.0;
+                }
+            },
+        );
         left_trigger.setValueChangedHandler(block2::RcBlock::as_ptr(&handler));
 
         let right_trigger = gamepad.rightTrigger();
         let store = axes.clone();
-        let handler = block2::RcBlock::new(move |_button: NonNull<GCControllerButtonInput>, v: f32, _pressed: Bool| {
-            if let Ok(mut store) = store.lock() {
-                store[5] = v * 2.0 - 1.0;
-            }
-        });
+        let handler = block2::RcBlock::new(
+            move |_button: NonNull<GCControllerButtonInput>, v: f32, _pressed: Bool| {
+                if let Ok(mut store) = store.lock() {
+                    store[5] = v * 2.0 - 1.0;
+                }
+            },
+        );
         right_trigger.setValueChangedHandler(block2::RcBlock::as_ptr(&handler));
     }
 }
@@ -129,7 +144,10 @@ struct Pad {
 
 pub fn monitor_background(on: bool) {
     use objc2::ClassType;
-    if GCController::class().metaclass().responds_to(objc2::sel!(setShouldMonitorBackgroundEvents:)) {
+    if GCController::class()
+        .metaclass()
+        .responds_to(objc2::sel!(setShouldMonitorBackgroundEvents:))
+    {
         unsafe { GCController::setShouldMonitorBackgroundEvents(on) };
     }
 }
@@ -145,13 +163,19 @@ unsafe impl Send for GcPads {}
 
 impl GcPads {
     pub fn new() -> GcPads {
-        GcPads { pads: Vec::new(), last_scan: None }
+        GcPads {
+            pads: Vec::new(),
+            last_scan: None,
+        }
     }
 
     /// Find the controllers again when the set of them changed (checked every two
     /// seconds, as `mac_hid` does).
     fn scan(&mut self) {
-        if self.last_scan.is_some_and(|t| t.elapsed().as_secs_f32() < 2.0) {
+        if self
+            .last_scan
+            .is_some_and(|t| t.elapsed().as_secs_f32() < 2.0)
+        {
             return;
         }
         self.last_scan = Some(std::time::Instant::now());
@@ -161,7 +185,14 @@ impl GcPads {
         for controller in controllers.iter() {
             let category = unsafe { controller.productCategory() };
             let is_xbox = unsafe { GCProductCategoryXboxOne }.is_some_and(|c| *category == *c);
-            log::info!("GameController framework: {category} ({})", if is_xbox { "read here" } else { "left to gilrs" });
+            log::info!(
+                "GameController framework: {category} ({})",
+                if is_xbox {
+                    "read here"
+                } else {
+                    "left to gilrs"
+                }
+            );
             if !is_xbox {
                 continue;
             }
@@ -175,11 +206,23 @@ impl GcPads {
                 pads.push(self.pads.remove(i));
                 continue;
             }
-            let Some(gamepad) = (unsafe { controller.extendedGamepad() }) else { continue };
-            let name = if xbox == 1 { "Xbox Controller".to_string() } else { format!("Xbox Controller {xbox}") };
+            let Some(gamepad) = (unsafe { controller.extendedGamepad() }) else {
+                continue;
+            };
+            let name = if xbox == 1 {
+                "Xbox Controller".to_string()
+            } else {
+                format!("Xbox Controller {xbox}")
+            };
             let axes = Arc::new(Mutex::new(read_axes(&gamepad)));
             register_axis_handlers(&gamepad, &axes);
-            pads.push(Pad { controller, gamepad, name, buttons: [false; BUTTONS], axes });
+            pads.push(Pad {
+                controller,
+                gamepad,
+                name,
+                buttons: [false; BUTTONS],
+                axes,
+            });
         }
         self.pads = pads;
     }

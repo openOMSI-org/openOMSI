@@ -58,7 +58,7 @@ It loads the existing OMSI 2 maps, buses, scenery and mods as they are.
 | Project | What it is |
 | --- | --- |
 | [openOMSI](https://github.com/openOMSI-org/openOMSI) | the game and its launcher (this repository) |
-| [openMapper](https://github.com/openOMSI-org/openMapper) | a simple map editor: draw roads, place objects, shape the ground, drive the map in openOMSI ([docs/OPENMAPPER.md](docs/OPENMAPPER.md)) |
+| [openMapper](https://github.com/openOMSI-org/openMapper) | a simple map editor: draw roads, place objects, shape the ground, drive the map in openOMSI ([docs/MAPPER.md](docs/MAPPER.md)) |
 | [openOMSI Plugins](https://github.com/openOMSI-org/openOMSI-Plugins) | the catalog of reviewed, open source Lua plugins |
 | [Development Tools](https://github.com/openOMSI-org/openOMSI-Development-Tools) | the plugin workbench: projects, API docs, the `.oop` compiler |
 | [Add-ons list](docs/ADDONS.md) | projects others make for openOMSI, shown on the launcher's *Add-ons* page |
@@ -67,7 +67,7 @@ It loads the existing OMSI 2 maps, buses, scenery and mods as they are.
 
 The newest stable version is always at
 [**Releases → Latest**](https://github.com/openOMSI-org/openOMSI/releases/latest) and on the
-[website](https://openomsi.org/#/download). Newer, untested builds are published as
+[website](https://openomsi.org/download/). Newer, untested builds are published as
 *Pre-release* (beta) on the [Releases](https://github.com/openOMSI-org/openOMSI/releases) page.
 
 | Platform | File |
@@ -102,8 +102,8 @@ You need **OMSI 2** installed (Steam or retail) with its stock content.
    * **Linux:** `./openomsi` (`chmod +x openomsi` first if needed). It needs a Vulkan or
      OpenGL driver (Mesa: `mesa-vulkan-drivers`, or your GPU vendor's driver), and
      **WebKitGTK 4.1** for the launcher window (`libwebkit2gtk-4.1-0` on Debian/Ubuntu,
-     `webkit2gtk4.1` on Fedora, `webkit2gtk-4.1` on Arch; for the Steam Deck see the [user
-     guide](docs/USER_GUIDE.md#the-launcher)).
+     `webkit2gtk4.1` on Fedora, `webkit2gtk-4.1` on Arch; for the Steam Deck see
+     [Troubleshooting](docs/TROUBLESHOOTING.md#linux-and-steam-deck)).
    * **Android:** see [docs/ANDROID.md](docs/ANDROID.md) - the OMSI 2 folder is copied onto
      the device first.
 3. **Find OMSI 2.** The launcher usually finds the installation by itself (Steam libraries and
@@ -153,15 +153,21 @@ The documentation is on the website, **https://openomsi.org/**, and in [`docs/`]
 
 | Document | What is in it |
 | --- | --- |
-| [User guide](docs/USER_GUIDE.md) | driving, the launcher, settings, mods, weather, LAN play |
+| [Getting started](docs/GETTING_STARTED.md) | install, find OMSI 2, drive your first bus |
+| [Driving](docs/DRIVING.md) | keys, cameras, service at the stops, photo mode |
+| [Launcher and settings](docs/LAUNCHER.md) | every launcher page and every setting |
+| [Graphics](docs/GRAPHICS.md) | renderers, presets, DLSS and FSR, mirrors |
+| [Mods](docs/MODS.md) | the content folder, installing mods, the object editor |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | performance, failed starts, logs, bug reports |
+| [Playing together](docs/MULTIPLAYER.md) | hosting and joining a session |
 | [Android](docs/ANDROID.md) | the mobile version: install, touch controls, building the APK |
 | [Virtual reality](docs/VR.md) | OpenXR headsets on Windows |
 | [Dedicated server](docs/SERVER.md) | hosting a multiplayer session without a window |
 | [Modding](docs/MODDING.md) | what openOMSI allows beyond OMSI 2: more lights, larger textures, additions OMSI 2 ignores |
 | [PBR materials](docs/PBR.md) | normal, roughness, metalness and occlusion maps |
 | [Map packages](docs/MAP_PACKAGE.md) | optional surroundings a map can ship for the navigator and city map |
-| [Plugins](docs/PLUGINS.md) | Lua and WebAssembly plugins, `.oop` files, OMSI plugin DLLs |
-| [openMapper](docs/OPENMAPPER.md) | the map editor |
+| [Plugins](docs/PLUGINS.md) | Lua and WebAssembly plugins, `.oop` files, OMSI plugin DLLs ([API reference](docs/PLUGIN_API.md)) |
+| [openMapper](docs/MAPPER.md) | the map editor: install and five tutorials |
 | [Trams, metros and trains](docs/RAIL.md) | rail vehicles, tracks and stations |
 | [Transport modes](docs/TRANSPORT_MODES.md) | how a vehicle and a map say what kind of transport they are for |
 | [Trolleybuses](docs/TROLLEYBUS.md) | the overhead wire and the poles |

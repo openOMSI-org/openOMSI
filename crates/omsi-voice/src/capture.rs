@@ -18,7 +18,9 @@ const QUEUE_SECS: usize = 1;
 /// Names of the input devices, for the settings.
 pub fn input_devices() -> Vec<String> {
     let host = cpal::default_host();
-    host.input_devices().map(|d| d.filter_map(|d| d.name().ok()).collect()).unwrap_or_default()
+    host.input_devices()
+        .map(|d| d.filter_map(|d| d.name().ok()).collect())
+        .unwrap_or_default()
 }
 
 /// Downmix to mono and bring a device's rate to 48 kHz (linear interpolation up, averaging
@@ -34,7 +36,14 @@ pub struct Converter {
 
 impl Converter {
     pub fn new(rate: u32, channels: usize) -> Converter {
-        Converter { ratio: rate.max(1) as f64 / RATE as f64, phase: 0.0, prev: 0.0, acc: 0.0, acc_n: 0, channels: channels.max(1) }
+        Converter {
+            ratio: rate.max(1) as f64 / RATE as f64,
+            phase: 0.0,
+            prev: 0.0,
+            acc: 0.0,
+            acc_n: 0,
+            channels: channels.max(1),
+        }
     }
 
     /// Interleaved samples in, mono 48 kHz samples appended to `out`.
@@ -108,12 +117,18 @@ impl Capture {
     pub fn open(name: &str) -> Result<Capture, String> {
         let host = cpal::default_host();
         let device = (!name.is_empty())
-            .then(|| host.input_devices().ok().and_then(|mut d| d.find(|d| d.name().ok().as_deref() == Some(name))))
+            .then(|| {
+                host.input_devices()
+                    .ok()
+                    .and_then(|mut d| d.find(|d| d.name().ok().as_deref() == Some(name)))
+            })
             .flatten()
             .or_else(|| host.default_input_device())
             .ok_or_else(|| "no microphone found".to_string())?;
         let label = device.name().unwrap_or_default();
-        let supported = device.default_input_config().map_err(|e| format!("microphone {label} failed: {e}"))?;
+        let supported = device
+            .default_input_config()
+            .map_err(|e| format!("microphone {label} failed: {e}"))?;
         let format = supported.sample_format();
         let config: cpal::StreamConfig = supported.into();
         let queue = Arc::new(Mutex::new(VecDeque::new()));
@@ -124,12 +139,26 @@ impl Capture {
             SampleFormat::U16 => build::<u16>(&device, &config, q),
             SampleFormat::I32 => build::<i32>(&device, &config, q),
             SampleFormat::I8 => build::<i8>(&device, &config, q),
-            other => return Err(format!("microphone {label}: sample format {other:?} is not supported")),
+            other => {
+                return Err(format!(
+                    "microphone {label}: sample format {other:?} is not supported"
+                ));
+            }
         }
         .map_err(|e| format!("microphone {label} failed: {e}"))?;
-        stream.play().map_err(|e| format!("microphone {label} failed: {e}"))?;
-        log::info!("voice: microphone {label} open ({} Hz, {} channel(s))", config.sample_rate.0, config.channels);
-        Ok(Capture { _stream: stream, queue, device: label })
+        stream
+            .play()
+            .map_err(|e| format!("microphone {label} failed: {e}"))?;
+        log::info!(
+            "voice: microphone {label} open ({} Hz, {} channel(s))",
+            config.sample_rate.0,
+            config.channels
+        );
+        Ok(Capture {
+            _stream: stream,
+            queue,
+            device: label,
+        })
     }
 
     /// Everything captured since the last call (mono, 48 kHz).
@@ -144,20 +173,41 @@ mod tests {
 
     #[test]
     fn rates_are_brought_to_48k_and_stereo_to_mono() {
-        for (rate, channels) in [(48_000u32, 1usize), (44_100, 2), (16_000, 1), (96_000, 2), (22_050, 1)] {
+        for (rate, channels) in [
+            (48_000u32, 1usize),
+            (44_100, 2),
+            (16_000, 1),
+            (96_000, 2),
+            (22_050, 1),
+        ] {
             let mut c = Converter::new(rate, channels);
             let n = rate as usize; // one second
-            let input: Vec<f32> = (0..n * channels).map(|i| 0.4 * (2.0 * std::f32::consts::PI * 440.0 * (i / channels) as f32 / rate as f32).sin()).collect();
+            let input: Vec<f32> = (0..n * channels)
+                .map(|i| {
+                    0.4 * (2.0 * std::f32::consts::PI * 440.0 * (i / channels) as f32 / rate as f32)
+                        .sin()
+                })
+                .collect();
             let mut out = Vec::new();
             for chunk in input.chunks(480 * channels) {
                 c.feed(chunk, &mut out);
             }
-            assert!((out.len() as i64 - 48_000).abs() <= 4, "{rate} Hz x{channels}: {} samples", out.len());
+            assert!(
+                (out.len() as i64 - 48_000).abs() <= 4,
+                "{rate} Hz x{channels}: {} samples",
+                out.len()
+            );
             // the tone is still a tone at the same pitch: count zero crossings
             let crossings = out.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count();
-            assert!((crossings as i64 - 440).abs() <= 3, "{rate} Hz x{channels}: {crossings} cycles");
+            assert!(
+                (crossings as i64 - 440).abs() <= 3,
+                "{rate} Hz x{channels}: {crossings} cycles"
+            );
             let peak = out.iter().fold(0f32, |m, v| m.max(v.abs()));
-            assert!(peak > 0.3 && peak < 0.45, "{rate} Hz x{channels}: peak {peak}");
+            assert!(
+                peak > 0.3 && peak < 0.45,
+                "{rate} Hz x{channels}: peak {peak}"
+            );
         }
     }
 }

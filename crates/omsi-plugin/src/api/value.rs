@@ -39,7 +39,13 @@ impl Value {
         match self {
             Value::Int(i) => Some(*i),
             Value::Num(n) if n.fract() == 0.0 && n.abs() < 9.0e15 => Some(*n as i64),
-            Value::Str(s) => s.trim().parse::<i64>().ok().or_else(|| s.trim().parse::<f64>().ok().filter(|n| n.fract() == 0.0).map(|n| n as i64)),
+            Value::Str(s) => s.trim().parse::<i64>().ok().or_else(|| {
+                s.trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|n| n.fract() == 0.0)
+                    .map(|n| n as i64)
+            }),
             _ => None,
         }
     }
@@ -114,7 +120,11 @@ impl Value {
 /// A number as Lua 5.4 writes it: `%.14g`, with `.0` after a float that looks whole.
 pub fn lua_number(n: f64) -> String {
     if n.is_nan() {
-        return if n.is_sign_negative() { "-nan".into() } else { "nan".into() };
+        return if n.is_sign_negative() {
+            "-nan".into()
+        } else {
+            "nan".into()
+        };
     }
     if n.is_infinite() {
         return if n > 0.0 { "inf".into() } else { "-inf".into() };
@@ -130,7 +140,11 @@ pub fn lua_number(n: f64) -> String {
 /// C's `%.<prec>g`.
 fn format_g(n: f64, prec: usize) -> String {
     if n == 0.0 {
-        return if n.is_sign_negative() { "-0".into() } else { "0".into() };
+        return if n.is_sign_negative() {
+            "-0".into()
+        } else {
+            "0".into()
+        };
     }
     let exp = n.abs().log10().floor() as i32;
     // (rounding can carry into the next power of ten: 9.99999999999999e14 -> 1e15)
@@ -228,7 +242,16 @@ mod tests {
 
     #[test]
     fn numbers_read_as_lua_writes_them() {
-        for (n, s) in [(12.5, "12.5"), (2.0, "2.0"), (1e20, "1e+20"), (-0.5, "-0.5"), (0.1, "0.1"), (1e-5, "1e-05"), (123456789012345.0, "1.2345678901234e+14"), (100.0, "100.0")] {
+        for (n, s) in [
+            (12.5, "12.5"),
+            (2.0, "2.0"),
+            (1e20, "1e+20"),
+            (-0.5, "-0.5"),
+            (0.1, "0.1"),
+            (1e-5, "1e-05"),
+            (123456789012345.0, "1.2345678901234e+14"),
+            (100.0, "100.0"),
+        ] {
             assert_eq!(lua_number(n), s, "{n}");
         }
     }

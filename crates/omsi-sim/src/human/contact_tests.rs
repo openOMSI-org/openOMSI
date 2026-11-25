@@ -160,9 +160,11 @@ fn seat_anchor_is_converted_once_for_low_and_high_seats() {
             let mut vertices = vec![];
             skin(&mesh, &bones, &mut vertices, &mut vec![]);
             assert!((posed.hip[1].z + lift - model_height).abs() < 0.005);
-            assert!(vertices
-                .iter()
-                .all(|v| v.is_finite() && v.z >= lift - 0.015));
+            assert!(
+                vertices
+                    .iter()
+                    .all(|v| v.is_finite() && v.z >= lift - 0.015)
+            );
         }
     }
 }

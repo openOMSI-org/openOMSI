@@ -29,8 +29,15 @@ pub struct ServerWorld<'a> {
 fn weathers() -> Vec<String> {
     let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
         .into_iter()
-        .filter(|p| p.extension().map(|e| e.eq_ignore_ascii_case("owt")).unwrap_or(false))
-        .filter_map(|p| p.file_name().map(|n| format!("Weather/{}", n.to_string_lossy())))
+        .filter(|p| {
+            p.extension()
+                .map(|e| e.eq_ignore_ascii_case("owt"))
+                .unwrap_or(false)
+        })
+        .filter_map(|p| {
+            p.file_name()
+                .map(|n| format!("Weather/{}", n.to_string_lossy()))
+        })
         .collect();
     files.sort();
     files.dedup();
@@ -49,7 +56,10 @@ pub fn apply(w: &mut ServerWorld, action: &Action) -> Outcome {
         Action::Clock(want) => {
             let now = (w.clock + *w.shift).rem_euclid(86_400.0);
             *w.shift += (want - now + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
-            Outcome::applied(format!("clock set ({})", omsi_sim::timetable_run::hhmm(*want)))
+            Outcome::applied(format!(
+                "clock set ({})",
+                omsi_sim::timetable_run::hhmm(*want)
+            ))
         }
         Action::Speed(s) => {
             w.lan.clock_speed = *s;
@@ -57,7 +67,10 @@ pub fn apply(w: &mut ServerWorld, action: &Action) -> Outcome {
         }
         Action::Weather(WeatherAction::Set(want)) => {
             // only an installed weather (the name came over the network)
-            match weathers().into_iter().find(|f| f.eq_ignore_ascii_case(&want.replace('\\', "/"))) {
+            match weathers()
+                .into_iter()
+                .find(|f| f.eq_ignore_ascii_case(&want.replace('\\', "/")))
+            {
                 Some(f) => {
                     log::info!("server: weather now {f}");
                     w.lan.set_weather(&f);
@@ -73,14 +86,20 @@ pub fn apply(w: &mut ServerWorld, action: &Action) -> Outcome {
                 return Outcome::rejected("no weather installed on the server");
             }
             let cur = w.lan.weather().replace('\\', "/").to_ascii_lowercase();
-            let k = files.iter().position(|f| f.to_ascii_lowercase() == cur).map(|k| (k + 1) % files.len()).unwrap_or(0);
+            let k = files
+                .iter()
+                .position(|f| f.to_ascii_lowercase() == cur)
+                .map(|k| (k + 1) % files.len())
+                .unwrap_or(0);
             log::info!("server: weather now {}", files[k]);
             w.lan.set_weather(&files[k]);
             let f = &files[k];
             Outcome::applied(format!("weather changed ({f})"))
         }
         Action::Traffic(arg) => {
-            let Some(t) = w.traffic.as_deref_mut() else { return Outcome::rejected("the server has no AI traffic") };
+            let Some(t) = w.traffic.as_deref_mut() else {
+                return Outcome::rejected("the server has no AI traffic");
+            };
             match TrafficOrder::parse(arg, w.traffic_max) {
                 Some(TrafficOrder::Density(n)) => {
                     t.set_density(n);
@@ -91,9 +110,14 @@ pub fn apply(w: &mut ServerWorld, action: &Action) -> Outcome {
                 Some(TrafficOrder::Clear) => {
                     let n = t.clear_cars();
                     log::info!("server: {n} AI vehicles taken off the road");
-                    Outcome::applied(format!("AI traffic cleared ({n} vehicles taken off the road)"))
+                    Outcome::applied(format!(
+                        "AI traffic cleared ({n} vehicles taken off the road)"
+                    ))
                 }
-                None => Outcome::rejected(format!("a traffic density from 0 to {} or 'clear'", w.traffic_max)),
+                None => Outcome::rejected(format!(
+                    "a traffic density from 0 to {} or 'clear'",
+                    w.traffic_max
+                )),
             }
         }
         // the people the stops and pavements get from now on: those already waiting,

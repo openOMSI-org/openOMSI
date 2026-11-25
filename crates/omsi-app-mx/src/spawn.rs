@@ -1,0 +1,1098 @@
+//! Putting the player's bus into the world: its file, coupled parts, paint scheme and place.
+
+use super::*;
+
+/// The vehicle file to spawn for `--bus`. The rear section of an articulated bus is never
+/// driven on its own (OMSI does not even list it): asked for one, the bus it belongs to is
+/// spawned, and a rear section that nothing couples is refused.
+pub(crate) fn player_bus_path(root: &Path, bus: &str) -> Result<PathBuf> {
+    let path = omsi_cfg::resolve_path(root, bus);
+    let def = omsi_vehicle::Vehicle::load(&path)
+        .with_context(|| format!("loading {}", path.display()))?;
+    // a part with a front coupling that another vehicle couples behind itself is a rear
+    // section, whether or not the mod gave it a [friendlyname] of its own
+    let fronts = if def.coupling_front.is_some() {
+        omsi_vehicle::vehicle::front_sections_of(&path)
+    } else {
+        Vec::new()
+    };
+    // (a rail vehicle couples at both ends by nature: a locomotive or a tram is driven as
+    // it is)
+    if (fronts.is_empty() && !def.is_rear_section()) || crate::rail_drive::is_rail(&def) {
+        return Ok(path);
+    }
+    match fronts.first() {
+        Some(front) => {
+            log::warn!(
+                "{} is the rear section of {}: spawning the whole bus",
+                path.display(),
+                front.display()
+            );
+            Ok(front.clone())
+        }
+        None => anyhow::bail!(
+            "{} is the rear section of an articulated bus and cannot be driven on its own, and no vehicle in its folder couples it ([couple_back]); choose the front section instead",
+            path.display()
+        ),
+    }
+}
+
+pub(crate) use omsi_vehicle::vehicle::{MAX_COUPLED_PARTS, chain_has_part, next_coupled};
+
+/// Load the `[couple_back]` chain behind `vehicle` (articulated rear sections, trailers),
+/// each file resolved from the folder of the part before it in whichever content root
+/// holds it.
+pub(crate) fn load_coupled_parts(
+    root: &Path,
+    vehicle: &mut omsi_sim::VehicleInstance,
+) -> Vec<Arc<omsi_sim::VehicleType>> {
+    let loaded = load_coupled_types(root, vehicle.ty.clone());
+    attach_coupled_types(vehicle, loaded)
+}
+
+/// The `[couple_back]` chain behind `lead` read from its files, each part with whether it
+/// is turned round: no vehicle, VM or scene is touched, so a worker thread can read it.
+fn load_coupled_types(
+    root: &Path,
+    mut lead: Arc<omsi_sim::VehicleType>,
+) -> Vec<(Arc<omsi_sim::VehicleType>, bool)> {
+    let mut parts = Vec::new();
+    let mut lead_rev = false;
+    let mut seen = vec![lead.def.path.clone()];
+    for _ in 0..MAX_COUPLED_PARTS {
+        let Some((path, reversed)) = next_coupled(&lead.def, lead_rev, true) else {
+            break;
+        };
+        if chain_has_part(&seen, &path) {
+            log::info!(
+                "coupled behind {}: {} - already in the train, the consist closes here",
+                lead.def
+                    .path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                path.display()
+            );
+            break;
+        }
+        match omsi_sim::VehicleType::load(root, &path) {
+            Ok(t) => {
+                let t = Arc::new(t);
+                log::info!(
+                    "coupled behind {}: {} ({} meshes{})",
+                    lead.def
+                        .path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    path.display(),
+                    t.meshes.len(),
+                    if reversed { ", reversed" } else { "" }
+                );
+                parts.push((t.clone(), reversed));
+                seen.push(path);
+                lead = t;
+                lead_rev = reversed;
+            }
+            Err(e) => {
+                log::warn!(
+                    "coupled part {} of {}: {e:#}",
+                    path.display(),
+                    lead.def.path.display()
+                );
+                break;
+            }
+        }
+    }
+    parts
+}
+
+/// Couple the parts `load_coupled_types` read behind `vehicle`.
+fn attach_coupled_types(
+    vehicle: &mut omsi_sim::VehicleInstance,
+    loaded: Vec<(Arc<omsi_sim::VehicleType>, bool)>,
+) -> Vec<Arc<omsi_sim::VehicleType>> {
+    loaded
+        .into_iter()
+        .map(|(ty, reversed)| {
+            vehicle.attach_trailer_ex(ty.clone(), reversed);
+            ty
+        })
+        .collect()
+}
+
+/// A vehicle read for placing, before it is put into the world: its type, the parts
+/// coupled behind it, and its meshes and textures made on the GPU ahead (`prefetch`).
+pub(crate) struct PreparedPlayer {
+    pub(crate) ty: Arc<omsi_sim::VehicleType>,
+    parts: Vec<(Arc<omsi_sim::VehicleType>, bool)>,
+    staged: Option<scene::VehiclePrefetch>,
+    /// A bus read from the files a server keeps writes its displays with its own fonts.
+    fonts: Option<omsi_lan::mods::vehicles::SharedFonts>,
+}
+
+impl PreparedPlayer {
+    /// Read `--bus` and its coupled parts (on any thread).
+    pub(crate) fn load(args: &Args) -> Result<Self> {
+        let bus = args.bus.as_deref().context("no vehicle selected")?;
+        let path = player_bus_path(&args.root, bus)?;
+        let ty = Arc::new(omsi_sim::VehicleType::load(&args.root, &path)?);
+        let parts = load_coupled_types(&args.root, ty.clone());
+        Ok(Self {
+            ty,
+            parts,
+            staged: None,
+            fonts: None,
+        })
+    }
+
+    pub(crate) fn of_type(
+        root: &Path,
+        ty: Arc<omsi_sim::VehicleType>,
+        fonts: Option<omsi_lan::mods::vehicles::SharedFonts>,
+    ) -> Self {
+        let parts = load_coupled_types(root, ty.clone());
+        Self {
+            ty,
+            parts,
+            staged: None,
+            fonts,
+        }
+    }
+
+    /// Make its meshes and textures in paint `paint` with `prefetch` (a placement's own,
+    /// `World::placement_prefetch`: given to the world only when the vehicle is put down).
+    pub(crate) fn prefetch(&mut self, prefetch: scene::VehiclePrefetch, paint: Option<&str>) {
+        let scheme = paint_scheme(&self.ty, paint);
+        prefetch.prefetch(&self.ty, scheme);
+        for (ty, _) in &self.parts {
+            prefetch.prefetch(ty, scheme.filter(|i| *i < ty.paint_schemes.len()));
+        }
+        self.staged = Some(prefetch);
+    }
+}
+
+/// A vehicle chosen in the game menu being read on a worker thread (one at a time): the
+/// game goes on meanwhile, and the bus driven stays until its replacement is ready.
+pub(crate) struct PendingPlacement {
+    pub(crate) receiver: std::sync::mpsc::Receiver<Result<PreparedPlayer>>,
+    /// The world it is for: a map loaded meanwhile drops it.
+    pub(crate) world: Arc<World>,
+    pub(crate) args: Args,
+    pub(crate) name: String,
+    /// The driven vehicle it takes the place of (its uid).
+    pub(crate) replace: Option<u64>,
+    /// The driven vehicle read again from its files (the menu's reload).
+    pub(crate) reload: bool,
+    pub(crate) heading: f64,
+    /// A server's parked bus taken over (`on_foot::parked`): its number.
+    pub(crate) taken: Option<u32>,
+}
+
+/// Choose the player's fleet number and registration before the script VM runs `{init}`.
+/// Manual plates win, free registrations come from the map, otherwise the selected number
+/// is paired with the bus's registration rules.
+fn player_identity(
+    args: &Args,
+    world: &World,
+    vt: &omsi_sim::VehicleType,
+) -> (Option<String>, Option<String>) {
+    let available = vt.def.numbers_with_plates();
+    let saved_number = args
+        .situation_strvars
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("number"))
+        .map(|(_, v)| v.trim())
+        .filter(|v| !v.is_empty());
+    let wanted = args
+        .number
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .or(saved_number);
+
+    let number = match wanted {
+        Some(w) if available.is_empty() => Some(w.to_string()),
+        Some(w) => match available.iter().find(|(n, _)| n.trim() == w) {
+            Some((n, _)) => Some(n.clone()),
+            None => {
+                log::warn!("--number {w}: not in the bus's [number] list");
+                Some(w.to_string())
+            }
+        },
+        None => available.first().map(|(n, _)| n.clone()),
+    };
+
+    let saved_ident = args
+        .situation_strvars
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("ident"))
+        .map(|(_, v)| v.trim())
+        .filter(|v| !v.is_empty());
+    let typed = args
+        .plate
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty());
+    let ident = if let Some(p) = typed {
+        Some(p.to_string())
+    } else if let Some(p) = saved_ident {
+        Some(p.to_string())
+    } else if vt.def.registration_free {
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        world.free_registration(seed)
+    } else {
+        number
+            .as_deref()
+            .map(|n| vt.def.chosen_plate_of_number(n))
+            .filter(|p| !p.trim().is_empty())
+    };
+
+    (number, ident)
+}
+
+pub(crate) fn spawn_player(
+    args: &Args,
+    world: &World,
+    renderer: &Renderer,
+    scene: &mut Scene,
+) -> Result<Option<Player>> {
+    if args.bus.is_none() {
+        return Ok(None);
+    }
+    spawn_player_prepared(args, world, renderer, scene, PreparedPlayer::load(args)?)
+}
+
+/// `spawn_player` with the vehicle read already (`PreparedPlayer`).
+pub(crate) fn spawn_player_prepared(
+    args: &Args,
+    world: &World,
+    renderer: &Renderer,
+    scene: &mut Scene,
+    mut prepared: PreparedPlayer,
+) -> Result<Option<Player>> {
+    if let Some(staged) = prepared.staged.take() {
+        world.accept_placement_prefetch(staged);
+    }
+    let fonts = prepared.fonts.take().unwrap_or_else(|| world.fonts.clone());
+    let vt = prepared.ty;
+    if let omsi_cfg::transport::Admission::Refused(why) =
+        omsi_sim::transport::admission(world.global.transport, &vt.def)
+    {
+        if omsi_cfg::flags::OMSI_IGNORE_TRANSPORT.is_set() {
+            log::warn!("transport: {why} (OMSI_IGNORE_TRANSPORT is set, running anyway)");
+        } else {
+            anyhow::bail!(
+                "{} {} cannot run on this map. {why}",
+                vt.def.manufacturer,
+                vt.def.type_name
+            );
+        }
+    }
+    log::info!(
+        "vehicle {} {}: {} meshes, {} script blocks, {} variables",
+        vt.def.manufacturer,
+        vt.def.type_name,
+        vt.meshes.len(),
+        vt.program.blocks.len(),
+        vt.program.var_names.len()
+    );
+    let doors = crate::player::door_keys(&vt);
+    if !doors.is_empty() {
+        let keys: Vec<String> = doors
+            .iter()
+            .enumerate()
+            .map(|(i, g)| format!("Shift+{} = {}", i + 1, g.join(" + ")))
+            .collect();
+        log::info!("door keys: {}", keys.join(", "));
+    }
+    let mut host = vehicle_host(args, world, &vt);
+    // (before the scripts' {init}, which asks for its fonts: one not found then stays not found)
+    host.font_lib = Some(fonts.clone());
+    let mut vehicle = omsi_sim::VehicleInstance::new(vt.clone(), host);
+    // place at the entry point
+    place_at_entry_point(args, world, &mut vehicle);
+    let scheme = paint_scheme(&vt, args.paint.as_deref());
+    match scheme {
+        Some(i) => log::info!(
+            "paint scheme {} '{}' (asked for {:?})",
+            i,
+            vt.paint_schemes[i].name,
+            args.paint
+        ),
+        None => log::info!("paint: the model's own textures"),
+    }
+    vehicle.apply_paint_vars(scheme);
+    log::info!(
+        "gearbox: {}",
+        if vehicle.ty.program.manual_gearbox() {
+            "manual (gates)"
+        } else {
+            "automatic or none"
+        }
+    );
+    if let Some(sp) = &args.spawn {
+        let v: Vec<f64> = sp
+            .split(',')
+            .filter_map(|x| x.trim().parse().ok())
+            .collect();
+        if v.len() >= 3 {
+            // x,y,heading[,z]: a height given is the road's (the ground may lie below it)
+            let z = match v.get(3) {
+                Some(&road) => world
+                    .stand_height(v[0], v[1], road)
+                    .map_or(road, |g| road.max(g)),
+                None => world.ground_height(v[0], v[1]).unwrap_or(0.0),
+            };
+            vehicle.position = DVec3::new(v[0], v[1], z);
+            vehicle.heading = v[2];
+        }
+    }
+    // a parked bus or car standing where the player's bus is put (a depot's entry point):
+    // it drives off instead of the player's bus standing inside it
+    if let Some(bb) = vt.def.bounding_box {
+        let n = world.clear_parked_under(
+            renderer,
+            scene,
+            &omsi_sim::collision::Obb::from_box(bb, vehicle.position, vehicle.heading),
+        );
+        if n > 0 {
+            log::info!("spawn: {n} parked vehicle(s) cleared from the place of the bus");
+        }
+        world.clear_props_under(
+            renderer,
+            scene,
+            &omsi_sim::collision::Obb::from_box(bb, vehicle.position, vehicle.heading),
+        );
+    }
+    let render = world.add_vehicle(renderer, scene, &vt, scheme);
+    // coupled rear sections / trailers
+    let trailer_renders: Vec<scene::VehicleRender> =
+        attach_coupled_types(&mut vehicle, prepared.parts)
+            .iter()
+            .enumerate()
+            .map(|(k, t)| {
+                world.add_vehicle_part(
+                    renderer,
+                    scene,
+                    t,
+                    scheme.filter(|i| *i < t.paint_schemes.len()),
+                    &render,
+                    vehicle.mirror_base(k),
+                )
+            })
+            .collect();
+    // fonts for [texttexture]
+    vehicle.init_text_textures(&mut fonts.lock(), &|p| {
+        omsi_texture::decode_file(p)
+            .ok()
+            .map(|i| (i.width, i.height, i.rgba))
+    });
+    for t in vehicle.trailers.iter_mut() {
+        t.init_text_textures(&mut fonts.lock(), &|p| {
+            omsi_texture::decode_file(p)
+                .ok()
+                .map(|i| (i.width, i.height, i.rgba))
+        });
+    }
+    // number / ident were installed before {init}; do not rewrite them here.
+    // ground following through the loaded tiles (road surfaces first, then terrain)
+    let data = world.data.clone();
+    vehicle.ground = Some(std::sync::Arc::new(move |x, y| {
+        let tx = (x / omsi_map::tile_size()).floor() as i32;
+        let ty = (y / omsi_map::tile_size()).floor() as i32;
+        let lx = (x - tx as f64 * omsi_map::tile_size()) as f32;
+        let ly = (y - ty as f64 * omsi_map::tile_size()) as f32;
+        let d = data.peek();
+        if let Some(s) = d.ground.surfaces.get(&(tx, ty)) {
+            if let Some(h) = s.sample(lx, ly) {
+                return Some(h as f64);
+            }
+        }
+        let terrain = d.ground.terrains.get(&(tx, ty))?;
+        Some(terrain.sample(lx, ly) as f64)
+    }));
+    // what the wheels stand on: the faces of the roads and surface objects themselves,
+    // and the terrain where it is not cut away under them (the streamer keeps both maps to
+    // the loaded tiles, and the bus is one of its centres)
+    vehicle.contact = Some(std::sync::Arc::new(scene::LiveGround(world.data.clone())));
+    let loaded = crate::settings::Settings::load();
+    // (the road model of new bodies: the setting, or `OMSI_REALISTIC_ROAD=1`)
+    omsi_sim::rigid::set_realistic_default(loaded.realistic_road_physics);
+    // (the cab's steering wheel turned as far as the player's own, if asked: this bus only)
+    vehicle.set_cab_wheel_rotation(loaded.cab_wheel_rotation);
+    let objects = loaded.collision_objects;
+    vehicle.collision = objects.then(|| world.data.peek().lists.collision.clone());
+    vehicle.wheel_walls = objects;
+    // (the map's wire is drawn whatever is driven; only a trolleybus reads it off the splines)
+    let wires = crate::trolley_net::load(args, world, vehicle.trolley.is_some());
+    *world.trolley_net.lock() = wires.clone();
+    vehicle.attach_wires(wires.clone());
+    // a rail vehicle rides the track (its position comes from the rails, not the tyres)
+    let rail_bound = crate::rail_drive::is_rail(&vt.def);
+    if rail_bound {
+        log::info!("rail: {} is bound to the rails", vt.def.path.display());
+    }
+    if args.physics != "simple" && !rail_bound {
+        // (on what the wheels stand on near the height found above: the texel height of
+        // `ground_height` undid that, and put the bus on a wall's top or a deck over it)
+        if let Some(z) =
+            world.stand_height(vehicle.position.x, vehicle.position.y, vehicle.position.z)
+        {
+            vehicle.position.z = z;
+        }
+        log::info!("spawn: the bus stands at height {:.2}", vehicle.position.z);
+        vehicle.enable_rigid_body();
+        log_rigid_body(&vehicle);
+    }
+    log::info!(
+        "collision world: {} obstacle boxes, {} collision meshes of {} parts",
+        vehicle
+            .collision
+            .as_ref()
+            .map(|c| c.boxes.len())
+            .unwrap_or(0),
+        vehicle
+            .collision
+            .as_ref()
+            .map(|c| c.meshes.len())
+            .unwrap_or(0),
+        vehicle
+            .collision
+            .as_ref()
+            .map(|c| c.mesh_parts())
+            .unwrap_or(0)
+    );
+    let bindings = omsi_content::KeyboardCfg::load(&crate::startup::keyboard_cfg(&args.root))
+        .map(|k| k.with_game_defaults().vehicles)
+        .unwrap_or_default();
+    let mut p = new_player(vehicle, render, trailer_renders, bindings, rail_bound, &vt);
+    if let Some(net) = wires {
+        p.trolley_view = Some(Box::new(omsi_scene::trolley_view::TrolleyView::new(
+            renderer, scene, net,
+        )));
+        if omsi_cfg::flags::OMSI_TROLLEY_UP.is_set() {
+            if let Some(g) = p.vehicle.trolley.as_deref_mut() {
+                g.auto_raise_for = 8.0;
+            }
+        }
+    }
+    for _ in 0..3 {
+        p.vehicle.update(1.0 / 30.0);
+    }
+    // a new bus with its tank full, if the player wants it (many maps have no petrol station):
+    // filled by its own pump, as at one, so each bus takes what its script says it holds; a
+    // situation's bus and a part uncoupled keep what they had (and --setvar, after it,
+    // still sets what a test asks for)
+    if !args.is_resuming() && !args.keep_fuel && crate::settings::Settings::load().full_tank {
+        match p.vehicle.refuel() {
+            Some(l) => log::info!("spawn: tank filled ({l:.0} l)"),
+            None => log::info!(
+                "spawn: this vehicle has no fuel pump handling (veh_tank): its tank stays as its script set it"
+            ),
+        }
+    }
+    // (over the paint scheme's [setvar]s, which are written every frame: a door type asked
+    // for over the repaint's stays the one asked for)
+    if let Some(sv) = &args.setvar {
+        for kv in sv.split(',') {
+            if let Some((k, v)) = kv.split_once('=') {
+                if !p
+                    .vehicle
+                    .set_var_over_scheme(k.trim(), omsi_cfg::parse_f32(v))
+                {
+                    log::warn!("variable {k} not found");
+                }
+            }
+        }
+        p.vehicle.update(1.0 / 30.0);
+    }
+    // a situation remembers how dirty the bus was; --dirt sets it for a test run
+    if let Some(d) = args.dirt {
+        p.vehicle.dirt = d.clamp(0.0, 1.0);
+    }
+    if args.is_resuming() {
+        let (numeric, textual) = p
+            .vehicle
+            .restore_script_state(&args.situation_vars, &args.situation_strvars);
+        let cars = p.vehicle.restore_car_states(&args.situation_cars);
+        if let Some(km) = args.situation_odometer_km {
+            p.vehicle.set_odometer_km(km);
+        }
+        let pictures = crate::situation::situation_file(args)
+            .map(|f| crate::situation::restore_script_textures(&f, &mut p.vehicle))
+            .unwrap_or(0);
+        log::info!(
+            "situation: {numeric} of {} variables, {textual} of {} strings, {cars} values of coupled cars and {pictures} script textures restored",
+            args.situation_vars.len(),
+            args.situation_strvars.len()
+        );
+    }
+    if let Some(id) = args.depot.as_deref().filter(|_| !args.is_resuming()) {
+        crate::depot_bus::restore(&mut p.vehicle, id);
+    }
+    if let Some(sv) = &args.setstr {
+        for kv in sv.split(',') {
+            if let Some((k, v)) = kv.split_once('=') {
+                match p.vehicle.ty.program.str_var(k.trim()) {
+                    Some(i) => p.vehicle.state.str_vars[i as usize] = v.to_string(),
+                    None => log::warn!("string variable {k} not found"),
+                }
+            }
+        }
+    }
+    // immediate triggers (those without a time)
+    for (name, at) in parse_triggers(args) {
+        if at <= 0.0 && !p.vehicle.trigger(&name) {
+            log::warn!("trigger {name} not found");
+        }
+    }
+    log_debug_meshes(&p.vehicle);
+    log_debug_props(&p.vehicle);
+    p.driver = crate::driver::DriverFigure::new(world, renderer, scene, &p.vehicle, 0);
+    p.sync_transforms(
+        renderer,
+        scene,
+        matches!(args.view.as_str(), "driver" | "pax"),
+        world.settings.rain_quality(),
+    );
+    // The sounds the scripts asked for while the bus was being set up ({init}, the state it
+    // is put in - cold, ready, the situation's) are not played: the first frame played them
+    // all, an engine stopping as every session began (#1198). Omsi.exe puts a bus down silent.
+    if !p.vehicle.host.fired_triggers.is_empty() {
+        log::info!(
+            "spawn: sound triggers of the set-up left silent: {:?}",
+            p.vehicle.host.fired_triggers
+        );
+    }
+    p.vehicle.host.fired_triggers.clear();
+    p.vehicle.host.fired_trigger_vars.clear();
+    if args
+        .pending_cabin_temperature
+        .swap(false, std::sync::atomic::Ordering::Relaxed)
+    {
+        p.vehicle.set_cabin_temperature(22.0);
+    }
+    Ok(Some(p))
+}
+
+/// The player's vehicle host: clock, wear, depot file, fonts, ticket pack, and the number,
+/// ident and paint scheme the scripts' {init} sees.
+fn vehicle_host(
+    args: &Args,
+    world: &World,
+    vt: &Arc<omsi_sim::VehicleType>,
+) -> omsi_sim::VehicleHost {
+    let mut host = omsi_sim::VehicleHost::new(start_clock(args));
+    // the maintenance condition of the options (AI vehicles never wear)
+    host.wear_lifespan = crate::settings::Settings::load().wear_lifespan();
+    host.hof = find_hof(args, world, &vt);
+    host.font_lib = Some(world.fonts.clone());
+    if !world.ticket_pack.trim().is_empty() {
+        let p = omsi_cfg::resolve_path(&args.root, &world.ticket_pack);
+        match omsi_content::tickets::TicketPack::load(&p) {
+            Ok(t) => {
+                log::info!("ticket pack {}: {} tickets", p.display(), t.tickets.len());
+                host.tickets = Some(std::sync::Arc::new(t));
+            }
+            Err(e) => log::warn!("{e}"),
+        }
+    }
+    if let Some(h) = &host.hof {
+        log::info!(
+            "depot file {}: {} termini, {} bus stops, {} IBIS trips",
+            h.name,
+            h.termini.len(),
+            h.bus_stops.len(),
+            h.info_trips.len()
+        );
+    }
+    // number / ident are there before the scripts' first {init} instruction
+    let (number, ident) = player_identity(args, world, &vt);
+    host.initial_number = number;
+    host.initial_ident = ident;
+    // (the paint scheme's variables are there for the scripts' {init})
+    host.paint_scheme = Some(paint_scheme(&vt, args.paint.as_deref()));
+    host
+}
+
+/// The vehicle put at the entry point `--entry` (or the map's first): on the road surface
+/// there, at the height the map recorded when the object came out on another level.
+fn place_at_entry_point(args: &Args, world: &World, vehicle: &mut omsi_sim::VehicleInstance) {
+    if let Some(ep) = world
+        .global
+        .entry_points
+        .get(args.entry)
+        .or(world.global.entry_points.first())
+    {
+        let found = world.entry_point_place(ep);
+        match found {
+            Some((pos, rot)) => {
+                vehicle.position = pos;
+                // the height the map's editor recorded for the entry point (global.cfg), when
+                // it is at the same place but on another level: an entry point under a bridge
+                // whose object came out on the deck put the bus on the bridge
+                if let Some(rec) = recorded_entry_pos(ep, pos) {
+                    let off = ((rec.x - pos.x).powi(2) + (rec.y - pos.y).powi(2)).sqrt();
+                    if off < 3.0 && (rec.z - pos.z).abs() > 1.5 {
+                        log::info!(
+                            "entry point {}: the object stands at height {:.1}, the map recorded {:.1}: the recorded one",
+                            ep.index,
+                            pos.z,
+                            rec.z
+                        );
+                        vehicle.position.z = rec.z;
+                    }
+                }
+                let pos = vehicle.position;
+                // on the road surface there, not at the marker's own height: a marker
+                // placed on the terrain a little under (or over) the road left one axle in
+                // the asphalt and the bus stood tilted from the start; a surface metres away
+                // (a bridge over the place, a lower level) is not this one
+                if let Some(g) = world.stand_height(pos.x, pos.y, pos.z) {
+                    vehicle.position.z = g;
+                } else if world
+                    .data
+                    .peek()
+                    .drive_probe(pos.x, pos.y, pos.z + 1.5)
+                    .below
+                    .is_none()
+                {
+                    // nothing under the place at all (the marker came out under the ground):
+                    // on the ground above, not in the void under the map
+                    if let Some(g) = world.walk_height(pos.x, pos.y) {
+                        log::info!(
+                            "entry point {}: nothing under its height {:.1}; put on the ground at {:.1}",
+                            ep.index,
+                            pos.z,
+                            g
+                        );
+                        vehicle.position.z = g;
+                    }
+                }
+                vehicle.heading = rot[0];
+                log::info!(
+                    "spawned at entry point {} \"{}\" ({:.1}, {:.1}, {:.1}) heading {:.0}",
+                    ep.index,
+                    ep.name,
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    rot[0]
+                );
+            }
+            None => log::warn!(
+                "entry point object {} not loaded; vehicle stays at origin",
+                ep.object_id
+            ),
+        }
+    }
+}
+
+/// The log lines of the rigid body just enabled: mass, inertia, and each axle's tyre and spring.
+fn log_rigid_body(vehicle: &omsi_sim::VehicleInstance) {
+    let rb = vehicle.rigid.as_ref().unwrap();
+    log::info!(
+        "rigid body: mass {:.0} kg, inertia {:?}, cog {:.2} m, {} wheels, loads {:?}",
+        rb.mass,
+        rb.inertia,
+        rb.cog.z,
+        rb.wheels.len(),
+        rb.wheels
+            .iter()
+            .map(|w| w.rest_load.round())
+            .collect::<Vec<_>>()
+    );
+    for a in 0..vehicle.ty.def.axles.len() {
+        let w = &rb.wheels[a * 2];
+        let model = vehicle.ty.wheel_geometry(0).get(a).copied().flatten();
+        log::info!(
+            "axle {a}: tyre r {:.3} m, hub {:.3} m unloaded{}, spring {:.0} kN/m x {:.2}, rest load {:.1} kN, sag {:.3} m",
+            w.radius,
+            w.attach.z,
+            model
+                .map(|(z, r)| format!(" (model wheel centre {z:.3}, tyre {r:.3})"))
+                .unwrap_or_else(|| " (radius: no wheel mesh found)".into()),
+            w.spring / 1000.0,
+            w.spring_factor,
+            w.rest_load / 1000.0,
+            w.rest_compression()
+        );
+    }
+}
+
+/// The player around a vehicle just set up, everything else at its start.
+fn new_player(
+    vehicle: omsi_sim::VehicleInstance,
+    render: scene::VehicleRender,
+    trailer_renders: Vec<scene::VehicleRender>,
+    bindings: Vec<omsi_content::KeyBinding>,
+    rail_bound: bool,
+    vt: &Arc<omsi_sim::VehicleType>,
+) -> Player {
+    static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let rail_placed_z = vehicle.position.z;
+    Player {
+        uid: NEXT_UID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        vehicle,
+        render,
+        trailer_renders,
+        axes: Default::default(),
+        analog: Default::default(),
+        cam_choice: (0, 0),
+        bindings,
+        sounds: None,
+        pressed_mesh: None,
+        press_info: (true, 0.0),
+        auto_drag: None,
+        pressed_trailer_mesh: None,
+        occlude_controls: false,
+        drawn_outside: false,
+        startup: None,
+        startup_at: None,
+        give_ticket: false,
+        give_change: false,
+        door_buttons: hashbrown::HashMap::new(),
+        cam_before_special: None,
+        held_keys: Default::default(),
+        held_repeat: Default::default(),
+        hand_coupled: 0,
+        rail_bound,
+        rail: None,
+        rail_placed_z,
+        head: Vec3::ZERO,
+        head_vel: Vec3::ZERO,
+        head_omega: Vec3::ZERO,
+        head_idle: Default::default(),
+        steer_look: 0.0,
+        seat: Vec3::ZERO,
+        mirror_offsets: crate::settings::mirror_offsets(&vt.def.path),
+        mirror_shifts: crate::settings::mirror_shifts(&vt.def.path),
+        mirror_fovs: crate::settings::mirror_fovs(&vt.def.path),
+        mirrors_dirty: false,
+        take_change: false,
+        toggled_up: Default::default(),
+        momentary_gears: crate::settings::Settings::load().momentary_gears,
+        from_keyboard: false,
+        auto_shift: crate::settings::Settings::load().auto_shift,
+        auto_shift_wait: 0.0,
+        auto_shift_idle: 0.0,
+        auto_shift_max: 0.0,
+        auto_shift_climb: (0.0, 0.0),
+        gates: Default::default(),
+        side_lights_by_l: false,
+        driver: None,
+        ibis_duty: None,
+        blind_pick: None,
+        ibis_typist: None,
+        duty_typed: false,
+        ibis_holds: Default::default(),
+        html_next_stop: None,
+        ibis_background: false,
+        arm: Default::default(),
+        blinker_key_state: 0,
+        blinker_cancel: crate::settings::Settings::load().blinker_cancel,
+        trolley_view: None,
+        panto_fx: Default::default(),
+        trolley_sound: Default::default(),
+        announce: crate::auto_announce::AutoAnnounce::new(),
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn test_player(
+    vehicle: omsi_sim::VehicleInstance,
+    bindings: Vec<omsi_content::KeyBinding>,
+) -> Player {
+    let ty = vehicle.ty.clone();
+    let render = scene::VehicleRender {
+        window_wipers: None,
+        instances: vec![],
+        far: vec![],
+        own_materials: vec![],
+        set: None,
+        variants: vec![],
+        text_textures: vec![],
+        script_textures: vec![],
+        shared_script: false,
+        displays_far: false,
+        display_tick: 0,
+        skinned: vec![],
+        damaged: vec![],
+        glass_cracks: vec![],
+        hidden: false,
+        interior_lamps: Default::default(),
+        interior_blocks: Default::default(),
+        own_set: None,
+    };
+    new_player(vehicle, render, vec![], bindings, false, &ty)
+}
+
+#[cfg(test)]
+mod cabin_input_tests;
+
+/// `OMSI_DEBUG_MESHES`: every mesh of the vehicle with its bounds, and per material slot (of the
+/// meshes whose file the flag names) which part of its texture it shows.
+fn log_debug_meshes(vehicle: &omsi_sim::VehicleInstance) {
+    if omsi_cfg::flags::OMSI_DEBUG_MESHES.is_set() {
+        for (i, vm) in vehicle.ty.meshes.iter().enumerate() {
+            let def = &vehicle.ty.model.meshes[vm.def_index];
+            let (lo, hi) = vm.data.positions.iter().fold(
+                (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+                |(lo, hi), v| (lo.min(*v), hi.max(*v)),
+            );
+            let (uv0, uv1) = vm.data.uvs.iter().fold(
+                (glam::Vec2::splat(f32::MAX), glam::Vec2::splat(f32::MIN)),
+                |(a, b), v| (a.min(*v), b.max(*v)),
+            );
+            let nrm = vm
+                .data
+                .normals
+                .iter()
+                .map(|n| n.length())
+                .fold(f32::MAX, f32::min);
+            log::info!(
+                "mesh {i:3} {:40} vp={} tris={:6} bounds {:?}..{:?} uv {:?}..{:?} min|n|={nrm:.2} mats={} anims={} visible={:?}",
+                def.file,
+                def.viewpoint,
+                vm.data.indices.len() / 3,
+                lo,
+                hi,
+                uv0,
+                uv1,
+                vm.materials.len(),
+                def.animations.len(),
+                def.visible
+            );
+            // per material slot: which part of its texture the mesh shows (display texts)
+            if omsi_cfg::flags::OMSI_DEBUG_MESHES
+                .var()
+                .map(|f| {
+                    !f.is_empty()
+                        && def
+                            .file
+                            .to_ascii_lowercase()
+                            .contains(&f.to_ascii_lowercase())
+                })
+                .unwrap_or(false)
+            {
+                for &(first, count, slot) in &vm.data.ranges {
+                    let idx = &vm.data.indices[first as usize..(first + count) as usize];
+                    let (a, b) = idx
+                        .iter()
+                        .filter_map(|k| vm.data.uvs.get(*k as usize))
+                        .fold(
+                            (glam::Vec2::splat(f32::MAX), glam::Vec2::splat(f32::MIN)),
+                            |(a, b), v| (a.min(*v), b.max(*v)),
+                        );
+                    let (p0, p1) = idx
+                        .iter()
+                        .filter_map(|k| vm.data.positions.get(*k as usize))
+                        .fold(
+                            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+                            |(a, b), v| (a.min(*v), b.max(*v)),
+                        );
+                    log::info!(
+                        "    slot {slot} {:?}: {} tris, uv {a:?}..{b:?}, at {p0:?}..{p1:?}",
+                        vm.materials
+                            .get(slot as usize)
+                            .map(|m| m.texture.as_str())
+                            .unwrap_or(""),
+                        count / 3
+                    );
+                    if count <= 24 {
+                        for t in idx.chunks_exact(3) {
+                            log::info!(
+                                "      tri uv {:?} pos {:?}",
+                                t.iter()
+                                    .map(|k| vm.data.uvs[*k as usize])
+                                    .collect::<Vec<_>>(),
+                                t.iter()
+                                    .map(|k| vm.data.positions[*k as usize])
+                                    .collect::<Vec<_>>()
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// `OMSI_DEBUG_PROPS`: the meshes drawn see-through or hidden, and a few script variables.
+fn log_debug_props(vehicle: &omsi_sim::VehicleInstance) {
+    if omsi_cfg::flags::OMSI_DEBUG_PROPS.is_set() {
+        for (i, vm) in vehicle.ty.meshes.iter().enumerate() {
+            let pr = &vehicle.mesh_props[i];
+            let def = &vehicle.ty.model.meshes[vm.def_index];
+            if pr.slot_alpha.iter().any(|a| *a < 1.0)
+                || !pr.visible
+                || def.materials.iter().any(|m| m.alphascale.is_some())
+            {
+                log::info!(
+                    "mesh {} {}: visible={} slot_alpha={:?} o3d mats={:?} overrides={:?}",
+                    i,
+                    vm.def_index,
+                    pr.visible,
+                    pr.slot_alpha,
+                    vm.materials
+                        .iter()
+                        .map(|m| m.texture.clone())
+                        .collect::<Vec<_>>(),
+                    def.materials
+                        .iter()
+                        .map(|m| (m.texture.clone(), m.index, m.alpha, m.alphascale.clone()))
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+        for v in [
+            "Rain_Window_Front_Wetness",
+            "Rain_Window_Norm_Wetness",
+            "Rain_Window_Wiped_Wetness",
+            "PrecipRate",
+            "cp_lenkrad_visible",
+            "IBIS_mode",
+            "IBIS_RouteIndex",
+            "IBIS_TerminusIndex",
+            "IBIS_TerminusCode",
+            "IBIS_LinieKurs",
+            "elec_busbar_main",
+        ] {
+            log::info!("{v} = {:?}", vehicle.var(v));
+        }
+        for v in [
+            "IBIS_terminus_name",
+            "IBIS_Complex_Line",
+            "IBIS_busstop_name",
+            "act_busstop",
+            "IBIS",
+            "Haltestelle",
+        ] {
+            log::info!("${v} = {:?}", vehicle.str_var(v));
+        }
+    }
+}
+
+/// The paint scheme a vehicle wears: the one named (or numbered) by `--paint`; none named is
+/// the model's own textures (the launcher's "Default paint"). Taking the first scheme then
+/// put another livery on a bus whose default was chosen. The game and the launcher's
+/// preview (`--export-glb`) both come here, so the preview shows what is driven.
+pub(crate) fn paint_scheme(vt: &omsi_sim::VehicleType, paint: Option<&str>) -> Option<usize> {
+    let asked = paint.map(str::trim).filter(|p| !p.is_empty());
+    let found = asked.and_then(|p| {
+        vt.paint_schemes
+            .iter()
+            .position(|s| s.name.eq_ignore_ascii_case(p))
+            .or_else(|| {
+                p.parse::<usize>()
+                    .ok()
+                    .filter(|i| *i < vt.paint_schemes.len())
+            })
+    });
+    if let (Some(p), None) = (asked, found) {
+        log::warn!(
+            "paint scheme '{p}' not found; available: {:?}",
+            vt.paint_schemes
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+    found
+}
+
+/// Where the map's `global.cfg` recorded an entry point (x, height, y within its tile), in
+/// world coordinates, taken in the tile of its object at `object` (Grundorf's records agree
+/// with their objects that way to a few decimetres).
+pub(crate) fn recorded_entry_pos(
+    ep: &omsi_map::global::EntryPoint,
+    object: DVec3,
+) -> Option<DVec3> {
+    let s = omsi_map::tile_size();
+    let (tx, ty) = ((object.x / s).floor(), (object.y / s).floor());
+    ep.pos
+        .iter()
+        .all(|v| v.is_finite())
+        .then(|| DVec3::new(tx * s + ep.pos[0], ty * s + ep.pos[1], ep.pos[2]))
+}
+
+#[cfg(test)]
+mod preparation_tests {
+    use super::*;
+
+    /// A consist read on a worker follows its couplings (turned round at a reversed front
+    /// coupling) without running any script; the parts are coupled to the live vehicle later.
+    #[test]
+    fn prepared_consist_follows_reversed_front_couplings_without_running_init() {
+        let dir =
+            std::env::temp_dir().join(format!("omsi-placement-consist-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(dir.clone());
+        for (file, body) in [
+            (
+                "lead.bus",
+                "[friendlyname]\nSynthetic\nLead\nTest\n[couple_back]\nfirst.bus\ntrue\n",
+            ),
+            (
+                "first.bus",
+                "[friendlyname]\nSynthetic\nFirst\nTest\n[couple_front]\nlast.bus\nfalse\n",
+            ),
+            ("last.bus", "[friendlyname]\nSynthetic\nLast\nTest\n"),
+        ] {
+            std::fs::write(dir.join(file), format!("{body}[model]\nempty.cfg\n")).unwrap();
+        }
+        std::fs::write(dir.join("empty.cfg"), "").unwrap();
+        let args = Args::parse_from(["omsi", "--root", dir.to_str().unwrap(), "--bus", "lead.bus"]);
+        let prepared = PreparedPlayer::load(&args).unwrap();
+        assert_eq!(prepared.parts.len(), 2);
+        assert!(prepared.parts.iter().all(|(_, reversed)| *reversed));
+        assert_eq!(
+            prepared.parts[0].0.def.path.file_name().unwrap(),
+            "first.bus"
+        );
+        assert_eq!(
+            prepared.parts[1].0.def.path.file_name().unwrap(),
+            "last.bus"
+        );
+        let mut vehicle = omsi_sim::VehicleInstance::new(
+            prepared.ty,
+            omsi_sim::VehicleHost::new(start_clock(&args)),
+        );
+        let types = attach_coupled_types(&mut vehicle, prepared.parts);
+        assert_eq!(vehicle.trailers.len(), types.len());
+        assert!(vehicle.trailers.iter().all(|part| part.reversed));
+    }
+
+    /// The NF6D tram is eleven parts long and its rear cab car `[couple_back]`s the
+    /// articulation its front car starts with: the chain has to be walked whole and must
+    /// stop where it comes round, or the last carriage is left off the tram.
+    #[test]
+    fn a_consist_that_closes_on_itself_ends_at_the_part_it_returns_to() {
+        let dir = std::env::temp_dir().join(format!("openomsi-chain-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let front = dir.join("NF6D_A.bus");
+        let rear = dir.join("NF6D_B_User.bus");
+        std::fs::write(&front, "[couple_back]\nNF6D_B_User.bus\nfalse\n").unwrap();
+        std::fs::write(&rear, "[couple_back]\nNF6D_A.bus\nfalse\n").unwrap();
+
+        assert!(!chain_has_part(&[front.clone()], &rear));
+        assert!(chain_has_part(&[front.clone(), rear.clone()], &front));
+        assert!(
+            MAX_COUPLED_PARTS >= 11,
+            "a part bound below eleven cuts an NF6D tram's last carriage off"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

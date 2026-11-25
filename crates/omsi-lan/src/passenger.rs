@@ -15,11 +15,24 @@ pub fn passenger_trigger(name: &str) -> bool {
 
 /// May player `from` work switch `ev` of our bus `bus` (`lan`: our session)? Only a passenger
 /// aboard our bus, inside it, and only a switch passengers work (`passenger_trigger`).
-pub fn may_work(lan: &omsi_net::LanSession, from: u32, bus: Option<&omsi_sim::VehicleInstance>, ev: &str) -> bool {
-    let walker = lan.peers().find(|p| p.pose.id == from).and_then(|p| p.pose.walker);
-    let aboard = walker.and_then(|w| w.aboard).filter(|a| a.owner == lan.my_id);
+pub fn may_work(
+    lan: &omsi_net::LanSession,
+    from: u32,
+    bus: Option<&omsi_sim::VehicleInstance>,
+    ev: &str,
+) -> bool {
+    let walker = lan
+        .peers()
+        .find(|p| p.pose.id == from)
+        .and_then(|p| p.pose.walker);
+    let aboard = walker
+        .and_then(|w| w.aboard)
+        .filter(|a| a.owner == lan.my_id);
     let inside = match (aboard, bus) {
-        (Some(a), Some(v)) => inside(&crate::spawn::footprint_of(v, crate::spawn::BUS_BOX), a.local),
+        (Some(a), Some(v)) => inside(
+            &crate::spawn::footprint_of(v, crate::spawn::BUS_BOX),
+            a.local,
+        ),
         _ => false,
     };
     aboard.is_some() && inside && passenger_trigger(ev)
@@ -31,7 +44,14 @@ mod tests {
 
     #[test]
     fn a_passenger_is_inside_the_bus_it_claims() {
-        let bus = Footprint { x: 100.0, y: 50.0, z: 0.0, heading: 90.0, length: 12.0, width: 2.5 };
+        let bus = Footprint {
+            x: 100.0,
+            y: 50.0,
+            z: 0.0,
+            heading: 90.0,
+            length: 12.0,
+            width: 2.5,
+        };
         assert!(inside(&bus, [0.0, 0.0, 1.0]));
         assert!(inside(&bus, [0.8, -5.5, 1.0]));
         assert!(!inside(&bus, [5.0, 0.0, 1.0]));

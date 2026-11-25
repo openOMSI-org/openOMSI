@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub struct Turn {
     pub direction: i32,
@@ -23,11 +23,19 @@ fn round(v: f32) -> f64 {
 }
 
 fn line(points: &[[f32; 2]]) -> Value {
-    Value::Array(points.iter().flat_map(|p| [json!(round(p[0])), json!(round(p[1]))]).collect())
+    Value::Array(
+        points
+            .iter()
+            .flat_map(|p| [json!(round(p[0])), json!(round(p[1]))])
+            .collect(),
+    )
 }
 
 pub fn roads_message(anchor: [f64; 2], roads: &[(Vec<[f32; 2]>, f32)]) -> String {
-    let roads: Vec<Value> = roads.iter().map(|(pts, width)| json!({ "w": round(*width), "p": line(pts) })).collect();
+    let roads: Vec<Value> = roads
+        .iter()
+        .map(|(pts, width)| json!({ "w": round(*width), "p": line(pts) }))
+        .collect();
     json!({ "t": "roads", "anchor": anchor, "roads": roads }).to_string()
 }
 

@@ -326,10 +326,11 @@ fn uncovered_crossing_entrance_preserves_render_and_wheel_heights() {
                             );
                         }
                     }
-                    assert!(mesh
-                        .normals
-                        .iter()
-                        .all(|n| n.is_finite() && (n.length() - 1.0).abs() < 1e-5));
+                    assert!(
+                        mesh.normals
+                            .iter()
+                            .all(|n| n.is_finite() && (n.length() - 1.0).abs() < 1e-5)
+                    );
 
                     let road = omsi_geometry::mesh_from_o3d(
                         &omsi_o3d::xfile::parse_x(strip(&[(-5.0, 0.1), (0.0, 0.1)]).as_bytes())
@@ -429,7 +430,9 @@ fn ai_lane_heights_are_independent_of_visual_vertex_coverage() {
                 covered_vertices && field_sign != 0.0
             );
 
-            let lanes = world.traffic_inbox.peek(omsi_sim::world_data::TrafficArrivals::lanes_of);
+            let lanes = world
+                .traffic_inbox
+                .peek(omsi_sim::world_data::TrafficArrivals::lanes_of);
             assert_eq!(lanes.len(), 1, "the map's artificial [path] is placed");
             let lane = &lanes[0];
             assert_eq!(lane.points.len(), 6);
@@ -446,8 +449,11 @@ fn ai_lane_heights_are_independent_of_visual_vertex_coverage() {
                 } else {
                     0.0
                 };
-                assert!((point.z - (20.1 + offset as f64)).abs() < 1e-5,
-                    "covered_vertices={covered_vertices}, field_sign={field_sign}, y={y}: lane height {}", point.z);
+                assert!(
+                    (point.z - (20.1 + offset as f64)).abs() < 1e-5,
+                    "covered_vertices={covered_vertices}, field_sign={field_sign}, y={y}: lane height {}",
+                    point.z
+                );
             }
         }
     }
@@ -484,8 +490,11 @@ fn split_backdrop_keeps_whole_object_visibility_bounds() {
         let xf = object_rotation([heading, 0.0, 0.0]);
         let pos = DVec3::new(-770.0, 1450.0, 20.0);
         assert_eq!(stand_in_area(&single, &xf, pos, tile), expected);
-        assert_eq!(stand_in_area(&split, &xf, pos, tile), expected,
-            "splitting a large backdrop into meshes must preserve its visibility at heading {heading}");
+        assert_eq!(
+            stand_in_area(&split, &xf, pos, tile),
+            expected,
+            "splitting a large backdrop into meshes must preserve its visibility at heading {heading}"
+        );
         // Placement scale still controls the footprint, just as for a single mesh.
         let small = xf * Mat4::from_scale(glam::Vec3::splat(0.5));
         assert_eq!(stand_in_area(&split, &small, pos, tile), None);
@@ -524,10 +533,16 @@ fn ordinary_split_object_keeps_full_view_distance() {
 #[test]
 fn backdrop_card_from_its_origin_is_a_stand_in() {
     let fixture = Fixture::new();
-    fixture.write("global.cfg", "[name]
+    fixture.write(
+        "global.cfg",
+        "[name]
 Artificial harbour
-");
-    fixture.write("card.x", &strip(&[(0.0, 0.0), (800.0, 30.0), (1600.0, 0.0)]));
+",
+    );
+    fixture.write(
+        "card.x",
+        &strip(&[(0.0, 0.0), (800.0, 30.0), (1600.0, 0.0)]),
+    );
     fixture.write(
         "backdrop.sco",
         "[mesh]
@@ -540,12 +555,15 @@ harbour.dds
 [matl_noZcheck]
 ",
     );
-    fixture.write("pier.sco", "[mesh]
+    fixture.write(
+        "pier.sco",
+        "[mesh]
 card.x
 [matl]
 harbour.dds
 0
-");
+",
+    );
     let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261008).unwrap();
     let backdrop = world.object_type("backdrop.sco").unwrap();
     let pier = world.object_type("pier.sco").unwrap();
@@ -555,10 +573,16 @@ harbour.dds
     for heading in [0.0, 37.0, 90.0] {
         let xf = object_rotation([heading, 0.0, 0.0]);
         let pos = DVec3::new(-1515.0, -914.0, 0.0);
-        assert_eq!(stand_in_area(&backdrop, &xf, pos, tile), expected,
-            "a backdrop card at heading {heading} keeps to the tiles around its own");
-        assert_eq!(stand_in_area(&pier, &xf, pos, tile), None,
-            "an ordinary model of the same size keeps the far view at heading {heading}");
+        assert_eq!(
+            stand_in_area(&backdrop, &xf, pos, tile),
+            expected,
+            "a backdrop card at heading {heading} keeps to the tiles around its own"
+        );
+        assert_eq!(
+            stand_in_area(&pier, &xf, pos, tile),
+            None,
+            "an ordinary model of the same size keeps the far view at heading {heading}"
+        );
     }
 }
 
@@ -604,27 +628,39 @@ fn aligned_overhead_only_spline_keeps_saved_ground() {
 #[test]
 fn aligned_spline_with_its_own_terrain_hole_profile_keeps_the_hole() {
     let fixture = Fixture::new();
-    fixture.write("global.cfg", "[name]\nAligned ramp\n[map]\n0\n0\ntile_0_0.map\n");
+    fixture.write(
+        "global.cfg",
+        "[name]\nAligned ramp\n[map]\n0\n0\ntile_0_0.map\n",
+    );
     fixture.write("ramp.sli", "[texture]\ngras1.bmp\n[profile]\n0\n[profilepnt]\n2.92\n0.10\n0.7\n0.167\n[profilepnt]\n4.23\n-0.47\n0.7\n0.167\n[profilepnt]\n5.35\n0.04\n0.2\n0.167\n[terrainholeprofile]\n[terrainholeprofilepnt]\n-5\n0\n0\n[terrainholeprofilepnt]\n5\n0\n0\n");
     fixture.write("tile_0_0.map", "[version]\n14\n[spline]\n0\nramp.sli\n1\n0\n0\n40\n0\n40\n0\n20\n0\n0\n0\n0\n0\n0\n0\n0\n\n[spline_terrain_align]\n");
     let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
     let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
     let p = &prepared[0];
     assert!(!p.splines.is_empty());
-    assert!(p.cut.is_some(), "a [terrainholeprofile] cuts the ground away, as in Omsi.exe");
+    assert!(
+        p.cut.is_some(),
+        "a [terrainholeprofile] cuts the ground away, as in Omsi.exe"
+    );
 }
 
 #[test]
 fn aligned_spline_drawn_with_alpha_textures_keeps_its_hole() {
     let fixture = Fixture::new();
-    fixture.write("global.cfg", "[name]\nAligned box cut\n[map]\n0\n0\ntile_0_0.map\n");
+    fixture.write(
+        "global.cfg",
+        "[name]\nAligned box cut\n[map]\n0\n0\ntile_0_0.map\n",
+    );
     fixture.write("boxcut.sli", "[texture]\nwall.bmp\n[matl]\nwall.bmp\n0\n[matl_alpha]\n2\n[profile]\n0\n[profilepnt]\n-4.5\n0.5\n0\n0\n[profilepnt]\n-4.5\n-7\n1\n0\n[profile]\n0\n[profilepnt]\n4.5\n-7\n0\n0\n[profilepnt]\n4.5\n0.5\n1\n0\n[terrainholeprofile]\n[terrainholeprofilepnt]\n-5\n0\n0\n[terrainholeprofilepnt]\n5\n0\n0\n");
     fixture.write("tile_0_0.map", "[version]\n14\n[spline]\n0\nboxcut.sli\n1\n0\n0\n40\n0\n40\n0\n20\n0\n0\n0\n0\n0\n0\n0\n0\n\n[spline_terrain_align]\n");
     let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
     let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
     let p = &prepared[0];
     assert!(!p.splines.is_empty());
-    assert!(p.cut.is_some(), "an aligned box cut drawn with alpha textures still cuts the ground");
+    assert!(
+        p.cut.is_some(),
+        "an aligned box cut drawn with alpha textures still cuts the ground"
+    );
 }
 
 #[test]

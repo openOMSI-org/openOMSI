@@ -512,7 +512,7 @@ fn reflective_car_body_stays_solid_while_unnamed_pane_on_non_body_mesh_is_see_th
 
 #[test]
 fn envmapped_atlas_window_on_body_named_mesh_is_see_through() {
-    use crate::vehicle_materials::{slot_is_clear_window, slot_is_see_through, ALPHA_MASK};
+    use crate::vehicle_materials::{ALPHA_MASK, slot_is_clear_window, slot_is_see_through};
     use crate::vehicles::is_reflective_body;
     use glam::Vec2;
     use omsi_geometry::MeshData;
@@ -520,14 +520,26 @@ fn envmapped_atlas_window_on_body_named_mesh_is_see_through() {
     let mesh = MeshData {
         positions: vec![],
         normals: vec![],
-        uvs: vec![Vec2::new(0.1, 0.1), Vec2::new(0.1, 0.2), Vec2::new(0.2, 0.1)],
+        uvs: vec![
+            Vec2::new(0.1, 0.1),
+            Vec2::new(0.1, 0.2),
+            Vec2::new(0.2, 0.1),
+        ],
         ranges: vec![(0, 3, 0)],
         indices: vec![0, 1, 2],
         ..Default::default()
     };
     let paint = vec![40u8; ALPHA_MASK * ALPHA_MASK];
     let mut atlas = vec![255u8; ALPHA_MASK * ALPHA_MASK];
-    for (x, y) in [(25, 25), (25, 51), (51, 25), (25, 38), (38, 25), (38, 38), (34, 34)] {
+    for (x, y) in [
+        (25, 25),
+        (25, 51),
+        (51, 25),
+        (25, 38),
+        (38, 25),
+        (38, 38),
+        (34, 34),
+    ] {
         atlas[y * ALPHA_MASK + x] = 0;
     }
 
@@ -541,7 +553,7 @@ fn envmapped_atlas_window_on_body_named_mesh_is_see_through() {
 
 #[test]
 fn envmapped_atlas_window_clear_away_from_centroid_stays_see_through() {
-    use crate::vehicle_materials::{slot_is_clear_window, slot_is_see_through, ALPHA_MASK};
+    use crate::vehicle_materials::{ALPHA_MASK, slot_is_clear_window, slot_is_see_through};
     use crate::vehicles::is_reflective_body;
     use glam::Vec2;
     use omsi_geometry::MeshData;
@@ -549,7 +561,11 @@ fn envmapped_atlas_window_clear_away_from_centroid_stays_see_through() {
     let mesh = MeshData {
         positions: vec![],
         normals: vec![],
-        uvs: vec![Vec2::new(0.1, 0.1), Vec2::new(0.1, 0.2), Vec2::new(0.2, 0.1)],
+        uvs: vec![
+            Vec2::new(0.1, 0.1),
+            Vec2::new(0.1, 0.2),
+            Vec2::new(0.2, 0.1),
+        ],
         ranges: vec![(0, 3, 0)],
         indices: vec![0, 1, 2],
         ..Default::default()

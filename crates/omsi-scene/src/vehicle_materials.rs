@@ -122,7 +122,13 @@ pub(super) fn d3d_material(
             v[13],
             [v[4], v[5], v[6]],
         ),
-        None => (m.diffuse, m.emissive, m.specular, m.specular_power, [1.0; 3]),
+        None => (
+            m.diffuse,
+            m.emissive,
+            m.specular,
+            m.specular_power,
+            [1.0; 3],
+        ),
     };
     let clamp01 = |x: f32| {
         if x.is_finite() {
@@ -229,7 +235,10 @@ pub(super) fn glow_mask<'a>(ov: &[&'a MaterialDef]) -> Option<&'a str> {
     if ov.iter().any(|o| o.lightmap.is_some()) {
         return None;
     }
-    ov.iter().rev().find_map(|o| o.glow.as_ref()).map(|g| g.0.as_str())
+    ov.iter()
+        .rev()
+        .find_map(|o| o.glow.as_ref())
+        .map(|g| g.0.as_str())
 }
 
 /// The strength of `glow_mask`'s glow in the shader's terms: the .cfg value x0.25, the
@@ -239,7 +248,10 @@ fn glow_strength(ov: &[&MaterialDef]) -> f32 {
     if glow_mask(ov).is_none() {
         return 0.0;
     }
-    ov.iter().rev().find_map(|o| o.glow.as_ref()).map_or(0.0, |g| (g.1 * 0.25).max(0.0))
+    ov.iter()
+        .rev()
+        .find_map(|o| o.glow.as_ref())
+        .map_or(0.0, |g| (g.1 * 0.25).max(0.0))
 }
 
 /// Whether a `[matl_item]`'s commands give it a light map's slot of its own (a light map or
@@ -250,7 +262,9 @@ pub(super) fn own_light_slot(ov: &[&MaterialDef]) -> bool {
 
 /// The addressing of a slot's textures: its last `[matl_texadress_*]` command decides (the
 /// border mode is clamped, its colour comes with `material_extra`).
-pub(super) fn tex_addressing<'a>(ov: impl DoubleEndedIterator<Item = &'a MaterialDef>) -> omsi_render::TexAddressing {
+pub(super) fn tex_addressing<'a>(
+    ov: impl DoubleEndedIterator<Item = &'a MaterialDef>,
+) -> omsi_render::TexAddressing {
     use omsi_model::TexAddress as A;
     use omsi_render::TexAddressing as R;
     match ov.rev().map(|o| o.tex_address).find(|a| *a != A::Wrap) {
@@ -271,7 +285,11 @@ pub(super) fn bump_key(path: &Path) -> PathBuf {
 /// (`Texture\WinterSnow\gras.bmp`, any case), where the snow weather finds the map's
 /// snowy textures, or in a `WinterSnowfall` one, its snowy roads.
 pub(super) fn is_snow_picture(path: &Path) -> bool {
-    path.components().any(|c| c.as_os_str().to_str().is_some_and(|s| s.eq_ignore_ascii_case("WinterSnow") || s.eq_ignore_ascii_case("WinterSnowfall")))
+    path.components().any(|c| {
+        c.as_os_str().to_str().is_some_and(|s| {
+            s.eq_ignore_ascii_case("WinterSnow") || s.eq_ignore_ascii_case("WinterSnowfall")
+        })
+    })
 }
 
 /// A PBR set beside the diffuse texture `path` (`foo_n.png` and the rest, see
@@ -289,7 +307,12 @@ pub fn attach_pbr(renderer: &Renderer, scene: &mut Scene, path: &Path, id: Textu
         return;
     }
     if let Some(set) = omsi_texture::pbr::load_set(&files) {
-        log::info!("PBR maps for {}: normal {:?}, occlusion/roughness/metal {:?}", path.display(), set.normal.as_ref().map(|i| (i.width, i.height)), set.flags);
+        log::info!(
+            "PBR maps for {}: normal {:?}, occlusion/roughness/metal {:?}",
+            path.display(),
+            set.normal.as_ref().map(|i| (i.width, i.height)),
+            set.flags
+        );
         renderer.add_pbr_maps(scene, id, &set);
     }
 }
@@ -331,7 +354,10 @@ pub fn material_alpha(
     // second [matl] was drawn opaque, its transparent parts as solid areas.) omsi-model
     // already joins blocks spelt the same; this covers those that reach the slot otherwise
     // (an index of -1 selects the first one, as 0 does).
-    let mine: Vec<&MaterialDef> = overrides.iter().filter(|o| !o.item && omsi_sim::vehicle::override_slot(materials, o) == Some(slot)).collect();
+    let mine: Vec<&MaterialDef> = overrides
+        .iter()
+        .filter(|o| !o.item && omsi_sim::vehicle::override_slot(materials, o) == Some(slot))
+        .collect();
     let plain = || mine.iter().filter(|o| o.change.is_none());
     plain()
         .rev()
@@ -361,7 +387,11 @@ pub(super) fn text_is_display(lightmap: bool, night: bool) -> bool {
 /// (the stock route helpers, `routearrows_busstop.sco`: blended, the empty part of the text
 /// wrote depth and cut away whatever was drawn behind it later - a bus beside the stop lost
 /// half its roof), blended otherwise.
-pub(super) fn text_alpha(materials: &[omsi_o3d::Material], slot: usize, overrides: &[MaterialDef]) -> AlphaMode {
+pub(super) fn text_alpha(
+    materials: &[omsi_o3d::Material],
+    slot: usize,
+    overrides: &[MaterialDef],
+) -> AlphaMode {
     match material_alpha(materials, slot, overrides) {
         AlphaMode::Test => AlphaMode::Test,
         _ => AlphaMode::Blend,
@@ -379,28 +409,69 @@ pub(super) fn text_alpha(materials: &[omsi_o3d::Material], slot: usize, override
 /// sign whose slot glows - a route arrow's caption - glows with its text, and one that does
 /// not stays dark at night. Made without it, the arrows' street and stop names went black
 /// after dusk on arrows that shone.
-pub(super) fn text_material(renderer: &Renderer, scene: &mut Scene, tex: TextureId, alpha: AlphaMode, slot_ov: &[&MaterialDef], slot_mat: Option<&omsi_o3d::Material>) -> MaterialId {
+pub(super) fn text_material(
+    renderer: &Renderer,
+    scene: &mut Scene,
+    tex: TextureId,
+    alpha: AlphaMode,
+    slot_ov: &[&MaterialDef],
+    slot_mat: Option<&omsi_o3d::Material>,
+) -> MaterialId {
     let extra = material_extra(slot_ov, None, None, [0.0; 4]);
     let plain = MaterialExtra::default();
-    let border_only = MaterialExtra { border: extra.border, ..plain.clone() };
-    renderer.address_next.set(tex_addressing(slot_ov.iter().copied()));
+    let border_only = MaterialExtra {
+        border: extra.border,
+        ..plain.clone()
+    };
+    renderer
+        .address_next
+        .set(tex_addressing(slot_ov.iter().copied()));
     let emissive = text_emissive(slot_ov, slot_mat);
-    renderer.add_material_extra(scene, Some(tex), alpha, [1.0; 4], false, None, None, None, None, emissive, border_only)
+    renderer.add_material_extra(
+        scene,
+        Some(tex),
+        alpha,
+        [1.0; 4],
+        false,
+        None,
+        None,
+        None,
+        None,
+        emissive,
+        border_only,
+    )
 }
 
 /// The emissive colour of a text texture's slot (see `text_material`).
-pub(super) fn text_emissive(slot_ov: &[&MaterialDef], slot_mat: Option<&omsi_o3d::Material>) -> [f32; 3] {
-    slot_mat.map(|m| d3d_material(m, slot_ov.iter().find_map(|o| o.allcolor), true).1).unwrap_or([0.0; 3])
+pub(super) fn text_emissive(
+    slot_ov: &[&MaterialDef],
+    slot_mat: Option<&omsi_o3d::Material>,
+) -> [f32; 3] {
+    slot_mat
+        .map(|m| d3d_material(m, slot_ov.iter().find_map(|o| o.allcolor), true).1)
+        .unwrap_or([0.0; 3])
 }
 
 /// The key of a text texture material: the text's own key, how its slot addresses it and
 /// the slot's glow.
-pub(super) fn text_material_key(base: String, slot_ov: &[&MaterialDef], slot_mat: Option<&omsi_o3d::Material>) -> String {
+pub(super) fn text_material_key(
+    base: String,
+    slot_ov: &[&MaterialDef],
+    slot_mat: Option<&omsi_o3d::Material>,
+) -> String {
     let border = material_extra(slot_ov, None, None, [0.0; 4]).border;
-    format!("{base}|{:?}|{border:?}|{:?}", tex_addressing(slot_ov.iter().copied()), text_emissive(slot_ov, slot_mat))
+    format!(
+        "{base}|{:?}|{border:?}|{:?}",
+        tex_addressing(slot_ov.iter().copied()),
+        text_emissive(slot_ov, slot_mat)
+    )
 }
 
-pub(super) fn scenery_text_key(tt: &omsi_model::TextTexture, text: &str, alpha: AlphaMode) -> String {
+pub(super) fn scenery_text_key(
+    tt: &omsi_model::TextTexture,
+    text: &str,
+    alpha: AlphaMode,
+) -> String {
     format!(
         "{}|{}|{}x{}|{}|{:?}|{:?}|{}|{}",
         tt.font.to_ascii_lowercase(),
@@ -439,8 +510,13 @@ pub(super) fn scenery_text_image(
 /// scripts it lacks) in the texture's colour, the height of the `.oft` font's letters,
 /// centred, and narrowed to the texture's width. None when the font draws every letter:
 /// that text keeps OMSI's own look.
-pub(super) fn helper_text_image(tt: &omsi_model::TextTexture, atlas: Option<&omsi_content::font::FontAtlas>, text: &str) -> Option<Image> {
-    let drawable = |c: char| c == '@' || c.is_whitespace() || atlas.is_some_and(|a| a.font.glyph(c).is_some());
+pub(super) fn helper_text_image(
+    tt: &omsi_model::TextTexture,
+    atlas: Option<&omsi_content::font::FontAtlas>,
+    text: &str,
+) -> Option<Image> {
+    let drawable =
+        |c: char| c == '@' || c.is_whitespace() || atlas.is_some_and(|a| a.font.glyph(c).is_some());
     if text.trim().is_empty() || text.chars().all(drawable) {
         return None;
     }
@@ -457,19 +533,30 @@ pub(super) fn helper_text_image(tt: &omsi_model::TextTexture, atlas: Option<&oms
     let n = lines.len().max(1) as f32;
     // (the .oft's line height holds its capitals and the gap below them; Inter's capitals
     // are 0.7 of its size, so nearly the line height gives letters of the same height)
-    let line = atlas.map(|a| a.font.height.max(8) as f32).unwrap_or(h as f32 * 0.2);
+    let line = atlas
+        .map(|a| a.font.height.max(8) as f32)
+        .unwrap_or(h as f32 * 0.2);
     // the lines share the texture's height when they would not fit at the font's own
     let mut pitch = line.min(h as f32 / n);
     // A line too long for the texture is made smaller first, letters and all, down to two
     // thirds of the height, and only what is still too wide is narrowed: narrowed alone, a
     // long Polish street name came out in thin sticks nobody could read (#1696, #1365).
-    let widest = lines.iter().filter(|l| !l.is_empty()).map(|l| fonts.render(l, pitch * 0.95, omsi_ui::Weight::Medium).w).max().unwrap_or(0);
+    let widest = lines
+        .iter()
+        .filter(|l| !l.is_empty())
+        .map(|l| fonts.render(l, pitch * 0.95, omsi_ui::Weight::Medium).w)
+        .max()
+        .unwrap_or(0);
     if widest > w {
         pitch *= (w as f32 / widest as f32).max(2.0 / 3.0);
     }
     let px = pitch * 0.95;
     let top = (h as f32 - pitch * n) * 0.5;
-    let rgb = if tt.full_color { [255u8; 3] } else { [tt.color[0] as u8, tt.color[1] as u8, tt.color[2] as u8] };
+    let rgb = if tt.full_color {
+        [255u8; 3]
+    } else {
+        [tt.color[0] as u8, tt.color[1] as u8, tt.color[2] as u8]
+    };
     let mut rgba = vec![0u8; (w * h * 4) as usize];
     for (k, l) in lines.iter().enumerate() {
         if l.is_empty() {
@@ -501,7 +588,12 @@ pub(super) fn helper_text_image(tt: &omsi_model::TextTexture, atlas: Option<&oms
             }
         }
     }
-    Some(Image { width: w, height: h, rgba, has_alpha: true })
+    Some(Image {
+        width: w,
+        height: h,
+        rgba,
+        has_alpha: true,
+    })
 }
 
 /// Identify a solid vehicle body material that should participate in the depth buffer.
@@ -514,16 +606,30 @@ pub(super) fn helper_text_image(tt: &omsi_model::TextTexture, atlas: Option<&oms
 /// model.cfg declares it blended: a Czech bus's `okna.o3d` (windows) on the shared
 /// `body.png` was drawn as a black wall, where OMSI shows the tinted glass.
 pub(super) const GLASS_WORDS: [&str; 24] = [
-    "window", "fenster", "glas", "scheibe", "windshield", "windscreen", // en, de ("glas" is also German: `Leuchtmelderglas.tga`)
-    "okn", "sklo", // cs, sk (okna, okno, sklo)
-    "szyb", "okien", // pl
-    "ablak", // hu
+    "window",
+    "fenster",
+    "glas",
+    "scheibe",
+    "windshield",
+    "windscreen", // en, de ("glas" is also German: `Leuchtmelderglas.tga`)
+    "okn",
+    "sklo", // cs, sk (okna, okno, sklo)
+    "szyb",
+    "okien",  // pl
+    "ablak",  // hu
     "steklo", // ru (transliterated)
-    "vitre", "fenetre", // fr
-    "vetro", "finestr", // it
-    "raam", "ruit", // nl
-    "ventan", "cristal", // es
-    "vidro", "janel", "parabrisa", "para-brisa", // pt (vidro, vidros, janela, janelas)
+    "vitre",
+    "fenetre", // fr
+    "vetro",
+    "finestr", // it
+    "raam",
+    "ruit", // nl
+    "ventan",
+    "cristal", // es
+    "vidro",
+    "janel",
+    "parabrisa",
+    "para-brisa", // pt (vidro, vidros, janela, janelas)
 ];
 
 pub(super) fn is_vehicle_body_material(
@@ -538,8 +644,14 @@ pub(super) fn is_vehicle_body_material(
         return false;
     }
     let name = format!("{} {}", mesh_file, texture).to_ascii_lowercase();
-    let overlay = ["regen", "dirt", "dreck", "wiper", "matrix", "display", "shadow"];
-    if GLASS_WORDS.iter().chain(overlay.iter()).any(|part| name.contains(part)) {
+    let overlay = [
+        "regen", "dirt", "dreck", "wiper", "matrix", "display", "shadow",
+    ];
+    if GLASS_WORDS
+        .iter()
+        .chain(overlay.iter())
+        .any(|part| name.contains(part))
+    {
         return false;
     }
     true
@@ -567,8 +679,16 @@ pub(super) struct AlphaMasks(Mutex<HashMap<PathBuf, Option<Arc<Vec<u8>>>>>);
 impl Drop for AlphaMasks {
     fn drop(&mut self) {
         let masks = self.0.get_mut();
-        let bytes: usize = masks.values().filter_map(Option::as_ref).map(|m| m.len()).sum();
-        log::debug!("alpha masks: releasing {} entries, {} bytes", masks.len(), bytes);
+        let bytes: usize = masks
+            .values()
+            .filter_map(Option::as_ref)
+            .map(|m| m.len())
+            .sum();
+        log::debug!(
+            "alpha masks: releasing {} entries, {} bytes",
+            masks.len(),
+            bytes
+        );
     }
 }
 
@@ -584,17 +704,23 @@ impl AlphaMasks {
 }
 
 fn alpha_mask(path: &Path) -> Option<Arc<Vec<u8>>> {
-    let mask = omsi_texture::decode_file(path).ok().filter(|img| img.has_alpha && img.width > 0 && img.height > 0).map(|img| {
-        let (w, h) = (img.width as usize, img.height as usize);
-        let mut out = vec![255u8; ALPHA_MASK * ALPHA_MASK];
-        for y in 0..ALPHA_MASK {
-            for x in 0..ALPHA_MASK {
-                let (sx, sy) = ((x * w / ALPHA_MASK).min(w - 1), (y * h / ALPHA_MASK).min(h - 1));
-                out[y * ALPHA_MASK + x] = img.rgba[(sy * w + sx) * 4 + 3];
+    let mask = omsi_texture::decode_file(path)
+        .ok()
+        .filter(|img| img.has_alpha && img.width > 0 && img.height > 0)
+        .map(|img| {
+            let (w, h) = (img.width as usize, img.height as usize);
+            let mut out = vec![255u8; ALPHA_MASK * ALPHA_MASK];
+            for y in 0..ALPHA_MASK {
+                for x in 0..ALPHA_MASK {
+                    let (sx, sy) = (
+                        (x * w / ALPHA_MASK).min(w - 1),
+                        (y * h / ALPHA_MASK).min(h - 1),
+                    );
+                    out[y * ALPHA_MASK + x] = img.rgba[(sy * w + sx) * 4 + 3];
+                }
             }
-        }
-        Arc::new(out)
-    });
+            Arc::new(out)
+        });
     mask
 }
 
@@ -610,10 +736,22 @@ pub(super) fn slot_is_see_through(mesh: &MeshData, slot: usize, mask: &[u8]) -> 
         }
         let start = first as usize;
         let end = start.saturating_add(count as usize).min(mesh.indices.len());
-        for tri in mesh.indices.get(start..end).unwrap_or_default().chunks_exact(3) {
-            let Some(uv) = tri.iter().map(|&i| mesh.uvs.get(i as usize).copied()).sum::<Option<glam::Vec2>>() else { continue };
+        for tri in mesh
+            .indices
+            .get(start..end)
+            .unwrap_or_default()
+            .chunks_exact(3)
+        {
+            let Some(uv) = tri
+                .iter()
+                .map(|&i| mesh.uvs.get(i as usize).copied())
+                .sum::<Option<glam::Vec2>>()
+            else {
+                continue;
+            };
             let uv = uv / 3.0;
-            let at = |t: f32| ((t.rem_euclid(1.0) * ALPHA_MASK as f32) as usize).min(ALPHA_MASK - 1);
+            let at =
+                |t: f32| ((t.rem_euclid(1.0) * ALPHA_MASK as f32) as usize).min(ALPHA_MASK - 1);
             all += 1;
             if mask[at(uv.y) * ALPHA_MASK + at(uv.x)] < 230 {
                 clear += 1;
@@ -652,13 +790,21 @@ pub(super) fn slot_is_clear_window(mesh: &MeshData, slot: usize, mask: &[u8]) ->
         }
         let start = first as usize;
         let end = start.saturating_add(count as usize).min(mesh.indices.len());
-        for tri in mesh.indices.get(start..end).unwrap_or_default().chunks_exact(3) {
+        for tri in mesh
+            .indices
+            .get(start..end)
+            .unwrap_or_default()
+            .chunks_exact(3)
+        {
             let (Some(a), Some(b), Some(c)) = (
                 mesh.uvs.get(tri[0] as usize).copied(),
                 mesh.uvs.get(tri[1] as usize).copied(),
                 mesh.uvs.get(tri[2] as usize).copied(),
-            ) else { continue };
-            let at = |t: f32| ((t.rem_euclid(1.0) * ALPHA_MASK as f32) as usize).min(ALPHA_MASK - 1);
+            ) else {
+                continue;
+            };
+            let at =
+                |t: f32| ((t.rem_euclid(1.0) * ALPHA_MASK as f32) as usize).min(ALPHA_MASK - 1);
             let clear_samples = samples
                 .iter()
                 .filter(|&&(wa, wb, wc)| {
@@ -701,10 +847,22 @@ pub(super) fn slot_is_tint(mesh: &MeshData, slot: usize, mask: &[u8]) -> bool {
         }
         let start = first as usize;
         let end = start.saturating_add(count as usize).min(mesh.indices.len());
-        for tri in mesh.indices.get(start..end).unwrap_or_default().chunks_exact(3) {
-            let Some(uv) = tri.iter().map(|&i| mesh.uvs.get(i as usize).copied()).sum::<Option<glam::Vec2>>() else { continue };
+        for tri in mesh
+            .indices
+            .get(start..end)
+            .unwrap_or_default()
+            .chunks_exact(3)
+        {
+            let Some(uv) = tri
+                .iter()
+                .map(|&i| mesh.uvs.get(i as usize).copied())
+                .sum::<Option<glam::Vec2>>()
+            else {
+                continue;
+            };
             let uv = uv / 3.0;
-            let at = |t: f32| ((t.rem_euclid(1.0) * ALPHA_MASK as f32) as usize).min(ALPHA_MASK - 1);
+            let at =
+                |t: f32| ((t.rem_euclid(1.0) * ALPHA_MASK as f32) as usize).min(ALPHA_MASK - 1);
             all += 1;
             if (129..=240).contains(&mask[at(uv.y) * ALPHA_MASK + at(uv.x)]) {
                 tint += 1;
@@ -755,13 +913,23 @@ pub(super) fn material_has_vehicle_volume(mesh: &MeshData, slot: usize) -> bool 
 /// baked ambient-occlusion or shading film over the floor, `[matl_alpha] 2`), which OMSI
 /// blends over the surface as declared.
 pub(super) fn slot_overlays_another(mesh: &MeshData, slot: usize) -> bool {
-    let key = |p: &glam::Vec3| ((p.x * 1000.0).round() as i32, (p.y * 1000.0).round() as i32, (p.z * 1000.0).round() as i32);
+    let key = |p: &glam::Vec3| {
+        (
+            (p.x * 1000.0).round() as i32,
+            (p.y * 1000.0).round() as i32,
+            (p.z * 1000.0).round() as i32,
+        )
+    };
     let mut own = std::collections::HashSet::new();
     let mut others = std::collections::HashSet::new();
     for &(first, count, material) in &mesh.ranges {
         let start = first as usize;
         let end = start.saturating_add(count as usize).min(mesh.indices.len());
-        let set = if material as usize == slot { &mut own } else { &mut others };
+        let set = if material as usize == slot {
+            &mut own
+        } else {
+            &mut others
+        };
         for &index in mesh.indices.get(start..end).unwrap_or_default() {
             if let Some(p) = mesh.positions.get(index as usize) {
                 set.insert(key(p));
@@ -782,12 +950,20 @@ mod alpha_cache_tests {
         let mask = Arc::new(vec![255; ALPHA_MASK * ALPHA_MASK]);
         let weak = Arc::downgrade(&mask);
         preview.0.lock().insert("preview".into(), Some(mask));
-        game.0.lock().insert("game".into(), Some(Arc::new(vec![42])));
+        game.0
+            .lock()
+            .insert("game".into(), Some(Arc::new(vec![42])));
         let prefetch = preview.clone();
         drop(preview);
-        assert!(weak.upgrade().is_some(), "prefetch owns the cache while loading");
+        assert!(
+            weak.upgrade().is_some(),
+            "prefetch owns the cache while loading"
+        );
         drop(prefetch);
-        assert!(weak.upgrade().is_none(), "closing the world releases its alpha data");
+        assert!(
+            weak.upgrade().is_none(),
+            "closing the world releases its alpha data"
+        );
         assert_eq!(game.get(Path::new("game")).unwrap().as_slice(), &[42]);
     }
 }

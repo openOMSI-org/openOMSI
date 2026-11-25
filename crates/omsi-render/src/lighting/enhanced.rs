@@ -121,11 +121,6 @@ pub(crate) fn tone_contrast(log_pre: f32) -> f32 {
     day + (night - day) * t
 }
 
-/// How much of the sun the enhanced sky's cumulus lets through to the camera: the same
-/// cloud the sky shader draws (sky_enhanced.wgsl `cloud_base_shape`, `cloud_sigma`: the
-/// shape map's heaps cut by the cover, rounded with height, without the billows), its
-/// extinction integrated along the sun's direction through the layer, over a few rays a
-/// few tens of metres apart (the penumbra of a cloud a kilometre and a half up).
 /// How far the exposure follows the light into a cloud's shadow (log terms).
 pub(crate) const CLOUD_SHADE_ADAPT: f32 = 0.5;
 
@@ -145,44 +140,52 @@ pub(crate) fn cloud_levels(lighting: &Lighting, cam_rel: Vec3, ro: DVec3) -> [f3
     }
 }
 
+/// How much of the sun the enhanced sky's clouds let through to the camera: the same
+/// clouds the sky shader draws (sky_enhanced.wgsl `cloud_density`, with the detail's
+/// erosion on average, see `cloud_field::layer_sigma`), their extinction integrated along
+/// the sun's direction through the layer, over a few rays a few tens of metres apart (the
+/// penumbra of a cloud a kilometre and a half up).
 pub(crate) fn cloud_sun_transmittance(
-    shape: &[u8],
+    cpu: &super::cloud_field::CloudCpu,
     lighting: &Lighting,
     cam_rel: Vec3,
     ro: DVec3,
 ) -> f32 {
     let [bottom, top] = cloud_levels(lighting, cam_rel, ro);
     let s = lighting.sun_dir.normalize_or_zero();
-    if s.z <= 0.02 || shape.len() < (clouds::SHAPE_SIZE / 2).pow(2) as usize * 4 {
+    if s.z <= 0.02 || cpu.is_empty() {
         return 1.0;
     }
-    let coverage = super::cloud_field::shadow_coverage(lighting.cloud_density);
+    let clouds = super::cloud_field::CloudParams::of(lighting);
     let origin = glam::Vec2::new(
         ro.x.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32,
         ro.y.rem_euclid(CLOUD_ORIGIN_PERIOD) as f32,
     );
     let drift = glam::Vec2::new(lighting.cloud_offset[0], lighting.cloud_offset[1]) * 2500.0;
+    let base_shift = drift * (super::cloud_field::BASE_DRIFT - 1.0);
+    let depth = top - bottom;
     let t0 = (bottom - cam_rel.z).max(0.0) / s.z;
     let t1 = ((top - cam_rel.z).max(0.0) / s.z).min(t0 + 12_000.0);
     let steps = 24;
     let ds = (t1 - t0) / steps as f32;
     let side = glam::Vec2::new(-s.y, s.x).normalize_or_zero();
+    let along = glam::Vec2::new(s.x, s.y).normalize_or_zero();
     let mut sum = 0.0;
     let offsets = [
         glam::Vec2::ZERO,
         side * 40.0,
         -side * 40.0,
-        glam::Vec2::new(s.x, s.y).normalize_or_zero() * 40.0,
-        -glam::Vec2::new(s.x, s.y).normalize_or_zero() * 40.0,
+        along * 40.0,
+        -along * 40.0,
     ];
     for off in offsets {
         let mut od = 0.0f32;
         for k in 0..steps {
             let t = t0 + (k as f32 + 0.5) * ds;
             let p = cam_rel + s * t;
-            let h = (p.z - bottom) / (top - bottom);
+            let h = (p.z - bottom) / depth;
             let g = glam::Vec2::new(p.x, p.y) + origin + off + drift;
-            od += super::cloud_field::layer_sigma(shape, g, h, coverage) * ds;
+            od += super::cloud_field::layer_sigma(cpu, g, h, depth, base_shift, &clouds) * ds;
         }
         sum += (-od).exp();
     }
@@ -512,6 +515,9 @@ pub(crate) fn enhanced_sky_input(
         deck_tau: lighting.deck_tau.unwrap_or(0.0),
         cloud_base: lighting.cloud_layer.map_or(1400.0, |l| l[0]),
         cloud_top: lighting.cloud_layer.map_or(2800.0, |l| l[1]),
+        storm: forced_storm()
+            .map_or(lighting.storm, |f| f.0)
+            .clamp(0.0, 1.0),
     };
     // (the disc in the sky: what the veil lets through of it as well)
     let veil_t = (-input.veil / s.z.max(0.03)).exp();
@@ -621,6 +627,7 @@ pub(crate) fn sky_input_differs(a: &atmosphere::SkyInput, b: &atmosphere::SkyInp
         || !near(a.deck_tau, b.deck_tau, 0.5)
         || !near(a.cloud_base, b.cloud_base, 60.0)
         || !near(a.cloud_top, b.cloud_top, 100.0)
+        || !near(a.storm, b.storm, 0.02)
         || a.moon_dir.dot(b.moon_dir) < 0.9999
         || !near(a.moon_illum, b.moon_illum, 0.01)
         || !near(a.city_glow, b.city_glow, 0.01)
@@ -841,7 +848,12 @@ impl Renderer {
         let shaded = atmosphere::exposure_for(st.e_sun * cloud_t + e_rest)
             .max(1e-6)
             .ln();
-        let target = full + (shaded - full) * CLOUD_SHADE_ADAPT;
+        // (and the weather's gloom: an overcast and a storm are seen darker than a clear day,
+        // the eye does not take all of it back, `atmosphere::weather_dimming`)
+        let e_nat = st.e_sun * cloud_t + (st.e_rest - st.e_artificial).max(0.0);
+        let dimming = atmosphere::weather_dimming(e_nat, st.e_clear, st.input.sun_dir.z)
+            * atmosphere::rain_gloom(st.input.rain, st.input.sun_dir.z);
+        let target = full + (shaded - full) * CLOUD_SHADE_ADAPT + dimming.ln();
         let log_exposure = match self.tone.exposure {
             // (the eye takes to brighter light within a second, to the dark over several:
             // the cones' light adaptation is fast, their dark adaptation slow)
@@ -895,55 +907,6 @@ impl Renderer {
             }
             None => (false, 1.0),
         };
-        // the sky cube's eye (see Probe::cube_eye): the correction for a camera that moved
-        // away from it is exact for the base of the clouds, and wrong by up to the layer's
-        // depth over their distance; a climb shows far sooner than driving along
-        let cam_w = ro + cam_rel.as_dvec3();
-        let eye_off = match self.tone.probe.as_mut() {
-            Some(p) => {
-                let to_clouds = (1400.0 - cam_rel.z as f64).max(120.0);
-                let far = match p.cube_eye {
-                    Some(e) if p.cube_filled => {
-                        let m = cam_w - e;
-                        // (a third of what it was: flying the free camera fast, the clouds
-                        // drifted with the old cube for 400 m and then jumped back into place)
-                        (m.truncate().length() * 0.1 + m.z.abs()) / to_clouds > 0.01
-                    }
-                    _ => true,
-                };
-                if far {
-                    if p.cube_filled && !instant {
-                        // (the cube for the new eye is filled beside the one in use, a
-                        // slice a frame: redrawn whole in one frame, that frame took the
-                        // six faces' 17 ms)
-                        p.sched.start_staging(cam_w);
-                    } else {
-                        p.cube_eye = Some(cam_w);
-                        p.sched.cancel_staging();
-                    }
-                }
-                if p.sched.staging_full() {
-                    // (filled: it goes over the one in use in this frame's prepass, and
-                    // this frame's uniform has its eye)
-                    if let Some(e) = p.sched.staging_eye.take() {
-                        if omsi_cfg::flags::OMSI_DEBUG_SKY.is_set() {
-                            log::info!(
-                                "sky cube: new eye {:.0},{:.0},{:.0} ({:.0} m from the camera now)",
-                                e.x,
-                                e.y,
-                                e.z,
-                                (e - cam_w).length()
-                            );
-                        }
-                        p.cube_eye = Some(e);
-                        p.sched.swap = true;
-                    }
-                    p.sched.staged = 0;
-                }
-                (p.cube_eye.unwrap_or(cam_w) - cam_w).as_vec3()
-            }
-            None => Vec3::ZERO,
-        };
         // the thunderstorm: its activity, and this frame's flash (OMSI_STORM forces both)
         let forced = forced_storm();
         let storm = forced.map_or(lighting.storm, |f| f.0).clamp(0.0, 1.0);
@@ -955,6 +918,16 @@ impl Renderer {
             Some(_) => [1100.0, 1100.0 + 300.0 + 7000.0 * storm],
             None => cloud_levels(lighting, cam_rel, ro),
         };
+        // the volumetric fog's medium (vol_fog.rs), and the wind's drift of its banks
+        let vol_on = self.vol_fog_enabled(lighting);
+        let (vol_fog, vol_fog2) = crate::vol_fog::slots(
+            self.lights.vol_fog.as_mut().filter(|_| vol_on),
+            lighting,
+            ro,
+            weather_fog,
+            dt,
+            self.options.cloud_shadows,
+        );
         let u = EnhancedUniform {
             // (self-lit surfaces at their own brightness after the metering, see ExposureLog)
             exposure: [
@@ -988,13 +961,18 @@ impl Renderer {
                 // the tone curve's contrast, which self-lit pictures undo (`display_level`)
                 tone_contrast(log_exposure),
             ],
-            eye: eye_off
-                .extend(if lighting.low_clouds {
+            // (w: the steps of the clouds' march; xyz no longer used - the sky cube is drawn
+            // from the camera)
+            eye: [
+                0.0,
+                0.0,
+                0.0,
+                if lighting.low_clouds {
                     CLOUD_STEPS_LOW
                 } else {
                     CLOUD_STEPS
-                } as f32)
-                .to_array(),
+                } as f32,
+            ],
             // x how bright an LED panel's dots burn (see `MaterialExtra::led`; the settings'
             // 16 levels give 0 = off .. 3.75), y whether the LED panels' `\S:n` masks keep
             // their mip chain (0: at full resolution, the dots stay visible when small)
@@ -1033,6 +1011,35 @@ impl Renderer {
             cloud_f1,
             cloud_f2,
             pane_tilt: lighting.pane_tilt,
+            // x the share of the sun the clouds over the camera let through, y the share of
+            // the natural light that comes diffuse (0 all sun .. 1 none: how flat the
+            // weather's light is, how weak its shadows), z the weather's dimming of the
+            // picture (EV, <= 0), w the cloud cover
+            clouds_ext: [
+                cloud_t,
+                1.0 - (st.e_sun * cloud_t / e_nat.max(1e-9)).clamp(0.0, 1.0),
+                dimming.log2(),
+                lighting.cloud_density.clamp(0.0, 1.0),
+            ],
+            // x the deck's optical depth (0 without one), y the storm
+            clouds_ext2: [st.deck_tau, st.input.storm, 0.0, 0.0],
+            vol_fog,
+            vol_fog2,
+            precip_ext: crate::precip::precip_ext(lighting),
+            // (free)
+            glass_ext: [0.0; 4],
+            // x the share of the sun's light through the clouds that still comes as a beam and
+            // casts a shadow (enhanced/01_brdf_shadow.wgsl `sun_scattered` takes the rest as a
+            // shadowless light from the sky): a thickening stratus deck and a veil of high cloud
+            // spread it, so that under a grey sky the shadows fade and the light goes flat while
+            // what is left of the sun is kept; y 1 (set)
+            pbr_ext: {
+                let deck = atmosphere::smoothstep(0.3, 0.85, input_overcast);
+                let spread = 1.0 - (-st.input.veil / st.input.sun_dir.z.max(0.03)).exp();
+                let beam = (1.0 - 0.85 * deck) * (1.0 - 0.6 * spread);
+                [beam.clamp(0.0, 1.0), 1.0, 0.0, 0.0]
+            },
+            rt_ext: [0.0; 4],
             moon_light: st
                 .moon_light
                 .extend(if lighting.casts_moon_shadows() {
@@ -1053,15 +1060,14 @@ impl Renderer {
     }
 }
 
-/// Steps of the enhanced clouds' march through their layer (sky_enhanced.wgsl
-/// `cloud_layer`), and with the low cloud quality (`Lighting::low_clouds`).
+/// Steps of the window's clouds' march through their layer (clouds_ss.wgsl
+/// `fs_cloud_trace`), and with the low cloud quality (`Lighting::low_clouds`).
 pub(crate) const CLOUD_STEPS: u32 = 56;
-pub(crate) const CLOUD_STEPS_LOW: u32 = 20;
+pub(crate) const CLOUD_STEPS_LOW: u32 = 28;
 
-/// Face size of the enhanced sky cube (see `Probe::cube_view`): about as many texels per
-/// degree as a 1600-pixel-wide picture has pixels at half its size (at 512 the clouds'
-/// edges stood in blocks of three or four pixels).
-pub(crate) const SKY_CUBE_SIZE: u32 = 1024;
+/// Face size of the enhanced sky cube (see `Probe::cube_view`): the reflections' sky and
+/// the mirrors', no longer the window's (whose clouds are traced per pixel).
+pub(crate) const SKY_CUBE_SIZE: u32 = 256;
 /// Redraw rounds of a sky cube face: each starts the clouds' steps elsewhere, and the
 /// rounds are averaged (all of them at once for a picture on its own or a new sky).
 pub(crate) const SKY_CUBE_ROUNDS: u32 = 8;
@@ -1119,7 +1125,7 @@ pub(crate) fn shortfall_adaptation(log2_pre: f32, brighten: f32, gain: f32) -> (
 pub(crate) const ADAPT_TO_DARK_S: f32 = 3.0;
 pub(crate) const ADAPT_TO_LIGHT_S: f32 = 0.9;
 /// The tone curve's contrast about mid grey by day and at night (see `tone_contrast`).
-pub(crate) const TONE_CONTRAST_DAY: f32 = 1.22;
+pub(crate) const TONE_CONTRAST_DAY: f32 = 1.3;
 pub(crate) const TONE_CONTRAST_NIGHT: f32 = 0.94;
 /// How far night vision takes the colour out of a dark scene (post.wgsl `night_vision`).
 pub(crate) const NIGHT_VISION: f32 = 0.3;

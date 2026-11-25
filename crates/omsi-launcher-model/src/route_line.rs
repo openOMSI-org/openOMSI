@@ -26,7 +26,11 @@ fn project(p: DVec2, poly: &[DVec2]) -> (f64, f64) {
     for w in poly.windows(2) {
         let ab = w[1] - w[0];
         let span = ab.length();
-        let t = if span < 1e-6 { 0.0 } else { ((p - w[0]).dot(ab) / (span * span)).clamp(0.0, 1.0) };
+        let t = if span < 1e-6 {
+            0.0
+        } else {
+            ((p - w[0]).dot(ab) / (span * span)).clamp(0.0, 1.0)
+        };
         let d = p.distance(w[0] + ab * t);
         if d < best {
             best = d;
@@ -106,13 +110,26 @@ pub fn route_lines(lanes: &[Vec<DVec2>]) -> Vec<Vec<DVec2>> {
             }
         }
         let p1 = lane[k];
-        let t0 = if cur.len() > 1 { heading(cur[cur.len() - 2], p0) } else { heading(p0, p1) };
-        let t1 = if k + 1 < lane.len() { heading(p1, lane[k + 1]) } else { heading(lane[k - 1], p1) };
+        let t0 = if cur.len() > 1 {
+            heading(cur[cur.len() - 2], p0)
+        } else {
+            heading(p0, p1)
+        };
+        let t1 = if k + 1 < lane.len() {
+            heading(p1, lane[k + 1])
+        } else {
+            heading(lane[k - 1], p1)
+        };
         let l = p0.distance(p1);
         let (c0, c1) = (p0 + t0 * l / 3.0, p1 - t1 * l / 3.0);
         for j in 1..=10 {
             let (t, u) = (j as f64 / 10.0, 1.0 - j as f64 / 10.0);
-            cur.push(p0 * (u * u * u) + c0 * (3.0 * u * u * t) + c1 * (3.0 * u * t * t) + p1 * (t * t * t));
+            cur.push(
+                p0 * (u * u * u)
+                    + c0 * (3.0 * u * u * t)
+                    + c1 * (3.0 * u * t * t)
+                    + p1 * (t * t * t),
+            );
         }
         cur.extend(lane.iter().skip(k + 1));
     }
@@ -140,9 +157,18 @@ mod tests {
     #[test]
     fn side_by_side_lanes_of_one_span_are_drawn_once() {
         // three lanes of the same 100 m, then the road goes on from the third
-        let l = route_lines(&[lane(0.0, 100.0, 0.0), lane(0.0, 100.0, 3.0), lane(0.0, 100.0, 6.0), lane(100.0, 200.0, 6.0)]);
+        let l = route_lines(&[
+            lane(0.0, 100.0, 0.0),
+            lane(0.0, 100.0, 3.0),
+            lane(0.0, 100.0, 6.0),
+            lane(100.0, 200.0, 6.0),
+        ]);
         assert_eq!(l.len(), 1);
-        assert!(l[0].iter().all(|p| p.y > 5.9), "only the last lane remains: {:?}", l[0]);
+        assert!(
+            l[0].iter().all(|p| p.y > 5.9),
+            "only the last lane remains: {:?}",
+            l[0]
+        );
         assert!((l[0].last().unwrap().x - 200.0).abs() < 1e-9);
     }
 

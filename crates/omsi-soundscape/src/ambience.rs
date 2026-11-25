@@ -204,7 +204,11 @@ impl Ambience {
             // a step on the other side of the bus's bodywork from the listener - the pavement
             // heard from the driver's seat, the saloon heard from the street - comes through
             // it: quieter and dull (it used to sound as if the people walked in the bus)
-            let (through, lowpass) = if f.own_bus != listener_inside { (0.3, 600.0) } else { (1.0, 0.0) };
+            let (through, lowpass) = if f.own_bus != listener_inside {
+                (0.3, 600.0)
+            } else {
+                (1.0, 0.0)
+            };
             let params = VoiceParams {
                 gain: self.step_volume * gain * through * (0.8 + 0.4 * self.rand()),
                 pitch: pitch * (0.94 + 0.12 * self.rand()),

@@ -14,13 +14,21 @@ pub fn alive(pid: u32) -> bool {
 #[cfg(windows)]
 pub fn alive(pid: u32) -> bool {
     use windows::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
-    use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE};
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    };
     if pid == 0 {
         return false;
     }
     // SAFETY: a handle opened, waited on for no time and closed again
     unsafe {
-        let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE, false, pid) else { return false };
+        let Ok(h) = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            false,
+            pid,
+        ) else {
+            return false;
+        };
         let running = WaitForSingleObject(h, 0) == WAIT_TIMEOUT;
         let _ = CloseHandle(h);
         running
@@ -46,7 +54,7 @@ pub fn kill(pid: u32) {
 #[cfg(windows)]
 pub fn kill(pid: u32) {
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
     // SAFETY: a handle opened, used to end the process and closed again
     unsafe {
         if let Ok(h) = OpenProcess(PROCESS_TERMINATE, false, pid) {

@@ -88,11 +88,22 @@ impl DrawPlan {
                 .iter()
                 .filter(|b| !is_rain(b))
                 .count();
-            let (rain, main): (Vec<_>, Vec<_>) = std::mem::take(&mut self.main_batches)
+            let (mut rain, main): (Vec<_>, Vec<_>) = std::mem::take(&mut self.main_batches)
                 .into_iter()
                 .partition(is_rain);
+            // Every picture takes the films of the vehicle the camera sits in as well (drawn
+            // last, nearest): in the main pass they read the picture behind the glass of the
+            // frame before - nothing at all in a single picture, and in the window a copy
+            // holding their own drops and haze of that frame, which blurred into itself frame
+            // after frame. (Kept there in the classic pictures, the windscreen's drops were
+            // dark specks on the sky.)
+            let (cab_rain, cab): (Vec<_>, Vec<_>) = std::mem::take(&mut self.cab_batches)
+                .into_iter()
+                .partition(|b| is_rain(b));
+            rain.extend(cab_rain);
             self.rain_batches = rain;
             self.main_batches = main;
+            self.cab_batches = cab;
         }
     }
 }

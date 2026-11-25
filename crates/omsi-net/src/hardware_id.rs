@@ -16,16 +16,27 @@ pub fn clear_hardware_id() {
 }
 
 pub fn hardware_id() -> Option<String> {
-    HARDWARE_ID.read().unwrap_or_else(|e| e.into_inner()).clone()
+    HARDWARE_ID
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }
 
 pub fn host_hardware_id(machine: &str, realm: &str) -> String {
     use sha2::{Digest, Sha256};
-    let h = Sha256::new().chain_update(b"openOMSI hardware id v2\0").chain_update(machine.as_bytes()).chain_update(b"\0").chain_update(realm.as_bytes()).finalize();
+    let h = Sha256::new()
+        .chain_update(b"openOMSI hardware id v2\0")
+        .chain_update(machine.as_bytes())
+        .chain_update(b"\0")
+        .chain_update(realm.as_bytes())
+        .finalize();
     h[..16].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// A hardware identifier as it goes over the wire: 128 bits in 32 lower-case hex digits.
 pub fn is_hardware_id(id: &str) -> bool {
-    id.len() == 32 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    id.len() == 32
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }

@@ -6,7 +6,9 @@ fn multiplayer_hud_translates_client_states_and_preserves_session_details() {
     let mut lan = LanSession::join_addr(Vec::new(), None, "Driver", Default::default()).unwrap();
     let tr = |text: &str| match text {
         "Online: connecting ..." => "連線中...".into(),
-        "Online: not connected: {reason} (chat /reconnect)" => "未連線：{reason}（聊天 /reconnect）".into(),
+        "Online: not connected: {reason} (chat /reconnect)" => {
+            "未連線：{reason}（聊天 /reconnect）".into()
+        }
         "Online: in {host}'s game, {others}" => "已加入 {host} 的遊戲，{others}".into(),
         "nobody else yet" => "尚無其他玩家".into(),
         "Online: {warning}" => "連線：{warning}".into(),
@@ -15,7 +17,10 @@ fn multiplayer_hud_translates_client_states_and_preserves_session_details() {
     };
     assert_eq!(hud_lines(&lan, &tr), ["連線中..."]);
     lan.rejected = Some("Map not installed".into());
-    assert_eq!(hud_lines(&lan, &tr), ["未連線：尚未安裝地圖（聊天 /reconnect）"]);
+    assert_eq!(
+        hud_lines(&lan, &tr),
+        ["未連線：尚未安裝地圖（聊天 /reconnect）"]
+    );
     lan.rejected = None;
     lan.connected = true;
     lan.welcome = Some(omsi_net::Welcome {
@@ -26,7 +31,13 @@ fn multiplayer_hud_translates_client_states_and_preserves_session_details() {
         players: 1,
     });
     lan.warnings.push("Map not installed".into());
-    assert_eq!(hud_lines(&lan, &tr), ["已加入 Alice {others} 的遊戲，尚無其他玩家", "連線：尚未安裝地圖"]);
+    assert_eq!(
+        hud_lines(&lan, &tr),
+        [
+            "已加入 Alice {others} 的遊戲，尚無其他玩家",
+            "連線：尚未安裝地圖"
+        ]
+    );
 }
 
 #[test]
@@ -39,8 +50,14 @@ fn compatible_string_tables_check_picture_paths_at_the_local_index() {
     let take = |values| mapped_remote_strings(&table, values, 2, &[1]).collect::<Vec<_>>();
     // A colon is valid in a display text but not in a picture path. The owner's
     // picture is wire slot 0; on this bus it is local slot 1.
-    assert_eq!(take(vec![(0, "12:30".into()), (1, "12:30".into())]), vec![(0, "12:30".into())]);
-    assert_eq!(take(vec![(0, r"..\Texture\blind.bmp".into())]), vec![(1, r"..\Texture\blind.bmp".into())]);
+    assert_eq!(
+        take(vec![(0, "12:30".into()), (1, "12:30".into())]),
+        vec![(0, "12:30".into())]
+    );
+    assert_eq!(
+        take(vec![(0, r"..\Texture\blind.bmp".into())]),
+        vec![(1, r"..\Texture\blind.bmp".into())]
+    );
     for path in [r"\\host\share\x.bmp", "C:/x.bmp", "/dev/zero"] {
         assert!(take(vec![(0, path.into()), (1, path.into())]).is_empty());
     }
@@ -171,4 +188,96 @@ fn admin_password_command_is_private_for_any_case() {
     assert_eq!(admin_chat_arg("/admin"), Some(""));
     assert_eq!(admin_chat_arg("/administrator public"), None);
     assert_eq!(admin_chat_arg("/reconnect"), None);
+}
+
+/// (#2536) A line typed into the chat: the session's own commands, a `/`-line for the plugins,
+/// or something to say - and a `/`-line is never mistaken for one of the others.
+#[test]
+fn a_slash_line_is_a_command_and_not_chat() {
+    assert_eq!(
+        chat_line("/login driver hunter2"),
+        ChatLine::Command("/login driver hunter2".into())
+    );
+    assert_eq!(
+        chat_line("  /duty 12 A  "),
+        ChatLine::Command("/duty 12 A".into()),
+        "trimmed"
+    );
+    assert_eq!(
+        chat_line("hello there"),
+        ChatLine::Say("hello there".into())
+    );
+    assert_eq!(
+        chat_line("/"),
+        ChatLine::Say("/".into()),
+        "a lone slash is just a slash, as it always was"
+    );
+    // the session's own lines keep their meaning, whatever the case they are typed in
+    assert_eq!(chat_line("/admin pw"), ChatLine::Admin("pw".into()));
+    assert_eq!(chat_line("/ADMIN pw"), ChatLine::Admin("pw".into()));
+    assert_eq!(
+        chat_line("/admin"),
+        ChatLine::Admin(String::new()),
+        "no password: the usage line"
+    );
+    assert_eq!(chat_line("/Reconnect"), ChatLine::Reconnect);
+    assert_eq!(
+        chat_line("/administrator"),
+        ChatLine::Command("/administrator".into()),
+        "not /admin"
+    );
+}
+
+#[test]
+fn slash_commands_stay_private_when_no_listener_is_available() {
+    let mut lan = LanSession::join_addr(Vec::new(), None, "Driver", Default::default()).unwrap();
+    let mut game = LanGame::default();
+    game.take_commands = false;
+    chat_send(&mut lan, &mut game, "/login driver hunter2");
+    assert_eq!(game.plugin_commands.len(), 0);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* no plugin is listening for commands".to_string())
+    );
+
+    game.take_commands = true;
+    chat_send(&mut lan, &mut game, "/login driver hunter2");
+    assert_eq!(game.plugin_commands, vec!["/login driver hunter2"]);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* sent to the plugins".to_string())
+    );
+
+    // Unloading the last listener resets take_commands:
+    game.take_commands = false;
+    chat_send(&mut lan, &mut game, "/login driver hunter2");
+    assert_eq!(game.plugin_commands.len(), 1);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* no plugin is listening for commands".to_string())
+    );
+}
+
+#[test]
+fn slash_command_queue_limit_reports_error_and_drops_excess() {
+    let mut lan = LanSession::join_addr(Vec::new(), None, "Driver", Default::default()).unwrap();
+    let mut game = LanGame::default();
+    game.take_commands = true;
+
+    for i in 0..32 {
+        chat_send(&mut lan, &mut game, &format!("/cmd {i}"));
+        assert_eq!(
+            game.chat.lines.last(),
+            Some(&"* sent to the plugins".to_string())
+        );
+    }
+    assert_eq!(game.plugin_commands.len(), 32);
+
+    // 33rd command exceeds the queue limit of 32:
+    chat_send(&mut lan, &mut game, "/cmd 32");
+    assert_eq!(game.plugin_commands.len(), 32);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* plugin command queue is full".to_string())
+    );
 }

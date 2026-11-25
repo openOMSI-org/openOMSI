@@ -3,9 +3,8 @@
 //! The switches grew one call site at a time (`omsi_cfg::env::var_os("OMSI_X").is_some()`),
 //! hundreds of them, documented only where they are read. Here each one has a name, a type,
 //! a default, a kind (debug log, test hook, A/B switch, tuning, set-up) and a line of
-//! documentation; `docs/DEBUG_FLAGS.md` is written from this list, and the tests below fail
-//! when a name in the source is missing here or the document is out of date
-//! (`OMSI_FLAGS_BLESS=1 cargo test -p omsi-cfg flags` writes it again).
+//! documentation; the tests below fail when a name in the source is missing here or from
+//! `docs/DEBUG_FLAGS.md`.
 //!
 //! Reading a flag costs an atomic load after the first time: the value is taken once from
 //! [`crate::env`] (which caches the environment for the whole process, so a flag and a
@@ -80,13 +79,30 @@ pub struct Flag {
 }
 
 impl Flag {
-    const fn new(name: &'static str, ty: Ty, kind: Kind, read: Read, default: &'static str, doc: &'static str) -> Flag {
-        Flag { name, ty, kind, read, default, doc, value: OnceLock::new() }
+    const fn new(
+        name: &'static str,
+        ty: Ty,
+        kind: Kind,
+        read: Read,
+        default: &'static str,
+        doc: &'static str,
+    ) -> Flag {
+        Flag {
+            name,
+            ty,
+            kind,
+            read,
+            default,
+            doc,
+            value: OnceLock::new(),
+        }
     }
 
     /// The value, as `omsi_cfg::env::var_os` gives it, without a copy.
     pub fn os(&self) -> Option<&OsStr> {
-        self.value.get_or_init(|| crate::env::var_os(self.name)).as_deref()
+        self.value
+            .get_or_init(|| crate::env::var_os(self.name))
+            .as_deref()
     }
 
     /// Set at all (`env::var_os(..).is_some()`).
@@ -117,13 +133,19 @@ impl Flag {
 
 impl std::fmt::Debug for Flag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Flag").field("name", &self.name).field("ty", &self.ty).field("kind", &self.kind).finish()
+        f.debug_struct("Flag")
+            .field("name", &self.name)
+            .field("ty", &self.ty)
+            .field("kind", &self.kind)
+            .finish()
     }
 }
 
 /// The registered flag of this name.
 pub fn find(name: &str) -> Option<&'static Flag> {
-    ALL.binary_search_by(|f| f.name.cmp(name)).ok().map(|i| ALL[i])
+    ALL.binary_search_by(|f| f.name.cmp(name))
+        .ok()
+        .map(|i| ALL[i])
 }
 
 macro_rules! flags {
@@ -190,9 +212,11 @@ flags! {
     OMSI_DEBUG_AI_WIDE: Bool, Debug, Use, "off", "Log every tenth of a second an AI car standing over 1.5 m beside its way.";
     OMSI_DEBUG_ANIM: Text, Debug, Once, "-", "Log the animations of the meshes whose file name contains this text.";
     OMSI_DEBUG_BOARDS: Bool, Debug, Use, "off", "Log boarding at bus stops.";
+    OMSI_DEBUG_CABLES: Bool, Debug, Use, "off", "Log every control cable value a train car reads when it changes.";
     OMSI_DEBUG_CAMERA: Num, Debug, Once, "1", "Camera arm log: 1 the types and what stops the arm, 2 also every frame.";
     OMSI_DEBUG_CAR: Num, Debug, Use, "-", "Log the state of the AI car with this id every step.";
     OMSI_DEBUG_CAREER: Bool, Debug, Use, "off", "Log the jolts the career scoring counts.";
+    OMSI_DEBUG_CAR_VARS: Text, Debug, Use, "-", "Log each change, per car of a train, of the script variables and strings whose name contains one of these comma-separated texts.";
     OMSI_DEBUG_COLLISION: Bool, Debug, Use, "off", "Log the player's collision state.";
     OMSI_DEBUG_CONES: Bool, Debug, Use, "off", "Log the light coronas and beams prepared per frame.";
     OMSI_DEBUG_CULL: Num, Debug, Frame, "off", "Log what near and in the picture is left out of the draw list, and why.";
@@ -301,6 +325,7 @@ flags! {
     OMSI_GPU_LIMITS: Text, Test, Use, "-", "default or downlevel: request only the WebGPU default (or downlevel) limits. Set by the small_chip test.";
     OMSI_GPU_TIMERS: Bool, Debug, Use, "off", "Measure GPU time per pass with timestamp queries.";
     OMSI_GPU_TIMERS_RAW: Bool, Debug, Use, "off", "With OMSI_GPU_TIMERS: the passes in the order the GPU finished them.";
+    OMSI_GRADE: Text, Tuning, Once, "on", "0: Enhanced draws without its colour grade (white balance, saturation, the shadows' lift by the sun's height and the weather), for comparisons.";
     OMSI_GRAPHICS: Text, Tuning, Use, "settings", "vanilla, vanilla_plus or enhanced: another renderer for one run.";
     OMSI_GROUND_GAP: Text, Debug, Use, "-", "Offscreen CSV (or -): how far every drawn tyre stands over or sinks into the ground.";
     OMSI_GROUND_GAP_RADIUS: Num, Debug, Use, "150", "With OMSI_GROUND_GAP: the radius in metres.";
@@ -344,7 +369,8 @@ flags! {
     OMSI_MIRROR_HUD: Num, Tuning, Use, "settings", "Mirror HUD mode (number).";
     OMSI_MOBILE: Bool, Test, Use, "off", "The phone layout on a computer (screen cut-outs).";
     OMSI_MUTE: Bool, Test, Use, "off", "Mix everything as usual but play nothing.";
-    OMSI_MX: Text, Setup, Use, "settings", "on or off: draw with mX, openOMSI's own graphics library, through wgpu (mX Graphics, experimental), or with wgpu's own backends (overrides the setting, which a Mac only reads; elsewhere the way to try mX).";
+    OMSI_MX: Text, Switch, Once, "settings", "mX Graphics for this run, over the mx_graphics setting: on (1, true) starts the game on mX, off (0, false) on wgpu.";
+    OMSI_MX_SOFTWARE: Bool, Test, Once, "off", "Let mX Graphics draw on a software renderer (WARP, llvmpipe) on a computer; without it a computer where only one opens starts again on wgpu.";
     OMSI_NAV_2D: Bool, Test, Use, "off", "Navigator pictures with flat houses (the nav_3d setting off).";
     OMSI_NAV_CONTOURS: Bool, Test, Use, "off", "Offscreen: the city map in its terrain view (contour lines and their heights, when the map's package has them).";
     OMSI_NAV_LINES: Text, Test, Use, "-", "Offscreen: open the city map's lines panel on the line with this number (a route, then a departure time, after semicolons: 5;1 or 5;1;14:07, which opens its timetable).";
@@ -386,6 +412,7 @@ flags! {
     OMSI_NO_LAMP_SIGHT: Bool, Switch, Use, "off", "Enhanced by night: every lamp near the line of sight dazzles, hidden or not.";
     OMSI_NO_LAN_MODS: Bool, Switch, Use, "off", "LAN: do not exchange mods.";
     OMSI_NO_LAN_UPLOADS: Bool, Switch, Use, "off", "LAN: a game hosting a session takes no buses from the players who join.";
+    OMSI_NO_LEAN: Bool, Switch, Frame, "off", "Enhanced main pass: draw every material with the full scene pipelines, not the lean ones of plain materials on a dry frame.";
     OMSI_NO_LIGHT_MAP: Bool, Switch, Use, "off", "No night light maps on the tiles (A/B).";
     OMSI_NO_MAP_CACHE: Bool, Test, Use, "off", "Read the map's navigator layers (houses, ground, paving) again instead of from the cache.";
     OMSI_NO_MATERIAL_SPLINE_BATCHING: Bool, Switch, Use, "off", "No batching of splines by material.";
@@ -474,6 +501,7 @@ flags! {
     OMSI_SCREEN_AT: Text, Setup, Once, "-", "x,y: the screen (a point on the desktop, pixels) the game window opens on; the launcher sets it to where it stands.";
     OMSI_SEED: Num, Test, Use, "random", "Seed of the scripts' random numbers (repeat a session).";
     OMSI_SERIAL_PIPELINES: Bool, Switch, Use, "off", "Compile the renderer's pipelines one after the other on one thread, as before (A/B).";
+    OMSI_SHADER_HOT: Text, Test, Use, "-", "Read the renderer's WGSL from this copy of a renderer crate's `src` folder (1: the source tree the game was built from), not the copy compiled in: trying shaders without a rebuild.";
     OMSI_SHADOW_FAR_EVERY_FRAME: Bool, Switch, Frame, "off", "Redraw the far shadow map every frame.";
     OMSI_SHADOW_NEAR_EVERY_FRAME: Bool, Switch, Frame, "off", "Redraw the near shadow map every frame.";
     OMSI_SIM_THREAD: Text, Switch, Use, "the setting", "Window: the AI traffic's, the people's and the scenery scripts' steps on a thread of their own while the picture is drawn (one frame later): 0 / false / off / no: on the main thread, anything else: on their thread, over the `sim_thread` setting (off by default); the offscreen run ignores it.";
@@ -501,6 +529,7 @@ flags! {
     OMSI_TOMORROW_API_KEY: Text, Setup, Use, "private key file", "Private Tomorrow.io API key for map-selected weather; never include it in map configs or logs.";
     OMSI_TOMORROW_CACHE_DIR: Text, Setup, Use, "settings/weather-cache", "Private Tomorrow.io response cache and shared request-budget directory.";
     OMSI_TOMORROW_KEY_FILE: Text, Setup, Use, "settings/tomorrow-api-key.txt", "Private text file containing the player's Tomorrow.io API key.";
+    OMSI_TONEMAP: Text, Tuning, Once, "agx", "natural, agx or neutral: Enhanced's tone curve (the old natural curve, AgX, Khronos PBR Neutral).";
     OMSI_TONE_CONTRAST: Text, Tuning, Once, "1", "day[,night]: tone mapping contrast.";
     OMSI_TOUCH: Bool, Test, Use, "off", "The on-screen touch controls on a computer.";
     OMSI_TRACE_AI: Text, Debug, Use, "-", "CSV: every AI car's pose, steering and speed every frame.";
@@ -546,7 +575,9 @@ mod tests {
     }
 
     fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
         for e in rd.flatten() {
             let p = e.path();
             if p.is_dir() {
@@ -572,16 +603,26 @@ mod tests {
             if rel == Path::new("omsi-cfg/src/flags.rs") {
                 continue;
             }
-            let krate = rel.components().next().map(|c| c.as_os_str().to_string_lossy().into_owned()).unwrap_or_default();
+            let krate = rel
+                .components()
+                .next()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .unwrap_or_default();
             for line in std::fs::read_to_string(&f).unwrap_or_default().lines() {
                 let code = code_part(line);
                 for (pat, close) in [("\"OMSI_", true), ("flags::OMSI_", false)] {
                     let mut rest = code;
                     while let Some(i) = rest.find(pat) {
                         let name = &rest[i + pat.len() - 5..];
-                        let end = name.find(|c: char| !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')).unwrap_or(name.len());
+                        let end = name
+                            .find(|c: char| {
+                                !(c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+                            })
+                            .unwrap_or(name.len());
                         if end > 5 && (!close || name[end..].starts_with('"')) {
-                            out.entry(name[..end].to_string()).or_default().insert(krate.clone());
+                            out.entry(name[..end].to_string())
+                                .or_default()
+                                .insert(krate.clone());
                         }
                         rest = &name[end..];
                     }
@@ -606,35 +647,6 @@ mod tests {
         line
     }
 
-    fn markdown(crates: &BTreeMap<String, BTreeSet<String>>) -> String {
-        let mut s = String::from(
-            "# OMSI_* environment variables\n\n\
-             Generated from `crates/omsi-cfg/src/flags.rs` - edit the list there and run\n\
-             `OMSI_FLAGS_BLESS=1 cargo test -p omsi-cfg flags` to write this file again.\n\n\
-             - **Type** - `bool`: on when set to anything (`0` and empty included); `num`: the whole value parsed as a number;\n  \
-             `text`: a path, a list or a mode.\n\
-             - **Kind** - `debug`: more logging, dumps and traces only; `test`: drives a test, check pass or offscreen run, or injects\n  \
-             a fault; `switch`: A/B or kill switch; `tuning`: a real setting for one run; `setup`: folders, programs, URLs;\n  \
-             `build`: read when compiling.\n\
-             - **Read** - `once` per process; `use`: each time the code passing it runs (start-up, loading, per step);\n  \
-             `frame`: every frame in `Renderer::render_inner`; `test`: tests and examples only.\n\n\
-             Values are read once per process and cached (`omsi_cfg::env`): changing the environment of a running game has no\n\
-             effect. On Android, `openOMSI/env.txt` holds `NAME=value` lines that are set before the game starts.\n\n",
-        );
-        let kinds = [(Kind::Debug, "Debug output"), (Kind::Test, "Test hooks"), (Kind::Switch, "A/B and kill switches"), (Kind::Tuning, "Tuning"), (Kind::Setup, "Set-up"), (Kind::Build, "Build")];
-        for (kind, title) in kinds {
-            s += &format!("## {title}\n\n| Name | Type | Default | Read | Crates | Description |\n|---|---|---|---|---|---|\n");
-            for f in ALL.iter().filter(|f| f.kind == kind) {
-                let c = crates.get(f.name).map(|c| c.iter().map(|k| k.trim_start_matches("omsi-")).collect::<Vec<_>>().join(", ")).unwrap_or_default();
-                let ty = format!("{:?}", f.ty).to_lowercase();
-                let read = format!("{:?}", f.read).to_lowercase();
-                s += &format!("| `{}` | {ty} | {} | {read} | {c} | {} |\n", f.name, f.default.replace('|', "\\|"), f.doc.replace('|', "\\|"));
-            }
-            s += "\n";
-        }
-        s
-    }
-
     #[test]
     fn flags_sorted_and_unique() {
         for w in ALL.windows(2) {
@@ -648,29 +660,53 @@ mod tests {
     fn flags_match_source() {
         let src = names_in_source();
         let missing: Vec<&String> = src.keys().filter(|n| find(n).is_none()).collect();
-        assert!(missing.is_empty(), "OMSI_* names in the code but not in omsi_cfg::flags (add them there): {missing:?}");
-        let unused: Vec<&str> = ALL.iter().map(|f| f.name).filter(|n| !src.contains_key(*n)).collect();
-        assert!(unused.is_empty(), "flags no code names any more (remove them from omsi_cfg::flags): {unused:?}");
+        assert!(
+            missing.is_empty(),
+            "OMSI_* names in the code but not in omsi_cfg::flags (add them there): {missing:?}"
+        );
+        let unused: Vec<&str> = ALL
+            .iter()
+            .map(|f| f.name)
+            .filter(|n| !src.contains_key(*n))
+            .collect();
+        assert!(
+            unused.is_empty(),
+            "flags no code names any more (remove them from omsi_cfg::flags): {unused:?}"
+        );
     }
 
     #[test]
     fn flags_doc_up_to_date() {
-        let want = markdown(&names_in_source());
-        let path = repo().join("docs/DEBUG_FLAGS.md");
-        if std::env::var_os("OMSI_FLAGS_BLESS").is_some() {
-            std::fs::write(&path, &want).unwrap();
-        }
-        let have = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
-        assert!(have == want, "docs/DEBUG_FLAGS.md is out of date: OMSI_FLAGS_BLESS=1 cargo test -p omsi-cfg flags");
+        // docs/DEBUG_FLAGS.md is written by hand, grouped by area: every name the code
+        // reads must have its row there
+        let doc = std::fs::read_to_string(repo().join("docs/DEBUG_FLAGS.md")).unwrap_or_default();
+        let missing: Vec<String> = names_in_source()
+            .into_keys()
+            .filter(|n| !doc.contains(&format!("`{n}`")))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "docs/DEBUG_FLAGS.md does not document {missing:?}"
+        );
     }
 
     #[test]
     fn cached_as_env() {
         // the flag reads through `env`'s cache: what `env` saw first is what the flag sees
         unsafe { std::env::set_var("OMSI_FLAGS_TEST_PROBE", "2.5") };
-        let f = Flag::new("OMSI_FLAGS_TEST_PROBE", Ty::Num, Kind::Test, Read::Test, "-", "");
+        let f = Flag::new(
+            "OMSI_FLAGS_TEST_PROBE",
+            Ty::Num,
+            Kind::Test,
+            Read::Test,
+            "-",
+            "",
+        );
         let f: &'static Flag = Box::leak(Box::new(f));
-        assert_eq!(crate::env::var("OMSI_FLAGS_TEST_PROBE").as_deref(), Ok("2.5"));
+        assert_eq!(
+            crate::env::var("OMSI_FLAGS_TEST_PROBE").as_deref(),
+            Ok("2.5")
+        );
         unsafe { std::env::set_var("OMSI_FLAGS_TEST_PROBE", "7") };
         assert!(f.is_set());
         assert_eq!(f.var(), Some("2.5"));

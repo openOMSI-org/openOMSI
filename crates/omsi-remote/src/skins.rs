@@ -30,22 +30,39 @@ fn root(parent: &mut [usize], mut i: usize) -> usize {
     i
 }
 
-pub(crate) fn front_face(positions: &[Vec3], uvs: &[Vec2], indices: &[u32], ranges: &[(u32, u32, u32)]) -> Option<Face> {
+pub(crate) fn front_face(
+    positions: &[Vec3],
+    uvs: &[Vec2],
+    indices: &[u32],
+    ranges: &[(u32, u32, u32)],
+) -> Option<Face> {
     let mut tris = Vec::new();
     for &(first, count, slot) in ranges {
-        let Some(list) = indices.get(first as usize..first.saturating_add(count) as usize) else { continue };
+        let Some(list) = indices.get(first as usize..first.saturating_add(count) as usize) else {
+            continue;
+        };
         for t in list.chunks_exact(3) {
             let v = [t[0], t[1], t[2]].map(|i| i as usize);
             if v.iter().any(|&i| i >= positions.len() || i >= uvs.len()) {
                 continue;
             }
-            let cross = (positions[v[1]] - positions[v[0]]).cross(positions[v[2]] - positions[v[0]]);
+            let cross =
+                (positions[v[1]] - positions[v[0]]).cross(positions[v[2]] - positions[v[0]]);
             let area = cross.length() * 0.5;
             if area <= f32::EPSILON {
                 continue;
             }
             let n = cross / (area * 2.0);
-            tris.push(Tri { v, key: ((n.x * 4.0).round() as i32, (n.y * 4.0).round() as i32, (n.z * 4.0).round() as i32, slot), area });
+            tris.push(Tri {
+                v,
+                key: (
+                    (n.x * 4.0).round() as i32,
+                    (n.y * 4.0).round() as i32,
+                    (n.z * 4.0).round() as i32,
+                    slot,
+                ),
+                area,
+            });
         }
     }
     let mut by_side: HashMap<(i32, i32, i32, u32), f32> = HashMap::new();
@@ -57,12 +74,19 @@ pub(crate) fn front_face(positions: &[Vec3], uvs: &[Vec2], indices: &[u32], rang
     let mut uv_of: HashMap<(i64, i64), usize> = HashMap::new();
     for t in tris.iter().filter(|t| t.key == side) {
         for &i in &t.v {
-            let k = ((uvs[i].x * 8192.0).round() as i64, (uvs[i].y * 8192.0).round() as i64);
+            let k = (
+                (uvs[i].x * 8192.0).round() as i64,
+                (uvs[i].y * 8192.0).round() as i64,
+            );
             let first = *uv_of.entry(k).or_insert(i);
             let (a, b) = (root(&mut parent, first), root(&mut parent, i));
             parent[a] = b;
         }
-        let (a, b, c) = (root(&mut parent, t.v[0]), root(&mut parent, t.v[1]), root(&mut parent, t.v[2]));
+        let (a, b, c) = (
+            root(&mut parent, t.v[0]),
+            root(&mut parent, t.v[1]),
+            root(&mut parent, t.v[2]),
+        );
         parent[a] = c;
         parent[b] = c;
     }
@@ -72,14 +96,23 @@ pub(crate) fn front_face(positions: &[Vec3], uvs: &[Vec2], indices: &[u32], rang
         let lo = uvs[t.v[0]].min(uvs[t.v[1]]).min(uvs[t.v[2]]);
         let hi = uvs[t.v[0]].max(uvs[t.v[1]]).max(uvs[t.v[2]]);
         let p = t.v.map(|i| positions[i]);
-        let f = islands.entry(r).or_insert(Face { slot: side.3, lo, hi, lo3: p[0], hi3: p[0], area: 0.0 });
+        let f = islands.entry(r).or_insert(Face {
+            slot: side.3,
+            lo,
+            hi,
+            lo3: p[0],
+            hi3: p[0],
+            area: 0.0,
+        });
         f.lo = f.lo.min(lo);
         f.hi = f.hi.max(hi);
         f.lo3 = f.lo3.min(p[0]).min(p[1]).min(p[2]);
         f.hi3 = f.hi3.max(p[0]).max(p[1]).max(p[2]);
         f.area += t.area;
     }
-    islands.into_values().max_by(|a, b| a.area.total_cmp(&b.area))
+    islands
+        .into_values()
+        .max_by(|a, b| a.area.total_cmp(&b.area))
 }
 
 fn region(img: &omsi_texture::Image, lo: Vec2, hi: Vec2) -> Option<image::RgbaImage> {
@@ -121,15 +154,27 @@ fn png(mut part: image::RgbaImage) -> Option<Vec<u8>> {
     let (pw, ph) = part.dimensions();
     if pw.max(ph) > MAX_SIDE {
         let k = MAX_SIDE as f32 / pw.max(ph) as f32;
-        part = image::imageops::resize(&part, ((pw as f32 * k) as u32).max(1), ((ph as f32 * k) as u32).max(1), image::imageops::FilterType::Triangle);
+        part = image::imageops::resize(
+            &part,
+            ((pw as f32 * k) as u32).max(1),
+            ((ph as f32 * k) as u32).max(1),
+            image::imageops::FilterType::Triangle,
+        );
     }
     let mut out = Vec::new();
-    image::DynamicImage::ImageRgba8(part).write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png).ok()?;
+    image::DynamicImage::ImageRgba8(part)
+        .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+        .ok()?;
     Some(out)
 }
 
 fn lit(day: &image::RgbaImage, night: &image::RgbaImage) -> Option<image::RgbaImage> {
-    let night = image::imageops::resize(night, day.width(), day.height(), image::imageops::FilterType::Triangle);
+    let night = image::imageops::resize(
+        night,
+        day.width(),
+        day.height(),
+        image::imageops::FilterType::Triangle,
+    );
     let mut out = day.clone();
     let mut glow = 0u64;
     for (o, n) in out.pixels_mut().zip(night.pixels()) {
@@ -143,7 +188,10 @@ fn lit(day: &image::RgbaImage, night: &image::RgbaImage) -> Option<image::RgbaIm
 
 fn generated(name: &str) -> bool {
     let n = name.trim().to_ascii_lowercase().replace('\\', "/");
-    let stem = Path::new(&n).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let stem = Path::new(&n)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
     stem.is_empty() || stem == "null" || stem.starts_with("reflexion")
 }
 
@@ -158,16 +206,35 @@ impl Textures<'_> {
         if generated(name) {
             return None;
         }
-        let name = self.subst.get(&name.trim().to_ascii_lowercase()).cloned().unwrap_or_else(|| name.to_string());
+        let name = self
+            .subst
+            .get(&name.trim().to_ascii_lowercase())
+            .cloned()
+            .unwrap_or_else(|| name.to_string());
         let path = omsi_texture::find_texture(&name, &self.dirs)?;
-        self.decoded.entry(path.clone()).or_insert_with(|| omsi_texture::decode_file(&path).ok().map(Arc::new)).clone()
+        self.decoded
+            .entry(path.clone())
+            .or_insert_with(|| omsi_texture::decode_file(&path).ok().map(Arc::new))
+            .clone()
     }
 }
 
 fn night_name(vm: &omsi_sim::vehicle::VehicleMesh, slot: usize) -> Option<String> {
-    let mine: Vec<&omsi_model::MaterialDef> = vm.overrides.iter().filter(|o| omsi_sim::vehicle::override_slot(&vm.materials, o) == Some(slot)).collect();
-    let pick = |o: &omsi_model::MaterialDef| o.lightmaps.last().map(|l| l.0.clone()).or_else(|| o.nightmap.clone());
-    mine.iter().filter(|o| o.item).find_map(|o| pick(o)).or_else(|| mine.iter().find_map(|o| pick(o)))
+    let mine: Vec<&omsi_model::MaterialDef> = vm
+        .overrides
+        .iter()
+        .filter(|o| omsi_sim::vehicle::override_slot(&vm.materials, o) == Some(slot))
+        .collect();
+    let pick = |o: &omsi_model::MaterialDef| {
+        o.lightmaps
+            .last()
+            .map(|l| l.0.clone())
+            .or_else(|| o.nightmap.clone())
+    };
+    mine.iter()
+        .filter(|o| o.item)
+        .find_map(|o| pick(o))
+        .or_else(|| mine.iter().find_map(|o| pick(o)))
 }
 
 pub fn extract(ty: &VehicleType, root: &Path, scheme: Option<usize>) -> Vec<(String, Vec<u8>)> {
@@ -183,21 +250,49 @@ pub fn extract(ty: &VehicleType, root: &Path, scheme: Option<usize>) -> Vec<(Str
     };
     let mut best: HashMap<String, (f32, Vec<u8>, Option<Vec<u8>>)> = HashMap::new();
     for (i, vm) in ty.meshes.iter().enumerate() {
-        let Some(def) = ty.model.meshes.get(vm.def_index) else { continue };
-        let Some(event) = def.mouse_event.as_deref().map(str::trim).filter(|e| !e.is_empty()) else { continue };
-        let Some(data) = ty.mesh_data(i) else { continue };
-        let Some(face) = front_face(&data.positions, &data.uvs, &data.indices, &data.ranges) else { continue };
+        let Some(def) = ty.model.meshes.get(vm.def_index) else {
+            continue;
+        };
+        let Some(event) = def
+            .mouse_event
+            .as_deref()
+            .map(str::trim)
+            .filter(|e| !e.is_empty())
+        else {
+            continue;
+        };
+        let Some(data) = ty.mesh_data(i) else {
+            continue;
+        };
+        let Some(face) = front_face(&data.positions, &data.uvs, &data.indices, &data.ranges) else {
+            continue;
+        };
         if best.get(event).is_some_and(|(area, ..)| *area >= face.area) {
             continue;
         }
         let slot = face.slot as usize;
-        let Some(material) = vm.materials.get(slot) else { continue };
-        let scripted = vm.overrides.iter().any(|o| omsi_sim::vehicle::override_slot(&vm.materials, o) == Some(slot) && (o.use_script_texture.is_some() || o.use_text_texture.is_some()));
+        let Some(material) = vm.materials.get(slot) else {
+            continue;
+        };
+        let scripted = vm.overrides.iter().any(|o| {
+            omsi_sim::vehicle::override_slot(&vm.materials, o) == Some(slot)
+                && (o.use_script_texture.is_some() || o.use_text_texture.is_some())
+        });
         if scripted || ty.texchange(&material.texture).is_some() {
             continue;
         }
-        let Some(day) = tex.get(&material.texture).and_then(|img| region(&img, face.lo, face.hi)).filter(|d| !plain(d)) else { continue };
-        let night = night_name(vm, slot).and_then(|n| tex.get(&n)).and_then(|img| region(&img, face.lo, face.hi)).and_then(|n| lit(&day, &n)).and_then(png);
+        let Some(day) = tex
+            .get(&material.texture)
+            .and_then(|img| region(&img, face.lo, face.hi))
+            .filter(|d| !plain(d))
+        else {
+            continue;
+        };
+        let night = night_name(vm, slot)
+            .and_then(|n| tex.get(&n))
+            .and_then(|img| region(&img, face.lo, face.hi))
+            .and_then(|n| lit(&day, &n))
+            .and_then(png);
         if let Some(day) = png(day) {
             best.insert(event.to_string(), (face.area, day, night));
         }
@@ -220,14 +315,28 @@ mod tests {
     #[test]
     fn the_largest_island_of_the_largest_flat_side_is_the_face() {
         let positions = vec![
-            Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 0.0), Vec3::new(0.0, 1.0, 0.0),
-            Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.5, 0.0, 0.0), Vec3::new(2.5, 0.5, 0.0),
-            Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, -0.1),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::new(2.0, 0.0, 0.0),
+            Vec3::new(2.5, 0.0, 0.0),
+            Vec3::new(2.5, 0.5, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, -0.1),
         ];
         let uvs = vec![
-            Vec2::new(0.25, 0.25), Vec2::new(0.5, 0.25), Vec2::new(0.5, 0.5), Vec2::new(0.25, 0.5),
-            Vec2::new(0.7, 0.7), Vec2::new(0.8, 0.7), Vec2::new(0.8, 0.8),
-            Vec2::new(0.9, 0.9), Vec2::new(1.0, 0.9), Vec2::new(1.0, 1.0),
+            Vec2::new(0.25, 0.25),
+            Vec2::new(0.5, 0.25),
+            Vec2::new(0.5, 0.5),
+            Vec2::new(0.25, 0.5),
+            Vec2::new(0.7, 0.7),
+            Vec2::new(0.8, 0.7),
+            Vec2::new(0.8, 0.8),
+            Vec2::new(0.9, 0.9),
+            Vec2::new(1.0, 0.9),
+            Vec2::new(1.0, 1.0),
         ];
         let indices = vec![0, 1, 2, 0, 2, 3, 4, 5, 6, 7, 8, 9];
         let f = front_face(&positions, &uvs, &indices, &[(0, 12, 0)]).unwrap();
@@ -242,9 +351,16 @@ mod tests {
                 rgba[(y * 64 + x) * 4] = 255;
             }
         }
-        let img = omsi_texture::Image { width: 64, height: 64, rgba, has_alpha: false };
+        let img = omsi_texture::Image {
+            width: 64,
+            height: 64,
+            rgba,
+            has_alpha: false,
+        };
         let part = region(&img, Vec2::new(1.25, 0.25), Vec2::new(1.5, 0.5)).unwrap();
-        let back = image::load_from_memory(&png(part).unwrap()).unwrap().to_rgba8();
+        let back = image::load_from_memory(&png(part).unwrap())
+            .unwrap()
+            .to_rgba8();
         assert_eq!(back.dimensions(), (16, 16));
         assert!(back.pixels().all(|p| p[0] == 255 && p[3] == 255));
         assert!(region(&img, Vec2::new(0.0, 0.0), Vec2::new(0.1, 0.1)).is_none());
@@ -253,8 +369,16 @@ mod tests {
 
     #[test]
     fn black_or_flat_faces_are_left_out() {
-        assert!(plain(&image::RgbaImage::from_pixel(8, 8, image::Rgba([5, 5, 5, 255]))));
-        assert!(plain(&image::RgbaImage::from_pixel(8, 8, image::Rgba([128, 128, 128, 255]))));
+        assert!(plain(&image::RgbaImage::from_pixel(
+            8,
+            8,
+            image::Rgba([5, 5, 5, 255])
+        )));
+        assert!(plain(&image::RgbaImage::from_pixel(
+            8,
+            8,
+            image::Rgba([128, 128, 128, 255])
+        )));
         let mut pictogram = image::RgbaImage::from_pixel(8, 8, image::Rgba([30, 30, 30, 255]));
         for x in 2..6 {
             pictogram.put_pixel(x, 4, image::Rgba([240, 240, 240, 255]));
@@ -268,6 +392,9 @@ mod tests {
         let dark = image::RgbaImage::from_pixel(4, 4, image::Rgba([0, 0, 0, 255]));
         assert!(lit(&day, &dark).is_none());
         let glow = image::RgbaImage::from_pixel(4, 4, image::Rgba([250, 0, 0, 255]));
-        assert_eq!(lit(&day, &glow).unwrap().get_pixel(0, 0).0, [255, 40, 40, 255]);
+        assert_eq!(
+            lit(&day, &glow).unwrap().get_pixel(0, 0).0,
+            [255, 40, 40, 255]
+        );
     }
 }

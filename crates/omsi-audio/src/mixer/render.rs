@@ -4,12 +4,12 @@
 //! back through another: in the callback nothing waits for a lock and nothing is allocated
 //! or freed (a block mixed late is a click, and the allocator may hold a lock).
 
-use super::{distance_gain, pan_gains, Clip, Listener, VoiceId, VoiceParams, MAX_VOICES};
+use super::{Clip, Listener, VoiceId, VoiceParams, distance_gain, pan_gains};
 use crate::spsc;
 use glam::Vec3;
 use std::cell::UnsafeCell;
-use std::sync::atomic::{fence, AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering, fence};
 
 pub(super) struct Voice {
     pub(super) id: VoiceId,
@@ -37,7 +37,13 @@ pub(super) struct Voice {
 
 impl Voice {
     /// A voice on `clip` (or on `stream`), playing from frame `start`.
-    pub(super) fn new(id: VoiceId, clip: Arc<Clip>, stream: Option<Arc<crate::stream::StreamBuf>>, params: VoiceParams, start: f64) -> Voice {
+    pub(super) fn new(
+        id: VoiceId,
+        clip: Arc<Clip>,
+        stream: Option<Arc<crate::stream::StreamBuf>>,
+        params: VoiceParams,
+        start: f64,
+    ) -> Voice {
         let tap = stream.as_ref().and_then(|s| s.take_tap());
         Voice {
             id,
@@ -56,17 +62,17 @@ impl Voice {
     }
 }
 
-/// The voice list and the mixer's scratch lists, made on the game's side with room for
-/// `cap` voices: the mixer moves into a bigger one before it would have to grow its own.
+/// The voice list, made on the game's side with room for `cap` voices: the mixer moves
+/// into a bigger one before it would have to grow its own.
 pub(super) struct Room {
     pub(super) voices: Vec<Voice>,
-    ranked: Vec<(bool, f32, usize)>,
-    keep: Vec<bool>,
 }
 
 impl Room {
     pub(super) fn with_capacity(cap: usize) -> Room {
-        Room { voices: Vec::with_capacity(cap), ranked: Vec::with_capacity(cap), keep: Vec::with_capacity(cap) }
+        Room {
+            voices: Vec::with_capacity(cap),
+        }
     }
 }
 
@@ -80,7 +86,11 @@ pub(super) enum Cmd {
     Params(VoiceId, VoiceParams, std::time::Instant, u64),
     Stop(VoiceId),
     /// The bus radio's effects on a stream voice, with new ones made ready in case it has none.
-    RadioFx(VoiceId, crate::radio_fx::RadioFxParams, Option<Box<crate::radio_fx::RadioFx>>),
+    RadioFx(
+        VoiceId,
+        crate::radio_fx::RadioFxParams,
+        Option<Box<crate::radio_fx::RadioFx>>,
+    ),
     /// Room for more voices (see [`Room`]).
     Grow(Room),
 }
@@ -105,7 +115,10 @@ pub(super) struct ListenerCell {
 
 impl ListenerCell {
     fn new(l: &Listener) -> ListenerCell {
-        let c = ListenerCell { seq: AtomicU32::new(0), v: Default::default() };
+        let c = ListenerCell {
+            seq: AtomicU32::new(0),
+            v: Default::default(),
+        };
         c.store(l);
         c
     }
@@ -116,8 +129,19 @@ impl ListenerCell {
         self.seq.store(s.wrapping_add(1), Ordering::Relaxed);
         fence(Ordering::Release);
         let n = [
-            l.position.x, l.position.y, l.position.z, l.forward.x, l.forward.y, l.forward.z, l.right.x, l.right.y, l.right.z, l.master,
-            l.reverb_time, l.reverb_mix, 0.0,
+            l.position.x,
+            l.position.y,
+            l.position.z,
+            l.forward.x,
+            l.forward.y,
+            l.forward.z,
+            l.right.x,
+            l.right.y,
+            l.right.z,
+            l.master,
+            l.reverb_time,
+            l.reverb_mix,
+            0.0,
         ];
         for (a, x) in self.v.iter().zip(n) {
             a.store(x.to_bits(), Ordering::Relaxed);
@@ -128,7 +152,8 @@ impl ListenerCell {
     pub(super) fn load(&self) -> Listener {
         loop {
             let s1 = self.seq.load(Ordering::Acquire);
-            let n: [f32; 13] = std::array::from_fn(|i| f32::from_bits(self.v[i].load(Ordering::Relaxed)));
+            let n: [f32; 13] =
+                std::array::from_fn(|i| f32::from_bits(self.v[i].load(Ordering::Relaxed)));
             fence(Ordering::Acquire);
             if s1 & 1 == 0 && self.seq.load(Ordering::Relaxed) == s1 {
                 return Listener {
@@ -216,7 +241,10 @@ impl Drop for Held<'_> {
 
 impl MixerCell {
     pub(super) fn new(m: Mixer) -> MixerCell {
-        MixerCell { busy: AtomicBool::new(false), mixer: UnsafeCell::new(m) }
+        MixerCell {
+            busy: AtomicBool::new(false),
+            mixer: UnsafeCell::new(m),
+        }
     }
 
     /// `f` on the mixer, unless somebody else holds it.
@@ -242,9 +270,6 @@ pub(super) struct Mixer {
     /// The voices as the mixer plays them, by rising id (each is put in by the queue, where
     /// its id is drawn).
     pub(super) voices: Vec<Voice>,
-    /// Scratch of the voice limit (see `render`), with room for every voice.
-    ranked: Vec<(bool, f32, usize)>,
-    keep: Vec<bool>,
     /// The echo of an underpass, fed from the mix.
     pub(super) reverb: Reverb,
     /// The master limiter's gain now (1 = none).
@@ -257,11 +282,23 @@ pub(super) struct Mixer {
 impl Mixer {
     /// A mixer with room for `room` voices, taking its commands from `cmds` and handing
     /// back through `back`; its reverb ready for `rate` and `channels`.
-    pub(super) fn new(shared: Arc<Shared>, cmds: spsc::Consumer<Cmd>, back: spsc::Producer<Back>, room: usize) -> Mixer {
+    pub(super) fn new(
+        shared: Arc<Shared>,
+        cmds: spsc::Consumer<Cmd>,
+        back: spsc::Producer<Back>,
+        room: usize,
+    ) -> Mixer {
         let rate = shared.sample_rate.load(Ordering::Relaxed);
         let ch = shared.channels.load(Ordering::Relaxed);
-        let Room { voices, ranked, keep } = Room::with_capacity(room);
-        Mixer { voices, ranked, keep, reverb: Reverb::ready(rate, ch), limiter: 1.0, cmds, back, shared }
+        let Room { voices } = Room::with_capacity(room);
+        Mixer {
+            voices,
+            reverb: Reverb::ready(rate, ch),
+            limiter: 1.0,
+            cmds,
+            back,
+            shared,
+        }
     }
 
     fn give_back(&mut self, b: Back) {
@@ -284,7 +321,10 @@ impl Mixer {
     pub(super) fn take_in(&mut self, listener: Vec3) {
         // (by rising id: a binary search; a voice put in some other way is still found)
         fn find(voices: &[Voice], id: VoiceId) -> Option<usize> {
-            voices.binary_search_by_key(&id, |v| v.id).ok().or_else(|| voices.iter().position(|v| v.id == id))
+            voices
+                .binary_search_by_key(&id, |v| v.id)
+                .ok()
+                .or_else(|| voices.iter().position(|v| v.id == id))
         }
         let mut taken = None;
         while let Some(cmd) = self.cmds.pop() {
@@ -292,7 +332,13 @@ impl Mixer {
                 Cmd::Play(v) => self.voices.push(v),
                 Cmd::Params(id, params, at, seq) => {
                     if let Some(k) = find(&self.voices, id) {
-                        apply_params(&mut self.voices[k], params, at, listener, self.shared.doppler.load(Ordering::Relaxed));
+                        apply_params(
+                            &mut self.voices[k],
+                            params,
+                            at,
+                            listener,
+                            self.shared.doppler.load(Ordering::Relaxed),
+                        );
                     }
                     taken = Some(seq);
                 }
@@ -323,8 +369,6 @@ impl Mixer {
                 Cmd::Grow(mut room) => {
                     room.voices.append(&mut self.voices);
                     std::mem::swap(&mut self.voices, &mut room.voices);
-                    std::mem::swap(&mut self.ranked, &mut room.ranked);
-                    std::mem::swap(&mut self.keep, &mut room.keep);
                     self.give_back(Back::Room(room));
                 }
             }
@@ -343,49 +387,16 @@ impl Mixer {
         let ch = self.shared.channels.load(Ordering::Relaxed).max(1);
         let frames = out.len() / ch;
         let rate = self.shared.sample_rate.load(Ordering::Relaxed).max(1);
-        let dev_rate = rate as f64;
-        // More voices than OMSI's `[sound_maxcount]` (200 by default): as Omsi.exe, the
-        // nearest sounds are kept and the far ones cut - by distance, which does not change
-        // from one block to the next, not by loudness, which follows every volume curve and
-        // cut voices in and out at the edge of the list (sounds breaking off in traffic).
-        // `[important]` ones and the non-spatial ones (the driven bus heard from inside, the
-        // interface) are never cut. Voices left out still advance in time, so a loop comes
-        // back at the right phase.
+        // (every voice is mixed: Omsi.exe cuts whole sound packs for `[sound_maxcount]`,
+        // before they play - see `crate::packs`)
         let stereo = self.shared.stereo.load(Ordering::Relaxed) as f32;
-        let Mixer { voices, ranked, keep, .. } = self;
-        let limited = voices.iter().filter(|v| !v.finished && v.stream.is_none()).count() > MAX_VOICES;
-        if limited {
-            ranked.clear();
-            ranked.extend(
-                voices
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, v)| !v.finished && v.stream.is_none())
-                    .map(|(i, v)| {
-                        let near = v.params.position.map_or(0.0, |p| (p - listener.position).length());
-                        (v.params.important || v.params.position.is_none(), -near, i)
-                    }),
-            );
-            // (in place, so nothing is allocated; the index last keeps the order a stable
-            // sort gives)
-            ranked.sort_unstable_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.total_cmp(&a.1)).then(a.2.cmp(&b.2)));
-            keep.clear();
-            keep.resize(voices.len(), false);
-            for &(_, _, i) in ranked.iter().take(MAX_VOICES) {
-                keep[i] = true;
-            }
-        }
-        for (i, v) in voices.iter_mut().enumerate() {
+        for v in self.voices.iter_mut() {
             if v.finished {
-                continue;
-            }
-            if v.stream.is_none() && limited && !keep[i] {
-                skip_clip(v, frames, dev_rate);
                 continue;
             }
             mix_voice(v, out, ch, frames, rate, &listener, stereo);
         }
-        if voices.iter().any(|v| v.finished) {
+        if self.voices.iter().any(|v| v.finished) {
             // (the ended voices go back to the game, which lets go of their clips; while
             // its ring is full they stay, finished, for a later block)
             let mut room = self.back.slots();
@@ -410,7 +421,13 @@ impl Mixer {
             }
         }
         if listener.reverb_mix > 0.001 && listener.reverb_time > 0.05 {
-            self.reverb.process(out, ch, rate, listener.reverb_time.min(3.0), listener.reverb_mix.min(1.0));
+            self.reverb.process(
+                out,
+                ch,
+                rate,
+                listener.reverb_time.min(3.0),
+                listener.reverb_mix.min(1.0),
+            );
         }
         // The master limiter: a busy street sums past full scale, and cut off hard there the
         // sound crackled and squeaked. Loud moments are turned down (at once) and back up
@@ -420,9 +437,15 @@ impl Mixer {
             let frames = (out.len() / ch.max(1)).max(1);
             let release = (-1.0 / (0.5 * rate as f32)).exp();
             for f in 0..frames {
-                let peak = (0..ch).map(|c| out[f * ch + c].abs()).fold(0.0f32, f32::max);
+                let peak = (0..ch)
+                    .map(|c| out[f * ch + c].abs())
+                    .fold(0.0f32, f32::max);
                 let want = if peak * *g > 0.9 { 0.9 / peak } else { 1.0 };
-                *g = if want < *g { want } else { want + (*g - want) * release };
+                *g = if want < *g {
+                    want
+                } else {
+                    want + (*g - want) * release
+                };
                 for c in 0..ch {
                     out[f * ch + c] = soft_clip(out[f * ch + c] * *g);
                 }
@@ -436,7 +459,15 @@ impl Mixer {
 }
 
 /// Voice `v` mixed into `out` (`frames` frames of `ch` channels at `rate`).
-fn mix_voice(v: &mut Voice, out: &mut [f32], ch: usize, frames: usize, rate: u32, listener: &Listener, stereo: f32) {
+fn mix_voice(
+    v: &mut Voice,
+    out: &mut [f32],
+    ch: usize,
+    frames: usize,
+    rate: u32,
+    listener: &Listener,
+    stereo: f32,
+) {
     let dev_rate = rate as f64;
     // spatialisation
     let (mut left, mut right) = (1.0f32, 1.0f32);
@@ -566,8 +597,17 @@ fn mix_voice(v: &mut Voice, out: &mut [f32], ch: usize, frames: usize, rate: u32
 /// Parameters for voice `v`, given at `now` with the listener at `listener`: the Doppler
 /// shift from how fast the distance to the listener changes (the bus's own sounds move with
 /// the listener and keep their pitch), when `doppler` (OMSI's `sound_doppler`) is on.
-pub(super) fn apply_params(v: &mut Voice, params: VoiceParams, now: std::time::Instant, listener: Vec3, doppler: bool) {
-    if let (Some(p), true) = (params.position.filter(|p| p.is_finite()), params.doppler && doppler) {
+pub(super) fn apply_params(
+    v: &mut Voice,
+    params: VoiceParams,
+    now: std::time::Instant,
+    listener: Vec3,
+    doppler: bool,
+) {
+    if let (Some(p), true) = (
+        params.position.filter(|p| p.is_finite()),
+        params.doppler && doppler,
+    ) {
         let dist = (p - listener).length();
         let (last, at, factor) = v.doppler;
         let mut f = factor;
@@ -589,26 +629,6 @@ pub(super) fn apply_params(v: &mut Voice, params: VoiceParams, now: std::time::I
     v.params = params;
 }
 
-/// Move a clip voice on by `frames` output frames without mixing it (looping or ending as
-/// it would have).
-fn skip_clip(v: &mut Voice, frames: usize, dev_rate: f64) {
-    let nframes = v.clip.frames();
-    if nframes == 0 {
-        v.finished = true;
-        return;
-    }
-    let step = (v.params.pitch * v.doppler.2).max(0.01) as f64 * v.clip.sample_rate as f64 / dev_rate;
-    v.pos += step * frames as f64;
-    v.cur_gain = 0.0;
-    if v.pos >= nframes as f64 {
-        if v.params.looping {
-            v.pos %= nframes as f64;
-        } else {
-            v.finished = true;
-        }
-    }
-}
-
 /// A small Schroeder reverb (four combs in parallel, two all-passes in series, per channel)
 /// for the echo under a bridge: the combs' feedback gives the reverberation time.
 #[derive(Default)]
@@ -625,8 +645,28 @@ impl Reverb {
     /// A reverb with its delay lines made for `rate` and `ch` channels (silent).
     pub(super) fn ready(rate: u32, ch: usize) -> Reverb {
         Reverb {
-            lines: (0..ch).map(|c| Self::COMBS.iter().map(|d| (vec![0.0; ((d + c as f32 * 0.0011) * rate as f32) as usize + 1], 0, 0.0)).collect()).collect(),
-            allpass: (0..ch).map(|_| Self::ALLPASS.iter().map(|d| (vec![0.0; (d * rate as f32) as usize + 1], 0)).collect()).collect(),
+            lines: (0..ch)
+                .map(|c| {
+                    Self::COMBS
+                        .iter()
+                        .map(|d| {
+                            (
+                                vec![0.0; ((d + c as f32 * 0.0011) * rate as f32) as usize + 1],
+                                0,
+                                0.0,
+                            )
+                        })
+                        .collect()
+                })
+                .collect(),
+            allpass: (0..ch)
+                .map(|_| {
+                    Self::ALLPASS
+                        .iter()
+                        .map(|d| (vec![0.0; (d * rate as f32) as usize + 1], 0))
+                        .collect()
+                })
+                .collect(),
             rate,
         }
     }

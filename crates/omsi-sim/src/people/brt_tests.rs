@@ -29,9 +29,9 @@ pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
         coupling_front_character: trailer.map(|kind| [30.0, -10.0, 10.0, kind]),
         ..def.clone()
     };
-    let mut parts = vec![(&def, Vec3::ZERO, f32::INFINITY)];
+    let mut parts = vec![(&def, Vec3::ZERO, f32::INFINITY, false)];
     if trailer.is_some() {
-        parts.push((&rear, Vec3::new(0.0, -10.0, 0.0), -5.0));
+        parts.push((&rear, Vec3::new(0.0, -10.0, 0.0), -5.0, false));
     }
     let cabin = Arc::new(Cabin::load_train(&parts).unwrap());
     let ty = Arc::new(HumanType::load(&dir.join("person.hum")).unwrap());
@@ -60,6 +60,7 @@ pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
         age: 40.0,
         stuck: 0.0,
         ghost: 0.0,
+        stuck_total: 0.0,
         car_wait: 0.0,
         detour: 0.0,
         detour_side: 0.0,
@@ -133,6 +134,137 @@ fn choose(h: &mut PeopleSim, bus: &BusNow) -> usize {
         .unwrap()
         .door
         .expect("a reachable platform-facing target")
+}
+
+#[test]
+fn brt_rear_door_boarding_walks_to_the_nearest_door() {
+    let (mut h, bus) = setup("rear-boarding", None);
+    // By the front-left door, which is shut and has no `{withbutton}`: as OMSI 2 the queue
+    // walks back to the door with the button instead.
+    h.pax_mut(0).unwrap().pos = DVec3::new(-3.0, 4.0, 0.0);
+    assert_eq!(choose(&mut h, &bus), 2, "off: the door with the button");
+    // #4055: on, the door they stand at counts, shut or not, so the nearest one wins.
+    h.rear_door_boarding = true;
+    assert_eq!(
+        choose(&mut h, &bus),
+        1,
+        "on: the nearest door of their side"
+    );
+}
+
+#[test]
+fn brt_rear_door_boarding_returns_to_an_open_door_when_the_nearest_stays_shut() {
+    let (mut h, mut bus) = setup("rear-boarding-fallback", None);
+    let world = crate::world_data::WorldData::default();
+    let bus_ix: HashMap<BusId, usize> = [(bus.id, 0)].into_iter().collect();
+    // The button door is open and the front-left one is not: the queue waits there, so
+    // rear door boarding sends nobody to a door that will not open for good.
+    bus.entry_open[2] = true;
+    h.pax_mut(0).unwrap().pos = DVec3::new(-3.0, 4.0, 0.0);
+    h.rear_door_boarding = true;
+    assert_eq!(choose(&mut h, &bus), 1, "the nearest door, still shut");
+    // Half the `DOOR_GIVE_UP` wait at it, and the open door takes them back.
+    h.pax_mut(0).unwrap().door_since = Some(h.time - DOOR_GIVE_UP * 0.6);
+    assert_eq!(choose(&mut h, &bus), 2, "the open door, after the wait");
+
+    // Multi-tick regression: walking to the open door across multiple ticks preserves
+    // the fallback choice without turning back to the closed door.
+    for _ in 0..5 {
+        h.time += 0.1;
+        h.pax_task(
+            0,
+            0.1,
+            &world,
+            std::slice::from_ref(&bus),
+            &bus_ix,
+            &HashMap::new(),
+            None,
+            &mut false,
+            &mut Vec::new(),
+        );
+        assert_eq!(
+            h.pax(0).unwrap().door,
+            Some(2),
+            "stays directed to open door while walking"
+        );
+    }
+}
+
+#[test]
+fn brt_ticket_buyers_preserve_selling_door_when_fallback_triggers_and_noticketsale_door_is_open() {
+    let (mut h, mut bus) = setup("rear-boarding-ticket-fallback", None);
+    let world = crate::world_data::WorldData::default();
+    let bus_ix: HashMap<BusId, usize> = [(bus.id, 0)].into_iter().collect();
+
+    // Passenger needs to buy a ticket; door 1 is {noticketsale} (open), door 2 is selling (shut)
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    h.rear_door_boarding = true;
+    bus.entry_open[1] = true;
+    bus.entry_open[2] = false;
+
+    // Initially chooses selling door 2
+    assert_eq!(choose(&mut h, &bus), 2, "initial choice is selling door");
+
+    // Timeout triggers fallback, but ticket buyer still avoids {noticketsale} door 1
+    h.pax_mut(0).unwrap().door_since = Some(h.time - DOOR_GIVE_UP * 0.6);
+    assert_eq!(
+        choose(&mut h, &bus),
+        2,
+        "ticket buyer stays at selling door after fallback"
+    );
+
+    // Multi-tick regression: continues targeting selling door over multiple ticks
+    for _ in 0..5 {
+        h.time += 0.1;
+        h.pax_task(
+            0,
+            0.1,
+            &world,
+            std::slice::from_ref(&bus),
+            &bus_ix,
+            &HashMap::new(),
+            None,
+            &mut false,
+            &mut Vec::new(),
+        );
+        assert_eq!(
+            h.pax(0).unwrap().door,
+            Some(2),
+            "stays directed to selling door despite open noticketsale door"
+        );
+    }
+}
+
+#[test]
+fn brt_ticket_buyers_fall_back_to_open_door_when_rear_boarding_is_disabled() {
+    let (mut h, mut bus) = setup("rear-boarding-disabled-ticket-fallback", None);
+
+    // Passenger needs to buy a ticket; door 1 is {noticketsale} (open), door 2 is selling (shut)
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    h.rear_door_boarding = false;
+    bus.entry_open[1] = true;
+    bus.entry_open[2] = false;
+
+    // With rear door boarding off, as Omsi.exe: the shut button door that sells counts
+    assert_eq!(choose(&mut h, &bus), 2, "waits at the selling button door");
+    // and without its button they fall back to the open {noticketsale} door
+    Arc::get_mut(&mut bus.cabin).unwrap().entries[2].button = false;
+    assert_eq!(
+        choose(&mut h, &bus),
+        1,
+        "falls back to open door when rear boarding is disabled"
+    );
+}
+
+#[test]
+fn brt_rear_door_boarding_leaves_a_shut_button_door_after_the_wait() {
+    let (mut h, mut bus) = setup("rear-boarding-button-fallback", None);
+    bus.entry_open[1] = true;
+    h.pax_mut(0).unwrap().pos = DVec3::new(-3.0, -4.0, 0.0);
+    h.rear_door_boarding = true;
+    assert_eq!(choose(&mut h, &bus), 2, "the nearest door has a button");
+    h.pax_mut(0).unwrap().door_since = Some(h.time - DOOR_GIVE_UP * 0.6);
+    assert_eq!(choose(&mut h, &bus), 1, "the open door, after the wait");
 }
 
 #[test]

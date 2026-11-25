@@ -4,3 +4,4 @@
 //! with what is decided here.
 
 pub mod map_index;
+pub mod stop_numbers;

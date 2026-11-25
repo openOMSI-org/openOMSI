@@ -2,8 +2,8 @@
 //! round tubes, lit and shaded as the scene round them (see `crate::api::cables`).
 
 use super::{def, o, p};
-use crate::api::{ApiError, ApiFn, Value};
 use crate::api::cables::{Cable, CableFrame, MAX_POINTS};
+use crate::api::{ApiError, ApiFn, Value};
 
 const NEW: &str = crate::api::VERSION;
 
@@ -62,43 +62,100 @@ fn options(v: &Value) -> Result<(f32, [f32; 4], CableFrame), ApiError> {
         return Ok((radius, color, frame));
     }
     if let Some(r) = v.get("radius").filter(|r| !r.is_nil()) {
-        radius = r.as_f64().filter(|r| *r > 0.0 && *r <= 1.0).ok_or_else(|| err("radius is a number of metres, over 0 and at most 1"))? as f32;
+        radius = r
+            .as_f64()
+            .filter(|r| *r > 0.0 && *r <= 1.0)
+            .ok_or_else(|| err("radius is a number of metres, over 0 and at most 1"))?
+            as f32;
     }
     if let Some(c) = v.get("color").filter(|c| !c.is_nil()) {
         let n: Vec<f64> = c.items().iter().filter_map(Value::as_f64).collect();
         if !(n.len() == 3 || n.len() == 4) || n.len() != c.items().len() {
             return Err(err("color is {r, g, b} or {r, g, b, a}, each 0 to 1"));
         }
-        color = [n[0] as f32, n[1] as f32, n[2] as f32, n.get(3).copied().unwrap_or(1.0) as f32].map(|x| x.clamp(0.0, 1.0));
+        color = [
+            n[0] as f32,
+            n[1] as f32,
+            n[2] as f32,
+            n.get(3).copied().unwrap_or(1.0) as f32,
+        ]
+        .map(|x| x.clamp(0.0, 1.0));
     }
     match v.get("frame").and_then(Value::as_str) {
         None | Some("world") => {}
         Some("bus") => frame = CableFrame::Bus,
-        Some(other) => return Err(err(format!("frame is \"world\" or \"bus\", not \"{other}\""))),
+        Some(other) => {
+            return Err(err(format!(
+                "frame is \"world\" or \"bus\", not \"{other}\""
+            )));
+        }
     }
     Ok((radius, color, frame))
 }
 
 pub(crate) static FNS: &[ApiFn] = &[
-    def!("cable.set", "scene", [p("id", "string"), p("points", "table"), o("options", "table")], "boolean", "Lays the cable `id` or moves it: a thin round tube through `points` (a flat list `{x1, y1, z1, x2, ...}` or a list of `{x, y, z}`, metres), lit and shaded as the scene. `options`: `radius` (m, default 0.006), `color` (`{r, g, b}` or `{r, g, b, a}`, 0 to 1, default dark grey) and `frame`: `\"world\"` (the map's coordinates, z up; the default) or `\"bus\"` (the player's bus's model frame: x right, y forward, z up, so a rope tied to the bus moves with it as drawn). Set it again whenever it moves; `false` (and the cable stays as it was) when the plugin would have more than 4096 cables, or more than 65536 points in all its cables together.", NEW, Ui, false, |c, a| {
-        let id = a.str(0)?;
-        let pts = points(a.get(1))?;
-        let (radius, color, frame) = options(a.get(2))?;
-        let s = c.state();
-        let owner = s.owner;
-        Ok::<_, ApiError>(s.hub.cables.borrow_mut().set(owner, &id, Cable { points: pts, radius, color, frame }))
-    }),
-    def!("cable.remove", "scene", [p("id", "string")], "boolean", "Takes the cable `id` away; `true` when there was one.", NEW, Ui, false, |c, a| {
-        let id = a.str(0)?;
-        let s = c.state();
-        let owner = s.owner;
-        Ok::<_, ApiError>(s.hub.cables.borrow_mut().remove(owner, &id))
-    }),
-    def!("cable.clear", "scene", [], "integer", "Takes every cable of the plugin away; how many went. They go by themselves when the plugin stops.", NEW, Ui, false, |c, a| {
-        let s = c.state();
-        let owner = s.owner;
-        s.hub.cables.borrow_mut().remove_owner(owner) as i64
-    }),
+    def!(
+        "cable.set",
+        "scene",
+        [
+            p("id", "string"),
+            p("points", "table"),
+            o("options", "table")
+        ],
+        "boolean",
+        "Lays the cable `id` or moves it: a thin round tube through `points` (a flat list `{x1, y1, z1, x2, ...}` or a list of `{x, y, z}`, metres), lit and shaded as the scene. `options`: `radius` (m, default 0.006), `color` (`{r, g, b}` or `{r, g, b, a}`, 0 to 1, default dark grey) and `frame`: `\"world\"` (the map's coordinates, z up; the default) or `\"bus\"` (the player's bus's model frame: x right, y forward, z up, so a rope tied to the bus moves with it as drawn). Set it again whenever it moves; `false` (and the cable stays as it was) when the plugin would have more than 4096 cables, or more than 65536 points in all its cables together.",
+        NEW,
+        Ui,
+        false,
+        |c, a| {
+            let id = a.str(0)?;
+            let pts = points(a.get(1))?;
+            let (radius, color, frame) = options(a.get(2))?;
+            let s = c.state();
+            let owner = s.owner;
+            Ok::<_, ApiError>(s.hub.cables.borrow_mut().set(
+                owner,
+                &id,
+                Cable {
+                    points: pts,
+                    radius,
+                    color,
+                    frame,
+                },
+            ))
+        }
+    ),
+    def!(
+        "cable.remove",
+        "scene",
+        [p("id", "string")],
+        "boolean",
+        "Takes the cable `id` away; `true` when there was one.",
+        NEW,
+        Ui,
+        false,
+        |c, a| {
+            let id = a.str(0)?;
+            let s = c.state();
+            let owner = s.owner;
+            Ok::<_, ApiError>(s.hub.cables.borrow_mut().remove(owner, &id))
+        }
+    ),
+    def!(
+        "cable.clear",
+        "scene",
+        [],
+        "integer",
+        "Takes every cable of the plugin away; how many went. They go by themselves when the plugin stops.",
+        NEW,
+        Ui,
+        false,
+        |c, a| {
+            let s = c.state();
+            let owner = s.owner;
+            s.hub.cables.borrow_mut().remove_owner(owner) as i64
+        }
+    ),
 ];
 
 #[cfg(test)]
@@ -112,7 +169,11 @@ mod tests {
     #[test]
     fn points_come_flat_or_as_triples() {
         let flat = points(&list(&[0.0, 0.0, 6.0, 30.0, 0.0, 6.2])).unwrap();
-        let triples = points(&Value::List(vec![list(&[0.0, 0.0, 6.0]), list(&[30.0, 0.0, 6.2])])).unwrap();
+        let triples = points(&Value::List(vec![
+            list(&[0.0, 0.0, 6.0]),
+            list(&[30.0, 0.0, 6.2]),
+        ]))
+        .unwrap();
         assert_eq!(flat, triples);
         assert!(points(&list(&[0.0, 0.0])).is_err());
         assert!(points(&list(&[0.0, 0.0, 6.0])).is_err());
@@ -120,9 +181,19 @@ mod tests {
 
     #[test]
     fn options_have_defaults_and_say_what_is_wrong() {
-        assert_eq!(options(&Value::Nil).unwrap(), (DEFAULT_RADIUS, DEFAULT_COLOR, CableFrame::World));
-        let o = Value::map([("radius", Value::Num(0.01)), ("frame", Value::Str("bus".into())), ("color", list(&[1.0, 0.5, 0.0]))]);
-        assert_eq!(options(&o).unwrap(), (0.01, [1.0, 0.5, 0.0, 1.0], CableFrame::Bus));
+        assert_eq!(
+            options(&Value::Nil).unwrap(),
+            (DEFAULT_RADIUS, DEFAULT_COLOR, CableFrame::World)
+        );
+        let o = Value::map([
+            ("radius", Value::Num(0.01)),
+            ("frame", Value::Str("bus".into())),
+            ("color", list(&[1.0, 0.5, 0.0])),
+        ]);
+        assert_eq!(
+            options(&o).unwrap(),
+            (0.01, [1.0, 0.5, 0.0, 1.0], CableFrame::Bus)
+        );
         assert!(options(&Value::map([("frame", Value::Str("sky".into()))])).is_err());
         assert!(options(&Value::map([("radius", Value::Num(-1.0))])).is_err());
     }

@@ -40,13 +40,23 @@ pub(crate) struct VehicleBox {
 impl VehicleBox {
     pub(crate) fn new((origin, heading, bb): &(DVec3, f64, [f32; 6]), ro: DVec3) -> VehicleBox {
         let (sin, cos) = (*heading as f32).to_radians().sin_cos();
-        VehicleBox { origin: (*origin - ro).as_vec3(), sin, cos, half: Vec3::new(bb[0], bb[1], bb[2]) * 0.5, centre: Vec3::new(bb[3], bb[4], bb[5]) }
+        VehicleBox {
+            origin: (*origin - ro).as_vec3(),
+            sin,
+            cos,
+            half: Vec3::new(bb[0], bb[1], bb[2]) * 0.5,
+            centre: Vec3::new(bb[3], bb[4], bb[5]),
+        }
     }
 
     /// Whether a point (render-origin relative) lies in the box grown by `margin`.
     pub(crate) fn contains(&self, p: Vec3, margin: f32) -> bool {
         let d = p - self.origin;
-        let l = Vec3::new(d.x * self.cos - d.y * self.sin, d.x * self.sin + d.y * self.cos, d.z) - self.centre;
+        let l = Vec3::new(
+            d.x * self.cos - d.y * self.sin,
+            d.x * self.sin + d.y * self.cos,
+            d.z,
+        ) - self.centre;
         l.abs().cmplt(self.half + Vec3::splat(margin)).all()
     }
 }
@@ -55,7 +65,8 @@ impl VehicleBox {
 /// light drawn as a road lamp's beam (`PointLight::beam`) or by a picture of one aimed along
 /// the road (`PointLight::cookie`), switched on, at the vehicle.
 pub(crate) fn own_headlamp(l: &PointLight, p: Vec3, own: &VehicleBox) -> bool {
-    let road = l.beam != 0.0 || (l.cookie.is_some() && l.direction.normalize_or_zero().z.abs() < 0.5);
+    let road =
+        l.beam != 0.0 || (l.cookie.is_some() && l.direction.normalize_or_zero().z.abs() < 0.5);
     road && l.mode == LightMode::Enhanced && l.intensity > 0.0 && own.contains(p, OWN_LAMP_MARGIN)
 }
 
@@ -63,7 +74,11 @@ pub(crate) fn own_headlamp(l: &PointLight, p: Vec3, own: &VehicleBox) -> bool {
 /// place, direction and reach), looking along their mean direction on the level - none
 /// when no lamp lights the road ahead, or when their light ends before the camera's
 /// surroundings begin (`cam_rel`).
-pub(crate) fn headlamp_shadow(lamps: &[(Vec3, Vec3, f32)], own: VehicleBox, cam_rel: Vec3) -> Option<LampShadow> {
+pub(crate) fn headlamp_shadow(
+    lamps: &[(Vec3, Vec3, f32)],
+    own: VehicleBox,
+    cam_rel: Vec3,
+) -> Option<LampShadow> {
     if lamps.is_empty() {
         return None;
     }
@@ -74,13 +89,23 @@ pub(crate) fn headlamp_shadow(lamps: &[(Vec3, Vec3, f32)], own: VehicleBox, cam_
     if look == Vec3::ZERO {
         return None;
     }
-    let range = lamps.iter().map(|l| l.2).fold(0.0f32, f32::max).min(HEADLAMP_SHADOW_REACH);
+    let range = lamps
+        .iter()
+        .map(|l| l.2)
+        .fold(0.0f32, f32::max)
+        .min(HEADLAMP_SHADOW_REACH);
     if range <= 1.0 || (position - cam_rel).length() > range + LAMP_SHADOW_REACH {
         return None;
     }
     // (the index the shaders compare is the tile's own code: every one of the lamps marked
     // as the player's reads this map, see `lamp_shadow_at`)
-    Some(LampShadow { position, range, look: Some(look), own: Some(own), ..LampShadow::new(VEHICLE_SLOTS.start) })
+    Some(LampShadow {
+        position,
+        range,
+        look: Some(look),
+        own: Some(own),
+        ..LampShadow::new(VEHICLE_SLOTS.start)
+    })
 }
 
 impl LampShadow {
@@ -89,7 +114,12 @@ impl LampShadow {
     pub(crate) fn headlamp_view_proj(&self, look: Vec3) -> Mat4 {
         let (s, c) = HEADLAMP_SHADOW_PITCH.to_radians().sin_cos();
         let dir = look * c - Vec3::Z * s;
-        let proj = Mat4::perspective_rh(HEADLAMP_SHADOW_FOV.to_radians(), 1.0, 0.1, self.range.max(1.0));
+        let proj = Mat4::perspective_rh(
+            HEADLAMP_SHADOW_FOV.to_radians(),
+            1.0,
+            0.1,
+            self.range.max(1.0),
+        );
         proj * Mat4::look_to_rh(self.position, dir, Vec3::Z)
     }
 
@@ -119,7 +149,8 @@ impl LampShadow {
                 }
                 // (inside the view's cone: the field's half-diagonal, its sphere's width on top)
                 let along = d.dot(look);
-                let half = (HEADLAMP_SHADOW_FOV * 0.5).to_radians().tan() * std::f32::consts::SQRT_2;
+                let half =
+                    (HEADLAMP_SHADOW_FOV * 0.5).to_radians().tan() * std::f32::consts::SQRT_2;
                 along > -r && (d - look * along).length() < along.max(0.0) * half + r * 1.8
             }
         }
@@ -132,14 +163,20 @@ mod tests {
 
     fn bus() -> VehicleBox {
         // a 12 m bus facing north (+y) at the origin, its box from 0 to 3 m high
-        VehicleBox::new(&(DVec3::ZERO, 0.0, [2.5, 12.0, 3.0, 0.0, 0.0, 1.5]), DVec3::ZERO)
+        VehicleBox::new(
+            &(DVec3::ZERO, 0.0, [2.5, 12.0, 3.0, 0.0, 0.0, 1.5]),
+            DVec3::ZERO,
+        )
     }
 
     /// The pair's map looks along the road from between the lamps, and a car ahead stands in
     /// it while the bus's own front does not.
     #[test]
     fn the_headlamps_shadow_what_is_ahead_but_not_their_own_bus() {
-        let lamps = [(Vec3::new(-0.9, 6.05, 0.8), Vec3::new(0.0, 1.0, -0.05), 60.0), (Vec3::new(0.9, 6.05, 0.8), Vec3::new(0.0, 1.0, -0.05), 60.0)];
+        let lamps = [
+            (Vec3::new(-0.9, 6.05, 0.8), Vec3::new(0.0, 1.0, -0.05), 60.0),
+            (Vec3::new(0.9, 6.05, 0.8), Vec3::new(0.0, 1.0, -0.05), 60.0),
+        ];
         let m = headlamp_shadow(&lamps, bus(), Vec3::new(0.0, -15.0, 3.0)).expect("a map");
         assert_eq!(m.slot, VEHICLE_SLOTS.start);
         assert!((m.position - Vec3::new(0.0, 6.05, 0.8)).length() < 1e-4);
@@ -149,7 +186,10 @@ mod tests {
         assert!(!m.reaches(Vec3::new(0.0, 5.9, 0.5), 0.6));
         // the car's place lands inside the map, in front of its eye
         let q = m.view_proj().project_point3(Vec3::new(0.5, 21.0, 0.7));
-        assert!(q.x.abs() < 1.0 && q.y.abs() < 1.0 && q.z > 0.0 && q.z < 1.0, "{q:?}");
+        assert!(
+            q.x.abs() < 1.0 && q.y.abs() < 1.0 && q.z > 0.0 && q.z < 1.0,
+            "{q:?}"
+        );
         // the road a metre in front of the bumper is in it too
         let q = m.view_proj().project_point3(Vec3::new(0.0, 7.0, 0.0));
         assert!(q.x.abs() < 1.0 && q.y.abs() < 1.0, "{q:?}");
@@ -159,7 +199,15 @@ mod tests {
     #[test]
     fn only_the_players_lit_headlamps_count() {
         let b = bus();
-        let lamp = |at: DVec3, intensity: f32| PointLight { position: at, radius: 60.0, intensity, beam: 1.0, direction: Vec3::Y, mode: LightMode::Enhanced, ..Default::default() };
+        let lamp = |at: DVec3, intensity: f32| PointLight {
+            position: at,
+            radius: 60.0,
+            intensity,
+            beam: 1.0,
+            direction: Vec3::Y,
+            mode: LightMode::Enhanced,
+            ..Default::default()
+        };
         let at = DVec3::new(0.9, 6.05, 0.8);
         assert!(own_headlamp(&lamp(at, 1800.0), at.as_vec3(), &b));
         assert!(!own_headlamp(&lamp(at, 0.0), at.as_vec3(), &b));

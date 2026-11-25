@@ -73,7 +73,10 @@ impl LineEdit {
     /// The caret at the end of `text`, nothing selected.
     pub fn at_end(text: &str) -> LineEdit {
         let n = text.chars().count();
-        LineEdit { caret: n, anchor: n }
+        LineEdit {
+            caret: n,
+            anchor: n,
+        }
     }
 
     /// The selection as (start, end), start <= end.
@@ -126,7 +129,14 @@ impl LineEdit {
     /// A key on the field. `shift` extends the selection with the caret's move; `word` (Ctrl,
     /// or Option on a Mac) moves and deletes by words; `clipboard` is the text a paste puts
     /// in.
-    pub fn key(&mut self, text: &mut String, key: EditKey, shift: bool, word: bool, clipboard: Option<&str>) -> Edited {
+    pub fn key(
+        &mut self,
+        text: &mut String,
+        key: EditKey,
+        shift: bool,
+        word: bool,
+        clipboard: Option<&str>,
+    ) -> Edited {
         self.clamp(text);
         let n = text.chars().count();
         let mut out = Edited::default();
@@ -162,7 +172,11 @@ impl LineEdit {
             EditKey::End => go(self, n),
             EditKey::Backspace => {
                 if !self.delete_selection(text) && self.caret > 0 {
-                    let from = if word { word_left(text, self.caret) } else { self.caret - 1 };
+                    let from = if word {
+                        word_left(text, self.caret)
+                    } else {
+                        self.caret - 1
+                    };
                     text.replace_range(byte(text, from)..byte(text, self.caret), "");
                     self.caret = from;
                     self.anchor = from;
@@ -170,7 +184,11 @@ impl LineEdit {
             }
             EditKey::Delete => {
                 if !self.delete_selection(text) && self.caret < n {
-                    let to = if word { word_right(text, self.caret) } else { self.caret + 1 };
+                    let to = if word {
+                        word_right(text, self.caret)
+                    } else {
+                        self.caret + 1
+                    };
                     text.replace_range(byte(text, self.caret)..byte(text, to), "");
                     self.anchor = self.caret;
                 }
@@ -181,7 +199,11 @@ impl LineEdit {
             }
             // (with nothing selected the whole line, as the field always copied)
             EditKey::Copy => {
-                out.clipboard = Some(if self.has_selection() { self.selected(text).to_string() } else { text.clone() });
+                out.clipboard = Some(if self.has_selection() {
+                    self.selected(text).to_string()
+                } else {
+                    text.clone()
+                });
             }
             EditKey::Cut => {
                 if self.has_selection() {
@@ -207,9 +229,16 @@ impl LineEdit {
 mod tests {
     use super::*;
 
-    fn run(text: &str, caret: usize, keys: &[(EditKey, bool, bool)]) -> (String, LineEdit, Option<String>) {
+    fn run(
+        text: &str,
+        caret: usize,
+        keys: &[(EditKey, bool, bool)],
+    ) -> (String, LineEdit, Option<String>) {
         let mut t = text.to_string();
-        let mut e = LineEdit { caret, anchor: caret };
+        let mut e = LineEdit {
+            caret,
+            anchor: caret,
+        };
         let mut clip = None;
         for &(k, shift, word) in keys {
             let r = e.key(&mut t, k, shift, word, Some("Ünter"));
@@ -235,25 +264,74 @@ mod tests {
     fn shift_selects_and_the_clipboard_takes_the_selection() {
         let s = "Linie 137";
         // Shift+Ctrl+Left from the end selects "137"
-        let (t, e, clip) = run(s, 9, &[(EditKey::Left, true, true), (EditKey::Copy, false, false)]);
-        assert_eq!((t.as_str(), e.range(), clip.as_deref()), ("Linie 137", (6, 9), Some("137")));
-        let (t, e, clip) = run(s, 9, &[(EditKey::Left, true, false), (EditKey::Left, true, false), (EditKey::Cut, false, false)]);
-        assert_eq!((t.as_str(), e.caret, clip.as_deref()), ("Linie 1", 7, Some("37")));
+        let (t, e, clip) = run(
+            s,
+            9,
+            &[(EditKey::Left, true, true), (EditKey::Copy, false, false)],
+        );
+        assert_eq!(
+            (t.as_str(), e.range(), clip.as_deref()),
+            ("Linie 137", (6, 9), Some("137"))
+        );
+        let (t, e, clip) = run(
+            s,
+            9,
+            &[
+                (EditKey::Left, true, false),
+                (EditKey::Left, true, false),
+                (EditKey::Cut, false, false),
+            ],
+        );
+        assert_eq!(
+            (t.as_str(), e.caret, clip.as_deref()),
+            ("Linie 1", 7, Some("37"))
+        );
         // a paste takes the selection's place (in characters: no byte of the umlaut split)
-        let (t, e, _) = run(s, 0, &[(EditKey::Right, true, true), (EditKey::Paste, false, false)]);
+        let (t, e, _) = run(
+            s,
+            0,
+            &[(EditKey::Right, true, true), (EditKey::Paste, false, false)],
+        );
         assert_eq!((t.as_str(), e.caret), ("Ünter 137", 5));
         // typing over a selection, and Left without Shift lands at its start
         let mut t = s.to_string();
-        let mut e = LineEdit { caret: 9, anchor: 6 };
+        let mut e = LineEdit {
+            caret: 9,
+            anchor: 6,
+        };
         e.insert(&mut t, "M45\n");
         assert_eq!((t.as_str(), e.caret), ("Linie M45", 9));
-        let (_, e, _) = run("abc", 3, &[(EditKey::Home, true, false), (EditKey::Left, false, false)]);
-        assert_eq!(e, LineEdit { caret: 0, anchor: 0 });
+        let (_, e, _) = run(
+            "abc",
+            3,
+            &[(EditKey::Home, true, false), (EditKey::Left, false, false)],
+        );
+        assert_eq!(
+            e,
+            LineEdit {
+                caret: 0,
+                anchor: 0
+            }
+        );
         // with nothing selected copy and cut take the whole line, as before
-        assert_eq!(run(s, 3, &[(EditKey::Copy, false, false)]).2.as_deref(), Some("Linie 137"));
+        assert_eq!(
+            run(s, 3, &[(EditKey::Copy, false, false)]).2.as_deref(),
+            Some("Linie 137")
+        );
         let (t, _, clip) = run(s, 3, &[(EditKey::Cut, false, false)]);
         assert_eq!((t.as_str(), clip.as_deref()), ("", Some("Linie 137")));
         // select all, then a delete empties it
-        assert_eq!(run(s, 2, &[(EditKey::SelectAll, false, false), (EditKey::Delete, false, false)]).0, "");
+        assert_eq!(
+            run(
+                s,
+                2,
+                &[
+                    (EditKey::SelectAll, false, false),
+                    (EditKey::Delete, false, false)
+                ]
+            )
+            .0,
+            ""
+        );
     }
 }

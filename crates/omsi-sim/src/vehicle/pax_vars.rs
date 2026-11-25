@@ -34,7 +34,8 @@ fn side(kind: &str) -> Option<usize> {
 
 impl PaxVars {
     fn of(v: &VehicleInstance) -> PaxVars {
-        let id = |name: &str| omsi_script::compile::with_lower(name, |k| v.var_index.get(k).copied());
+        let id =
+            |name: &str| omsi_script::compile::with_lower(name, |k| v.var_index.get(k).copied());
         let p = &v.ty.program;
         let mut out = PaxVars::default();
         for (s, kind) in ["Entry", "Exit"].into_iter().enumerate() {
@@ -46,7 +47,9 @@ impl PaxVars {
                 out.reports_open[s][i] = reports(p, &open);
             }
         }
-        out.door = (0..DOOR_ANIMS).map(|k| (id(&format!("door_{k}")), id(&format!("door{k}")))).collect();
+        out.door = (0..DOOR_ANIMS)
+            .map(|k| (id(&format!("door_{k}")), id(&format!("door{k}"))))
+            .collect();
         out
     }
 }
@@ -104,7 +107,9 @@ impl VehicleInstance {
     pub fn door_anim(&self, k: usize) -> Option<f32> {
         match self.pax_vars().door.get(k) {
             Some(&(a, b)) => self.value_of(a).or_else(|| self.value_of(b)),
-            None => self.var(&format!("door_{k}")).or_else(|| self.var(&format!("door{k}"))),
+            None => self
+                .var(&format!("door_{k}"))
+                .or_else(|| self.var(&format!("door{k}"))),
         }
     }
 }
@@ -122,7 +127,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("omsi_pax_vars_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let (script, vars) = (dir.join("doors.osc"), dir.join("vars.txt"));
-        std::fs::write(&script, "{frame}\n1 (S.L.PAX_Entry1_Open)\n1 (S.L.PAX_Exit9_Open)\n{end}\n").unwrap();
+        std::fs::write(
+            &script,
+            "{frame}\n1 (S.L.PAX_Entry1_Open)\n1 (S.L.PAX_Exit9_Open)\n{end}\n",
+        )
+        .unwrap();
         std::fs::write(&vars, "door_1\ndoor3\ndoor_40\nPAX_Exit20_Open\n").unwrap();
         let mut builtin: Vec<String> = Vec::new();
         for i in 0..12 {
@@ -132,7 +141,12 @@ mod tests {
             }
         }
         builtin.extend(["PAX_Entry0_Busy", "PAX_Exit3_Busy", "PAX_Entry15_Busy"].map(String::from));
-        let program = omsi_script::compile(&CompileInput { builtin_vars: builtin, scripts: vec![script], varlists: vec![vars], ..Default::default() });
+        let program = omsi_script::compile(&CompileInput {
+            builtin_vars: builtin,
+            scripts: vec![script],
+            varlists: vec![vars],
+            ..Default::default()
+        });
         std::fs::remove_dir_all(&dir).ok();
         assert!(program.errors.is_empty(), "{:?}", program.errors);
         let ty = Arc::new(VehicleType {
@@ -164,8 +178,12 @@ mod tests {
                     ));
                 }
             }
-            let doors: Vec<Option<f32>> =
-                (0..DOOR_ANIMS + 12).map(|k| v.var(&format!("door_{k}")).or_else(|| v.var(&format!("door{k}")))).collect();
+            let doors: Vec<Option<f32>> = (0..DOOR_ANIMS + 12)
+                .map(|k| {
+                    v.var(&format!("door_{k}"))
+                        .or_else(|| v.var(&format!("door{k}")))
+                })
+                .collect();
             (out, doors)
         };
         let cached = |v: &VehicleInstance| {
@@ -173,7 +191,12 @@ mod tests {
             for kind in ["Entry", "Exit"] {
                 for i in 0..PAX_DOORS + 6 {
                     let get = |what: &str| v.var(&format!("PAX_{kind}{i}_{what}"));
-                    out.push((v.pax_reports_open(kind, i), v.pax_open(kind, i), get("Req"), get("Busy")));
+                    out.push((
+                        v.pax_reports_open(kind, i),
+                        v.pax_open(kind, i),
+                        get("Req"),
+                        get("Busy"),
+                    ));
                 }
             }
             let doors: Vec<Option<f32>> = (0..DOOR_ANIMS + 12).map(|k| v.door_anim(k)).collect();
@@ -192,7 +215,11 @@ mod tests {
         for (k, name) in [(1, "door_1"), (3, "door3"), (40, "door_40")] {
             assert!(v.set_var(name, k as f32 / 100.0));
         }
-        assert!(v.pax_reports_open("Entry", 1) && v.pax_reports_open("Exit", 9) && v.pax_reports_open("Exit", 20));
+        assert!(
+            v.pax_reports_open("Entry", 1)
+                && v.pax_reports_open("Exit", 9)
+                && v.pax_reports_open("Exit", 20)
+        );
         assert!(!v.pax_reports_open("Entry", 2));
         assert_eq!(cached(&v), by_name(&v));
         // a variable the vehicle gains later (none of these, but the table is made again)

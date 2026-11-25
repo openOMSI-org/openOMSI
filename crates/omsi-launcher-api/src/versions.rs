@@ -1,8 +1,8 @@
-use crate::{err, Answer, Platform};
+use crate::{Answer, Platform, err};
 use omsi_launcher_lib as core;
 use omsi_platform::recovery;
 use omsi_platform::updater::{self, Listed, Status, Updater};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard};
@@ -43,7 +43,12 @@ fn chosen_of(text: &str) -> Option<(String, bool)> {
     Some((version, lines.next() != Some("0")))
 }
 
-fn after_choice(before: Option<(String, bool)>, checking: bool, version: &str, keep: bool) -> (bool, Option<String>) {
+fn after_choice(
+    before: Option<(String, bool)>,
+    checking: bool,
+    version: &str,
+    keep: bool,
+) -> (bool, Option<String>) {
     let checked = before.map_or(checking, |(_, c)| c);
     if keep {
         (false, Some(format!("{version}\n{}\n", u8::from(checked))))
@@ -53,15 +58,25 @@ fn after_choice(before: Option<(String, bool)>, checking: bool, version: &str, k
 }
 
 fn after_start(chosen: Option<(String, bool)>, current: &str, checking: bool) -> Option<bool> {
-    chosen.filter(|(v, _)| v != current).map(|(_, c)| c || checking)
+    chosen
+        .filter(|(v, _)| v != current)
+        .map(|(_, c)| c || checking)
 }
 
 pub fn settle() {
     if SWAPPED.load(Ordering::Relaxed) {
         return;
     }
-    let Ok(mut s) = core::get_settings() else { return };
-    let Some(checking) = after_start(chosen(), updater::current_version(), s["update_check"].as_bool().unwrap_or(true)) else { return };
+    let Ok(mut s) = core::get_settings() else {
+        return;
+    };
+    let Some(checking) = after_start(
+        chosen(),
+        updater::current_version(),
+        s["update_check"].as_bool().unwrap_or(true),
+    ) else {
+        return;
+    };
     s["update_check"] = json!(checking);
     if core::save_settings(&s).is_ok() {
         let _ = std::fs::remove_file(chosen_file());
@@ -70,7 +85,12 @@ pub fn settle() {
 
 fn remember(version: &str, keep: bool) -> Result<(), String> {
     let mut s = core::get_settings().map_err(err)?;
-    let (checking, mark) = after_choice(chosen(), s["update_check"].as_bool().unwrap_or(true), version, keep);
+    let (checking, mark) = after_choice(
+        chosen(),
+        s["update_check"].as_bool().unwrap_or(true),
+        version,
+        keep,
+    );
     if let Some(text) = &mark {
         recovery::write_atomic(&chosen_file(), text).map_err(err)?;
     }
@@ -96,7 +116,10 @@ fn watch() {
             Status::Restarting(_) => {
                 SWAPPED.store(true, Ordering::Relaxed);
                 if let Err(e) = remember(&j.version, j.keep) {
-                    core::log_to_file(&format!("launcher: the update checks could not be set for {}: {e}", j.version));
+                    core::log_to_file(&format!(
+                        "launcher: the update checks could not be set for {}: {e}",
+                        j.version
+                    ));
                 }
                 j.ready = true;
                 return;
@@ -108,7 +131,11 @@ fn watch() {
 }
 
 pub fn installing() -> bool {
-    lock(&JOB).as_ref().is_some_and(|j| j.started.elapsed().as_secs() < 600 && (matches!(j.updater.status(), Status::Installing(_)) || (matches!(j.updater.status(), Status::Restarting(_)) && !j.ready)))
+    lock(&JOB).as_ref().is_some_and(|j| {
+        j.started.elapsed().as_secs() < 600
+            && (matches!(j.updater.status(), Status::Installing(_))
+                || (matches!(j.updater.status(), Status::Restarting(_)) && !j.ready))
+    })
 }
 
 pub fn swapped() -> bool {
@@ -156,7 +183,14 @@ pub fn list() -> Answer {
 }
 
 fn busy(s: &Status) -> bool {
-    matches!(s, Status::Checking | Status::Downloading { .. } | Status::Installing(_) | Status::WaitingForInstaller(_) | Status::Restarting(_))
+    matches!(
+        s,
+        Status::Checking
+            | Status::Downloading { .. }
+            | Status::Installing(_)
+            | Status::WaitingForInstaller(_)
+            | Status::Restarting(_)
+    )
 }
 
 pub fn install(version: String) -> Answer {
@@ -165,8 +199,14 @@ pub fn install(version: String) -> Answer {
     }
     let (release, latest) = {
         let listed = lock(&LISTED);
-        let found = listed.iter().find(|l| l.release.version == version).ok_or("Open the list of versions again.")?;
-        (found.release.clone(), listed.first().is_some_and(|l| l.release.version == version))
+        let found = listed
+            .iter()
+            .find(|l| l.release.version == version)
+            .ok_or("Open the list of versions again.")?;
+        (
+            found.release.clone(),
+            listed.first().is_some_and(|l| l.release.version == version),
+        )
     };
     if version == updater::current_version() {
         return Err("This version is installed already.".into());
@@ -183,7 +223,13 @@ pub fn install(version: String) -> Answer {
     }
     let mut updater = Updater::default();
     updater.install(release);
-    *job = Some(Job { updater, version, keep: !latest, ready: false, started: std::time::Instant::now() });
+    *job = Some(Job {
+        updater,
+        version,
+        keep: !latest,
+        ready: false,
+        started: std::time::Instant::now(),
+    });
     drop(job);
     std::thread::spawn(watch);
     status()
@@ -191,23 +237,37 @@ pub fn install(version: String) -> Answer {
 
 pub fn status() -> Answer {
     let job = lock(&JOB);
-    let Some(j) = job.as_ref() else { return Ok(json!({ "state": "idle" })) };
+    let Some(j) = job.as_ref() else {
+        return Ok(json!({ "state": "idle" }));
+    };
     let v = j.version.as_str();
     Ok(match j.updater.status() {
-        Status::Downloading { done, total, .. } => json!({ "state": "downloading", "version": v, "done": done, "total": total }),
+        Status::Downloading { done, total, .. } => {
+            json!({ "state": "downloading", "version": v, "done": done, "total": total })
+        }
         Status::Restarting(_) if j.ready => json!({ "state": "installed", "version": v }),
-        Status::Failed(e) => json!({ "state": "failed", "version": v, "error": core::i18n::tr(reason(&e)) }),
-        Status::Installing(_) | Status::Restarting(_) => json!({ "state": "installing", "version": v }),
+        Status::Failed(e) => {
+            json!({ "state": "failed", "version": v, "error": core::i18n::tr(reason(&e)) })
+        }
+        Status::Installing(_) | Status::Restarting(_) => {
+            json!({ "state": "installing", "version": v })
+        }
         _ => json!({ "state": "downloading", "version": v, "done": 0, "total": 0 }),
     })
 }
 
 fn reason(e: &str) -> &str {
-    e.split_once(": ").filter(|(head, _)| head.starts_with("openOMSI was not updated to")).map_or(e, |(_, why)| why)
+    e.split_once(": ")
+        .filter(|(head, _)| head.starts_with("openOMSI was not updated to"))
+        .map_or(e, |(_, why)| why)
 }
 
 fn program(place: &updater::Place) -> PathBuf {
-    let game = place.exe.with_file_name(if cfg!(windows) { "openomsi.exe" } else { "openomsi" });
+    let game = place.exe.with_file_name(if cfg!(windows) {
+        "openomsi.exe"
+    } else {
+        "openomsi"
+    });
     if game.is_file() {
         game
     } else {
@@ -218,13 +278,24 @@ fn program(place: &updater::Place) -> PathBuf {
 pub fn restart(p: &dyn Platform) -> Answer {
     let version = {
         let job = lock(&JOB);
-        let j = job.as_ref().filter(|j| j.ready && matches!(j.updater.status(), Status::Restarting(_))).ok_or("No version is installed yet.")?;
+        let j = job
+            .as_ref()
+            .filter(|j| j.ready && matches!(j.updater.status(), Status::Restarting(_)))
+            .ok_or("No version is installed yet.")?;
         j.version.clone()
     };
     let place = updater::install_place().map_err(err)?;
     let exe = program(&place);
-    std::process::Command::new(&exe).current_dir(&place.dir).env_remove("OMSI_GUARD_STATE").env_remove("OMSI_SAFE_MODE").spawn().map_err(err)?;
-    core::log_to_file(&format!("launcher: openOMSI {version} installed, {} starts", exe.display()));
+    std::process::Command::new(&exe)
+        .current_dir(&place.dir)
+        .env_remove("OMSI_GUARD_STATE")
+        .env_remove("OMSI_SAFE_MODE")
+        .spawn()
+        .map_err(err)?;
+    core::log_to_file(&format!(
+        "launcher: openOMSI {version} installed, {} starts",
+        exe.display()
+    ));
     p.quit();
     Ok(Value::Null)
 }
@@ -251,21 +322,42 @@ mod tests {
         assert_eq!((checking, mark.as_deref()), (false, Some("0.2.34\n1\n")));
         assert_eq!(after_choice(first, false, "0.2.38", false), (true, None));
         assert_eq!(after_choice(None, false, "0.2.38", false), (false, None));
-        assert_eq!(after_choice(None, false, "0.2.33", true), (false, Some("0.2.33\n0\n".into())));
+        assert_eq!(
+            after_choice(None, false, "0.2.33", true),
+            (false, Some("0.2.33\n0\n".into()))
+        );
     }
 
     #[test]
     fn the_checks_come_back_once_another_version_runs() {
-        assert_eq!(after_start(Some(("0.2.33".into(), true)), "0.2.33", false), None);
-        assert_eq!(after_start(Some(("0.2.33".into(), true)), "0.2.38", false), Some(true));
-        assert_eq!(after_start(Some(("0.2.33".into(), false)), "0.2.38", false), Some(false));
-        assert_eq!(after_start(Some(("0.2.33".into(), false)), "0.2.38", true), Some(true));
+        assert_eq!(
+            after_start(Some(("0.2.33".into(), true)), "0.2.33", false),
+            None
+        );
+        assert_eq!(
+            after_start(Some(("0.2.33".into(), true)), "0.2.38", false),
+            Some(true)
+        );
+        assert_eq!(
+            after_start(Some(("0.2.33".into(), false)), "0.2.38", false),
+            Some(false)
+        );
+        assert_eq!(
+            after_start(Some(("0.2.33".into(), false)), "0.2.38", true),
+            Some(true)
+        );
         assert_eq!(after_start(None, "0.2.38", false), None);
     }
 
     #[test]
     fn a_failure_says_why_once() {
-        assert_eq!(reason("openOMSI was not updated to 0.2.33: the download stopped at 5 of 9 bytes"), "the download stopped at 5 of 9 bytes");
-        assert_eq!(reason("the folder x cannot be written"), "the folder x cannot be written");
+        assert_eq!(
+            reason("openOMSI was not updated to 0.2.33: the download stopped at 5 of 9 bytes"),
+            "the download stopped at 5 of 9 bytes"
+        );
+        assert_eq!(
+            reason("the folder x cannot be written"),
+            "the folder x cannot be written"
+        );
     }
 }

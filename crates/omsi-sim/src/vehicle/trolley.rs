@@ -110,8 +110,18 @@ impl TrolleyGear {
                 ]
             })
             .collect();
-        let rope = (1..=def.poles.len()).map(|k| [format!("Trolley_Pole{k}_Rope"), format!("Trolley_Pole{k}_Rope_X"), format!("Trolley_Pole{k}_Rope_Y")]).collect();
-        let gear = (1..=def.poles.len()).map(|k| format!("Trolley_Pole{k}_Gear")).collect();
+        let rope = (1..=def.poles.len())
+            .map(|k| {
+                [
+                    format!("Trolley_Pole{k}_Rope"),
+                    format!("Trolley_Pole{k}_Rope_X"),
+                    format!("Trolley_Pole{k}_Rope_Y"),
+                ]
+            })
+            .collect();
+        let gear = (1..=def.poles.len())
+            .map(|k| format!("Trolley_Pole{k}_Gear"))
+            .collect();
         let mut rig = TrolleyRig::new(def, seed);
         rig.verbose = omsi_cfg::flags::OMSI_DEBUG_TROLLEY.is_set();
         Some(Box::new(TrolleyGear {
@@ -154,7 +164,13 @@ impl TrolleyGear {
     /// The mouse on a held pole's rope from outside, the cursor in window pixels (`scale`: per
     /// point): up lets the pole rise, down pulls it down, sideways swings it the way `side` says
     /// the screen's right goes (1 the bus's right). False when the rope cannot be held from here.
-    pub fn rope_by_mouse(&mut self, cursor: (f32, f32), scale: f32, side: f64, from_cab: bool) -> bool {
+    pub fn rope_by_mouse(
+        &mut self,
+        cursor: (f32, f32),
+        scale: f32,
+        side: f64,
+        from_cab: bool,
+    ) -> bool {
         if from_cab && !self.grab_by_script {
             self.grab = None;
             return false;
@@ -181,7 +197,10 @@ impl TrolleyGear {
         self.active_crossings.retain(|&(a, b)| {
             net.crossings_of(a).iter().any(|&(ci, _)| {
                 let c = &net.crossings[ci as usize];
-                (c.a == b || c.b == b) && poles.iter().any(|p| (p.tip - c.pos).length() <= CROSSING_CLEAR_RADIUS)
+                (c.a == b || c.b == b)
+                    && poles
+                        .iter()
+                        .any(|p| (p.tip - c.pos).length() <= CROSSING_CLEAR_RADIUS)
             })
         });
     }
@@ -196,9 +215,15 @@ impl TrolleyGear {
         };
         let poles = &self.rig.poles;
         self.active_frogs.retain(|&sw| {
-            let Some(s) = net.switches.get(sw as usize) else { return false };
-            let Some(node) = net.nodes.get(s.node as usize) else { return false };
-            poles.iter().any(|p| (p.tip - node.pos).length() <= FROG_CLEAR_RADIUS)
+            let Some(s) = net.switches.get(sw as usize) else {
+                return false;
+            };
+            let Some(node) = net.nodes.get(s.node as usize) else {
+                return false;
+            };
+            poles
+                .iter()
+                .any(|p| (p.tip - node.pos).length() <= FROG_CLEAR_RADIUS)
         });
     }
 }
@@ -207,7 +232,9 @@ impl VehicleInstance {
     /// The poles' variables exist from the start (a model's pole mesh is turned by them: its
     /// animations look their variables up when the vehicle is built).
     pub(super) fn declare_trolley_vars(&mut self) {
-        let Some(g) = self.trolley.as_ref() else { return };
+        let Some(g) = self.trolley.as_ref() else {
+            return;
+        };
         let names: Vec<String> = g.names.pole.iter().flatten().cloned().collect();
         for n in names {
             if self.var(&n).is_none() {
@@ -234,7 +261,10 @@ impl VehicleInstance {
 
     /// The model's own script handles pole `k`'s rope (it has `Trolley_Pole<n>_Rope`).
     pub fn trolley_rope_scripted(&self, k: usize) -> bool {
-        self.trolley.as_ref().and_then(|g| g.names.rope.get(k)).is_some_and(|n| self.var(&n[0]).is_some())
+        self.trolley
+            .as_ref()
+            .and_then(|g| g.names.rope.get(k))
+            .is_some_and(|n| self.var(&n[0]).is_some())
     }
 
     /// Put the poles on the wire by themselves, whether or not they have a motor (the player's
@@ -242,16 +272,35 @@ impl VehicleInstance {
     /// within its reach. True when they are being put on.
     pub fn trolley_put_on(&mut self, only_under_wire: bool) -> bool {
         let (pos, m, _) = self.trolley_frame();
-        let rot = glam::DMat3::from_cols(m.x_axis.truncate().as_dvec3(), m.y_axis.truncate().as_dvec3(), m.z_axis.truncate().as_dvec3());
-        let Some(g) = self.trolley.as_deref_mut() else { return false };
-        let down: Vec<&omsi_trolley::Pole> = g.rig.poles.iter().filter(|p| p.mode != omsi_trolley::PoleMode::OnWire).collect();
+        let rot = glam::DMat3::from_cols(
+            m.x_axis.truncate().as_dvec3(),
+            m.y_axis.truncate().as_dvec3(),
+            m.z_axis.truncate().as_dvec3(),
+        );
+        let Some(g) = self.trolley.as_deref_mut() else {
+            return false;
+        };
+        let down: Vec<&omsi_trolley::Pole> = g
+            .rig
+            .poles
+            .iter()
+            .filter(|p| p.mode != omsi_trolley::PoleMode::OnWire)
+            .collect();
         if down.is_empty() {
             return false;
         }
         if only_under_wire {
-            let Some(net) = g.net.as_deref() else { return false };
+            let Some(net) = g.net.as_deref() else {
+                return false;
+            };
             let reaches = |p: &omsi_trolley::Pole| {
-                let tip = p.base_at(pos, &rot) + rot * omsi_trolley::rotate_tip_pub((p.def.work_angle as f64).to_radians(), 0.0, p.def.length as f64);
+                let tip = p.base_at(pos, &rot)
+                    + rot
+                        * omsi_trolley::rotate_tip_pub(
+                            (p.def.work_angle as f64).to_radians(),
+                            0.0,
+                            p.def.length as f64,
+                        );
                 !net.candidates(tip, 3.5).is_empty()
             };
             if !down.iter().all(|p| reaches(p)) {
@@ -266,8 +315,14 @@ impl VehicleInstance {
     /// Take the poles down on to their hooks by themselves (the player's shortcut). True when any
     /// was up.
     pub fn trolley_take_off(&mut self) -> bool {
-        let Some(g) = self.trolley.as_deref_mut() else { return false };
-        if g.rig.poles.iter().all(|p| p.mode == omsi_trolley::PoleMode::Down) {
+        let Some(g) = self.trolley.as_deref_mut() else {
+            return false;
+        };
+        if g.rig
+            .poles
+            .iter()
+            .all(|p| p.mode == omsi_trolley::PoleMode::Down)
+        {
             return false;
         }
         g.auto_raise_for = 0.0;
@@ -277,7 +332,12 @@ impl VehicleInstance {
 
     /// The player's Ctrl+R: the poles on the wire, or down if one is on; what the driver is told.
     pub fn trolley_toggle(&mut self) -> &'static str {
-        if self.trolley.as_ref().is_some_and(|g| g.rig.poles.iter().any(|p| p.mode == omsi_trolley::PoleMode::OnWire)) {
+        if self.trolley.as_ref().is_some_and(|g| {
+            g.rig
+                .poles
+                .iter()
+                .any(|p| p.mode == omsi_trolley::PoleMode::OnWire)
+        }) {
             self.trolley_take_off();
             "Taking the poles down"
         } else {
@@ -287,9 +347,18 @@ impl VehicleInstance {
     }
 
     pub fn trolley_frame(&self) -> (glam::DVec3, glam::Mat4, Option<[f32; 6]>) {
-        match self.trolley.as_ref().and_then(|g| g.carrier).and_then(|k| self.trailers.get(k)) {
+        match self
+            .trolley
+            .as_ref()
+            .and_then(|g| g.carrier)
+            .and_then(|k| self.trailers.get(k))
+        {
             Some(t) => (t.position, t.body_rotation(), t.ty.def.bounding_box),
-            None => (self.position, self.body_rotation(), self.ty.def.bounding_box),
+            None => (
+                self.position,
+                self.body_rotation(),
+                self.ty.def.bounding_box,
+            ),
         }
     }
 
@@ -307,7 +376,13 @@ impl VehicleInstance {
 
     /// The driven wheels' radius (m).
     fn driven_radius(&self) -> f32 {
-        let a = self.ty.def.axles.iter().find(|a| a.driven).or(self.ty.def.axles.first());
+        let a = self
+            .ty
+            .def
+            .axles
+            .iter()
+            .find(|a| a.driven)
+            .or(self.ty.def.axles.first());
         a.map_or(0.5, |a| (a.wheel_diameter * 0.5).max(0.2))
     }
 
@@ -317,14 +392,24 @@ impl VehicleInstance {
             return;
         }
         let (pos, m, _) = self.trolley_frame();
-        let rot = glam::DMat3::from_cols(m.x_axis.truncate().as_dvec3(), m.y_axis.truncate().as_dvec3(), m.z_axis.truncate().as_dvec3());
+        let rot = glam::DMat3::from_cols(
+            m.x_axis.truncate().as_dvec3(),
+            m.y_axis.truncate().as_dvec3(),
+            m.z_axis.truncate().as_dvec3(),
+        );
         let def = self.trolley.as_ref().unwrap().def.clone();
         // the way the drive pulls: the model's variable where it has one, else the way the
         // script's own torque points while the pedal is down (reverse gear: negative), kept
         // while the pedal is up
         let dir = match self.var(&def.vars.direction) {
             Some(d) => {
-                if d > 0.5 { 1.0 } else if d < -0.5 { -1.0 } else { 0.0 }
+                if d > 0.5 {
+                    1.0
+                } else if d < -0.5 {
+                    -1.0
+                } else {
+                    0.0
+                }
             }
             // (only with the typical drive, which waits for the script adapter: see `TrolleyDef`)
             None if def.drive_typical => {
@@ -355,22 +440,49 @@ impl VehicleInstance {
             Some(_) => 0,
             None => blinker,
         };
-        let route_code = self.var(&def.vars.switch_code).map_or(0, |v| v.max(0.0).round() as u32);
-        let channel = self.var(&def.vars.switch_channel).map_or(0, |v| v.max(0.0).round() as u32);
+        let route_code = self
+            .var(&def.vars.switch_code)
+            .map_or(0, |v| v.max(0.0).round() as u32);
+        let channel = self
+            .var(&def.vars.switch_channel)
+            .map_or(0, |v| v.max(0.0).round() as u32);
         let mut raise_all = self.var(&def.vars.raise_request).map(|v| v);
         // a plain OMSI 2 trolleybus: the cab's two switches (0 folded, 1 raised) ask for the
         // poles, and their meshes follow what our poles do (2: both hidden, ours are drawn)
         let legacy_switch: Vec<(String, f32)> = def
             .legacy
             .as_ref()
-            .map(|l| l.switches.iter().map(|n| (n.clone(), self.var(n).unwrap_or(0.0))).collect())
+            .map(|l| {
+                l.switches
+                    .iter()
+                    .map(|n| (n.clone(), self.var(n).unwrap_or(0.0)))
+                    .collect()
+            })
             .unwrap_or_default();
         if self.trolley.as_ref().is_some_and(|g| g.rope_ids.is_none()) {
-            let ids = self.trolley.as_ref().unwrap().names.rope.iter().map(|n| {
-                let id = |s: &str| omsi_script::compile::with_lower(s, |k| self.var_index.get(k).copied());
-                Some([id(&n[0])?, id(&n[1])?, id(&n[2])?])
-            }).collect();
-            let gear = self.trolley.as_ref().unwrap().names.gear.iter().map(|n| omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied())).collect();
+            let ids = self
+                .trolley
+                .as_ref()
+                .unwrap()
+                .names
+                .rope
+                .iter()
+                .map(|n| {
+                    let id = |s: &str| {
+                        omsi_script::compile::with_lower(s, |k| self.var_index.get(k).copied())
+                    };
+                    Some([id(&n[0])?, id(&n[1])?, id(&n[2])?])
+                })
+                .collect();
+            let gear = self
+                .trolley
+                .as_ref()
+                .unwrap()
+                .names
+                .gear
+                .iter()
+                .map(|n| omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied()))
+                .collect();
             let g = self.trolley.as_mut().unwrap();
             g.rope_ids = Some(ids);
             g.gear_ids = gear;
@@ -382,7 +494,11 @@ impl VehicleInstance {
         }
         let mut rope_vars = [None; MAX_ROPES];
         if let Some(ids) = self.trolley.as_ref().and_then(|g| g.rope_ids.as_ref()) {
-            for (slot, [r, x, y]) in rope_vars.iter_mut().zip(ids.iter()).filter_map(|(s, i)| Some((s, (*i)?))) {
+            for (slot, [r, x, y]) in rope_vars
+                .iter_mut()
+                .zip(ids.iter())
+                .filter_map(|(s, i)| Some((s, (*i)?)))
+            {
                 let vars = &mut self.state.vars;
                 *slot = Some((vars[r as usize], vars[x as usize], vars[y as usize]));
                 vars[x as usize] = 0.0;
@@ -399,17 +515,29 @@ impl VehicleInstance {
         let mut ropes = g.ropes.clone();
         let mut legacy_write: Vec<(String, f32)> = Vec::new();
         for (k, (name, v)) in legacy_switch.iter().enumerate() {
-            let Some(p) = g.rig.poles.get(k) else { continue };
+            let Some(p) = g.rig.poles.get(k) else {
+                continue;
+            };
             let idle = ropes.get(k) == Some(&RopeCmd::Idle);
             let mode = p.mode;
             let raising = &mut g.legacy_raising[k];
-            if matches!(mode, omsi_trolley::PoleMode::OnWire | omsi_trolley::PoleMode::Down) && !(mode == omsi_trolley::PoleMode::Down && *v > 0.5 && *v < 1.5) {
+            if matches!(
+                mode,
+                omsi_trolley::PoleMode::OnWire | omsi_trolley::PoleMode::Down
+            ) && !(mode == omsi_trolley::PoleMode::Down && *v > 0.5 && *v < 1.5)
+            {
                 *raising = false;
             }
             if *raising && idle {
-                ropes[k] = RopeCmd::Raise { ray: None, auto: true };
+                ropes[k] = RopeCmd::Raise {
+                    ray: None,
+                    auto: true,
+                };
             }
-            let was_down = std::mem::replace(&mut g.legacy_was_down[k], mode == omsi_trolley::PoleMode::Down);
+            let was_down = std::mem::replace(
+                &mut g.legacy_was_down[k],
+                mode == omsi_trolley::PoleMode::Down,
+            );
             if mode == omsi_trolley::PoleMode::Down {
                 if *v > 0.5 && *v < 1.5 && was_down {
                     // a click on the cab's switch (or its key): the hand takes the pole -
@@ -474,8 +602,20 @@ impl VehicleInstance {
             if *a > 0.0 {
                 *a -= dt;
                 let mode = g.rig.poles.get(k).map(|p| p.mode);
-                if matches!(mode, Some(omsi_trolley::PoleMode::Hand | omsi_trolley::PoleMode::Free)) && g.grab != Some(k) && ropes.get(k) == Some(&RopeCmd::Idle) {
-                    ropes[k] = if g.grab_auto { RopeCmd::Raise { ray: g.grab_ray, auto: true } } else { RopeCmd::Release };
+                if matches!(
+                    mode,
+                    Some(omsi_trolley::PoleMode::Hand | omsi_trolley::PoleMode::Free)
+                ) && g.grab != Some(k)
+                    && ropes.get(k) == Some(&RopeCmd::Idle)
+                {
+                    ropes[k] = if g.grab_auto {
+                        RopeCmd::Raise {
+                            ray: g.grab_ray,
+                            auto: true,
+                        }
+                    } else {
+                        RopeCmd::Release
+                    };
                 } else if mode == Some(omsi_trolley::PoleMode::OnWire) {
                     *a = 0.0;
                 }
@@ -491,7 +631,10 @@ impl VehicleInstance {
                     g.grab_idle += dt;
                 }
                 // (a window that does not feed the ray - no mouse - lets the pole go)
-                let up = matches!(g.rig.poles.get(k).map(|p| p.mode), Some(omsi_trolley::PoleMode::Free | omsi_trolley::PoleMode::OnWire));
+                let up = matches!(
+                    g.rig.poles.get(k).map(|p| p.mode),
+                    Some(omsi_trolley::PoleMode::Free | omsi_trolley::PoleMode::OnWire)
+                );
                 if g.grab_manual {
                     let p = &g.rig.poles[k];
                     if p.hold_engaged || g.grab_idle > 2.0 {
@@ -508,7 +651,10 @@ impl VehicleInstance {
                 } else if g.grab_idle > 2.0 || (g.grab_auto && up) {
                     g.grab = None;
                 } else {
-                    ropes[k] = RopeCmd::Raise { ray: g.grab_ray, auto: g.grab_auto };
+                    ropes[k] = RopeCmd::Raise {
+                        ray: g.grab_ray,
+                        auto: g.grab_auto,
+                    };
                 }
             }
         }
@@ -517,7 +663,10 @@ impl VehicleInstance {
             for (k, p) in g.rig.poles.iter().enumerate() {
                 if p.def.motor && ropes.get(k) == Some(&RopeCmd::Idle) {
                     if r > 0.5 {
-                        ropes[k] = RopeCmd::Raise { ray: None, auto: true };
+                        ropes[k] = RopeCmd::Raise {
+                            ray: None,
+                            auto: true,
+                        };
                     } else if r < -0.5 {
                         ropes[k] = RopeCmd::Pull;
                     }
@@ -527,7 +676,10 @@ impl VehicleInstance {
         if g.auto_raise_for > 0.0 {
             g.auto_raise_for -= dt;
             for r in ropes.iter_mut() {
-                *r = RopeCmd::Raise { ray: None, auto: true };
+                *r = RopeCmd::Raise {
+                    ray: None,
+                    auto: true,
+                };
             }
         }
         if g.auto_lower_for > 0.0 {
@@ -566,20 +718,56 @@ impl VehicleInstance {
         g.prune_frogs(net.as_deref());
         // the pole variables a model animates by (written by slot once they have been made: a
         // physics step of a trolleybus looked up some twenty names by their text before)
-        const GLOBAL: [&str; 7] = ["Trolley_Volts", "Trolley_Amps", "Trolley_Powered", "Trolley_Notch", "Trolley_Arc", "Trolley_Hiss", "Trolley_Battery"];
+        const GLOBAL: [&str; 7] = [
+            "Trolley_Volts",
+            "Trolley_Amps",
+            "Trolley_Powered",
+            "Trolley_Notch",
+            "Trolley_Arc",
+            "Trolley_Hiss",
+            "Trolley_Battery",
+        ];
         let mut vals = std::mem::take(&mut g.var_values);
         vals.clear();
         for (p, hit) in g.rig.poles.iter().zip(&g.rig.hit_level) {
-            vals.extend_from_slice(&[p.theta.to_degrees() as f32, p.psi.to_degrees() as f32, p.state_code(), if p.closed { 1.0 } else { 0.0 }, p.force as f32, p.bounce_level(), *hit, p.shoe_yaw.to_degrees() as f32, p.shoe_pitch.to_degrees() as f32]);
+            vals.extend_from_slice(&[
+                p.theta.to_degrees() as f32,
+                p.psi.to_degrees() as f32,
+                p.state_code(),
+                if p.closed { 1.0 } else { 0.0 },
+                p.force as f32,
+                p.bounce_level(),
+                *hit,
+                p.shoe_yaw.to_degrees() as f32,
+                p.shoe_pitch.to_degrees() as f32,
+            ]);
         }
-        vals.extend_from_slice(&[g.rig.volts, g.rig.amps, if g.rig.circuit { 1.0 } else { 0.0 }, out.notch, g.rig.arc, g.rig.hiss, out.battery_soc]);
+        vals.extend_from_slice(&[
+            g.rig.volts,
+            g.rig.amps,
+            if g.rig.circuit { 1.0 } else { 0.0 },
+            out.notch,
+            g.rig.arc,
+            g.rig.hiss,
+            out.battery_soc,
+        ]);
         let mut ids = std::mem::take(&mut g.var_ids);
-        let names: Option<Vec<String>> = (ids.len() != vals.len()).then(|| g.names.pole.iter().flatten().cloned().chain(GLOBAL.iter().map(|s| s.to_string())).collect());
+        let names: Option<Vec<String>> = (ids.len() != vals.len()).then(|| {
+            g.names
+                .pole
+                .iter()
+                .flatten()
+                .cloned()
+                .chain(GLOBAL.iter().map(|s| s.to_string()))
+                .collect()
+        });
         if let Some(names) = names {
             ids.clear();
             for (n, v) in names.iter().zip(&vals) {
                 self.set_engine_var(n, *v);
-                if let Some(id) = omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied()) {
+                if let Some(id) =
+                    omsi_script::compile::with_lower(n, |k| self.var_index.get(k).copied())
+                {
                     ids.push(id);
                 }
             }
@@ -610,7 +798,12 @@ impl VehicleInstance {
         }
     }
 
-    fn fire_wire_triggers(&mut self, frogs: &[(usize, u32)], crossings: &[(usize, u32)], net: Option<&WireNet>) {
+    fn fire_wire_triggers(
+        &mut self,
+        frogs: &[(usize, u32)],
+        crossings: &[(usize, u32)],
+        net: Option<&WireNet>,
+    ) {
         let mut seen_frogs: Vec<(usize, u32)> = Vec::new();
         for &(pole, switch) in frogs {
             if seen_frogs.contains(&(pole, switch)) {
@@ -629,26 +822,33 @@ impl VehicleInstance {
                 continue;
             }
             self.trigger("Trolley_Frog");
-            if let Some(name) = net.and_then(|n| n.switches.get(switch as usize)).map(|s| s.name.as_str()).filter(|n| !n.is_empty()) {
+            if let Some(name) = net
+                .and_then(|n| n.switches.get(switch as usize))
+                .map(|s| s.name.as_str())
+                .filter(|n| !n.is_empty())
+            {
                 let name = name.split_whitespace().collect::<Vec<_>>().join("_");
                 self.trigger(&format!("Trolley_Frog_{name}"));
             }
         }
 
-        let fresh_pairs: Vec<(u32, u32)> = if let (Some(g), Some(net)) = (self.trolley.as_mut(), net) {
-            let mut fresh = Vec::new();
-            for &(_, id) in crossings {
-                let Some(c) = net.crossings.get(id as usize) else { continue };
-                let pair = if c.a < c.b { (c.a, c.b) } else { (c.b, c.a) };
-                if !g.active_crossings.contains(&pair) {
-                    g.active_crossings.push(pair);
-                    fresh.push(pair);
+        let fresh_pairs: Vec<(u32, u32)> =
+            if let (Some(g), Some(net)) = (self.trolley.as_mut(), net) {
+                let mut fresh = Vec::new();
+                for &(_, id) in crossings {
+                    let Some(c) = net.crossings.get(id as usize) else {
+                        continue;
+                    };
+                    let pair = if c.a < c.b { (c.a, c.b) } else { (c.b, c.a) };
+                    if !g.active_crossings.contains(&pair) {
+                        g.active_crossings.push(pair);
+                        fresh.push(pair);
+                    }
                 }
-            }
-            fresh
-        } else {
-            Vec::new()
-        };
+                fresh
+            } else {
+                Vec::new()
+            };
         let mut seen_crossings: Vec<(usize, u32)> = Vec::new();
         let mut conductors: Vec<u32> = Vec::new();
         let mut physical: Vec<(u32, u32)> = Vec::new();
@@ -721,8 +921,15 @@ mod tests {
             "[trolley_span]\np -40 0 5.5\np 40 0 5.5\n[trolley_span]\np 0 -40 5.5\np 0 40 5.5\n",
         ));
         assert_eq!(net.crossings.len(), 4, "the wires cross without joining");
-        let pole = |side: i8| omsi_trolley::PoleDef { side, base: glam::Vec3::new(0.3 * side as f32, -1.0, 3.0), ..Default::default() };
-        let def = TrolleyDef { poles: vec![pole(-1), pole(1)], ..Default::default() };
+        let pole = |side: i8| omsi_trolley::PoleDef {
+            side,
+            base: glam::Vec3::new(0.3 * side as f32, -1.0, 3.0),
+            ..Default::default()
+        };
+        let def = TrolleyDef {
+            poles: vec![pole(-1), pole(1)],
+            ..Default::default()
+        };
         vehicle.trolley = Some(TrolleyGear::for_type(&def, 1).unwrap());
         vehicle.attach_wires(Some(net.clone()));
         vehicle.heading = 90.0;
@@ -731,24 +938,41 @@ mod tests {
         for _ in 0..(8 * 60) {
             vehicle.step_physics(1.0 / 60.0);
         }
-        assert!(vehicle.trolley.as_ref().unwrap().rig.all_on_wire(), "both poles on the wire");
+        assert!(
+            vehicle.trolley.as_ref().unwrap().rig.all_on_wire(),
+            "both poles on the wire"
+        );
         let mut batches: Vec<Vec<(usize, u32)>> = Vec::new();
         vehicle.set_speed(8.0);
         for _ in 0..(6 * 60) {
             vehicle.step_physics(1.0 / 60.0);
-            let events: Vec<(usize, u32)> = vehicle.trolley.as_ref().unwrap().rig.crossings_crossed().collect();
+            let events: Vec<(usize, u32)> = vehicle
+                .trolley
+                .as_ref()
+                .unwrap()
+                .rig
+                .crossings_crossed()
+                .collect();
             if !events.is_empty() {
                 batches.push(events);
             }
         }
-        assert!(vehicle.position.x > 20.0, "the bus did not reach the crossing: {:.1}", vehicle.position.x);
+        assert!(
+            vehicle.position.x > 20.0,
+            "the bus did not reach the crossing: {:.1}",
+            vehicle.position.x
+        );
         // the two conductors of the crossed wire are 0.6 m apart: the poles reach them in
         // steps of their own, and the crossing is one crossing all the same
         assert_eq!(batches.len(), 2, "{batches:?}");
         assert!(batches.iter().all(|b| b.len() == 2), "{batches:?}");
         let crossed: Vec<(usize, u32)> = batches.concat();
         for p in 0..2 {
-            assert_eq!(crossed.iter().filter(|(pole, _)| *pole == p).count(), 2, "{crossed:?}");
+            assert_eq!(
+                crossed.iter().filter(|(pole, _)| *pole == p).count(),
+                2,
+                "{crossed:?}"
+            );
         }
         assert_eq!(vehicle.var("joint_count"), Some(4.0));
         assert_eq!(vehicle.var("pole1_count"), Some(2.0));
@@ -770,8 +994,15 @@ mod tests {
              [trolley_switch]\npos 0 0 5.5\nmode fixed\n",
         ));
         // a pole on each wire of the span the bus drives along, the front one ahead of the other
-        let pole = |side: i8, y: f32| omsi_trolley::PoleDef { side, base: glam::Vec3::new(0.3 * side as f32, y, 3.0), ..Default::default() };
-        let def = TrolleyDef { poles: vec![pole(-1, 1.0), pole(1, -3.0)], ..Default::default() };
+        let pole = |side: i8, y: f32| omsi_trolley::PoleDef {
+            side,
+            base: glam::Vec3::new(0.3 * side as f32, y, 3.0),
+            ..Default::default()
+        };
+        let def = TrolleyDef {
+            poles: vec![pole(-1, 1.0), pole(1, -3.0)],
+            ..Default::default()
+        };
         vehicle.trolley = Some(TrolleyGear::for_type(&def, 1).unwrap());
         vehicle.attach_wires(Some(net.clone()));
         vehicle.heading = 90.0;
@@ -780,21 +1011,38 @@ mod tests {
         for _ in 0..(8 * 60) {
             vehicle.step_physics(1.0 / 60.0);
         }
-        assert!(vehicle.trolley.as_ref().unwrap().rig.all_on_wire(), "both poles on the wire");
+        assert!(
+            vehicle.trolley.as_ref().unwrap().rig.all_on_wire(),
+            "both poles on the wire"
+        );
         let mut batches: Vec<Vec<(usize, u32)>> = Vec::new();
         vehicle.set_speed(8.0);
         for _ in 0..(6 * 60) {
             vehicle.step_physics(1.0 / 60.0);
-            let events: Vec<(usize, u32)> = vehicle.trolley.as_ref().unwrap().rig.frogs_crossed().collect();
+            let events: Vec<(usize, u32)> = vehicle
+                .trolley
+                .as_ref()
+                .unwrap()
+                .rig
+                .frogs_crossed()
+                .collect();
             if !events.is_empty() {
                 batches.push(events);
             }
         }
-        assert!(vehicle.position.x > 20.0, "the bus did not reach the frog: {:.1}", vehicle.position.x);
+        assert!(
+            vehicle.position.x > 20.0,
+            "the bus did not reach the frog: {:.1}",
+            vehicle.position.x
+        );
         assert_eq!(batches.len(), 2, "{batches:?}");
         assert!(batches.iter().all(|b| b.len() == 1), "{batches:?}");
         assert_eq!(vehicle.var("frog_count"), Some(1.0));
-        assert_eq!(vehicle.var("joint_count"), Some(1.0), "the frog's inner crossing fires a joint");
+        assert_eq!(
+            vehicle.var("joint_count"),
+            Some(1.0),
+            "the frog's inner crossing fires a joint"
+        );
         assert_eq!(vehicle.var("pole1_count"), Some(1.0));
         assert_eq!(vehicle.var("pole2_count"), Some(1.0));
     }
@@ -804,12 +1052,16 @@ mod tests {
 /// pedal is down (reverse gear: negative torque), the last one kept while it is up or the script
 /// gives none.
 fn direction_of(throttle: f32, torque: f32, held: f32) -> f32 {
-    if throttle > 0.05 && torque.abs() > 30.0 { torque.signum() } else { held }
+    if throttle > 0.05 && torque.abs() > 30.0 {
+        torque.signum()
+    } else {
+        held
+    }
 }
 
 #[cfg(test)]
 mod direction_tests {
-    use super::{direction_of, TrolleyDef};
+    use super::{TrolleyDef, direction_of};
     #[test]
     fn legacy_traction_is_not_replaced_by_a_typical_drive() {
         // Exercise the opt-in path in a fresh process without changing other tests' settings.
@@ -821,9 +1073,15 @@ mod direction_tests {
                 .env("OMSI_REALISTIC_ROAD", "1")
                 .status()
                 .unwrap();
-            assert!(status.success(), "legacy traction must also be preserved in realistic mode");
+            assert!(
+                status.success(),
+                "legacy traction must also be preserved in realistic mode"
+            );
         } else {
-            assert!(crate::rail::realistic(), "the child exercises realistic mode");
+            assert!(
+                crate::rail::realistic(),
+                "the child exercises realistic mode"
+            );
         }
         let def = TrolleyDef {
             poles: vec![omsi_trolley::PoleDef::default()],
@@ -831,8 +1089,14 @@ mod direction_tests {
             ..Default::default()
         };
         let gear = super::TrolleyGear::for_type(&def, 1).unwrap();
-        assert!(gear.def.drive.is_none(), "the bus script keeps its gears and interlocks");
-        assert!(gear.torque.is_none(), "no native torque overrides the script");
+        assert!(
+            gear.def.drive.is_none(),
+            "the bus script keeps its gears and interlocks"
+        );
+        assert!(
+            gear.torque.is_none(),
+            "no native torque overrides the script"
+        );
         assert_eq!(gear.rig.poles.len(), 1, "pole simulation is retained");
 
         let explicit = TrolleyDef {
@@ -840,16 +1104,26 @@ mod direction_tests {
             ..def
         };
         let gear = super::TrolleyGear::for_type(&explicit, 1).unwrap();
-        assert_eq!(gear.def.drive, explicit.drive, "an explicitly configured drive remains available");
+        assert_eq!(
+            gear.def.drive, explicit.drive,
+            "an explicitly configured drive remains available"
+        );
     }
-
 
     #[test]
     fn follows_the_sign_of_the_torque_under_the_pedal_and_keeps_it_after() {
         assert_eq!(direction_of(0.8, 400.0, 1.0), 1.0);
         assert_eq!(direction_of(0.8, -400.0, 1.0), -1.0);
         assert_eq!(direction_of(0.0, 0.0, -1.0), -1.0, "pedal up: kept");
-        assert_eq!(direction_of(0.8, 0.0, -1.0), -1.0, "a script that gives no torque: kept");
-        assert_eq!(direction_of(0.8, 12.0, 1.0), 1.0, "noise is not a direction");
+        assert_eq!(
+            direction_of(0.8, 0.0, -1.0),
+            -1.0,
+            "a script that gives no torque: kept"
+        );
+        assert_eq!(
+            direction_of(0.8, 12.0, 1.0),
+            1.0,
+            "noise is not a direction"
+        );
     }
 }
