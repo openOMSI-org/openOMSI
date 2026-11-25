@@ -10,12 +10,16 @@ impl World {
     /// the wheels and the feet), and decode the textures the upload will want. The roads that
     /// reach a tile and the surfaces and cutters of the tiles next to it count as much as its
     /// own, each as it finally stands.
+    /// Returns the seconds of the cut (the rasters and the ground's paint) and of the
+    /// textures decoded for the upload, apart: a first area of 9 tiles took 31 s in the two
+    /// together, and the log could not say which.
     pub(super) fn cut_terrain(
         &self,
         prepared: &mut [Prepared],
         staged: &HashMap<(i32, i32), Arc<StagedTile>>,
         layout: &TileLayout,
-    ) {
+    ) -> (f64, f64) {
+        let t0 = std::time::Instant::now();
         let debug_raster = omsi_cfg::flags::OMSI_DEBUG_RASTER.var().and_then(|q| {
             q.split_once(',')
                 .and_then(|(a, b)| Some((a.parse::<f64>().ok()?, b.parse::<f64>().ok()?)))
@@ -97,7 +101,9 @@ impl World {
                 log::info!("   {d:.1} m of nothing under the ground at ({x:.0}, {y:.0})");
             }
         }
+        let t1 = std::time::Instant::now();
         self.decode_wanted_textures(prepared);
+        ((t1 - t0).as_secs_f64(), t1.elapsed().as_secs_f64())
     }
 
     /// One tile's surface raster and the ground cut and paint that follow from it.
