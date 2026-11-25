@@ -14,7 +14,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         duv = in.uv * material.extra.z;
     }
     // a height map (in the PBR set's ORM alpha, `foo_height`): parallax occlusion mapping
-    if (material.pbr.x > 3.5 && !terrain) {
+    if (!LEAN && material.pbr.x > 3.5 && !terrain) {
         duv = parallax_uv(duv, in.world, safe_normal(in.normal), normalize(eye - in.world));
     }
     // (without the [texcoordtransX/Y] offset: the transmap, night map and light map stay

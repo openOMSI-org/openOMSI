@@ -284,7 +284,7 @@ fn vcloud_hg(c: f32, g: f32) -> f32 {
 }
 
 // rgb (the sky's own terms) and cover of the classic layer towards d, or none (a 0).
-fn vanilla_clouds_3d(d: vec3<f32>, fog: vec3<f32>, encoded: bool, gx: vec2<f32>, gy: vec2<f32>) -> vec4<f32> {
+fn vanilla_clouds_3d(d: vec3<f32>, fog: vec3<f32>, encoded: bool, uv: vec2<f32>, t: f32, gx: vec2<f32>, gy: vec2<f32>) -> vec4<f32> {
     let h_abs = vsky.cloud.x;
     let size = max(vsky.cloud.y, 1.0);
     let h0 = camera.cam_pos.z + vsky.haze.w;
@@ -292,7 +292,6 @@ fn vanilla_clouds_3d(d: vec3<f32>, fog: vec3<f32>, encoded: bool, gx: vec2<f32>,
         return vec4<f32>(0.0);
     }
     let ovc = vsky.haze.z > 0.5;
-    let t = vcloud_shell(d, h_abs - h0);
     if (t <= 0.0) {
         return vec4<f32>(0.0);
     }
@@ -302,8 +301,6 @@ fn vanilla_clouds_3d(d: vec3<f32>, fog: vec3<f32>, encoded: bool, gx: vec2<f32>,
     let day = smoothstep(-0.08, 0.12, sun.z);
     let sc = camera.sun_color.rgb;
     let sun_tint = sc / max(max(sc.r, max(sc.g, sc.b)), 1e-4);
-    let origin = camera.cam_pos.xy + camera.world_origin.zw;
-    let uv = (origin + d.xy * t + vsky.cloud.zw) / size + vec2<f32>(0.5, -0.5) * (h_abs / size);
     let tex = textureSampleGrad(t_vclouds, s_repeat, uv, gx, gy);
     var a = tex.a;
     var thick = a;
@@ -365,11 +362,15 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let lit = min(srgb_encode(sky) + vanilla_sun(d), vec3<f32>(1.0));
     var col = select(srgb_decode(lit), lit, encoded);
     col = mix(col, fog, vanilla_haze(v));
-    // (the texture's footprint for the layer's own samples: the flat cone's, taken here in
-    // uniform control flow)
-    let gx = dpdx(cuv);
-    let gy = dpdy(cuv);
-    let c = vanilla_clouds_3d(d, fog, encoded, gx, gy);
+    // (where the ray meets the layer's shell and the texture's footprint there, taken here in
+    // uniform control flow; the footprint held to a sane size where the shell runs off
+    // towards the horizon)
+    let h0s = camera.cam_pos.z + vsky.haze.w;
+    let t_shell = vcloud_shell(d, max(vsky.cloud.x - h0s, 1.0));
+    let suv = (camera.cam_pos.xy + camera.world_origin.zw + d.xy * max(t_shell, 0.0) + vsky.cloud.zw) / size + vec2<f32>(0.5, -0.5) * (vsky.cloud.x / size);
+    let gx = clamp(dpdx(suv), vec2<f32>(-0.25), vec2<f32>(0.25));
+    let gy = clamp(dpdy(suv), vec2<f32>(-0.25), vec2<f32>(0.25));
+    let c = vanilla_clouds_3d(d, fog, encoded, suv, t_shell, gx, gy);
     col = mix(col, c.rgb, c.a);
     if (encoded) {
         return vec4<f32>(srgb_decode(col), 1.0);

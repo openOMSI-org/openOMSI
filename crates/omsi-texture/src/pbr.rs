@@ -134,7 +134,7 @@ pub fn find(diffuse: &Path) -> PbrFiles {
         "ambientocclusion",
         "ambient_occlusion",
     ]);
-    out.height = pick(&["hh", "height", "heightmap", "disp", "displacement", "parallax"]);
+    out.height = pick(&["height", "heightmap", "displacement", "parallax"]);
     if let Some(p) = pick(&["orm", "arm"]) {
         out.packed = Some((p, [0, 1, 2]));
     } else if let Some(p) = pick(&["mra"]) {
@@ -377,7 +377,8 @@ pub fn load_set(files: &PbrFiles) -> Option<PbrImages> {
             Image {
                 width: hm.width,
                 height: hm.height,
-                rgba: vec![255u8; (hm.width * hm.height * 4) as usize],
+                // (occlusion open, roughness and metalness unknown: their flags stay off)
+                rgba: [255u8, 255, 0, 255].repeat((hm.width * hm.height) as usize),
                 has_alpha: false,
             }
         });

@@ -401,6 +401,12 @@ fn model_lights_into(
     let mut seq = 0usize;
     let mut li = 0usize;
     let model_dir = model.path.parent().unwrap_or(std::path::Path::new(""));
+    // (a vehicle's model - under `Vehicles` - not a scenery object's that names the same
+    // channels: a parked bus model, a garage's lamps)
+    let vehicle_model = model
+        .path
+        .components()
+        .any(|c| c.as_os_str().eq_ignore_ascii_case("vehicles"));
     for (i, md) in model.meshes.iter().enumerate() {
         // most meshes carry no light, and their transform is not free (every mesh of every
         // AI car, every frame)
@@ -411,7 +417,7 @@ fn model_lights_into(
         li += md.light_enh_2.len();
         let xf = mesh_transforms(i);
         // (a mesh seen from outside: a cab-only one may reuse an outside lamp's channel)
-        let exterior_mesh = md.viewpoint == 0 || md.viewpoint & 0b101 != 0;
+        let exterior_mesh = vehicle_model && (md.viewpoint == 0 || md.viewpoint & 0b101 != 0);
         for l in &md.light_enh {
             if let Some(o) = owners.as_deref_mut() {
                 o.resize(out.len() - base, seq.wrapping_sub(1));

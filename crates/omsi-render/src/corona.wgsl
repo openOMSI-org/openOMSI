@@ -84,14 +84,6 @@ fn vs_main(in: CoronaIn) -> CoronaOut {
 @vertex
 fn vs_enhanced(in: CoronaIn) -> CoronaOut {
     let compact = (u32(in.extra.z + 0.5) & VEHICLE_LAMP) != 0u;
-    if (compact && in.extra.w > 1.5 && in.extra.w < 2.5) {
-        // (a vehicle lamp's round fog billboard: its light in the air is the lamps'
-        // airlight's, `lamp_airlight`, which follows the beam; the billboard stood in front
-        // of the car as a lit disc)
-        var hidden: CoronaOut;
-        hidden.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
-        return hidden;
-    }
     return corona_vertex(in, glare_scale(compact), true);
 }
 

@@ -94,6 +94,12 @@ fn lamp_shadow_at(li: u32, p: vec3<f32>, n: vec3<f32>, thin: bool) -> f32 {
 
 const CABIN_FILL: f32 = 0.2;
 
+// How a saloon lamp's light reaches a surface turned at `c` (the cosine) to it: a tube's
+// length lights what faces a little away from its middle too.
+fn cabin_wrap(c: f32) -> f32 {
+    return clamp((c + 0.3) / 1.3, 0.0, 1.0);
+}
+
 // The saloon's lamps in the Enhanced picture. A bus's saloon lights are tubes and long
 // diffusers along the ceiling, not points: a point's inverse square burnt the ceiling round
 // every lamp white and left the seats and the floor a metre and a half below it dim, a
@@ -118,13 +124,15 @@ fn interior_lamps_area(p: vec3<f32>, n: vec3<f32>, code: f32) -> vec3<f32> {
         }
         let core = max(l.extra.y, 0.01);
         let dist = sqrt(dist2);
-        let att = 0.5 * core * core / (dist2 + 0.25 * core * core) + 0.5 * core / (dist + 0.5 * core);
-        let ndl = clamp((dot(n, d / dist) + 0.3) / 1.3, 0.0, 1.0);
+        // (flat within the tube's own length, an inverse square beyond it - half as much
+        // again as a point of the same core far off, the tube's length)
+        let att = 1.5 * core * core / (dist2 + 0.5 * core * core);
+        let ndl = cabin_wrap(dot(n, d / dist));
         sum = sum + l.color.rgb * l.color.w * att * ndl;
     }
-    // (a soft knee instead of a hard stop at white: what lies right under a lamp keeps a
-    // trace of its shading)
-    return sum / (vec3<f32>(1.0) + 0.2 * sum);
+    // (a soft knee towards white instead of a hard stop: what lies right under a lamp keeps
+    // a trace of its shading)
+    return min(sum / (vec3<f32>(1.0) + 0.25 * sum), vec3<f32>(1.25));
 }
 
 // How much of the player's saloon lamps' light reaches a point past what stands in it, 1 where
@@ -145,12 +153,12 @@ fn cabin_visibility(p: vec3<f32>, n: vec3<f32>) -> f32 {
         let l = lights[li];
         let d = l.pos.xyz - p;
         let dist2 = max(dot(d, d), 1e-4);
-        let ndl = dot(n, d * inverseSqrt(dist2));
+        let ndl = cabin_wrap(dot(n, d * inverseSqrt(dist2)));
         if (ndl <= 0.0 || l.color.w <= 0.0) {
             continue;
         }
         let core = max(l.extra.y, 0.01);
-        let share = (l.color.r + l.color.g + l.color.b) * l.color.w * core * core / dist2 * ndl;
+        let share = (l.color.r + l.color.g + l.color.b) * l.color.w * core * core / (dist2 + 0.5 * core * core) * ndl;
         open_light = open_light + share;
         seen_light = seen_light + share * lamp_shadow_at(li, p, n, false);
     }

@@ -1021,16 +1021,8 @@ pub fn exposure_for(e_ref: f32) -> f32 {
     // two thirds of a stop over "mid grey in full light = 0.18" (the tone curve's contrast
     // adds as much again to the bright half), as a camera exposes a sunny street: its soft
     // shoulder holds the sunlit white
-    // (the key's ratio taken to `NIGHT_KEY_POWER`: the lightness data are for a scene seen
-    // after minutes in it, on paper; a picture on a screen in a lit room shows a lamp-lit
-    // street a stop and a half under the day, a moonlit field under three - darker than that,
-    // every night read as black with a few lamps in it)
-    1.6 * std::f32::consts::PI / e
-        * (adaptation_key(e) / adaptation_key(DAY_REFERENCE)).powf(NIGHT_KEY_POWER)
+    1.6 * std::f32::consts::PI / e * adaptation_key(e) / adaptation_key(DAY_REFERENCE)
 }
-
-/// How much of the eye's darker key at low light the exposure keeps (see `exposure_for`).
-pub const NIGHT_KEY_POWER: f32 = 0.62;
 
 /// How much of the weather's dimming of the day the eye is left to see (log terms): it
 /// adapts to an overcast or a storm's gloom as to any light, but not all the way - a grey

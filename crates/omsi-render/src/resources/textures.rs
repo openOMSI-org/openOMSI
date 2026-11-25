@@ -783,7 +783,18 @@ impl Renderer {
                     .collect(),
                 has_alpha: img.has_alpha,
             };
-            self.add_texture(scene, &data, true)
+            // (each channel averaged on its own down the mip chain: the alpha of an ORM map
+            // is a height map, not a coverage that should weigh the other channels)
+            let fitted = fit_image(&data, self.device.limits().max_texture_dimension_2d);
+            let data = fitted.as_ref().unwrap_or(&data);
+            let t = self.upload_rgba_mips_with(
+                data.width,
+                data.height,
+                &data.rgba,
+                MipAverage::Independent,
+            );
+            scene.textures.push(t);
+            scene.textures.len() - 1
         };
         let normal = set.normal.as_ref().map(&mut up);
         let orm = set.orm.as_ref().map(&mut up);

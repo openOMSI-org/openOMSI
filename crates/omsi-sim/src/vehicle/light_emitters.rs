@@ -38,6 +38,9 @@ pub(crate) fn add(model: &mut Model, meshes: &[VehicleMesh], dirs: &[&Path]) {
         let Some(tag) = md.light_emitter_interior.clone() else {
             continue;
         };
+        if tag.strength <= 0.0 {
+            continue;
+        }
         let data = &vm.data;
         if data.indices.is_empty() || data.uvs.len() != data.positions.len() {
             continue;
@@ -142,12 +145,14 @@ pub(crate) fn add(model: &mut Model, meshes: &[VehicleMesh], dirs: &[&Path]) {
             let peak = color.max_element().max(1e-4);
             // (the reach: an `[interiorlight]`'s range is how far its light stays at full
             // strength - a lit square metre of a white strip reaches about a metre)
-            let range = (total.sqrt() * 2.2 * tag.strength.sqrt()).clamp(0.3, 3.0);
+            let range = (total.sqrt() * 2.2).clamp(0.3, 3.0);
             made.push((
                 InteriorLight {
                     variable: variable.clone(),
                     range,
-                    color: (color / peak * 255.0 * peak.sqrt().min(1.0)).to_array(),
+                    // (the strength scales the light's level: an `[interiorlight]`'s colour is
+                    // its brightness, 255 the full one)
+                    color: (color / peak * 255.0 * peak.sqrt().min(1.0) * tag.strength).to_array(),
                     pos: (pos + normal * 0.08).to_array(),
                 },
                 vm.file.display().to_string(),

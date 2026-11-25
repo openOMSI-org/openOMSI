@@ -69,8 +69,8 @@ fn by_altitude(alt: f32) -> ColorGrade {
     // a dusk whose pink and violet the eye takes most of out (the magenta that every lit wall
     // took at sunset), a blue hour a little cool, a night whose dark keeps the sky's blue
     let keys: [(f32, ColorGrade); 7] = [
-        (-18.0, key([0.96, 1.0, 1.06], 0.82, [0.006, 0.010, 0.020], [1.0, 1.0, 1.0])),
-        (-9.0, key([0.96, 1.0, 1.05], 0.86, [0.005, 0.009, 0.018], [1.0, 1.0, 1.0])),
+        (-18.0, key([0.96, 1.0, 1.06], 0.82, [0.010, 0.015, 0.026], [1.0, 1.0, 1.0])),
+        (-9.0, key([0.96, 1.0, 1.05], 0.86, [0.008, 0.012, 0.022], [1.0, 1.0, 1.0])),
         (-4.0, key([0.97, 1.03, 1.02], 0.92, [0.003, 0.005, 0.011], [1.0, 1.0, 0.99])),
         (0.5, key([1.0, 1.03, 0.97], 1.04, [0.002, 0.002, 0.004], [1.03, 1.0, 0.93])),
         (6.0, key([1.03, 1.0, 0.94], 1.10, [0.001, 0.001, 0.002], [1.04, 1.0, 0.94])),
@@ -93,9 +93,30 @@ fn by_altitude(alt: f32) -> ColorGrade {
     keys[keys.len() - 1].1
 }
 
+/// Tests that measure geometry by pixel values (a reflection's strength, a shadow's ratio)
+/// render with the old natural curve and no grade (`neutral_for_tests`).
+static NEUTRAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(test)]
+pub(crate) struct NeutralGrade;
+
+#[cfg(test)]
+impl Drop for NeutralGrade {
+    fn drop(&mut self) {
+        NEUTRAL.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The natural curve and no grade until the guard is dropped.
+#[cfg(test)]
+pub(crate) fn neutral_for_tests() -> NeutralGrade {
+    NEUTRAL.store(true, std::sync::atomic::Ordering::Relaxed);
+    NeutralGrade
+}
+
 /// The grade for the light of the moment.
 pub(crate) fn color_grade(l: &Lighting) -> ColorGrade {
-    if !grade_on() {
+    if !grade_on() || NEUTRAL.load(std::sync::atomic::Ordering::Relaxed) {
         return ColorGrade::NEUTRAL;
     }
     let alt = l.sun_dir.normalize_or_zero().z.clamp(-1.0, 1.0).asin().to_degrees();
@@ -124,6 +145,9 @@ pub(crate) fn color_grade(l: &Lighting) -> ColorGrade {
 
 /// The tone curve's number for post.wgsl `tone_curve` (0 natural, 1 AgX, 2 PBR Neutral).
 pub(crate) fn tone_curve_choice() -> f32 {
+    if NEUTRAL.load(std::sync::atomic::Ordering::Relaxed) {
+        return 0.0;
+    }
     static C: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *C.get_or_init(|| match std::env::var("OMSI_TONEMAP").ok().as_deref().map(str::trim) {
         Some("natural") | Some("0") => 0.0,

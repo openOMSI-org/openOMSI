@@ -858,11 +858,18 @@ impl Model {
                         r.seek(save);
                         break;
                     }
-                    match (k, t.parse::<f32>()) {
+                    let num = t.replace(',', ".").parse::<f32>();
+                    match (k, num) {
                         (0, Ok(v)) => e.strength = v.max(0.0),
                         (1, Ok(v)) => e.max_lamps = (v as u32).clamp(1, 16),
                         // (a free text line - a comment - is no variable name)
-                        (_, Err(_)) if !t.contains(char::is_whitespace) => {
+                        (_, Err(_))
+                            if t
+                                .chars()
+                                .next()
+                                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                                && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') =>
+                        {
                             e.variable = Some(t.to_string());
                             break;
                         }
