@@ -4,6 +4,7 @@ use super::*;
 use omsi_input::auto_shift::GateMemory;
 
 mod cameras;
+pub(crate) mod cruise;
 mod doors;
 mod gears;
 mod ibis;
@@ -192,6 +193,10 @@ pub(crate) struct Player {
     pub(crate) auto_drag: Option<AutoDrag>,
     /// Running auto-start (Shift+U).
     pub(crate) startup: Option<omsi_sim::startup::StartUp>,
+    /// Cruise control, while it is on (Num0, #3976).
+    pub(crate) cruise: Option<cruise::Cruise>,
+    /// What the cruise control has to say on the screen (it switched itself off).
+    pub(crate) cruise_note: Option<String>,
     /// When the running auto-start began (one that has gone on for long is given up by the
     /// next Shift+U).
     pub(crate) startup_at: Option<std::time::Instant>,
@@ -1224,17 +1229,15 @@ impl Player {
         if a.throttle.is_some_and(|t| t > 0.05) {
             self.axes.brake = 0.0;
         }
-        self.auto_clutch_bite(a.throttle.unwrap_or(0.0).max(self.axes.throttle));
-        self.tick_auto_shift(
-            dt,
-            a.throttle.unwrap_or(0.0).max(self.axes.throttle),
-            a.brake.unwrap_or(0.0).max(self.axes.brake),
-        );
         let throttle = a
             .throttle
             .unwrap_or(self.axes.throttle)
             .max(self.axes.throttle);
         let brake = a.brake.unwrap_or(self.axes.brake).max(self.axes.brake);
+        let (throttle, brake) = self.cruise_pedals(dt, throttle, brake);
+        // (the cruise control's pedals: the automated manual shifts up under it)
+        self.auto_clutch_bite(throttle);
+        self.tick_auto_shift(dt, throttle, brake);
         let (throttle, brake) = rp_speed_limit::controls(
             f64::from(self.vehicle.physics.velocity_kmh()),
             omsi_lan::commands::speed_limit_kmh(),
@@ -1732,44 +1735,4 @@ mod held_repeat_tests {
 }
 
 #[cfg(test)]
-mod steering_view_tests {
-    use super::steering_view_yaw;
-
-    #[test]
-    fn follows_both_directions_without_snapping_or_overshooting() {
-        let right = steering_view_yaw(0.0, 1.0, 0.016, true, 30.0, 0.25);
-        assert!(right > 0.0 && right < 30.0);
-        assert_eq!(
-            steering_view_yaw(0.0, -1.0, 0.016, true, 30.0, 0.25),
-            -right
-        );
-        let changed = steering_view_yaw(30.0, -1.0, 0.016, true, 30.0, 0.25);
-        assert!(changed < 30.0 && changed > -30.0);
-    }
-
-    #[test]
-    fn smoothing_is_frame_rate_independent_even_at_five_fps() {
-        let mut reference: Option<f32> = None;
-        for fps in [5, 30, 60, 144] {
-            let mut yaw = 0.0;
-            for _ in 0..fps {
-                yaw = steering_view_yaw(yaw, 0.8, 1.0 / fps as f32, true, 40.0, 0.25);
-            }
-            if let Some(reference) = reference {
-                assert!((yaw - reference).abs() < 0.0001);
-            }
-            reference = Some(yaw);
-        }
-    }
-
-    #[test]
-    fn configurable_angle_response_and_return_to_center() {
-        let slow = steering_view_yaw(0.0, 1.0, 0.1, true, 45.0, 0.5);
-        let fast = steering_view_yaw(0.0, 1.0, 0.1, true, 45.0, 0.1);
-        assert!(fast > slow);
-        assert_eq!(steering_view_yaw(0.0, 2.0, 0.1, true, 45.0, 0.1), fast);
-        let centered = steering_view_yaw(30.0, 1.0, 0.1, false, 45.0, 0.25);
-        assert!(centered > 0.0 && centered < 30.0);
-        assert_eq!(steering_view_yaw(30.0, 0.0, 0.0, true, 45.0, 0.25), 30.0);
-    }
-}
+mod steering_view_tests;

@@ -99,6 +99,9 @@ What Omsi.exe does, read from the game itself, where openOMSI did something of i
 
 ### Fixes
 
+- **mX Graphics have cruise control, named saves, taking over an AI bus and
+  `omsi.bus.track()` too**: they came only to the standard graphics
+  ([#4043](https://github.com/openOMSI-org/openOMSI/pull/4043), [#4045](https://github.com/openOMSI-org/openOMSI/pull/4045), [#4047](https://github.com/openOMSI-org/openOMSI/pull/4047), [#4051](https://github.com/openOMSI-org/openOMSI/pull/4051)).
 - **Enhanced graphics**: far lamps are round points of light instead of torn squares, the
   shaded parts of the clouds have no grid of diamonds, bus windows are no longer grey, fences
   and railings are lit by the sun on their facing side only, wet road reflections have no grid,

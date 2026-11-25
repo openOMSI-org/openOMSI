@@ -867,6 +867,11 @@ impl App {
             && self.menus.game_menu.is_none()
             && !self.mouse_steering_now()
         {
+            if let Some(id) = crate::game_panels::take_control::bus_under_cursor(self) {
+                if crate::game_panels::take_control::ask(self, id) {
+                    return;
+                }
+            }
             if self
                 .player
                 .as_ref()

@@ -28,6 +28,13 @@ impl App {
                 self.menus.menu_edit_icao = false;
                 self.menus.menu_edit = None;
             }
+            if matches!(
+                self.menus.list_kind,
+                Some(crate::game_lists::ListKind::SaveSlots)
+            ) && self.menus.menu_edit.take().is_some()
+            {
+                crate::platform::text_input(self.window.as_deref(), false);
+            }
         }
         self.menus.dropdown = None;
         self.shell.bus_preview.invalidate_selection();
@@ -337,14 +344,27 @@ impl App {
             }
             KeyCode::Enter | KeyCode::NumpadEnter => {
                 if let Some(t) = self.menus.menu_edit.take() {
-                    crate::game_lists::set_route_by_hand(self, &t);
+                    crate::platform::text_input(self.window.as_deref(), false);
+                    if matches!(
+                        self.menus.list_kind,
+                        Some(crate::game_lists::ListKind::SaveSlots)
+                    ) {
+                        if t.trim().is_empty() {
+                            self.refresh_list();
+                            return;
+                        }
+                        self.save_slot_to(None, Some(t));
+                    } else {
+                        crate::game_lists::set_route_by_hand(self, &t);
+                    }
                     self.close_game_menu();
                 }
                 return;
             }
             _ => {
+                let max = self.edit_max();
                 if let (Some(c), Some(t)) = (route_char(code), self.menus.menu_edit.as_mut()) {
-                    if t.chars().count() < ROUTE_NUMBER_MAX {
+                    if t.chars().count() < max {
                         t.push(c);
                     }
                 }
@@ -379,20 +399,34 @@ impl App {
         }
         if !matches!(
             self.menus.list_kind,
-            Some(crate::game_lists::ListKind::RouteNumbers)
+            Some(
+                crate::game_lists::ListKind::RouteNumbers | crate::game_lists::ListKind::SaveSlots
+            )
         ) || self.menus.menu_edit.is_none()
         {
             return;
         }
+        let max = self.edit_max();
         if let Some(t) = self.menus.menu_edit.as_mut() {
             for c in text.chars().filter(|c| !c.is_control()) {
-                if t.chars().count() >= ROUTE_NUMBER_MAX {
+                if t.chars().count() >= max {
                     break;
                 }
                 t.push(c);
             }
         }
         self.refresh_list();
+    }
+
+    fn edit_max(&self) -> usize {
+        if matches!(
+            self.menus.list_kind,
+            Some(crate::game_lists::ListKind::SaveSlots)
+        ) {
+            crate::app_impl::saves::NAME_MAX
+        } else {
+            ROUTE_NUMBER_MAX
+        }
     }
 
     /// Set the clock to the time typed (digits: hh, hhmm or hhmmss; what is missing is 0).
@@ -665,7 +699,10 @@ impl App {
                 self.ident_edit_key(code);
             } else if matches!(
                 self.menus.list_kind,
-                Some(crate::game_lists::ListKind::RouteNumbers)
+                Some(
+                    crate::game_lists::ListKind::RouteNumbers
+                        | crate::game_lists::ListKind::SaveSlots
+                )
             ) {
                 self.route_edit_key(code);
             } else {
