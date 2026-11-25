@@ -7,7 +7,12 @@
 
 use std::path::{Path, PathBuf};
 
-pub const SITUATIONS: [&str; 4] = ["Tutorials/STRG.osn", "Tutorials/FAST.osn", "Tutorials/LIN.osn", "Tutorials/SPEZ.osn"];
+pub const SITUATIONS: [&str; 4] = [
+    "Tutorials/STRG.osn",
+    "Tutorials/FAST.osn",
+    "Tutorials/LIN.osn",
+    "Tutorials/SPEZ.osn",
+];
 
 pub struct Page {
     pub title: String,
@@ -30,8 +35,17 @@ pub fn page_text(html: &str) -> (String, String) {
         .map(|(t, _)| strip(t))
         .unwrap_or_default();
     let rest = body.split_once("</h2>").map(|x| x.1).unwrap_or(body);
-    let text = strip(&rest.replace("</p>", "\n").replace("<br>", "\n").replace("<li>", "\n• "));
-    let lines: Vec<String> = text.lines().map(|l| l.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|l| !l.is_empty()).collect();
+    let text = strip(
+        &rest
+            .replace("</p>", "\n")
+            .replace("<br>", "\n")
+            .replace("<li>", "\n• "),
+    );
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty())
+        .collect();
     (title, lines.join("\n"))
 }
 
@@ -54,7 +68,10 @@ impl Tutorial {
     /// folder is missing).
     pub fn load(root: &Path, number: usize, lang: &str) -> Option<Tutorial> {
         let dir = root.join("Tutorials").join(number.to_string());
-        let lang_dir = [lang, "ENG", "DEU"].iter().map(|l| dir.join(l)).find(|d| d.is_dir())?;
+        let lang_dir = [lang, "ENG", "DEU"]
+            .iter()
+            .map(|l| dir.join(l))
+            .find(|d| d.is_dir())?;
         let mut steps: Vec<(u64, PathBuf)> = std::fs::read_dir(&lang_dir)
             .ok()?
             .flatten()
@@ -71,11 +88,23 @@ impl Tutorial {
                 let bytes = std::fs::read(&p).ok()?;
                 let (title, text) = page_text(&omsi_cfg::codepage::decode(&bytes));
                 let img = dir.join(format!("{n}.jpg"));
-                Some(Page { title, text, image: img.is_file().then_some(img) })
+                Some(Page {
+                    title,
+                    text,
+                    image: img.is_file().then_some(img),
+                })
             })
             .collect::<Vec<_>>();
-        log::info!("tutorial {number}: {} pages from {}", pages.len(), lang_dir.display());
-        (!pages.is_empty()).then_some(Tutorial { pages, at: 0, hidden: false })
+        log::info!(
+            "tutorial {number}: {} pages from {}",
+            pages.len(),
+            lang_dir.display()
+        );
+        (!pages.is_empty()).then_some(Tutorial {
+            pages,
+            at: 0,
+            hidden: false,
+        })
     }
 
     pub fn next(&mut self) {
@@ -105,13 +134,25 @@ pub fn decode_html_entities(input: &str) -> String {
         };
         let entity = &remaining[1..end];
         let decoded = match entity {
-            "amp" => Some('&'), "quot" => Some('"'), "apos" | "#39" => Some('\''),
-            "lt" => Some('<'), "gt" => Some('>'), "nbsp" => Some(' '),
-            "auml" => Some('ä'), "ouml" => Some('ö'), "uuml" => Some('ü'),
-            "Auml" => Some('Ä'), "Ouml" => Some('Ö'), "Uuml" => Some('Ü'),
-            "szlig" => Some('ß'), "ndash" | "mdash" | "minus" => Some('-'),
-            "bull" => Some('•'), "deg" => Some('°'),
-            _ => entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X"))
+            "amp" => Some('&'),
+            "quot" => Some('"'),
+            "apos" | "#39" => Some('\''),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "nbsp" => Some(' '),
+            "auml" => Some('ä'),
+            "ouml" => Some('ö'),
+            "uuml" => Some('ü'),
+            "Auml" => Some('Ä'),
+            "Ouml" => Some('Ö'),
+            "Uuml" => Some('Ü'),
+            "szlig" => Some('ß'),
+            "ndash" | "mdash" | "minus" => Some('-'),
+            "bull" => Some('•'),
+            "deg" => Some('°'),
+            _ => entity
+                .strip_prefix("#x")
+                .or_else(|| entity.strip_prefix("#X"))
                 .and_then(|n| u32::from_str_radix(n, 16).ok())
                 .or_else(|| entity.strip_prefix('#').and_then(|n| n.parse().ok()))
                 .and_then(char::from_u32),
@@ -132,17 +173,23 @@ pub fn decode_html_entities(input: &str) -> String {
 mod tests {
     #[test]
     fn text() {
-        let (t, x) = super::page_text("<style>b{}</style><h2>Hello!</h2><p>One &quot;two&quot;</p><p>Three</p>");
+        let (t, x) = super::page_text(
+            "<style>b{}</style><h2>Hello!</h2><p>One &quot;two&quot;</p><p>Three</p>",
+        );
         assert_eq!(t, "Hello!");
         assert_eq!(x, "One \"two\"\nThree");
     }
 
     #[test]
     fn german_html_entities() {
-        let (title, text) = super::page_text("<h2>Fahrg&auml;ste</h2><p>Men&uuml; &amp; T&#252;ren &ndash; gr&ouml;&szlig;er</p>");
+        let (title, text) = super::page_text(
+            "<h2>Fahrg&auml;ste</h2><p>Men&uuml; &amp; T&#252;ren &ndash; gr&ouml;&szlig;er</p>",
+        );
         assert_eq!(title, "Fahrgäste");
         assert_eq!(text, "Menü & Türen - größer");
-        let (_, text) = super::page_text("<h2>x</h2><p>unter 0&deg;C, the AI &#8203;&#8203;vehicles &unknown; R&D</p>");
+        let (_, text) = super::page_text(
+            "<h2>x</h2><p>unter 0&deg;C, the AI &#8203;&#8203;vehicles &unknown; R&D</p>",
+        );
         assert_eq!(text, "unter 0°C, the AI vehicles &unknown; R&D");
     }
 }

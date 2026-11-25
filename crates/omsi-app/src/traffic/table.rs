@@ -57,10 +57,22 @@ impl Traffic {
                 // (the paint scheme it is drawn with: a host's cars are all its own, never a
                 // LAN mirror's, whose `scheme` is unset)
                 scheme: c.scheme.map(|s| s.min(254) as u8),
-                paint: c.scheme.and_then(|s| v.ty.paint_schemes.get(s)).map(|p| p.name.clone()).unwrap_or_default(),
+                paint: c
+                    .scheme
+                    .and_then(|s| v.ty.paint_schemes.get(s))
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default(),
             };
-            let meta = || if c.is_bus() { crate::lan_world::car_meta(v) } else { Meta::default() };
-            let Some(id) = self.table.upsert(c.id, kind, look, meta, row) else { continue };
+            let meta = || {
+                if c.is_bus() {
+                    crate::lan_world::car_meta(v)
+                } else {
+                    Meta::default()
+                }
+            };
+            let Some(id) = self.table.upsert(c.id, kind, look, meta, row) else {
+                continue;
+            };
             if c.is_bus() && refresh {
                 self.table.set_meta(id, &crate::lan_world::car_meta(v));
             }

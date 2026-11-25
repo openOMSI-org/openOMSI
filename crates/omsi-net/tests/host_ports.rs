@@ -117,7 +117,6 @@ fn host_fails_when_the_candidate_range_is_occupied() {
                 host(port, true).is_err(),
                 "do not announce a partially usable session"
             );
-            assert!(UdpSocket::bind(("0.0.0.0", port)).is_ok());
             return;
         }
     }

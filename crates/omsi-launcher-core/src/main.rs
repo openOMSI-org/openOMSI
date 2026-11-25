@@ -19,7 +19,18 @@ fn main() {
     }
     let game = omsi_launcher_lib::load_config().game;
     let game = if game.trim().is_empty() {
-        std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(if cfg!(windows) { "openomsi.exe" } else { "openomsi" }))).unwrap_or_default()
+        std::env::current_exe()
+            .ok()
+            .and_then(|e| {
+                e.parent().map(|d| {
+                    d.join(if cfg!(windows) {
+                        "openomsi.exe"
+                    } else {
+                        "openomsi"
+                    })
+                })
+            })
+            .unwrap_or_default()
     } else {
         std::path::PathBuf::from(game)
     };

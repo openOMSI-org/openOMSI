@@ -27,18 +27,35 @@ pub trait Host: Send + Sync {
         None
     }
     /// A map's roads, read the way the game's city map reads them (the navigator's).
-    fn city_map(&self, _root: &Path, _tiles: &[(i32, i32, PathBuf)], _chrono: &[PathBuf]) -> CityMap {
+    fn city_map(
+        &self,
+        _root: &Path,
+        _tiles: &[(i32, i32, PathBuf)],
+        _chrono: &[PathBuf],
+    ) -> CityMap {
         CityMap::default()
     }
     /// The map's own layers (ground, water, paved surfaces, houses: `omsi_scene::mapgen`), read
     /// the way the navigator reads them, from the game's cache when it has them.
-    fn map_layers(&self, _root: &Path, _map_dir: &Path, _tiles: &[(i32, i32, PathBuf)], _chrono: &[PathBuf]) -> Option<omsi_map::layers::Layers> {
+    fn map_layers(
+        &self,
+        _root: &Path,
+        _map_dir: &Path,
+        _tiles: &[(i32, i32, PathBuf)],
+        _chrono: &[PathBuf],
+    ) -> Option<omsi_map::layers::Layers> {
         None
     }
     /// The game's city map colours (RGBA, 0 - 1): road casing, road, main road, route.
     fn city_map_colors(&self) -> [[f32; 4]; 4] {
-        let c = |r: u8, g: u8, b: u8, a: f32| [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a];
-        [c(30, 30, 30, 0.9), c(92, 92, 92, 1.0), c(112, 112, 112, 1.0), c(214, 48, 40, 1.0)]
+        let c =
+            |r: u8, g: u8, b: u8, a: f32| [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a];
+        [
+            c(30, 30, 30, 0.9),
+            c(92, 92, 92, 1.0),
+            c(112, 112, 112, 1.0),
+            c(214, 48, 40, 1.0),
+        ]
     }
     /// A polyline thinned to `tol` metres (the game's own map simplification).
     fn simplify(&self, pts: &[Vec3], _tol: f32) -> Vec<Vec3> {

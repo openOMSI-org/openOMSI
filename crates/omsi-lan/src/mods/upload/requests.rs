@@ -88,7 +88,12 @@ impl Request {
     /// own, or a word it does not know).
     pub(in crate::mods) fn parse(words: &[&str]) -> Option<Result<Request, Rejected>> {
         use Rejected::{Answer, End};
-        let offer = |len: &str| len.parse::<u64>().ok().filter(|l| *l <= MAX_OFFER).ok_or(End("bad offer"));
+        let offer = |len: &str| {
+            len.parse::<u64>()
+                .ok()
+                .filter(|l| *l <= MAX_OFFER)
+                .ok_or(End("bad offer"))
+        };
         let r = match words {
             ["OFFER", len] => offer(len).map(|len| Request::Offer { len }),
             ["OFFER2", len] => offer(len).map(|len| Request::OfferPieces { len }),
@@ -96,18 +101,30 @@ impl Request {
                 (Ok(index), Ok(len)) => Ok(Request::Put { index, len }),
                 _ => Err(End("bad put")),
             },
-            ["PUTPIECE", index, piece, raw, codec, wire] => match (index.parse(), piece.parse(), raw.parse(), wire.parse()) {
-                (Ok(index), Ok(piece), Ok(raw), Ok(wire)) => Ok(Request::PutPiece(PutPiece { index, piece, raw, codec: codec.to_string(), wire })),
-                _ => Err(End("bad piece")),
-            },
+            ["PUTPIECE", index, piece, raw, codec, wire] => {
+                match (index.parse(), piece.parse(), raw.parse(), wire.parse()) {
+                    (Ok(index), Ok(piece), Ok(raw), Ok(wire)) => Ok(Request::PutPiece(PutPiece {
+                        index,
+                        piece,
+                        raw,
+                        codec: codec.to_string(),
+                        wire,
+                    })),
+                    _ => Err(End("bad piece")),
+                }
+            }
             ["ZSTD"] => Ok(Request::Zstd),
             ["PIECE", sha, piece] => match (Sha256::parse(sha), piece.parse()) {
                 (Some(sha), Ok(piece)) => Ok(Request::Piece { sha, piece }),
                 _ => Err(Answer(says::NO_SUCH_FILE)),
             },
             ["DONE"] => Ok(Request::Done),
-            ["MANIFEST", fp] => Fingerprint::parse(fp).map(Request::Manifest).ok_or(Answer(says::NO_SUCH_BUS)),
-            ["BLOB", sha] => Sha256::parse(sha).map(Request::Blob).ok_or(Answer(says::NO_SUCH_FILE)),
+            ["MANIFEST", fp] => Fingerprint::parse(fp)
+                .map(Request::Manifest)
+                .ok_or(Answer(says::NO_SUCH_BUS)),
+            ["BLOB", sha] => Sha256::parse(sha)
+                .map(Request::Blob)
+                .ok_or(Answer(says::NO_SUCH_FILE)),
             _ => return None,
         };
         Some(r)
@@ -124,7 +141,12 @@ pub(in crate::mods) struct BusRequests {
 
 impl BusRequests {
     /// Answer one request (its body, when it has one, read from `input`).
-    pub(in crate::mods) fn serve(&mut self, request: Request, input: &mut impl Read, out: &mut impl Write) -> std::io::Result<()> {
+    pub(in crate::mods) fn serve(
+        &mut self,
+        request: Request,
+        input: &mut impl Read,
+        out: &mut impl Write,
+    ) -> std::io::Result<()> {
         match request {
             Request::Offer { len } => self.incoming.offer(input, out, len),
             Request::OfferPieces { len } => self.incoming.offer_pieces(input, out, len),
@@ -156,13 +178,40 @@ mod tests {
         let fp = format!("v1-{}", "cd".repeat(32));
         assert_eq!(parse("OFFER 120"), Some(Ok(Request::Offer { len: 120 })));
         assert_eq!(parse("OFFER2 7"), Some(Ok(Request::OfferPieces { len: 7 })));
-        assert_eq!(parse("PUT 3 4096"), Some(Ok(Request::Put { index: 3, len: 4096 })));
-        assert_eq!(parse("PUTPIECE 3 1 1048576 y 2048"), Some(Ok(Request::PutPiece(PutPiece { index: 3, piece: 1, raw: 1 << 20, codec: "y".into(), wire: 2048 }))));
+        assert_eq!(
+            parse("PUT 3 4096"),
+            Some(Ok(Request::Put {
+                index: 3,
+                len: 4096
+            }))
+        );
+        assert_eq!(
+            parse("PUTPIECE 3 1 1048576 y 2048"),
+            Some(Ok(Request::PutPiece(PutPiece {
+                index: 3,
+                piece: 1,
+                raw: 1 << 20,
+                codec: "y".into(),
+                wire: 2048
+            })))
+        );
         assert_eq!(parse("ZSTD"), Some(Ok(Request::Zstd)));
-        assert_eq!(parse(&format!("PIECE {sha} 9")), Some(Ok(Request::Piece { sha: Sha256::parse(&sha).unwrap(), piece: 9 })));
+        assert_eq!(
+            parse(&format!("PIECE {sha} 9")),
+            Some(Ok(Request::Piece {
+                sha: Sha256::parse(&sha).unwrap(),
+                piece: 9
+            }))
+        );
         assert_eq!(parse("DONE"), Some(Ok(Request::Done)));
-        assert_eq!(parse(&format!("MANIFEST {fp}")), Some(Ok(Request::Manifest(Fingerprint::parse(&fp).unwrap()))));
-        assert_eq!(parse(&format!("BLOB {sha}")), Some(Ok(Request::Blob(Sha256::parse(&sha).unwrap()))));
+        assert_eq!(
+            parse(&format!("MANIFEST {fp}")),
+            Some(Ok(Request::Manifest(Fingerprint::parse(&fp).unwrap())))
+        );
+        assert_eq!(
+            parse(&format!("BLOB {sha}")),
+            Some(Ok(Request::Blob(Sha256::parse(&sha).unwrap())))
+        );
         // (the host's own requests, and words it does not know, are not these)
         assert_eq!(parse("LIST"), None);
         assert_eq!(parse("GET 4"), None);
@@ -173,14 +222,32 @@ mod tests {
     #[test]
     fn what_is_asked_wrongly_is_answered_as_it_always_was() {
         // a file or bus that cannot be: ERR, and the connection goes on
-        assert_eq!(parse("PIECE nothex 1"), Some(Err(Rejected::Answer(says::NO_SUCH_FILE))));
-        assert_eq!(parse(&format!("PIECE {} x", "0".repeat(64))), Some(Err(Rejected::Answer(says::NO_SUCH_FILE))));
-        assert_eq!(parse("BLOB 1234"), Some(Err(Rejected::Answer(says::NO_SUCH_FILE))));
-        assert_eq!(parse("MANIFEST nobus"), Some(Err(Rejected::Answer(says::NO_SUCH_BUS))));
+        assert_eq!(
+            parse("PIECE nothex 1"),
+            Some(Err(Rejected::Answer(says::NO_SUCH_FILE)))
+        );
+        assert_eq!(
+            parse(&format!("PIECE {} x", "0".repeat(64))),
+            Some(Err(Rejected::Answer(says::NO_SUCH_FILE)))
+        );
+        assert_eq!(
+            parse("BLOB 1234"),
+            Some(Err(Rejected::Answer(says::NO_SUCH_FILE)))
+        );
+        assert_eq!(
+            parse("MANIFEST nobus"),
+            Some(Err(Rejected::Answer(says::NO_SUCH_BUS)))
+        );
         // numbers that make no sense (a body of their size may follow): the connection ends
         assert_eq!(parse("OFFER many"), Some(Err(Rejected::End("bad offer"))));
-        assert_eq!(parse(&format!("OFFER {}", MAX_OFFER + 1)), Some(Err(Rejected::End("bad offer"))));
+        assert_eq!(
+            parse(&format!("OFFER {}", MAX_OFFER + 1)),
+            Some(Err(Rejected::End("bad offer")))
+        );
         assert_eq!(parse("PUT x 10"), Some(Err(Rejected::End("bad put"))));
-        assert_eq!(parse("PUTPIECE 0 0 ten y 5"), Some(Err(Rejected::End("bad piece"))));
+        assert_eq!(
+            parse("PUTPIECE 0 0 ten y 5"),
+            Some(Err(Rejected::End("bad piece")))
+        );
     }
 }

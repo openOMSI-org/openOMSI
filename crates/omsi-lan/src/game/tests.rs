@@ -6,7 +6,9 @@ fn multiplayer_hud_translates_client_states_and_preserves_session_details() {
     let mut lan = LanSession::join_addr(Vec::new(), None, "Driver", Default::default()).unwrap();
     let tr = |text: &str| match text {
         "Online: connecting ..." => "連線中...".into(),
-        "Online: not connected: {reason} (chat /reconnect)" => "未連線：{reason}（聊天 /reconnect）".into(),
+        "Online: not connected: {reason} (chat /reconnect)" => {
+            "未連線：{reason}（聊天 /reconnect）".into()
+        }
         "Online: in {host}'s game, {others}" => "已加入 {host} 的遊戲，{others}".into(),
         "nobody else yet" => "尚無其他玩家".into(),
         "Online: {warning}" => "連線：{warning}".into(),
@@ -15,7 +17,10 @@ fn multiplayer_hud_translates_client_states_and_preserves_session_details() {
     };
     assert_eq!(hud_lines(&lan, &tr), ["連線中..."]);
     lan.rejected = Some("Map not installed".into());
-    assert_eq!(hud_lines(&lan, &tr), ["未連線：尚未安裝地圖（聊天 /reconnect）"]);
+    assert_eq!(
+        hud_lines(&lan, &tr),
+        ["未連線：尚未安裝地圖（聊天 /reconnect）"]
+    );
     lan.rejected = None;
     lan.connected = true;
     lan.welcome = Some(omsi_net::Welcome {
@@ -26,7 +31,13 @@ fn multiplayer_hud_translates_client_states_and_preserves_session_details() {
         players: 1,
     });
     lan.warnings.push("Map not installed".into());
-    assert_eq!(hud_lines(&lan, &tr), ["已加入 Alice {others} 的遊戲，尚無其他玩家", "連線：尚未安裝地圖"]);
+    assert_eq!(
+        hud_lines(&lan, &tr),
+        [
+            "已加入 Alice {others} 的遊戲，尚無其他玩家",
+            "連線：尚未安裝地圖"
+        ]
+    );
 }
 
 #[test]
@@ -39,8 +50,14 @@ fn compatible_string_tables_check_picture_paths_at_the_local_index() {
     let take = |values| mapped_remote_strings(&table, values, 2, &[1]).collect::<Vec<_>>();
     // A colon is valid in a display text but not in a picture path. The owner's
     // picture is wire slot 0; on this bus it is local slot 1.
-    assert_eq!(take(vec![(0, "12:30".into()), (1, "12:30".into())]), vec![(0, "12:30".into())]);
-    assert_eq!(take(vec![(0, r"..\Texture\blind.bmp".into())]), vec![(1, r"..\Texture\blind.bmp".into())]);
+    assert_eq!(
+        take(vec![(0, "12:30".into()), (1, "12:30".into())]),
+        vec![(0, "12:30".into())]
+    );
+    assert_eq!(
+        take(vec![(0, r"..\Texture\blind.bmp".into())]),
+        vec![(1, r"..\Texture\blind.bmp".into())]
+    );
     for path in [r"\\host\share\x.bmp", "C:/x.bmp", "/dev/zero"] {
         assert!(take(vec![(0, path.into()), (1, path.into())]).is_empty());
     }

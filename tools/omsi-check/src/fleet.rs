@@ -489,10 +489,15 @@ fn run_vehicle(
         ));
     }
     if power && engine {
-        let fba = v.var("bremse_p_Brzyl_FBA").or_else(|| v.var("spring_brake_pressure"));
+        let fba = v
+            .var("bremse_p_Brzyl_FBA")
+            .or_else(|| v.var("spring_brake_pressure"));
         if let Some(p) = fba {
             if p < 6.0e5 {
-                problems.push(format!("air pressure low after 20s start-up (spring brake {:.1} bar < 6.0 bar)", p / 1e5));
+                problems.push(format!(
+                    "air pressure low after 20s start-up (spring brake {:.1} bar < 6.0 bar)",
+                    p / 1e5
+                ));
             }
         }
     }
@@ -531,7 +536,11 @@ fn run_vehicle(
                 .map(|t| t.rgba.iter().all(|b| *b == 0))
                 .unwrap_or(true)
         }) {
-            let ids = group.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ");
+            let ids = group
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
             blank.push(format!("[scripttexture] {ids}"));
         }
     }
@@ -576,7 +585,10 @@ mod tests {
         model.meshes.push(inactive);
 
         assert!(shown_script_texture_groups(&model, |_| Some(0.0)).is_empty());
-        assert_eq!(shown_script_texture_groups(&model, |_| Some(1.0)), vec![vec![1]]);
+        assert_eq!(
+            shown_script_texture_groups(&model, |_| Some(1.0)),
+            vec![vec![1]]
+        );
     }
 }
 
@@ -637,20 +649,38 @@ fn type_first_trip(v: &mut omsi_sim::VehicleInstance) -> Option<String> {
 fn cause_of(problem: &str) -> &'static str {
     let p = problem.to_ascii_lowercase();
     match () {
-        _ if p.starts_with("cannot read") || p.starts_with("does not load") => "the vehicle does not load at all",
+        _ if p.starts_with("cannot read") || p.starts_with("does not load") => {
+            "the vehicle does not load at all"
+        }
         _ if p.starts_with("unknown keywords") => "keywords the loaders do not know",
-        _ if p.starts_with("script:") && p.contains("varinvalid") => "script: variables no varlist declares",
-        _ if p.starts_with("script:") && p.contains("functioninvalid") => "script: curves no constfile defines",
-        _ if p.starts_with("script:") && p.contains("constantinvalid") => "script: constants no constfile defines",
-        _ if p.starts_with("script:") && p.contains("macroinvalid") => "script: macros no script defines",
+        _ if p.starts_with("script:") && p.contains("varinvalid") => {
+            "script: variables no varlist declares"
+        }
+        _ if p.starts_with("script:") && p.contains("functioninvalid") => {
+            "script: curves no constfile defines"
+        }
+        _ if p.starts_with("script:") && p.contains("constantinvalid") => {
+            "script: constants no constfile defines"
+        }
+        _ if p.starts_with("script:") && p.contains("macroinvalid") => {
+            "script: macros no script defines"
+        }
         _ if p.starts_with("script:") => "script: other compiler errors",
-        _ if p.starts_with("callbacks the engine does not provide") => "callbacks the engine does not provide",
-        _ if p.starts_with("called callbacks") => "callbacks the engine does not provide (called while driving)",
-        _ if p.starts_with("getfontindex") || p.starts_with("[texttexture] fonts") => "fonts that are in no Fonts folder",
+        _ if p.starts_with("callbacks the engine does not provide") => {
+            "callbacks the engine does not provide"
+        }
+        _ if p.starts_with("called callbacks") => {
+            "callbacks the engine does not provide (called while driving)"
+        }
+        _ if p.starts_with("getfontindex") || p.starts_with("[texttexture] fonts") => {
+            "fonts that are in no Fonts folder"
+        }
         // almost always a stock train/tram `.ovh` shipped without the front section that
         // would couple it (trains couple through `Trains/`, not `[couple_back]`): counting
         // it with the real problems buried them under the size of the rolling-stock fleet
-        _ if p.starts_with("rear section that no vehicle couples") => "not driveable alone (no [couple_back] found for it - almost always unfinished stock rolling stock, not a mod problem)",
+        _ if p.starts_with("rear section that no vehicle couples") => {
+            "not driveable alone (no [couple_back] found for it - almost always unfinished stock rolling stock, not a mod problem)"
+        }
         _ if p.starts_with("displays a mesh shows") => "displays that stay blank with the IBIS set",
         _ if p.contains("textures not found") => "textures not found",
         _ if p.contains("meshes missing") => "meshes missing or unreadable",

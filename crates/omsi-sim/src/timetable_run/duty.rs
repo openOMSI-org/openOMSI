@@ -7,7 +7,10 @@ impl StopDir {
         if self.inbound.is_none() && self.outbound.is_none() {
             return true;
         }
-        [self.inbound, self.outbound].into_iter().flatten().any(|d| fwd.dot(d) >= DIR_COS)
+        [self.inbound, self.outbound]
+            .into_iter()
+            .flatten()
+            .any(|d| fwd.dot(d) >= DIR_COS)
     }
 }
 
@@ -47,7 +50,12 @@ impl PlannedTrip {
 /// Where timetable stop `k` (called `name`) stands in the IBIS's own stop list of route
 /// `route` (an index into the depot file's `info_busstop_lists`): the stop of that name
 /// nearest `k`. What `IBIS_busstop` has to be for the IBIS to show that stop.
-pub fn ibis_stop_index(hof: &omsi_vehicle::Hof, route: usize, name: &str, k: usize) -> Option<usize> {
+pub fn ibis_stop_index(
+    hof: &omsi_vehicle::Hof,
+    route: usize,
+    name: &str,
+    k: usize,
+) -> Option<usize> {
     let stop = (name.trim().to_lowercase(), stop_words(name));
     let list = hof.info_busstop_lists.get(route)?;
     // (spelt as `pick_route` compares the names: "Kirchweg" is the depot file's "F_Kirchweg")
@@ -74,10 +82,21 @@ pub(crate) fn script_route_index(bus: &crate::VehicleInstance) -> Option<usize> 
 /// so on a forward step the value is left at the previous route index and that `+ 1` lands
 /// on the new one. A backward step (or a resume) writes the index itself and freezes the
 /// ibox's "last TT index" so the frame does not announce again.
-pub(crate) fn sync_script_busstop(bus: &mut crate::VehicleInstance, tt: usize, name: &str, prev_tt: i32) {
-    let Some(hof) = bus.host.hof.clone() else { return };
-    let Some(route) = script_route_index(bus) else { return };
-    let Some(idx) = ibis_stop_index(&hof, route, name, tt) else { return };
+pub(crate) fn sync_script_busstop(
+    bus: &mut crate::VehicleInstance,
+    tt: usize,
+    name: &str,
+    prev_tt: i32,
+) {
+    let Some(hof) = bus.host.hof.clone() else {
+        return;
+    };
+    let Some(route) = script_route_index(bus) else {
+        return;
+    };
+    let Some(idx) = ibis_stop_index(&hof, route, name, tt) else {
+        return;
+    };
     let forward = (tt as i32) > prev_tt;
     let value = if forward { idx.saturating_sub(1) } else { idx };
     for var in ["ibox_busstop"] {
@@ -120,7 +139,8 @@ pub fn starting_trip(trips: &[PlannedTrip], now: f64) -> usize {
 /// GetTTTerminusIndex as Omsi.exe answers it: the first depot terminus whose name is the
 /// trip's terminus (the second [trip] line), else -1.
 pub(crate) fn tt_terminus_index(hof: Option<&omsi_vehicle::hof::Hof>, terminus: &str) -> i32 {
-    hof.and_then(|h| h.termini.iter().position(|t| t.texture_id == terminus)).map_or(-1, |i| i as i32)
+    hof.and_then(|h| h.termini.iter().position(|t| t.texture_id == terminus))
+        .map_or(-1, |i| i as i32)
 }
 
 /// A trip run's number (`PlayerDuty::trip_run`): never the same twice in a game.
@@ -133,7 +153,14 @@ impl PlayerDuty {
     /// A duty of `trips` (where they begin in the tour: `first_trip`) that starts with trip
     /// `trip_index`, before the bus has been placed on it; `picked` when the player picked
     /// the trip.
-    pub fn new(line: String, tour: String, trips: Vec<PlannedTrip>, trip_index: usize, first_trip: usize, picked: bool) -> PlayerDuty {
+    pub fn new(
+        line: String,
+        tour: String,
+        trips: Vec<PlannedTrip>,
+        trip_index: usize,
+        first_trip: usize,
+        picked: bool,
+    ) -> PlayerDuty {
         PlayerDuty {
             line,
             tour,
@@ -184,9 +211,27 @@ impl PlayerDuty {
     /// Service/depot legs have no public line and use the HOF's
     /// `Betriebsfahrt` destination. They remain part of the duty, but the
     /// player's IBIS should use the next public leg while the bus is waiting.
+    /// Whether the IBIS's stop has to be typed again (#2267): `shown` is the stop it was last
+    /// given (None - never), `wanted` the duty's own; only for a player who lets the game type
+    /// the IBIS (`auto_ibis`) and asked it to follow the stops (`ibis_auto_stop`).
+    pub fn ibis_stop_stale(
+        shown: Option<usize>,
+        wanted: usize,
+        auto_ibis: bool,
+        set: bool,
+    ) -> bool {
+        auto_ibis && set && shown != Some(wanted)
+    }
+
     pub fn trip_for_ibis(&self) -> (&PlannedTrip, usize) {
         let current = self.trip();
-        let public = |t: &PlannedTrip| !t.line.trim().is_empty() || self.unnumbered_public.iter().any(|n| n.eq_ignore_ascii_case(&t.name));
+        let public = |t: &PlannedTrip| {
+            !t.line.trim().is_empty()
+                || self
+                    .unnumbered_public
+                    .iter()
+                    .any(|n| n.eq_ignore_ascii_case(&t.name))
+        };
         if public(current) {
             return (
                 current,
@@ -241,7 +286,11 @@ impl PlayerDuty {
     /// The current trip ended `how` (the first ending since the last `take_finished` counts).
     fn finish(&mut self, how: TripEnd) {
         if self.finished.is_none() {
-            self.finished = Some(Finished { index: self.trip_index, how, run: self.run });
+            self.finished = Some(Finished {
+                index: self.trip_index,
+                how,
+                run: self.run,
+            });
         }
     }
 
@@ -258,7 +307,9 @@ impl PlayerDuty {
     pub fn set_closed_stops(&mut self, names: &[String], via: &str) -> usize {
         let mut n = 0;
         for s in self.trips.iter_mut().flat_map(|t| t.stops.iter_mut()) {
-            let closed = names.iter().any(|c| c.trim().eq_ignore_ascii_case(s.name.trim()));
+            let closed = names
+                .iter()
+                .any(|c| c.trim().eq_ignore_ascii_case(s.name.trim()));
             s.closed = closed.then(|| via.trim().to_string());
             n += closed as usize;
         }
@@ -333,7 +384,13 @@ impl PlayerDuty {
             .filter(|(_, d)| *d < AT_STOP)
             .collect();
         let nearest = |v: Vec<(usize, f64)>| v.into_iter().min_by(|a, b| a.1.total_cmp(&b.1));
-        let near = nearest(near.iter().copied().filter(|&(k, _)| trip.stops[k].dir.takes(fwd)).collect()).or_else(|| nearest(near));
+        let near = nearest(
+            near.iter()
+                .copied()
+                .filter(|&(k, _)| trip.stops[k].dir.takes(fwd))
+                .collect(),
+        )
+        .or_else(|| nearest(near));
         if near.is_none() && !self.picked {
             let reachable = (self.trip_index..self.trips.len()).find(|&k| {
                 let t = &self.trips[k];
@@ -361,14 +418,22 @@ impl PlayerDuty {
                     self.next_stop = t
                         .stops
                         .iter()
-                        .position(|s| s.calls() && s.position.map(|p| s.arr >= now + Self::approach_time(pos, p)).unwrap_or(false))
+                        .position(|s| {
+                            s.calls()
+                                && s.position
+                                    .map(|p| s.arr >= now + Self::approach_time(pos, p))
+                                    .unwrap_or(false)
+                        })
                         .unwrap_or(0);
                     log::info!(
                         "duty: no trip of the tour can be reached in time; trip {} ({}) from stop {} '{}'",
                         self.trip_index + 1,
                         t.name,
                         self.next_stop,
-                        t.stops.get(self.next_stop).map(|s| s.name.as_str()).unwrap_or("")
+                        t.stops
+                            .get(self.next_stop)
+                            .map(|s| s.name.as_str())
+                            .unwrap_or("")
                     );
                     return;
                 }
@@ -463,7 +528,9 @@ impl PlayerDuty {
         self.next_stop = stop.min(last);
         self.left_late = (self.next_stop > 0).then_some(0.0);
         self.done = self.next_stop == last
-            && self.trip().stops[last].position.is_some_and(|p| (p - pos).length() < AT_STOP);
+            && self.trip().stops[last]
+                .position
+                .is_some_and(|p| (p - pos).length() < AT_STOP);
         self.placed = true;
         self.picked = true;
         self.trip_changed = false;
@@ -472,7 +539,12 @@ impl PlayerDuty {
     /// The duty of a resumed situation: at its saved stop (an older save without one is
     /// placed by where the bus stands), with the timetable on the host before the first
     /// script frame.
-    pub fn resume(&mut self, bus: &mut crate::VehicleInstance, day_time: f64, saved_stop: Option<usize>) {
+    pub fn resume(
+        &mut self,
+        bus: &mut crate::VehicleInstance,
+        day_time: f64,
+        saved_stop: Option<usize>,
+    ) {
         match saved_stop {
             Some(stop) => self.restore_progress(stop, bus.position),
             None => {
@@ -489,7 +561,12 @@ impl PlayerDuty {
     pub fn skip_to(&mut self, stop: usize) -> bool {
         let last = self.trip().stops.len().saturating_sub(1);
         let stop = stop.min(last);
-        log::debug!("duty: page asks for stop {stop} (next {}, at_stop {}, done {})", self.next_stop, self.at_stop, self.done);
+        log::debug!(
+            "duty: page asks for stop {stop} (next {}, at_stop {}, done {})",
+            self.next_stop,
+            self.at_stop,
+            self.done
+        );
         if stop == self.next_stop && !self.done {
             return false;
         }
@@ -529,7 +606,10 @@ impl PlayerDuty {
             return None;
         }
         let last = self.trip().stops.len().checked_sub(1)?;
-        let name = self.trip().stops[self.next_stop.min(last)].name.trim().to_string();
+        let name = self.trip().stops[self.next_stop.min(last)]
+            .name
+            .trim()
+            .to_string();
         if self.next_stop >= last {
             self.at_stop = false;
             self.arrived_late = None;
@@ -577,10 +657,21 @@ impl PlayerDuty {
             return now - stop.dep;
         }
         let due = now - stop.arr;
-        let last = self.next_stop.checked_sub(1).and_then(|k| trip.stops.get(k));
-        if let (Some(last), Some(at), Some(here), true) = (last, last.and_then(|s| s.position), self.position, self.left_late.is_some()) {
+        let last = self
+            .next_stop
+            .checked_sub(1)
+            .and_then(|k| trip.stops.get(k));
+        if let (Some(last), Some(at), Some(here), true) = (
+            last,
+            last.and_then(|s| s.position),
+            self.position,
+            self.left_late.is_some(),
+        ) {
             if let Some(next) = stop.position {
-                let (gone, left) = ((here - at).truncate().length(), (next - here).truncate().length());
+                let (gone, left) = (
+                    (here - at).truncate().length(),
+                    (next - here).truncate().length(),
+                );
                 if gone + left > 1.0 {
                     let share = gone / (gone + left);
                     return now - (last.dep + share * (stop.arr - last.dep));
@@ -607,7 +698,11 @@ impl PlayerDuty {
     /// the personnel file counts.
     /// Returns, when the bus has just left a stop it had to serve, how late it arrived
     /// there and how late it left (seconds; negative: early).
-    pub fn update(&mut self, bus: &mut crate::VehicleInstance, day_time: f64) -> Option<(f64, f64)> {
+    pub fn update(
+        &mut self,
+        bus: &mut crate::VehicleInstance,
+        day_time: f64,
+    ) -> Option<(f64, f64)> {
         let day_time = self.duty_time(day_time);
         self.heading = bus.heading;
         self.position = Some(bus.position);
@@ -633,7 +728,12 @@ impl PlayerDuty {
         // next trip while it waited at the terminus (#2148, #2060).
         if self.trip_index + 1 < self.trips.len() && self.served_terminus.is_some() {
             self.set_trip(self.trip_index + 1);
-            log::info!("duty: terminus served, on to trip {} {} to {}", self.trip_index + 1, self.trip().name, self.trip().terminus);
+            log::info!(
+                "duty: terminus served, on to trip {} {} to {}",
+                self.trip_index + 1,
+                self.trip().name,
+                self.trip().terminus
+            );
             self.progress_at(bus.position, day_time, doors_open_here);
         }
         self.feed_host(bus, day_time);
@@ -652,17 +752,31 @@ impl PlayerDuty {
             return;
         }
         let trip = &self.trips[self.trip_index];
-        let at = |i: usize| trip.stops.get(i).and_then(|s| s.position).map(|p| (p - pos).length());
+        let at = |i: usize| {
+            trip.stops
+                .get(i)
+                .and_then(|s| s.position)
+                .map(|p| (p - pos).length())
+        };
         let Some(back) = at(k) else { return };
         if back > STEP_BACK || at(k + 1).is_some_and(|ahead| ahead <= back) {
             return;
         }
         let stop = &trip.stops[k];
-        log::info!("duty: trip {}: the bus serves stop {} '{}' it had passed, {back:.0} m beyond it", trip.name, k + 1, stop.name.trim());
+        log::info!(
+            "duty: trip {}: the bus serves stop {} '{}' it had passed, {back:.0} m beyond it",
+            trip.name,
+            k + 1,
+            stop.name.trim()
+        );
         self.arrived_late = Some(day_time - stop.arr);
         self.next_stop = k;
         self.at_stop = true;
-        self.passed = PassedStop { doors: true, stop: None, stand: Some(pos) };
+        self.passed = PassedStop {
+            doors: true,
+            stop: None,
+            stand: Some(pos),
+        };
     }
 
     pub(crate) fn doors_open(bus: &crate::VehicleInstance) -> bool {
@@ -736,11 +850,20 @@ impl PlayerDuty {
         }
         let trip = &self.trips[self.trip_index];
         let last = trip.stops.len().saturating_sub(1);
-        let upto = if self.left_late.is_some() { trip.stops.len() } else { last };
+        let upto = if self.left_late.is_some() {
+            trip.stops.len()
+        } else {
+            last
+        };
         if self.next_stop + 1 >= upto {
             return;
         }
-        let of = |k: usize| -> Option<f64> { trip.stops.get(k).and_then(|s| s.position).map(|p| (p - pos).length()) };
+        let of = |k: usize| -> Option<f64> {
+            trip.stops
+                .get(k)
+                .and_then(|s| s.position)
+                .map(|p| (p - pos).length())
+        };
         // still at the stop it served: too early to look for a later one
         if let Some(k) = self.next_stop.checked_sub(1) {
             if of(k).is_some_and(|d| d <= AT_STOP) {
@@ -752,7 +875,11 @@ impl PlayerDuty {
         let mut best: Option<(usize, f64)> = None;
         for k in self.next_stop + 1..upto {
             let Some(d) = of(k) else { continue };
-            if d >= AT_STOP || here.is_some_and(|h| d >= h) || (!trip.stops[k].calls() && has_calling_stops) || !trip.stops[k].dir.takes(fwd) {
+            if d >= AT_STOP
+                || here.is_some_and(|h| d >= h)
+                || (!trip.stops[k].calls() && has_calling_stops)
+                || !trip.stops[k].dir.takes(fwd)
+            {
                 continue;
             }
             if best.is_none_or(|(_, b)| d < b) {
@@ -761,7 +888,10 @@ impl PlayerDuty {
         }
         let Some((k, _)) = best else { return };
         // (a closed stop or a station passed through was not missed)
-        let missed = trip.stops[self.next_stop..k].iter().filter(|s| s.calls()).count();
+        let missed = trip.stops[self.next_stop..k]
+            .iter()
+            .filter(|s| s.calls())
+            .count();
         if missed == 0 {
             self.next_stop = k;
             return;
@@ -786,13 +916,27 @@ impl PlayerDuty {
 
     /// The duty's progress with the bus at `pos` (see [`PlayerDuty::update`]);
     /// `doors_open_here`: it stands with a door open.
-    pub(crate) fn progress_at(&mut self, pos: glam::DVec3, day_time: f64, doors_open_here: bool) -> Option<(f64, f64)> {
+    pub(crate) fn progress_at(
+        &mut self,
+        pos: glam::DVec3,
+        day_time: f64,
+        doors_open_here: bool,
+    ) -> Option<(f64, f64)> {
         if !self.placed {
             // (stops beyond the loaded tiles have no place yet: a few seconds for the
             // navigator's map, unless the bus stands at a stop of its trip)
             let first = *self.first_update.get_or_insert(day_time);
-            let at_a_stop = self.trip().stops.iter().any(|s| s.position.map(|p| (p - pos).length() < AT_STOP).unwrap_or(false));
-            let known = self.trips[self.trip_index..].iter().all(|t| t.stops.first().map(|s| s.position.is_some()).unwrap_or(true));
+            let at_a_stop = self.trip().stops.iter().any(|s| {
+                s.position
+                    .map(|p| (p - pos).length() < AT_STOP)
+                    .unwrap_or(false)
+            });
+            let known = self.trips[self.trip_index..].iter().all(|t| {
+                t.stops
+                    .first()
+                    .map(|s| s.position.is_some())
+                    .unwrap_or(true)
+            });
             if !(at_a_stop || known || (day_time - first).abs() > 12.0) {
                 return None;
             }
@@ -816,10 +960,19 @@ impl PlayerDuty {
             // somewhere along the route.
             let last = self.trip().stops.len().saturating_sub(1);
             // (at the last stop itself it is reached the usual way, its arrival counted)
-            let at_last = self.trip().stops.get(last).and_then(|s| s.position).is_some_and(|p| (p - pos).length() < AT_STOP);
+            let at_last = self
+                .trip()
+                .stops
+                .get(last)
+                .and_then(|s| s.position)
+                .is_some_and(|p| (p - pos).length() < AT_STOP);
             let at_next_start = self.next_stop >= last
                 && !at_last
-                && self.trips[self.trip_index + 1].stops.first().and_then(|s| s.position).is_some_and(|p| (p - pos).length() < AT_STOP);
+                && self.trips[self.trip_index + 1]
+                    .stops
+                    .first()
+                    .and_then(|s| s.position)
+                    .is_some_and(|p| (p - pos).length() < AT_STOP);
             if !(self.done || unbegun || given_up || at_next_start) {
                 break;
             }
@@ -870,7 +1023,11 @@ impl PlayerDuty {
                 } else if self.at_stop && gone > LEFT_STOP {
                     self.at_stop = false;
                     let left = self.next_stop;
-                    self.passed = PassedStop { doors: false, stop: (!self.passed.doors && stop.calls()).then_some(left), stand: None };
+                    self.passed = PassedStop {
+                        doors: false,
+                        stop: (!self.passed.doors && stop.calls()).then_some(left),
+                        stand: None,
+                    };
                     let late = day_time - stop.dep;
                     self.left_late = Some(late);
                     // (OMSI counts a stop only with its arrival: the original)

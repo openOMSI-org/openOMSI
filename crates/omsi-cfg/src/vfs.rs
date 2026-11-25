@@ -24,7 +24,10 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 mod sealed;
-pub use sealed::{is_sealed, mount_sealed, random_key, seal, sealed_len, unmount_sealed, unseal, SealKey, SealedFile, SEALED_OVERHEAD};
+pub use sealed::{
+    SEALED_OVERHEAD, SealKey, SealedFile, is_sealed, mount_publisher, mount_sealed,
+    protected_reads, random_key, seal, sealed_len, unmount_sealed, unseal,
+};
 
 /// One file inside an archive.
 #[derive(Debug, Clone)]
@@ -69,7 +72,16 @@ fn le32(b: &[u8], o: usize) -> u32 {
 }
 
 fn le64(b: &[u8], o: usize) -> u64 {
-    u64::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3], b[o + 4], b[o + 5], b[o + 6], b[o + 7]])
+    u64::from_le_bytes([
+        b[o],
+        b[o + 1],
+        b[o + 2],
+        b[o + 3],
+        b[o + 4],
+        b[o + 5],
+        b[o + 6],
+        b[o + 7],
+    ])
 }
 
 fn bad(msg: impl Into<String>) -> io::Error {
@@ -79,7 +91,13 @@ fn bad(msg: impl Into<String>) -> io::Error {
 /// Code page 437, the encoding of entry names written without the UTF-8 flag (what the
 /// Windows zip tools of the OMSI years produced for "Straße" or "Bahnübergang").
 const CP437_HIGH: [char; 128] = [
-    'Ç', 'ü', 'é', 'â', 'ä', 'à', 'å', 'ç', 'ê', 'ë', 'è', 'ï', 'î', 'ì', 'Ä', 'Å', 'É', 'æ', 'Æ', 'ô', 'ö', 'ò', 'û', 'ù', 'ÿ', 'Ö', 'Ü', '¢', '£', '¥', '₧', 'ƒ', 'á', 'í', 'ó', 'ú', 'ñ', 'Ñ', 'ª', 'º', '¿', '⌐', '¬', '½', '¼', '¡', '«', '»', '░', '▒', '▓', '│', '┤', '╡', '╢', '╖', '╕', '╣', '║', '╗', '╝', '╜', '╛', '┐', '└', '┴', '┬', '├', '─', '┼', '╞', '╟', '╚', '╔', '╩', '╦', '╠', '═', '╬', '╧', '╨', '╤', '╥', '╙', '╘', '╒', '╓', '╫', '╪', '┘', '┌', '█', '▄', '▌', '▐', '▀', 'α', 'ß', 'Γ', 'π', 'Σ', 'σ', 'µ', 'τ', 'Φ', 'Θ', 'Ω', 'δ', '∞', 'φ', 'ε', '∩', '≡', '±', '≥', '≤', '⌠', '⌡', '÷', '≈', '°', '∙', '·', '√', 'ⁿ', '²', '■', '\u{a0}',
+    'Ç', 'ü', 'é', 'â', 'ä', 'à', 'å', 'ç', 'ê', 'ë', 'è', 'ï', 'î', 'ì', 'Ä', 'Å', 'É', 'æ', 'Æ',
+    'ô', 'ö', 'ò', 'û', 'ù', 'ÿ', 'Ö', 'Ü', '¢', '£', '¥', '₧', 'ƒ', 'á', 'í', 'ó', 'ú', 'ñ', 'Ñ',
+    'ª', 'º', '¿', '⌐', '¬', '½', '¼', '¡', '«', '»', '░', '▒', '▓', '│', '┤', '╡', '╢', '╖', '╕',
+    '╣', '║', '╗', '╝', '╜', '╛', '┐', '└', '┴', '┬', '├', '─', '┼', '╞', '╟', '╚', '╔', '╩', '╦',
+    '╠', '═', '╬', '╧', '╨', '╤', '╥', '╙', '╘', '╒', '╓', '╫', '╪', '┘', '┌', '█', '▄', '▌', '▐',
+    '▀', 'α', 'ß', 'Γ', 'π', 'Σ', 'σ', 'µ', 'τ', 'Φ', 'Θ', 'Ω', 'δ', '∞', 'φ', 'ε', '∩', '≡', '±',
+    '≥', '≤', '⌠', '⌡', '÷', '≈', '°', '∙', '·', '√', 'ⁿ', '²', '■', '\u{a0}',
 ];
 
 fn decode_name(raw: &[u8], utf8: bool) -> String {
@@ -89,7 +107,16 @@ fn decode_name(raw: &[u8], utf8: bool) -> String {
     match std::str::from_utf8(raw) {
         // many tools write UTF-8 without setting the flag
         Ok(s) => s.to_string(),
-        Err(_) => raw.iter().map(|&b| if b < 0x80 { b as char } else { CP437_HIGH[(b - 0x80) as usize] }).collect(),
+        Err(_) => raw
+            .iter()
+            .map(|&b| {
+                if b < 0x80 {
+                    b as char
+                } else {
+                    CP437_HIGH[(b - 0x80) as usize]
+                }
+            })
+            .collect(),
     }
 }
 
@@ -113,11 +140,22 @@ impl ZipArchive {
     pub fn open(path: &Path) -> io::Result<ZipArchive> {
         let file = std::fs::File::open(path)?;
         let len = file.metadata()?.len();
-        let archive = ZipArchive { path: path.to_path_buf(), file, #[cfg(not(unix))] lock: std::sync::Mutex::new(()), prefix: String::new(), entries: HashMap::new(), dirs: HashMap::new() };
+        let archive = ZipArchive {
+            path: path.to_path_buf(),
+            file,
+            #[cfg(not(unix))]
+            lock: std::sync::Mutex::new(()),
+            prefix: String::new(),
+            entries: HashMap::new(),
+            dirs: HashMap::new(),
+        };
         // end of central directory: the last 22 bytes plus a comment of up to 65 535
         let tail_len = len.min(22 + 65_535);
         let tail = archive.read_at(len - tail_len, tail_len as usize)?;
-        let eocd = (0..tail.len().saturating_sub(21)).rev().find(|&i| le32(&tail, i) == 0x0605_4b50).ok_or_else(|| bad(format!("{}: not a zip archive", path.display())))?;
+        let eocd = (0..tail.len().saturating_sub(21))
+            .rev()
+            .find(|&i| le32(&tail, i) == 0x0605_4b50)
+            .ok_or_else(|| bad(format!("{}: not a zip archive", path.display())))?;
         let e = &tail[eocd..];
         let mut count = le16(e, 10) as u64;
         let mut cd_size = le32(e, 12) as u64;
@@ -133,11 +171,20 @@ impl ZipArchive {
             cd_size = le64(&z, 40);
             cd_offset = le64(&z, 48);
         }
-        if cd_offset.checked_add(cd_size).map(|end| end > len).unwrap_or(true) || cd_size > 1 << 32 {
-            return Err(bad(format!("{}: central directory out of range", path.display())));
+        if cd_offset
+            .checked_add(cd_size)
+            .map(|end| end > len)
+            .unwrap_or(true)
+            || cd_size > 1 << 32
+        {
+            return Err(bad(format!(
+                "{}: central directory out of range",
+                path.display()
+            )));
         }
         let cd = archive.read_at(cd_offset, cd_size as usize)?;
-        let mut raw: Vec<(String, ZipEntry, bool)> = Vec::with_capacity(count.min(cd_size / 46) as usize);
+        let mut raw: Vec<(String, ZipEntry, bool)> =
+            Vec::with_capacity(count.min(cd_size / 46) as usize);
         let mut p = 0usize;
         while p + 46 <= cd.len() && le32(&cd, p) == 0x0201_4b50 {
             let flags = le16(&cd, p + 8);
@@ -183,7 +230,18 @@ impl ZipArchive {
             p = end;
             let name = name.replace('\\', "/");
             let is_dir = name.ends_with('/');
-            raw.push((name, ZipEntry { method, flags, crc, compressed, size, header }, is_dir));
+            raw.push((
+                name,
+                ZipEntry {
+                    method,
+                    flags,
+                    crc,
+                    compressed,
+                    size,
+                    header,
+                },
+                is_dir,
+            ));
         }
         let mut archive = archive;
         archive.prefix = Self::content_prefix(raw.iter().map(|(n, _, _)| n.as_str()));
@@ -191,14 +249,24 @@ impl ZipArchive {
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for (name, entry, is_dir) in raw {
             let lower = name.to_lowercase();
-            let Some(rel_lower) = lower.strip_prefix(&prefix_lower) else { continue };
+            let Some(rel_lower) = lower.strip_prefix(&prefix_lower) else {
+                continue;
+            };
             let rel_lower = normalize(rel_lower);
             if rel_lower.is_empty() {
                 continue;
             }
             // the original spelling of every component, for listings
-            let Some(rest) = name.get(archive.prefix.len()..).filter(|_| name[..archive.prefix.len()].to_lowercase() == prefix_lower) else { continue };
-            let rel: Vec<&str> = rest.split('/').filter(|c| !c.is_empty() && *c != ".").collect();
+            let Some(rest) = name
+                .get(archive.prefix.len()..)
+                .filter(|_| name[..archive.prefix.len()].to_lowercase() == prefix_lower)
+            else {
+                continue;
+            };
+            let rel: Vec<&str> = rest
+                .split('/')
+                .filter(|c| !c.is_empty() && *c != ".")
+                .collect();
             let lower_parts: Vec<&str> = rel_lower.split('/').collect();
             if rel.len() != lower_parts.len() {
                 continue;
@@ -207,7 +275,11 @@ impl ZipArchive {
                 let parent = lower_parts[..k].join("/");
                 let child_is_dir = k + 1 < rel.len() || is_dir;
                 if seen.insert(lower_parts[..=k].join("/")) {
-                    archive.dirs.entry(parent).or_default().push((rel[k].to_string(), child_is_dir));
+                    archive
+                        .dirs
+                        .entry(parent)
+                        .or_default()
+                        .push((rel[k].to_string(), child_is_dir));
                 }
             }
             if is_dir {
@@ -228,18 +300,28 @@ impl ZipArchive {
     /// (`Sound`, `Texture`, `Scripts`) - then the shallowest, then the first by name.
     fn content_prefix<'a>(names: impl Iterator<Item = &'a str>) -> String {
         const SHARED: [&str; 3] = ["Texture", "Sounds", "Scripts"];
-        let is_content = |c: &str| crate::CONTENT_FOLDERS.iter().any(|f| f.eq_ignore_ascii_case(c));
+        let is_content = |c: &str| {
+            crate::CONTENT_FOLDERS
+                .iter()
+                .any(|f| f.eq_ignore_ascii_case(c))
+        };
         // folder (lower case) -> (spelling, lower-case names of its sub-folders)
         let mut children: HashMap<String, (String, Vec<String>)> = HashMap::new();
         for n in names {
             let parts: Vec<&str> = n.split('/').filter(|c| !c.is_empty()).collect();
-            let folders = if n.ends_with('/') { parts.len() } else { parts.len().saturating_sub(1) };
+            let folders = if n.ends_with('/') {
+                parts.len()
+            } else {
+                parts.len().saturating_sub(1)
+            };
             for k in 0..folders.min(6) {
                 if k > 0 && is_content(parts[k - 1]) {
                     break; // below a content folder: an add-on's own folders
                 }
                 let dir: String = parts[..k].iter().map(|c| format!("{c}/")).collect();
-                let e = children.entry(dir.to_lowercase()).or_insert_with(|| (dir.clone(), Vec::new()));
+                let e = children
+                    .entry(dir.to_lowercase())
+                    .or_insert_with(|| (dir.clone(), Vec::new()));
                 let child = parts[k].to_lowercase();
                 if !e.1.contains(&child) {
                     e.1.push(child);
@@ -249,13 +331,28 @@ impl ZipArchive {
         children
             .iter()
             .filter_map(|(key, (dir, kids))| {
-                let present: Vec<&str> = crate::CONTENT_FOLDERS.iter().copied().filter(|f| kids.iter().any(|k| k.eq_ignore_ascii_case(f))).collect();
+                let present: Vec<&str> = crate::CONTENT_FOLDERS
+                    .iter()
+                    .copied()
+                    .filter(|f| kids.iter().any(|k| k.eq_ignore_ascii_case(f)))
+                    .collect();
                 if present.is_empty() {
                     return None;
                 }
-                let shared = present.iter().filter(|f| SHARED.iter().any(|s| s.eq_ignore_ascii_case(f))).count();
+                let shared = present
+                    .iter()
+                    .filter(|f| SHARED.iter().any(|s| s.eq_ignore_ascii_case(f)))
+                    .count();
                 let depth = key.matches('/').count();
-                Some(((present.len() - shared, shared, std::cmp::Reverse(depth), std::cmp::Reverse(key.as_str())), dir))
+                Some((
+                    (
+                        present.len() - shared,
+                        shared,
+                        std::cmp::Reverse(depth),
+                        std::cmp::Reverse(key.as_str()),
+                    ),
+                    dir,
+                ))
             })
             .max_by(|a, b| a.0.cmp(&b.0))
             .map(|(_, dir)| dir.clone())
@@ -300,19 +397,40 @@ impl ZipArchive {
         self.entries.values().map(|e| e.size).sum()
     }
 
+    fn bounded_sizes(&self, rel: &str) -> Option<(u64, u64)> {
+        self.entries
+            .get(&normalize(rel))
+            .map(|e| (e.size, e.compressed))
+    }
+
     /// Contents of the entry at `rel` (relative to the mount root, any case).
     pub fn read(&self, rel: &str) -> io::Result<Vec<u8>> {
         let key = normalize(rel);
-        let e = self.entries.get(&key).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("{}: no entry {rel}", self.path.display())))?;
+        let e = self.entries.get(&key).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("{}: no entry {rel}", self.path.display()),
+            )
+        })?;
         if e.flags & 1 != 0 {
-            return Err(io::Error::new(io::ErrorKind::Unsupported, format!("{}: {rel} is encrypted", self.path.display())));
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                format!("{}: {rel} is encrypted", self.path.display()),
+            ));
         }
         if e.size > MAX_ENTRY || e.compressed > MAX_ENTRY {
-            return Err(bad(format!("{}: {rel} is too large ({} bytes)", self.path.display(), e.size)));
+            return Err(bad(format!(
+                "{}: {rel} is too large ({} bytes)",
+                self.path.display(),
+                e.size
+            )));
         }
         let local = self.read_at(e.header, 30)?;
         if le32(&local, 0) != 0x0403_4b50 {
-            return Err(bad(format!("{}: {rel}: bad local header", self.path.display())));
+            return Err(bad(format!(
+                "{}: {rel}: bad local header",
+                self.path.display()
+            )));
         }
         let data_at = e.header + 30 + le16(&local, 26) as u64 + le16(&local, 28) as u64;
         let packed = self.read_at(data_at, e.compressed as usize)?;
@@ -320,18 +438,36 @@ impl ZipArchive {
             0 => packed,
             8 => {
                 let mut out = Vec::with_capacity(e.size as usize);
-                flate2::read::DeflateDecoder::new(&packed[..]).take(e.size + 1).read_to_end(&mut out)?;
+                flate2::read::DeflateDecoder::new(&packed[..])
+                    .take(e.size + 1)
+                    .read_to_end(&mut out)?;
                 out
             }
-            m => return Err(io::Error::new(io::ErrorKind::Unsupported, format!("{}: {rel}: compression method {m} is not supported", self.path.display()))),
+            m => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    format!(
+                        "{}: {rel}: compression method {m} is not supported",
+                        self.path.display()
+                    ),
+                ));
+            }
         };
         if out.len() as u64 != e.size {
-            return Err(bad(format!("{}: {rel}: {} bytes unpacked, {} expected", self.path.display(), out.len(), e.size)));
+            return Err(bad(format!(
+                "{}: {rel}: {} bytes unpacked, {} expected",
+                self.path.display(),
+                out.len(),
+                e.size
+            )));
         }
         let mut crc = flate2::Crc::new();
         crc.update(&out);
         if crc.sum() != e.crc {
-            return Err(bad(format!("{}: {rel}: checksum mismatch", self.path.display())));
+            return Err(bad(format!(
+                "{}: {rel}: checksum mismatch",
+                self.path.display()
+            )));
         }
         Ok(out)
     }
@@ -353,9 +489,31 @@ pub fn mount_zip(path: &Path) -> io::Result<PathBuf> {
     }
     let t0 = std::time::Instant::now();
     let archive = ZipArchive::open(path)?;
-    log::info!("zip {}: {} files ({:.1} GB unpacked) under '{}', indexed in {:.0} ms", path.display(), archive.file_count(), archive.total_size() as f64 / 1e9, archive.prefix, t0.elapsed().as_secs_f64() * 1000.0);
-    if archive.prefix.is_empty() && !archive.dirs.get("").map(|l| l.iter().any(|(n, _)| crate::CONTENT_FOLDERS.iter().any(|f| f.eq_ignore_ascii_case(n)))).unwrap_or(false) {
-        log::warn!("zip {}: no OMSI content folders (Vehicles, maps, Sceneryobjects ...) found; mounted as it is", path.display());
+    log::info!(
+        "zip {}: {} files ({:.1} GB unpacked) under '{}', indexed in {:.0} ms",
+        path.display(),
+        archive.file_count(),
+        archive.total_size() as f64 / 1e9,
+        archive.prefix,
+        t0.elapsed().as_secs_f64() * 1000.0
+    );
+    if archive.prefix.is_empty()
+        && !archive
+            .dirs
+            .get("")
+            .map(|l| {
+                l.iter().any(|(n, _)| {
+                    crate::CONTENT_FOLDERS
+                        .iter()
+                        .any(|f| f.eq_ignore_ascii_case(n))
+                })
+            })
+            .unwrap_or(false)
+    {
+        log::warn!(
+            "zip {}: no OMSI content folders (Vehicles, maps, Sceneryobjects ...) found; mounted as it is",
+            path.display()
+        );
     }
     let mount = archive.path.clone();
     MOUNTS.write().unwrap().push(Arc::new(archive));
@@ -391,7 +549,11 @@ fn locate(path: &Path) -> Option<(Arc<ZipArchive>, String)> {
                     Component::Normal(s) => {
                         let s = s.to_string_lossy();
                         let s: &str = &s;
-                        let s = if i + 1 == comps.len() { s.trim_end_matches(['.', ' ']) } else { s.strip_suffix('.').unwrap_or(s) };
+                        let s = if i + 1 == comps.len() {
+                            s.trim_end_matches(['.', ' '])
+                        } else {
+                            s.strip_suffix('.').unwrap_or(s)
+                        };
                         if !s.is_empty() {
                             parts.push(s.to_lowercase());
                         }
@@ -420,16 +582,24 @@ static MEMORY: RwLock<Option<HashMap<PathBuf, Arc<[u8]>>>> = RwLock::new(None);
 
 /// Put a file into memory at `path` (see [`MEMORY`]); a file there before is replaced.
 pub fn put_memory_file(path: PathBuf, bytes: Arc<[u8]>) {
-    MEMORY.write().unwrap().get_or_insert_with(HashMap::new).insert(path, bytes);
+    MEMORY
+        .write()
+        .unwrap()
+        .get_or_insert_with(HashMap::new)
+        .insert(path, bytes);
 }
 
 fn memory_file(path: &Path) -> Option<Arc<[u8]>> {
-    MEMORY.read().unwrap().as_ref().and_then(|m| m.get(path).cloned())
+    MEMORY
+        .read()
+        .unwrap()
+        .as_ref()
+        .and_then(|m| m.get(path).cloned())
 }
 
 /// Whether a VFS layer takes precedence over the plain file at this path.
 pub fn is_virtual(path: &Path) -> bool {
-    memory_file(path).is_some() || is_sealed(path) || archive_of(path).is_some()
+    memory_file(path).is_some() || sealed::locate(path).is_some() || archive_of(path).is_some()
 }
 
 /// Read a whole file, from a folder, a mounted archive or a sealed store.
@@ -447,7 +617,11 @@ pub fn read(path: &Path) -> io::Result<Vec<u8>> {
     };
     if r.is_ok() {
         if RECORDING.load(std::sync::atomic::Ordering::Relaxed) {
-            READS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(Default::default).insert(path.to_path_buf());
+            READS
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get_or_insert_with(Default::default)
+                .insert(path.to_path_buf());
         }
         AUDIT.with(|a| {
             if let Some(v) = a.borrow_mut().as_mut() {
@@ -456,6 +630,76 @@ pub fn read(path: &Path) -> io::Result<Vec<u8>> {
         });
     }
     r
+}
+
+/// Read one input with a caller's stricter limit while checking the opened file handle,
+/// rather than trusting an earlier metadata lookup that could race with replacement.
+pub fn read_bounded(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+    let result = if let Some(bytes) = memory_file(path) {
+        if bytes.len() as u64 > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        bytes.to_vec()
+    } else if let Some((mount, key)) = sealed::locate(path) {
+        if mount.size(&key).is_none_or(|size| size > limit) {
+            return Err(bad("file exceeds its size limit"));
+        }
+        let bytes = mount.read(&key)?;
+        if bytes.len() as u64 > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        bytes
+    } else if let Some((archive, key)) = locate(path) {
+        let (size, compressed) = archive
+            .bounded_sizes(&key)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file is not in the archive"))?;
+        if size > limit || compressed > limit.saturating_add(64 * 1024) {
+            return Err(bad("file exceeds its size limit"));
+        }
+        let bytes = archive.read(&key)?;
+        if bytes.len() as u64 > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        bytes
+    } else {
+        let link = std::fs::symlink_metadata(path)?;
+        if link.file_type().is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "symbolic links are not allowed for bounded metadata",
+            ));
+        }
+        let file = std::fs::File::open(path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "not a regular file",
+            ));
+        }
+        if metadata.len() > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        let mut bytes = Vec::new();
+        file.take(limit.saturating_add(1)).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > limit {
+            return Err(bad("file exceeds its size limit"));
+        }
+        bytes
+    };
+    if RECORDING.load(std::sync::atomic::Ordering::Relaxed) {
+        READS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert_with(Default::default)
+            .insert(path.to_path_buf());
+    }
+    AUDIT.with(|a| {
+        if let Some(v) = a.borrow_mut().as_mut() {
+            v.push(path.to_path_buf());
+        }
+    });
+    Ok(result)
 }
 
 thread_local! {
@@ -488,7 +732,8 @@ impl Drop for Audit {
 /// really uses (the variant and paint driven, not its whole pack), to pass on to a server
 /// that lacks it.
 static RECORDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static READS: std::sync::Mutex<Option<std::collections::HashSet<PathBuf>>> = std::sync::Mutex::new(None);
+static READS: std::sync::Mutex<Option<std::collections::HashSet<PathBuf>>> =
+    std::sync::Mutex::new(None);
 
 /// Note (or stop noting, and forget) the files `read` gives out.
 pub fn record_reads(on: bool) {
@@ -500,16 +745,29 @@ pub fn record_reads(on: bool) {
 
 /// The files read since `record_reads` was switched on.
 pub fn reads() -> Vec<PathBuf> {
-    READS.lock().unwrap_or_else(|e| e.into_inner()).iter().flatten().cloned().collect()
+    READS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .flatten()
+        .cloned()
+        .collect()
 }
 
 fn read_disk_file(path: &Path) -> io::Result<Vec<u8>> {
     let regular = |md: std::fs::Metadata| {
         if !md.is_file() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("{}: not a regular file", path.display())));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{}: not a regular file", path.display()),
+            ));
         }
         if md.len() > MAX_ENTRY {
-            return Err(bad(format!("{}: too large ({} bytes)", path.display(), md.len())));
+            return Err(bad(format!(
+                "{}: too large ({} bytes)",
+                path.display(),
+                md.len()
+            )));
         }
         Ok(md.len())
     };
@@ -571,7 +829,10 @@ pub fn list_dir(path: &Path) -> Option<Vec<(OsString, bool)>> {
         return m.list(&key);
     }
     match locate(path) {
-        Some((m, key)) => m.dirs.get(&key).map(|l| l.iter().map(|(n, d)| (OsString::from(n), *d)).collect()),
+        Some((m, key)) => m
+            .dirs
+            .get(&key)
+            .map(|l| l.iter().map(|(n, d)| (OsString::from(n), *d)).collect()),
         None => {
             let rd = std::fs::read_dir(path).ok()?;
             // the entry's own type costs nothing; only a symbolic link needs a stat
@@ -602,20 +863,34 @@ pub fn file_size(path: &Path) -> Option<u64> {
     }
     match locate(path) {
         Some((m, key)) => m.entries.get(&key).map(|e| e.size),
-        None => std::fs::metadata(path).ok().filter(|md| md.is_file()).map(|md| md.len()),
+        None => std::fs::metadata(path)
+            .ok()
+            .filter(|md| md.is_file())
+            .map(|md| md.len()),
     }
 }
 
 /// Full paths of a folder's entries (like `std::fs::read_dir`), empty when it is not a folder.
 pub fn read_dir_paths(path: &Path) -> Vec<PathBuf> {
-    list_dir(path).map(|l| l.into_iter().map(|(n, _)| path.join(n)).collect()).unwrap_or_default()
+    list_dir(path)
+        .map(|l| l.into_iter().map(|(n, _)| path.join(n)).collect())
+        .unwrap_or_default()
 }
 
 /// Mount every `.zip` in `dir` (in name order) as a content root: where an installer puts
 /// map and mod archives that are read in place. Returns the mount points.
 pub fn mount_dir_zips(dir: &Path) -> Vec<PathBuf> {
     let mut zips: Vec<PathBuf> = match std::fs::read_dir(dir) {
-        Ok(rd) => rd.flatten().map(|e| e.path()).filter(|p| p.is_file() && p.extension().map(|e| e.eq_ignore_ascii_case("zip")).unwrap_or(false)).collect(),
+        Ok(rd) => rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.is_file()
+                    && p.extension()
+                        .map(|e| e.eq_ignore_ascii_case("zip"))
+                        .unwrap_or(false)
+            })
+            .collect(),
         Err(_) => return Vec::new(),
     };
     zips.sort();
@@ -632,7 +907,9 @@ pub fn mount_dir_zips(dir: &Path) -> Vec<PathBuf> {
 /// Mount every archive listed in `OMSI_CONTENT_ZIP` (separated like `PATH`) as a content
 /// root. Returns the mount points.
 pub fn mount_env_zips() -> Vec<PathBuf> {
-    let Some(v) = crate::flags::OMSI_CONTENT_ZIP.live_os() else { return Vec::new() };
+    let Some(v) = crate::flags::OMSI_CONTENT_ZIP.live_os() else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for p in std::env::split_paths(&v) {
         if p.as_os_str().is_empty() {
@@ -663,7 +940,9 @@ mod tests {
         let _ = read(&d.join("missing.cfg"));
         // (another thread's reads are its own)
         let other = a.clone();
-        std::thread::spawn(move || read(&other).unwrap()).join().unwrap();
+        std::thread::spawn(move || read(&other).unwrap())
+            .join()
+            .unwrap();
         assert_eq!(audit.end(), vec![b.clone()]);
         // over: nothing more is noted
         read(&b).unwrap();
@@ -674,7 +953,9 @@ mod tests {
 
     #[test]
     fn a_memory_file_reads_like_one_on_disk() {
-        let p = std::env::temp_dir().join("omsi-vfs-memory-test").join("bus.glb.tex0.png");
+        let p = std::env::temp_dir()
+            .join("omsi-vfs-memory-test")
+            .join("bus.glb.tex0.png");
         assert!(!is_file(&p));
         put_memory_file(p.clone(), Arc::from(&b"picture"[..]));
         assert!(is_file(&p) && exists(&p));
@@ -686,8 +967,16 @@ mod tests {
     fn build_zip(path: &Path) {
         let files: Vec<(&str, Vec<u8>, bool)> = vec![
             ("Docs/readme.txt", b"hello".to_vec(), false),
-            ("OMSI 2/maps/Test Map/global.cfg", b"[name]\r\nTest\r\n".repeat(20), true),
-            ("OMSI 2/Sceneryobjects/Stra\u{df}e/Schild.sco", b"[mesh]\r\nschild.o3d\r\n".to_vec(), false),
+            (
+                "OMSI 2/maps/Test Map/global.cfg",
+                b"[name]\r\nTest\r\n".repeat(20),
+                true,
+            ),
+            (
+                "OMSI 2/Sceneryobjects/Stra\u{df}e/Schild.sco",
+                b"[mesh]\r\nschild.o3d\r\n".to_vec(),
+                false,
+            ),
             ("OMSI 2/Vehicles/", Vec::new(), false),
         ];
         write_zip(path, &files);
@@ -701,7 +990,8 @@ mod tests {
             let mut crc = flate2::Crc::new();
             crc.update(data);
             let packed = if *deflate {
-                let mut e = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+                let mut e =
+                    flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
                 e.write_all(data).unwrap();
                 e.finish().unwrap()
             } else {
@@ -766,30 +1056,85 @@ mod tests {
         let sco = crate::resolve_path(&mount, "Sceneryobjects\\straße\\schild.sco");
         assert!(is_file(&sco), "{}", sco.display());
         assert_eq!(read(&sco).unwrap(), b"[mesh]\r\nschild.o3d\r\n");
-        let names: Vec<String> = list_dir(&mount).unwrap().into_iter().map(|(n, _)| n.to_string_lossy().into_owned()).collect();
-        assert!(names.contains(&"maps".to_string()) && names.contains(&"Sceneryobjects".to_string()), "{names:?}");
+        let names: Vec<String> = list_dir(&mount)
+            .unwrap()
+            .into_iter()
+            .map(|(n, _)| n.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            names.contains(&"maps".to_string()) && names.contains(&"Sceneryobjects".to_string()),
+            "{names:?}"
+        );
         let f = crate::CfgFile::read(&cfg).unwrap();
         assert_eq!(f.lines[1], "Test");
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
+    fn bounded_archive_read_checks_compressed_size_before_unpacking() {
+        let dir = std::env::temp_dir().join(format!("omsi-cfg-bounded-zip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let zip = dir.join("deps.zip");
+        write_zip(
+            &zip,
+            &[("maps/Test/dependencies.json", b"{}".to_vec(), false)],
+        );
+        let mut bytes = std::fs::read(&zip).unwrap();
+        let central = bytes
+            .windows(4)
+            .position(|w| w == 0x0201_4b50u32.to_le_bytes())
+            .unwrap();
+        bytes[central + 20..central + 24]
+            .copy_from_slice(&(1024u32 * 1024 + 64 * 1024 + 1).to_le_bytes());
+        std::fs::write(&zip, bytes).unwrap();
+        add_content_zip(&zip).unwrap();
+        assert!(read_bounded(&zip.join("maps/Test/dependencies.json"), 1024 * 1024).is_err());
+        crate::remove_content_root(&zip);
+        MOUNTS.write().unwrap().retain(|m| m.path != zip);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn mount_root_of_an_addon_archive() {
         let prefix = |names: &[&str]| ZipArchive::content_prefix(names.iter().copied());
         // a bus: its own Sound and Texture folders do not make it the root
-        let bus = ["OMSI 2/Vehicles/MAN_Lion/Lion.bus", "OMSI 2/Vehicles/MAN_Lion/Model/model.cfg", "OMSI 2/Vehicles/MAN_Lion/Script/main.osc", "OMSI 2/Vehicles/MAN_Lion/Sound/sound.cfg", "OMSI 2/Vehicles/MAN_Lion/Texture/body.dds", "Readme.txt"];
+        let bus = [
+            "OMSI 2/Vehicles/MAN_Lion/Lion.bus",
+            "OMSI 2/Vehicles/MAN_Lion/Model/model.cfg",
+            "OMSI 2/Vehicles/MAN_Lion/Script/main.osc",
+            "OMSI 2/Vehicles/MAN_Lion/Sound/sound.cfg",
+            "OMSI 2/Vehicles/MAN_Lion/Texture/body.dds",
+            "Readme.txt",
+        ];
         assert_eq!(prefix(&bus), "OMSI 2/");
         // two buses tie between themselves, never with the root
-        let two = ["Vehicles/A/Sound/a.wav", "Vehicles/A/Texture/a.dds", "Vehicles/B/Sound/b.wav", "Vehicles/B/Texture/b.dds"];
+        let two = [
+            "Vehicles/A/Sound/a.wav",
+            "Vehicles/A/Texture/a.dds",
+            "Vehicles/B/Sound/b.wav",
+            "Vehicles/B/Texture/b.dds",
+        ];
         assert_eq!(prefix(&two), "");
         // a scenery pack
-        let pack = ["Pack v2/Sceneryobjects/Pack/model/a.o3d", "Pack v2/Sceneryobjects/Pack/texture/a.bmp", "Pack v2/Sceneryobjects/Pack/sound/a.wav", "Pack v2/Sceneryobjects/Pack/a.sco"];
+        let pack = [
+            "Pack v2/Sceneryobjects/Pack/model/a.o3d",
+            "Pack v2/Sceneryobjects/Pack/texture/a.bmp",
+            "Pack v2/Sceneryobjects/Pack/sound/a.wav",
+            "Pack v2/Sceneryobjects/Pack/a.sco",
+        ];
         assert_eq!(prefix(&pack), "Pack v2/");
         // a folder with the top-level names wins over one with only the shared ones
-        let mixed = ["Extras/Bonus/Sound/x.wav", "Extras/Bonus/Texture/x.dds", "OMSI 2/maps/M/global.cfg"];
+        let mixed = [
+            "Extras/Bonus/Sound/x.wav",
+            "Extras/Bonus/Texture/x.dds",
+            "OMSI 2/maps/M/global.cfg",
+        ];
         assert_eq!(prefix(&mixed), "OMSI 2/");
         // a texture pack still has its root
-        assert_eq!(prefix(&["Winter/Texture/snow.dds", "Winter/readme.txt"]), "Winter/");
+        assert_eq!(
+            prefix(&["Winter/Texture/snow.dds", "Winter/readme.txt"]),
+            "Winter/"
+        );
         // on a tie, the shallowest, then the first by name
         assert_eq!(prefix(&["b/Vehicles/x.bus", "a/Vehicles/y.bus"]), "a/");
         assert_eq!(prefix(&["docs/readme.txt"]), "");
@@ -804,11 +1149,29 @@ mod tests {
         let install = dir.join("install");
         std::fs::create_dir_all(content.join("Archives")).unwrap();
         std::fs::create_dir_all(content.join("Vehicles").join("MyBus")).unwrap();
-        std::fs::write(content.join("Vehicles").join("MyBus").join("override.txt"), b"content").unwrap();
+        std::fs::write(
+            content.join("Vehicles").join("MyBus").join("override.txt"),
+            b"content",
+        )
+        .unwrap();
         std::fs::create_dir_all(install.join("Vehicles").join("MAN_SD202").join("Sound")).unwrap();
-        std::fs::write(install.join("Vehicles").join("MAN_SD202").join("Sound").join("x.wav"), b"stock").unwrap();
+        std::fs::write(
+            install
+                .join("Vehicles")
+                .join("MAN_SD202")
+                .join("Sound")
+                .join("x.wav"),
+            b"stock",
+        )
+        .unwrap();
         let x = content.join("Archives").join("x.zip");
-        write_zip(&x, &[("OMSI 2/Vehicles/MyBus/bus.bus", b"bus".to_vec(), false), ("OMSI 2/Vehicles/MyBus/override.txt", b"zip".to_vec(), false)]);
+        write_zip(
+            &x,
+            &[
+                ("OMSI 2/Vehicles/MyBus/bus.bus", b"bus".to_vec(), false),
+                ("OMSI 2/Vehicles/MyBus/override.txt", b"zip".to_vec(), false),
+            ],
+        );
         let y = content.join("Archives").join("y.zip");
         write_zip(&y, &[("Vehicles/Other/y.txt", b"y".to_vec(), false)]);
         crate::add_content_root(content.clone());
@@ -818,10 +1181,20 @@ mod tests {
         let bus = x.join("Vehicles").join("MyBus");
         assert!(is_file(&crate::resolve_path(&bus, "bus.bus")));
         // the content folder has priority over the archive
-        assert_eq!(read(&crate::resolve_path(&bus, "override.txt")).unwrap(), b"content");
+        assert_eq!(
+            read(&crate::resolve_path(&bus, "override.txt")).unwrap(),
+            b"content"
+        );
         // the installation after it
         let wav = crate::resolve_path(&bus, "..\\MAN_SD202\\Sound\\x.wav");
-        assert_eq!(wav, install.join("Vehicles").join("MAN_SD202").join("Sound").join("x.wav"));
+        assert_eq!(
+            wav,
+            install
+                .join("Vehicles")
+                .join("MAN_SD202")
+                .join("Sound")
+                .join("x.wav")
+        );
         // and an archive after it
         let other = crate::resolve_path(&bus, "..\\other\\Y.TXT");
         assert_eq!(read(&other).unwrap(), b"y", "{}", other.display());
@@ -863,7 +1236,13 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("omsi-cfg-zip-kelvin-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let zip = dir.join("pack.zip");
-        write_zip(&zip, &[("k/Vehicles/a.bus", b"a".to_vec(), false), ("\u{212A}/Vehicles/b.bus", b"b".to_vec(), false)]);
+        write_zip(
+            &zip,
+            &[
+                ("k/Vehicles/a.bus", b"a".to_vec(), false),
+                ("\u{212A}/Vehicles/b.bus", b"b".to_vec(), false),
+            ],
+        );
         let archive = ZipArchive::open(&zip).unwrap();
         assert_eq!(archive.prefix(), "k/");
         assert!(archive.read("vehicles/a.bus").is_ok());
@@ -872,7 +1251,10 @@ mod tests {
 
     #[test]
     fn names() {
-        assert_eq!(decode_name(&[b'S', b't', b'r', b'a', 0xE1, b'e'], false), "Straße");
+        assert_eq!(
+            decode_name(&[b'S', b't', b'r', b'a', 0xE1, b'e'], false),
+            "Straße"
+        );
         assert_eq!(normalize("a\\B/./c/../D"), "a/b/d");
     }
 
@@ -891,8 +1273,13 @@ mod tests {
         let archive = content.join("Archives/compat.zip");
         let anchor = format!("{base_rel}/anchor.cti");
         let texture = format!("{common_rel}/Paint.DDS");
-        write_zip(&archive, &[(anchor.as_str(), b"synthetic".to_vec(), false),
-            (texture.as_str(), b"archive".to_vec(), true)]);
+        write_zip(
+            &archive,
+            &[
+                (anchor.as_str(), b"synthetic".to_vec(), false),
+                (texture.as_str(), b"archive".to_vec(), true),
+            ],
+        );
         crate::add_content_root(content.clone());
         mount_dir_zips(&content.join("Archives"));
         crate::add_content_root(install.clone());

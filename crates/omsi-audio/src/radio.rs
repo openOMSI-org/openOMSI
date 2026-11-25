@@ -37,7 +37,10 @@ fn run(buf: &StreamBuf, url: &str) {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(8))
         .timeout_read(Duration::from_secs(15))
-        .user_agent(&format!("openOMSI/{}", option_env!("OPENOMSI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))))
+        .user_agent(&format!(
+            "openOMSI/{}",
+            option_env!("OPENOMSI_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"))
+        ))
         .build();
     let mut wait = 2u64;
     while !buf.is_closed() {
@@ -80,12 +83,19 @@ fn resolve(agent: &ureq::Agent, url: &str) -> anyhow::Result<ureq::Response> {
             return Ok(resp);
         }
         let mut text = String::new();
-        resp.into_reader().take(64 * 1024).read_to_string(&mut text)?;
+        resp.into_reader()
+            .take(64 * 1024)
+            .read_to_string(&mut text)?;
         // .m3u: the first line that is an address; .pls: File1=address
         let next = text
             .lines()
             .map(|l| l.trim())
-            .map(|l| l.split_once('=').filter(|(k, _)| k.to_ascii_lowercase().starts_with("file")).map(|(_, v)| v.trim()).unwrap_or(l))
+            .map(|l| {
+                l.split_once('=')
+                    .filter(|(k, _)| k.to_ascii_lowercase().starts_with("file"))
+                    .map(|(_, v)| v.trim())
+                    .unwrap_or(l)
+            })
             .find(|l| l.starts_with("http://") || l.starts_with("https://"))
             .ok_or_else(|| anyhow::anyhow!("the playlist names no stream"))?;
         url = next.to_string();
@@ -96,12 +106,22 @@ fn resolve(agent: &ureq::Agent, url: &str) -> anyhow::Result<ureq::Response> {
 fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
     let resp = resolve(agent, url)?;
     let ctype = resp.content_type().to_ascii_lowercase();
-    let metaint = resp.header("icy-metaint").and_then(|v| v.trim().parse::<usize>().ok());
-    let name = resp.header("icy-name").map(|s| s.trim().to_string()).unwrap_or_default();
+    let metaint = resp
+        .header("icy-metaint")
+        .and_then(|v| v.trim().parse::<usize>().ok());
+    let name = resp
+        .header("icy-name")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
     let reader: Box<dyn Read + Send + Sync> = Box::new(resp.into_reader());
     let title = Arc::new(parking_lot::Mutex::new(String::new()));
     let reader: Box<dyn Read + Send + Sync> = match metaint {
-        Some(n) if n > 0 => Box::new(IcyReader { inner: reader, every: n, left: n, title: title.clone() }),
+        Some(n) if n > 0 => Box::new(IcyReader {
+            inner: reader,
+            every: n,
+            left: n,
+            title: title.clone(),
+        }),
         _ => reader,
     };
     // (a new connection: what the last one said of the station counts no longer)
@@ -118,17 +138,26 @@ fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
     // AAC is read as ADTS straight away: probed, its frame headers pass for MPEG audio and
     // the MP3 reader takes it
     let mut format: Box<dyn FormatReader> = if ctype.contains("aac") {
-        Box::new(symphonia::default::formats::AdtsReader::try_new(mss, &FormatOptions::default())?)
+        Box::new(symphonia::default::formats::AdtsReader::try_new(
+            mss,
+            &FormatOptions::default(),
+        )?)
     } else {
         symphonia::default::get_probe()
-            .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())?
+            .format(
+                &hint,
+                mss,
+                &FormatOptions::default(),
+                &MetadataOptions::default(),
+            )?
             .format
     };
     let track = format
         .default_track()
         .ok_or_else(|| anyhow::anyhow!("no audio in the stream"))?
         .clone();
-    let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
+    let mut decoder =
+        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
     let mut samples: Option<SampleBuffer<f32>> = None;
     let mut shown = String::new();
     loop {
@@ -140,7 +169,11 @@ fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
         }
         let packet = match format.next_packet() {
             Ok(p) => p,
-            Err(symphonia::core::errors::Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                return Ok(());
+            }
             Err(e) => return Err(e.into()),
         };
         if packet.track_id() != track.id {
@@ -162,14 +195,23 @@ fn play(agent: &ureq::Agent, buf: &StreamBuf, url: &str) -> anyhow::Result<()> {
         let data = sb.samples();
         buf.push(
             spec.rate,
-            data.chunks_exact(ch).map(|f| if ch >= 2 { [f[0], f[1]] } else { [f[0], f[0]] }),
+            data.chunks_exact(ch)
+                .map(|f| if ch >= 2 { [f[0], f[1]] } else { [f[0], f[0]] }),
         );
         let now = {
             let t = title.lock();
             buf.set_meta(&name, &t);
-            if t.is_empty() { name.clone() } else { t.clone() }
+            if t.is_empty() {
+                name.clone()
+            } else {
+                t.clone()
+            }
         };
-        let status = if buf.is_playing() { now } else { "buffering …".to_string() };
+        let status = if buf.is_playing() {
+            now
+        } else {
+            "buffering …".to_string()
+        };
         if status != shown {
             buf.set_status(status.clone());
             shown = status;

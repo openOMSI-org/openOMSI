@@ -30,6 +30,9 @@ export const S = {
   changelog: false,
   errors: {},
   cache: {},
+  reading: {},
+  readError: {},
+  settling: [],
 };
 
 const subs = new Set();

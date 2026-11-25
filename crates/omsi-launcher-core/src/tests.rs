@@ -57,6 +57,7 @@ fn the_games_options_survive_a_save() {
         ("head_tracking", json!(true)),
         ("collision_objects", json!(false)),
         ("realistic_road_physics", json!(true)),
+        ("driver_like_omsi", json!(true)),
         ("led_mips", json!(2.5)),
         ("led_glow", json!(11)),
         ("look_sens", json!(0.5)),
@@ -107,6 +108,7 @@ fn the_games_options_survive_a_save() {
         "head_tracking",
         "collision_objects",
         "realistic_road_physics",
+        "driver_like_omsi",
         "led_mips",
         "led_glow",
         "look_sens",
@@ -310,6 +312,106 @@ fn a_duty_passes_its_fleet_number() {
         a.windows(2).any(|w| w[0] == "--number" && w[1] == "4711"),
         "{a:?}"
     );
+}
+
+/// The onboard computer the player picked reaches the game as `--setvar`, which the game sets
+/// over the paint scheme's own `[setvar]`s before the scripts' {init} (#4077).
+#[test]
+fn a_duty_passes_the_variables_picked_for_the_bus() {
+    let d: Duty = serde_json::from_str(r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","setvars":{"vis_ibis_type":"1","v_drzwi":"0"}}"#).unwrap();
+    let a = duty_args_for_root(&d, Path::new("test-omsi")).unwrap();
+    assert!(
+        a.windows(2)
+            .any(|w| w[0] == "--setvar" && w[1] == "v_drzwi=0,vis_ibis_type=1"),
+        "{a:?}"
+    );
+    let plain: Duty = serde_json::from_str(
+        r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00"}"#,
+    )
+    .unwrap();
+    assert!(
+        !duty_args_for_root(&plain, Path::new("test-omsi"))
+            .unwrap()
+            .iter()
+            .any(|x| x == "--setvar")
+    );
+    let empty: Duty = serde_json::from_str(
+        r#"{"map":"maps/x/global.cfg","bus":"Vehicles/x.bus","time":"09:00","setvars":{}}"#,
+    )
+    .unwrap();
+    assert!(
+        !duty_args_for_root(&empty, Path::new("test-omsi"))
+            .unwrap()
+            .iter()
+            .any(|x| x == "--setvar")
+    );
+}
+
+/// The variable names the launcher offers as the bus's onboard computer: the words the vehicle
+/// packs of OMSI use for it, and not the ones they use for doors, seats and the rest.
+#[test]
+fn the_onboard_computers_are_the_variables_the_packs_name() {
+    for name in [
+        "vis_ibis_type",
+        "IBIS_Type",
+        "vis_kasse",
+        "Ticketprinter",
+        "AFR4_unit",
+        "vis_almex",
+        "bordcomputer",
+        "vis_ticketbox",
+    ] {
+        assert!(is_onboard_computer(name), "{name}");
+    }
+    for name in [
+        "v_drzwi",
+        "vis_tuer",
+        "cockpit_frame",
+        "v_seat",
+        "matrix_type",
+        "vis_spiegel",
+    ] {
+        assert!(!is_onboard_computer(name), "{name}");
+    }
+}
+
+/// The variables a bus's paints set, as the launcher offers them: one entry per variable, its
+/// values ascending with the paints that give them, the onboard computers first.
+#[test]
+fn a_buss_variables_come_from_its_paints() {
+    let paints = vec![
+        (
+            "IBIS classic".to_string(),
+            vec![
+                ("vis_ibis_type".to_string(), 0.0),
+                ("v_drzwi".to_string(), 1.0),
+            ],
+        ),
+        ("AFR4".to_string(), vec![("VIS_IBIS_TYPE".to_string(), 2.0)]),
+        (
+            "Almex".to_string(),
+            vec![("vis_ibis_type".to_string(), 1.0)],
+        ),
+    ];
+    let vars = vehicle_variables(&paints);
+    assert_eq!(
+        vars[0].name, "vis_ibis_type",
+        "the onboard computer comes first"
+    );
+    assert!(vars[0].onboard_computer);
+    assert_eq!(
+        vars[0]
+            .values
+            .iter()
+            .map(|v| v.value.as_str())
+            .collect::<Vec<_>>(),
+        ["0", "1", "2"]
+    );
+    assert_eq!(vars[0].values[0].paints, ["IBIS classic"]);
+    assert_eq!(vars[0].values[1].paints, ["Almex"]);
+    assert_eq!(vars[0].values[2].paints, ["AFR4"]);
+    assert_eq!(vars[1].name, "v_drzwi");
+    assert!(!vars[1].onboard_computer);
 }
 
 #[test]
@@ -878,15 +980,6 @@ fn dates_are_fitted_to_the_maps_year_span() {
     assert_eq!(span((1972, 1989)), Some((1972, 1989)));
 }
 
-/// A date the player chose keeps its year; only the machine's calendar is fitted to the
-/// map's `[years]`.
-#[test]
-fn a_chosen_duty_date_keeps_its_year() {
-    let span = Some((1986, 2000));
-    assert_eq!(date_for_game("2025-06-01", false, span), "2025-06-01");
-    assert_eq!(date_for_game("2025-06-01", true, span), "2000-06-01");
-}
-
 #[test]
 fn todays_year_is_kept_when_the_player_asks_for_it() {
     let dir = std::env::temp_dir().join(format!("openomsi-real-year-{}", std::process::id()));
@@ -905,6 +998,17 @@ fn todays_year_is_kept_when_the_player_asks_for_it() {
     };
     let (y, ..) = local_now().unwrap();
     assert_eq!(year(serde_json::json!({"use_real_date": true})), "1995");
+    // a year after the map's [years] is kept with today's date too: Omsi.exe's [useActDate]
+    // leaves the year alone (0x708780), and a chrono scenario of a later year is reached
+    // (#3283)
+    let mut later = d.clone();
+    later.date = Some("2021-01-01".into());
+    let a =
+        duty_args_with_settings(&later, &dir, &serde_json::json!({"use_real_date": true})).unwrap();
+    assert_eq!(
+        &a[a.iter().position(|x| x == "--date").unwrap() + 1][..4],
+        "2021"
+    );
     assert_eq!(
         year(serde_json::json!({"use_real_date": true, "use_real_year": true})),
         format!("{y:04}")
@@ -1033,6 +1137,129 @@ upscale_quality=native
     assert_eq!(mac["upscaler"].as_str(), Some("metalfx"));
     assert!(super::settings_to_text(&mac, None).contains("upscaler=metalfx\n"));
 }
+#[test]
+fn the_doors_the_passengers_board_at_are_kept_in_the_settings_file() {
+    // (#3124) as the vehicle says (the default), the front door only, the first two, or the
+    // rear one only.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(
+        fresh["pax_entry_doors"],
+        serde_json::json!("as_bus"),
+        "as OMSI has always boarded"
+    );
+    let front = super::settings_from_text(Some("pax_entry_doors=first\n"));
+    assert_eq!(front["pax_entry_doors"], serde_json::json!("first"));
+    let text = super::settings_to_text(&front, None);
+    assert!(
+        text.lines().any(|l| l.trim() == "pax_entry_doors=first"),
+        "{text}"
+    );
+    // (the spellings a hand-edited file or the settings page may use)
+    for (written, kept) in [
+        ("rear", "last"),
+        ("back door", "last"),
+        ("front two", "first_two"),
+        ("both", "first_two"),
+        ("first", "first"),
+        ("vehicle", "as_bus"),
+        ("nonsense", "as_bus"),
+        ("", "as_bus"),
+    ] {
+        let v = super::settings_from_text(Some(&format!("pax_entry_doors={written}\n")));
+        assert_eq!(v["pax_entry_doors"], serde_json::json!(kept), "{written:?}");
+    }
+    // (and what is written is what the game reads back)
+    let rear = super::settings_from_text(Some("pax_entry_doors=rear\n"));
+    assert!(
+        super::settings_to_text(&rear, None)
+            .lines()
+            .any(|l| l.trim() == "pax_entry_doors=last")
+    );
+}
+
+#[test]
+#[test]
+fn whether_the_ibis_follows_the_stops_is_kept_in_the_settings_file() {
+    // (#2267) off by default - the driver presses the IBIS's "next stop" key, as in OMSI.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["ibis_auto_stop"], serde_json::json!(false));
+    let on = super::settings_from_text(Some("ibis_auto_stop=1\n"));
+    assert_eq!(on["ibis_auto_stop"], serde_json::json!(true));
+    assert!(
+        super::settings_to_text(&on, None)
+            .lines()
+            .any(|l| l.trim() == "ibis_auto_stop=1")
+    );
+    let off = super::settings_from_text(Some("ibis_auto_stop=0\n"));
+    assert!(
+        super::settings_to_text(&off, None)
+            .lines()
+            .any(|l| l.trim() == "ibis_auto_stop=0")
+    );
+}
+
+#[test]
+fn how_late_the_bus_may_be_is_kept_in_the_settings_file() {
+    let fresh = super::settings_from_text(None);
+    assert_eq!(fresh["pax_late_tolerance_min"], serde_json::json!(5.0));
+    for (written, kept) in [
+        ("10", 10.0),
+        ("0", 0.0),
+        ("7.5", 7.5),
+        ("-5", 0.0),
+        ("500", 120.0),
+        ("junk", 5.0),
+    ] {
+        let v = super::settings_from_text(Some(&format!("pax_late_tolerance_min={written}\n")));
+        assert_eq!(
+            v["pax_late_tolerance_min"],
+            serde_json::json!(kept),
+            "{written:?}"
+        );
+    }
+    let ten = super::settings_from_text(Some("pax_late_tolerance_min=10\n"));
+    let text = super::settings_to_text(&ten, None);
+    assert!(
+        text.lines()
+            .any(|l| l.trim() == "pax_late_tolerance_min=10"),
+        "{text}"
+    );
+}
+
+#[test]
+fn the_dead_zone_of_each_axis_is_kept_as_the_settings_file_wrote_it() {
+    let fresh = super::settings_from_text(None);
+    assert_eq!(
+        fresh["ctrl_deadzone_axes"],
+        serde_json::json!(""),
+        "no axis until one is given one"
+    );
+    let own = super::settings_from_text(Some(
+        "ctrl_deadzone=0.03\nctrl_deadzone_axes=throttle=0.12;brake=0.08\n",
+    ));
+    assert_eq!(
+        own["ctrl_deadzone_axes"],
+        serde_json::json!("throttle=0.12;brake=0.08")
+    );
+    let text = super::settings_to_text(&own, None);
+    assert!(
+        text.lines()
+            .any(|l| l.trim() == "ctrl_deadzone_axes=throttle=0.12;brake=0.08"),
+        "{text}"
+    );
+    assert!(
+        text.lines().any(|l| l.trim() == "ctrl_deadzone=0.03"),
+        "the general one is kept beside them: {text}"
+    );
+    let odd =
+        super::settings_from_text(Some("ctrl_deadzone_axes= throttle=0.12 ; leftover=zzz \n"));
+    assert!(
+        super::settings_to_text(&odd, None)
+            .lines()
+            .any(|l| l.trim() == "ctrl_deadzone_axes=throttle=0.12 ; leftover=zzz"),
+        "trimmed, not parsed"
+    );
+}
 
 #[test]
 fn whether_the_stops_fill_in_free_drive_is_kept_in_the_settings_file() {
@@ -1079,4 +1306,36 @@ fn whether_the_stops_passengers_wait_for_a_standing_bus_is_kept_in_the_settings_
             .lines()
             .any(|l| l.trim() == "pax_board_when_stopped=0")
     );
+}
+
+#[test]
+fn the_maps_own_passenger_numbers_reach_the_world_through_the_settings_file() {
+    // (#3154) A stop the map gives 0.7 to keeps 0.7 people only when the player asks for it;
+    // the switch has to survive the launcher's own file both ways.
+    let fresh = super::settings_from_text(None);
+    assert_eq!(
+        fresh["pax_stop_numbers_exact"],
+        serde_json::json!(false),
+        "OMSI 2's rounding is what a fresh file asks for"
+    );
+    let asked = super::settings_from_text(Some("pax_stop_numbers_exact=1\n"));
+    assert_eq!(asked["pax_stop_numbers_exact"], serde_json::json!(true));
+    let text = super::settings_to_text(&asked, None);
+    assert!(
+        text.lines().any(|l| l.trim() == "pax_stop_numbers_exact=1"),
+        "the file the game reads says it: {text}"
+    );
+    for off in ["0", "false", "off", "no"] {
+        let v = super::settings_from_text(Some(&format!("pax_stop_numbers_exact={off}\n")));
+        assert_eq!(
+            v["pax_stop_numbers_exact"],
+            serde_json::json!(false),
+            "{off}"
+        );
+        assert!(
+            super::settings_to_text(&v, None)
+                .lines()
+                .any(|l| l.trim() == "pax_stop_numbers_exact=0")
+        );
+    }
 }

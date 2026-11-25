@@ -38,13 +38,21 @@ impl Drop for Held<'_> {
 
 impl Budget {
     pub(crate) const fn new(max: u64) -> Budget {
-        Budget { held: AtomicU64::new(0), max }
+        Budget {
+            held: AtomicU64::new(0),
+            max,
+        }
     }
 
     /// `n` bytes of it, if they are free - or if nothing is held: a request larger than all
     /// of it comes alone.
     pub(crate) fn hold(&self, n: u64) -> Option<Held<'_>> {
-        self.held.try_update(Ordering::AcqRel, Ordering::Acquire, |h| (h + n <= self.max || h == 0).then_some(h + n)).ok().map(|_| Held(&self.held, n))
+        self.held
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |h| {
+                (h + n <= self.max || h == 0).then_some(h + n)
+            })
+            .ok()
+            .map(|_| Held(&self.held, n))
     }
 
     /// `hold`, waiting up to `wait` for the room (for work that has no `busy` to answer).

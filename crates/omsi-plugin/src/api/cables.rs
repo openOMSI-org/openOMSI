@@ -72,7 +72,8 @@ impl Cables {
         if count >= MAX_CABLES || points + cable.points.len() > MAX_PLUGIN_POINTS {
             return false;
         }
-        self.per_owner.insert(owner, (count + 1, points + cable.points.len()));
+        self.per_owner
+            .insert(owner, (count + 1, points + cable.points.len()));
         self.changed.insert(key.clone());
         self.by.insert(key, cable);
         self.generation += 1;
@@ -81,7 +82,9 @@ impl Cables {
 
     pub fn remove(&mut self, owner: u64, id: &str) -> bool {
         let key = (owner, id.to_string());
-        let Some(old) = self.by.remove(&key) else { return false };
+        let Some(old) = self.by.remove(&key) else {
+            return false;
+        };
         self.generation += 1;
         if let Some((count, points)) = self.per_owner.get_mut(&owner) {
             *count = count.saturating_sub(1);
@@ -93,7 +96,12 @@ impl Cables {
 
     /// Every cable of `owner` goes (it stopped, or cleared them).
     pub fn remove_owner(&mut self, owner: u64) -> usize {
-        let keys: Vec<(u64, String)> = self.by.keys().filter(|(o, _)| *o == owner).cloned().collect();
+        let keys: Vec<(u64, String)> = self
+            .by
+            .keys()
+            .filter(|(o, _)| *o == owner)
+            .cloned()
+            .collect();
         for k in &keys {
             self.by.remove(k);
         }
@@ -111,12 +119,19 @@ impl Cables {
     pub fn changes(&mut self, all: bool) -> Vec<((u64, String), Option<Cable>)> {
         let changed = std::mem::take(&mut self.changed);
         if all {
-            return self.by.iter().map(|(k, c)| (k.clone(), Some(c.clone()))).collect();
+            return self
+                .by
+                .iter()
+                .map(|(k, c)| (k.clone(), Some(c.clone())))
+                .collect();
         }
-        changed.into_iter().map(|k| {
-            let c = self.by.get(&k).cloned();
-            (k, c)
-        }).collect()
+        changed
+            .into_iter()
+            .map(|k| {
+                let c = self.by.get(&k).cloned();
+                (k, c)
+            })
+            .collect()
     }
 
     /// The cables, each with a key unique among all plugins'.
@@ -138,11 +153,19 @@ mod tests {
     use super::*;
 
     fn cable(x: f64) -> Cable {
-        Cable { points: vec![[0.0, 0.0, 6.0], [x, 0.0, 6.0]], radius: 0.006, color: [0.1, 0.1, 0.1, 1.0], frame: CableFrame::World }
+        Cable {
+            points: vec![[0.0, 0.0, 6.0], [x, 0.0, 6.0]],
+            radius: 0.006,
+            color: [0.1, 0.1, 0.1, 1.0],
+            frame: CableFrame::World,
+        }
     }
 
     fn cable_of(points: usize) -> Cable {
-        Cable { points: vec![[0.0, 0.0, 6.0]; points], ..cable(1.0) }
+        Cable {
+            points: vec![[0.0, 0.0, 6.0]; points],
+            ..cable(1.0)
+        }
     }
 
     #[test]
@@ -155,7 +178,11 @@ mod tests {
         }
         assert!(!c.set(1, "one more", cable_of(2)), "over the budget");
         assert!(!c.set(1, "w0", cable_of(each + 1)), "grown over the budget");
-        assert_eq!(c.by[&(1, "w0".into())].points.len(), each, "a refused change keeps the cable as it was");
+        assert_eq!(
+            c.by[&(1, "w0".into())].points.len(),
+            each,
+            "a refused change keeps the cable as it was"
+        );
         // another plugin has a budget of its own
         assert!(c.set(2, "w", cable_of(each)));
         // what is taken away frees its points, and a cable made shorter makes room
@@ -206,7 +233,10 @@ mod tests {
         c.set(1, "a", cable(3.0));
         c.remove(1, "b");
         let ch = c.changes(false);
-        assert_eq!(ch, vec![((1, "a".into()), Some(cable(3.0))), ((1, "b".into()), None)]);
+        assert_eq!(
+            ch,
+            vec![((1, "a".into()), Some(cable(3.0))), ((1, "b".into()), None)]
+        );
         // a game that lost its scene asks for all of them
         assert_eq!(c.changes(true), vec![((1, "a".into()), Some(cable(3.0)))]);
     }

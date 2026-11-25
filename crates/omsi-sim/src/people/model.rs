@@ -146,6 +146,8 @@ pub struct Person {
     /// Seconds without getting nearer the goal while wanting to move; seconds left
     /// passing through others.
     pub stuck: f32,
+    /// Seconds spent wanting to walk and not moving, across slip-pasts (#3790).
+    pub stuck_total: f32,
     pub ghost: f32,
     /// Seconds a standing vehicle has stood in the way (see the crowd step).
     pub car_wait: f32,
@@ -241,6 +243,9 @@ pub fn arrive(from: DVec2, to: DVec2, pace: f64) -> DVec2 {
 /// Seconds after one passenger's greeting or complaint before anybody says another.
 pub const CHAT_PAUSE: f64 = 12.0;
 
+/// How late the player's bus may be before its boarding passengers say so (s): five
+/// minutes, as Omsi.exe had it. The player may allow more (#2718).
+pub const LATE_TOLERANCE: f64 = 300.0;
 /// How still a bus has to stand before the stop's passengers walk to it, when
 /// [`PeopleSim::board_when_stopped`] is on (m/s; #2757).
 pub const BOARD_STOPPED_SPEED: f64 = 0.2;
@@ -260,7 +265,7 @@ pub struct PeopleSim {
     pub wall_cells: HashMap<(i32, i32, i32), WallCell>,
     pub wall_key: (usize, usize, usize, f64),
     /// Passenger cabins by vehicle files (the front vehicle and its coupled parts).
-    pub cabins: HashMap<Vec<PathBuf>, Option<Arc<Cabin>>>,
+    pub cabins: HashMap<Vec<(PathBuf, bool)>, Option<Arc<Cabin>>>,
     pub player_cabin: Option<Arc<Cabin>>,
     pub player_next_stop: Option<RequestStop>,
     /// Which places of each bus are taken.
@@ -317,6 +322,8 @@ pub struct PeopleSim {
     pub ai_stop_requests: Vec<u64>,
     /// Tickets sold at the cash desk this session and what they were worth.
     pub tickets_sold: u32,
+    /// How many of the sales above were fares paid without a ticket (#2742).
+    pub fares_no_ticket: u32,
     pub ticket_cash: f32,
     /// The tickets sold since the last `take_sales`: name and value.
     pub sales: Vec<(String, f32)>,
@@ -353,9 +360,12 @@ pub struct PeopleSim {
     pub density: f32,
     /// The clock's time of day in seconds (set by the app): day tickets sell by it.
     pub time_of_day: f64,
-    /// How late the player's bus is on its duty (s; set by the app): over five minutes,
+    /// How late the player's bus is on its duty (s; set by the app): over `late_tolerance`,
     /// boarding passengers may say so.
     pub delay: f64,
+    /// How late the bus may be before they say so (s): [`LATE_TOLERANCE`] unless the
+    /// settings say otherwise (#2718). Zero turns the complaint off.
+    pub late_tolerance: f64,
     /// The game's folder (the ticket pack's voices are found from it).
     pub root: std::path::PathBuf,
     /// What passengers said since the app last collected it (see `take_voice_lines`).
@@ -391,10 +401,12 @@ pub struct PeopleSim {
     /// wants one of them and boards only a bus showing one of its termini; at a stop no trip
     /// goes on from, anybody takes the first bus (0x61c33c).
     pub stop_targets: Option<HashMap<i64, Vec<(String, HashSet<String>)>>>,
-    /// Per bus stop, the destinations of the trips due there soon (`Schedule::
-    /// due_destinations`, made anew every game minute): the people turning up draw theirs
-    /// from these alone. None: from all of the stop's (no timetable).
-    pub due_dests: Option<HashMap<i64, HashSet<String>>>,
+    /// Per bus stop, the destinations of the trips due there soon (`Schedule::due_trips`,
+    /// made anew every game minute, where their buses are every frame): the people turning
+    /// up draw theirs from these alone, and the stop fills to the share of its number those
+    /// trips ask for until their bus has passed it (`DueTrips::share_of`). None: from all of
+    /// the stop's (no timetable).
+    pub due_dests: Option<crate::timetable_run::DueTrips>,
     /// Game time `due_dests` was made at.
     pub due_at: f64,
     /// The timetable's name of each stop object (`Schedule::stop_names`), the names the
@@ -442,10 +454,21 @@ pub struct PeopleSim {
     /// Optional visual-only response to an approaching full bus.
     pub visual_full_bus_reaction: bool,
     pub bad_driving: bool,
+    /// Which doors the passengers may get in through (#3124): as the vehicle says, the
+    /// front one only, the first two, or the rear one. Set by the app from the settings.
+    pub entry_doors: crate::people::entry_doors::EntryDoors,
+    /// The fare is paid without a ticket (#2742): the passenger pays, gets the change and
+    /// goes to their place instead of waiting at the desk for a ticket - and no ticket
+    /// sound or ticket hand-over is made. Set by the app from the settings.
+    pub no_ticket: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to
     /// sell it (and show a pass after `PAY_PATIENCE`); `walk` - no cash desk at all.
     pub boarding: String,
+    /// Rear door boarding (`rear_door_boarding` in the settings, #4055): the passengers may
+    /// get in at any door of the bus on their side of it, not only the front one - each walks
+    /// to the nearest and asks for it there.
+    pub rear_door_boarding: bool,
     /// The chance a boarding passenger takes a standing place although a seat is free
     /// (`standing_chance` in the settings).
     pub stand_chance: f32,

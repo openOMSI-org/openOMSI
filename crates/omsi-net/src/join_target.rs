@@ -28,12 +28,17 @@ pub fn describe_join(text: &str) -> Result<String, String> {
         return Ok("search the local network for a hosted session".into());
     }
     if let Some(url) = ws::ws_url(t) {
-        return Ok(format!("a server on the internet, reached over a WebSocket ({url})"));
+        return Ok(format!(
+            "a server on the internet, reached over a WebSocket ({url})"
+        ));
     }
     if looks_like_code(t) {
         let c = SessionCode::decode(t)?;
         if c.protocol as u32 != PROTOCOL {
-            return Err(format!("this code was made by a game with LAN protocol {}, this one speaks {PROTOCOL} - both players need the same version", c.protocol));
+            return Err(format!(
+                "this code was made by a game with LAN protocol {}, this one speaks {PROTOCOL} - both players need the same version",
+                c.protocol
+            ));
         }
         let at: Vec<String> = c
             .ips
@@ -69,7 +74,7 @@ pub fn describe_join(text: &str) -> Result<String, String> {
             _ => {
                 return Err(format!(
                     "the part after ':' must be a port (1 to 65535), not '{p}'"
-                ))
+                ));
             }
         },
         None => (t, DEFAULT_PORT),
@@ -96,7 +101,9 @@ pub fn describe_join(text: &str) -> Result<String, String> {
             )
         });
     }
-    Err(format!("the entry '{t}' is neither a session code (OMSI-XXXX-…), an address (192.168.1.20 or 192.168.1.20:27015), a port, nor empty (search)"))
+    Err(format!(
+        "the entry '{t}' is neither a session code (OMSI-XXXX-…), an address (192.168.1.20 or 192.168.1.20:27015), a port, nor empty (search)"
+    ))
 }
 
 /// Read what a player typed into the join field: a session code, `ip`, `ip:port`,
@@ -149,7 +156,7 @@ pub fn parse_join(text: &str) -> Result<JoinTarget, String> {
             _ => {
                 return Err(format!(
                     "the entry '{t}': the part after ':' must be a port (1 to 65535)"
-                ))
+                ));
             }
         },
         None => (t, DEFAULT_PORT),
@@ -159,7 +166,9 @@ pub fn parse_join(text: &str) -> Result<JoinTarget, String> {
         || host.contains(char::is_whitespace)
         || host.bytes().all(|b| b.is_ascii_digit() || b == b'.')
     {
-        return Err(format!("the entry '{t}' is neither a session code (OMSI-…), an address (192.168.1.20 or 192.168.1.20:27015) nor a port"));
+        return Err(format!(
+            "the entry '{t}' is neither a session code (OMSI-…), an address (192.168.1.20 or 192.168.1.20:27015) nor a port"
+        ));
     }
     match (host, port).to_socket_addrs() {
         Ok(mut it) => match it.find(|a| a.is_ipv4()) {
@@ -174,7 +183,9 @@ pub fn parse_join(text: &str) -> Result<JoinTarget, String> {
             }),
             None => Err(format!("the computer {host} has no IPv4 address")),
         },
-        Err(e) => Err(format!("the entry '{t}' is neither a session code (OMSI-…), an address nor a port, and no computer of that name was found ({e})")),
+        Err(e) => Err(format!(
+            "the entry '{t}' is neither a session code (OMSI-…), an address nor a port, and no computer of that name was found ({e})"
+        )),
     }
 }
 
@@ -206,9 +217,7 @@ mod tests {
 
     #[test]
     fn explicit_targets_remain_exact() {
-        for target in [
-            "27017", "127.0.0.1:27017", "[::1]:27017", "localhost:27017",
-        ] {
+        for target in ["27017", "127.0.0.1:27017", "[::1]:27017", "localhost:27017"] {
             let JoinTarget::Direct { addrs, .. } = parse_join(target).unwrap() else {
                 panic!("expected direct target");
             };

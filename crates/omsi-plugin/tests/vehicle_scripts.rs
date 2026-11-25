@@ -47,13 +47,29 @@ fn dir(tag: &str) -> PathBuf {
 #[test]
 fn a_vehicle_script_runs_with_the_vehicle_and_leaves_with_it() {
     let d = dir("run");
-    std::fs::write(d.join("cab.lua"), "function on_frame(dt) omsi.set_var('cab_ticks', (omsi.var('cab_ticks') or 0) + 1) end").unwrap();
-    std::fs::write(d.join("other.lua"), "function on_frame(dt) omsi.set_var('other_ticks', 1) end").unwrap();
+    std::fs::write(
+        d.join("cab.lua"),
+        "function on_frame(dt) omsi.set_var('cab_ticks', (omsi.var('cab_ticks') or 0) + 1) end",
+    )
+    .unwrap();
+    std::fs::write(
+        d.join("other.lua"),
+        "function on_frame(dt) omsi.set_var('other_ticks', 1) end",
+    )
+    .unwrap();
     let mut plugins = Plugins::default();
     let mut bus = Bus::default();
     bus.vars.insert("cab_ticks".into(), 0.0);
     bus.vars.insert("other_ticks".into(), 0.0);
-    assert_eq!(plugins.attach_vehicle_scripts(&[d.join("cab.lua"), d.join("missing.lua"), d.join("x.txt")]), 1, "the missing file and the wrong kind are left out");
+    assert_eq!(
+        plugins.attach_vehicle_scripts(&[
+            d.join("cab.lua"),
+            d.join("missing.lua"),
+            d.join("x.txt")
+        ]),
+        1,
+        "the missing file and the wrong kind are left out"
+    );
     assert!(plugins.has("vehicle:cab"));
     plugins.frame(&mut bus);
     plugins.frame(&mut bus);
@@ -78,6 +94,15 @@ fn a_vehicle_script_cannot_reach_beyond_the_vehicle() {
     bus.vars.insert("own".into(), 0.0);
     assert_eq!(plugins.attach_vehicle_scripts(&[d.join("greedy.lua")]), 1);
     plugins.frame(&mut bus);
-    assert_eq!(bus.vars.get("own"), Some(&1.0), "it may write its bus's variables");
-    assert_eq!(bus.vars.get("denied"), Some(&1.0), "but not give the game menu commands: {:?}", bus.vars);
+    assert_eq!(
+        bus.vars.get("own"),
+        Some(&1.0),
+        "it may write its bus's variables"
+    );
+    assert_eq!(
+        bus.vars.get("denied"),
+        Some(&1.0),
+        "but not give the game menu commands: {:?}",
+        bus.vars
+    );
 }

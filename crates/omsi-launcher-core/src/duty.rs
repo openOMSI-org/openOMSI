@@ -13,6 +13,11 @@ pub struct Duty {
     /// The fleet number picked from the bus's `[number]` list (none: its first).
     #[serde(default)]
     pub number: Option<String>,
+    /// The variables the player chose for this bus in the launcher - its onboard computer (the
+    /// IBIS unit or ticket printer its repaints name), a door type: set before the scripts'
+    /// `{init}` and kept over the paint scheme's own `[setvar]`s (`--setvar`, #4077).
+    #[serde(default)]
+    pub setvars: Option<std::collections::BTreeMap<String, String>>,
     pub hof: Option<String>,
     pub entry: Option<i32>,
     pub line: Option<String>,
@@ -46,6 +51,10 @@ pub struct Duty {
     /// Explicit per-launch authorization for server-defined vehicle content.
     #[serde(default)]
     pub allow_server_fleet: bool,
+    /// A hosted session's buses (#1464): the ones its players may drive, `;`-separated, bus
+    /// files or folders. Empty: every bus.
+    #[serde(default)]
+    pub session_buses: Option<String>,
     /// Season override: spring / summer / autumn / winter, with a phase `-early` / `-late`
     /// (`autumn-late`; none = the middle; empty = by date).
     pub season: Option<String>,
@@ -126,6 +135,16 @@ pub(crate) fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Resu
     if let Some(n) = d.number.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
         a.extend(["--number".into(), n.to_string()]);
     }
+    if let Some(vars) = d.setvars.as_ref().filter(|v| !v.is_empty()) {
+        let list: Vec<String> = vars
+            .iter()
+            .filter(|(k, _)| !k.trim().is_empty())
+            .map(|(k, v)| format!("{}={}", k.trim(), v.trim()))
+            .collect();
+        if !list.is_empty() {
+            a.extend(["--setvar".into(), list.join(",")]);
+        }
+    }
     if let Some(id) = d.depot.as_deref().map(str::trim).filter(|i| !i.is_empty()) {
         a.extend(["--depot".into(), id.to_string()]);
     }
@@ -180,23 +199,11 @@ pub(crate) fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Resu
         date = Some(format!("{year:04}-{mo:02}-{dd:02}"));
     }
     if let Some(dt) = date {
-        // (only the machine's calendar is fitted to the map's [years], so that its AI lists,
-        // chrono and timetables fit; the date the player chose in the launcher stays)
-        let real_date = on("use_real_date") && !on("use_real_year");
-        let span = if real_date {
-            let file = root.join(&d.map);
-            let file = if file.is_file() {
-                file
-            } else {
-                resolve_content(&d.map).unwrap_or(file)
-            };
-            omsi_map::GlobalCfg::load(&file)
-                .ok()
-                .and_then(|g| year_span_of(&g))
-        } else {
-            None
-        };
-        a.extend(["--date".into(), date_for_game(&dt, real_date, span)]);
+        // (the year stays the duty's: Omsi.exe's [useActDate] takes the day alone from the
+        // computer's calendar and leaves the year as it is, 0x708780; a map's [years] only
+        // pick the year of a random start, 0x678518. Fitted to them, a chrono scenario of
+        // 2021 on a map whose [years] end in 2018 was never reached, #3283)
+        a.extend(["--date".into(), dt]);
     }
     if let Some(w) = d.weather.as_deref().filter(|x| !x.trim().is_empty()) {
         a.extend(["--weather".into(), w.trim().to_string()]);
@@ -257,6 +264,10 @@ pub(crate) fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Resu
         if lan.eq_ignore_ascii_case("host") {
             // 0: the default port, or the next free one when a session runs here already
             a.extend(["--lan-host".into(), "0".into()]);
+            // (#1464) the buses this session drives
+            if let Some(buses) = d.session_buses.as_deref().filter(|b| !b.trim().is_empty()) {
+                a.extend(["--session-buses".into(), buses.trim().to_string()]);
+            }
         } else if let Some(target) = lan.strip_prefix("join:") {
             let target = target.trim();
             omsi_net::describe_join(target).map_err(|e| anyhow!("LAN join: {e}"))?;

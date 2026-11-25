@@ -8,12 +8,26 @@ pub fn unpack(zip: &Path, to: &Path) -> anyhow::Result<()> {
     let mut a = zip::ZipArchive::new(std::fs::File::open(zip)?)?;
     for i in 0..a.len() {
         let mut e = a.by_index(i)?;
-        let Some(rel) = e.enclosed_name() else { continue };
+        let Some(rel) = e.enclosed_name() else {
+            continue;
+        };
         // (macOS' resource forks, which ditto keeps beside the files)
-        if rel.components().next().map(|c| c.as_os_str() == "__MACOSX").unwrap_or(false) || rel.file_name().map(|n| n.to_string_lossy().starts_with("._")).unwrap_or(false) {
+        if rel
+            .components()
+            .next()
+            .map(|c| c.as_os_str() == "__MACOSX")
+            .unwrap_or(false)
+            || rel
+                .file_name()
+                .map(|n| n.to_string_lossy().starts_with("._"))
+                .unwrap_or(false)
+        {
             continue;
         }
-        if rel.ancestors().any(|p| !p.as_os_str().is_empty() && to.join(p).is_symlink()) {
+        if rel
+            .ancestors()
+            .any(|p| !p.as_os_str().is_empty() && to.join(p).is_symlink())
+        {
             continue;
         }
         let out = to.join(&rel);
@@ -56,7 +70,10 @@ pub fn unpack(zip: &Path, to: &Path) -> anyhow::Result<()> {
 #[cfg(unix)]
 fn link_points_down(target: &Path) -> bool {
     use std::path::Component;
-    !target.as_os_str().is_empty() && target.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
+    !target.as_os_str().is_empty()
+        && target
+            .components()
+            .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
 }
 
 #[cfg(all(test, unix))]
@@ -74,7 +91,8 @@ mod tests {
         {
             let mut z = zip::ZipWriter::new(std::fs::File::create(&zip).unwrap());
             let o = zip::write::SimpleFileOptions::default();
-            z.add_symlink("App.app/Contents/Current", "Versions/A", o).unwrap();
+            z.add_symlink("App.app/Contents/Current", "Versions/A", o)
+                .unwrap();
             z.add_symlink("App.app/escape", "../../outside", o).unwrap();
             z.add_symlink("App.app/absolute", "/etc", o).unwrap();
             z.add_symlink("a/b", "..", o).unwrap();
@@ -85,20 +103,38 @@ mod tests {
             z.add_symlink("into", "sub", o).unwrap();
             z.start_file("into/through", o).unwrap();
             z.write_all(b"x").unwrap();
-            z.start_file("App.app/run", o.unix_permissions(0o4755)).unwrap();
+            z.start_file("App.app/run", o.unix_permissions(0o4755))
+                .unwrap();
             z.write_all(b"x").unwrap();
             z.finish().unwrap();
         }
         let to = root.join("out");
         unpack(&zip, &to).unwrap();
-        assert_eq!(std::fs::read_link(to.join("App.app/Contents/Current")).unwrap(), Path::new("Versions/A"));
-        assert_eq!(std::fs::read_link(to.join("into")).unwrap(), Path::new("sub"));
+        assert_eq!(
+            std::fs::read_link(to.join("App.app/Contents/Current")).unwrap(),
+            Path::new("Versions/A")
+        );
+        assert_eq!(
+            std::fs::read_link(to.join("into")).unwrap(),
+            Path::new("sub")
+        );
         for refused in ["App.app/escape", "App.app/absolute", "a/b", "x"] {
             assert!(!to.join(refused).is_symlink(), "{refused}");
         }
-        assert!(!root.join("escaped").exists() && !to.join("escaped").exists() && !to.join("a/escaped").exists());
+        assert!(
+            !root.join("escaped").exists()
+                && !to.join("escaped").exists()
+                && !to.join("a/escaped").exists()
+        );
         assert!(!to.join("sub").exists());
-        assert_eq!(std::fs::metadata(to.join("App.app/run")).unwrap().permissions().mode() & 0o7777, 0o755);
+        assert_eq!(
+            std::fs::metadata(to.join("App.app/run"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o755
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }

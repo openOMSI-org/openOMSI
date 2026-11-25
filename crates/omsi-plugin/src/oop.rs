@@ -18,8 +18,14 @@ use std::path::{Path, PathBuf};
 
 /// The `.oop` files of a plugins folder.
 pub fn find_oop(dir: &Path) -> Vec<PathBuf> {
-    let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
-    let mut v: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_file() && p.extension().is_some_and(|x| x.eq_ignore_ascii_case("oop"))).collect();
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut v: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.extension().is_some_and(|x| x.eq_ignore_ascii_case("oop")))
+        .collect();
     v.sort();
     v
 }
@@ -42,14 +48,32 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
     let oop = Oop::read(&bytes).map_err(|e| format!("not a usable .oop (damaged, changed after it was built, or made for another openOMSI): {e}"))?;
     let h = oop.header().clone();
     if h.api_abi > crate::wasm::ABI as u32 {
-        return Err(format!("made for plugin API {}, this openOMSI has {} - update openOMSI", h.api_abi, crate::wasm::ABI));
+        return Err(format!(
+            "made for plugin API {}, this openOMSI has {} - update openOMSI",
+            h.api_abi,
+            crate::wasm::ABI
+        ));
     }
     match oop.signer_fingerprint() {
-        Some(f) => log::info!("{}: {} {} by {}, signed by {f}", path.display(), h.name, h.version, h.authors.join(", ")),
-        None => log::warn!("{}: {} {} is not signed: who built it is not known", path.display(), h.name, h.version),
+        Some(f) => log::info!(
+            "{}: {} {} by {}, signed by {f}",
+            path.display(),
+            h.name,
+            h.version,
+            h.authors.join(", ")
+        ),
+        None => log::warn!(
+            "{}: {} {} is not signed: who built it is not known",
+            path.display(),
+            h.name,
+            h.version
+        ),
     }
     let perms = permissions(&h.permissions);
-    let name = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| h.id.clone());
+    let name = path
+        .file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| h.id.clone());
     let dir = path.parent().unwrap_or(Path::new("."));
     let data_dir = dir.join(format!("{name}.data"));
     let entry = h.entry.clone();
@@ -58,15 +82,35 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
     let folder = extract_assets(dir, &name, &files);
     match kind {
         Kind::Wasm => {
-            let wasm = files.into_iter().find(|(p, _)| *p == entry).map(|(_, b)| b).ok_or_else(|| format!("its module {entry} is missing"))?;
-            Ok(Loaded::Wasm(WasmSpec { name, wasm, data_dir, folder, perms: Some(perms) }))
+            let wasm = files
+                .into_iter()
+                .find(|(p, _)| *p == entry)
+                .map(|(_, b)| b)
+                .ok_or_else(|| format!("its module {entry} is missing"))?;
+            Ok(Loaded::Wasm(WasmSpec {
+                name,
+                wasm,
+                data_dir,
+                folder,
+                perms: Some(perms),
+            }))
         }
         Kind::Lua => {
             let source = ArchiveSource::new(&entry, files)?;
             let save_file = dir.join(format!("{name}.save.lua"));
-            Ok(Loaded::Lua(LuaSpec { name, source: Box::new(source), save_file, data_dir, folder, perms: Some(perms) }))
+            Ok(Loaded::Lua(LuaSpec {
+                name,
+                source: Box::new(source),
+                save_file,
+                data_dir,
+                folder,
+                perms: Some(perms),
+            }))
         }
-        other => Err(format!("a plugin of kind {} this openOMSI does not know - update openOMSI", other.as_str())),
+        other => Err(format!(
+            "a plugin of kind {} this openOMSI does not know - update openOMSI",
+            other.as_str()
+        )),
     }
 }
 
@@ -126,14 +170,19 @@ impl ArchiveSource {
         let mut lua = HashMap::new();
         for (p, b) in files {
             if p.to_ascii_lowercase().ends_with(".lua") {
-                let text = String::from_utf8(b).map_err(|_| format!("{p} is not text (compiled Lua is refused: rebuild it with oopc)"))?;
+                let text = String::from_utf8(b).map_err(|_| {
+                    format!("{p} is not text (compiled Lua is refused: rebuild it with oopc)")
+                })?;
                 lua.insert(p, text);
             }
         }
         if !lua.contains_key(entry) {
             return Err(format!("its main file {entry} is missing"));
         }
-        Ok(ArchiveSource { entry: entry.to_string(), lua })
+        Ok(ArchiveSource {
+            entry: entry.to_string(),
+            lua,
+        })
     }
 }
 
@@ -144,6 +193,8 @@ impl LuaSource for ArchiveSource {
 
     fn module(&self, name: &str) -> Option<(String, String)> {
         let rel = name.replace('.', "/");
-        [format!("{rel}.lua"), format!("{rel}/init.lua")].into_iter().find_map(|f| self.lua.get(&f).map(|t| (t.clone(), f)))
+        [format!("{rel}.lua"), format!("{rel}/init.lua")]
+            .into_iter()
+            .find_map(|f| self.lua.get(&f).map(|t| (t.clone(), f)))
     }
 }

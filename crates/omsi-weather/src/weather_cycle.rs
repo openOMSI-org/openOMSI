@@ -39,7 +39,13 @@ pub struct Blend {
 
 impl Blend {
     pub fn new(from: Weather, to: Weather, secs: f32) -> Blend {
-        Blend { from, to, k: 0.0, secs: secs.max(1.0), switched: false }
+        Blend {
+            from,
+            to,
+            k: 0.0,
+            secs: secs.max(1.0),
+            switched: false,
+        }
     }
 
     /// Advance by `dt` seconds of the day: the weather as it is now, whether the cloud type
@@ -69,24 +75,51 @@ pub fn lerp(a: &Weather, b: &Weather, k: f32) -> Weather {
         name: if late { b.name.clone() } else { a.name.clone() },
         description: b.description.clone(),
         // (visibility changes on a log scale: 50 km to 200 m passes through the kilometres)
-        fog: ((a.fog.0.max(1.0).ln() + (b.fog.0.max(1.0).ln() - a.fog.0.max(1.0).ln()) * k).exp(), m(a.fog.1, b.fog.1)),
+        fog: (
+            (a.fog.0.max(1.0).ln() + (b.fog.0.max(1.0).ln() - a.fog.0.max(1.0).ln()) * k).exp(),
+            m(a.fog.1, b.fog.1),
+        ),
         wind: (m(a.wind.0, b.wind.0), m(a.wind.1, b.wind.1)),
         temp: (m(a.temp.0, b.temp.0), m(a.temp.1, b.temp.1)),
         pressure: m(a.pressure, b.pressure),
-        clouds: (if late { b.clouds.0.clone() } else { a.clouds.0.clone() }, m(a.clouds.1, b.clouds.1)),
+        clouds: (
+            if late {
+                b.clouds.0.clone()
+            } else {
+                a.clouds.0.clone()
+            },
+            m(a.clouds.1, b.clouds.1),
+        ),
         // The *kind* of cloud changes at a stroke - its name is the picture the sky is drawn
         // with - but the cover must not: a weather coming in closes the sky over the minutes
         // the blend takes, rather than putting a deck up at its halfway point. `None` only
         // while both ends agree that the type decides.
-        cloud_cover: if a.cloud_cover.is_none() && b.cloud_cover.is_none() && a.clouds.0.trim().eq_ignore_ascii_case(b.clouds.0.trim()) {
+        cloud_cover: if a.cloud_cover.is_none()
+            && b.cloud_cover.is_none()
+            && a.clouds.0.trim().eq_ignore_ascii_case(b.clouds.0.trim())
+        {
             None
         } else {
-            Some(m(omsi_content::weather_choice::cover_of(a), omsi_content::weather_choice::cover_of(b)))
+            Some(m(
+                omsi_content::weather_choice::cover_of(a),
+                omsi_content::weather_choice::cover_of(b),
+            ))
         },
-        precip: (0..n).map(|i| m(p(&a.precip, i), p(&b.precip, i))).collect(),
-        ground_wet: [m(a.ground_wet[0], b.ground_wet[0]), m(a.ground_wet[1], b.ground_wet[1]), m(a.ground_wet[2], b.ground_wet[2])],
+        precip: (0..n)
+            .map(|i| m(p(&a.precip, i), p(&b.precip, i)))
+            .collect(),
+        ground_wet: [
+            m(a.ground_wet[0], b.ground_wet[0]),
+            m(a.ground_wet[1], b.ground_wet[1]),
+            m(a.ground_wet[2], b.ground_wet[2]),
+        ],
         snow: if late { b.snow } else { a.snow },
         snow_on_road: if late { b.snow_on_road } else { a.snow_on_road },
+        decorative_clouds: if late {
+            b.decorative_clouds
+        } else {
+            a.decorative_clouds
+        },
     }
 }
 
@@ -95,7 +128,10 @@ pub fn installed() -> Vec<(String, Weather)> {
     let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
         .into_iter()
         .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("owt")))
-        .filter_map(|p| p.file_name().map(|n| format!("Weather/{}", n.to_string_lossy())))
+        .filter_map(|p| {
+            p.file_name()
+                .map(|n| format!("Weather/{}", n.to_string_lossy()))
+        })
         .collect();
     files.sort();
     files.dedup();
@@ -116,7 +152,13 @@ fn cover(w: &Weather) -> f32 {
 
 /// How much rain or snow a weather brings (0 none .. 1 a downpour).
 fn wetness(w: &Weather) -> f32 {
-    w.precip.first().copied().unwrap_or(0.0).clamp(0.0, 1.0).max(w.precip.get(1).copied().unwrap_or(0.0) / 32.0).clamp(0.0, 1.0)
+    w.precip
+        .first()
+        .copied()
+        .unwrap_or(0.0)
+        .clamp(0.0, 1.0)
+        .max(w.precip.get(1).copied().unwrap_or(0.0) / 32.0)
+        .clamp(0.0, 1.0)
 }
 
 /// Does the weather suit month `m` (1..12)? Snow only from November to March, no frost in
@@ -138,9 +180,24 @@ fn suits(w: &Weather, m: i32) -> bool {
 
 /// The next weather after `now` (a file of `all`): one that suits the month, the nearer
 /// the likelier (in cloud cover, rain and visibility). `r` is a random number 0..1.
-pub fn pick(all: &[(String, Weather)], now: &Weather, now_file: &str, month: i32, r: f32) -> Option<String> {
-    let cand: Vec<&(String, Weather)> = all.iter().filter(|(f, w)| !f.eq_ignore_ascii_case(now_file) && suits(w, month)).collect();
-    let cand = if cand.is_empty() { all.iter().filter(|(f, _)| !f.eq_ignore_ascii_case(now_file)).collect() } else { cand };
+pub fn pick(
+    all: &[(String, Weather)],
+    now: &Weather,
+    now_file: &str,
+    month: i32,
+    r: f32,
+) -> Option<String> {
+    let cand: Vec<&(String, Weather)> = all
+        .iter()
+        .filter(|(f, w)| !f.eq_ignore_ascii_case(now_file) && suits(w, month))
+        .collect();
+    let cand = if cand.is_empty() {
+        all.iter()
+            .filter(|(f, _)| !f.eq_ignore_ascii_case(now_file))
+            .collect()
+    } else {
+        cand
+    };
     if cand.is_empty() {
         return None;
     }
@@ -148,7 +205,9 @@ pub fn pick(all: &[(String, Weather)], now: &Weather, now_file: &str, month: i32
     let weights: Vec<f32> = cand
         .iter()
         .map(|(_, w)| {
-            let d = (cover(w) - cover(now)).abs() * 1.5 + (wetness(w) - wetness(now)).abs() * 3.0 + (vis(w) - vis(now)).abs() * 1.5;
+            let d = (cover(w) - cover(now)).abs() * 1.5
+                + (wetness(w) - wetness(now)).abs() * 3.0
+                + (vis(w) - vis(now)).abs() * 1.5;
             1.0 / (0.25 + d * d)
         })
         .collect();
@@ -171,7 +230,10 @@ pub struct Cycle {
 
 impl Cycle {
     pub fn new(seed: u64) -> Cycle {
-        let mut c = Cycle { next_in: 0.0, rng: seed | 1 };
+        let mut c = Cycle {
+            next_in: 0.0,
+            rng: seed | 1,
+        };
         c.next_in = c.interval();
         c
     }
@@ -196,7 +258,24 @@ mod tests {
     use super::*;
 
     fn w(name: &str, cover: f32, rain: f32, fog: f32, temp: f32, snow: bool) -> Weather {
-        Weather { name: name.into(), fog: (fog, 0.0), temp: (temp, 0.0), clouds: (if cover > 0.5 { "Overcast 1".into() } else if cover > 0.2 { "Cumulus 2".into() } else { "-1".into() }, 300.0), precip: vec![rain, 0.0, 0.0, 0.0, 0.0], snow, ..Default::default() }
+        Weather {
+            name: name.into(),
+            fog: (fog, 0.0),
+            temp: (temp, 0.0),
+            clouds: (
+                if cover > 0.5 {
+                    "Overcast 1".into()
+                } else if cover > 0.2 {
+                    "Cumulus 2".into()
+                } else {
+                    "-1".into()
+                },
+                300.0,
+            ),
+            precip: vec![rain, 0.0, 0.0, 0.0, 0.0],
+            snow,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -213,14 +292,20 @@ mod tests {
             assert!(c >= last - 1e-4, "the cover went backwards: {last} -> {c}");
             last = c;
         }
-        assert!((last - 1.0).abs() < 1e-4, "the blend ends on the closed sky, not {last}");
+        assert!(
+            (last - 1.0).abs() < 1e-4,
+            "the blend ends on the closed sky, not {last}"
+        );
         // a steady weather still lets its type decide
         assert!(lerp(&a, &a, 0.5).cloud_cover.is_none());
     }
 
     #[test]
     fn a_blend_passes_through_the_middle_and_switches_the_clouds_halfway() {
-        let (a, b) = (w("clear", 0.1, 0.0, 50000.0, 20.0, false), w("rain", 0.9, 1.0, 2000.0, 12.0, false));
+        let (a, b) = (
+            w("clear", 0.1, 0.0, 50000.0, 20.0, false),
+            w("rain", 0.9, 1.0, 2000.0, 12.0, false),
+        );
         let mut bl = Blend::new(a, b, 100.0);
         let (x, changed, done) = bl.step(25.0);
         assert!(!changed && !done && (x.temp.0 - 18.0).abs() < 1e-3 && x.clouds.0 == "-1");
@@ -233,16 +318,32 @@ mod tests {
     #[test]
     fn the_next_weather_suits_the_month_and_is_near() {
         let all = vec![
-            ("Weather/a.owt".to_string(), w("clear", 0.1, 0.0, 50000.0, 20.0, false)),
-            ("Weather/b.owt".to_string(), w("cloudy", 0.4, 0.0, 30000.0, 18.0, false)),
-            ("Weather/c.owt".to_string(), w("snow", 1.0, 1.0, 800.0, -5.0, true)),
+            (
+                "Weather/a.owt".to_string(),
+                w("clear", 0.1, 0.0, 50000.0, 20.0, false),
+            ),
+            (
+                "Weather/b.owt".to_string(),
+                w("cloudy", 0.4, 0.0, 30000.0, 18.0, false),
+            ),
+            (
+                "Weather/c.owt".to_string(),
+                w("snow", 1.0, 1.0, 800.0, -5.0, true),
+            ),
         ];
         // in July there is no snow; from clear, cloudy is the only near one left
         for r in [0.0, 0.3, 0.7, 0.99] {
-            assert_eq!(pick(&all, &all[0].1, "Weather/a.owt", 7, r).as_deref(), Some("Weather/b.owt"));
+            assert_eq!(
+                pick(&all, &all[0].1, "Weather/a.owt", 7, r).as_deref(),
+                Some("Weather/b.owt")
+            );
         }
         // in January snow may come
-        assert!((0..20).map(|i| pick(&all, &all[1].1, "Weather/b.owt", 1, i as f32 / 20.0)).any(|p| p.as_deref() == Some("Weather/c.owt")));
+        assert!(
+            (0..20)
+                .map(|i| pick(&all, &all[1].1, "Weather/b.owt", 1, i as f32 / 20.0))
+                .any(|p| p.as_deref() == Some("Weather/c.owt"))
+        );
     }
     #[test]
     fn the_cloud_drift_goes_round_where_every_cloud_texture_does() {

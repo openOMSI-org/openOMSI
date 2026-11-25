@@ -5,7 +5,9 @@
 //! usage: turned <file.o3d>...
 fn main() {
     for p in std::env::args().skip(1) {
-        let Ok(m) = omsi_o3d::load_mesh(std::path::Path::new(&p)) else { continue };
+        let Ok(m) = omsi_o3d::load_mesh(std::path::Path::new(&p)) else {
+            continue;
+        };
         let rot = glam::Mat3::from_mat4(m.transform_row_major());
         let (mut against, mut against_turned, mut total) = (0usize, 0usize, 0usize);
         for t in &m.triangles {

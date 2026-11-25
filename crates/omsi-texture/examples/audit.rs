@@ -6,14 +6,20 @@
 use std::path::{Path, PathBuf};
 
 fn walk(p: &Path, filter: &str, out: &mut Vec<PathBuf>) {
-    let Some(entries) = omsi_cfg::vfs::list_dir(p) else { return };
+    let Some(entries) = omsi_cfg::vfs::list_dir(p) else {
+        return;
+    };
     for (name, is_dir) in entries {
         let c = p.join(&name);
         if is_dir {
             walk(&c, filter, out);
             continue;
         }
-        let ext = c.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+        let ext = c
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
         if matches!(ext.as_str(), "bmp" | "tga" | "dds" | "png" | "jpg" | "jpeg") && {
             let l = c.to_string_lossy().to_ascii_lowercase();
             filter.split('|').any(|f| l.contains(f))
@@ -38,20 +44,37 @@ fn main() {
     let mut files = Vec::new();
     for a in &args {
         let p = PathBuf::from(a);
-        let root = if a.to_ascii_lowercase().ends_with(".zip") { omsi_cfg::vfs::mount_zip(&p).expect("zip") } else { p };
+        let root = if a.to_ascii_lowercase().ends_with(".zip") {
+            omsi_cfg::vfs::mount_zip(&p).expect("zip")
+        } else {
+            p
+        };
         walk(&root, &filter, &mut files);
     }
     files.sort();
     if gpu {
         use omsi_texture::gpu::*;
         for f in files {
-            let Ok(bytes) = omsi_cfg::vfs::read(&f) else { continue };
-            let Ok(img) = omsi_texture::decode_bytes(&bytes, &f) else { continue };
-            let Ok((t, _)) = load_gpu_bytes(&bytes, &f, GpuOptions { bc: true, compress: true }) else {
+            let Ok(bytes) = omsi_cfg::vfs::read(&f) else {
+                continue;
+            };
+            let Ok(img) = omsi_texture::decode_bytes(&bytes, &f) else {
+                continue;
+            };
+            let Ok((t, _)) = load_gpu_bytes(
+                &bytes,
+                &f,
+                GpuOptions {
+                    bc: true,
+                    compress: true,
+                },
+            ) else {
                 println!("{}\tGPU-ERR", f.display());
                 continue;
             };
-            let back = t.format.decode_level(&t.levels[0], t.width, t.height, t.has_alpha);
+            let back = t
+                .format
+                .decode_level(&t.levels[0], t.width, t.height, t.has_alpha);
             let mean = |v: &[u8]| {
                 let mut s = [0f64; 4];
                 for p in v.chunks_exact(4) {
@@ -64,8 +87,28 @@ fn main() {
             };
             let (a, b) = (mean(&img.rgba), mean(&back));
             let d = (0..4).map(|c| (a[c] - b[c]).abs()).fold(0f64, f64::max);
-            let flag = if d > 3.0 || t.has_alpha != img.has_alpha { "BAD" } else { "ok" };
-            println!("{}\t{flag}\t{:?}\t{}x{}\talpha {}/{}\tmean {:.1} {:.1} {:.1} {:.1} -> {:.1} {:.1} {:.1} {:.1}", f.display(), t.format, t.width, t.height, img.has_alpha as u8, t.has_alpha as u8, a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]);
+            let flag = if d > 3.0 || t.has_alpha != img.has_alpha {
+                "BAD"
+            } else {
+                "ok"
+            };
+            println!(
+                "{}\t{flag}\t{:?}\t{}x{}\talpha {}/{}\tmean {:.1} {:.1} {:.1} {:.1} -> {:.1} {:.1} {:.1} {:.1}",
+                f.display(),
+                t.format,
+                t.width,
+                t.height,
+                img.has_alpha as u8,
+                t.has_alpha as u8,
+                a[0],
+                a[1],
+                a[2],
+                a[3],
+                b[0],
+                b[1],
+                b[2],
+                b[3]
+            );
         }
         return;
     }
@@ -102,7 +145,11 @@ fn main() {
                     bot / rest.max(1.0)
                 );
             }
-            Err(e) => println!("{}\tERR\t{}", f.display(), e.to_string().replace(['\t', '\n'], " ")),
+            Err(e) => println!(
+                "{}\tERR\t{}",
+                f.display(),
+                e.to_string().replace(['\t', '\n'], " ")
+            ),
         }
     }
 }

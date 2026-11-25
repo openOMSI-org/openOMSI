@@ -14,7 +14,11 @@ pub(crate) struct ErrorFlags {
 /// with one bad texture makes one or two (60 a second); a dead device makes hundreds a second.
 const INVALID_FLOOD: u64 = 1500;
 
-pub(crate) fn install(device: &wgpu::Device, format: wgpu::TextureFormat, options: &RenderOptions) -> ErrorFlags {
+pub(crate) fn install(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    options: &RenderOptions,
+) -> ErrorFlags {
     let msaa = options.msaa;
     // A GPU error while multisampling is on is logged and switches multisampling off
     // at the next frame (`render_inner`). Otherwise it is logged and the game goes on:
@@ -34,7 +38,8 @@ pub(crate) fn install(device: &wgpu::Device, format: wgpu::TextureFormat, option
                 return;
             }
             log::error!("the graphics device was lost ({reason:?}): {message}");
-            *lost.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{reason:?}: {message}"));
+            *lost.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some(format!("{reason:?}: {message}"));
         });
     }
     {
@@ -44,7 +49,8 @@ pub(crate) fn install(device: &wgpu::Device, format: wgpu::TextureFormat, option
         let oom = out_of_memory.clone();
         let count = Arc::new(std::sync::atomic::AtomicU64::new(0));
         let lost = device_lost.clone();
-        let flood: Arc<std::sync::Mutex<(std::time::Instant, u64)>> = Arc::new(std::sync::Mutex::new((std::time::Instant::now(), 0)));
+        let flood: Arc<std::sync::Mutex<(std::time::Instant, u64)>> =
+            Arc::new(std::sync::Mutex::new((std::time::Instant::now(), 0)));
         device.on_uncaptured_error(Arc::new(move |e: wgpu::Error| {
             if matches!(e, wgpu::Error::OutOfMemory { .. }) {
                 oom.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -102,7 +108,12 @@ pub(crate) fn install(device: &wgpu::Device, format: wgpu::TextureFormat, option
             view_formats: &[],
         });
     }
-    ErrorFlags { gpu_error, rt_error, out_of_memory, device_lost }
+    ErrorFlags {
+        gpu_error,
+        rt_error,
+        out_of_memory,
+        device_lost,
+    }
 }
 
 fn blames_msaa(e: &wgpu::Error, text: &str, msaa: u32) -> bool {
@@ -115,10 +126,19 @@ mod msaa_blame_tests {
 
     #[test]
     fn out_of_memory_and_its_invalid_resources_keep_msaa() {
-        let oom = wgpu::Error::OutOfMemory { source: Box::new(std::io::Error::other("oom")) };
+        let oom = wgpu::Error::OutOfMemory {
+            source: Box::new(std::io::Error::other("oom")),
+        };
         assert!(!blames_msaa(&oom, "Out of Memory", 4));
-        let invalid = wgpu::Error::Validation { source: Box::new(std::io::Error::other("v")), description: String::new() };
-        assert!(!blames_msaa(&invalid, "BindGroup with 'camera' label is invalid", 4));
+        let invalid = wgpu::Error::Validation {
+            source: Box::new(std::io::Error::other("v")),
+            description: String::new(),
+        };
+        assert!(!blames_msaa(
+            &invalid,
+            "BindGroup with 'camera' label is invalid",
+            4
+        ));
         assert!(blames_msaa(&invalid, "Sample count 3 is invalid", 4));
         assert!(blames_msaa(&invalid, "Color state [0] is invalid", 4));
         assert!(!blames_msaa(&invalid, "Sample count 3 is invalid", 1));

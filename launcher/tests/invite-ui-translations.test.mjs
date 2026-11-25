@@ -15,6 +15,8 @@ const required = [
   'Saved servers', 'Select server', 'Save to list', 'Connection protocol',
   'Select a server to prepare your bus, or save its address for later. No game starts yet.',
   'Paste the complete session code from your friend.',
+  'Buses of this session', 'every bus',
+  'The buses your players may drive, separated by ; : their folders such as MAN_SD200, or a bus file such as Vehicles/MAN_SD200/MAN_SD77.bus. A player who drives another bus is sent away and told the list. Empty: every bus.',
 ];
 const languages = ['es', 'zh-tw', 'pt', 'ca', 'fr', 'sr', 'ru', 'de', 'pt-pt', 'ka', 'sv', 'uk', 'be', 'kk', 'pl', 'cs', 'hu', 'it', 'nl', 'tr', 'ja', 'zh', 'hi', 'ko', 'th', 'vi', 'id', 'ms', 'tl'];
 const catalogue = new Map();

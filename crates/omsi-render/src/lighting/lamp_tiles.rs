@@ -24,7 +24,12 @@ pub(crate) struct LightEye<'a> {
 impl LightEye<'_> {
     /// An eye at `cam_rel` that knows of no view and no vehicle.
     pub(crate) fn at(cam_rel: Vec3) -> LightEye<'static> {
-        LightEye { cam_rel, view_proj: None, vehicle: None, level: 2 }
+        LightEye {
+            cam_rel,
+            view_proj: None,
+            vehicle: None,
+            level: 2,
+        }
     }
 }
 
@@ -61,24 +66,48 @@ impl TileWants {
     /// lamp: one with no direction looks straight down, a spot (a floodlight, a lamp that lights a
     /// door or a work place) along its own axis. Returns the marks its record gets now: where a frame draws no tiles - a
     /// mirror's picture - the tile the window's last frame gave the lamp, which it looks up.
-    pub(crate) fn consider(&mut self, slots: &WorldSlots, eye: &LightEye, l: &PointLight, p: Vec3, idx: u32, lamp_shadows: bool) -> f32 {
+    pub(crate) fn consider(
+        &mut self,
+        slots: &WorldSlots,
+        eye: &LightEye,
+        l: &PointLight,
+        p: Vec3,
+        idx: u32,
+        lamp_shadows: bool,
+    ) -> f32 {
         let key = lamp_key(l.position);
-        let road = l.beam != 0.0 || (l.cookie.is_some() && l.direction.normalize_or_zero().z.abs() < 0.5);
+        let road =
+            l.beam != 0.0 || (l.cookie.is_some() && l.direction.normalize_or_zero().z.abs() < 0.5);
         // (how far it is from the camera along the ground: a camera high above the street
         // - the free camera - sees the ground below it, which the lamps round it light)
         let d = (p - eye.cam_rel).length();
         let d_ground = (p - eye.cam_rel).truncate().length();
         if !lamp_shadows {
             // (a frame that draws no tiles marks the lamps the window's last frame gave one)
-            return slots.slot_of(&key).filter(|_| !road).map_or(0.0, |slot| LAMP_MARK * (slot + 1) as f32);
+            return slots
+                .slot_of(&key)
+                .filter(|_| !road)
+                .map_or(0.0, |slot| LAMP_MARK * (slot + 1) as f32);
         }
         let strength = l.intensity * (l.color[0] + l.color[1] + l.color[2]);
         if road {
             let reach = l.radius.min(passes::HEADLAMP_SHADOW_REACH);
-            if l.mode == LightMode::Enhanced && d < reach + LAMP_SHADOW_REACH && lights_the_view(eye, p, l.direction, reach) {
-                self.spots.push(Spot { index: idx, position: p, direction: l.direction, range: l.radius, score: strength / (d * d + 25.0) });
+            if l.mode == LightMode::Enhanced
+                && d < reach + LAMP_SHADOW_REACH
+                && lights_the_view(eye, p, l.direction, reach)
+            {
+                self.spots.push(Spot {
+                    index: idx,
+                    position: p,
+                    direction: l.direction,
+                    range: l.radius,
+                    score: strength / (d * d + 25.0),
+                });
             }
-        } else if !l.flash && d_ground < l.radius + LAMP_SHADOW_REACH && (eye.level >= 2 || l.direction.length_squared() < 1e-6) {
+        } else if !l.flash
+            && d_ground < l.radius + LAMP_SHADOW_REACH
+            && (eye.level >= 2 || l.direction.length_squared() < 1e-6)
+        {
             let core = l.core.max(l.radius * 0.125);
             let mut score = strength * core * core / (d_ground * d_ground + 25.0);
             // (a lamp that had a map keeps it until another is clearly stronger: the set
@@ -91,11 +120,26 @@ impl TileWants {
             // axis over its cone, not down: its shadows fall where its light does)
             let dir = l.direction.normalize_or_zero();
             let aim = (dir != Vec3::ZERO).then_some(dir);
-            let fov = aim.map_or(LAMP_SHADOW_FOV, |_| (2.0 * l.cone[1].clamp(-1.0, 1.0).acos().to_degrees() * 1.08).clamp(30.0, 150.0));
-            let tile = LampShadow { position: p, range: l.radius, owner: l.shadow_owner, aim, fov, ..LampShadow::new(0) };
+            let fov = aim.map_or(LAMP_SHADOW_FOV, |_| {
+                (2.0 * l.cone[1].clamp(-1.0, 1.0).acos().to_degrees() * 1.08).clamp(30.0, 150.0)
+            });
+            let tile = LampShadow {
+                position: p,
+                range: l.radius,
+                owner: l.shadow_owner,
+                aim,
+                fov,
+                ..LampShadow::new(0)
+            };
             // (a point light that is no street lamp's head, with no axis: it lights every side)
-            if eye.level >= 2 && aim.is_none() && !l.housed && l.cookie.is_none() && l.mode != LightMode::Vanilla {
-                self.cubes.push((strength * core * core / (d * d + 25.0), key, idx, tile));
+            if eye.level >= 2
+                && aim.is_none()
+                && !l.housed
+                && l.cookie.is_none()
+                && l.mode != LightMode::Vanilla
+            {
+                self.cubes
+                    .push((strength * core * core / (d * d + 25.0), key, idx, tile));
             }
             self.world.push((score, key, idx, tile));
         }
@@ -105,24 +149,46 @@ impl TileWants {
     /// The tiles of the frame: the world's lamps, the vehicles' headlamps, the saloon's lamps.
     /// Marks the lights that have one in `gpu_lights`, by their records (`LAMP_MARK`).
     /// `own`: the box of the player's vehicle, for its headlamps' map.
-    pub(crate) fn tiles(mut self, scene: &mut Scene, eye: &LightEye, own: Option<passes::VehicleBox>, gpu_lights: &mut [GpuPointLight]) -> Vec<LampShadow> {
+    pub(crate) fn tiles(
+        mut self,
+        scene: &mut Scene,
+        eye: &LightEye,
+        own: Option<passes::VehicleBox>,
+        gpu_lights: &mut [GpuPointLight],
+    ) -> Vec<LampShadow> {
         let mut tiles: Vec<LampShadow> = Vec::new();
         let mut tiled: Vec<(u32, usize)> = Vec::new();
-        let cubed = self.cube_tiles(scene, &mut tiles, &mut tiled);
-        self.world.retain(|w| !cubed.contains(&w.2));
-        self.world_tiles(scene, &mut tiles, &mut tiled);
-        self.vehicle_tiles(eye.cam_rel, own, &mut tiles, &mut tiled);
+        if eye.level > 0 {
+            let cubed = self.cube_tiles(scene, &mut tiles, &mut tiled);
+            self.world.retain(|w| !cubed.contains(&w.2));
+            self.world_tiles(scene, &mut tiles, &mut tiled);
+            self.vehicle_tiles(eye.cam_rel, own, &mut tiles, &mut tiled);
+        }
         for &(idx, slot) in &tiled {
             if let Some(g) = gpu_lights.get_mut(idx as usize) {
                 g.pos[3] = -(-g.pos[3]).max(0.0) - LAMP_MARK * (slot + 1) as f32;
             }
         }
-        if let Some((b, rotation)) = eye.vehicle.filter(|_| !omsi_cfg::flags::OMSI_NO_CABIN_SHADOWS.is_set()) {
+        // (the saloon's maps only while the eye is in the saloon: from outside, its shadows
+        // are seen through the windows at most, and every picture of the bus - the puddles'
+        // reflections of it too - paid for their lookups)
+        if let Some((b, rotation)) = eye.vehicle.filter(|(b, _)| {
+            !omsi_cfg::flags::OMSI_NO_CABIN_SHADOWS.is_set()
+                && passes::VehicleBox::new(b, scene.render_origin).contains(eye.cam_rel, 0.3)
+        }) {
             let ro = scene.render_origin;
             // (the world to the frame of the vehicle's body, whose rotation the app gives)
-            let to_world = rotation.unwrap_or_else(|| Mat4::from_rotation_z(-(b.1 as f32).to_radians()));
+            let to_world =
+                rotation.unwrap_or_else(|| Mat4::from_rotation_z(-(b.1 as f32).to_radians()));
             let to_local = (Mat4::from_translation((b.0 - ro).as_vec3()) * to_world).inverse();
-            cabin_tiles(scene, eye.cam_rel, passes::VehicleBox::new(b, ro), to_local, gpu_lights, &mut tiles);
+            cabin_tiles(
+                scene,
+                eye.cam_rel,
+                passes::VehicleBox::new(b, ro),
+                to_local,
+                gpu_lights,
+                &mut tiles,
+            );
         }
         tiles
     }
@@ -130,7 +196,12 @@ impl TileWants {
     /// The lamps that shine every way: the strongest of them, within the cube blocks, get six
     /// tiles each, one for every direction. Returns the lamps that have them (their records in
     /// the light buffer), which then need no tile looking down.
-    fn cube_tiles(&mut self, scene: &mut Scene, tiles: &mut Vec<LampShadow>, tiled: &mut Vec<(u32, usize)>) -> Vec<u32> {
+    fn cube_tiles(
+        &mut self,
+        scene: &mut Scene,
+        tiles: &mut Vec<LampShadow>,
+        tiled: &mut Vec<(u32, usize)>,
+    ) -> Vec<u32> {
         for c in self.cubes.iter_mut() {
             if scene.cube_slots.keys.contains(&Some(c.1)) {
                 c.0 *= KEEP_FACTOR;
@@ -143,7 +214,12 @@ impl TileWants {
             let (_, _, idx, lamp) = self.cubes[w];
             let base = CUBE_SLOTS.start + block * 6;
             for (f, axis) in CUBE_FACES.iter().enumerate() {
-                tiles.push(LampShadow { slot: base + f, aim: Some(*axis), fov: CUBE_FACE_FOV, ..lamp });
+                tiles.push(LampShadow {
+                    slot: base + f,
+                    aim: Some(*axis),
+                    fov: CUBE_FACE_FOV,
+                    ..lamp
+                });
             }
             tiled.push((idx, base));
             had.push(idx);
@@ -152,10 +228,19 @@ impl TileWants {
     }
 
     /// The world's lamps keep their tiles while they stay among the strongest.
-    fn world_tiles(&mut self, scene: &mut Scene, tiles: &mut Vec<LampShadow>, tiled: &mut Vec<(u32, usize)>) {
+    fn world_tiles(
+        &mut self,
+        scene: &mut Scene,
+        tiles: &mut Vec<LampShadow>,
+        tiled: &mut Vec<(u32, usize)>,
+    ) {
         self.world.sort_by(|a, b| b.0.total_cmp(&a.0));
         let wants: Vec<LampKey> = self.world.iter().map(|w| w.1).collect();
-        let fresh = if scene.lamp_slots.is_cold() { usize::MAX } else { NEW_LAMPS_PER_FRAME };
+        let fresh = if scene.lamp_slots.is_cold() {
+            usize::MAX
+        } else {
+            NEW_LAMPS_PER_FRAME
+        };
         for (w, slot) in scene.lamp_slots.assign(&wants, fresh) {
             let (_, _, idx, mut lamp) = self.world[w];
             lamp.slot = slot;
@@ -166,9 +251,17 @@ impl TileWants {
 
     /// The vehicles' headlamps are given the vehicle run in order of strength, the player's pair
     /// first (a pair of lamps shares one map, which looks along the road from between them).
-    fn vehicle_tiles(&mut self, cam_rel: Vec3, own: Option<passes::VehicleBox>, tiles: &mut Vec<LampShadow>, tiled: &mut Vec<(u32, usize)>) {
+    fn vehicle_tiles(
+        &mut self,
+        cam_rel: Vec3,
+        own: Option<passes::VehicleBox>,
+        tiles: &mut Vec<LampShadow>,
+        tiled: &mut Vec<(u32, usize)>,
+    ) {
         let mut next = VEHICLE_SLOTS.start;
-        if let Some(mut map) = own.and_then(|b| passes::headlamp_shadow(&self.own_lamps, b, cam_rel)) {
+        if let Some(mut map) =
+            own.and_then(|b| passes::headlamp_shadow(&self.own_lamps, b, cam_rel))
+        {
             map.slot = next;
             next += 1;
             tiled.extend(self.own_marked.iter().map(|&i| (i, map.slot)));
@@ -182,9 +275,17 @@ impl TileWants {
             // (a car's map is taken for a coarse place and heading: while the car drives by the
             // map is drawn every few frames, not every one)
             let position = (g.position / SPOT_POSITION_STEP).round() * SPOT_POSITION_STEP;
-            let heading = (g.look.x.atan2(g.look.y) / SPOT_HEADING_STEP).round() * SPOT_HEADING_STEP;
+            let heading =
+                (g.look.x.atan2(g.look.y) / SPOT_HEADING_STEP).round() * SPOT_HEADING_STEP;
             let look = Vec3::new(heading.sin(), heading.cos(), 0.0);
-            tiles.push(LampShadow { slot: next, position, range, look: Some(look), hosts: true, ..LampShadow::new(0) });
+            tiles.push(LampShadow {
+                slot: next,
+                position,
+                range,
+                look: Some(look),
+                hosts: true,
+                ..LampShadow::new(0)
+            });
             tiled.extend(g.members.iter().map(|&i| (i, next)));
             next += 1;
         }
@@ -204,10 +305,19 @@ fn lights_the_view(eye: &LightEye, p: Vec3, direction: Vec3, reach: f32) -> bool
 /// for each set of meshes it lights, in the slots of the interior lights: one tile for all of
 /// them, named by where it hangs in the vehicle). `vbox`: the vehicle's box, `to_local` the world
 /// to its frame.
-fn cabin_tiles(scene: &mut Scene, cam_rel: Vec3, vbox: passes::VehicleBox, to_local: Mat4, gpu_lights: &mut [GpuPointLight], tiles: &mut Vec<LampShadow>) {
+fn cabin_tiles(
+    scene: &mut Scene,
+    cam_rel: Vec3,
+    vbox: passes::VehicleBox,
+    to_local: Mat4,
+    gpu_lights: &mut [GpuPointLight],
+    tiles: &mut Vec<LampShadow>,
+) {
     let ro = scene.render_origin;
     let mut groups: Vec<(LampKey, Vec3, Vec3, Vec<usize>, f32)> = Vec::new();
-    scene.cabin_places.resize(scene.interior_lights.len(), Vec3::NAN);
+    scene
+        .cabin_places
+        .resize(scene.interior_lights.len(), Vec3::NAN);
     for (i, l) in scene.interior_lights.iter().enumerate() {
         if l.intensity <= 0.0 {
             continue;
@@ -220,9 +330,17 @@ fn cabin_tiles(scene: &mut Scene, cam_rel: Vec3, vbox: passes::VehicleBox, to_lo
         // numbers from frame to frame, and the tile is kept while its matrix is the same: the place
         // is taken to a centimetre, and kept while it stays within one)
         let now = to_local.transform_point3(p);
-        let lp = if (now - scene.cabin_places[i]).abs().max_element() < 0.01 { scene.cabin_places[i] } else { (now * 100.0).round() / 100.0 };
+        let lp = if (now - scene.cabin_places[i]).abs().max_element() < 0.01 {
+            scene.cabin_places[i]
+        } else {
+            (now * 100.0).round() / 100.0
+        };
         scene.cabin_places[i] = lp;
-        let key: LampKey = [(lp.x * 40.0).round() as i64, (lp.y * 40.0).round() as i64, (lp.z * 40.0).round() as i64];
+        let key: LampKey = [
+            (lp.x * 40.0).round() as i64,
+            (lp.y * 40.0).round() as i64,
+            (lp.z * 40.0).round() as i64,
+        ];
         if let Some(g) = groups.iter_mut().find(|g| g.0 == key) {
             g.3.push(i);
             continue;
@@ -230,7 +348,8 @@ fn cabin_tiles(scene: &mut Scene, cam_rel: Vec3, vbox: passes::VehicleBox, to_lo
         // (the lamp's strength over its distance from the camera, as the world's)
         let core = l.core.max(0.1);
         let d = (p - cam_rel).length();
-        let mut score = l.intensity * (l.color[0] + l.color[1] + l.color[2]) * core * core / (d * d + 1.0);
+        let mut score =
+            l.intensity * (l.color[0] + l.color[1] + l.color[2]) * core * core / (d * d + 1.0);
         if scene.cabin_slots.slot_of(&key).is_some() {
             score *= KEEP_FACTOR;
         }
@@ -238,7 +357,11 @@ fn cabin_tiles(scene: &mut Scene, cam_rel: Vec3, vbox: passes::VehicleBox, to_lo
     }
     groups.sort_by(|a, b| b.4.total_cmp(&a.4));
     let wants: Vec<LampKey> = groups.iter().map(|g| g.0).collect();
-    let fresh = if scene.cabin_slots.is_cold() { usize::MAX } else { NEW_LAMPS_PER_FRAME };
+    let fresh = if scene.cabin_slots.is_cold() {
+        usize::MAX
+    } else {
+        NEW_LAMPS_PER_FRAME
+    };
     for (w, s) in scene.cabin_slots.assign(&wants, fresh) {
         let (_, p, lp, members, _) = &groups[w];
         let slot = CABIN_SLOTS.start + s;
@@ -248,7 +371,11 @@ fn cabin_tiles(scene: &mut Scene, cam_rel: Vec3, vbox: passes::VehicleBox, to_lo
             range: CABIN_REACH,
             near: CABIN_NEAR,
             fov: CABIN_FOV,
-            cabin: Some(Cabin { vehicle: vbox, to_local, lamp: *lp }),
+            cabin: Some(Cabin {
+                vehicle: vbox,
+                to_local,
+                lamp: *lp,
+            }),
             index: members[0] as u32,
             ..LampShadow::new(0)
         });
@@ -265,13 +392,29 @@ mod tests {
     use super::*;
 
     fn headlamp(at: Vec3, direction: Vec3) -> PointLight {
-        PointLight { position: at.as_dvec3(), radius: 60.0, intensity: 400.0, color: [1.0; 3], direction, beam: 1.0, core: 1.0, mode: LightMode::Enhanced, ..Default::default() }
+        PointLight {
+            position: at.as_dvec3(),
+            radius: 60.0,
+            intensity: 400.0,
+            color: [1.0; 3],
+            direction,
+            beam: 1.0,
+            core: 1.0,
+            mode: LightMode::Enhanced,
+            ..Default::default()
+        }
     }
 
     /// A view from the origin along the road (+y), 70 degrees wide.
     fn eye_along_the_road() -> LightEye<'static> {
-        let vp = Mat4::perspective_rh(70f32.to_radians(), 1.5, 0.1, 400.0) * Mat4::look_to_rh(Vec3::new(0.0, 0.0, 1.5), Vec3::Y, Vec3::Z);
-        LightEye { cam_rel: Vec3::new(0.0, 0.0, 1.5), view_proj: Some(vp), vehicle: None, level: 2 }
+        let vp = Mat4::perspective_rh(70f32.to_radians(), 1.5, 0.1, 400.0)
+            * Mat4::look_to_rh(Vec3::new(0.0, 0.0, 1.5), Vec3::Y, Vec3::Z);
+        LightEye {
+            cam_rel: Vec3::new(0.0, 0.0, 1.5),
+            view_proj: Some(vp),
+            vehicle: None,
+            level: 2,
+        }
     }
 
     /// A car ahead that drives towards the camera lights the view, so does one behind the camera
@@ -297,7 +440,14 @@ mod tests {
         // an eye with no view takes every car in reach
         let mut wants = TileWants::default();
         for (k, (at, dir)) in cars.iter().enumerate() {
-            wants.consider(&slots, &LightEye::at(Vec3::ZERO), &headlamp(*at, *dir), *at, k as u32, true);
+            wants.consider(
+                &slots,
+                &LightEye::at(Vec3::ZERO),
+                &headlamp(*at, *dir),
+                *at,
+                k as u32,
+                true,
+            );
         }
         assert_eq!(wants.spots.len(), 4);
     }
@@ -305,10 +455,32 @@ mod tests {
     #[test]
     fn a_trolley_spark_takes_no_world_tile() {
         let at = Vec3::new(0.0, 10.0, 5.0);
-        let lamp = PointLight { position: at.as_dvec3(), radius: 20.0, intensity: 4.0, ..Default::default() };
+        let lamp = PointLight {
+            position: at.as_dvec3(),
+            radius: 20.0,
+            intensity: 4.0,
+            ..Default::default()
+        };
         let mut wants = TileWants::default();
-        wants.consider(&WorldSlots::default(), &LightEye::at(Vec3::ZERO), &lamp, at, 0, true);
-        wants.consider(&WorldSlots::default(), &LightEye::at(Vec3::ZERO), &PointLight { flash: true, ..lamp }, at, 1, true);
+        wants.consider(
+            &WorldSlots::default(),
+            &LightEye::at(Vec3::ZERO),
+            &lamp,
+            at,
+            0,
+            true,
+        );
+        wants.consider(
+            &WorldSlots::default(),
+            &LightEye::at(Vec3::ZERO),
+            &PointLight {
+                flash: true,
+                ..lamp
+            },
+            at,
+            1,
+            true,
+        );
         assert_eq!(wants.world.iter().map(|w| w.2).collect::<Vec<_>>(), vec![0]);
     }
 
@@ -318,8 +490,20 @@ mod tests {
     fn a_cars_map_keeps_its_place_while_the_car_drives_a_little() {
         let map = |x: f32, y: f32, dir: Vec3| {
             let mut wants = TileWants::default();
-            let lamp = |side: f32| Spot { index: 0, position: Vec3::new(x + side, y, 0.8), direction: dir, range: 60.0, score: 4.0 };
-            wants.spots = vec![lamp(-0.7), Spot { index: 1, ..lamp(0.7) }];
+            let lamp = |side: f32| Spot {
+                index: 0,
+                position: Vec3::new(x + side, y, 0.8),
+                direction: dir,
+                range: 60.0,
+                score: 4.0,
+            };
+            wants.spots = vec![
+                lamp(-0.7),
+                Spot {
+                    index: 1,
+                    ..lamp(0.7)
+                },
+            ];
             let (mut tiles, mut tiled) = (Vec::new(), Vec::new());
             wants.vehicle_tiles(Vec3::ZERO, None, &mut tiles, &mut tiled);
             assert_eq!((tiles.len(), tiled.len()), (1, 2));
@@ -328,8 +512,16 @@ mod tests {
         let ahead = Vec3::new(0.0, 1.0, -0.03);
         let a = map(0.0, 20.0, ahead);
         assert_eq!(a, map(0.1, 20.13, ahead), "a few centimetres");
-        assert_eq!(a, map(0.0, 20.0, Vec3::new(0.01, 1.0, -0.03)), "half a degree");
+        assert_eq!(
+            a,
+            map(0.0, 20.0, Vec3::new(0.01, 1.0, -0.03)),
+            "half a degree"
+        );
         assert_ne!(a.0, map(0.0, 21.0, ahead).0, "a metre");
-        assert_ne!(a.1, map(0.0, 20.0, Vec3::new(0.1, 1.0, -0.03)).1, "six degrees");
+        assert_ne!(
+            a.1,
+            map(0.0, 20.0, Vec3::new(0.1, 1.0, -0.03)).1,
+            "six degrees"
+        );
     }
 }

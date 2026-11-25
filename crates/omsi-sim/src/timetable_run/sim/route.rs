@@ -163,16 +163,30 @@ impl ScheduleSim {
                 let gap = (b.start() - a.end()).truncate().length();
                 if gap > 2.0
                     || a.key.map(|k| (k.tile, k.id, k.path))
-                    == b.key.map(|k| (k.tile, k.id, k.path))
+                        == b.key.map(|k| (k.tile, k.id, k.path))
                 {
-                    log::info!("route: step {k}: lane {} {:?} rev {} -> lane {} {:?} rev {}: gap {gap:.1} m, linked {}, lane change {}", w[0], a.key, a.reversed, w[1], b.key, b.reversed, a.next.contains(&w[1]), net.parallel(w[0], w[1]));
+                    log::info!(
+                        "route: step {k}: lane {} {:?} rev {} -> lane {} {:?} rev {}: gap {gap:.1} m, linked {}, lane change {}",
+                        w[0],
+                        a.key,
+                        a.reversed,
+                        w[1],
+                        b.key,
+                        b.reversed,
+                        a.next.contains(&w[1]),
+                        net.parallel(w[0], w[1])
+                    );
                 }
             }
         }
         let waiting = out.iter().filter(|s| **s == Slot::Waiting).count();
         let absent = out.iter().filter(|s| **s == Slot::Absent).count();
         if absent > 0 || omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-            log::debug!("route: {} of {} steps on loaded lanes, {waiting} on tiles still to come, {absent} not in the map", out.len() - waiting - absent, out.len());
+            log::debug!(
+                "route: {} of {} steps on loaded lanes, {waiting} on tiles still to come, {absent} not in the map",
+                out.len() - waiting - absent,
+                out.len()
+            );
         }
         out
     }
@@ -185,12 +199,7 @@ impl ScheduleSim {
         traffic: &TrafficSim,
         trip_name: &str,
     ) -> (Vec<usize>, bool) {
-        let Some(trip) = self
-            .data
-            .trips
-            .iter()
-            .find(|x| x.is_named(trip_name))
-        else {
+        let Some(trip) = self.data.trips.iter().find(|x| x.is_named(trip_name)) else {
             return (Vec::new(), true);
         };
         let slots = self.slots(
@@ -217,7 +226,14 @@ impl ScheduleSim {
             return Vec::new();
         };
         let (steps, _) = self.steps_of(trip_name, &trip_stations(trip));
-        let cands: Vec<Option<&Vec<usize>>> = steps.iter().map(|st| st.key.and_then(|k| net.by_key.get(&k)).filter(|c| !c.is_empty())).collect();
+        let cands: Vec<Option<&Vec<usize>>> = steps
+            .iter()
+            .map(|st| {
+                st.key
+                    .and_then(|k| net.by_key.get(&k))
+                    .filter(|c| !c.is_empty())
+            })
+            .collect();
         let mut out: Vec<Slot> = Vec::with_capacity(steps.len());
         let mut last: Option<usize> = None;
         for (i, c) in cands.iter().enumerate() {
@@ -233,16 +249,25 @@ impl ScheduleSim {
                 }
                 if let Some(next) = next {
                     let end = net.lanes[l].end();
-                    s += next.iter().map(|&n| (net.lanes[n].start() - end).length()).fold(f64::MAX, f64::min);
+                    s += next
+                        .iter()
+                        .map(|&n| (net.lanes[n].start() - end).length())
+                        .fold(f64::MAX, f64::min);
                 }
                 s
             };
-            let best = c.iter().copied().min_by(|a, b| score(*a).total_cmp(&score(*b))).unwrap();
+            let best = c
+                .iter()
+                .copied()
+                .min_by(|a, b| score(*a).total_cmp(&score(*b)))
+                .unwrap();
             out.push(Slot::Lane(best));
             last = Some(best);
         }
         skip_detours(net, &mut out);
-        out.into_iter().filter_map(|s| if let Slot::Lane(l) = s { Some(l) } else { None }).collect()
+        out.into_iter()
+            .filter_map(|s| if let Slot::Lane(l) = s { Some(l) } else { None })
+            .collect()
     }
 
     /// `OMSI_CHECK_TRIPS=1`: build the route of every trip on the loaded lanes and say where
@@ -256,7 +281,13 @@ impl ScheduleSim {
             let lanes: Vec<usize> = self
                 .slots(world, traffic, &steps, None)
                 .iter()
-                .filter_map(|s| if let Slot::Lane(l) = s { Some(*l) } else { None })
+                .filter_map(|s| {
+                    if let Slot::Lane(l) = s {
+                        Some(*l)
+                    } else {
+                        None
+                    }
+                })
                 .collect();
             add_connectors(traffic, &lanes);
         }
@@ -278,8 +309,16 @@ impl ScheduleSim {
                         steps.len(),
                         slots.iter().filter(|s| **s == Slot::Waiting).count(),
                         steps.get(k).and_then(|s| s.key),
-                        steps.get(k).and_then(|s| s.key).map(|key| traffic.lane_tiles.contains(&key.tile)).unwrap_or(false),
-                        steps.get(k).and_then(|s| s.key).map(|key| world.has_tile(key.tile)).unwrap_or(false),
+                        steps
+                            .get(k)
+                            .and_then(|s| s.key)
+                            .map(|key| traffic.lane_tiles.contains(&key.tile))
+                            .unwrap_or(false),
+                        steps
+                            .get(k)
+                            .and_then(|s| s.key)
+                            .map(|key| world.has_tile(key.tile))
+                            .unwrap_or(false),
                     );
                 }
                 partial += 1;
@@ -287,7 +326,11 @@ impl ScheduleSim {
             }
             trips += 1;
             // `OMSI_CHECK_TRIPS=<trip name>`: every step of that trip
-            if omsi_cfg::flags::OMSI_CHECK_TRIPS.var().map(|v| v.eq_ignore_ascii_case(&trip.name)).unwrap_or(false) {
+            if omsi_cfg::flags::OMSI_CHECK_TRIPS
+                .var()
+                .map(|v| v.eq_ignore_ascii_case(&trip.name))
+                .unwrap_or(false)
+            {
                 for (k, (st, sl)) in steps.iter().zip(&slots).enumerate() {
                     let cands: Vec<String> = st
                         .key
@@ -296,12 +339,28 @@ impl ScheduleSim {
                             c.iter()
                                 .map(|&l| {
                                     let x = &net.lanes[l];
-                                    format!("{l}{} ({:.1},{:.1})->({:.1},{:.1}) {:.1} m", if x.reversed { "r" } else { "" }, x.start().x, x.start().y, x.end().x, x.end().y, x.length())
+                                    format!(
+                                        "{l}{} ({:.1},{:.1})->({:.1},{:.1}) {:.1} m",
+                                        if x.reversed { "r" } else { "" },
+                                        x.start().x,
+                                        x.start().y,
+                                        x.end().x,
+                                        x.end().y,
+                                        x.length()
+                                    )
                                 })
                                 .collect()
                         })
                         .unwrap_or_default();
-                    log::info!("check trips: {} step {k} leg {} {:?} ({:.1} m): {:?} of {:?}", trip.name, st.leg, st.key, st.length, sl, cands);
+                    log::info!(
+                        "check trips: {} step {k} leg {} {:?} ({:.1} m): {:?} of {:?}",
+                        trip.name,
+                        st.leg,
+                        st.key,
+                        st.length,
+                        sl,
+                        cands
+                    );
                 }
             }
             // the lane a step names should be as long as the file says its path is
@@ -312,7 +371,10 @@ impl ScheduleSim {
                         if bad_length < 12 {
                             log::info!(
                                 "check trips: {}: lane {} {:?} is {len:.1} m long, the file says {:.1} m",
-                                trip.name, l, net.lanes[*l].key, st.length
+                                trip.name,
+                                l,
+                                net.lanes[*l].key,
+                                st.length
                             );
                         }
                         bad_length += 1;
@@ -321,7 +383,13 @@ impl ScheduleSim {
             }
             let lanes: Vec<usize> = slots
                 .iter()
-                .filter_map(|s| if let Slot::Lane(l) = s { Some(*l) } else { None })
+                .filter_map(|s| {
+                    if let Slot::Lane(l) = s {
+                        Some(*l)
+                    } else {
+                        None
+                    }
+                })
                 .collect();
             let lanes = bridge_gaps(net, &lanes).0;
             let mut shown = 0;
@@ -351,12 +419,22 @@ impl ScheduleSim {
                     shown += 1;
                     log::info!(
                         "check trips: {}: step {k}: lane {} {:?} rev {} -> {} {:?} rev {}: {} (gap {gap:.1} m, to its end {backwards:.1} m) at ({:.0}, {:.0})",
-                        trip.name, w[0], a.key, a.reversed, w[1], b.key, b.reversed,
-                        if is_wrong { "WRONG WAY" } else { "gap" }, a.end().x, a.end().y
+                        trip.name,
+                        w[0],
+                        a.key,
+                        a.reversed,
+                        w[1],
+                        b.key,
+                        b.reversed,
+                        if is_wrong { "WRONG WAY" } else { "gap" },
+                        a.end().x,
+                        a.end().y
                     );
                 }
             }
         }
-        log::info!("check trips: {trips} trips on loaded lanes ({partial} not wholly loaded): {joints} joints, {linked} joined, {changes} lane changes, {gaps} gaps, {wrong} taken the wrong way round; {bad_length} lanes not as long as the file says");
+        log::info!(
+            "check trips: {trips} trips on loaded lanes ({partial} not wholly loaded): {joints} joints, {linked} joined, {changes} lane changes, {gaps} gaps, {wrong} taken the wrong way round; {bad_length} lanes not as long as the file says"
+        );
     }
 }

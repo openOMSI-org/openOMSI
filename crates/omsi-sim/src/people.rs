@@ -103,6 +103,8 @@ pub mod ticket_hook;
 #[rustfmt::skip]
 pub mod bodies;
 #[rustfmt::skip]
+pub mod entry_doors;
+#[rustfmt::skip]
 pub mod pose_facts;
 #[rustfmt::skip]
 pub mod money;
@@ -118,6 +120,8 @@ mod population_limit_tests;
 #[rustfmt::skip]
 mod ticket_hook_tests;
 #[cfg(test)]
+mod section_door_tests;
+#[cfg(test)]
 #[rustfmt::skip]
 mod bad_driving_tests;
 #[cfg(test)]
@@ -126,6 +130,17 @@ mod desk_ticket_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod destination_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod entry_doors_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod no_ticket_tests;
+#[cfg(test)]
+#[rustfmt::skip]
+mod late_tolerance_tests;
+#[cfg(test)]
+mod stuck_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod free_drive_tests;

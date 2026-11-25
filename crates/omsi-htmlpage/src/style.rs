@@ -232,12 +232,20 @@ impl Style {
 pub(crate) fn parse_color(s: &str) -> Option<[u8; 4]> {
     let s = s.trim().to_ascii_lowercase();
     if let Some(h) = s.strip_prefix('#') {
-        let d: Vec<u8> = h.chars().map(|c| c.to_digit(16).map(|v| v as u8)).collect::<Option<Vec<_>>>()?;
+        let d: Vec<u8> = h
+            .chars()
+            .map(|c| c.to_digit(16).map(|v| v as u8))
+            .collect::<Option<Vec<_>>>()?;
         return match d.len() {
             3 => Some([d[0] * 17, d[1] * 17, d[2] * 17, 255]),
             4 => Some([d[0] * 17, d[1] * 17, d[2] * 17, d[3] * 17]),
             6 => Some([d[0] * 16 + d[1], d[2] * 16 + d[3], d[4] * 16 + d[5], 255]),
-            8 => Some([d[0] * 16 + d[1], d[2] * 16 + d[3], d[4] * 16 + d[5], d[6] * 16 + d[7]]),
+            8 => Some([
+                d[0] * 16 + d[1],
+                d[2] * 16 + d[3],
+                d[4] * 16 + d[5],
+                d[6] * 16 + d[7],
+            ]),
             _ => None,
         };
     }
@@ -255,8 +263,15 @@ pub(crate) fn parse_color(s: &str) -> Option<[u8; 4]> {
         if p.len() < 3 {
             return None;
         }
-        let alpha = p.get(3).map_or(255.0, |a| if *a <= 1.0 { a * 255.0 } else { *a });
-        return Some([p[0].clamp(0.0, 255.0) as u8, p[1].clamp(0.0, 255.0) as u8, p[2].clamp(0.0, 255.0) as u8, alpha.clamp(0.0, 255.0) as u8]);
+        let alpha = p
+            .get(3)
+            .map_or(255.0, |a| if *a <= 1.0 { a * 255.0 } else { *a });
+        return Some([
+            p[0].clamp(0.0, 255.0) as u8,
+            p[1].clamp(0.0, 255.0) as u8,
+            p[2].clamp(0.0, 255.0) as u8,
+            alpha.clamp(0.0, 255.0) as u8,
+        ]);
     }
     if let Some(a) = s.strip_prefix("hsla(").or_else(|| s.strip_prefix("hsl(")) {
         let inner = a.trim_end_matches(')');
@@ -264,13 +279,26 @@ pub(crate) fn parse_color(s: &str) -> Option<[u8; 4]> {
             .split(|c| c == ',' || c == ' ' || c == '/')
             .map(str::trim)
             .filter(|x| !x.is_empty())
-            .map(|x| x.trim_end_matches("deg").trim_end_matches('%').parse::<f32>().unwrap_or(0.0))
+            .map(|x| {
+                x.trim_end_matches("deg")
+                    .trim_end_matches('%')
+                    .parse::<f32>()
+                    .unwrap_or(0.0)
+            })
             .collect();
         if p.len() < 3 {
             return None;
         }
-        let (h, sat, l) = (p[0].rem_euclid(360.0) / 360.0, (p[1] / 100.0).clamp(0.0, 1.0), (p[2] / 100.0).clamp(0.0, 1.0));
-        let q = if l < 0.5 { l * (1.0 + sat) } else { l + sat - l * sat };
+        let (h, sat, l) = (
+            p[0].rem_euclid(360.0) / 360.0,
+            (p[1] / 100.0).clamp(0.0, 1.0),
+            (p[2] / 100.0).clamp(0.0, 1.0),
+        );
+        let q = if l < 0.5 {
+            l * (1.0 + sat)
+        } else {
+            l + sat - l * sat
+        };
         let pp = 2.0 * l - q;
         let ch = |mut t: f32| {
             t = t.rem_euclid(1.0);
@@ -285,8 +313,15 @@ pub(crate) fn parse_color(s: &str) -> Option<[u8; 4]> {
             };
             (v * 255.0).round().clamp(0.0, 255.0) as u8
         };
-        let alpha = p.get(3).map_or(255.0, |a| if *a <= 1.0 { a * 255.0 } else { *a });
-        return Some([ch(h + 1.0 / 3.0), ch(h), ch(h - 1.0 / 3.0), alpha.clamp(0.0, 255.0) as u8]);
+        let alpha = p
+            .get(3)
+            .map_or(255.0, |a| if *a <= 1.0 { a * 255.0 } else { *a });
+        return Some([
+            ch(h + 1.0 / 3.0),
+            ch(h),
+            ch(h - 1.0 / 3.0),
+            alpha.clamp(0.0, 255.0) as u8,
+        ]);
     }
     let named = match s.as_str() {
         "black" => [0, 0, 0, 255],
@@ -359,20 +394,49 @@ pub(crate) struct Units {
 
 pub(crate) fn parse_len(v: &str, u: &Units) -> Option<Len> {
     let v = v.trim().to_ascii_lowercase();
-    if v.starts_with("calc(") || v.starts_with("min(") || v.starts_with("max(") || v.starts_with("clamp(") || v.starts_with('(') {
+    if v.starts_with("calc(")
+        || v.starts_with("min(")
+        || v.starts_with("max(")
+        || v.starts_with("clamp(")
+        || v.starts_with('(')
+    {
         let (px, pct) = Calc::new(&v, u).eval()?;
-        return Some(if pct == 0.0 { Len::Px(px) } else if px == 0.0 { Len::Pct(pct) } else { Len::Mix(px, pct) });
+        return Some(if pct == 0.0 {
+            Len::Px(px)
+        } else if px == 0.0 {
+            Len::Pct(pct)
+        } else {
+            Len::Mix(px, pct)
+        });
     }
     plain_len(&v, u)
 }
 
 fn plain_len(v: &str, u: &Units) -> Option<Len> {
-    let num = |suffix: &str| v.strip_suffix(suffix).and_then(|n| n.trim().parse::<f32>().ok());
+    let num = |suffix: &str| {
+        v.strip_suffix(suffix)
+            .and_then(|n| n.trim().parse::<f32>().ok())
+    };
     if v == "0" {
         return Some(Len::Px(0.0));
     }
     // (longer suffixes first: `vmin` before `in`, `rem` before `em`)
-    for (suffix, k) in [("vmin", u.vw.min(u.vh) / 100.0), ("vmax", u.vw.max(u.vh) / 100.0), ("rem", 16.0), ("vw", u.vw / 100.0), ("vh", u.vh / 100.0), ("em", u.font), ("ex", u.font * 0.5), ("ch", u.font * 0.5), ("pt", 4.0 / 3.0), ("pc", 16.0), ("cm", 96.0 / 2.54), ("mm", 96.0 / 25.4), ("in", 96.0), ("px", 1.0)] {
+    for (suffix, k) in [
+        ("vmin", u.vw.min(u.vh) / 100.0),
+        ("vmax", u.vw.max(u.vh) / 100.0),
+        ("rem", 16.0),
+        ("vw", u.vw / 100.0),
+        ("vh", u.vh / 100.0),
+        ("em", u.font),
+        ("ex", u.font * 0.5),
+        ("ch", u.font * 0.5),
+        ("pt", 4.0 / 3.0),
+        ("pc", 16.0),
+        ("cm", 96.0 / 2.54),
+        ("mm", 96.0 / 25.4),
+        ("in", 96.0),
+        ("px", 1.0),
+    ] {
         if let Some(n) = num(suffix) {
             return Some(Len::Px(n * k));
         }
@@ -393,7 +457,11 @@ struct V {
 
 impl V {
     fn scale(self, k: f32) -> V {
-        V { px: self.px * k, pct: self.pct * k, num: self.num }
+        V {
+            px: self.px * k,
+            pct: self.pct * k,
+            num: self.num,
+        }
     }
 }
 
@@ -406,7 +474,11 @@ struct Calc<'a> {
 
 impl<'a> Calc<'a> {
     fn new(s: &'a str, u: &'a Units) -> Calc<'a> {
-        Calc { s: s.as_bytes(), i: 0, u }
+        Calc {
+            s: s.as_bytes(),
+            i: 0,
+            u,
+        }
     }
 
     fn eval(mut self) -> Option<(f32, f32)> {
@@ -433,12 +505,20 @@ impl<'a> Calc<'a> {
                 Some(b'+') => {
                     self.i += 1;
                     let b = self.product()?;
-                    a = V { px: a.px + b.px, pct: a.pct + b.pct, num: a.num && b.num };
+                    a = V {
+                        px: a.px + b.px,
+                        pct: a.pct + b.pct,
+                        num: a.num && b.num,
+                    };
                 }
                 Some(b'-') => {
                     self.i += 1;
                     let b = self.product()?;
-                    a = V { px: a.px - b.px, pct: a.pct - b.pct, num: a.num && b.num };
+                    a = V {
+                        px: a.px - b.px,
+                        pct: a.pct - b.pct,
+                        num: a.num && b.num,
+                    };
                 }
                 _ => return Some(a),
             }
@@ -452,7 +532,13 @@ impl<'a> Calc<'a> {
                 Some(b'*') => {
                     self.i += 1;
                     let b = self.atom()?;
-                    a = if a.num { b.scale(a.px) } else if b.num { a.scale(b.px) } else { return None };
+                    a = if a.num {
+                        b.scale(a.px)
+                    } else if b.num {
+                        a.scale(b.px)
+                    } else {
+                        return None;
+                    };
                 }
                 Some(b'/') => {
                     self.i += 1;
@@ -505,25 +591,50 @@ impl<'a> Calc<'a> {
                     "max" => args.into_iter().max_by(|a, b| key(a).total_cmp(&key(b))),
                     "clamp" if args.len() == 3 => {
                         let (lo, mid, hi) = (args[0], args[1], args[2]);
-                        Some(if key(&mid) < key(&lo) { lo } else if key(&mid) > key(&hi) { hi } else { mid })
+                        Some(if key(&mid) < key(&lo) {
+                            lo
+                        } else if key(&mid) > key(&hi) {
+                            hi
+                        } else {
+                            mid
+                        })
                     }
                     _ => None,
                 }
             }
             _ => {
                 let st = self.i;
-                while self.i < self.s.len() && (self.s[self.i].is_ascii_alphanumeric() || matches!(self.s[self.i], b'.' | b'%')) {
+                while self.i < self.s.len()
+                    && (self.s[self.i].is_ascii_alphanumeric()
+                        || matches!(self.s[self.i], b'.' | b'%'))
+                {
                     self.i += 1;
                 }
                 let tok = std::str::from_utf8(&self.s[st..self.i]).ok()?;
                 // a bare number is a plain number; with a unit it is a length
                 if let Ok(n) = tok.parse::<f32>() {
-                    return Some(V { px: n, pct: 0.0, num: true });
+                    return Some(V {
+                        px: n,
+                        pct: 0.0,
+                        num: true,
+                    });
                 }
                 match plain_len(tok, self.u)? {
-                    Len::Px(v) => Some(V { px: v, pct: 0.0, num: false }),
-                    Len::Pct(p) => Some(V { px: 0.0, pct: p, num: false }),
-                    Len::Mix(a, b) => Some(V { px: a, pct: b, num: false }),
+                    Len::Px(v) => Some(V {
+                        px: v,
+                        pct: 0.0,
+                        num: false,
+                    }),
+                    Len::Pct(p) => Some(V {
+                        px: 0.0,
+                        pct: p,
+                        num: false,
+                    }),
+                    Len::Mix(a, b) => Some(V {
+                        px: a,
+                        pct: b,
+                        num: false,
+                    }),
                 }
             }
         }
@@ -557,7 +668,11 @@ pub(crate) fn resolve_vars(val: &str, vars: &std::collections::HashMap<String, S
             Some((n, f)) => (n.trim(), Some(f.trim())),
             None => (inner.trim(), None),
         };
-        let rep = vars.get(name).cloned().or_else(|| fallback.map(str::to_string)).unwrap_or_default();
+        let rep = vars
+            .get(name)
+            .cloned()
+            .or_else(|| fallback.map(str::to_string))
+            .unwrap_or_default();
         out.replace_range(at..=end, &rep);
     }
     out
@@ -601,12 +716,22 @@ pub(crate) fn find_url(val: &str) -> Option<(String, usize, usize)> {
     let s = val.to_ascii_lowercase().find("url(")?;
     let inner = s + 4;
     let e = val[inner..].find(')')? + inner;
-    let path = val[inner..e].trim().trim_matches(|c| c == '"' || c == '\'').trim().to_string();
+    let path = val[inner..e]
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .trim()
+        .to_string();
     Some((path, s, e + 1))
 }
 
 pub(crate) fn parse_bg_size(t: &[&str], u: &Units) -> Option<BgSize> {
-    let len = |x: &str| if x == "auto" { Some(None) } else { parse_len(x, u).map(Some) };
+    let len = |x: &str| {
+        if x == "auto" {
+            Some(None)
+        } else {
+            parse_len(x, u).map(Some)
+        }
+    };
     match t {
         ["cover"] => Some(BgSize::Cover),
         ["contain"] => Some(BgSize::Contain),
@@ -626,11 +751,21 @@ pub(crate) fn parse_bg_pos(t: &[&str], u: &Units) -> Option<[Len; 2]> {
     match t {
         [a] => {
             let v = val(*a)?;
-            Some(if matches!(*a, "top" | "bottom") { [Len::Pct(50.0), v] } else { [v, Len::Pct(50.0)] })
+            Some(if matches!(*a, "top" | "bottom") {
+                [Len::Pct(50.0), v]
+            } else {
+                [v, Len::Pct(50.0)]
+            })
         }
         [a, b] => {
             let (x, y) = (val(*a)?, val(*b)?);
-            Some(if matches!(*a, "top" | "bottom") || matches!(*b, "left" | "right") { [y, x] } else { [x, y] })
+            Some(
+                if matches!(*a, "top" | "bottom") || matches!(*b, "left" | "right") {
+                    [y, x]
+                } else {
+                    [x, y]
+                },
+            )
         }
         _ => None,
     }
@@ -663,8 +798,16 @@ pub(crate) fn box_values(v: &str, u: &Units) -> ([f32; 4], bool) {
 impl Style {
     pub(crate) fn apply(&mut self, prop: &str, val: &str, parent_font: f32, vw: f32, vh: f32) {
         let val = val.trim().trim_end_matches("!important").trim();
-        let u = Units { font: parent_font, vw, vh };
-        let own = Units { font: self.font_px, vw, vh };
+        let u = Units {
+            font: parent_font,
+            vw,
+            vh,
+        };
+        let own = Units {
+            font: self.font_px,
+            vw,
+            vh,
+        };
         match prop {
             "color" => {
                 if let Some(c) = parse_color(val) {
@@ -728,7 +871,13 @@ impl Style {
                 }
             }
             "background-image" => {
-                self.bg_img = find_url(val).and_then(|(p, _, _)| if p.is_empty() { None } else { Some(Arc::from(p.as_str())) });
+                self.bg_img = find_url(val).and_then(|(p, _, _)| {
+                    if p.is_empty() {
+                        None
+                    } else {
+                        Some(Arc::from(p.as_str()))
+                    }
+                });
             }
             "background-size" => {
                 if let Some(z) = parse_bg_size(&split_top(val), &own) {
@@ -763,7 +912,8 @@ impl Style {
                 }
             }
             "font-weight" => {
-                self.bold = matches!(val, "bold" | "bolder") || val.parse::<u32>().map_or(false, |w| w >= 600);
+                self.bold = matches!(val, "bold" | "bolder")
+                    || val.parse::<u32>().map_or(false, |w| w >= 600);
             }
             "text-align" => {
                 self.align = match val {
@@ -808,12 +958,27 @@ impl Style {
             "padding-right" => self.padding[1] = parse_len(val, &own).map_or(0.0, |l| l.px(vw)),
             "padding-bottom" => self.padding[2] = parse_len(val, &own).map_or(0.0, |l| l.px(vw)),
             "padding-left" => self.padding[3] = parse_len(val, &own).map_or(0.0, |l| l.px(vw)),
-            "width" => self.width = if val == "auto" { None } else { parse_len(val, &own) },
-            "height" => self.height = if val == "auto" { None } else { parse_len(val, &own) },
+            "width" => {
+                self.width = if val == "auto" {
+                    None
+                } else {
+                    parse_len(val, &own)
+                }
+            }
+            "height" => {
+                self.height = if val == "auto" {
+                    None
+                } else {
+                    parse_len(val, &own)
+                }
+            }
             "display" => {
                 self.none = val == "none";
                 self.inline = val == "inline";
-                self.inline_block = matches!(val, "inline-block" | "inline-flex" | "inline-grid" | "inline-table");
+                self.inline_block = matches!(
+                    val,
+                    "inline-block" | "inline-flex" | "inline-grid" | "inline-table"
+                );
                 self.flex = matches!(val, "flex" | "inline-flex");
                 self.inline_flex = val == "inline-flex";
                 self.grid = matches!(val, "grid" | "inline-grid");
@@ -835,7 +1000,11 @@ impl Style {
 
     fn apply_more(&mut self, prop: &str, val: &str, own: &Units, vw: f32, vh: f32) {
         let len = |v: &str| parse_len(v, own);
-        let side = |name: &str| ["top", "right", "bottom", "left"].iter().position(|s| *s == name);
+        let side = |name: &str| {
+            ["top", "right", "bottom", "left"]
+                .iter()
+                .position(|s| *s == name)
+        };
         let _ = vh;
         match prop {
             // ---- borders
@@ -848,7 +1017,19 @@ impl Style {
                 for t in split_top(val) {
                     if let Some(c) = parse_color(t) {
                         color = Some(c);
-                    } else if matches!(t, "none" | "hidden" | "solid" | "dashed" | "dotted" | "double" | "groove" | "ridge" | "inset" | "outset") {
+                    } else if matches!(
+                        t,
+                        "none"
+                            | "hidden"
+                            | "solid"
+                            | "dashed"
+                            | "dotted"
+                            | "double"
+                            | "groove"
+                            | "ridge"
+                            | "inset"
+                            | "outset"
+                    ) {
                         style = Some(t != "none" && t != "hidden");
                     } else if let Some(l) = match t {
                         "thin" => Some(Len::Px(1.0)),
@@ -887,21 +1068,48 @@ impl Style {
                     self.bw = [0.0; 4];
                 }
             }
-            "border-top-width" | "border-right-width" | "border-bottom-width" | "border-left-width" => {
-                if let Some(i) = prop.strip_prefix("border-").and_then(|r| r.strip_suffix("-width")).and_then(side) {
+            "border-top-width"
+            | "border-right-width"
+            | "border-bottom-width"
+            | "border-left-width" => {
+                if let Some(i) = prop
+                    .strip_prefix("border-")
+                    .and_then(|r| r.strip_suffix("-width"))
+                    .and_then(side)
+                {
                     self.bw[i] = len(val).map_or(0.0, |l| l.px(vw));
                 }
             }
-            "border-top-color" | "border-right-color" | "border-bottom-color" | "border-left-color" => {
-                if let (Some(i), Some(c)) = (prop.strip_prefix("border-").and_then(|r| r.strip_suffix("-color")).and_then(side), parse_color(val)) {
+            "border-top-color"
+            | "border-right-color"
+            | "border-bottom-color"
+            | "border-left-color" => {
+                if let (Some(i), Some(c)) = (
+                    prop.strip_prefix("border-")
+                        .and_then(|r| r.strip_suffix("-color"))
+                        .and_then(side),
+                    parse_color(val),
+                ) {
                     self.bcolor[i] = c;
                 }
             }
             "box-sizing" => self.border_box = val == "border-box",
             // ---- size limits
-            "min-width" => self.min_w = if val == "auto" || val == "0" { None } else { len(val) },
+            "min-width" => {
+                self.min_w = if val == "auto" || val == "0" {
+                    None
+                } else {
+                    len(val)
+                }
+            }
             "max-width" => self.max_w = if val == "none" { None } else { len(val) },
-            "min-height" => self.min_h = if val == "auto" || val == "0" { None } else { len(val) },
+            "min-height" => {
+                self.min_h = if val == "auto" || val == "0" {
+                    None
+                } else {
+                    len(val)
+                }
+            }
             "max-height" => self.max_h = if val == "none" { None } else { len(val) },
             // ---- position
             "position" => {
@@ -918,7 +1126,10 @@ impl Style {
                 }
             }
             "inset" => {
-                let toks: Vec<Option<Len>> = split_top(val).into_iter().map(|t| if t == "auto" { None } else { len(t) }).collect();
+                let toks: Vec<Option<Len>> = split_top(val)
+                    .into_iter()
+                    .map(|t| if t == "auto" { None } else { len(t) })
+                    .collect();
                 self.inset = match toks.len() {
                     1 => [toks[0]; 4],
                     2 => [toks[0], toks[1], toks[0], toks[1]],
@@ -928,8 +1139,18 @@ impl Style {
                 };
             }
             "z-index" => self.z = val.parse().unwrap_or(0),
-            "overflow" | "overflow-x" | "overflow-y" => self.overflow_hidden = val.split_whitespace().any(|t| matches!(t, "hidden" | "scroll" | "auto" | "clip")),
-            "opacity" => self.opacity = val.trim_end_matches('%').parse::<f32>().map_or(1.0, |o| if val.ends_with('%') { o / 100.0 } else { o }).clamp(0.0, 1.0),
+            "overflow" | "overflow-x" | "overflow-y" => {
+                self.overflow_hidden = val
+                    .split_whitespace()
+                    .any(|t| matches!(t, "hidden" | "scroll" | "auto" | "clip"))
+            }
+            "opacity" => {
+                self.opacity = val
+                    .trim_end_matches('%')
+                    .parse::<f32>()
+                    .map_or(1.0, |o| if val.ends_with('%') { o / 100.0 } else { o })
+                    .clamp(0.0, 1.0)
+            }
             // ---- flexbox
             "flex-direction" => {
                 self.dir = match val {
@@ -948,7 +1169,17 @@ impl Style {
             }
             "flex-flow" => {
                 for t in val.split_whitespace() {
-                    self.apply_more(if t.starts_with("wrap") || t == "nowrap" { "flex-wrap" } else { "flex-direction" }, t, own, vw, vh);
+                    self.apply_more(
+                        if t.starts_with("wrap") || t == "nowrap" {
+                            "flex-wrap"
+                        } else {
+                            "flex-direction"
+                        },
+                        t,
+                        own,
+                        vw,
+                        vh,
+                    );
                 }
             }
             "justify-content" => {
@@ -964,7 +1195,11 @@ impl Style {
             "align-items" => self.align_items = align_code(val).unwrap_or(0),
             "align-self" => self.align_self = if val == "auto" { None } else { align_code(val) },
             "gap" | "grid-gap" => {
-                let v: Vec<f32> = split_top(val).into_iter().filter_map(len).map(|l| l.px(vw)).collect();
+                let v: Vec<f32> = split_top(val)
+                    .into_iter()
+                    .filter_map(len)
+                    .map(|l| l.px(vw))
+                    .collect();
                 match v.as_slice() {
                     [a] => self.gap = [*a, *a],
                     [a, b] => self.gap = [*a, *b],
@@ -975,7 +1210,13 @@ impl Style {
             "column-gap" => self.gap[1] = len(val).map_or(0.0, |l| l.px(vw)),
             "flex-grow" => self.grow = val.parse().unwrap_or(0.0),
             "flex-shrink" => self.shrink = val.parse().unwrap_or(1.0),
-            "flex-basis" => self.basis = if val == "auto" || val == "content" { None } else { len(val) },
+            "flex-basis" => {
+                self.basis = if val == "auto" || val == "content" {
+                    None
+                } else {
+                    len(val)
+                }
+            }
             "flex" => {
                 match val {
                     "none" => (self.grow, self.shrink, self.basis) = (0.0, 0.0, None),
@@ -983,11 +1224,18 @@ impl Style {
                     "initial" => (self.grow, self.shrink, self.basis) = (0.0, 1.0, None),
                     _ => {
                         let toks = split_top(val);
-                        let nums: Vec<f32> = toks.iter().take(2).map_while(|t| t.parse::<f32>().ok()).collect();
+                        let nums: Vec<f32> = toks
+                            .iter()
+                            .take(2)
+                            .map_while(|t| t.parse::<f32>().ok())
+                            .collect();
                         self.grow = nums.first().copied().unwrap_or(1.0);
                         self.shrink = nums.get(1).copied().unwrap_or(1.0);
                         // `flex: 1` means a basis of 0; a basis may follow
-                        self.basis = toks.get(nums.len()).and_then(|t| len(t)).or(Some(Len::Px(0.0)));
+                        self.basis = toks
+                            .get(nums.len())
+                            .and_then(|t| len(t))
+                            .or(Some(Len::Px(0.0)));
                     }
                 }
             }
@@ -1002,7 +1250,13 @@ impl Style {
                     _ => 0,
                 }
             }
-            "letter-spacing" => self.letter_px = if val == "normal" { 0.0 } else { len(val).map_or(0.0, |l| l.px(self.font_px)) },
+            "letter-spacing" => {
+                self.letter_px = if val == "normal" {
+                    0.0
+                } else {
+                    len(val).map_or(0.0, |l| l.px(self.font_px))
+                }
+            }
             "text-decoration" | "text-decoration-line" => {
                 self.underline = val.contains("underline");
                 self.strike = val.contains("line-through");
@@ -1010,7 +1264,11 @@ impl Style {
             "text-overflow" => self.ellipsis = val == "ellipsis",
             "vertical-align" => self.valign = (val == "middle") as u8,
             "box-shadow" => {
-                self.shadow = if val == "none" { None } else { parse_shadow(val, own) };
+                self.shadow = if val == "none" {
+                    None
+                } else {
+                    parse_shadow(val, own)
+                };
             }
             _ => {}
         }
@@ -1072,7 +1330,13 @@ fn parse_shadow(val: &str, u: &Units) -> Option<Shadow> {
     if nums.len() < 2 {
         return None;
     }
-    Some(Shadow { dx: nums[0], dy: nums[1], blur: nums.get(2).copied().unwrap_or(0.0).max(0.0), spread: nums.get(3).copied().unwrap_or(0.0), color })
+    Some(Shadow {
+        dx: nums[0],
+        dy: nums[1],
+        blur: nums.get(2).copied().unwrap_or(0.0).max(0.0),
+        spread: nums.get(3).copied().unwrap_or(0.0),
+        color,
+    })
 }
 
 /// `linear-gradient([angle | to side,] stop, stop, ...)`.
@@ -1113,7 +1377,10 @@ fn parse_gradient(val: &str, u: &Units) -> Option<Gradient> {
     parts.push(inner[st..].trim());
     let mut angle = 180.0;
     let first = parts.first()?.to_ascii_lowercase();
-    if let Some(a) = first.strip_suffix("deg").and_then(|n| n.trim().parse::<f32>().ok()) {
+    if let Some(a) = first
+        .strip_suffix("deg")
+        .and_then(|n| n.trim().parse::<f32>().ok())
+    {
         angle = a;
         parts.remove(0);
     } else if let Some(rest) = first.strip_prefix("to ") {
@@ -1134,7 +1401,10 @@ fn parse_gradient(val: &str, u: &Units) -> Option<Gradient> {
     for p in parts {
         let toks = split_top(p);
         let color = toks.iter().find_map(|t| parse_color(t))?;
-        let pos = toks.iter().find(|t| parse_color(t).is_none()).and_then(|t| parse_len(t, u));
+        let pos = toks
+            .iter()
+            .find(|t| parse_color(t).is_none())
+            .and_then(|t| parse_len(t, u));
         stops.push(GStop { pos, color });
     }
     (stops.len() >= 2).then_some(Gradient { angle, stops })

@@ -151,7 +151,8 @@ impl<'a> Layouter<'a> {
                 st.inline = true;
                 st.bold = true;
             }
-            "span" | "i" | "em" | "a" | "small" | "u" | "label" | "code" | "s" | "sub" | "sup" | "abbr" | "time" | "mark" | "kbd" => {
+            "span" | "i" | "em" | "a" | "small" | "u" | "label" | "code" | "s" | "sub" | "sup"
+            | "abbr" | "time" | "mark" | "kbd" => {
                 st.inline = true;
                 match n.tag.as_str() {
                     "u" => st.underline = true,
@@ -191,7 +192,9 @@ impl<'a> Layouter<'a> {
                 st.radius = 4.0;
             }
             "img" => st.inline_block = true,
-            "head" | "style" | "script" | "title" | "meta" | "link" | "template" | "noscript" => st.none = true,
+            "head" | "style" | "script" | "title" | "meta" | "link" | "template" | "noscript" => {
+                st.none = true
+            }
             "tr" => {
                 st.flex = true;
             }
@@ -214,7 +217,12 @@ impl<'a> Layouter<'a> {
             .rules
             .iter()
             .filter_map(|r| {
-                r.sels.iter().filter(|c| self.dom.matches(idx, c)).map(specificity).max().map(|s| (s, r.order, r))
+                r.sels
+                    .iter()
+                    .filter(|c| self.dom.matches(idx, c))
+                    .map(specificity)
+                    .max()
+                    .map(|s| (s, r.order, r))
             })
             .collect();
         matched.sort_by_key(|(s, o, _)| (*s, *o));
@@ -222,11 +230,19 @@ impl<'a> Layouter<'a> {
         let mut decls: Vec<(&str, &str, bool)> = Vec::new();
         for (_, _, r) in &matched {
             for (k, v) in &r.decls {
-                decls.push((k.as_str(), v.as_str(), v.trim_end().to_ascii_lowercase().ends_with("!important")));
+                decls.push((
+                    k.as_str(),
+                    v.as_str(),
+                    v.trim_end().to_ascii_lowercase().ends_with("!important"),
+                ));
             }
         }
         for (k, v) in &n.inline {
-            decls.push((k.as_str(), v.as_str(), v.trim_end().to_ascii_lowercase().ends_with("!important")));
+            decls.push((
+                k.as_str(),
+                v.as_str(),
+                v.trim_end().to_ascii_lowercase().ends_with("!important"),
+            ));
         }
         // custom properties first: the declarations may name them
         if decls.iter().any(|(k, ..)| k.starts_with("--")) {
@@ -251,7 +267,10 @@ impl<'a> Layouter<'a> {
                 }
                 if val.to_ascii_lowercase().contains("currentcolor") {
                     let c = st.color;
-                    val = std::borrow::Cow::Owned(val.to_ascii_lowercase().replace("currentcolor", &format!("rgba({},{},{},{})", c[0], c[1], c[2], c[3] as f32 / 255.0)));
+                    val = std::borrow::Cow::Owned(val.to_ascii_lowercase().replace(
+                        "currentcolor",
+                        &format!("rgba({},{},{},{})", c[0], c[1], c[2], c[3] as f32 / 255.0),
+                    ));
                 }
                 st.apply(k, &val, pf, self.vw, self.vh);
             }
@@ -267,7 +286,11 @@ impl<'a> Layouter<'a> {
     /// picture's own size; a missing side keeps the picture's proportions.
     fn size_img(&self, idx: usize, st: &mut Style) {
         let n = &self.dom.nodes[idx];
-        let u = Units { font: st.font_px, vw: self.vw, vh: self.vh };
+        let u = Units {
+            font: st.font_px,
+            vw: self.vw,
+            vh: self.vh,
+        };
         if st.width.is_none() && !n.attr_w.is_empty() {
             st.width = parse_len(&n.attr_w, &u);
         }
@@ -283,8 +306,12 @@ impl<'a> Layouter<'a> {
                 st.width = Some(Len::Px(nw));
                 st.height = Some(Len::Px(nh));
             }
-            (Some(Len::Px(w)), None) => st.height = Some(Len::Px(if nw > 0.0 { w * nh / nw } else { 0.0 })),
-            (None, Some(Len::Px(h))) => st.width = Some(Len::Px(if nh > 0.0 { h * nw / nh } else { 0.0 })),
+            (Some(Len::Px(w)), None) => {
+                st.height = Some(Len::Px(if nw > 0.0 { w * nh / nw } else { 0.0 }))
+            }
+            (None, Some(Len::Px(h))) => {
+                st.width = Some(Len::Px(if nh > 0.0 { h * nw / nh } else { 0.0 }))
+            }
             (Some(Len::Pct(_)), None) if nw > 0.0 => st.aspect = nh / nw,
             _ => {}
         }
@@ -309,7 +336,17 @@ impl<'a> Layouter<'a> {
         }
     }
 
-    pub(crate) fn finish_line(&self, items: &mut Vec<LItem>, lw: &mut f32, lh: &mut f32, out: &mut Vec<LLine>, cy: &mut f32, x: f32, w: f32, align: u8) {
+    pub(crate) fn finish_line(
+        &self,
+        items: &mut Vec<LItem>,
+        lw: &mut f32,
+        lh: &mut f32,
+        out: &mut Vec<LLine>,
+        cy: &mut f32,
+        x: f32,
+        w: f32,
+        align: u8,
+    ) {
         if let Some(l) = items.last_mut() {
             let t = l.text.trim_end().to_string();
             let nw = self.tw(&t, l.px, l.bold) + l.letter * t.chars().count() as f32;
@@ -322,20 +359,40 @@ impl<'a> Layouter<'a> {
             2 => w - *lw,
             _ => 0.0,
         }
-            .max(0.0);
+        .max(0.0);
         let h = *lh;
-        out.push(LLine { x: x + off, y: *cy, h, items: std::mem::take(items) });
+        out.push(LLine {
+            x: x + off,
+            y: *cy,
+            h,
+            items: std::mem::take(items),
+        });
         *cy += h;
         *lw = 0.0;
         *lh = 0.0;
     }
 
-    pub(crate) fn lines(&self, runs: &[(String, Style)], x: f32, y: f32, w: f32, align: u8) -> (Vec<LLine>, f32) {
+    pub(crate) fn lines(
+        &self,
+        runs: &[(String, Style)],
+        x: f32,
+        y: f32,
+        w: f32,
+        align: u8,
+    ) -> (Vec<LLine>, f32) {
         self.lines_e(runs, x, y, w, align, false)
     }
 
     /// `ellipsis`: a line that does not fit is cut and ends in "…" (`text-overflow`).
-    pub(crate) fn lines_e(&self, runs: &[(String, Style)], x: f32, y: f32, w: f32, align: u8, ellipsis: bool) -> (Vec<LLine>, f32) {
+    pub(crate) fn lines_e(
+        &self,
+        runs: &[(String, Style)],
+        x: f32,
+        y: f32,
+        w: f32,
+        align: u8,
+        ellipsis: bool,
+    ) -> (Vec<LLine>, f32) {
         let mut out = Vec::new();
         let mut cy = y;
         let mut items: Vec<LItem> = Vec::new();
@@ -352,14 +409,29 @@ impl<'a> Layouter<'a> {
                 let letters = st.letter_px * tok.chars().count() as f32;
                 let full = self.tw(tok, st.font_px, st.bold) + letters;
                 let t = tok.trim_end();
-                let trimmed = if t.len() == tok.len() { full } else { self.tw(t, st.font_px, st.bold) + st.letter_px * t.chars().count() as f32 };
+                let trimmed = if t.len() == tok.len() {
+                    full
+                } else {
+                    self.tw(t, st.font_px, st.bold) + st.letter_px * t.chars().count() as f32
+                };
                 if !items.is_empty() && lw + trimmed > w + 0.01 && !st.nowrap {
                     self.finish_line(&mut items, &mut lw, &mut lh, &mut out, &mut cy, x, w, align);
                 }
                 if items.is_empty() && tok.trim().is_empty() {
                     continue;
                 }
-                items.push(LItem { text: tok.to_string(), px: st.font_px, bold: st.bold, color: st.color, dx: lw, w: full, node: st.node, letter: st.letter_px, underline: st.underline, strike: st.strike });
+                items.push(LItem {
+                    text: tok.to_string(),
+                    px: st.font_px,
+                    bold: st.bold,
+                    color: st.color,
+                    dx: lw,
+                    w: full,
+                    node: st.node,
+                    letter: st.letter_px,
+                    underline: st.underline,
+                    strike: st.strike,
+                });
                 lw += full;
                 lh = lh.max(st.font_px * st.line_h);
             }
@@ -375,11 +447,16 @@ impl<'a> Layouter<'a> {
 
     /// Cut the end of a line that is too long and put "…" there.
     fn ellipsize(&self, items: &mut Vec<LItem>, lw: &mut f32, w: f32) {
-        let dots = items.last().map(|l| self.tw("…", l.px, l.bold)).unwrap_or(0.0);
+        let dots = items
+            .last()
+            .map(|l| self.tw("…", l.px, l.bold))
+            .unwrap_or(0.0);
         while let Some(l) = items.last_mut() {
             let mut chars: Vec<char> = l.text.chars().collect();
             let before = l.dx;
-            while !chars.is_empty() && before + self.tw(&chars.iter().collect::<String>(), l.px, l.bold) + dots > w {
+            while !chars.is_empty()
+                && before + self.tw(&chars.iter().collect::<String>(), l.px, l.bold) + dots > w
+            {
                 chars.pop();
             }
             if chars.is_empty() && items.len() > 1 {
@@ -403,12 +480,19 @@ impl<'a> Layouter<'a> {
         let extra = st.padding[1] + st.padding[3] + st.bw[1] + st.bw[3];
         if let Some(l) = st.width {
             if let Len::Px(w) = l {
-                return if st.border_box { (w - extra).max(0.0) } else { w };
+                return if st.border_box {
+                    (w - extra).max(0.0)
+                } else {
+                    w
+                };
             }
         }
         let n = &self.dom.nodes[idx];
         if n.tag == "img" {
-            return match st.width { Some(Len::Px(w)) => w, _ => 0.0 };
+            return match st.width {
+                Some(Len::Px(w)) => w,
+                _ => 0.0,
+            };
         }
         let mut runs: Vec<(String, Style)> = Vec::new();
         let mut widest = 0.0f32;
@@ -436,7 +520,13 @@ impl<'a> Layouter<'a> {
             // a block child: the text before it is a line of its own
             widest = widest.max(self.runs_width(&runs));
             runs.clear();
-            let cw = self.max_content(k, &st) + cs.margin[1] + cs.margin[3] + cs.padding[1] + cs.padding[3] + cs.bw[1] + cs.bw[3];
+            let cw = self.max_content(k, &st)
+                + cs.margin[1]
+                + cs.margin[3]
+                + cs.padding[1]
+                + cs.padding[3]
+                + cs.bw[1]
+                + cs.bw[3];
             let cw = if cs.border_box { cw } else { cw };
             if row_flex || cs.inline_block {
                 row += cw + if first { 0.0 } else { st.gap[1] };
@@ -468,14 +558,30 @@ impl<'a> Layouter<'a> {
         let (lines, h) = self.lines(runs, 0.0, 0.0, w, st.align);
         let mut s = st.inherit();
         s.node = st.node;
-        LBox { rect: [0.0, 0.0, w, h], mb: 0.0, st: s, items: lines.into_iter().map(Item::Line).collect(), node: st.node, pending: Vec::new() }
+        LBox {
+            rect: [0.0, 0.0, w, h],
+            mb: 0.0,
+            st: s,
+            items: lines.into_iter().map(Item::Line).collect(),
+            node: st.node,
+            pending: Vec::new(),
+        }
     }
 
     /// The children of a flex container (`display: flex`) laid out: the boxes in order, the height
     /// they use, and the absolute boxes among them. `definite_h` is the container's content height
     /// when it has one.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn flex_layout(&self, idx: usize, st: &Style, cx: f32, top: f32, content_w: f32, definite_h: Option<f32>, pct_h: f32) -> (Vec<Item>, f32, Vec<Pend>) {
+    pub(crate) fn flex_layout(
+        &self,
+        idx: usize,
+        st: &Style,
+        cx: f32,
+        top: f32,
+        content_w: f32,
+        definite_h: Option<f32>,
+        pct_h: f32,
+    ) -> (Vec<Item>, f32, Vec<Pend>) {
         struct F {
             node: Option<usize>,
             st: Style,
@@ -495,7 +601,14 @@ impl<'a> Layouter<'a> {
             if text.iter().any(|(t, _)| !t.trim().is_empty()) {
                 let mut cs = st.inherit();
                 cs.node = idx;
-                fs.push(F { node: None, st: cs, runs: std::mem::take(text), main: 0.0, base: 0.0, box_: None });
+                fs.push(F {
+                    node: None,
+                    st: cs,
+                    runs: std::mem::take(text),
+                    main: 0.0,
+                    base: 0.0,
+                    box_: None,
+                });
             }
             text.clear();
         };
@@ -510,11 +623,24 @@ impl<'a> Layouter<'a> {
                 continue;
             }
             if cs.position >= 2 {
-                pend.push(Pend { node: k, parent: st.clone(), sx: cx, sy: top, fixed: cs.position == 3 });
+                pend.push(Pend {
+                    node: k,
+                    parent: st.clone(),
+                    sx: cx,
+                    sy: top,
+                    fixed: cs.position == 3,
+                });
                 continue;
             }
             flush_text(&mut text, &mut fs);
-            fs.push(F { node: Some(k), st: cs, runs: Vec::new(), main: 0.0, base: 0.0, box_: None });
+            fs.push(F {
+                node: Some(k),
+                st: cs,
+                runs: Vec::new(),
+                main: 0.0,
+                base: 0.0,
+                box_: None,
+            });
         }
         flush_text(&mut text, &mut fs);
         fs.sort_by_key(|f| f.st.order);
@@ -522,21 +648,40 @@ impl<'a> Layouter<'a> {
         if n == 0 {
             return (Vec::new(), definite_h.unwrap_or(0.0).min(0.0), pend);
         }
-        let (gap_main, gap_cross) = if row { (st.gap[1], st.gap[0]) } else { (st.gap[0], st.gap[1]) };
+        let (gap_main, gap_cross) = if row {
+            (st.gap[1], st.gap[0])
+        } else {
+            (st.gap[0], st.gap[1])
+        };
         let main_avail = if row { Some(content_w) } else { definite_h };
         let margins = |f: &F| f.st.margin;
-        let extra = |f: &F| (f.st.padding[1] + f.st.padding[3] + f.st.bw[1] + f.st.bw[3], f.st.padding[0] + f.st.padding[2] + f.st.bw[0] + f.st.bw[2]);
+        let extra = |f: &F| {
+            (
+                f.st.padding[1] + f.st.padding[3] + f.st.bw[1] + f.st.bw[3],
+                f.st.padding[0] + f.st.padding[2] + f.st.bw[0] + f.st.bw[2],
+            )
+        };
         let stretch_w = |f: &F| -> Option<f32> {
             // a column item's width (border box) when it is stretched across the container
             let [_, mr, _, ml] = f.st.margin;
             let al = f.st.align_self.unwrap_or(st.align_items);
-            if f.st.width.is_none() && al == 0 && !f.st.m_auto[1] && !f.st.m_auto[3] { Some((content_w - ml - mr).max(0.0)) } else { None }
+            if f.st.width.is_none() && al == 0 && !f.st.m_auto[1] && !f.st.m_auto[3] {
+                Some((content_w - ml - mr).max(0.0))
+            } else {
+                None
+            }
         };
         // ---- flex base sizes
         for f in fs.iter_mut() {
             let (ew, eh) = extra(f);
             let [mt, mr, mb, ml] = margins(f);
-            let border_box_of = |l: Len, base: f32, e: f32| if f.st.border_box { l.px(base) } else { l.px(base) + e };
+            let border_box_of = |l: Len, base: f32, e: f32| {
+                if f.st.border_box {
+                    l.px(base)
+                } else {
+                    l.px(base) + e
+                }
+            };
             f.base = if row {
                 match f.st.basis.or(f.st.width) {
                     Some(l) => border_box_of(l, content_w, ew),
@@ -551,23 +696,56 @@ impl<'a> Layouter<'a> {
                     None => {
                         // the height the item has at its width
                         let w = match f.st.width {
-                            Some(l) => if f.st.border_box { l.px(content_w) } else { l.px(content_w) + ew },
-                            None => stretch_w(f).unwrap_or_else(|| f.node.map_or(self.runs_width(&f.runs), |k| self.max_content(k, st) + ew)),
+                            Some(l) => {
+                                if f.st.border_box {
+                                    l.px(content_w)
+                                } else {
+                                    l.px(content_w) + ew
+                                }
+                            }
+                            None => stretch_w(f).unwrap_or_else(|| {
+                                f.node.map_or(self.runs_width(&f.runs), |k| {
+                                    self.max_content(k, st) + ew
+                                })
+                            }),
                         };
                         let cw = (w - ew).max(0.0);
                         match f.node {
-                            Some(k) => self.build_x(k, st, 0.0, 0.0, content_w, pct_h, Some(cw), None).rect[3],
+                            Some(k) => {
+                                self.build_x(k, st, 0.0, 0.0, content_w, pct_h, Some(cw), None)
+                                    .rect[3]
+                            }
                             None => self.anon_box(&f.runs, &f.st, cw).rect[3],
                         }
                     }
                 }
             };
             // min/max along the main axis
-            let (min, max) = if row { (f.st.min_w, f.st.max_w) } else { (f.st.min_h, f.st.max_h) };
-            let basis_for_pct = if row { content_w } else { definite_h.unwrap_or(0.0) };
+            let (min, max) = if row {
+                (f.st.min_w, f.st.max_w)
+            } else {
+                (f.st.min_h, f.st.max_h)
+            };
+            let basis_for_pct = if row {
+                content_w
+            } else {
+                definite_h.unwrap_or(0.0)
+            };
             let e = if row { ew } else { eh };
-            let lo = min.map_or(0.0, |l| if f.st.border_box { l.px(basis_for_pct) } else { l.px(basis_for_pct) + e });
-            let hi = max.map_or(f32::INFINITY, |l| if f.st.border_box { l.px(basis_for_pct) } else { l.px(basis_for_pct) + e });
+            let lo = min.map_or(0.0, |l| {
+                if f.st.border_box {
+                    l.px(basis_for_pct)
+                } else {
+                    l.px(basis_for_pct) + e
+                }
+            });
+            let hi = max.map_or(f32::INFINITY, |l| {
+                if f.st.border_box {
+                    l.px(basis_for_pct)
+                } else {
+                    l.px(basis_for_pct) + e
+                }
+            });
             f.base = f.base.min(hi).max(lo);
             f.main = f.base;
             let _ = (mt, mr, mb, ml);
@@ -585,7 +763,10 @@ impl<'a> Layouter<'a> {
                 let m = margins(&fs[i]);
                 fs[i].base + if row { m[1] + m[3] } else { m[0] + m[2] }
             };
-            if st.wrap != 0 && !cur.is_empty() && main_avail.is_some_and(|a| used + gap_main + size > a + 0.01) {
+            if st.wrap != 0
+                && !cur.is_empty()
+                && main_avail.is_some_and(|a| used + gap_main + size > a + 0.01)
+            {
                 lines.push(std::mem::take(&mut cur));
                 used = 0.0;
             }
@@ -623,14 +804,30 @@ impl<'a> Layouter<'a> {
             for &i in line {
                 let f = &mut fs[i];
                 let (ew, eh) = extra(f);
-                let (min, max) = if row { (f.st.min_w, f.st.max_w) } else { (f.st.min_h, f.st.max_h) };
+                let (min, max) = if row {
+                    (f.st.min_w, f.st.max_w)
+                } else {
+                    (f.st.min_h, f.st.max_h)
+                };
                 let e = if row { ew } else { eh };
-                let base = if row { content_w } else { definite_h.unwrap_or(0.0) };
+                let base = if row {
+                    content_w
+                } else {
+                    definite_h.unwrap_or(0.0)
+                };
                 if let Some(l) = max {
-                    f.main = f.main.min(if f.st.border_box { l.px(base) } else { l.px(base) + e });
+                    f.main = f.main.min(if f.st.border_box {
+                        l.px(base)
+                    } else {
+                        l.px(base) + e
+                    });
                 }
                 if let Some(l) = min {
-                    f.main = f.main.max(if f.st.border_box { l.px(base) } else { l.px(base) + e });
+                    f.main = f.main.max(if f.st.border_box {
+                        l.px(base)
+                    } else {
+                        l.px(base) + e
+                    });
                 }
             }
         }
@@ -647,7 +844,11 @@ impl<'a> Layouter<'a> {
             } else {
                 let ch = (f.main - eh).max(0.0);
                 let width = match f.st.width {
-                    Some(l) => Some(if f.st.border_box { (l.px(content_w) - ew).max(0.0) } else { l.px(content_w) }),
+                    Some(l) => Some(if f.st.border_box {
+                        (l.px(content_w) - ew).max(0.0)
+                    } else {
+                        l.px(content_w)
+                    }),
                     None => stretch_w(f).map(|w| (w - ew).max(0.0)),
                 };
                 match f.node {
@@ -665,9 +866,16 @@ impl<'a> Layouter<'a> {
         let cross_of = |f: &F| {
             let b = f.box_.as_ref().unwrap();
             let m = margins(f);
-            if row { b.rect[3] + m[0] + m[2] } else { b.rect[2] + m[1] + m[3] }
+            if row {
+                b.rect[3] + m[0] + m[2]
+            } else {
+                b.rect[2] + m[1] + m[3]
+            }
         };
-        let mut line_cross: Vec<f32> = lines.iter().map(|l| l.iter().map(|&i| cross_of(&fs[i])).fold(0.0, f32::max)).collect();
+        let mut line_cross: Vec<f32> = lines
+            .iter()
+            .map(|l| l.iter().map(|&i| cross_of(&fs[i])).fold(0.0, f32::max))
+            .collect();
         let cross_avail = if row { definite_h } else { Some(content_w) };
         if lines.len() == 1 || st.wrap == 0 {
             if let (Some(c), Some(lc)) = (cross_avail, line_cross.first_mut()) {
@@ -675,35 +883,63 @@ impl<'a> Layouter<'a> {
             }
         }
         // ---- stretch, align and place
-        let total_cross: f32 = line_cross.iter().sum::<f32>() + gap_cross * (lines.len().saturating_sub(1)) as f32;
+        let total_cross: f32 =
+            line_cross.iter().sum::<f32>() + gap_cross * (lines.len().saturating_sub(1)) as f32;
         let mut items: Vec<Item> = Vec::new();
         let mut cross_pos = 0.0f32;
-        let order: Vec<usize> = if st.wrap == 2 { (0..lines.len()).rev().collect() } else { (0..lines.len()).collect() };
+        let order: Vec<usize> = if st.wrap == 2 {
+            (0..lines.len()).rev().collect()
+        } else {
+            (0..lines.len()).collect()
+        };
         for li in order {
             let line = &lines[li];
             let lc = line_cross[li];
             // main-axis free space after the items and the gaps (and auto margins)
-            let total: f32 = line.iter().map(|&i| outer_main(&fs[i])).sum::<f32>() + gap_main * (line.len().saturating_sub(1)) as f32;
+            let total: f32 = line.iter().map(|&i| outer_main(&fs[i])).sum::<f32>()
+                + gap_main * (line.len().saturating_sub(1)) as f32;
             let mut free = main_avail.map_or(0.0, |a| a - total).max(0.0);
-            let autos: usize = line.iter().map(|&i| {
-                let a = fs[i].st.m_auto;
-                if row { a[1] as usize + a[3] as usize } else { a[0] as usize + a[2] as usize }
-            }).sum();
-            let auto_share = if autos > 0 && free > 0.0 { free / autos as f32 } else { 0.0 };
+            let autos: usize = line
+                .iter()
+                .map(|&i| {
+                    let a = fs[i].st.m_auto;
+                    if row {
+                        a[1] as usize + a[3] as usize
+                    } else {
+                        a[0] as usize + a[2] as usize
+                    }
+                })
+                .sum();
+            let auto_share = if autos > 0 && free > 0.0 {
+                free / autos as f32
+            } else {
+                0.0
+            };
             if autos > 0 {
                 free = 0.0;
             }
             // (a reversed axis begins at the other end: flex-start is the far side)
-            let justify = if reverse && st.justify < 2 { 1 - st.justify } else { st.justify };
+            let justify = if reverse && st.justify < 2 {
+                1 - st.justify
+            } else {
+                st.justify
+            };
             let (start, between) = match justify {
                 1 => (free, 0.0),
                 2 => (free / 2.0, 0.0),
                 3 if line.len() > 1 => (0.0, free / (line.len() - 1) as f32),
                 4 => (free / (2.0 * line.len() as f32), free / line.len() as f32),
-                5 => (free / (line.len() + 1) as f32, free / (line.len() + 1) as f32),
+                5 => (
+                    free / (line.len() + 1) as f32,
+                    free / (line.len() + 1) as f32,
+                ),
                 _ => (0.0, 0.0),
             };
-            let seq: Vec<usize> = if reverse { line.iter().rev().copied().collect() } else { line.clone() };
+            let seq: Vec<usize> = if reverse {
+                line.iter().rev().copied().collect()
+            } else {
+                line.clone()
+            };
             let mut pos = start;
             for &i in &seq {
                 let f = &mut fs[i];
@@ -718,7 +954,16 @@ impl<'a> Layouter<'a> {
                         let want = (lc - m[0] - m[2] - eh).max(0.0);
                         if (b.rect[3] - eh - want).abs() > 0.01 {
                             b = match f.node {
-                                Some(k) => self.build_x(k, st, 0.0, 0.0, content_w, pct_h, Some((b.rect[2] - ew).max(0.0)), Some(want)),
+                                Some(k) => self.build_x(
+                                    k,
+                                    st,
+                                    0.0,
+                                    0.0,
+                                    content_w,
+                                    pct_h,
+                                    Some((b.rect[2] - ew).max(0.0)),
+                                    Some(want),
+                                ),
                                 None => b,
                             };
                         }
@@ -726,7 +971,11 @@ impl<'a> Layouter<'a> {
                 }
                 let (ml_auto, mr_auto, mt_auto, mb_auto) = (am[3], am[1], am[0], am[2]);
                 let (bw_, bh_) = (b.rect[2], b.rect[3]);
-                let cross_size = if row { bh_ + m[0] + m[2] } else { bw_ + m[1] + m[3] };
+                let cross_size = if row {
+                    bh_ + m[0] + m[2]
+                } else {
+                    bw_ + m[1] + m[3]
+                };
                 let cross_free = (lc - cross_size).max(0.0);
                 let cross_auto_lead = if row { mt_auto } else { ml_auto };
                 let cross_auto_trail = if row { mb_auto } else { mr_auto };
@@ -745,9 +994,15 @@ impl<'a> Layouter<'a> {
                 };
                 // the margins along the main axis, auto ones taking their share of the free space
                 let (lead_m, trail_m) = if row {
-                    (m[3] + if ml_auto { auto_share } else { 0.0 }, m[1] + if mr_auto { auto_share } else { 0.0 })
+                    (
+                        m[3] + if ml_auto { auto_share } else { 0.0 },
+                        m[1] + if mr_auto { auto_share } else { 0.0 },
+                    )
                 } else {
-                    (m[0] + if mt_auto { auto_share } else { 0.0 }, m[2] + if mb_auto { auto_share } else { 0.0 })
+                    (
+                        m[0] + if mt_auto { auto_share } else { 0.0 },
+                        m[2] + if mb_auto { auto_share } else { 0.0 },
+                    )
                 };
                 // `b` was built with its margin edge at the origin: its border box is at (ml, mt)
                 let (x, y) = if row {
@@ -762,7 +1017,16 @@ impl<'a> Layouter<'a> {
             }
             cross_pos += lc + gap_cross;
         }
-        let used_h = if row { definite_h.unwrap_or(total_cross) } else { definite_h.unwrap_or_else(|| fs.iter().map(|f| f.main + f.st.margin[0] + f.st.margin[2]).sum::<f32>() + gap_main * (n.saturating_sub(1)) as f32) };
+        let used_h = if row {
+            definite_h.unwrap_or(total_cross)
+        } else {
+            definite_h.unwrap_or_else(|| {
+                fs.iter()
+                    .map(|f| f.main + f.st.margin[0] + f.st.margin[2])
+                    .sum::<f32>()
+                    + gap_main * (n.saturating_sub(1)) as f32
+            })
+        };
         let mut out_pend = pend;
         for it in items.iter_mut() {
             if let Item::Block(b) = it {
@@ -772,7 +1036,15 @@ impl<'a> Layouter<'a> {
         (items, used_h, out_pend)
     }
 
-    pub(crate) fn build(&self, idx: usize, ps: &Style, x0: f32, y0: f32, avail: f32, pct_h: f32) -> LBox {
+    pub(crate) fn build(
+        &self,
+        idx: usize,
+        ps: &Style,
+        x0: f32,
+        y0: f32,
+        avail: f32,
+        pct_h: f32,
+    ) -> LBox {
         let mut b = self.build_x(idx, ps, x0, y0, avail, pct_h, None, None);
         // the page's root: whatever absolute boxes are left find the viewport
         if idx == self.dom.body {
@@ -794,19 +1066,34 @@ impl<'a> Layouter<'a> {
                 keep.push(p);
                 continue;
             }
-            let (cbx, cby, cbw, cbh) = if p.fixed { (0.0, 0.0, self.vw, self.vh) } else { (cb[0], cb[1], cb[2], cb[3]) };
+            let (cbx, cby, cbw, cbh) = if p.fixed {
+                (0.0, 0.0, self.vw, self.vh)
+            } else {
+                (cb[0], cb[1], cb[2], cb[3])
+            };
             let cs = self.style_of(p.node, &p.parent);
             let [_, mr, _, ml] = cs.margin;
             let [mt, _, mb, _] = cs.margin;
             let extra_w = cs.padding[1] + cs.padding[3] + cs.bw[1] + cs.bw[3];
             let extra_h = cs.padding[0] + cs.padding[2] + cs.bw[0] + cs.bw[2];
             let [top, right, bottom, left] = cs.inset;
-            let content = |l: f32, extra: f32| if cs.border_box { (l - extra).max(0.0) } else { l };
+            let content = |l: f32, extra: f32| {
+                if cs.border_box {
+                    (l - extra).max(0.0)
+                } else {
+                    l
+                }
+            };
             let mut force_w = cs.width.map(|l| content(l.px(cbw), extra_w));
             if force_w.is_none() {
                 force_w = match (left, right) {
-                    (Some(l), Some(r)) => Some((cbw - l.px(cbw) - r.px(cbw) - ml - mr - extra_w).max(0.0)),
-                    _ => Some(self.max_content(p.node, &p.parent).min((cbw - ml - mr - extra_w).max(0.0))),
+                    (Some(l), Some(r)) => {
+                        Some((cbw - l.px(cbw) - r.px(cbw) - ml - mr - extra_w).max(0.0))
+                    }
+                    _ => Some(
+                        self.max_content(p.node, &p.parent)
+                            .min((cbw - ml - mr - extra_w).max(0.0)),
+                    ),
                 };
             }
             let mut force_h = cs.height.map(|l| content(l.px(cbh), extra_h));
@@ -845,7 +1132,17 @@ impl<'a> Layouter<'a> {
     /// The box of element `idx`. `force_w` / `force_h` fix the content width / height (the row
     /// layout of inline blocks, flex items and absolute boxes use them).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn build_x(&self, idx: usize, ps: &Style, x0: f32, y0: f32, avail: f32, pct_h: f32, force: Option<f32>, force_h: Option<f32>) -> LBox {
+    pub(crate) fn build_x(
+        &self,
+        idx: usize,
+        ps: &Style,
+        x0: f32,
+        y0: f32,
+        avail: f32,
+        pct_h: f32,
+        force: Option<f32>,
+        force_h: Option<f32>,
+    ) -> LBox {
         let mut st = self.style_of(idx, ps);
         let [mt, mr, mb, ml] = st.margin;
         let [pt, pr, pb, pl] = st.padding;
@@ -857,13 +1154,30 @@ impl<'a> Layouter<'a> {
             let auto = (avail - ml - mr - extra_w).max(0.0);
             let probe = self.build_x(idx, ps, x0, y0, avail, pct_h, Some(auto), force_h);
             let nat = natural_width(&probe, x0 + ml + bl + pl);
-            let nat = if st.flex { nat.max(self.max_content(idx, ps)).min(auto) } else { nat };
-            return self.build_x(idx, ps, x0, y0, avail, pct_h, Some(nat.ceil().min(auto)), force_h);
+            let nat = if st.flex {
+                nat.max(self.max_content(idx, ps)).min(auto)
+            } else {
+                nat
+            };
+            return self.build_x(
+                idx,
+                ps,
+                x0,
+                y0,
+                avail,
+                pct_h,
+                Some(nat.ceil().min(auto)),
+                force_h,
+            );
         }
         // the content width: forced, or the style's, clamped by min/max, or what is left
         let sized = |l: Len, base: f32, extra: f32| {
             let v = l.px(base);
-            if st.border_box { (v - extra).max(0.0) } else { v.max(0.0) }
+            if st.border_box {
+                (v - extra).max(0.0)
+            } else {
+                v.max(0.0)
+            }
         };
         let clamp_w = |w: f32| {
             let lo = st.min_w.map_or(0.0, |l| sized(l, avail, extra_w));
@@ -891,7 +1205,13 @@ impl<'a> Layouter<'a> {
         let cx = bx + bl + pl;
         let top = by + bt + pt;
         let mut cy = top;
-        let resolved_h = |l: Len, base: f32| if st.border_box { (l.px(base) - extra_h).max(0.0) } else { l.px(base).max(0.0) };
+        let resolved_h = |l: Len, base: f32| {
+            if st.border_box {
+                (l.px(base) - extra_h).max(0.0)
+            } else {
+                l.px(base).max(0.0)
+            }
+        };
         let child_pct_h = match st.height {
             Some(l) => resolved_h(l, pct_h),
             None => pct_h,
@@ -901,7 +1221,8 @@ impl<'a> Layouter<'a> {
         let is_container = st.position != 0 || idx == self.dom.body;
         if st.flex {
             let definite = force_h.or(st.height.map(|l| resolved_h(l, pct_h)));
-            let (list, used, pend) = self.flex_layout(idx, &st, cx, top, content_w, definite, child_pct_h);
+            let (list, used, pend) =
+                self.flex_layout(idx, &st, cx, top, content_w, definite, child_pct_h);
             items = list;
             pending = pend;
             cy = top + used;
@@ -919,11 +1240,17 @@ impl<'a> Layouter<'a> {
             // consecutive `inline-block` children are laid out in rows, wrapping at the content width
             let mut group: Vec<usize> = Vec::new();
             let mut pend_cell: Vec<Pend> = Vec::new();
-            let place = |group: &mut Vec<usize>, cy: &mut f32, items: &mut Vec<Item>, pend: &mut Vec<Pend>| {
+            let place = |group: &mut Vec<usize>,
+                         cy: &mut f32,
+                         items: &mut Vec<Item>,
+                         pend: &mut Vec<Pend>| {
                 if group.is_empty() {
                     return;
                 }
-                let mut boxes: Vec<LBox> = group.drain(..).map(|k| self.build_x(k, &st, 0.0, 0.0, content_w, child_pct_h, None, None)).collect();
+                let mut boxes: Vec<LBox> = group
+                    .drain(..)
+                    .map(|k| self.build_x(k, &st, 0.0, 0.0, content_w, child_pct_h, None, None))
+                    .collect();
                 let occupied = |b: &LBox| b.st.margin[3] + b.rect[2] + b.st.margin[1];
                 let mut i = 0;
                 while i < boxes.len() {
@@ -941,13 +1268,20 @@ impl<'a> Layouter<'a> {
                         2 => content_w - rw,
                         _ => 0.0,
                     }
-                        .max(0.0);
-                    let rh = boxes[i..j].iter().map(|b| b.st.margin[0] + b.rect[3] + b.st.margin[2]).fold(0.0, f32::max);
+                    .max(0.0);
+                    let rh = boxes[i..j]
+                        .iter()
+                        .map(|b| b.st.margin[0] + b.rect[3] + b.st.margin[2])
+                        .fold(0.0, f32::max);
                     let mut x = cx + off;
                     for b in &mut boxes[i..j] {
                         let ow = occupied(b);
                         // (vertical-align: middle centres a box in its row)
-                        let dy = if b.st.valign == 1 { (rh - (b.st.margin[0] + b.rect[3] + b.st.margin[2])) / 2.0 } else { 0.0 };
+                        let dy = if b.st.valign == 1 {
+                            (rh - (b.st.margin[0] + b.rect[3] + b.st.margin[2])) / 2.0
+                        } else {
+                            0.0
+                        };
                         shift(b, x, *cy + dy);
                         x += ow + st.gap[1];
                     }
@@ -972,7 +1306,13 @@ impl<'a> Layouter<'a> {
                 }
                 if cs.position >= 2 {
                     // out of the flow: it waits for its containing block, remembering where it stood
-                    pending.push(Pend { node: k, parent: st.clone(), sx: cx, sy: cy, fixed: cs.position == 3 });
+                    pending.push(Pend {
+                        node: k,
+                        parent: st.clone(),
+                        sx: cx,
+                        sy: cy,
+                        fixed: cs.position == 3,
+                    });
                     continue;
                 }
                 if kn.tag == "br" {
@@ -1030,7 +1370,14 @@ impl<'a> Layouter<'a> {
             st.radius = st.radius / 100.0 * outer_w.min(h);
             st.radius_pct = false;
         }
-        let mut b = LBox { rect: [bx, by, outer_w, h], mb, st: st.clone(), items, node: idx, pending };
+        let mut b = LBox {
+            rect: [bx, by, outer_w, h],
+            mb,
+            st: st.clone(),
+            items,
+            node: idx,
+            pending,
+        };
         if is_container {
             let cb = [bx + bl, by + bt, outer_w - bl - br, h - bt - bb];
             self.resolve_pending(&mut b, cb, false);

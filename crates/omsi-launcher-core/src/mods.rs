@@ -63,7 +63,10 @@ fn registry_file(content: &Path) -> PathBuf {
 }
 
 fn load(content: &Path) -> Registry {
-    std::fs::read(registry_file(content)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    std::fs::read(registry_file(content))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default()
 }
 
 fn save(content: &Path, r: &Registry) -> anyhow::Result<()> {
@@ -79,8 +82,24 @@ fn save(content: &Path, r: &Registry) -> anyhow::Result<()> {
 
 /// A file name of `name`, not yet taken by another mod.
 fn new_id(r: &Registry, name: &str) -> String {
-    let base: String = name.chars().map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' }).collect::<String>().trim().trim_matches('.').to_string();
-    let base = if base.is_empty() { "mod".to_string() } else { base };
+    let base: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || " -_.()".contains(c) {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .trim()
+        .trim_matches('.')
+        .to_string();
+    let base = if base.is_empty() {
+        "mod".to_string()
+    } else {
+        base
+    };
     let mut id = base.clone();
     let mut k = 2;
     while r.mods.iter().any(|m| m.id.eq_ignore_ascii_case(&id)) {
@@ -92,7 +111,10 @@ fn new_id(r: &Registry, name: &str) -> String {
 
 fn kind_of(paths: &[String]) -> Kind {
     let top = |p: &String| p.split('/').next().unwrap_or("").to_ascii_lowercase();
-    if paths.iter().any(|p| top(p) == ARCHIVES.to_ascii_lowercase()) {
+    if paths
+        .iter()
+        .any(|p| top(p) == ARCHIVES.to_ascii_lowercase())
+    {
         Kind::Archive
     } else if paths.iter().any(|p| top(p) == "maps") {
         Kind::Map
@@ -110,7 +132,11 @@ pub fn record(content: &Path, name: &str, paths: &[String]) {
         return;
     }
     let mut r = load(content);
-    match r.mods.iter_mut().find(|m| m.name.eq_ignore_ascii_case(name)) {
+    match r
+        .mods
+        .iter_mut()
+        .find(|m| m.name.eq_ignore_ascii_case(name))
+    {
         Some(m) => {
             for p in paths {
                 if !m.paths.iter().any(|x| x.eq_ignore_ascii_case(p)) {
@@ -122,7 +148,16 @@ pub fn record(content: &Path, name: &str, paths: &[String]) {
         }
         None => {
             let id = new_id(&r, name);
-            r.mods.push(Mod { id, name: name.to_string(), paths: paths.to_vec(), enabled: true, installed: install::now_secs(), bytes: 0, kind: Kind::Other, noted: true });
+            r.mods.push(Mod {
+                id,
+                name: name.to_string(),
+                paths: paths.to_vec(),
+                enabled: true,
+                installed: install::now_secs(),
+                bytes: 0,
+                kind: Kind::Other,
+                noted: true,
+            });
         }
     }
     if let Err(e) = save(content, &r) {
@@ -132,18 +167,38 @@ pub fn record(content: &Path, name: &str, paths: &[String]) {
 
 pub fn attach(content: &Path, owner: &str, paths: &[String]) {
     let top = owner.split('/').next().unwrap_or("");
-    if paths.is_empty() || !(top.eq_ignore_ascii_case("maps") || top.eq_ignore_ascii_case(ARCHIVES)) {
+    if paths.is_empty() || !(top.eq_ignore_ascii_case("maps") || top.eq_ignore_ascii_case(ARCHIVES))
+    {
         return;
     }
     let mut r = load(content);
     import_records(content, &mut r);
-    let owned = |p: &String| owner.eq_ignore_ascii_case(p) || owner.to_ascii_lowercase().starts_with(&format!("{}/", p.to_ascii_lowercase()));
-    let k = match r.mods.iter().position(|m| m.enabled && m.paths.iter().any(owned)).or_else(|| r.mods.iter().position(|m| m.paths.iter().any(owned))) {
+    let owned = |p: &String| {
+        owner.eq_ignore_ascii_case(p)
+            || owner
+                .to_ascii_lowercase()
+                .starts_with(&format!("{}/", p.to_ascii_lowercase()))
+    };
+    let k = match r
+        .mods
+        .iter()
+        .position(|m| m.enabled && m.paths.iter().any(owned))
+        .or_else(|| r.mods.iter().position(|m| m.paths.iter().any(owned)))
+    {
         Some(k) => k,
         None => {
             let name = owner.rsplit('/').next().unwrap_or(owner).to_string();
             let id = new_id(&r, &name);
-            r.mods.push(Mod { id, name, paths: vec![owner.to_string()], enabled: true, installed: 0, bytes: 0, kind: Kind::Other, noted: true });
+            r.mods.push(Mod {
+                id,
+                name,
+                paths: vec![owner.to_string()],
+                enabled: true,
+                installed: 0,
+                bytes: 0,
+                kind: Kind::Other,
+                noted: true,
+            });
             r.mods.len() - 1
         }
     };
@@ -159,7 +214,9 @@ pub fn attach(content: &Path, owner: &str, paths: &[String]) {
 
 fn size_of(p: &Path) -> u64 {
     match std::fs::symlink_metadata(p) {
-        Ok(m) if m.is_dir() => std::fs::read_dir(p).map(|rd| rd.flatten().map(|e| size_of(&e.path())).sum()).unwrap_or(0),
+        Ok(m) if m.is_dir() => std::fs::read_dir(p)
+            .map(|rd| rd.flatten().map(|e| size_of(&e.path())).sum())
+            .unwrap_or(0),
         Ok(m) => m.len(),
         Err(_) => 0,
     }
@@ -176,14 +233,24 @@ pub fn list(content: &Path) -> Vec<Mod> {
     import_records(content, &mut r);
     // (a note whose folders are gone everywhere - deleted by hand - goes too)
     let before = r.mods.len();
-    r.mods.retain(|m| m.paths.iter().any(|p| content.join(p).exists() || disabled_dir(content, &m.id).join(p).exists()));
+    r.mods.retain(|m| {
+        m.paths
+            .iter()
+            .any(|p| content.join(p).exists() || disabled_dir(content, &m.id).join(p).exists())
+    });
     if r.mods.len() != before {
         let _ = save(content, &r);
     }
     let mut out = Vec::new();
     for m in &r.mods {
         let mut m = m.clone();
-        let at = |p: &String| if m.enabled { content.join(p) } else { disabled_dir(content, &m.id).join(p) };
+        let at = |p: &String| {
+            if m.enabled {
+                content.join(p)
+            } else {
+                disabled_dir(content, &m.id).join(p)
+            }
+        };
         m.bytes = m.paths.iter().map(|p| size_of(&at(p))).sum();
         m.kind = kind_of(&m.paths);
         m.noted = true;
@@ -192,14 +259,22 @@ pub fn list(content: &Path) -> Vec<Mod> {
         }
         out.push(m);
     }
-    let claimed: Vec<String> = r.mods.iter().flat_map(|m| m.paths.iter().map(|p| p.to_ascii_lowercase())).collect();
+    let claimed: Vec<String> = r
+        .mods
+        .iter()
+        .flat_map(|m| m.paths.iter().map(|p| p.to_ascii_lowercase()))
+        .collect();
     let is_claimed = |rel: &str| {
         let rel = rel.to_ascii_lowercase();
-        claimed.iter().any(|c| *c == rel || rel.starts_with(&format!("{c}/")) || c.starts_with(&format!("{rel}/")))
+        claimed.iter().any(|c| {
+            *c == rel || rel.starts_with(&format!("{c}/")) || c.starts_with(&format!("{rel}/"))
+        })
     };
     let mut found = Vec::new();
     for folder in omsi_cfg::CONTENT_FOLDERS {
-        let Ok(rd) = std::fs::read_dir(content.join(folder)) else { continue };
+        let Ok(rd) = std::fs::read_dir(content.join(folder)) else {
+            continue;
+        };
         for e in rd.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             if name.starts_with('.') || !e.path().is_dir() {
@@ -219,7 +294,16 @@ pub fn list(content: &Path) -> Vec<Mod> {
         if !files.is_empty() {
             let paths: Vec<String> = files.iter().map(|f| format!("{folder}/{f}")).collect();
             let bytes = paths.iter().map(|p| size_of(&content.join(p))).sum();
-            out.push(Mod { id: format!("{LOOSE}{folder}"), name: trf("{folder} (loose files)", &[("folder", &folder)]), kind: kind_of(&paths), paths, bytes, enabled: true, installed: 0, noted: false });
+            out.push(Mod {
+                id: format!("{LOOSE}{folder}"),
+                name: trf("{folder} (loose files)", &[("folder", &folder)]),
+                kind: kind_of(&paths),
+                paths,
+                bytes,
+                enabled: true,
+                installed: 0,
+                noted: false,
+            });
         }
     }
     if let Ok(rd) = std::fs::read_dir(content.join(ARCHIVES)) {
@@ -233,7 +317,16 @@ pub fn list(content: &Path) -> Vec<Mod> {
     }
     for (name, rel) in found {
         let paths = vec![rel.clone()];
-        out.push(Mod { id: format!("found:{rel}"), name, bytes: size_of(&content.join(&rel)), kind: kind_of(&paths), paths, enabled: true, installed: 0, noted: false });
+        out.push(Mod {
+            id: format!("found:{rel}"),
+            name,
+            bytes: size_of(&content.join(&rel)),
+            kind: kind_of(&paths),
+            paths,
+            enabled: true,
+            installed: 0,
+            noted: false,
+        });
     }
     out
 }
@@ -243,7 +336,9 @@ const LOOSE: &str = "found-loose:";
 
 /// The files of `folder` (not its subfolders) no note claims.
 fn loose_files(content: &Path, folder: &str, is_claimed: &dyn Fn(&str) -> bool) -> Vec<String> {
-    let Ok(rd) = std::fs::read_dir(content.join(folder)) else { return Vec::new() };
+    let Ok(rd) = std::fs::read_dir(content.join(folder)) else {
+        return Vec::new();
+    };
     let mut out: Vec<String> = rd
         .flatten()
         .filter(|e| e.path().is_file())
@@ -258,19 +353,42 @@ fn loose_files(content: &Path, folder: &str, is_claimed: &dyn Fn(&str) -> bool) 
 /// taken over.
 fn import_records(content: &Path, r: &mut Registry) {
     let dir = content.join("Mods").join(install::RECORDS);
-    let Ok(rd) = std::fs::read_dir(&dir) else { return };
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return;
+    };
     let mut changed = false;
     for e in rd.flatten() {
-        let Some(name) = e.file_name().to_string_lossy().strip_suffix(".txt").map(str::to_string) else { continue };
+        let Some(name) = e
+            .file_name()
+            .to_string_lossy()
+            .strip_suffix(".txt")
+            .map(str::to_string)
+        else {
+            continue;
+        };
         if r.mods.iter().any(|m| m.name.eq_ignore_ascii_case(&name)) {
             continue;
         }
-        let paths: Vec<String> = std::fs::read_to_string(e.path()).unwrap_or_default().lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty() && content.join(l).exists()).collect();
+        let paths: Vec<String> = std::fs::read_to_string(e.path())
+            .unwrap_or_default()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty() && content.join(l).exists())
+            .collect();
         if paths.is_empty() {
             continue;
         }
         let id = new_id(r, &name);
-        r.mods.push(Mod { id, name, paths, enabled: true, installed: 0, bytes: 0, kind: Kind::Other, noted: true });
+        r.mods.push(Mod {
+            id,
+            name,
+            paths,
+            enabled: true,
+            installed: 0,
+            bytes: 0,
+            kind: Kind::Other,
+            noted: true,
+        });
         changed = true;
     }
     if changed {
@@ -285,23 +403,54 @@ fn take(content: &Path, r: &mut Registry, id: &str) -> anyhow::Result<usize> {
     }
     if let Some(folder) = id.strip_prefix(LOOSE) {
         // (a folder's loose files: noted together, as the list shows them)
-        let claimed: Vec<String> = r.mods.iter().flat_map(|m| m.paths.iter().map(|p| p.to_ascii_lowercase())).collect();
+        let claimed: Vec<String> = r
+            .mods
+            .iter()
+            .flat_map(|m| m.paths.iter().map(|p| p.to_ascii_lowercase()))
+            .collect();
         let is_claimed = |rel: &str| claimed.iter().any(|c| c.eq_ignore_ascii_case(rel));
-        let paths: Vec<String> = loose_files(content, folder, &is_claimed).into_iter().map(|f| format!("{folder}/{f}")).collect();
-        if paths.is_empty() || !omsi_cfg::CONTENT_FOLDERS.iter().any(|f| f.eq_ignore_ascii_case(folder)) {
+        let paths: Vec<String> = loose_files(content, folder, &is_claimed)
+            .into_iter()
+            .map(|f| format!("{folder}/{f}"))
+            .collect();
+        if paths.is_empty()
+            || !omsi_cfg::CONTENT_FOLDERS
+                .iter()
+                .any(|f| f.eq_ignore_ascii_case(folder))
+        {
             anyhow::bail!(trf("no loose files in {folder}", &[("folder", &folder)]));
         }
         let new = new_id(r, &format!("{folder} (loose files)"));
-        r.mods.push(Mod { id: new, name: format!("{folder} (loose files)"), paths, enabled: true, installed: 0, bytes: 0, kind: Kind::Other, noted: true });
+        r.mods.push(Mod {
+            id: new,
+            name: format!("{folder} (loose files)"),
+            paths,
+            enabled: true,
+            installed: 0,
+            bytes: 0,
+            kind: Kind::Other,
+            noted: true,
+        });
         return Ok(r.mods.len() - 1);
     }
-    let rel = id.strip_prefix("found:").ok_or_else(|| anyhow::anyhow!("no mod {id}"))?;
+    let rel = id
+        .strip_prefix("found:")
+        .ok_or_else(|| anyhow::anyhow!("no mod {id}"))?;
     if install::check_installed_rel(rel).is_err() || !content.join(rel).exists() {
         anyhow::bail!(trf("{rel} is not in the content folder", &[("rel", &rel)]));
     }
     let name = rel.rsplit('/').next().unwrap_or(rel).to_string();
     let new = new_id(r, &name);
-    r.mods.push(Mod { id: new, name, paths: vec![rel.to_string()], enabled: true, installed: 0, bytes: 0, kind: Kind::Other, noted: true });
+    r.mods.push(Mod {
+        id: new,
+        name,
+        paths: vec![rel.to_string()],
+        enabled: true,
+        installed: 0,
+        bytes: 0,
+        kind: Kind::Other,
+        noted: true,
+    });
     Ok(r.mods.len() - 1)
 }
 
@@ -321,14 +470,21 @@ fn move_path(from: &Path, to: &Path) -> anyhow::Result<()> {
     if to.exists() {
         anyhow::bail!(trf("{path} is in the way", &[("path", &to.display())]));
     }
-    std::fs::rename(from, to).map_err(|e| anyhow::anyhow!("moving {} to {}: {e}", from.display(), to.display()))
+    std::fs::rename(from, to)
+        .map_err(|e| anyhow::anyhow!("moving {} to {}: {e}", from.display(), to.display()))
 }
 
 /// The archives among `paths` no longer read by the lists (switched off or removed).
 fn unmount(content: &Path, paths: &[String]) {
-    for p in paths.iter().filter(|p| p.to_ascii_lowercase().starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()))) {
+    for p in paths.iter().filter(|p| {
+        p.to_ascii_lowercase()
+            .starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()))
+    }) {
         let zip = content.join(p);
-        for root in omsi_cfg::content_roots().into_iter().filter(|r| r.starts_with(&zip)) {
+        for root in omsi_cfg::content_roots()
+            .into_iter()
+            .filter(|r| r.starts_with(&zip))
+        {
             omsi_cfg::remove_content_root(&root);
         }
     }
@@ -349,7 +505,11 @@ fn set_enabled_in(content: &Path, id: &str, on: bool, roots: &[PathBuf]) -> anyh
     if m.enabled == on {
         return Ok(m.name);
     }
-    let kept = if on { Vec::new() } else { plan_in(content, &r, k, roots, false).kept };
+    let kept = if on {
+        Vec::new()
+    } else {
+        plan_in(content, &r, k, roots, false).kept
+    };
     let off = disabled_dir(content, &m.id);
     let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
     if !on {
@@ -357,7 +517,11 @@ fn set_enabled_in(content: &Path, id: &str, on: bool, roots: &[PathBuf]) -> anyh
     }
     let mut shared_elsewhere = Vec::new();
     for p in m.paths.iter().filter(|p| !kept.contains(p)) {
-        let (from, to) = if on { (off.join(p), content.join(p)) } else { (content.join(p), off.join(p)) };
+        let (from, to) = if on {
+            (off.join(p), content.join(p))
+        } else {
+            (content.join(p), off.join(p))
+        };
         if on && p.to_ascii_lowercase().starts_with("hofs/") && to.exists() {
             shared_elsewhere.push(p.clone());
             continue;
@@ -372,7 +536,10 @@ fn set_enabled_in(content: &Path, id: &str, on: bool, roots: &[PathBuf]) -> anyh
         moved.push((from, to));
     }
     if on {
-        for p in m.paths.iter().filter(|p| p.to_ascii_lowercase().starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()))) {
+        for p in m.paths.iter().filter(|p| {
+            p.to_ascii_lowercase()
+                .starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()))
+        }) {
             crate::mount_archive(&content.join(p));
         }
         let _ = std::fs::remove_dir_all(&off);
@@ -401,7 +568,13 @@ fn plan_in(content: &Path, r: &Registry, k: usize, roots: &[PathBuf], full: bool
     let off = disabled_dir(content, &m.id);
     // (a switched-off map is the copy under Mods/disabled: a map of the same name in the content
     // folder then is another one, installed while it was off, and counts among the others)
-    let at = |p: &String| if !m.enabled && off.join(p).symlink_metadata().is_ok() { vec![off.join(p)] } else { vec![content.join(p), off.join(p)] };
+    let at = |p: &String| {
+        if !m.enabled && off.join(p).symlink_metadata().is_ok() {
+            vec![off.join(p)]
+        } else {
+            vec![content.join(p), off.join(p)]
+        }
+    };
     let mut lost = false;
     let mut mine: Vec<PathBuf> = Vec::new();
     for p in &m.paths {
@@ -411,26 +584,69 @@ fn plan_in(content: &Path, r: &Registry, k: usize, roots: &[PathBuf], full: bool
         } else if lower.starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase())) {
             let zip = content.join(p);
             for root in roots.iter().filter(|x| x.starts_with(&zip)) {
-                mine.extend(map_uses::child(root, "maps", &mut false).map(|d| map_uses::subdirs(&d, &mut false)).unwrap_or_default());
+                mine.extend(
+                    map_uses::child(root, "maps", &mut false)
+                        .map(|d| map_uses::subdirs(&d, &mut false))
+                        .unwrap_or_default(),
+                );
             }
         }
     }
-    let mut parents: Vec<PathBuf> = roots.iter().chain([&content.to_path_buf()]).filter_map(|x| map_uses::child(x, "maps", &mut lost)).collect();
+    let mut parents: Vec<PathBuf> = roots
+        .iter()
+        .chain([&content.to_path_buf()])
+        .filter_map(|x| map_uses::child(x, "maps", &mut lost))
+        .collect();
     for d in map_uses::subdirs(&content.join("Mods").join(DISABLED), &mut lost) {
         parents.extend(map_uses::child(&d, "maps", &mut lost));
     }
     let mut others: Vec<PathBuf> = Vec::new();
-    for d in parents.iter().flat_map(|p| map_uses::subdirs(p, &mut lost)).collect::<Vec<_>>() {
+    for d in parents
+        .iter()
+        .flat_map(|p| map_uses::subdirs(p, &mut lost))
+        .collect::<Vec<_>>()
+    {
         if !mine.iter().chain(&others).any(|x| map_uses::same(x, &d)) {
             others.push(d);
         }
     }
-    let foreign: Vec<String> = r.mods.iter().enumerate().filter(|(i, _)| *i != k).flat_map(|(_, x)| x.paths.clone()).collect();
-    let archive = |p: &String| p.to_ascii_lowercase().starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()));
-    let unread = std::fs::read_dir(content.join(ARCHIVES)).map(|rd| rd.flatten().any(|e| e.path().is_file() && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("zip")) && !roots.iter().any(|x| x.starts_with(e.path())))).unwrap_or_else(|_| content.join(ARCHIVES).symlink_metadata().is_ok());
-    let blind = lost || unread || r.mods.iter().enumerate().any(|(i, x)| i != k && !x.enabled && x.paths.iter().any(archive));
+    let foreign: Vec<String> = r
+        .mods
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != k)
+        .flat_map(|(_, x)| x.paths.clone())
+        .collect();
+    let archive = |p: &String| {
+        p.to_ascii_lowercase()
+            .starts_with(&format!("{}/", ARCHIVES.to_ascii_lowercase()))
+    };
+    let unread = std::fs::read_dir(content.join(ARCHIVES))
+        .map(|rd| {
+            rd.flatten().any(|e| {
+                e.path().is_file()
+                    && e.path()
+                        .extension()
+                        .is_some_and(|x| x.eq_ignore_ascii_case("zip"))
+                    && !roots.iter().any(|x| x.starts_with(e.path()))
+            })
+        })
+        .unwrap_or_else(|_| content.join(ARCHIVES).symlink_metadata().is_ok());
+    let blind = lost
+        || unread
+        || r.mods
+            .iter()
+            .enumerate()
+            .any(|(i, x)| i != k && !x.enabled && x.paths.iter().any(archive));
     let maps = !mine.is_empty() || matches!(kind_of(&m.paths), Kind::Map | Kind::Archive);
-    let scope = map_uses::Scope { mine, others, owned: &m.paths, foreign, blind, maps };
+    let scope = map_uses::Scope {
+        mine,
+        others,
+        owned: &m.paths,
+        foreign,
+        blind,
+        maps,
+    };
     let mut plan = map_uses::plan(content, roots, &scope, full);
     plan.bytes = plan.freed.iter().map(|p| size_of(&content.join(p))).sum();
     plan
@@ -452,7 +668,12 @@ fn remove_in(content: &Path, id: &str, roots: &[PathBuf]) -> anyhow::Result<Stri
     // (the kept folders of a switched-off map go back before anything is deleted; one whose
     // place in the content folder is taken - another mod's folder of the same name, installed
     // while the map was off - stops the delete before anything moves, so neither copy is lost)
-    let back: Vec<(PathBuf, PathBuf)> = plan.kept.iter().map(|p| (off.join(p), content.join(p))).filter(|(from, _)| here(from)).collect();
+    let back: Vec<(PathBuf, PathBuf)> = plan
+        .kept
+        .iter()
+        .map(|p| (off.join(p), content.join(p)))
+        .filter(|(from, _)| here(from))
+        .collect();
     if let Some((_, to)) = back.iter().find(|(_, to)| here(to)) {
         anyhow::bail!(trf("{path} is in the way", &[("path", &to.display())]));
     }
@@ -464,12 +685,26 @@ fn remove_in(content: &Path, id: &str, roots: &[PathBuf]) -> anyhow::Result<Stri
         install::check_installed_rel(p)?;
         // (a switched-off mod's folder is the one under Mods/disabled: a folder of the same
         // name in the content folder then is another mod's, installed while it was off)
-        let places = if !m.enabled && here(&off.join(p)) { vec![off.join(p)] } else { vec![content.join(p), off.join(p)] };
+        let places = if !m.enabled && here(&off.join(p)) {
+            vec![off.join(p)]
+        } else {
+            vec![content.join(p), off.join(p)]
+        };
         for at in places {
             if at.is_dir() {
-                std::fs::remove_dir_all(&at).map_err(|e| anyhow::anyhow!(trf("deleting {path}: {e}", &[("path", &at.display()), ("e", &e)])))?;
+                std::fs::remove_dir_all(&at).map_err(|e| {
+                    anyhow::anyhow!(trf(
+                        "deleting {path}: {e}",
+                        &[("path", &at.display()), ("e", &e)]
+                    ))
+                })?;
             } else if at.exists() {
-                std::fs::remove_file(&at).map_err(|e| anyhow::anyhow!(trf("deleting {path}: {e}", &[("path", &at.display()), ("e", &e)])))?;
+                std::fs::remove_file(&at).map_err(|e| {
+                    anyhow::anyhow!(trf(
+                        "deleting {path}: {e}",
+                        &[("path", &at.display()), ("e", &e)]
+                    ))
+                })?;
             }
         }
     }
@@ -478,11 +713,23 @@ fn remove_in(content: &Path, id: &str, roots: &[PathBuf]) -> anyhow::Result<Stri
     let installed = content.join("Mods").join("installed").join(&m.name);
     let _ = std::fs::remove_dir_all(&installed);
     let _ = std::fs::remove_file(&installed);
-    let _ = std::fs::remove_file(content.join("Mods").join(install::RECORDS).join(format!("{}.txt", m.name)));
+    let _ = std::fs::remove_file(
+        content
+            .join("Mods")
+            .join(install::RECORDS)
+            .join(format!("{}.txt", m.name)),
+    );
     save(content, &r)?;
-    for p in plan.freed.iter().filter(|p| install::check_installed_rel(p).is_ok()) {
+    for p in plan
+        .freed
+        .iter()
+        .filter(|p| install::check_installed_rel(p).is_ok())
+    {
         if let Err(e) = std::fs::remove_dir_all(content.join(p)) {
-            crate::log_to_file(&format!("mods: {p}, used by {} alone, was not deleted: {e}", m.name));
+            crate::log_to_file(&format!(
+                "mods: {p}, used by {} alone, was not deleted: {e}",
+                m.name
+            ));
         }
     }
     omsi_cfg::content_changed();
@@ -496,7 +743,14 @@ mod tests {
     fn content() -> PathBuf {
         static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let d = std::env::temp_dir().join(format!("openomsi_mods_{}_{n}_{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let d = std::env::temp_dir().join(format!(
+            "openomsi_mods_{}_{n}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         std::fs::create_dir_all(d.join("Vehicles/Big Bus")).unwrap();
         std::fs::write(d.join("Vehicles/Big Bus/big.bus"), b"[name]").unwrap();
         std::fs::create_dir_all(d.join("maps/Hill Town")).unwrap();
@@ -514,13 +768,27 @@ mod tests {
         std::fs::write(c.join("Fonts/a.oft"), b"x").unwrap();
         std::fs::write(c.join("Fonts/b.bmp"), b"x").unwrap();
         std::fs::write(c.join("Fonts/mine.oft"), b"x").unwrap();
-        record(&c, "Bus with font", &["Vehicles/Big Bus".into(), "Fonts/mine.oft".into()]);
+        record(
+            &c,
+            "Bus with font",
+            &["Vehicles/Big Bus".into(), "Fonts/mine.oft".into()],
+        );
         let l = list(&c);
-        let loose = l.iter().find(|m| m.id == "found-loose:Fonts").expect("the loose fonts");
+        let loose = l
+            .iter()
+            .find(|m| m.id == "found-loose:Fonts")
+            .expect("the loose fonts");
         assert_eq!(loose.paths, ["Fonts/a.oft", "Fonts/b.bmp"]);
         set_enabled(&c, "found-loose:Fonts", false).unwrap();
-        assert!(!c.join("Fonts/a.oft").exists() && !c.join("Fonts/b.bmp").exists() && c.join("Fonts/mine.oft").exists());
-        let off = list(&c).into_iter().find(|m| m.name == "Fonts (loose files)").unwrap();
+        assert!(
+            !c.join("Fonts/a.oft").exists()
+                && !c.join("Fonts/b.bmp").exists()
+                && c.join("Fonts/mine.oft").exists()
+        );
+        let off = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Fonts (loose files)")
+            .unwrap();
         set_enabled(&c, &off.id, true).unwrap();
         assert!(c.join("Fonts/a.oft").exists());
         std::fs::remove_dir_all(c).unwrap();
@@ -536,7 +804,11 @@ mod tests {
         assert_eq!(noted[0].name, "BigBus_v2.zip");
         assert_eq!(noted[0].kind, Kind::Bus);
         assert!(noted[0].bytes > 0);
-        let found: Vec<&str> = l.iter().filter(|m| !m.noted).map(|m| m.paths[0].as_str()).collect();
+        let found: Vec<&str> = l
+            .iter()
+            .filter(|m| !m.noted)
+            .map(|m| m.paths[0].as_str())
+            .collect();
         assert!(found.contains(&"maps/Hill Town") && found.contains(&"Vehicles/Hand Made"));
         assert!(!found.contains(&"Vehicles/Big Bus"));
         std::fs::remove_dir_all(c).unwrap();
@@ -549,7 +821,12 @@ mod tests {
         let id = list(&c).into_iter().find(|m| m.noted).unwrap().id;
         set_enabled(&c, &id, false).unwrap();
         assert!(!c.join("Vehicles/Big Bus").exists());
-        assert!(c.join("Mods/disabled").join(&id).join("Vehicles/Big Bus/big.bus").exists());
+        assert!(
+            c.join("Mods/disabled")
+                .join(&id)
+                .join("Vehicles/Big Bus/big.bus")
+                .exists()
+        );
         let m = list(&c).into_iter().find(|m| m.id == id).unwrap();
         assert!(!m.enabled && m.bytes > 0);
         set_enabled(&c, &id, true).unwrap();
@@ -563,20 +840,34 @@ mod tests {
     #[test]
     fn a_switched_off_mod_is_not_installed_again_from_the_inbox() {
         let c = content();
-        let id = list(&c).into_iter().find(|m| m.paths == ["Vehicles/Big Bus"]).unwrap().id;
+        let id = list(&c)
+            .into_iter()
+            .find(|m| m.paths == ["Vehicles/Big Bus"])
+            .unwrap()
+            .id;
         set_enabled(&c, &id, false).unwrap();
         assert!(c.join("Mods").join(DISABLED).is_dir());
-        assert!(crate::inbox_entries(&c).is_empty(), "{:?}", crate::inbox_entries(&c));
+        assert!(
+            crate::inbox_entries(&c).is_empty(),
+            "{:?}",
+            crate::inbox_entries(&c)
+        );
         std::fs::remove_dir_all(c).unwrap();
     }
 
     #[test]
     fn a_found_folder_is_switched_off_and_removed_by_itself() {
         let c = content();
-        let found = list(&c).into_iter().find(|m| m.paths == ["maps/Hill Town"]).unwrap();
+        let found = list(&c)
+            .into_iter()
+            .find(|m| m.paths == ["maps/Hill Town"])
+            .unwrap();
         set_enabled(&c, &found.id, false).unwrap();
         assert!(!c.join("maps/Hill Town").exists());
-        let noted = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap();
+        let noted = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Hill Town")
+            .unwrap();
         assert!(noted.noted && !noted.enabled);
         remove(&c, &noted.id).unwrap();
         assert!(!c.join("Mods/disabled").join(&noted.id).exists());
@@ -593,7 +884,10 @@ mod tests {
         std::fs::write(c.join("HOFs/Hill Town.hof"), b"[name]").unwrap();
         std::fs::write(c.join("HOFs/Other.hof"), b"[name]").unwrap();
         attach(&c, "maps/Hill Town", &["HOFs/Hill Town.hof".into()]);
-        let map = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap();
+        let map = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Hill Town")
+            .unwrap();
         assert!(map.noted && map.kind == Kind::Map);
         assert_eq!(map.paths, ["maps/Hill Town", "HOFs/Hill Town.hof"]);
         remove(&c, &map.id).unwrap();
@@ -602,8 +896,15 @@ mod tests {
         record(&c, "Town pack.zip", &["Archives/Town pack.zip".into()]);
         std::fs::create_dir_all(c.join("Archives")).unwrap();
         std::fs::write(c.join("Archives/Town pack.zip"), b"x").unwrap();
-        attach(&c, "Archives/Town pack.zip/maps/Town", &["HOFs/Other.hof".into()]);
-        let pack = list(&c).into_iter().find(|m| m.name == "Town pack.zip").unwrap();
+        attach(
+            &c,
+            "Archives/Town pack.zip/maps/Town",
+            &["HOFs/Other.hof".into()],
+        );
+        let pack = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Town pack.zip")
+            .unwrap();
         assert_eq!(pack.paths, ["Archives/Town pack.zip", "HOFs/Other.hof"]);
         assert!(list(&c).iter().all(|m| m.name != "Town"));
         std::fs::remove_dir_all(c).unwrap();
@@ -616,14 +917,23 @@ mod tests {
         std::fs::create_dir_all(c.join("HOFs")).unwrap();
         std::fs::write(c.join("HOFs/Depot.hof"), b"[name]").unwrap();
         attach(&c, "maps/Hill Town", &["HOFs/Depot.hof".into()]);
-        let hill = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap();
+        let hill = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Hill Town")
+            .unwrap();
         set_enabled(&c, &hill.id, false).unwrap();
         std::fs::write(c.join("HOFs/Depot.hof"), b"[name]").unwrap();
         attach(&c, "maps/Valley", &["HOFs/Depot.hof".into()]);
         set_enabled(&c, &hill.id, true).unwrap();
         let l = list(&c);
-        assert_eq!(l.iter().find(|m| m.name == "Hill Town").unwrap().paths, ["maps/Hill Town"]);
-        assert_eq!(l.iter().find(|m| m.name == "Valley").unwrap().paths, ["maps/Valley", "HOFs/Depot.hof"]);
+        assert_eq!(
+            l.iter().find(|m| m.name == "Hill Town").unwrap().paths,
+            ["maps/Hill Town"]
+        );
+        assert_eq!(
+            l.iter().find(|m| m.name == "Valley").unwrap().paths,
+            ["maps/Valley", "HOFs/Depot.hof"]
+        );
         assert!(c.join("maps/Hill Town/global.cfg").exists() && c.join("HOFs/Depot.hof").exists());
         std::fs::remove_dir_all(c).unwrap();
     }
@@ -655,17 +965,47 @@ mod tests {
     fn two_maps() -> (PathBuf, PathBuf, String) {
         let c = content();
         let omsi = c.with_extension("omsi");
-        put(&omsi.join("maps/Stock/tile_0_0.map"), "[object]\n0\nSceneryobjects\\Generic\\x.sco\n");
+        put(
+            &omsi.join("maps/Stock/tile_0_0.map"),
+            "[object]\n0\nSceneryobjects\\Generic\\x.sco\n",
+        );
         put(&omsi.join("Sceneryobjects/Generic/x.sco"), "");
-        put(&c.join("maps/Hill Town/tile_0_0.map"), "[object]\n0\nSceneryobjects\\PackA\\a.sco\n1\n\n[object]\n0\nsceneryobjects\\SHARED\\s.sco\n\n[spline]\n0\nSplines\\RoadA\\r.sli\n\n[object]\n0\nSceneryobjects\\Generic\\x.sco\n\n[object]\n0\nSceneryobjects\\Linked\\l.sco\n");
-        put(&c.join("maps/Valley/Chrono/Summer/tile_0_0.map"), "[spline]\n0\nSplines\\ChronoB\\c.sli\n");
-        put(&c.join("maps/Valley/parklist_p.txt"), "Sceneryobjects\\Shared\\t.sco\n");
-        for d in ["Sceneryobjects/PackA/model", "Sceneryobjects/Shared", "Sceneryobjects/Generic", "Sceneryobjects/Linked", "Splines/RoadA", "Splines/ChronoB"] {
+        put(
+            &c.join("maps/Hill Town/tile_0_0.map"),
+            "[object]\n0\nSceneryobjects\\PackA\\a.sco\n1\n\n[object]\n0\nsceneryobjects\\SHARED\\s.sco\n\n[spline]\n0\nSplines\\RoadA\\r.sli\n\n[object]\n0\nSceneryobjects\\Generic\\x.sco\n\n[object]\n0\nSceneryobjects\\Linked\\l.sco\n",
+        );
+        put(
+            &c.join("maps/Valley/Chrono/Summer/tile_0_0.map"),
+            "[spline]\n0\nSplines\\ChronoB\\c.sli\n",
+        );
+        put(
+            &c.join("maps/Valley/parklist_p.txt"),
+            "Sceneryobjects\\Shared\\t.sco\n",
+        );
+        for d in [
+            "Sceneryobjects/PackA/model",
+            "Sceneryobjects/Shared",
+            "Sceneryobjects/Generic",
+            "Sceneryobjects/Linked",
+            "Splines/RoadA",
+            "Splines/ChronoB",
+        ] {
             put(&c.join(d).join("f.txt"), "1234");
         }
-        put(&c.join("Sceneryobjects/Other/o.sco"), "[mesh]\n..\\..\\Linked\\model\\m.o3d\n");
-        record(&c, "Hill Town", &["maps/Hill Town".into(), "Sceneryobjects/Shared".into()]);
-        let id = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap().id;
+        put(
+            &c.join("Sceneryobjects/Other/o.sco"),
+            "[mesh]\n..\\..\\Linked\\model\\m.o3d\n",
+        );
+        record(
+            &c,
+            "Hill Town",
+            &["maps/Hill Town".into(), "Sceneryobjects/Shared".into()],
+        );
+        let id = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Hill Town")
+            .unwrap()
+            .id;
         (c, omsi, id)
     }
 
@@ -683,10 +1023,21 @@ mod tests {
         for gone in ["maps/Hill Town", "Sceneryobjects/PackA", "Splines/RoadA"] {
             assert!(!c.join(gone).exists(), "{gone}");
         }
-        for kept in ["Sceneryobjects/Shared", "Sceneryobjects/Generic", "Sceneryobjects/Linked", "Sceneryobjects/Other", "Splines/ChronoB", "maps/Valley"] {
+        for kept in [
+            "Sceneryobjects/Shared",
+            "Sceneryobjects/Generic",
+            "Sceneryobjects/Linked",
+            "Sceneryobjects/Other",
+            "Splines/ChronoB",
+            "maps/Valley",
+        ] {
             assert!(c.join(kept).exists(), "{kept}");
         }
-        assert!(list(&c).iter().any(|m| m.paths == ["Sceneryobjects/Shared"] && !m.noted));
+        assert!(
+            list(&c)
+                .iter()
+                .any(|m| m.paths == ["Sceneryobjects/Shared"] && !m.noted)
+        );
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
@@ -695,7 +1046,11 @@ mod tests {
     fn without_the_omsi_folder_only_the_shared_objects_are_kept() {
         let (c, omsi, id) = two_maps();
         remove_in(&c, &id, &[c.clone()]).unwrap();
-        assert!(!c.join("maps/Hill Town").exists() && c.join("Sceneryobjects/Shared").exists() && c.join("Sceneryobjects/PackA").exists());
+        assert!(
+            !c.join("maps/Hill Town").exists()
+                && c.join("Sceneryobjects/Shared").exists()
+                && c.join("Sceneryobjects/PackA").exists()
+        );
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
@@ -705,12 +1060,21 @@ mod tests {
         let (c, omsi, id) = two_maps();
         let roots = [c.clone(), omsi.clone()];
         set_enabled_in(&c, &id, false, &roots).unwrap();
-        assert!(!c.join("maps/Hill Town").exists() && c.join("Sceneryobjects/Shared/f.txt").exists());
+        assert!(
+            !c.join("maps/Hill Town").exists() && c.join("Sceneryobjects/Shared/f.txt").exists()
+        );
         std::fs::remove_dir_all(c.join("maps/Valley")).unwrap();
         set_enabled_in(&c, &id, true, &roots).unwrap();
-        assert!(c.join("maps/Hill Town/tile_0_0.map").exists() && c.join("Sceneryobjects/Shared/f.txt").exists());
+        assert!(
+            c.join("maps/Hill Town/tile_0_0.map").exists()
+                && c.join("Sceneryobjects/Shared/f.txt").exists()
+        );
         remove_in(&c, &id, &roots).unwrap();
-        assert!(!c.join("Sceneryobjects/Shared").exists() && !c.join("Splines/RoadA").exists() && c.join("Splines/ChronoB").exists());
+        assert!(
+            !c.join("Sceneryobjects/Shared").exists()
+                && !c.join("Splines/RoadA").exists()
+                && c.join("Splines/ChronoB").exists()
+        );
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
@@ -721,9 +1085,15 @@ mod tests {
         let roots = [c.clone(), omsi.clone()];
         set_enabled_in(&c, "found:Sceneryobjects/Linked", false, &roots).unwrap();
         assert!(!c.join("Sceneryobjects/Linked").exists());
-        let pack = list(&c).into_iter().find(|m| m.paths == ["Sceneryobjects/Linked"] && !m.enabled).unwrap();
+        let pack = list(&c)
+            .into_iter()
+            .find(|m| m.paths == ["Sceneryobjects/Linked"] && !m.enabled)
+            .unwrap();
         remove_in(&c, &pack.id, &roots).unwrap();
-        assert!(!c.join("Mods/disabled").join(&pack.id).exists() && !c.join("Sceneryobjects/Linked").exists());
+        assert!(
+            !c.join("Mods/disabled").join(&pack.id).exists()
+                && !c.join("Sceneryobjects/Linked").exists()
+        );
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
@@ -732,8 +1102,14 @@ mod tests {
     fn objects_reached_through_another_pack_or_an_unread_archive_stay() {
         let (c, omsi, id) = two_maps();
         let roots = [c.clone(), omsi.clone()];
-        put(&c.join("maps/Valley/tile_1_0.map"), "[object]\r0\r.\\Sceneryobjects\\ValPack\\v.sco\r");
-        put(&c.join("Sceneryobjects/ValPack/v.sco"), "[mesh]\r\n..\\..\\PackA\\model\\a.o3d\r\n");
+        put(
+            &c.join("maps/Valley/tile_1_0.map"),
+            "[object]\r0\r.\\Sceneryobjects\\ValPack\\v.sco\r",
+        );
+        put(
+            &c.join("Sceneryobjects/ValPack/v.sco"),
+            "[mesh]\r\n..\\..\\PackA\\model\\a.o3d\r\n",
+        );
         record(&c, "Hill Town", &["Splines/RoadA".into()]);
         let mut r = load(&c);
         let k = take(&c, &mut r, &id).unwrap();
@@ -748,7 +1124,10 @@ mod tests {
         let mut r = load(&c);
         let k = take(&c, &mut r, &id).unwrap();
         let plan = plan_in(&c, &r, k, &roots, true);
-        assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared", "Splines/RoadA"], "{plan:?}");
+        assert!(
+            plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared", "Splines/RoadA"],
+            "{plan:?}"
+        );
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
@@ -758,8 +1137,14 @@ mod tests {
         let (c, omsi, id) = two_maps();
         let roots = [c.clone(), omsi.clone()];
         record(&c, "Hill Town", &["Sceneryobjects/Base".into()]);
-        put(&c.join("Sceneryobjects/Base/b.sco"), "[mesh]\n..\\..\\PackA\\x.o3d\n");
-        put(&c.join("Sceneryobjects/Other/o2.sco"), "[mesh]\n..\\..\\Base\\y.o3d\n");
+        put(
+            &c.join("Sceneryobjects/Base/b.sco"),
+            "[mesh]\n..\\..\\PackA\\x.o3d\n",
+        );
+        put(
+            &c.join("Sceneryobjects/Other/o2.sco"),
+            "[mesh]\n..\\..\\Base\\y.o3d\n",
+        );
         let mut r = load(&c);
         let k = take(&c, &mut r, &id).unwrap();
         let plan = plan_in(&c, &r, k, &roots, true);
@@ -767,7 +1152,10 @@ mod tests {
         assert_eq!(plan.freed, ["Splines/RoadA"]);
         put(&c.join("Archives/Off.zip"), "x");
         let plan = plan_in(&c, &r, k, &roots, true);
-        assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared", "Sceneryobjects/Base"], "{plan:?}");
+        assert!(
+            plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared", "Sceneryobjects/Base"],
+            "{plan:?}"
+        );
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
@@ -776,7 +1164,10 @@ mod tests {
     fn a_map_or_pack_not_read_to_the_end_keeps_everything() {
         let (c, omsi, id) = two_maps();
         let roots = [c.clone(), omsi.clone()];
-        put(&c.join("Mods/disabled/Old/Sceneryobjects/Old/o.sco"), "[mesh]\n..\\..\\PackA\\a.o3d\n");
+        put(
+            &c.join("Mods/disabled/Old/Sceneryobjects/Old/o.sco"),
+            "[mesh]\n..\\..\\PackA\\a.o3d\n",
+        );
         let mut r = load(&c);
         let k = take(&c, &mut r, &id).unwrap();
         assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Splines/RoadA"]);
@@ -784,7 +1175,10 @@ mod tests {
         let deep: PathBuf = (0..20).fold(c.join("maps/Valley"), |p, i| p.join(i.to_string()));
         put(&deep.join("x.map"), "");
         let plan = plan_in(&c, &r, k, &roots, true);
-        assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared"], "{plan:?}");
+        assert!(
+            plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared"],
+            "{plan:?}"
+        );
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
@@ -796,11 +1190,22 @@ mod tests {
         std::fs::remove_file(c.join("maps/Valley/parklist_p.txt")).unwrap();
         let roots = [c.clone(), omsi.clone()];
         set_enabled_in(&c, &id, false, &roots).unwrap();
-        let id = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap().id;
-        assert!(!c.join("Sceneryobjects/Shared").exists() && disabled_dir(&c, &id).join("Sceneryobjects/Shared").exists());
+        let id = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Hill Town")
+            .unwrap()
+            .id;
+        assert!(
+            !c.join("Sceneryobjects/Shared").exists()
+                && disabled_dir(&c, &id).join("Sceneryobjects/Shared").exists()
+        );
         std::os::unix::fs::symlink(c.join("Archives"), c.join("Archives")).unwrap();
         remove_in(&c, &id, &roots).unwrap();
-        assert!(c.join("Sceneryobjects/Shared/f.txt").exists() && !disabled_dir(&c, &id).exists() && !c.join("maps/Hill Town").exists());
+        assert!(
+            c.join("Sceneryobjects/Shared/f.txt").exists()
+                && !disabled_dir(&c, &id).exists()
+                && !c.join("maps/Hill Town").exists()
+        );
         assert!(c.join("Sceneryobjects/PackA").exists());
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
@@ -813,16 +1218,32 @@ mod tests {
         std::fs::remove_file(c.join("maps/Valley/parklist_p.txt")).unwrap();
         let roots = [c.clone(), omsi.clone()];
         set_enabled_in(&c, &id, false, &roots).unwrap();
-        let id = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap().id;
+        let id = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Hill Town")
+            .unwrap()
+            .id;
         let off = disabled_dir(&c, &id);
-        assert!(off.join("Sceneryobjects/Shared/f.txt").exists() && !c.join("Sceneryobjects/Shared").exists());
+        assert!(
+            off.join("Sceneryobjects/Shared/f.txt").exists()
+                && !c.join("Sceneryobjects/Shared").exists()
+        );
         // (another mod's folder of the same name, with other files, installed while the map is off)
         put(&c.join("Sceneryobjects/Shared/new.txt"), "other");
         std::os::unix::fs::symlink(c.join("Archives"), c.join("Archives")).unwrap();
         assert!(remove_in(&c, &id, &roots).is_err());
-        assert_eq!(std::fs::read_to_string(off.join("Sceneryobjects/Shared/f.txt")).unwrap(), "1234");
-        assert_eq!(std::fs::read_to_string(c.join("Sceneryobjects/Shared/new.txt")).unwrap(), "other");
-        assert!(!c.join("Sceneryobjects/Shared/f.txt").exists() && off.join("maps/Hill Town/tile_0_0.map").exists());
+        assert_eq!(
+            std::fs::read_to_string(off.join("Sceneryobjects/Shared/f.txt")).unwrap(),
+            "1234"
+        );
+        assert_eq!(
+            std::fs::read_to_string(c.join("Sceneryobjects/Shared/new.txt")).unwrap(),
+            "other"
+        );
+        assert!(
+            !c.join("Sceneryobjects/Shared/f.txt").exists()
+                && off.join("maps/Hill Town/tile_0_0.map").exists()
+        );
         assert!(load(&c).mods.iter().any(|m| m.id == id && !m.enabled));
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
@@ -834,13 +1255,26 @@ mod tests {
         std::fs::remove_file(c.join("maps/Valley/parklist_p.txt")).unwrap();
         let roots = [c.clone(), omsi.clone()];
         set_enabled_in(&c, &id, false, &roots).unwrap();
-        let id = list(&c).into_iter().find(|m| m.name == "Hill Town").unwrap().id;
+        let id = list(&c)
+            .into_iter()
+            .find(|m| m.name == "Hill Town")
+            .unwrap()
+            .id;
         put(&c.join("Sceneryobjects/Shared/new.txt"), "other");
-        put(&c.join("maps/Hill Town/global.cfg"), "another map of the same name");
+        put(
+            &c.join("maps/Hill Town/global.cfg"),
+            "another map of the same name",
+        );
         remove_in(&c, &id, &roots).unwrap();
         assert!(!disabled_dir(&c, &id).exists());
-        assert_eq!(std::fs::read_to_string(c.join("Sceneryobjects/Shared/new.txt")).unwrap(), "other");
-        assert_eq!(std::fs::read_to_string(c.join("maps/Hill Town/global.cfg")).unwrap(), "another map of the same name");
+        assert_eq!(
+            std::fs::read_to_string(c.join("Sceneryobjects/Shared/new.txt")).unwrap(),
+            "other"
+        );
+        assert_eq!(
+            std::fs::read_to_string(c.join("maps/Hill Town/global.cfg")).unwrap(),
+            "another map of the same name"
+        );
         std::fs::remove_dir_all(c).unwrap();
         std::fs::remove_dir_all(omsi).unwrap();
     }
@@ -856,25 +1290,43 @@ mod tests {
         let k = take(&c, &mut r, &id).unwrap();
         let roots = [c.clone(), omsi.clone(), more.clone()];
         let plan = plan_in(&c, &r, k, &roots, true);
-        assert!(plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared"], "{plan:?}");
+        assert!(
+            plan.freed.is_empty() && plan.kept == ["Sceneryobjects/Shared"],
+            "{plan:?}"
+        );
         std::fs::remove_file(more.join("maps")).unwrap();
         let gone = c.join("Mods/disabled/Gone/maps");
         std::fs::create_dir_all(gone.parent().unwrap()).unwrap();
         std::os::unix::fs::symlink(&gone, &gone).unwrap();
         assert!(plan_in(&c, &r, k, &roots, true).freed.is_empty());
         std::fs::remove_dir_all(gone.parent().unwrap()).unwrap();
-        assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Sceneryobjects/PackA", "Splines/RoadA"]);
+        assert_eq!(
+            plan_in(&c, &r, k, &roots, true).freed,
+            ["Sceneryobjects/PackA", "Splines/RoadA"]
+        );
         let packs = c.join("Mods/disabled/Old/Sceneryobjects");
         std::fs::create_dir_all(packs.parent().unwrap()).unwrap();
         std::os::unix::fs::symlink(&packs, &packs).unwrap();
         assert!(plan_in(&c, &r, k, &roots, true).freed.is_empty());
         std::fs::remove_dir_all(packs.parent().unwrap()).unwrap();
         let tile = c.join("maps/Hill Town/tile_0_0.map");
-        put(&tile, &(std::fs::read_to_string(&tile).unwrap() + "\n[object]\n0\nSceneryobjects\\Twin\\t.sco\n"));
+        put(
+            &tile,
+            &(std::fs::read_to_string(&tile).unwrap()
+                + "\n[object]\n0\nSceneryobjects\\Twin\\t.sco\n"),
+        );
         put(&c.join("Sceneryobjects/Twin/f.txt"), "1234");
-        assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Sceneryobjects/PackA", "Sceneryobjects/Twin", "Splines/RoadA"]);
+        assert_eq!(
+            plan_in(&c, &r, k, &roots, true).freed,
+            [
+                "Sceneryobjects/PackA",
+                "Sceneryobjects/Twin",
+                "Splines/RoadA"
+            ]
+        );
         std::fs::rename(omsi.join("Sceneryobjects"), omsi.join("Objects")).unwrap();
-        std::os::unix::fs::symlink(omsi.join("Sceneryobjects"), omsi.join("Sceneryobjects")).unwrap();
+        std::os::unix::fs::symlink(omsi.join("Sceneryobjects"), omsi.join("Sceneryobjects"))
+            .unwrap();
         assert_eq!(plan_in(&c, &r, k, &roots, true).freed, ["Splines/RoadA"]);
         std::fs::remove_file(omsi.join("Sceneryobjects")).unwrap();
         std::os::unix::fs::symlink(c.join("Archives"), c.join("Archives")).unwrap();

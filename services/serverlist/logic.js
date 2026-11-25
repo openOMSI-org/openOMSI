@@ -115,6 +115,28 @@ export function sourceKey(ip) {
   return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":") + "::/64";
 }
 
+// The listings, in the Durable Object's storage as well as in memory. Cloudflare may evict an
+// object from memory between requests (when idle, on a deploy, when it moves the object), and
+// its memory goes with it: kept in memory alone, a server's listing was forgotten between
+// two heartbeats and it was listed only from its re-registration to the next beat (#4165). Every change is written; the
+// memory is only the copy the object reads from.
+export const LISTING_PREFIX = "listing:";
+
+export class ListingStore {
+  constructor(storage) { this.storage = storage; this.map = new Map(); }
+  // (once, when the object starts or wakes)
+  async load() {
+    this.map.clear();
+    for (const l of (await this.storage.list({ prefix: LISTING_PREFIX })).values()) this.map.set(l.id, l);
+  }
+  get size() { return this.map.size; }
+  get(id) { return this.map.get(id); }
+  values() { return this.map.values(); }
+  [Symbol.iterator]() { return this.map[Symbol.iterator](); }
+  save(l) { this.map.set(l.id, l); return this.storage.put(LISTING_PREFIX + l.id, l); }
+  delete(id) { this.map.delete(id); return this.storage.delete(LISTING_PREFIX + id); }
+}
+
 // A sliding window of events per key, in memory.
 export class Limiter {
   constructor(max, windowMs) { this.max = max; this.windowMs = windowMs; this.hits = new Map(); }

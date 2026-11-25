@@ -30,7 +30,12 @@ impl Block {
     /// Bytes of one block.
     pub fn block_bytes(self) -> usize {
         match self {
-            Block::Bc1 | Block::Bc4 | Block::Etc1 | Block::Etc2Rgb | Block::Etc2Rgba1 | Block::EacR => 8,
+            Block::Bc1
+            | Block::Bc4
+            | Block::Etc1
+            | Block::Etc2Rgb
+            | Block::Etc2Rgba1
+            | Block::EacR => 8,
             _ => 16,
         }
     }
@@ -50,7 +55,15 @@ impl Block {
     }
 
     fn has_alpha(self) -> bool {
-        matches!(self, Block::Bc2 | Block::Bc3 | Block::Bc7 | Block::Etc2Rgba1 | Block::Etc2Rgba8 | Block::Astc(..))
+        matches!(
+            self,
+            Block::Bc2
+                | Block::Bc3
+                | Block::Bc7
+                | Block::Etc2Rgba1
+                | Block::Etc2Rgba8
+                | Block::Astc(..)
+        )
     }
 }
 
@@ -79,7 +92,9 @@ pub fn decode(kind: Block, data: &[u8], width: usize, height: usize) -> Result<I
         Block::Etc2Rgba8 => t::decode_etc2_rgba8(data, width, height, &mut px),
         Block::EacR => t::decode_eacr(data, width, height, &mut px),
         Block::EacRg => t::decode_eacrg(data, width, height, &mut px),
-        Block::Astc(bw, bh) => t::decode_astc(data, width, height, bw as usize, bh as usize, &mut px),
+        Block::Astc(bw, bh) => {
+            t::decode_astc(data, width, height, bw as usize, bh as usize, &mut px)
+        }
     };
     r.map_err(|e| e.to_string())?;
     // (the decoder's pixels are B, G, R, A in memory)
@@ -97,8 +112,14 @@ pub fn decode(kind: Block, data: &[u8], width: usize, height: usize) -> Result<I
             _ => rgba.extend_from_slice(&[r, g, b, a]),
         }
     }
-    let has_alpha = kind.has_alpha() && rgba.chunks_exact(4).any(|p| p[3] < 255) || kind == Block::Bc1 && rgba.chunks_exact(4).any(|p| p[3] == 0);
-    Ok(Image { width: width as u32, height: height as u32, rgba, has_alpha })
+    let has_alpha = kind.has_alpha() && rgba.chunks_exact(4).any(|p| p[3] < 255)
+        || kind == Block::Bc1 && rgba.chunks_exact(4).any(|p| p[3] == 0);
+    Ok(Image {
+        width: width as u32,
+        height: height as u32,
+        rgba,
+        has_alpha,
+    })
 }
 
 #[cfg(test)]
@@ -116,7 +137,13 @@ mod tests {
         assert_eq!(&img.rgba[..4], &[200, 200, 200, 255]);
         assert!(!img.has_alpha);
         // BC5: x = y = 128 is the straight-up normal
-        let img = decode(Block::Bc5, &[128, 128, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0, 0, 0], 4, 4).unwrap();
+        let img = decode(
+            Block::Bc5,
+            &[128, 128, 0, 0, 0, 0, 0, 0, 128, 128, 0, 0, 0, 0, 0, 0],
+            4,
+            4,
+        )
+        .unwrap();
         assert_eq!(img.rgba[2], 255);
         assert!(decode(Block::Bc7, &[0u8; 15], 4, 4).is_err());
     }
