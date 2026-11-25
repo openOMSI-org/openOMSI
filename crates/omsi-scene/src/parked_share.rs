@@ -110,7 +110,8 @@ impl ParkedHold {
         self.held.retain(|_, h| h.tile != tile);
     }
 
-    pub fn len(&self) -> usize {
+    #[cfg(test)]
+    fn len(&self) -> usize {
         self.held.len()
     }
 
@@ -203,8 +204,8 @@ mod tests {
     /// their cars as the room comes, never more than the cap.
     #[test]
     fn a_tile_come_in_at_the_cap_gets_its_cars_as_old_tiles_go() {
-        let max = 4;
-        let mut live = 4; // the old tiles hold the cap
+        let max: i64 = 4;
+        let mut live: usize = 4; // the old tiles hold the cap
         let mut hold = ParkedHold::default();
         for key in 10..13 {
             hold.hold(key, (1, 0));
@@ -223,13 +224,13 @@ mod tests {
             vec![10, 11]
         );
         live += out.len();
-        assert_eq!(live, max);
+        assert_eq!(live, max as usize);
         assert_eq!(hold.len(), 1);
         // the rest when the next goes; the new tile leaving drops what it still holds
         live -= 1;
         let out = hold.release(parked_room(max, live));
         live += out.len();
-        assert_eq!((live, hold.len()), (max, 0));
+        assert_eq!((live, hold.len()), (max as usize, 0));
         hold.hold(20, (2, 0));
         hold.drop_tile((2, 0));
         assert_eq!(hold.len(), 0);
