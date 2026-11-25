@@ -218,6 +218,34 @@ and spray keep their own settings. It works at once.
 snows, snow builds up on roads and roofs, with ruts and tyre tracks, and thaws again. Off, the
 weather's own road snow of OMSI 2 is used.
 
+### Road dirt
+
+**Road dirt on the vehicles** (`procedural_dirt`, on by default, Enhanced and Enhanced+ only):
+every bus, including stock, DLC and old mod buses, gathers road dirt where it would land, with
+no dirt texture of its own needed. It takes the place of the bus's own dirt overlay (OMSI's
+`Dirt_Norm` layer): with the setting on the overlay is hidden, off the overlay shows as in OMSI 2,
+never both. Vanilla and Vanilla+ always show the bus's own dirt.
+
+- **Wet roads:** spray behind and above each wheel, on the lower sides and on the back, where
+  the air behind the bus lays a film that reaches higher up.
+- **Dry roads:** a thin dust all over, the roof included. Off the road it builds up fast, and
+  wet ground throws up mud.
+- **Winter roads:** grey slush and salt.
+- **Rain** washes the dust off within minutes and the caked spray slowly; the wheels keep
+  laying it on below. Wet dirt is darker and glossy, dry dirt matt.
+- **Windows** get dirty too, and a dirty pane is harder to see through from inside as well.
+- **The wash** (game menu, or a bus wash) cleans it along with OMSI's own dirt.
+
+How fast it builds up: an hour on wet roads leaves the wheel arches and lower sides plainly dirty;
+an hour on dry roads barely shows. Only the outside of the body is dirtied: surfaces near the
+`.bus` file's `[boundingbox]` that face out of it. Interior panels, seats and the dashboard stay
+clean. The `Dirt_Norm` and `DirtRate` variables are kept for the scripts, and the windscreen's
+dirt that the wipers clear stays. Dirt is drawn on the six vehicle bodies nearest the camera that
+have any. Modders can switch it off for a bus, change how fast it gathers, lay it out on a box of
+their own and keep materials clean (see [Road dirt](MODDING.md#road-dirt)).
+`OMSI_ROAD_DIRT` sets the dirt on every vehicle for pictures (see
+[Debug flags](DEBUG_FLAGS.md)).
+
 ### Trees
 
 **Windy trees** makes foliage sway in the weather's wind. **Detailed trees** stops leaf pictures

@@ -80,6 +80,8 @@ Values for looking at and comparing pictures. The defaults are what the game use
 | `OMSI_TONE_CONTRAST` | `day[,night]`; default `1` | Tone mapping contrast. |
 | `OMSI_TONEMAP` | `natural`, `agx` or `neutral`; default `agx` | Enhanced's tone curve: the old natural curve, AgX, Khronos PBR Neutral. |
 | `OMSI_GRADE` | `0` | Enhanced without its colour grade (white balance, saturation and the shadows' lift by the sun's height and the weather). |
+| `OMSI_ROAD_DIRT_RATE` | number; default `1` | How many times faster the vehicles gather road dirt: `60` lays an hour's dirt in a minute of driving. |
+| `OMSI_ROAD_DIRT` | `spray,film,dust,wet[,slush,mud]` | The procedural road dirt (`procedural_dirt`) every vehicle carries, 0..1 each, whatever it gathered. |
 | `OMSI_WIDE_AO` | `reach,strength,gain,max` | The street-scale occlusion of sky light and bounced light (metres, 0..1, 0..1, radiance). |
 | `OMSI_PUDDLE_F0` | number; default `0.08` | Puddle reflectance at normal incidence (0.02 to 0.2). |
 | `OMSI_PUDDLE_THICKNESS` | number; default `0.12` | Puddle water film thickness. |

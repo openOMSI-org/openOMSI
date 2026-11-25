@@ -337,6 +337,23 @@ With **Passengers pay the exact fare** off, they overpay and you hand out change
 **Passengers react to bad driving** off, nobody complains or gets off early because of rough
 driving.
 
+### Passenger weight
+
+With **Settings → Gameplay → Passengers add weight to the bus** on, every passenger adds their
+weight to the bus while they ride. The bus then pulls away more slowly when it is full, needs
+longer to stop, climbs more slowly, and sits lower on its springs. Where the riders stand or sit
+counts as well: a crowd at the back moves the centre of gravity back and loads the rear axle more
+than the front one. In an articulated bus each section carries its own riders.
+
+- A passenger's weight is the `[mass]` of their `.hum` file (in tonnes, as OMSI writes it:
+  `0.075` is 75 kg). A file without one counts as **Passenger weight** (75 kg unless changed).
+- In `settings.cfg`, `passenger_weight_fixed=1` gives everybody **Passenger weight** whatever
+  their file says, and `passenger_weight_spread` (percent) varies each person's weight either
+  way by up to that much, the same for one person for the whole ride.
+- The setting is off by default: the bus then weighs what its `.bus` file says, as openOMSI has
+  always done, whoever rides.
+- It applies to the bus you drive. Timetable (AI) buses keep their file's weight.
+
 ### Skipping a stop
 
 For a stop the bus cannot reach, or one where it never registers: **Ctrl+Shift+H** or the game

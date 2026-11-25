@@ -25,6 +25,7 @@ use glam::{DVec2, DVec3, Quat, Vec2, Vec3};
 use omsi_vehicle::Vehicle;
 
 mod body;
+pub mod load;
 pub mod realism;
 #[cfg(test)]
 mod tests;
@@ -560,6 +561,9 @@ pub struct RigidBody {
     /// is passed, one grip, no unevenness, no air drag of its own: the vehicle scripts add it to
     /// their brake force, as in Omsi.exe).
     pub realistic: bool,
+    /// The body as its file made it, before the people aboard were put in (see
+    /// `RigidBody::set_load`); None while nothing was ever loaded.
+    pub unloaded: Option<load::Unloaded>,
 }
 
 static REALISTIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

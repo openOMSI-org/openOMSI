@@ -1087,6 +1087,7 @@ impl Renderer {
             clamp_sampler: defaults.clamp_sampler,
             mirror_sampler: defaults.mirror_sampler,
             address_next: std::cell::Cell::new(TexAddressing::Wrap),
+            vehicle_dirt: Default::default(),
             light_map_next: std::cell::Cell::new(false),
             puddles,
             texture_aspect: None,

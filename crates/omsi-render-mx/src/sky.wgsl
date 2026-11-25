@@ -149,14 +149,65 @@ fn vs_main(@location(0) pos: vec3<f32>) -> VsOut {
 // The classic sky's weather (lib.rs `VanillaSky`): the cloud type's own texture and
 // cloud: x height H (m over the map's zero), y the type's size (m a tile; 0: no clouds),
 // zw the wind's drift (m); haze: x the weather's fog range (m), y the visibility (m),
-// z 1 for an overcast type, w the render origin's height.
+// z 1 for an overcast type, w the render origin's height; and the moon.
 struct VanillaSkyUniform {
     cloud: vec4<f32>,
     haze: vec4<f32>,
+    // xyz towards the moon, w its angular radius
+    moon: vec4<f32>,
 };
 @group(1) @binding(9) var t_vclouds: texture_2d<f32>;
 @group(1) @binding(10) var<uniform> vsky: VanillaSkyUniform;
 @group(1) @binding(11) var t_sun: texture_2d<f32>;
+// The moon's near side as seen from the Earth, north up (grey, `moon_map`; made from
+// NASA's Scientific Visualization Studio's CGI Moon Kit, LRO's LROC colour map).
+@group(1) @binding(13) var t_moon: texture_2d<f32>;
+
+// The moon of both skies towards d: a sphere of angular radius r towards m with the real
+// face on it, lit from the sun's side - its phase is what the sun's direction makes of it.
+// x how bright the pixel's point of it is (about 1 on the full moon's highlands), y how
+// much of the pixel (`pix` across, rad) the disc covers.
+fn moon_face(d: vec3<f32>, m: vec3<f32>, r: f32, sun: vec3<f32>, pix: f32) -> vec2<f32> {
+    if (r <= 0.0 || dot(d, m) <= cos(r * 1.5)) {
+        return vec2<f32>(0.0);
+    }
+    // the point on the moon's sphere seen in direction d
+    let right = normalize(cross(m, vec3<f32>(0.0, 0.0, 1.0)) + vec3<f32>(1e-5, 0.0, 0.0));
+    let up = cross(right, m);
+    let q = vec2<f32>(dot(d, right), dot(d, up)) / r;
+    let q2 = dot(q, q);
+    // a pixel in disc radii: the limb's edge and the map's level
+    let px = max(pix * 0.6 / r, 1e-4);
+    let covered = 1.0 - smoothstep(1.0 - px, 1.0 + px, sqrt(q2));
+    let nz = sqrt(max(1.0 - q2, 0.0));
+    let n = normalize(right * q.x + up * q.y - m * nz);
+    // the dust's reflection (Lommel-Seeliger): a full moon is as bright at the limb as in
+    // the middle, and the light fades out towards the terminator
+    let mu0 = dot(n, sun);
+    let lit = 2.0 * max(mu0, 0.0) / (max(mu0, 0.0) + max(nz, 0.05)) * smoothstep(-0.02, 0.1, mu0);
+    let level = log2(max(px * f32(textureDimensions(t_moon).x) * 0.5, 1.0));
+    let map = textureSampleLevel(t_moon, s_sky, vec2<f32>(0.5 + 0.5 * q.x, 0.5 - 0.5 * q.y), level).r;
+    // (about 1 on the highlands, a third of it in the darkest seas)
+    let albedo = pow(map * 1.75, 1.35);
+    // (the dark part keeps a trace of earthshine, more of it by a thin crescent)
+    let dark = 0.5 - 0.5 * dot(-m, sun);
+    return vec2<f32>((lit + 0.004 + 0.02 * dark * dark) * albedo, covered);
+}
+
+// The moon on the classic sky (`base` in sRGB terms), laid over it as light is: bright at
+// night, pale on a day's blue sky; the haze and the clouds cover it as the sky. A low moon
+// is warmer.
+fn vanilla_moon(base: vec3<f32>, d: vec3<f32>, pix: f32) -> vec3<f32> {
+    let m = vsky.moon.xyz;
+    let f = moon_face(d, m, vsky.moon.w, normalize(camera.sun_dir.xyz), pix);
+    let shown = f.y * smoothstep(-0.01, 0.02, d.z);
+    let tint = mix(vec3<f32>(1.0, 0.82, 0.62), vec3<f32>(1.0, 0.98, 0.95), smoothstep(0.0, 0.3, m.z));
+    // (against a day's sky it is pale, and its earthshine not seen at all)
+    let day = smoothstep(-0.12, 0.1, camera.sun_dir.z);
+    let light = max(f.x * 0.5 - 0.012 * day, 0.0) * mix(1.0, 0.5, day);
+    let face = srgb_encode(clamp(tint * light, vec3<f32>(0.0), vec3<f32>(1.0)));
+    return base + face * (vec3<f32>(1.0) - base) * shown;
+}
 
 fn vanilla_sun(d: vec3<f32>) -> vec3<f32> {
     let s = normalize(camera.sun_dir.xyz);
@@ -359,7 +410,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Vanilla+ in linear light
     let encoded = camera.sky_color.w > 0.5;
     let fog = camera.fog.xyz;
-    let lit = min(srgb_encode(sky) + vanilla_sun(d), vec3<f32>(1.0));
+    let sunlit = min(srgb_encode(sky) + vanilla_sun(d), vec3<f32>(1.0));
+    let lit = vanilla_moon(sunlit, d, length(fwidth(d)));
     var col = select(srgb_decode(lit), lit, encoded);
     col = mix(col, fog, vanilla_haze(v));
     // (where the ray meets the layer's shell and the texture's footprint there, taken here in

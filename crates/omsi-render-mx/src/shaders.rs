@@ -237,6 +237,7 @@ mod tests {
     /// And the saloon's lamps as line sources, the height maps' parallax, and normal maps
     /// turned the right way (the tangent frame's handedness).
     /// And #4258: the wet panes' blur through a plain sampler, a drop's view kept near it.
+    /// And the environment map's reflections through that sampler too (OpenGL: one a texture).
     /// And the experimental traced global illumination (`rt_gi`: `gi_at`, `t_gi`).
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
@@ -246,10 +247,10 @@ mod tests {
             super::SCENE.replace("\r\n", "\n"),
             super::ENHANCED.replace("\r\n", "\n"),
         );
-        assert_eq!((scene.len(), fnv1a(&scene)), (155557, 13575073982121967635));
+        assert_eq!((scene.len(), fnv1a(&scene)), (156850, 9712518676160815153));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (131148, 4935460173887691663)
+            (140778, 5397446741661920698)
         );
     }
 }

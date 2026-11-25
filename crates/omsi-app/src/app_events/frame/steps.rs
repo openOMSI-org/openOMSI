@@ -258,6 +258,26 @@ pub(crate) fn career_step(
     crash
 }
 
+/// The people aboard the player's bus as part of its weight (the `passenger_mass` setting,
+/// #4014): each rider where they are, by the bus's sections. Off, a bus that carried some
+/// sheds them once and stays as its file makes it.
+pub(crate) fn passenger_load_step(
+    p: &mut Player,
+    humans: Option<&omsi_sim::people::PeopleSim>,
+    weight: omsi_sim::people::PassengerWeight,
+) {
+    if !weight.on() {
+        if p.vehicle.passenger_load_kg() > 0.0 {
+            p.vehicle.set_passenger_load(&[]);
+        }
+        return;
+    }
+    let loads = humans
+        .map(|h| h.player_loads(1 + p.vehicle.trailers.len(), weight))
+        .unwrap_or_default();
+    p.vehicle.set_passenger_load(&loads);
+}
+
 /// The cabin air of the player's bus and the condensation on its glass, `dt` on.
 pub(crate) fn cabin_air_step(
     cabin: &mut crate::condensation::CabinAir,

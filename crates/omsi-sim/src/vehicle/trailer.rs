@@ -99,6 +99,9 @@ pub struct TrailerPart {
     pub(super) rest: Vec<(f32, f32, f32)>,
     /// The share of its weight the part hangs on its coupling with (N; see `joint_load`).
     pub(super) joint_load: f32,
+    /// The weight of the people aboard this part (kg, the `passenger_mass` setting; see
+    /// `VehicleInstance::set_passenger_load`).
+    pub load_kg: f32,
     /// `Axle_Brakeforce_<axle>_L/R` of this part's axles, in the leading vehicle's scripts.
     pub(super) v_brakes: Vec<Option<omsi_script::VarId>>,
     /// How far the part's origin stands above the ground under its axles (m).
@@ -424,6 +427,7 @@ impl TrailerPart {
             turned_put: 0.0,
             remote: false,
             reversed,
+            load_kg: 0.0,
             text_textures: Vec::new(),
             axle_ids: AxleVarIds::default(),
             skin_rest: Vec::new(),
@@ -1073,6 +1077,23 @@ impl TrailerPart {
         crate::anim::apply_parents(&self.animators, &mut self.mesh_transforms);
         self.props_plan.refresh(&self.ty, index);
         self.props_plan.apply(vars, &mut self.mesh_props);
+        self.props_plan
+            .apply_emission(dt, vars, &mut self.mesh_props);
+        // (its own dirt overlay goes where the road dirt takes its place, as the leading
+        // vehicle's does: `road_dirt::procedural_for`)
+        if super::road_dirt::procedural_for(&self.ty.def) {
+            for &(i, slot, wiped) in &self.props_plan.dirt {
+                if let Some(a) = self
+                    .mesh_props
+                    .get_mut(i)
+                    .and_then(|p| p.slot_alpha.get_mut(slot))
+                {
+                    if !wiped {
+                        *a = 0.0;
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -38,6 +38,7 @@ pub mod money;
 pub mod plugin_cables;
 pub mod puddles;
 pub mod rain;
+pub mod road_dirt;
 pub mod road_paint;
 pub mod road_snow;
 pub mod route_arrows;

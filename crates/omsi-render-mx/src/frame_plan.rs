@@ -563,7 +563,7 @@ pub(crate) fn lean_glass_kind(kind: u8) -> bool {
 
 /// Which of the branches the `LEAN` scene pipelines leave out (see `override LEAN` in the
 /// scene shader) a material may take: none, when it is not the map's water, has no bump or
-/// PBR maps, is no LED panel, no pane's film, no glow and not a season's snow pane; and
+/// PBR maps or factors, is no LED panel, no pane's film, no glow and not a season's snow pane; and
 /// glass only when it is blended and no terrain.
 pub(crate) fn material_lean(m: &MaterialUniform) -> Lean {
     let terrain = m.extra[0] > 0.5;
@@ -573,6 +573,9 @@ pub(crate) fn material_lean(m: &MaterialUniform) -> Lean {
         && m.emissive[3] >= -1.5
         && m.emissive[3] <= 1.5
         && m.glow[0] <= 0.0
+        // (a base colour alone is drawn by the lean pipelines; the other PBR factors not)
+        && m.base_color[3] < 1.5
+        && m.emission[3] <= 0.0
         && !(m.wipe_bounds[2] != 0.0 && m.wipe_bounds[3] < 0.0);
     if !plain_branches {
         Lean::No
