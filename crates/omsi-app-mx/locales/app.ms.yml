@@ -2967,3 +2967,5 @@
 "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Berat setiap penumpang, daripada fail .hum mereka, ditambah kepada bas di tempat mereka duduk atau berdiri: bas penuh bergerak, membrek dan mendaki sebagai kenderaan yang lebih berat; jika dimatikan, berat bas mengikut failnya"
 "Passenger weight": "Berat penumpang"
 "For passengers whose file gives no weight; default 75 kg": "Untuk penumpang yang failnya tiada berat; lalai 75 kg"
+"Road dirt on the vehicles": "Kotoran jalan pada kenderaan"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: kenderaan mengumpul kotoran jalan di tempat ia jatuh - percikan di belakang roda dan sisi bawah di jalan basah, lapisan di belakang, debu ketika kering, salji berlumpur pada musim sejuk - dan hujan membasuhnya; jika dimatikan: kotoran asal bas, seperti dalam OMSI 2"

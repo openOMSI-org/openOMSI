@@ -3587,6 +3587,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["windy_trees"] = json!(true);
     v["detailed_trees"] = json!(true);
     v["road_snow"] = json!(false); // opt-in; off preserves the weather's classic snow on roads
+    v["procedural_dirt"] = json!(true); // Enhanced: road dirt where it lands, in place of the buses' own (#1386)
     v["sim_thread"] = json!(false); // (switched in the game's Display menu, saved through this writer)
     v["mx_graphics"] = json!(false);
     v["mirror_hud_every_frame"] = json!(false);
@@ -4470,6 +4471,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "rain_lights"
             | "detailed_trees"
             | "road_snow"
+            | "procedural_dirt"
             | "mirror_hud_every_frame"
             | "mirror_shadows"
             | "mirror_particles"
@@ -5220,6 +5222,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("rain_lights={}\n", b("rain_lights", true)));
     text.push_str(&format!("detailed_trees={}\n", b("detailed_trees", true)));
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
+    text.push_str(&format!("procedural_dirt={}\n", b("procedural_dirt", true)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mx_graphics={}\n", b("mx_graphics", false)));
     text.push_str(&format!(

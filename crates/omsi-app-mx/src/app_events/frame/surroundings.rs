@@ -123,6 +123,8 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
             cx.traffic.traffic.as_ref().map(|t| &t.net),
             &v,
         );
+        // the road dirt on the vehicles near the camera (omsi_scene::road_dirt)
+        omsi_scene::road_dirt::frame(r, cx.common.settings.procedural_dirt, cam.position, &v);
         omsi_scene::road_snow::show_roofs(r, scene, v.iter().map(|x| x.0), |k| {
             if k == 0 {
                 p.map(|p| (&p.render, &p.trailer_renders[..]))

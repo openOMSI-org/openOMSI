@@ -29,6 +29,8 @@ mod passes;
 use gpu_memory::adapter_vram_mb;
 use passes::{Encoders, FrameArgs, FrameEnv, PassTimers, StageClock};
 mod frame_plan;
+mod vehicle_dirt;
+pub use vehicle_dirt::{DIRT_VEHICLES, VehicleDirt};
 mod gpu;
 mod lighting;
 pub mod pipeline_cache;
@@ -220,6 +222,8 @@ pub struct Renderer {
     mirror_sampler: wgpu::Sampler,
     /// The addressing of the next material's textures (`[matl_texadress_*]`).
     pub address_next: std::cell::Cell<TexAddressing>,
+    /// The vehicles' road dirt the enhanced picture lays over them (`set_vehicle_dirt`).
+    pub(crate) vehicle_dirt: std::cell::RefCell<Vec<VehicleDirt>>,
     /// The next material is lit at night by the tile light maps (`[LightMapMapping]`, the
     /// splines) instead of the map's lamps.
     pub light_map_next: std::cell::Cell<bool>,

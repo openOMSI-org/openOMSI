@@ -2,7 +2,7 @@ use super::*;
 
 /// The settings a graphics profile holds: what the Graphics tab shows, except the machine's
 /// own (fullscreen, graphics API).
-pub const GRAPHICS_PROFILE_KEYS: [&str; 49] = [
+pub const GRAPHICS_PROFILE_KEYS: [&str; 50] = [
     "graphics",
     "msaa",
     "render_scale",
@@ -35,6 +35,7 @@ pub const GRAPHICS_PROFILE_KEYS: [&str; 49] = [
     "rain_lights",
     "detailed_trees",
     "road_snow",
+    "procedural_dirt",
     "ray_tracing",
     "light_shadows",
     "cloud_shadows",

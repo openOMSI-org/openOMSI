@@ -578,6 +578,9 @@ pub struct MaterialExtra {
     /// `[matl_emissive]` (openOMSI, see `EmissionLight`); None: the slot gives off no light
     /// of its own beyond OMSI's.
     pub emission: Option<EmissionLight>,
+    /// `[matl_nodirt]` (openOMSI): the slot takes none of the road dirt (`params2.w` bit 32,
+    /// see enhanced/04_shade.wgsl).
+    pub no_dirt: bool,
 }
 
 /// The textures a material's bind group samples.
@@ -1162,7 +1165,8 @@ impl Renderer {
                 moisture,
                 // bit 1: a [matl_envmap_mask]; bit 2: a [matl_transmap]; bit 4: a vehicle's
                 // part that may be metal; bit 8: a body, never foliage; bit 16: the active
-                // night texture supplies a clear vehicle material's coverage
+                // night texture supplies a clear vehicle material's coverage; bit 32: no road
+                // dirt (`[matl_nodirt]`)
                 (if env_mask.is_some() { 1.0 } else { 0.0 })
                     + if extra.transmap_declared || transmap.is_some() {
                         2.0
@@ -1171,6 +1175,7 @@ impl Renderer {
                     }
                     + if extra.metal_ok { 4.0 } else { 0.0 }
                     + if extra.solid { 8.0 } else { 0.0 }
+                    + if extra.no_dirt { 32.0 } else { 0.0 }
                     + if extra.night_alpha
                         && alpha == AlphaMode::Blend
                         && nightmap.is_some()

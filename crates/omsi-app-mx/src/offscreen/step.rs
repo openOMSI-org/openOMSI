@@ -1215,6 +1215,7 @@ impl Offscreen<'_> {
             ref world,
             ref weather,
             ref humans_off,
+            ref settings,
             ..
         } = *self;
         if let Some(p) = player.as_ref() {
@@ -1292,6 +1293,7 @@ impl Offscreen<'_> {
             traffic.as_ref().map(|t| &t.net),
             &v,
         );
+        omsi_scene::road_dirt::frame(renderer, settings.procedural_dirt, camera.position, &v);
     }
 
     /// A snapshot due at `t_s` (`--snapshots`).

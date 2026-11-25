@@ -485,6 +485,8 @@ flags! {
     OMSI_RENDER_OCCLUDED: Bool, Test, Use, "off", "Draw frames into a texture while the window is hidden (macOS gives none).";
     OMSI_REPAIR_BODY_DEPTH: Bool, Switch, Use, "off", "The old guess for [matl_alpha] 2 vehicle bodies (A/B).";
     OMSI_ROAD_CUT: Bool, Switch, Once, "off", "Take the ground away under every road surface (Omsi.exe does not).";
+    OMSI_ROAD_DIRT: Text, Test, Use, "-", "spray,film,dust,wet[,slush,mud]: the road dirt every vehicle carries (0..1 each), whatever it gathered - pictures of the procedural dirt without driving for an hour first.";
+    OMSI_ROAD_DIRT_RATE: Num, Test, Use, "1", "How many times faster the vehicles gather road dirt (procedural_dirt): 60 lays an hour's dirt in a minute of driving, for trying it out.";
     OMSI_ROAD_PHOTO: Bool, Test, Use, "off", "Map check: photograph the road network from above and report grass where a carriageway should be.";
     OMSI_ROAD_PHOTO_N: Num, Test, Use, "400", "With OMSI_ROAD_PHOTO: number of sample points.";
     OMSI_ROAD_PHOTO_SIDE: Num, Test, Use, "0", "With OMSI_ROAD_PHOTO: metres to either side of the carriageway.";

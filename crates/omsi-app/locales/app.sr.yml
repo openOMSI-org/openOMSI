@@ -4487,3 +4487,5 @@
 "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says": "Težina svakog putnika iz njegove .hum datoteke dodaje se autobusu tamo gde sedi ili stoji: pun autobus kreće, koči i penje se kao teže vozilo; isključeno - autobus je težak koliko piše u njegovoj datoteci"
 "Passenger weight": "Težina putnika"
 "For passengers whose file gives no weight; default 75 kg": "Za putnike čija datoteka ne navodi težinu; podrazumevano 75 kg"
+"Road dirt on the vehicles": "Prljavština sa puta na vozilima"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: vozila skupljaju prljavštinu sa puta tamo gde pada - prskanje iza točkova i na donjim bokovima na mokrom putu, sloj pozadi, prašina po suvom, bljuzgavica zimi - a kiša je spira; isključeno: sopstvena prljavština autobusa, kao u OMSI 2"
