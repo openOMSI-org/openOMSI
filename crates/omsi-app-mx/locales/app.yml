@@ -6763,6 +6763,10 @@ _version: 2
   en: "FSR sharpness"
 "RCAS sharpening strength":
   en: "RCAS sharpening strength"
+"DLSS sharpness":
+  en: "DLSS sharpness"
+"How much the picture is sharpened after DLSS; 25 % as before":
+  en: "How much the picture is sharpened after DLSS; 25 % as before"
 "Ultra Quality (77%)":
   en: "Ultra Quality (77%)"
 "Quality (67%)":

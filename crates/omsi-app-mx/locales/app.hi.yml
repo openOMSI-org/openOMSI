@@ -2219,6 +2219,8 @@
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "मानक Catmull-Rom या प्रायोगिक FSR 1; बदलाव तुरंत दिखते हैं"
 "FSR quality": "FSR गुणवत्ता"
 "FSR sharpness": "FSR तीक्ष्णता"
+"DLSS sharpness": "DLSS तीक्ष्णता"
+"How much the picture is sharpened after DLSS; 25 % as before": "DLSS के बाद चित्र कितना तीक्ष्ण किया जाए; 25 % पहले जैसा"
 "RCAS sharpening strength": "RCAS तीक्ष्णता की तीव्रता"
 "Ultra Quality (77%)": "अल्ट्रा गुणवत्ता (77%)"
 "Quality (67%)": "गुणवत्ता (67%)"

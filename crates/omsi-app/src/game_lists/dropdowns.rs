@@ -708,6 +708,8 @@ pub(super) fn sync_live(app: &mut App) {
         r.options.cloud_shadows = live.cloud_shadows;
         r.options.light_glow = live.light_glow;
         r.options.volumetric_fog = live.volumetric_fog;
+        // (and DLSS's sharpening, read at every upscaled frame)
+        r.options.dlss_sharpness = live.dlss_sharpness;
     }
     let s = &app.settings;
     if let Some(w) = app.world.as_ref() {

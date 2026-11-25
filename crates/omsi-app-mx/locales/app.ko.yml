@@ -1978,6 +1978,8 @@
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "표준 Catmull-Rom 또는 실험적 FSR 1. 변경 사항이 바로 적용됩니다"
 "FSR quality": "FSR 품질"
 "FSR sharpness": "FSR 선명도"
+"DLSS sharpness": "DLSS 선명도"
+"How much the picture is sharpened after DLSS; 25 % as before": "DLSS 이후 화면을 얼마나 선명하게 할지 정합니다. 25 %는 이전과 같습니다"
 "RCAS sharpening strength": "RCAS 샤프닝 강도"
 "Ultra Quality (77%)": "울트라 품질 (77%)"
 "Quality (67%)": "품질 (67%)"

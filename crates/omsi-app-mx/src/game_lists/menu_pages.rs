@@ -1238,10 +1238,14 @@ mod tests {
 }
 
 /// The upscaler's rows of the graphics page (after the render scale's): the upscaler, and
-/// FSR 1's quality and sharpening while it is chosen.
+/// FSR 1's quality and sharpening while it is chosen, and DLSS's sharpening while it is.
 fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
     let temporal = app.settings.temporal_upscaling().is_some();
+    let dlss = app
+        .settings
+        .temporal_upscaling()
+        .is_some_and(|t| t.upscaler == omsi_render::TemporalUpscaler::Dlss);
     let offered =
         !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
     let generation = app.settings.temporal_upscaling().is_some_and(|t| {
@@ -1254,6 +1258,7 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
         select_row(file, "frame_generation", "Frame generation", omsi_cfg::upscaler_files::frame_generation_help()).filter(|_| generation),
         select_row(file, "fsr_quality", "FSR quality", &fsr_size(app)).filter(|_| fsr),
         slider_row(app, "fsr_sharpness", "FSR sharpness", "RCAS sharpening strength", &pct).filter(|_| fsr),
+        slider_row(app, "dlss_sharpness", "DLSS sharpness", "How much the picture is sharpened after DLSS; 25 % as before", &pct).filter(|_| dlss),
     ]
     .into_iter()
     .flatten()

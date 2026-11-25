@@ -64,6 +64,10 @@ fn home() -> PathBuf {
         .unwrap_or_default()
 }
 
+/// DLSS's sharpening after it as the game has it by default (`omsi_render::DLSS_SHARPEN`,
+/// which this crate does not depend on).
+pub const DLSS_SHARPNESS: f64 = 0.25;
+
 pub fn data_dir() -> PathBuf {
     // (made once: asked for dozens of times a second - the launcher's frames, its polls - and
     // made each time, two system calls for a folder that was there)
@@ -3478,6 +3482,7 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["frame_generation"] = json!("off");
     v["fsr_quality"] = json!("quality");
     v["fsr_sharpness"] = json!(0.8);
+    v["dlss_sharpness"] = json!(DLSS_SHARPNESS);
     v["street_light"] = json!("off");
     v["ray_tracing"] = json!(false);
     v["light_shadows"] = json!("off");
@@ -3903,12 +3908,13 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     _ => "quality",
                 })
             }
-            "fsr_sharpness" => {
+            "fsr_sharpness" | "dlss_sharpness" => {
+                let default = if k == "fsr_sharpness" { 0.8 } else { DLSS_SHARPNESS };
                 v[&k] = json!(
                     val.parse::<f64>()
                         .ok()
                         .filter(|x| x.is_finite())
-                        .unwrap_or(0.8)
+                        .unwrap_or(default)
                         .clamp(0.0, 1.0)
                 )
             }
@@ -5362,7 +5368,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         head_tracking_value("head_tracking_dead_zone", v.get("head_tracking_dead_zone").and_then(|x| x.as_f64())),
     ));
     text.push_str(&format!(
-        "upscaler={}\nupscale_quality={}\nframe_generation={}\nfsr_quality={}\nfsr_sharpness={}\n",
+        "upscaler={}\nupscale_quality={}\nframe_generation={}\nfsr_quality={}\nfsr_sharpness={}\ndlss_sharpness={}\n",
         upscaler_word(v.get("upscaler").and_then(|x| x.as_str()).unwrap_or("")),
         omsi_cfg::upscaler_files::quality_word(
             v.get("upscale_quality")
@@ -5387,6 +5393,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             _ => "quality",
         },
         f("fsr_sharpness", 0.8).clamp(0.0, 1.0),
+        f("dlss_sharpness", DLSS_SHARPNESS).clamp(0.0, 1.0),
     ));
     let written: Vec<String> = text
         .lines()
