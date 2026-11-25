@@ -238,30 +238,8 @@ impl VehicleInstance {
             }
         }
         let p = self.ty.program.clone();
-        let coins_before = self.host.change_coins.len();
-        let fired = self
-            .vm
-            .run_trigger(&p, name, &mut self.state, &mut self.host);
-        if let Some(value) = changer_value(name) {
-            let given = &mut self.host.change_coins[coins_before..];
-            let dm_euro_lever = match (
-                name.to_ascii_lowercase().strip_prefix("cashdesk_change_"),
-                given.first().map(|c| c.0),
-            ) {
-                (Some("0050"), Some(2)) => true,
-                (Some("0100"), Some(3)) => true,
-                (Some("0200"), Some(4)) => true,
-                (Some("0500"), Some(5)) => true,
-                _ => false,
-            };
-            if !dm_euro_lever {
-                let each = value / given.len().max(1) as f32;
-                for coin in given {
-                    coin.1 = each;
-                }
-            }
-        }
-        fired
+        self.vm
+            .run_trigger(&p, name, &mut self.state, &mut self.host)
     }
 
     pub fn has_trigger(&self, name: &str) -> bool {
@@ -455,47 +433,24 @@ impl VehicleInstance {
     }
 }
 
-fn changer_value(name: &str) -> Option<f32> {
-    let name = name.to_ascii_lowercase();
-    if let Some(cents) = name
-        .strip_prefix("cashdesk_change_")
-        .filter(|c| c.len() == 4)
-    {
-        return Some(cents.parse::<u32>().ok()? as f32 / 100.0);
-    }
-    let (units, cents) = name
-        .strip_prefix("cashdesk_changer_")?
-        .split_once('_')
-        .filter(|(_, c)| c.len() == 2)?;
-    Some(units.parse::<u32>().ok()? as f32 + cents.parse::<u32>().ok()? as f32 / 100.0)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::changer_value;
-
+    /// A cash desk key hands out what its script asks for with `GiveChangeCoin`: coin
+    /// number n of the map's money system, as often as the script calls it, whatever value
+    /// the key's name speaks of (a DM desk on a euro map, a 0.20 key on a map with 0.25s;
+    /// #4191). OMSI 2 does not read the key's name.
     #[test]
-    fn a_change_key_names_its_value() {
-        assert_eq!(changer_value("cashdesk_changer_0_50"), Some(0.5));
-        assert_eq!(changer_value("Cashdesk_Changer_15_00"), Some(15.0));
-        assert_eq!(changer_value("cashdesk_changer_0_50_off"), None);
-        assert_eq!(changer_value("cashdesk_changer_0_5"), None);
-        assert_eq!(changer_value("ticket_give"), None);
-        assert_eq!(changer_value("cashdesk_change_0500"), Some(5.0));
-        assert_eq!(changer_value("cashdesk_change_0050"), Some(0.5));
-        assert_eq!(changer_value("cashdesk_change_1000_off"), None);
-    }
-
-    #[test]
-    fn dm_lever_names_on_euro_scripts_keep_the_script_coin() {
-        let osc = "{trigger:cashdesk_change_0050}\n2 (M.V.GiveChangeCoin)\n{end}\n{trigger:cashdesk_change_0500}\n5 (M.V.GiveChangeCoin)\n{end}\n{trigger:cashdesk_changer_0_50}\n0 (M.V.GiveChangeCoin)\n{end}\n";
+    fn a_change_key_gives_the_coins_its_script_names() {
+        let osc = "{trigger:cashdesk_change_0500}\n5 (M.V.GiveChangeCoin)\n{end}\n\
+                   {trigger:cashdesk_changer_0_20}\n3 (M.V.GiveChangeCoin)\n{end}\n\
+                   {trigger:cashdesk_changer_0_30}\n0 (M.V.GiveChangeCoin)\n0 (M.V.GiveChangeCoin)\n0 (M.V.GiveChangeCoin)\n{end}\n";
         let mut v = crate::timetable_run::tests::script_test_vehicle(osc, "", "");
-        v.trigger("cashdesk_change_0050");
-        assert_eq!(v.host.change_coins.pop(), Some((2, 0.0)));
         v.trigger("cashdesk_change_0500");
-        assert_eq!(v.host.change_coins.pop(), Some((5, 0.0)));
-        v.trigger("cashdesk_changer_0_50");
-        assert_eq!(v.host.change_coins.pop(), Some((0, 0.5)));
+        assert_eq!(std::mem::take(&mut v.host.change_coins), [5]);
+        v.trigger("cashdesk_changer_0_20");
+        assert_eq!(std::mem::take(&mut v.host.change_coins), [3]);
+        v.trigger("cashdesk_changer_0_30");
+        assert_eq!(std::mem::take(&mut v.host.change_coins), [0, 0, 0]);
     }
 }
 #[cfg(test)]

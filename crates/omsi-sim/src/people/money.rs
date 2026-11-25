@@ -25,11 +25,25 @@ pub struct Money {
 impl Money {
     pub fn new(root: &Path, money_system: &str) -> Money {
         let path = omsi_cfg::resolve_path(root, money_system);
-        let currency = Currency::load(&path).map_err(|e| log::warn!("money system {}: {e}", path.display())).ok();
+        let currency = Currency::load(&path)
+            .map_err(|e| log::warn!("money system {}: {e}", path.display()))
+            .ok();
         if let Some(c) = &currency {
-            log::info!("money system {}: {} coins, {} bills", c.name, c.coins.len(), c.bills.len());
+            log::info!(
+                "money system {}: {} coins, {} bills",
+                c.name,
+                c.coins.len(),
+                c.bills.len()
+            );
         }
-        Money { currency, dir: path.parent().map(|p| p.to_path_buf()).unwrap_or_default(), meshes: HashMap::new(), placed: Vec::new(), hidden: Vec::new(), rng: 0x5151_7777 }
+        Money {
+            currency,
+            dir: path.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
+            meshes: HashMap::new(),
+            placed: Vec::new(),
+            hidden: Vec::new(),
+            rng: 0x5151_7777,
+        }
     }
 
     pub fn rand_f(&mut self) -> f32 {
@@ -43,9 +57,18 @@ impl Money {
     /// then banknotes (index `coins.len() + k`). The available denominations
     /// influence passenger payments even when no plugin changes the payment.
     fn denominations(&self) -> Vec<(usize, f32)> {
-        let Some(c) = &self.currency else { return Vec::new() };
+        let Some(c) = &self.currency else {
+            return Vec::new();
+        };
         let n = c.coins.len();
-        let mut all: Vec<(usize, f32)> = c.coins.iter().enumerate().map(|(i, (_, v))| (i, *v)).chain(c.bills.iter().enumerate().map(|(k, (_, v))| (n + k, *v))).filter(|(_, v)| *v > 0.0).collect();
+        let mut all: Vec<(usize, f32)> = c
+            .coins
+            .iter()
+            .enumerate()
+            .map(|(i, (_, v))| (i, *v))
+            .chain(c.bills.iter().enumerate().map(|(k, (_, v))| (n + k, *v)))
+            .filter(|(_, v)| *v > 0.0)
+            .collect();
         all.sort_by(|a, b| b.1.total_cmp(&a.1));
         all
     }
@@ -100,9 +123,19 @@ impl Money {
         // alive while random numbers are generated below.
         let (coin_count, largest_coin, bills) = match self.currency.as_ref() {
             Some(currency) => {
-                let largest_coin = currency.coins.iter().map(|(_, value)| *value).filter(|value| value.is_finite() && *value > 0.0).max_by(|a, b| a.total_cmp(b));
+                let largest_coin = currency
+                    .coins
+                    .iter()
+                    .map(|(_, value)| *value)
+                    .filter(|value| value.is_finite() && *value > 0.0)
+                    .max_by(|a, b| a.total_cmp(b));
 
-                let bills: Vec<f32> = currency.bills.iter().map(|(_, value)| *value).filter(|value| value.is_finite() && *value > 0.0).collect();
+                let bills: Vec<f32> = currency
+                    .bills
+                    .iter()
+                    .map(|(_, value)| *value)
+                    .filter(|value| value.is_finite() && *value > 0.0)
+                    .collect();
 
                 (currency.coins.len(), largest_coin, bills)
             }
@@ -110,7 +143,7 @@ impl Money {
         };
 
         let smallest_bill = bills.iter().copied().min_by(|a, b| a.total_cmp(b));
-        let largest_bill = bills .iter().copied().max_by(|a, b| a.total_cmp(b));
+        let largest_bill = bills.iter().copied().max_by(|a, b| a.total_cmp(b));
 
         // Banknotes become relevant when the fare exceeds the largest coin,
         // or reaches the value of the smallest banknote.
@@ -126,7 +159,12 @@ impl Money {
         // Limit banknotes to the smallest denomination that covers the fare.
         // If no banknote covers it, the largest available banknote is the limit.
         let bill_limit = if may_use_bills {
-            bills.iter().copied().filter(|value| *value >= price).min_by(|a, b| a.total_cmp(b)).or(largest_bill)
+            bills
+                .iter()
+                .copied()
+                .filter(|value| *value >= price)
+                .min_by(|a, b| a.total_cmp(b))
+                .or(largest_bill)
         } else {
             None
         };
@@ -201,7 +239,16 @@ impl Money {
 
     /// The value of the smallest coin (the tolerance of the change is half of it).
     pub fn smallest_value(&self) -> f32 {
-        self.currency.as_ref().and_then(|c| c.coins.iter().map(|(_, v)| *v).filter(|v| *v > 0.0).reduce(f32::min)).unwrap_or(0.01)
+        self.currency
+            .as_ref()
+            .and_then(|c| {
+                c.coins
+                    .iter()
+                    .map(|(_, v)| *v)
+                    .filter(|v| *v > 0.0)
+                    .reduce(f32::min)
+            })
+            .unwrap_or(0.01)
     }
 
     /// How many coins lie on the change tray.
@@ -212,7 +259,17 @@ impl Money {
     pub fn value_of(&self, coins: &[usize]) -> f32 {
         let Some(c) = &self.currency else { return 0.0 };
         let n = c.coins.len();
-        coins.iter().filter_map(|&i| if i < n { c.coins.get(i) } else { c.bills.get(i - n) }).map(|(_, v)| *v).sum()
+        coins
+            .iter()
+            .filter_map(|&i| {
+                if i < n {
+                    c.coins.get(i)
+                } else {
+                    c.bills.get(i - n)
+                }
+            })
+            .map(|(_, v)| *v)
+            .sum()
     }
 
     /// One coin's place on a point from three random numbers in 0..1: x and y (forward) in the
@@ -237,15 +294,6 @@ impl Money {
         }
     }
 
-    pub fn coin_worth(&self, coin: usize, worth: f32) -> usize {
-        let have = self.value_of(&[coin]);
-        let note = self.currency.as_ref().and_then(|c| c.bills.iter().map(|b| b.1).filter(|v| *v > 0.0).reduce(f32::min)).is_some_and(|b| worth >= b - 0.001);
-        if worth <= 0.0 || (have - worth).abs() < 0.001 || (!note && have > 0.0 && (have / worth).max(worth / have) > 5.0) {
-            return coin;
-        }
-        self.denominations().into_iter().find(|(_, v)| (v - worth).abs() < 0.001).map_or(coin, |(i, _)| i)
-    }
-
     pub fn change_value(&self) -> f32 {
         let coins: Vec<usize> = self.placed.iter().filter(|p| p.3).map(|p| p.2).collect();
         self.value_of(&coins)
@@ -253,7 +301,11 @@ impl Money {
 
     pub fn change_left_coins(&mut self, owed: f32) -> Vec<usize> {
         let left = owed - self.change_value();
-        if left > self.smallest_value() / 2.0 { self.exact_coins_for(left) } else { Vec::new() }
+        if left > self.smallest_value() / 2.0 {
+            self.exact_coins_for(left)
+        } else {
+            Vec::new()
+        }
     }
 }
 
@@ -264,7 +316,14 @@ mod tests {
     #[test]
     fn coins_lie_flat_on_the_point_not_stacked() {
         let point = Vec3::new(0.4, 5.0, 1.1);
-        let mut rng = Money { currency: None, dir: PathBuf::new(), meshes: HashMap::new(), placed: Vec::new(), hidden: Vec::new(), rng: 7 };
+        let mut rng = Money {
+            currency: None,
+            dir: PathBuf::new(),
+            meshes: HashMap::new(),
+            placed: Vec::new(),
+            hidden: Vec::new(),
+            rng: 7,
+        };
         let mut top = f32::MIN;
         for _ in 0..80 {
             let r = [rng.rand_f(), rng.rand_f(), rng.rand_f()];
@@ -279,12 +338,22 @@ mod tests {
 
     #[test]
     fn a_coin_of_the_change_is_picked_up_alone() {
-        let mut m = Money { currency: None, dir: PathBuf::new(), meshes: HashMap::new(), placed: Vec::new(), hidden: Vec::new(), rng: 7 };
+        let mut m = Money {
+            currency: None,
+            dir: PathBuf::new(),
+            meshes: HashMap::new(),
+            placed: Vec::new(),
+            hidden: Vec::new(),
+            rng: 7,
+        };
         m.placed.push((10, Mat4::IDENTITY, 0, false, None));
         m.placed.push((11, Mat4::IDENTITY, 1, true, None));
         m.placed.push((12, Mat4::IDENTITY, 2, true, None));
         m.take_coin(1);
-        assert_eq!(m.placed.iter().map(|p| p.0).collect::<Vec<_>>(), vec![10, 12]);
+        assert_eq!(
+            m.placed.iter().map(|p| p.0).collect::<Vec<_>>(),
+            vec![10, 12]
+        );
         assert_eq!(m.hidden, vec![11]);
         m.take_coin(9);
         assert_eq!(m.placed.len(), 2);
@@ -302,32 +371,6 @@ mod tests {
         m.placed.push((3, Mat4::IDENTITY, 4, true, None));
         assert!(m.change_left_coins(3.0).is_empty());
         assert!(m.change_left_coins(2.9).is_empty());
-    }
-
-    #[test]
-    fn a_change_key_gives_the_coin_it_names() {
-        let m = money_with_currency(&[0.05, 0.1, 0.2, 0.5, 1.0, 2.0], &[5.0]);
-        assert_eq!(m.coin_worth(2, 0.5), 3);
-        assert_eq!(m.coin_worth(2, 0.2), 2);
-        assert_eq!(m.coin_worth(2, 0.0), 2);
-        assert_eq!(m.coin_worth(5, 5.0), 6);
-        assert_eq!(m.coin_worth(5, 0.3), 5);
-    }
-
-    #[test]
-    fn a_change_key_named_in_another_currency_keeps_the_scripts_coin() {
-        let m = money_with_currency(&[0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0], &[100.0]);
-        assert_eq!(m.coin_worth(6, 0.05), 6, "10 Kc on a key named 0.05");
-        assert_eq!(m.coin_worth(7, 0.1), 7, "20 Kc on a key named 0.10");
-        assert_eq!(m.coin_worth(8, 0.5), 8, "50 Kc on a key named 0.50");
-        assert_eq!(m.coin_worth(3, 1.0), 3);
-    }
-
-    #[test]
-    fn a_note_key_gives_the_note_whatever_coin_the_script_names() {
-        let m = money_with_currency(&[0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 0.1, 0.2, 0.5, 1.0, 2.0], &[5.0, 10.0, 20.0]);
-        assert_eq!(m.coin_worth(6, 5.0), 11, "a doubled coin list: index 6 is a second 0.10");
-        assert_eq!(m.coin_worth(7, 10.0), 12);
     }
 
     fn money_with_currency(coins: &[f32], bills: &[f32]) -> Money {
@@ -355,11 +398,7 @@ mod tests {
 
     /// Repeatedly checks that no passenger payment contains a banknote
     /// above the permitted limit. `None` means banknotes must not be used.
-    fn assert_bill_limit(
-        money: &mut Money,
-        price: f32,
-        max_bill: Option<f32>,
-    ) {
+    fn assert_bill_limit(money: &mut Money, price: f32, max_bill: Option<f32>) {
         let coin_count = money.currency.as_ref().unwrap().coins.len();
 
         for _ in 0..100 {
