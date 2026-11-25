@@ -337,6 +337,10 @@ fn stop_brake_interlock_releases_held_brake_only_when_disengaging() {
     assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(1.0));
     assert_eq!(p.axes.brake, 1.0);
 
+    // (a frame passes between the clicks: a second click before it waits for it)
+    p.vehicle.update(1.0 / 60.0);
+    p.settle_click();
+
     // 4. Cab control (mouse click) disengaging releases held brake:
     p.trigger_cab_control("cp_stop_brake_toggle");
     assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(0.0));
