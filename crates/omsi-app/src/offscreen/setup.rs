@@ -23,21 +23,8 @@ impl<'a> Offscreen<'a> {
             .unwrap_or((1600, 900));
         let view_aspect = w as f32 / h.max(1) as f32;
         let settings = settings::Settings::load();
-        let instance = graphics_instance();
-        let mut renderer = pollster::block_on(Renderer::new_with(
-            &instance,
-            None,
-            Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-            args.session_settings.render_options(&settings),
-        ))?;
-        log::info!("adapter: {}", renderer.adapter_name);
-        crate::lights::load_smoke_texture(&mut renderer, &args.root);
-        crate::lights::set_corona_root(&args.root);
-        let mut scene = renderer.new_scene();
-        let (world, camera) = lan::answering_while(&mut lan_off, args.bus.as_deref(), || {
-            load_world(args, &renderer, &mut scene)
-        })?;
-        world.show_help_arrows(&renderer, &mut scene, settings.nav_map_arrows);
+        let (renderer, mut scene, world, camera) =
+            load_offscreen_world(args, &settings, &mut lan_off)?;
         let lan_seed = lan_off.as_ref().map(lan::population_seed);
         // (a player who joins another's game draws the host's traffic in it, whatever their own
         // count says: without it the host's cars had nowhere to go - "passengers, but no
@@ -109,68 +96,11 @@ impl<'a> Offscreen<'a> {
             center,
         );
         let player_ref: Option<Player> = None;
-        let envir = omsi_content::Envir::load(&args.root.join("envir.cfg")).ok();
-        let (weather, model) = crate::weather_setup::load_weather_run(args);
-        let mut sky = crate::weather_setup::SkyState {
-            clouds: None,
-            model,
-            look: args.session_settings,
-        };
-        setup_sky(
-            args,
-            &renderer,
-            &mut scene,
-            envir.as_ref(),
-            Some(&weather),
-            &mut sky.clouds,
-        );
-        if let Some(p) = player.as_mut() {
-            apply_weather(&mut p.vehicle, &weather, initial_wetness(&weather));
-        }
-        // the workshop's waiting time moves the clock on, so the sky has to follow it
-        let mut service_seconds = 0.0f64;
-        // (the run's weather for Omsi.exe's daylight from the first step on)
-        omsi_sim::daylight::set_sky_weather(omsi_weather::conditions::daylight_weather(&weather));
-        let daylight0 = omsi_sim::Daylight::compute(&start_clock(args), envir.as_ref());
-        if let Some(p) = player.as_mut() {
-            p.vehicle.set_var(
-                "Envir_Brightness",
-                daylight0.envir_brightness(world.light_map_light_at(p.vehicle.position)),
-            );
-            let mut clock = p.vehicle.host.clock.clone();
-            let was = clock.time;
-            let at_station = at_petrol_station(&world, &p.vehicle);
-            for line in run_services(
-                args,
-                &mut p.vehicle,
-                &mut clock,
-                world.global.repair_time_min,
-                at_station,
-            ) {
-                log::info!("{line}");
-            }
-            service_seconds = clock.time - was;
-            p.vehicle.host.clock = clock;
-        }
-        // one simulation loop for everything: traffic, the player's vehicle (test profile and
-        // timed triggers) and the passengers, so that they see each other every frame
-        let dt = super::run_dt();
-        let drive_frames = args.drive.map(|s| (s / dt) as usize).unwrap_or(0);
+        let (envir, weather, sky, service_seconds) =
+            setup_weather_and_services(args, &world, &renderer, &mut scene, player.as_mut());
+        let (dt, drive_frames, total_frames, server) =
+            run_length(args, humans_off.is_some(), traffic.is_some());
         let wheel_worst: Option<(DVec3, f64)> = None;
-        let total_frames = drive_frames
-            .max(if humans_off.is_some() {
-                super::steps_in(1.0)
-            } else {
-                0
-            })
-            .max(if traffic.is_some() { 1 } else { 0 });
-        // a dedicated server runs until it is told to stop (SIGTERM, Ctrl+C)
-        let server = args.server.is_some();
-        let total_frames = if server { usize::MAX } else { total_frames };
-        if server {
-            quit::install(|_| {});
-            log::info!("server: running; Ctrl+C or SIGTERM stops it");
-        }
         let timed: Vec<(String, f32)> = parse_triggers(args)
             .into_iter()
             .filter(|(_, t)| *t > 0.0)
@@ -363,6 +293,105 @@ impl<'a> Offscreen<'a> {
             sky,
         })
     }
+}
+
+fn load_offscreen_world(
+    args: &Args,
+    settings: &settings::Settings,
+    lan_off: &mut Option<omsi_net::LanSession>,
+) -> Result<(Renderer, Scene, World, Camera)> {
+    let instance = graphics_instance();
+    let mut renderer = pollster::block_on(Renderer::new_with(
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        args.session_settings.render_options(settings),
+    ))?;
+    log::info!("adapter: {}", renderer.adapter_name);
+    crate::lights::load_smoke_texture(&mut renderer, &args.root);
+    crate::lights::set_corona_root(&args.root);
+    let mut scene = renderer.new_scene();
+    let (world, camera) = lan::answering_while(lan_off, args.bus.as_deref(), || {
+        load_world(args, &renderer, &mut scene)
+    })?;
+    world.show_help_arrows(&renderer, &mut scene, settings.nav_map_arrows);
+    Ok((renderer, scene, world, camera))
+}
+
+fn setup_weather_and_services(
+    args: &Args,
+    world: &World,
+    renderer: &Renderer,
+    scene: &mut Scene,
+    mut player: Option<&mut Player>,
+) -> (
+    Option<omsi_content::Envir>,
+    omsi_content::weather::Weather,
+    crate::weather_setup::SkyState,
+    f64,
+) {
+    let envir = omsi_content::Envir::load(&args.root.join("envir.cfg")).ok();
+    let (weather, model) = crate::weather_setup::load_weather_run(args);
+    let mut sky = crate::weather_setup::SkyState {
+        clouds: None,
+        model,
+        look: args.session_settings,
+    };
+    setup_sky(
+        args,
+        renderer,
+        scene,
+        envir.as_ref(),
+        Some(&weather),
+        &mut sky.clouds,
+    );
+    if let Some(p) = player.as_mut() {
+        apply_weather(&mut p.vehicle, &weather, initial_wetness(&weather));
+    }
+    // the workshop's waiting time moves the clock on, so the sky has to follow it
+    let mut service_seconds = 0.0f64;
+    // (the run's weather for Omsi.exe's daylight from the first step on)
+    omsi_sim::daylight::set_sky_weather(omsi_weather::conditions::daylight_weather(&weather));
+    let daylight0 = omsi_sim::Daylight::compute(&start_clock(args), envir.as_ref());
+    if let Some(p) = player.as_mut() {
+        p.vehicle.set_var(
+            "Envir_Brightness",
+            daylight0.envir_brightness(world.light_map_light_at(p.vehicle.position)),
+        );
+        let mut clock = p.vehicle.host.clock.clone();
+        let was = clock.time;
+        let at_station = at_petrol_station(world, &p.vehicle);
+        for line in run_services(
+            args,
+            &mut p.vehicle,
+            &mut clock,
+            world.global.repair_time_min,
+            at_station,
+        ) {
+            log::info!("{line}");
+        }
+        service_seconds = clock.time - was;
+        p.vehicle.host.clock = clock;
+    }
+    (envir, weather, sky, service_seconds)
+}
+
+fn run_length(args: &Args, has_people: bool, has_traffic: bool) -> (f32, usize, usize, bool) {
+    // one simulation loop for everything: traffic, the player's vehicle (test profile and
+    // timed triggers) and the passengers, so that they see each other every frame
+    let dt = super::run_dt();
+    let drive_frames = args.drive.map(|s| (s / dt) as usize).unwrap_or(0);
+    let total_frames = drive_frames
+        .max(if has_people { super::steps_in(1.0) } else { 0 })
+        .max(if has_traffic { 1 } else { 0 });
+    // a dedicated server runs until it is told to stop (SIGTERM, Ctrl+C)
+    let server = args.server.is_some();
+    let total_frames = if server { usize::MAX } else { total_frames };
+    if server {
+        quit::install(|_| {});
+        log::info!("server: running; Ctrl+C or SIGTERM stops it");
+    }
+    (dt, drive_frames, total_frames, server)
 }
 
 /// The AI traffic (with no cars asked for, the light programs and the lamps only).

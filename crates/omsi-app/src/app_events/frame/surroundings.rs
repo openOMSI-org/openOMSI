@@ -65,7 +65,7 @@ crate::app::stage_ctx!(
 
 /// The lights (the lamps' cones, the light maps, every light that shines), the rain and
 /// the snow, the cabin air, the tyres' spray and the sounds of the street.
-pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind: f32) {
+pub(super) fn lights(mut cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind: f32) {
     // the lamps' cones in fog and falling rain or snow, and new light pictures
     let enhanced = cx
         .gfx
@@ -80,61 +80,7 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
             .map(|wt| lights::ConeWeather::of(wt, daylight.night))
             .unwrap_or_default()
     };
-    if let Some(r) = cx.gfx.renderer.as_mut() {
-        lights::upload_corona_textures(r);
-    }
-    // the tile light maps around the camera, for the roads' night light
-    let __ta = Instant::now();
-    if let (Some(w), Some(r), Some(cam)) = (
-        cx.world.world.as_ref(),
-        cx.gfx.renderer.as_ref(),
-        cx.view.camera.as_ref(),
-    ) {
-        w.update_light_map_atlas(r, cam.position);
-    }
-    cx.perf.profile.add(
-        crate::profile_keys::ProfKey::LightsAtlas,
-        __ta.elapsed().as_secs_f64(),
-    );
-    // the roads' and roofs' built-up snow, its ruts and tracks (omsi_scene::road_snow)
-    let __ts = Instant::now();
-    if let (Some(r), Some(cam), Some(scene)) = (
-        cx.gfx.renderer.as_ref(),
-        cx.view.camera.as_ref(),
-        cx.gfx.scene.as_mut(),
-    ) {
-        let (v, p, view) = (
-            omsi_scene::road_snow::vehicles(
-                cx.player.player.as_ref().map(|p| &p.vehicle),
-                cx.traffic.traffic.as_deref(),
-            ),
-            cx.player.player.as_ref(),
-            &cx.gfx.gfx.sim_view.traffic,
-        );
-        omsi_scene::road_snow::frame(
-            r,
-            if *cx.clock.paused {
-                0.0
-            } else {
-                dt * crate::app_impl::time_speed(cx.common.settings, cx.net) as f32
-            },
-            cx.weather.weather.as_ref(),
-            cam.position,
-            cx.traffic.traffic.as_ref().map(|t| &t.net),
-            &v,
-        );
-        omsi_scene::road_snow::show_roofs(r, scene, v.iter().map(|x| x.0), |k| {
-            if k == 0 {
-                p.map(|p| (&p.render, &p.trailer_renders[..]))
-            } else {
-                view.car(k - 1).map(|c| (&c.body, &c.trailers[..]))
-            }
-        });
-    }
-    cx.perf.profile.add(
-        crate::profile_keys::ProfKey::LightsSnow,
-        __ts.elapsed().as_secs_f64(),
-    );
+    update_light_textures_and_snow(&mut cx, dt);
     if let (Some(w), Some(scene), Some(cam)) = (
         cx.world.world.as_ref(),
         cx.gfx.scene.as_mut(),
@@ -406,6 +352,64 @@ pub(super) fn lights(cx: LightsCx, dt: f32, daylight: omsi_sim::Daylight, behind
             t.sim.show_actual();
         }
     }
+}
+
+fn update_light_textures_and_snow(cx: &mut LightsCx, dt: f32) {
+    if let Some(r) = cx.gfx.renderer.as_mut() {
+        lights::upload_corona_textures(r);
+    }
+    // the tile light maps around the camera, for the roads' night light
+    let __ta = Instant::now();
+    if let (Some(w), Some(r), Some(cam)) = (
+        cx.world.world.as_ref(),
+        cx.gfx.renderer.as_ref(),
+        cx.view.camera.as_ref(),
+    ) {
+        w.update_light_map_atlas(r, cam.position);
+    }
+    cx.perf.profile.add(
+        crate::profile_keys::ProfKey::LightsAtlas,
+        __ta.elapsed().as_secs_f64(),
+    );
+    // the roads' and roofs' built-up snow, its ruts and tracks (omsi_scene::road_snow)
+    let __ts = Instant::now();
+    if let (Some(r), Some(cam), Some(scene)) = (
+        cx.gfx.renderer.as_ref(),
+        cx.view.camera.as_ref(),
+        cx.gfx.scene.as_mut(),
+    ) {
+        let (v, p, view) = (
+            omsi_scene::road_snow::vehicles(
+                cx.player.player.as_ref().map(|p| &p.vehicle),
+                cx.traffic.traffic.as_deref(),
+            ),
+            cx.player.player.as_ref(),
+            &cx.gfx.gfx.sim_view.traffic,
+        );
+        omsi_scene::road_snow::frame(
+            r,
+            if *cx.clock.paused {
+                0.0
+            } else {
+                dt * crate::app_impl::time_speed(cx.common.settings, cx.net) as f32
+            },
+            cx.weather.weather.as_ref(),
+            cam.position,
+            cx.traffic.traffic.as_ref().map(|t| &t.net),
+            &v,
+        );
+        omsi_scene::road_snow::show_roofs(r, scene, v.iter().map(|x| x.0), |k| {
+            if k == 0 {
+                p.map(|p| (&p.render, &p.trailer_renders[..]))
+            } else {
+                view.car(k - 1).map(|c| (&c.body, &c.trailers[..]))
+            }
+        });
+    }
+    cx.perf.profile.add(
+        crate::profile_keys::ProfKey::LightsSnow,
+        __ts.elapsed().as_secs_f64(),
+    );
 }
 
 crate::app::stage_ctx!(
