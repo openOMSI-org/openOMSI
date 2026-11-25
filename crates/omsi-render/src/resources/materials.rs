@@ -33,6 +33,56 @@ pub(crate) struct MaterialUniform {
     /// x: `[matl_glow]` strength (`MaterialExtra::glow`); 0 = the keyword is not there.
     /// y/z/w free.
     pub(crate) glow: [f32; 4],
+    /// The PBR factors (`PbrFactors`): x metalness, y roughness, z the normal map's
+    /// strength, w the occlusion map's; each counts only where `base_color.w` says so.
+    pub(crate) pbr_factor: [f32; 4],
+    /// rgb: `[matl_basecolor]` (linear), the texture's factor; w: bits of what the
+    /// material's commands set - 1 the base colour, 2 the metalness, 4 the roughness,
+    /// 8 the normal strength, 16 the occlusion strength (0: none, as OMSI's materials).
+    pub(crate) base_color: [f32; 4],
+}
+
+/// The PBR factors of a material (openOMSI `[matl_basecolor]`, `[matl_metallic]`,
+/// `[matl_roughness]`, `[matl_normal_strength]`, `[matl_occlusion_strength]`, and a glTF
+/// material's factors): what the enhanced picture takes in place of, or times, a PBR map
+/// as glTF does - a factor alone is the value, with a map the map is scaled by it. None of
+/// them set: the material is as it was (see docs/PBR.md).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct PbrFactors {
+    /// The base colour (linear rgb) the texture is multiplied with.
+    pub base_color: Option<[f32; 3]>,
+    pub metallic: Option<f32>,
+    pub roughness: Option<f32>,
+    pub normal_strength: Option<f32>,
+    pub occlusion_strength: Option<f32>,
+}
+
+impl PbrFactors {
+    /// The two vectors of the material's uniform (`MaterialUniform::pbr_factor` and
+    /// `base_color`).
+    pub(crate) fn uniform(&self) -> ([f32; 4], [f32; 4]) {
+        let c = self.base_color.unwrap_or([1.0; 3]);
+        let bit = |set: bool, b: f32| if set { b } else { 0.0 };
+        let flags = bit(self.base_color.is_some(), 1.0)
+            + bit(self.metallic.is_some(), 2.0)
+            + bit(self.roughness.is_some(), 4.0)
+            + bit(self.normal_strength.is_some(), 8.0)
+            + bit(self.occlusion_strength.is_some(), 16.0);
+        (
+            [
+                self.metallic.unwrap_or(0.0).clamp(0.0, 1.0),
+                self.roughness.unwrap_or(1.0).clamp(0.0, 1.0),
+                self.normal_strength.unwrap_or(1.0).max(0.0),
+                self.occlusion_strength.unwrap_or(1.0).clamp(0.0, 1.0),
+            ],
+            [c[0].max(0.0), c[1].max(0.0), c[2].max(0.0), flags],
+        )
+    }
+
+    /// Whether the material's commands set any of them.
+    pub fn any(&self) -> bool {
+        *self != PbrFactors::default()
+    }
 }
 
 /// The maps of a PBR set found beside a diffuse texture (`foo_n.png` and the rest, see
@@ -76,9 +126,9 @@ pub enum TexAddressing {
 pub(crate) struct BindKey {
     pub(crate) textures: [(usize, u64); 7],
     pub(crate) address: TexAddressing,
-    // 13 vec4: the MaterialUniform's own fields (see the count in
+    // 15 vec4: the MaterialUniform's own fields (see the count in
     // `shaders_validate_and_match_the_uniforms`)
-    pub(crate) uniform: [u32; 52],
+    pub(crate) uniform: [u32; 60],
 }
 
 pub struct Material {
@@ -256,6 +306,9 @@ pub struct MaterialExtra {
     /// the modeller has said whether the slot is an LED panel at all (`led` follows it),
     /// so this is only read where `led` is set.
     pub led_glow: Option<f32>,
+    /// The PBR factors of the slot (openOMSI, see `PbrFactors`); the enhanced picture alone
+    /// draws them.
+    pub pbr: PbrFactors,
 }
 
 /// The textures a material's bind group samples.
@@ -937,6 +990,8 @@ impl Renderer {
                 0.0,
                 0.0,
             ],
+            pbr_factor: extra.pbr.uniform().0,
+            base_color: extra.pbr.uniform().1,
         };
         let slot = |t: Option<TextureId>| {
             t.and_then(|t| scene.textures.get(t).map(|g| (t, g.generation)))

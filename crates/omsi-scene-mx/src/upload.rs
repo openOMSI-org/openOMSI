@@ -485,6 +485,7 @@ impl World {
                     None => None,
                 };
                 let mut extra = material_extra(&slot_ov, env_mask, bump, specular);
+                extra.pbr = mesh_pbr(extra.pbr, m);
                 extra.ambient = Some(ambient);
                 extra.no_map_lights = ot.sco.no_map_lighting;
                 // a route arrow ([helparrow]) is a guide over the world, not a light in it:
@@ -574,6 +575,7 @@ impl World {
                     );
                     let it_alpha = items.first().map(|o| alpha_mode(o.alpha)).unwrap_or(alpha);
                     let mut it_extra = material_extra(&items, env_mask, bump, is);
+                    it_extra.pbr = mesh_pbr(it_extra.pbr, m);
                     it_extra.ambient = Some(ia);
                     it_extra.night_switched = items.iter().any(|o| o.nightmap.is_some());
                     it_extra.no_z_write |= extra.no_z_write;

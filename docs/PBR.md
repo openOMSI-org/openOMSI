@@ -48,6 +48,60 @@ suffix, as Substance, Blender, Materialize and similar tools export them.
   where they are seen up close.
 - The separate maps are packed into one occlusion/roughness/metalness texture on the GPU.
 
+## Factors without textures
+
+A material can also be given its PBR values as numbers, for surfaces that are the same all
+over (a polished reflector, a rubber seal, a painted rail), without making texture files. Put
+the keywords after the `[matl]` they belong to in the model `.cfg`, one value per line, as the
+other `[matl_*]` commands. OMSI 2 does not know these keywords and skips them; only the
+**Enhanced** and **Enhanced+** renderers draw them.
+
+```
+[matl]
+reflector.bmp
+0
+
+[matl_basecolor]
+0.9
+0.9
+0.92
+
+[matl_metallic]
+1
+
+[matl_roughness]
+0.08
+```
+
+| Keyword | Lines | Values |
+|---|---|---|
+| `[matl_basecolor]` | red, green, blue | 0..1, sRGB (as a colour picker shows it) |
+| `[matl_metallic]` | metalness | 0 (dielectric) .. 1 (metal) |
+| `[matl_roughness]` | roughness | 0 (mirror) .. 1 (matt) |
+| `[matl_normal_strength]` | factor | 0 (flat) .. 4; 1 the map as painted |
+| `[matl_occlusion_strength]` | factor | 0 (none) .. 1 (the whole map) |
+
+How a factor works with a map, as in glTF:
+
+- **Base colour** multiplies the diffuse texture (and the `.o3d` material's colour). A slot
+  without a texture takes it as its whole colour.
+- **Metalness and roughness:** with a map the map's value is multiplied by the factor, without
+  one the factor is the value. Either replaces the values derived from OMSI's files (the table
+  below), so a material with a factor reflects the sky as a mapped one does.
+- **Normal strength** scales the normal map's slopes; without a normal map it does nothing.
+- **Occlusion strength** blends the occlusion map towards white; without a map it does nothing.
+- A value out of range is taken to the nearer end. A `[matl_item]` takes the factors it does
+  not set from its slot's `[matl]`, and the last keyword of a kind counts.
+
+A material without these keywords looks exactly as before.
+
+### glTF models
+
+A `.gltf` or `.glb` material's `metallicFactor` and `roughnessFactor` are taken as
+`[matl_metallic]` and `[matl_roughness]` when the material has no metallic-roughness texture
+(that texture is not read; put the maps beside the base colour texture instead). Keywords in
+the `.cfg` take precedence. The base colour factor is the `.o3d` material colour, as before.
+
 ## Tips
 
 - Export at the diffuse texture's resolution, or half of it.

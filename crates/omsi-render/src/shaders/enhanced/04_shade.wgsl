@@ -240,6 +240,12 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // A slot without a texture (ambient.w -1) takes its diffuse colour for both: Omsi.exe's
     // white ambient of every o3d slot under a strong sky turned a coloured model white (#1737).
     var ambient_albedo = select(tex.rgb * material.ambient.rgb, albedo, material.ambient.w < -0.5 || from_ground);
+    // [matl_basecolor] (openOMSI, `PbrFactors`): the texture's colour times the factor, as
+    // glTF's base colour factor - the whole colour of a slot without a texture
+    if (pbr_set(1u) && !from_ground) {
+        albedo = albedo * material.base_color.rgb;
+        ambient_albedo = ambient_albedo * material.base_color.rgb;
+    }
     var detail_factor = 1.0;
     if (camera.flags.x > 0.5 && (terrain || in.params2.w > 0.5)) {
         let k = clamp(1.0 - (dist - 25.0) / 120.0, 0.0, 1.0);
@@ -351,6 +357,10 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         if (pbr_normal_flag() > 1.5) {
             tn.y = -tn.y;
         }
+        // ([matl_normal_strength]: the map's slopes scaled, 0 flat)
+        if (pbr_set(8u)) {
+            tn = vec3<f32>(tn.xy * material.pbr_factor.z, tn.z);
+        }
         n = perturb_normal(n, in.world, duv, tn);
     }
     if (material.pbr.y + material.pbr.z + material.pbr.w > 0.5 && !terrain) {
@@ -363,6 +373,21 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
         }
         if (material.pbr.w > 0.5) {
             metal = orm.b;
+            f0 = mix(vec3<f32>(0.04), albedo, metal);
+        }
+    }
+    // The PBR factors (openOMSI `[matl_metallic]`, `[matl_roughness]`,
+    // `[matl_occlusion_strength]`; `PbrFactors`), as glTF takes them: with a map the map
+    // times the factor, without one the factor itself, in place of the guesses above.
+    if (material.base_color.w > 1.5 && !terrain) {
+        if (pbr_set(16u)) {
+            pbr_ao = mix(1.0, pbr_ao, material.pbr_factor.w);
+        }
+        if (pbr_set(4u)) {
+            rough = clamp(select(material.pbr_factor.y, rough * material.pbr_factor.y, material.pbr.z > 0.5), 0.03, 1.0);
+        }
+        if (pbr_set(2u)) {
+            metal = clamp(select(material.pbr_factor.x, metal * material.pbr_factor.x, material.pbr.w > 0.5), 0.0, 1.0);
             f0 = mix(vec3<f32>(0.04), albedo, metal);
         }
     }
@@ -655,7 +680,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // A wet road, a wet pavement is no mirror: a soft, dim sheen of what stands round it, a
     // puddle a blurred picture of it (panes, envmapped paint and still water keep their own
     // smoothness). Its reflection is taken this rough, at this share.
-    let wet_only = !(reflective_env || glass || is_water || ((material.pbr.z > 0.5 || material.pbr.w > 0.5) && !terrain));
+    let wet_only = !(reflective_env || glass || is_water || (pbr_reflective() && !terrain));
     let refl_rough = select(rough, max(rough, mix(0.2, 0.16, puddle)), wet_only);
     let wet_share = select(1.0, mix(0.6, 0.7, puddle), wet_only);
     let lod = refl_rough * (enh.lights.x - 1.0);
@@ -733,7 +758,7 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
     // what the SSAO darkens, it also keeps reflections out of
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
     // (a PBR set's roughness or metalness map says how it reflects: the probe, as for an envmap)
-    let pbr_reflects = (material.pbr.z > 0.5 || material.pbr.w > 0.5) && !terrain;
+    let pbr_reflects = pbr_reflective() && !terrain;
     // (a wet road mirrors the sky probe as well; and what reflects nothing keeps the light
     // the Fresnel term took off its ambient above - at a grazing angle that term is near 1,
     // and the far road and ground went dark with no reflection in its place, #374)
