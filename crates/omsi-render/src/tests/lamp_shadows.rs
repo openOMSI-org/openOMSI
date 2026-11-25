@@ -1,5 +1,9 @@
 use super::*;
 
+pub(super) fn lamp_shadows_renderer() -> Renderer {
+    renderer()
+}
+
 fn renderer() -> Renderer {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     pollster::block_on(Renderer::new_with(
@@ -361,14 +365,15 @@ fn a_handrail_in_the_players_saloon_shades_the_floor_from_its_lamp() {
     let floor_instance =
         renderer.add_instance(&mut scene, floor, DVec3::ZERO, Mat4::IDENTITY, vec![grey]);
     renderer.add_instance(&mut scene, pole, DVec3::ZERO, Mat4::IDENTITY, vec![grey]);
-    // the floor takes the saloon's plain light, a lamp hangs 3.5 m up beside the pole
+    // the floor takes the saloon's plain light, a lamp hangs 2.4 m up beside the pole (a
+    // saloon's ceiling height: the shadow lookups reach `CABIN_SHADOW_REACH`)
     renderer.set_interior(&mut scene, floor_instance, 0.6);
     let slot = renderer.alloc_interior_lights(&mut scene, 1);
     renderer.set_interior_light(
         &mut scene,
         slot,
         PointLight {
-            position: DVec3::new(-1.5, 0.0, 3.5),
+            position: DVec3::new(-1.0, 0.0, 2.4),
             radius: 100.0,
             core: 1.0,
             color: [1.0; 3],
@@ -381,7 +386,7 @@ fn a_handrail_in_the_players_saloon_shades_the_floor_from_its_lamp() {
     let (_, tiles) = renderer.prepare_lights(
         &mut scene,
         &LightEye {
-            cam_rel: Vec3::new(0.0, 0.0, 8.0),
+            cam_rel: Vec3::new(0.0, 0.0, 3.2),
             view_proj: None,
             vehicle: lighting.inside.as_ref().map(|b| (b, None)),
             level: 2,
@@ -396,14 +401,15 @@ fn a_handrail_in_the_players_saloon_shades_the_floor_from_its_lamp() {
         "the saloon's lamp has a tile: {} tiles",
         tiles.len()
     );
-    let reach = 8.0 * 2.0 * 30f32.to_radians().tan();
+    // (seen from in the saloon: its lamps' maps are made only while the eye is in it)
+    let reach = 3.2 * 2.0 * 30f32.to_radians().tan();
     let rgba = renderer
-        .render_to_image(&mut scene, 64, 64, &from_above(8.0), &lighting)
+        .render_to_image(&mut scene, 64, 64, &from_above(3.2), &lighting)
         .unwrap();
     // (the saloon's plain light is the same everywhere: what differs is how much of the lamp's
     // light the point is in - behind the pole, or to its side)
-    let behind = ground_at(&rgba, reach, 1.5, 0.0);
-    let beside = ground_at(&rgba, reach, 1.5, 3.0);
+    let behind = ground_at(&rgba, reach, 1.2, 0.0);
+    let beside = ground_at(&rgba, reach, 1.2, 1.3);
     assert!(
         behind * 1.5 < beside,
         "the pole's shadow darkens the floor behind it: {behind} against {beside}"

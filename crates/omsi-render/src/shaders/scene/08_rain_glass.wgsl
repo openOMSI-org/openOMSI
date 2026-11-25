@@ -544,16 +544,19 @@ fn glass_water(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, water: f32, t: 
 
 // The picture behind the glass (`glass_mips.rs`, pre-exposed radiance) at `uv`, blurred to
 // level `lod`: five reads round the point a texel of that level apart, so the small levels'
-// texels do not show as blocks when they are spread over many pixels.
+// texels do not show as blocks when they are spread over many pixels. (Through `s_ao`, a
+// plain trilinear sampler: the material's own `s_diffuse` is anisotropic, and read at an
+// explicit level some Windows drivers took its small levels unfiltered - the street behind
+// a wet windscreen in squares of four and eight pixels, #4258.)
 fn glass_blur(uv: vec2<f32>, lod: f32) -> vec3<f32> {
     let dims = vec2<f32>(textureDimensions(t_env));
     let o = exp2(lod) * 0.75 / dims;
     let c = clamp(uv, vec2<f32>(0.001), vec2<f32>(0.999));
-    var s = textureSampleLevel(t_env, s_diffuse, c, lod).rgb * 2.0;
-    s = s + textureSampleLevel(t_env, s_diffuse, clamp(c + vec2<f32>(o.x, o.y * 0.5), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
-    s = s + textureSampleLevel(t_env, s_diffuse, clamp(c + vec2<f32>(-o.x * 0.5, o.y), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
-    s = s + textureSampleLevel(t_env, s_diffuse, clamp(c + vec2<f32>(-o.x, -o.y * 0.5), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
-    s = s + textureSampleLevel(t_env, s_diffuse, clamp(c + vec2<f32>(o.x * 0.5, -o.y), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
+    var s = textureSampleLevel(t_env, s_ao, c, lod).rgb * 2.0;
+    s = s + textureSampleLevel(t_env, s_ao, clamp(c + vec2<f32>(o.x, o.y * 0.5), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
+    s = s + textureSampleLevel(t_env, s_ao, clamp(c + vec2<f32>(-o.x * 0.5, o.y), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
+    s = s + textureSampleLevel(t_env, s_ao, clamp(c + vec2<f32>(-o.x, -o.y * 0.5), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
+    s = s + textureSampleLevel(t_env, s_ao, clamp(c + vec2<f32>(o.x * 0.5, -o.y), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
     return s / 6.0;
 }
 

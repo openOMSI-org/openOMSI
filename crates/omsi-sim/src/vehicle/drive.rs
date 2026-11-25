@@ -541,7 +541,7 @@ impl VehicleInstance {
                 crate::rigid::CoupledPart {
                     point: first.coupling_back,
                     dir,
-                    mass: def.mass_kg().max(0.0),
+                    mass: def.mass_kg().max(0.0) + t.load_kg,
                     driven_wheels: driven.len() * 2,
                     radius: driven
                         .first()
@@ -555,7 +555,8 @@ impl VehicleInstance {
                         .sum::<f32>()
                         + def.rolling_resistance.max(0.0),
                     load: (0..def.axles.len()).map(wheel_load).sum(),
-                    joint_load: t.joint_load,
+                    // (the people in it hang on the coupling in the share its own weight does)
+                    joint_load: t.joint_load * (1.0 + t.load_kg / def.mass_kg().max(500.0)),
                     spin: t.drive_spin,
                     slipping: t.drive_slipping,
                     inertia_inv: driven

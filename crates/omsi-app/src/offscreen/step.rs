@@ -454,6 +454,7 @@ impl Offscreen<'_> {
     pub(super) fn duty_step(&mut self) {
         let (args, dt) = (self.args, self.dt);
         let announce = self.settings.auto_announce;
+        let weight = self.settings.passenger_weight();
         let Self {
             ref mut player,
             ref mut duty,
@@ -470,7 +471,7 @@ impl Offscreen<'_> {
         if let Some(d) = duty.as_mut() {
             // (no plugins in an offscreen run: what they would be told goes to the log)
             let mut events = Vec::new();
-            steps::duty_step(
+            let note = steps::duty_step(
                 d,
                 player,
                 world,
@@ -483,11 +484,15 @@ impl Offscreen<'_> {
                 Some(&mut events),
                 announce,
             );
+            if let Some(text) = note {
+                log::info!("{text}");
+            }
             for e in events {
                 log::info!("plugin event: {e:?}");
             }
         }
         let riders = humans_off.as_ref().map(|h| h.riding()).unwrap_or(0);
+        steps::passenger_load_step(player, humans_off.as_ref().map(|h| &h.sim), weight);
         let crash = steps::career_step(career, player, riders, duty.is_some(), dt, true);
         if crash > 0.0 {
             log::warn!("crash: {:.0} kJ", crash / 1000.0);
@@ -1213,6 +1218,7 @@ impl Offscreen<'_> {
             ref world,
             ref weather,
             ref humans_off,
+            ref settings,
             ..
         } = *self;
         if let Some(p) = player.as_ref() {
@@ -1290,6 +1296,7 @@ impl Offscreen<'_> {
             traffic.as_ref().map(|t| &t.net),
             &v,
         );
+        omsi_scene::road_dirt::frame(renderer, settings.procedural_dirt, camera.position, &v);
     }
 
     /// A snapshot due at `t_s` (`--snapshots`).

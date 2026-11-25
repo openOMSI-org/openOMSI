@@ -1147,17 +1147,6 @@ pub fn fit_date_to_years(date: &str, span: Option<(i32, i32)>) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
-/// The `--date` of a duty: the date the player chose as it stands. Only a date taken from
-/// the machine's calendar (`use_real_date`) is fitted to the map's `[years]` - an old saved
-/// duty or a manually picked year must not be moved behind the player's back.
-fn date_for_game(date: &str, real_date: bool, span: Option<(i32, i32)>) -> String {
-    if real_date {
-        fit_date_to_years(date, span)
-    } else {
-        date.to_string()
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct EntryInfo {
     pub index: i32,
@@ -3475,6 +3464,11 @@ fn passenger_defaults(v: &mut Value) {
     v["passenger_hailing"] = json!(false);
     v["passenger_full_bus_reaction"] = json!(false);
     v["pax_short_rides_stand"] = json!(false);
+    // (#4014: the riders' weight on the bus's physics, off by default)
+    v["passenger_mass"] = json!(false);
+    v["passenger_weight_kg"] = json!(75.0);
+    v["passenger_weight_fixed"] = json!(false);
+    v["passenger_weight_spread"] = json!(0.0);
 }
 
 /// Initial values shared by desktop and phone, kept outside the long settings parser.
@@ -3501,9 +3495,9 @@ fn graphics_and_interface_defaults(v: &mut Value) {
 }
 
 // (one setting a line, as the settings file has them: rustfmt would triple it)
-#[rustfmt::skip]
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
+    v["rear_door_boarding"] = json!(false);
     graphics_and_interface_defaults(&mut v);
     if phone {
         for (k, d) in [
@@ -3593,6 +3587,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["windy_trees"] = json!(true);
     v["detailed_trees"] = json!(true);
     v["road_snow"] = json!(false); // opt-in; off preserves the weather's classic snow on roads
+    v["procedural_dirt"] = json!(true); // Enhanced: road dirt where it lands, in place of the buses' own (#1386)
     v["sim_thread"] = json!(false); // (switched in the game's Display menu, saved through this writer)
     v["mx_graphics"] = json!(false);
     v["mirror_hud_every_frame"] = json!(false);
@@ -3728,6 +3723,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["flashlight_cursor"] = json!(false);
     // (#3154: OMSI 2's own rounding of a stop's passenger numbers until the player asks)
     v["pax_stop_numbers_exact"] = json!(false);
+    v["others_detail"] = json!(false);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
     v["ctrl_background"] = json!(false);
@@ -4013,6 +4009,20 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 } else {
                     "simple"
                 })
+            }
+            "passenger_weight_kg" | "passenger_weight_spread" => {
+                let (def, lo, hi) = if k == "passenger_weight_kg" {
+                    (75.0, 20.0, 200.0)
+                } else {
+                    (0.0, 0.0, 50.0)
+                };
+                v[&k] = json!(
+                    val.parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .unwrap_or(def)
+                        .clamp(lo, hi)
+                )
             }
             "passenger_transfer_percent" => {
                 v[&k] = json!(
@@ -4310,7 +4320,9 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 )
             }
             "zoom_hold_latch" => v[&k] = json!(b(val)),
-            "flashlight_cursor" | "pax_stop_numbers_exact" => v[&k] = json!(b(val)),
+            "flashlight_cursor" | "others_detail" | "pax_stop_numbers_exact" => {
+                v[&k] = json!(b(val))
+            }
             "pad_steer_smooth" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4459,6 +4471,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "rain_lights"
             | "detailed_trees"
             | "road_snow"
+            | "procedural_dirt"
             | "mirror_hud_every_frame"
             | "mirror_shadows"
             | "mirror_particles"
@@ -4470,8 +4483,11 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "passenger_connections"
             | "passenger_hailing"
             | "passenger_full_bus_reaction"
+            | "passenger_mass"
+            | "passenger_weight_fixed"
             | "pax_short_rides_stand"
             | "auto_announce"
+            | "rear_door_boarding"
             | "ambient" => v[&k] = json!(b(val)),
             "pax_late_tolerance_min" => {
                 v[&k] = json!(
@@ -4666,7 +4682,22 @@ fn units_setting(v: &str) -> &'static str {
 }
 
 // (one setting a line, as the settings file has them: rustfmt would triple it)
-#[rustfmt::skip]
+/// The `rain_quality`, `vehicle_smoke` and `puddles` lines of the settings file.
+fn weather_effects_text(v: &Value) -> String {
+    let s = |key: &str, default: &'static str| -> String {
+        v.get(key)
+            .and_then(|x| x.as_str())
+            .unwrap_or(default)
+            .to_string()
+    };
+    format!(
+        "rain_quality={}\nvehicle_smoke={}\npuddles={}\n",
+        rain_quality(&s("rain_quality", "high")),
+        vehicle_smoke(&s("vehicle_smoke", "all")),
+        puddles(&s("puddles", "high"))
+    )
+}
+
 pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let b = |k: &str, d: bool| v.get(k).and_then(|x| x.as_bool()).unwrap_or(d) as u8;
     // a number, also as the string a select gives
@@ -5110,26 +5141,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("light_glow", false),
         b("volumetric_fog", true)
     ));
-    text.push_str(&format!(
-        "rain_quality={}\n",
-        rain_quality(
-            v.get("rain_quality")
-                .and_then(|x| x.as_str())
-                .unwrap_or("high")
-        )
-    ));
-    text.push_str(&format!(
-        "vehicle_smoke={}\n",
-        vehicle_smoke(
-            v.get("vehicle_smoke")
-                .and_then(|x| x.as_str())
-                .unwrap_or("all")
-        )
-    ));
-    text.push_str(&format!(
-        "puddles={}\n",
-        puddles(v.get("puddles").and_then(|x| x.as_str()).unwrap_or("high"))
-    ));
+    text.push_str(&weather_effects_text(v));
     text.push_str(&format!(
         "road_glare={}\ntraffic_headlights={}\n",
         f("road_glare", 1.0).clamp(0.0, 2.0),
@@ -5164,6 +5176,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         "pax_stop_numbers_exact={}\n",
         b("pax_stop_numbers_exact", false)
     ));
+    text.push_str(&format!("others_detail={}\n", b("others_detail", false)));
     text.push_str(&format!("look_sens={}\nlook_smoothing_ms={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\ntime_sync={}\nmetar_sync={}\nmetar_station={}\n", f("look_sens", 1.0).clamp(0.1, 2.0), f("look_smoothing_ms", 0.0).clamp(0.0, 200.0), f("steer_look_angle", 30.0).clamp(0.0, 60.0), f("steer_look_response", 0.25).clamp(0.05, 1.0), f("head_idle", 0.0).clamp(0.0, 1.0), f("head_idle_pace", 1.0).clamp(0.5, 2.0), b("time_sync", false), b("metar_sync", false), v.get("metar_station").and_then(|x| x.as_str()).unwrap_or("").chars().filter(|c| c.is_ascii_alphabetic()).take(4).collect::<String>().to_ascii_uppercase()));
     text.push_str(&format!(
         "pad_steer_smooth={}\n",
@@ -5209,8 +5222,13 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("rain_lights={}\n", b("rain_lights", true)));
     text.push_str(&format!("detailed_trees={}\n", b("detailed_trees", true)));
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
+    text.push_str(&format!("procedural_dirt={}\n", b("procedural_dirt", true)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mx_graphics={}\n", b("mx_graphics", false)));
+    text.push_str(&format!(
+        "rear_door_boarding={}\n",
+        b("rear_door_boarding", false)
+    ));
     text.push_str(&format!(
         "mirror_hud_every_frame={}\n",
         b("mirror_hud_every_frame", false)
@@ -5286,11 +5304,22 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("passenger_full_bus_reaction", false)
     ));
     text.push_str(&format!(
+        "passenger_mass={}\npassenger_weight_kg={}\npassenger_weight_fixed={}\npassenger_weight_spread={}\n",
+        b("passenger_mass", false),
+        f("passenger_weight_kg", 75.0).clamp(20.0, 200.0),
+        b("passenger_weight_fixed", false),
+        f("passenger_weight_spread", 0.0).clamp(0.0, 50.0)
+    ));
+    text.push_str(&format!(
         "pax_short_rides_stand={}\n",
         b("pax_short_rides_stand", false)
     ));
     let ed = entry_doors_setting(v.get("pax_entry_doors").and_then(|x| x.as_str()));
-    text.push_str(&format!("auto_announce={}\npax_no_ticket={}\npax_entry_doors={ed}\n", b("auto_announce", false), b("pax_no_ticket", false)));
+    text.push_str(&format!(
+        "auto_announce={}\npax_no_ticket={}\npax_entry_doors={ed}\n",
+        b("auto_announce", false),
+        b("pax_no_ticket", false)
+    ));
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),

@@ -899,6 +899,15 @@ The SD200's roller sets `Rollband_Tex_V` from the depot and terminus strings, so
 - `[led_glow_effect] <value>` (0..1) is how much of the **Led glow** setting the slot's dots burn
   with. `0` means the slot is no LED panel. Without it, Enhanced guesses: a `\S:n` script mask
   under an all-white light map is taken for an LED panel.
+- `[matl_basecolor]` (three lines, sRGB 0..1), `[matl_metallic]`, `[matl_roughness]`,
+  `[matl_normal_strength]` and `[matl_occlusion_strength]` (one line each) are PBR factors: the
+  value itself without a map, the map's value scaled with one. Only Enhanced draws them. See
+  [PBR materials](PBR.md#factors-without-textures).
+- `[matl_emissive]` (r, g, b, strength, optional variable), `[matl_emissive_nits]`,
+  `[matl_emissive_kelvin]` (temperature, optional variable or `filament`),
+  `[matl_emissive_texture]` and `[matl_emissive_fade]` (seconds up, optional seconds down) make
+  the slot its own light in HDR, which the scripts can switch, dim and tint. Only Enhanced draws
+  it. See [Emissive materials](PBR.md#emissive-materials).
 
 ### Smoke particles
 

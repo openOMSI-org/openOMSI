@@ -42,6 +42,8 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "passenger_connections", "Passenger connections between lines", "Optional onward trips in single player only; disabled in multiplayer"),
         slider_row(app, "passenger_transfer_percent", "Connection chance", "Probability for eligible transfers; default 20%", &|v|format!("{v:.0}%")).filter(|_|s.passenger_connections),
         switch_row(app, "passenger_hailing", "Passengers signal approaching buses", "Optional visual hailing; only effective with supported natural animations"),
+        switch_row(app, "passenger_mass", "Passengers add weight to the bus", "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says"),
+        slider_row(app, "passenger_weight_kg", "Passenger weight", "For passengers whose file gives no weight; default 75 kg", &|v| format!("{v:.0} kg")).filter(|_| s.passenger_mass),
         switch_row(app, "passenger_full_bus_reaction", "Passengers react to full buses", "Optional visual acknowledgement when an approaching compatible bus is at passenger capacity"),
         switch_row(app, "pax_short_rides_stand", "Short rides stand by a door", "Passengers with no set stop who ride only a few kilometres take a free standing place near an exit rather than a seat"),
         switch_row(app, "auto_announce", "Arrival announcements at the stop", "On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS's next stop key, pressed as the driver would"),
@@ -90,6 +92,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "windy_trees", "Windy trees", "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still"),
         switch_row(app, "detailed_trees", "Detailed trees", "Close up, the trees' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time"),
         switch_row(app, "road_snow", "Built-up snow on roads and roofs", "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2").filter(|_| shown("road_snow")),
+        switch_row(app, "procedural_dirt", "Road dirt on the vehicles", "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2").filter(|_| shown("procedural_dirt")),
     ]
         .into_iter()
         .flatten()
@@ -175,6 +178,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "precision_zoom", "Precision mouse zoom", "The mouse zoom follows the FOV curve instead of OMSI's linear way"),
         slider_row(app, "zoom_hold_amount", "Zoom on a key", "How far the view zooms while the zoom key is held (Controls: Zoom while held)", &|v| format!("{}x", format!("{:.2}", 1.0 / v.max(0.15)).trim_end_matches('0').trim_end_matches('.'))),
         switch_row(app, "zoom_hold_latch", "Zoom key stays", "One press zooms in, the next zooms out; off: only while the key is held"),
+        switch_row(app, "others_detail", "Draw other players' buses in less detail when far away", "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps"),
         switch_row(app, "flashlight_cursor", "Flashlight follows the cursor", "With the cursor free (on foot, or in the cab while the mouse does not steer) the flashlight lights where it points; otherwise straight ahead"),
         slider_row(app, "fov", "Field of view", "Vertical field of view; in triple screen Default uses physical measurements, an override moves the virtual eye", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }),
         slider_row(app, "seat 1", "Seat forward and back", "Adjust the driver's seat position forward or backward", &cm),
@@ -1040,7 +1044,8 @@ fn shown_in_mode(mode: &str, key: &str) -> bool {
         "shadows" | "ssao" => !matches!(mode, "vanilla" | "enhanced_plus"),
         "shadow_size" | "shadow_casters" | "detail_textures" | "road_snow" => mode != "vanilla",
         "reflections" => mode != "enhanced_plus",
-        "night_brightness" | "led_glow" | "led_mips" | "mirror_quality" | "cloud_quality" => {
+        "night_brightness" | "led_glow" | "led_mips" | "mirror_quality" | "cloud_quality"
+        | "procedural_dirt" => {
             matches!(mode, "enhanced" | "enhanced_plus")
         }
         // (the ray-traced picture has its own occlusion)

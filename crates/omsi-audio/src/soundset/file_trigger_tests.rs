@@ -58,6 +58,34 @@ fn a_blank_file_plays_nothing() {
     assert!(set.sounds[0].voice.is_none());
 }
 
+/// `" " (T.F.x)` frees the entry's buffer (0x74fb3c -> 0x75030c): what it plays stops, and
+/// it stays silent - `""` re-fires it with no file - until a `(T.F.)` names one that loads.
+#[test]
+fn a_blank_file_stops_the_entry_and_keeps_it_silent() {
+    let engine = AudioEngine::silent();
+    let mut set = announcer(&engine, Some(gong()));
+    set.play_file_trigger(&engine, "ann", "", &|_| None, &Mat4::IDENTITY);
+    let voice = set.sounds[0].voice;
+    assert!(playing(&set, &engine));
+    set.play_file_trigger(&engine, "ann", " ", &|_| None, &Mat4::IDENTITY);
+    assert!(voice.is_some_and(|id| !engine.is_playing(id)), "stopped");
+    assert!(set.sounds[0].voice.is_none() && set.sounds[0].clip.is_none());
+    set.play_file_trigger(&engine, "ann", "", &|_| None, &Mat4::IDENTITY);
+    assert!(set.sounds[0].voice.is_none(), "no file to play again");
+}
+
+/// A named file that is not there does the same (0x74fe28 marks the entry not loaded).
+#[test]
+fn a_missing_file_stops_the_entry_and_keeps_it_silent() {
+    let engine = AudioEngine::silent();
+    let mut set = announcer(&engine, Some(gong()));
+    set.play_file_trigger(&engine, "ann", "", &|_| None, &Mat4::IDENTITY);
+    let voice = set.sounds[0].voice;
+    set.play_file_trigger(&engine, "ann", "missing.wav", &|_| None, &Mat4::IDENTITY);
+    assert!(voice.is_some_and(|id| !engine.is_playing(id)), "stopped");
+    assert!(set.sounds[0].clip.is_none());
+}
+
 #[test]
 fn an_empty_file_without_a_file_to_play_again_is_silent() {
     let engine = AudioEngine::silent();

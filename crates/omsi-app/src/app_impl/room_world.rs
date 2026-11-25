@@ -140,6 +140,7 @@ impl App {
             );
             humans.board_when_stopped = self.settings.pax_board_when_stopped;
             humans.boarding = self.settings.boarding.clone();
+            humans.rear_door_boarding = self.settings.rear_door_boarding;
             humans.stand_chance = self.settings.standing_chance;
             humans.short_rides_stand = self.settings.pax_short_rides_stand;
             humans.voices = match self.settings.pax_voices.as_str() {

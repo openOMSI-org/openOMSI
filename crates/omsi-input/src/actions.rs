@@ -12,6 +12,7 @@ pub fn is_game_action(name: &str) -> bool {
                 | "screenshot"
                 | "photo_mode"
                 | "flashlight"
+                | "cruise_control"
                 | "clean_screen"
                 | "get_up"
                 | "quicksave"

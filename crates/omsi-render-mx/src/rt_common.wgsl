@@ -183,7 +183,10 @@ fn trace(o: vec3<f32>, d: vec3<f32>, tmax: f32, mask: u32, seed: vec3<u32>, soli
     var start = 0.0;
     var out: Hit;
     out.t = -1.0;
-    for (var i = 0u; i < 6u; i++) {
+    // (four layers of cut-out leaves at most: past them the ray is taken as through - in
+    // a crown's thick of cards six restarts cost the trace a third of its time for light
+    // that the filter averages away)
+    for (var i = 0u; i < 4u; i++) {
         out.tries = i + 1u;
         let h = ray_hit(RT_FORCE_OPAQUE, mask, start, tmax, o, d);
         if (h.kind == RAY_QUERY_INTERSECTION_NONE) {

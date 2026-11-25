@@ -208,6 +208,84 @@ pub(super) fn material_extra(
         alpha_cut: false,
         glow: glow_strength(ov),
         led_glow: led_glow_effect(ov),
+        pbr: pbr_factors(ov),
+        emission: emission_light(ov),
+        no_dirt: ov.iter().any(|o| o.no_dirt),
+    }
+}
+
+/// `[matl_emissive]` and its companions of a slot (openOMSI, see `omsi_model::Emission`) as
+/// the renderer draws them: the last slot command that has them counts. Its colour is the
+/// temperature's (`[matl_emissive_kelvin]`) where one is given, else the sRGB colour made
+/// linear; with `[matl_emissive_nits]` the colour is taken at a luminance of 1 and the light
+/// in the renderer's radiance units. A slot with a `[matl_lightmap]` keeps that light map in
+/// its slot (no emission texture) and its value (the emission is not driven).
+pub(super) fn emission_light(ov: &[&MaterialDef]) -> Option<omsi_render::EmissionLight> {
+    let e = ov.iter().rev().find_map(|o| o.emission.as_ref())?;
+    let lit = ov.iter().any(|o| o.lightmap.is_some());
+    let glow = ov.iter().any(|o| o.glow.is_some());
+    let mut color = match e.kelvin {
+        Some(k) => omsi_model::blackbody_rgb(k),
+        None => e.color.map(srgb_to_linear),
+    };
+    let (scale, physical) = match e.nits {
+        Some(n) => {
+            let l = 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2];
+            if l > 1e-6 {
+                color = color.map(|c| c / l);
+            }
+            (n / 10_000.0, true)
+        }
+        None => (e.strength, false),
+    };
+    Some(omsi_render::EmissionLight {
+        color,
+        scale,
+        physical,
+        textured: e.texture.is_some() && !lit && !glow,
+        dimmed: e.is_driven() && !lit,
+        tinted: e.is_driven() && e.is_tinted() && !lit,
+    })
+}
+
+/// An sRGB value (0..1) as linear light.
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// The slot's PBR factors with what its mesh's own material says where the commands do not:
+/// a glTF material's metallic and roughness factors (`omsi_o3d::Material::metallic_roughness`).
+pub(super) fn mesh_pbr(
+    mut pbr: omsi_render::PbrFactors,
+    m: &omsi_o3d::Material,
+) -> omsi_render::PbrFactors {
+    if let Some([metal, rough]) = m.metallic_roughness {
+        pbr.metallic.get_or_insert(metal);
+        pbr.roughness.get_or_insert(rough);
+    }
+    pbr
+}
+
+/// The PBR factors of a slot's commands (openOMSI `[matl_basecolor]`, `[matl_metallic]`,
+/// `[matl_roughness]`, `[matl_normal_strength]`, `[matl_occlusion_strength]`, see
+/// `omsi_render::PbrFactors`): the last of each counts, as with the other commands. The
+/// base colour is written in sRGB, as a colour picker shows it; the renderer takes it linear.
+pub(super) fn pbr_factors(ov: &[&MaterialDef]) -> omsi_render::PbrFactors {
+    let last = |f: fn(&MaterialDef) -> Option<f32>| ov.iter().rev().find_map(|o| f(o));
+    omsi_render::PbrFactors {
+        base_color: ov
+            .iter()
+            .rev()
+            .find_map(|o| o.base_color)
+            .map(|c| c.map(srgb_to_linear)),
+        metallic: last(|o| o.metallic),
+        roughness: last(|o| o.roughness),
+        normal_strength: last(|o| o.normal_strength),
+        occlusion_strength: last(|o| o.occlusion_strength),
     }
 }
 
@@ -239,6 +317,12 @@ pub(super) fn glow_mask<'a>(ov: &[&'a MaterialDef]) -> Option<&'a str> {
         .rev()
         .find_map(|o| o.glow.as_ref())
         .map(|g| g.0.as_str())
+        // (else a `[matl_emissive_texture]` takes the slot: `emission_light`)
+        .or_else(|| {
+            ov.iter()
+                .rev()
+                .find_map(|o| o.emission.as_ref()?.texture.as_deref())
+        })
 }
 
 /// The strength of `glow_mask`'s glow in the shader's terms: the .cfg value x0.25, the
@@ -257,7 +341,11 @@ fn glow_strength(ov: &[&MaterialDef]) -> f32 {
 /// Whether a `[matl_item]`'s commands give it a light map's slot of its own (a light map or
 /// a glow); without one it keeps its base material's.
 pub(super) fn own_light_slot(ov: &[&MaterialDef]) -> bool {
-    ov.iter().any(|o| o.lightmap.is_some() || o.glow.is_some())
+    ov.iter().any(|o| {
+        o.lightmap.is_some()
+            || o.glow.is_some()
+            || o.emission.as_ref().is_some_and(|e| e.texture.is_some())
+    })
 }
 
 /// The addressing of a slot's textures: its last `[matl_texadress_*]` command decides (the

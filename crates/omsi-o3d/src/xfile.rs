@@ -892,6 +892,7 @@ fn parse_material(t: &mut Tok) -> Result<(Option<String>, Material), O3dError> {
             emissive,
             specular_power: power,
             texture,
+            metallic_roughness: None,
         },
     ))
 }

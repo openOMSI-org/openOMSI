@@ -166,6 +166,7 @@ impl RigidBody {
             wetness: 0.0,
             road_s: 0.0,
             realistic: realistic_default(),
+            unloaded: None,
         }
     }
 

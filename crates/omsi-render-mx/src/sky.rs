@@ -37,6 +37,8 @@ pub(crate) struct VanillaSkyUniform {
     pub(crate) cloud: [f32; 4],
     /// fog range, visibility, 1 for an overcast type, the render origin's height
     pub(crate) haze: [f32; 4],
+    /// towards the moon (world space), w its angular radius
+    pub(crate) moon: [f32; 4],
 }
 
 /// The enhanced clouds' noise textures (clouds.rs), made once, with their mip chains: the
@@ -51,6 +53,80 @@ pub(crate) struct CloudTextures {
     pub curl: mx::TextureView,
     pub sampler: mx::Sampler,
     pub cpu: crate::lighting::CloudCpu,
+}
+
+/// Edge of `assets/moon.png` in texels.
+const MOON_MAP_SIZE: u32 = 512;
+
+/// The moon's face (sky.wgsl `t_moon`) and its mip levels, level 0 first.
+fn moon_map() -> Vec<Vec<u8>> {
+    let png = include_bytes!("../../omsi-render/assets/moon.png");
+    let face = image::load_from_memory_with_format(png, image::ImageFormat::Png)
+        .expect("the moon's map")
+        .into_luma8();
+    assert_eq!(face.dimensions(), (MOON_MAP_SIZE, MOON_MAP_SIZE));
+    let mut levels = vec![face.into_raw()];
+    let mut size = MOON_MAP_SIZE as usize;
+    while size > 1 {
+        let above = &levels[levels.len() - 1];
+        let half = size / 2;
+        let level = (0..half * half)
+            .map(|i| {
+                let at = i / half * 2 * size + i % half * 2;
+                let four = [at, at + 1, at + size, at + size + 1];
+                ((four.iter().map(|&p| u32::from(above[p])).sum::<u32>() + 2) / 4) as u8
+            })
+            .collect();
+        levels.push(level);
+        size = half;
+    }
+    levels
+}
+
+/// The moon's face as a texture, for both skies.
+pub(crate) fn moon_texture(device: &mx::Device, queue: &mx::Queue) -> mx::TextureView {
+    let tex = device
+        .create_texture(&mx::TextureDescriptor {
+            label: Some("moon"),
+            size: mx::Extent3d {
+                width: MOON_MAP_SIZE,
+                height: MOON_MAP_SIZE,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: MOON_MAP_SIZE.ilog2() + 1,
+            sample_count: 1,
+            dimension: mx::TextureDimension::D2,
+            format: mx::TextureFormat::R8Unorm,
+            usage: mx::TextureUsages::TEXTURE_BINDING | mx::TextureUsages::COPY_DST,
+            view_formats: &[],
+        })
+        .expect("mX: a texture");
+    for (level, data) in moon_map().iter().enumerate() {
+        let edge = MOON_MAP_SIZE >> level;
+        queue
+            .write_texture(
+                mx::TexelCopyTextureInfo {
+                    texture: &tex,
+                    mip_level: level as u32,
+                    origin: mx::Origin3d::ZERO,
+                    aspect: mx::TextureAspect::All,
+                },
+                data,
+                mx::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(edge),
+                    rows_per_image: Some(edge),
+                },
+                mx::Extent3d {
+                    width: edge,
+                    height: edge,
+                    depth_or_array_layers: 1,
+                },
+            )
+            .expect("mX: a queue write");
+    }
+    tex.create_view(&mx::TextureViewDescriptor::default())
+        .expect("mX: a texture view")
 }
 
 pub(crate) fn cloud_noise_textures(
@@ -276,6 +352,10 @@ impl Renderer {
                         binding: 12,
                         resource: self.sky.cloud_view_buf.as_entire_binding(),
                     },
+                    mx::BindGroupEntry {
+                        binding: 13,
+                        resource: mx::BindingResource::TextureView(&self.sky.moon_view),
+                    },
                 ],
             },
         );
@@ -298,6 +378,8 @@ pub(crate) struct SkyRes {
     pub(crate) cloud_shape_view: mx::TextureView,
     pub(crate) cloud_detail_view: mx::TextureView,
     pub(crate) cloud_sampler: mx::Sampler,
+    /// The moon's face (sky bind group binding 13).
+    pub(crate) moon_view: mx::TextureView,
     /// Where the screen's clouds were traced from (cloud_pass.rs `CloudView`, sky bind group
     /// binding 12): the dome looks them up through it.
     pub(crate) cloud_view_buf: mx::Buffer,

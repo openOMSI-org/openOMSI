@@ -189,3 +189,95 @@ fn admin_password_command_is_private_for_any_case() {
     assert_eq!(admin_chat_arg("/administrator public"), None);
     assert_eq!(admin_chat_arg("/reconnect"), None);
 }
+
+/// (#2536) A line typed into the chat: the session's own commands, a `/`-line for the plugins,
+/// or something to say - and a `/`-line is never mistaken for one of the others.
+#[test]
+fn a_slash_line_is_a_command_and_not_chat() {
+    assert_eq!(
+        chat_line("/login driver hunter2"),
+        ChatLine::Command("/login driver hunter2".into())
+    );
+    assert_eq!(
+        chat_line("  /duty 12 A  "),
+        ChatLine::Command("/duty 12 A".into()),
+        "trimmed"
+    );
+    assert_eq!(
+        chat_line("hello there"),
+        ChatLine::Say("hello there".into())
+    );
+    assert_eq!(
+        chat_line("/"),
+        ChatLine::Say("/".into()),
+        "a lone slash is just a slash, as it always was"
+    );
+    // the session's own lines keep their meaning, whatever the case they are typed in
+    assert_eq!(chat_line("/admin pw"), ChatLine::Admin("pw".into()));
+    assert_eq!(chat_line("/ADMIN pw"), ChatLine::Admin("pw".into()));
+    assert_eq!(
+        chat_line("/admin"),
+        ChatLine::Admin(String::new()),
+        "no password: the usage line"
+    );
+    assert_eq!(chat_line("/Reconnect"), ChatLine::Reconnect);
+    assert_eq!(
+        chat_line("/administrator"),
+        ChatLine::Command("/administrator".into()),
+        "not /admin"
+    );
+}
+
+#[test]
+fn slash_commands_stay_private_when_no_listener_is_available() {
+    let mut lan = LanSession::join_addr(Vec::new(), None, "Driver", Default::default()).unwrap();
+    let mut game = LanGame::default();
+    game.take_commands = false;
+    chat_send(&mut lan, &mut game, "/login driver hunter2");
+    assert_eq!(game.plugin_commands.len(), 0);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* no plugin is listening for commands".to_string())
+    );
+
+    game.take_commands = true;
+    chat_send(&mut lan, &mut game, "/login driver hunter2");
+    assert_eq!(game.plugin_commands, vec!["/login driver hunter2"]);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* sent to the plugins".to_string())
+    );
+
+    // Unloading the last listener resets take_commands:
+    game.take_commands = false;
+    chat_send(&mut lan, &mut game, "/login driver hunter2");
+    assert_eq!(game.plugin_commands.len(), 1);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* no plugin is listening for commands".to_string())
+    );
+}
+
+#[test]
+fn slash_command_queue_limit_reports_error_and_drops_excess() {
+    let mut lan = LanSession::join_addr(Vec::new(), None, "Driver", Default::default()).unwrap();
+    let mut game = LanGame::default();
+    game.take_commands = true;
+
+    for i in 0..32 {
+        chat_send(&mut lan, &mut game, &format!("/cmd {i}"));
+        assert_eq!(
+            game.chat.lines.last(),
+            Some(&"* sent to the plugins".to_string())
+        );
+    }
+    assert_eq!(game.plugin_commands.len(), 32);
+
+    // 33rd command exceeds the queue limit of 32:
+    chat_send(&mut lan, &mut game, "/cmd 32");
+    assert_eq!(game.plugin_commands.len(), 32);
+    assert_eq!(
+        game.chat.lines.last(),
+        Some(&"* plugin command queue is full".to_string())
+    );
+}

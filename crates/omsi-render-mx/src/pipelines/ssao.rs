@@ -34,7 +34,9 @@ pub(crate) fn ssao(device: &mx::Device, gl: bool) -> Ssao {
         "ssao params",
         std::mem::size_of::<SsaoUniform>() as u64,
     );
-    let ao_sampler = clamped_linear_sampler(device);
+    // (also the camera group's `s_ao`: the wet panes read the picture behind them through it
+    // at their blur's level, see scene/08_rain_glass.wgsl `glass_blur`)
+    let ao_sampler = clamped_trilinear_sampler(device);
     // (r the occlusion, g the depth it was worked out at, b and a the bounced light)
     let targets = [target(mx::TextureFormat::Rgba16Float, None)];
     let make_ao =
