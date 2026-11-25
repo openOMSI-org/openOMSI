@@ -19,11 +19,44 @@ fn headlamp(t: vec3<f32>, dir: vec3<f32>, low: bool) -> f32 {
     let tilt = dir.z / max(length(dir.xy), 1e-3);
     // (the tangent of the angle under that horizon)
     let drop = (tilt - rise) / max(1.0 + rise * tilt, 1e-3);
-    // full out to where the road is 0.04 under the lamp's horizon, less nearer down: with the
-    // distance's square the road is brightest a few metres ahead of the bumper and fades
-    // steadily down the road (as a low beam's isolux plot does: some 30 lux at 10 m, a
-    // tenth of that at 40), not one even sheet of light from the bumper to the cut-off
-    var up = min(1.0, pow(0.04 / max(abs(drop), 1e-4), 2.2));
+    // full out to where the road is 0.06 under the lamp's horizon, then less as the cube of
+    // the drop and a little more: the road is lit evenly from the bumper on, a little
+    // brighter as far as the beam reaches, and not as one hot pool where its axis lands
+    var up = min(1.0, pow(0.06 / max(abs(drop), 1e-4), 3.4));
+    if (low) {
+        up = up * smoothstep(-0.012, 0.025, drop);
+        return wide * up;
+    }
+    // a full beam reaches far: a narrow, bright core along the lamp's horizon
+    let hot = exp(-across * across / 0.012 - drop * drop / 0.0004);
+    return wide * up + 6.0 * hot;
+}
+
+// The same lamp's light on the surfaces it reaches (`lamp_light`): a low beam's vertical
+// profile, its strongest light just under the cut-off and falling steeply towards the
+// foreground, so that with the distance's cube the road runs from some twice the 10 m
+// value three metres ahead to a sixth of it at 40 m, as a real beam's isolux plot does.
+// (The light in the air keeps `headlamp`'s even sheet: this profile, integrated along a
+// view ray through a fog, drew rings round the beams' foot.)
+const HEADLAMP_PEAK: f32 = 2.5;
+fn headlamp_road(t: vec3<f32>, dir: vec3<f32>, low: bool) -> f32 {
+    let fwd = normalize(dir.xy + vec2<f32>(1e-6, 0.0));
+    let ahead = dot(t.xy, fwd);
+    if (ahead <= 0.0) {
+        return 0.0;
+    }
+    let across = abs(t.x * fwd.y - t.y * fwd.x) / ahead;
+    let wide = 0.12 * smoothstep(1.0, 0.45, across) + 0.88 * exp(-across * across / 0.06);
+    let rise = t.z / max(length(t.xy), 1e-3);
+    let tilt = dir.z / max(length(dir.xy), 1e-3);
+    // (the tangent of the angle under that horizon)
+    let drop = (tilt - rise) / max(1.0 + rise * tilt, 1e-3);
+    // A low beam's vertical profile: its strongest light just under the cut-off (the
+    // long-range zone a degree or two down), falling steeply towards the foreground - with
+    // the distance's cube on the road the illuminance then runs from some twice the 10 m
+    // value three metres ahead to a sixth of it at 40 m, as a real beam's isolux plot does,
+    // instead of an even sheet from the bumper on or a hot pool at the bumper
+    var up = HEADLAMP_PEAK / (1.0 + pow(abs(drop) / 0.028, 2.8));
     if (low) {
         up = up * smoothstep(-0.012, 0.025, drop);
         return wide * up;
@@ -166,10 +199,7 @@ fn lamp_airlight(c: vec3<f32>, d: vec3<f32>, start: f32, len: f32, jitter: f32, 
                     // out as a coarse checker in the fog round every headlamp.)
                     // A headlamp's narrow cutoff needs finer angular integration.
                     // At a fixed phase, 16 samples turn that cutoff into rings.
-                    // (32 for a headlamp: its steps are jittered per pixel and frame and the
-                    // half-size result is blended over frames - the rings of a fixed phase
-                    // do not come back; 64 cost the pass half its time in a fog at night)
-                    let steps = select(16u, 32u, l.extra.z != 0.0);
+                    let steps = select(16u, 64u, l.extra.z != 0.0);
                     let pa = atan((ta - t0) / hh);
                     let dphi = (atan((tb - t0) / hh) - pa) / f32(steps);
                     let tile_k = beam_tile(li, l);

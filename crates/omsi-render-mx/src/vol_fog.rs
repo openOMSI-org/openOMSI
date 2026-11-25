@@ -487,7 +487,7 @@ pub(crate) fn ground_haze(lighting: &Lighting) -> f32 {
 }
 
 /// The ground haze's density round a low sun, at noon and at night (1/m).
-const HAZE_LOW_SUN: f32 = 0.0022;
+const HAZE_LOW_SUN: f32 = 0.0035;
 const HAZE_NOON: f32 = 0.00045;
 const HAZE_NIGHT: f32 = 0.0009;
 

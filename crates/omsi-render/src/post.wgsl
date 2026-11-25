@@ -313,6 +313,8 @@ fn agx_sigmoid(x: vec3<f32>) -> vec3<f32> {
     let x4 = x2 * x2;
     return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
 }
+const AGX_SAT: f32 = 1.22;
+const AGX_POWER: f32 = 1.1;
 fn agx_tone(c: vec3<f32>, contrast: f32) -> vec3<f32> {
     let inset = mat3x3<f32>(
         vec3<f32>(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
@@ -331,6 +333,11 @@ fn agx_tone(c: vec3<f32>, contrast: f32) -> vec3<f32> {
     v = mid + (v - vec3<f32>(mid)) * contrast;
     v = clamp((v - vec3<f32>(lo)) / (hi - lo), vec3<f32>(0.0), vec3<f32>(1.0));
     v = agx_sigmoid(v);
+    // (the "punchy" look: AgX's base is a neutral, rather flat film; a camera's picture has
+    // more bite in the middle tones and more colour)
+    let lv = dot(v, vec3<f32>(0.2126, 0.7152, 0.0722));
+    v = max(vec3<f32>(lv) + (v - vec3<f32>(lv)) * AGX_SAT, vec3<f32>(0.0));
+    v = pow(v, vec3<f32>(AGX_POWER));
     v = outset * v;
     return pow(clamp(v, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(2.2));
 }

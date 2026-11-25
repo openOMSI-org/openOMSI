@@ -274,7 +274,7 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
         // (a lamp's picture of its beam: its colour that way, see `cookie_light`)
         var tint = vec3<f32>(1.0);
         if (l.extra.z != 0.0) {
-            e = headlamp(-ld, l.dir.xyz, l.extra.z > 0.0) / max(dist2, 0.3) * window;
+            e = headlamp_road(-ld, l.dir.xyz, l.extra.z > 0.0) / max(dist2, 0.3) * window;
         } else if (l.dir.w > -1.5) {
             let cd = dot(-ld, l.dir.xyz);
             if (light_marks(l).y > 0.5) {
