@@ -238,6 +238,7 @@ impl Offscreen<'_> {
             master: self.settings.volume.clamp(0.0, 1.0),
             reverb_time,
             reverb_mix,
+            surround: self.settings.audio_surround,
         });
         if let Some(p) = self.player.as_mut() {
             p.sound_step(Some(a), inside, inside);

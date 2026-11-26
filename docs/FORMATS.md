@@ -1302,6 +1302,14 @@ How an entry plays:
   same level everywhere.
 - The rear section of an articulated bus has its own `[sound]` and plays it on the shared
   scripts' triggers and variables.
+* `[3d]` sounds carry no speaker of their own: they are heard from where the sound object
+  stands, not from the whole bus. On a device opened with six channels and the option
+  *5.1 sound (five speakers)* on (`audio_surround=1`), each sound is placed on the five
+  speakers it faces - front left/right 30° to either side of the view, centre ahead, back
+  left/right 110° - and shares with its neighbour only when it lies between two of them.
+  The sub-woofer gets nothing of it: the receiver's bass management feeds it. Off (the
+  default, and on two speakers whatever the option), `[sound_stereo]` pans the sound
+  across the pair as OMSI 2 does.
 
 **Outside sounds heard in the cab.** The player's bus's outside entries (`[viewpoint]` without 2) come in at
 `Snd_OutsideVol` of their volume, as in OMSI. Traffic heard from the cab is at
