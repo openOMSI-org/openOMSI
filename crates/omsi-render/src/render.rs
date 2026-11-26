@@ -345,6 +345,18 @@ impl Renderer {
         let Some((_, was)) = self.upscaler_retry.take() else {
             return;
         };
+        // (only while the picture is still drawn as the fallback left it: a player who turned
+        // the upscaler off, or chose other anti-aliasing, in the meantime keeps that)
+        let fallback = Self::without_upscaler(was, true);
+        let o = &self.options;
+        if o.temporal.is_some()
+            || o.msaa != fallback.msaa
+            || o.fxaa != fallback.fxaa
+            || o.msaa_fallback != fallback.msaa_fallback
+        {
+            log::info!("the upscaler is not tried again: the anti-aliasing was changed since");
+            return;
+        }
         self.upscaler_retried = true;
         log::info!("the upscaler is tried once more, now that the textures were lowered");
         self.rebuild_with(

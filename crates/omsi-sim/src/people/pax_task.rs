@@ -401,6 +401,14 @@ impl PeopleSim {
         } else {
             list.clone()
         };
+        // ... unless that leaves the buyer no door at all (`last` on a bus whose rear door
+        // sells no tickets): then they go to an allowed door as anybody else would, instead
+        // of never boarding.
+        let search_list = if restrict_noticketsale && search_list.iter().all(Option::is_none) {
+            list.clone()
+        } else {
+            search_list
+        };
         // Rear door boarding (#4055): the doors past the front one count too, open or shut,
         // so the nearest one wins instead of the queue filing to the front. A door that stays
         // shut while another of the bus is open - a bus whose script never opens it - sends

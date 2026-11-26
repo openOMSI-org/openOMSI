@@ -106,6 +106,32 @@ What Omsi.exe does, read from the game itself, where openOMSI did something of i
 
 ### Fixes
 
+- **Passenger settings work outside online rooms**: which doors passengers get in through, paying
+  without a ticket, how late the bus may be, free-drive passengers and waiting for the doors to
+  open reached the passengers of an online room only; in single player, in a LAN game and after
+  changing them in the game they did nothing. They now have rows in the launcher, with the IBIS
+  stop following the duty.
+- **A ticket buyer no longer stands at the stop for good** when the chosen doors sell no tickets
+  (the rear door only on most German buses): they board at that door.
+- **The IBIS is not typed twice** after Shift+U on a trip change.
+- **The automatic announcements say why they are quiet once**, not at the start of every trip.
+- **`[light_emitter_interior]` takes the light map of the right material slot**: with a
+  `[matl]` for some slots only, the lamps came out in the wrong place or not at all.
+- **Stop labels (`--export-stop-labels`)** read trips written with the old `[station]` blocks,
+  and no longer list a line at the stop where it ends.
+- **A ground texture found in the map's folder** has its own surface sound.
+- **The upscaler is not switched back on** after the player turned it off while it was waiting
+  to be tried again after running out of graphics memory; and a renderer rebuilt once after
+  refused frames is rebuilt again an hour later instead of the device being taken for lost.
+- **mX Graphics get the changes merged for the standard graphics only**: the passenger and IBIS
+  settings, plugin commands typed in the chat (they were always answered "no plugin is
+  listening"), the automatic announcements' notes and departure timing, mirrors drawn in
+  mirrors, reflective AI bodies not drawn as glass, ground textures in the map's folder and
+  the clouds traced at the window's size under an upscaler.
+- **Other players' buses drawn in less detail** give back the graphics memory of their
+  destination displays.
+- **CI size budget passes again** (`window_wipers.rs` tests moved to their own file).
+
 - **Online play: the host knows what the others have served**: a stop another player's bus
   has stood at and left no longer fills again for that player's trip, and the timetable's buses
   near the other players are read ahead as the host's own are.

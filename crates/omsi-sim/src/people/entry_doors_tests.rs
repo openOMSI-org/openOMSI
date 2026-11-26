@@ -317,10 +317,27 @@ fn ticket_buyers_avoid_noticketsale_doors_when_setting_selects_only_those_doors(
         "[entry]\n0\n\n[entry]\n1\n{noticketsale}\n\n[entry]\n2\n{noticketsale}\n\n[exit]\n2\n\n",
     );
     h.pax_mut(0).unwrap().ticket = TICKET_BUY;
-    h.entry_doors = EntryDoors::Last;
-    assert_eq!(door_chosen(&mut h, &bus), None);
     h.entry_doors = EntryDoors::First;
     assert_eq!(door_chosen(&mut h, &bus), Some(0));
+    h.entry_doors = EntryDoors::FirstTwo;
+    assert_eq!(
+        door_chosen(&mut h, &bus),
+        Some(0),
+        "the selling door of the two"
+    );
+}
+
+#[test]
+fn a_ticket_buyer_whose_doors_all_sell_none_still_boards_at_one() {
+    let (mut h, bus) = bus_with_cabin_entries(
+        "no-ticket-sale-only",
+        "[entry]\n0\n\n[entry]\n1\n{noticketsale}\n\n[entry]\n2\n{noticketsale}\n\n[exit]\n2\n\n",
+    );
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    // Only the rear door, and it sells no tickets: as Omsi.exe's second search without the
+    // `{noticketsale}` rule, the buyer goes to it rather than standing at the stop for good.
+    h.entry_doors = EntryDoors::Last;
+    assert_eq!(door_chosen(&mut h, &bus), Some(2));
 }
 
 #[test]

@@ -116,7 +116,11 @@ impl Player {
     /// auto-start is done. Not while a plugin leaves the IBIS to the driver
     /// (`duty.set_auto_ibis`): the driver types line, route and destination.
     pub(crate) fn set_duty_destination(&mut self, trip: &schedule::PlannedTrip, stop: usize) {
-        if !duty_selected(&mut self.duty_typed, &self.ibis_holds) {
+        if duty_selected(&mut self.duty_typed, &self.ibis_holds) {
+            // A trip change still waiting (`update_duty_ibis`) is this one: typed now by
+            // Shift+U or the auto-start, it is not typed a second time in the next frame.
+            self.duty_trip_pending = false;
+        } else {
             log::info!(
                 "IBIS: line {} to {} left for the driver to type",
                 trip.line.trim(),

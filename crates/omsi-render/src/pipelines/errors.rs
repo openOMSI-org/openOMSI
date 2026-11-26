@@ -37,15 +37,27 @@ pub(crate) enum Rejected {
 pub(crate) struct RejectedRun {
     run: u32,
     rebuilt: bool,
+    /// Frames drawn in a row since the last refused one.
+    good: u32,
 }
+
+/// Frames drawn in a row after which a rebuild counts as having worked: a later run of
+/// refused frames rebuilds again instead of taking the device for lost (one transient run
+/// an hour earlier made the next one end the device).
+pub(crate) const RECOVERED_FRAMES: u32 = REJECTED_FRAMES * 5;
 
 impl RejectedRun {
     /// One frame more: whether the device refused any of its work.
     pub(crate) fn frame(&mut self, refused: bool) -> Rejected {
         if !refused {
             self.run = 0;
+            self.good = self.good.saturating_add(1);
+            if self.good >= RECOVERED_FRAMES {
+                self.rebuilt = false;
+            }
             return Rejected::Fine;
         }
+        self.good = 0;
         self.run += 1;
         if self.run < REJECTED_FRAMES {
             return Rejected::Fine;
@@ -301,6 +313,22 @@ mod rt_blame_tests {
             assert_eq!(r.frame(true), Rejected::Fine);
         }
         assert_eq!(r.frame(true), Rejected::Lost);
+    }
+
+    #[test]
+    fn a_rebuild_that_worked_is_forgotten_after_a_while() {
+        let mut r = RejectedRun::default();
+        for _ in 1..REJECTED_FRAMES {
+            r.frame(true);
+        }
+        assert_eq!(r.frame(true), Rejected::Rebuild);
+        for _ in 0..RECOVERED_FRAMES {
+            assert_eq!(r.frame(false), Rejected::Fine);
+        }
+        for _ in 1..REJECTED_FRAMES {
+            assert_eq!(r.frame(true), Rejected::Fine);
+        }
+        assert_eq!(r.frame(true), Rejected::Rebuild, "rebuilt again, not lost");
     }
 
     #[test]
