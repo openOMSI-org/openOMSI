@@ -31,6 +31,8 @@ pub mod lateral;
 mod lateral_tests;
 pub mod light_paths;
 pub mod lights;
+#[cfg(test)]
+mod livery_tests;
 pub mod mirror;
 pub mod model;
 pub mod obstacles;
@@ -153,6 +155,9 @@ pub struct TrafficSim {
     pub(crate) lane_weight_sums: (usize, Vec<f64>),
     pub rng: u64,
     pub scheme_salt: u64,
+    /// The livery of the bus the player drives: the random traffic of the same vehicle file
+    /// draws another paint, number and plate (see `omsi_sim::livery`, #3477).
+    pub player_livery: Option<crate::livery::PlayerLivery>,
     scheme_sets: std::sync::Mutex<HashMap<std::path::PathBuf, Vec<usize>>>,
     /// Target number of cars around the camera.
     pub target: usize,

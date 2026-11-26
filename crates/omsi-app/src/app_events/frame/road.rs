@@ -94,6 +94,20 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
                 __t5.elapsed().as_secs_f64(),
             );
         }
+        // (no AI bus takes the livery of the player's own: #3477 - the traffic's random buses
+        // of that file draw another paint, number and plate, the timetable's depot buses
+        // leave the player's line of the ailists alone)
+        if let Some(p) = cx.player.player.as_ref() {
+            let mine = omsi_sim::livery::PlayerLivery::of(&p.vehicle);
+            // (the random buses of the player's file draw another paint, number and plate)
+            t.sim.set_player_livery(Some(mine.clone()));
+            // (and the timetable's depot buses leave the player's line of the ailists alone)
+            if let Some(s) = cx.traffic.schedule.as_mut() {
+                if s.sim.player_bus.as_ref() != Some(&mine) {
+                    s.sim.set_player_bus(Some(mine));
+                }
+            }
+        }
         if let Some(s) = cx.traffic.schedule.as_mut() {
             if let Some(blocks) = s.poll_transit() {
                 t.sim.set_blocks(blocks);

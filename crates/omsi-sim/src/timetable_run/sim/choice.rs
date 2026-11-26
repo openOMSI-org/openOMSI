@@ -4,6 +4,13 @@
 use super::*;
 
 impl ScheduleSim {
+    /// The bus the player drives from now on (None: on foot, or no bus of the drive). A depot
+    /// bus of that file leaves the player's own line of the ailists alone from then on
+    /// (#3477).
+    pub fn set_player_bus(&mut self, livery: Option<crate::livery::PlayerLivery>) {
+        self.player_bus = livery;
+    }
+
     /// The vehicle departure `i` is driven with (see [`Choice`]).
     pub fn choose(&mut self, i: usize, world: &dyn TimetableWorld) -> Option<Choice> {
         let group = self.departures[i].ai_group.to_ascii_lowercase();
@@ -59,6 +66,11 @@ impl ScheduleSim {
                                 !self
                                     .used_numbers
                                     .contains(&(group.clone(), nums[j].number.trim().to_string()))
+                                    && !player_entry(
+                                        self.player_bus.as_ref(),
+                                        &vehicles[k].0,
+                                        &nums[j],
+                                    )
                             });
                         let j = free.unwrap_or(start);
                         if let Some(n) = nums.get(j) {
@@ -281,4 +293,141 @@ pub fn depot_file(
     let h = found.map(Arc::new);
     cache.insert(key, h.clone());
     h
+}
+
+/// Is the ailists line `e` of `ty` the one the player's own bus is? The same vehicle file, a
+/// fleet number or plate of the line that is the player's, and the paint of the line that
+/// the player's bus wears (#3477): a depot bus drawn from that very line was the player's
+/// bus a second time on the map, with its repaint and registration both. A line that only
+/// shares the paint is the fleet's own livery and stays in the draw.
+fn player_entry(
+    player: Option<&crate::livery::PlayerLivery>,
+    ty: &VehicleType,
+    e: &omsi_map::DepotEntry,
+) -> bool {
+    let Some(mine) = player.filter(|p| p.is_bus_of(ty)) else {
+        return false;
+    };
+    let paint = if e.paint.trim().is_empty() {
+        ty.def.default_paint.as_str()
+    } else {
+        e.paint.trim()
+    };
+    if !mine.is_paint(paint) {
+        return false;
+    }
+    // the plate the line gives the bus, as `choose` reads it
+    let plate = if !e.registration.trim().is_empty() {
+        e.registration.clone()
+    } else if ty.def.registration_mode != 1 {
+        ty.def.plate_of_number(e.number.trim())
+    } else {
+        String::new()
+    };
+    mine.is_number_or_plate(&e.number, &plate)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::livery::PlayerLivery;
+
+    /// A vehicle type of its own file with no model and no scripts.
+    fn vehicle(file: &str, default_paint: &str) -> crate::VehicleType {
+        crate::VehicleType {
+            def: omsi_vehicle::Vehicle {
+                path: std::path::PathBuf::from(file),
+                default_paint: default_paint.into(),
+                ..Default::default()
+            },
+            model: Default::default(),
+            model_dir: Default::default(),
+            program: Default::default(),
+            meshes: Vec::new(),
+            lod_meshes: Vec::new(),
+            paint_schemes: Vec::new(),
+            texchanges: Vec::new(),
+            wheel_meshes: Vec::new(),
+            suspension_axles: Vec::new(),
+            missing_packs: Vec::new(),
+            mesh_bounds: Vec::new(),
+            mesh_boxes: Vec::new(),
+        }
+    }
+
+    fn entry(number: &str, registration: &str, paint: &str) -> omsi_map::DepotEntry {
+        omsi_map::DepotEntry {
+            number: number.into(),
+            registration: registration.into(),
+            paint: paint.into(),
+            from: None,
+            to: None,
+        }
+    }
+
+    fn mine(paint: &str, number: &str, ident: &str) -> PlayerLivery {
+        PlayerLivery {
+            bus: "Vehicles/bus.bus".into(),
+            paint: paint.into(),
+            number: number.into(),
+            ident: ident.into(),
+        }
+    }
+
+    #[test]
+    fn the_ailists_line_the_player_drives_is_not_drawn_again() {
+        let ty = vehicle("Vehicles/bus.bus", "Standard");
+        let player = mine("BVG Gelb", "1234", "B-V 1234");
+        // (the player's own line: its fleet number, its plate and its paint)
+        assert!(super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "B-V 1234", "BVG Gelb")
+        ));
+        // (whichever of the two tells it: the plate of the line alone is enough)
+        assert!(super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "", "BVG Gelb")
+        ));
+        // (its paint on another fleet number is the depot's own livery, and stays)
+        assert!(!super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("5678", "B-V 5678", "BVG Gelb")
+        ));
+        // (the player's plate in another paint is another bus of the depot)
+        assert!(!super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "B-V 1234", "BVG Rot")
+        ));
+        // (and another vehicle file has its own fleet)
+        assert!(!super::player_entry(
+            Some(&player),
+            &vehicle("Vehicles/other.bus", "Standard"),
+            &entry("1234", "B-V 1234", "BVG Gelb")
+        ));
+        // (nobody driving: every line is free)
+        assert!(!super::player_entry(
+            None,
+            &ty,
+            &entry("1234", "B-V 1234", "BVG Gelb")
+        ));
+    }
+
+    #[test]
+    fn a_line_without_a_repaint_is_the_models_own_paint() {
+        let ty = vehicle("Vehicles/bus.bus", "Standard");
+        let player = mine("Standard", "1234", "B-V 1234");
+        assert!(super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "B-V 1234", "")
+        ));
+        assert!(!super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "B-V 1234", "BVG Gelb")
+        ));
+    }
 }

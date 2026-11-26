@@ -276,6 +276,7 @@ impl ScheduleSim {
             trip_departures,
             boards_made: f64::NEG_INFINITY,
             player_tour: None,
+            player_bus: None,
             player_departure: None,
             purge_player_tour: false,
             player_twins: HashSet::new(),
