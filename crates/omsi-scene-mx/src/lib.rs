@@ -98,6 +98,8 @@ pub use props::*;
 pub use scripted::*;
 pub use stage::*;
 pub use staging::*;
+mod lamp_slots;
+pub use lamp_slots::*;
 pub use terrain_paint::*;
 pub use vehicle_materials::*;
 pub use vehicle_types::*;
