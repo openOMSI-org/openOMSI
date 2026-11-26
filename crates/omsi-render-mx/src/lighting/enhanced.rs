@@ -1029,8 +1029,8 @@ impl Renderer {
             vol_fog,
             vol_fog2,
             precip_ext: crate::precip::precip_ext(lighting),
-            // (free)
-            glass_ext: [0.0; 4],
+            // the dry map (`PrecipMap::dry_slot`, enhanced/03_surface.wgsl `roof_dry`)
+            glass_ext: self.shadows.precip.dry_slot(ro),
             // x the share of the sun's light through the clouds that still comes as a beam and
             // casts a shadow (enhanced/01_brdf_shadow.wgsl `sun_scattered` takes the rest as a
             // shadowless light from the sky): a thickening stratus deck and a veil of high cloud

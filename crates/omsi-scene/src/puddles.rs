@@ -64,11 +64,25 @@ pub fn water_at(x: f64, y: f64, wet_road: f32) -> Water {
         + vnoise_f(px, py, 1.6, -4.0, 8.0) * 0.3
         + vnoise_f(px, py, 5.0, 2.7, 11.3) * 0.1;
     let t = 1.0 - wet_road * PUDDLE_SPREAD;
+    // the water in the lanes' wheel tracks (Enhanced's, see `rut_water`)
+    let (rut, level) = rut_water(px, py, crate::road_snow::lane_ruts_at(x, y), wet_road);
     Water {
-        puddle: smoothstep(t - 0.02, t + 0.02, pn),
-        depth: ((pn - t) / 0.15).clamp(0.0, 1.0),
+        puddle: smoothstep(t - 0.02, t + 0.02, pn).max(rut),
+        depth: ((pn - t) / 0.15).max((level - 0.5) / 0.3).clamp(0.0, 1.0),
         wet: wet_road,
     }
+}
+
+/// The water standing in a lane's wheel track at the pattern's point (px, py), `ruts` the
+/// field's rut there (`road_snow::lane_ruts_at`), on a road `wet`: its cover (0..1) and its
+/// level (over 0.5 where it stands). `rut_water` of enhanced/03_surface.wgsl.
+fn rut_water(px: f32, py: f32, ruts: f32, wet: f32) -> (f32, f32) {
+    if ruts <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let breaks = vnoise_f(px, py, 0.9, 5.3, -2.2);
+    let level = ruts * smoothstep(0.75, 0.95, wet) * (0.7 + 0.6 * breaks);
+    (smoothstep(0.45, 0.55, level), level)
 }
 
 /// `hash_cell` of `shader.wgsl`: the lattice cell as an exact integer modulo the lattice's
@@ -286,15 +300,19 @@ pub fn water_spray(w: &Water) -> f32 {
 }
 
 /// What the vehicles' own `[smoke]` tyre spray is scaled by (see
-/// `omsi_sim::particles::set_road_water`): the water spray at world (x, y) on the wet roads
-/// of `world`.
+/// `omsi_sim::particles::set_road_water`): the water spray at world (x, y, z) on the wet
+/// roads of `world` (none where a bridge or a canopy keeps the rain off, `roofed_at`).
 pub fn road_water_hook(world: &crate::World, wetness: f32) -> omsi_sim::particles::RoadWater {
     let data = world.data.clone();
-    std::sync::Arc::new(move |x, y| {
+    std::sync::Arc::new(move |x, y, z| {
         if wetness <= 0.0 {
             return 0.0;
         }
-        water_spray(&water_at(x, y, data.peek().wet_road_at(x, y, wetness)))
+        let d = data.peek();
+        if d.roofed_at(x, y, z) {
+            return 0.0;
+        }
+        water_spray(&water_at(x, y, d.wet_road_at(x, y, wetness)))
     })
 }
 
@@ -452,7 +470,7 @@ impl Spray {
         vehicles: &[(u64, &omsi_sim::VehicleInstance)],
         eye: DVec3,
         wind: Vec3,
-        water: &dyn Fn(f64, f64) -> Water,
+        water: &dyn Fn(f64, f64, f64) -> Water,
     ) {
         let mut tyres = Vec::new();
         let mut bodies = std::mem::take(&mut self.bodies);
@@ -483,7 +501,7 @@ impl Spray {
         tyres: &[Tyre],
         eye: DVec3,
         wind: Vec3,
-        water: &dyn Fn(f64, f64) -> Water,
+        water: &dyn Fn(f64, f64, f64) -> Water,
     ) {
         if dt <= 0.0 {
             return;
@@ -556,12 +574,12 @@ impl Spray {
         }
     }
 
-    fn throw(&mut self, dt: f32, tyre: &Tyre, eye: DVec3, water: &dyn Fn(f64, f64) -> Water) {
+    fn throw(&mut self, dt: f32, tyre: &Tyre, eye: DVec3, water: &dyn Fn(f64, f64, f64) -> Water) {
         let dist = (tyre.contact - eye).length();
         if dist > SPAWN_RANGE || !tyre.contact.is_finite() {
             return;
         }
-        let w = water(tyre.contact.x, tyre.contact.y);
+        let w = water(tyre.contact.x, tyre.contact.y, tyre.contact.z);
         let state = self.tyres.entry(tyre.key).or_default();
         let entered = state.puddle;
         state.puddle = w.puddle;
@@ -821,7 +839,7 @@ mod tests {
         }
     }
 
-    fn puddle(_: f64, _: f64) -> Water {
+    fn puddle(_: f64, _: f64, _: f64) -> Water {
         Water {
             puddle: 1.0,
             depth: 1.0,
@@ -829,7 +847,7 @@ mod tests {
         }
     }
 
-    fn wet_road(_: f64, _: f64) -> Water {
+    fn wet_road(_: f64, _: f64, _: f64) -> Water {
         Water {
             puddle: 0.0,
             depth: 0.0,
@@ -838,7 +856,7 @@ mod tests {
     }
 
     /// Puffs thrown by `tyres` over `secs` (the tyre standing where it is, the camera beside it).
-    fn run(tyres: &[Tyre], secs: f32, water: &dyn Fn(f64, f64) -> Water) -> Spray {
+    fn run(tyres: &[Tyre], secs: f32, water: &dyn Fn(f64, f64, f64) -> Water) -> Spray {
         let mut s = Spray::new();
         for _ in 0..(secs * 30.0) as usize {
             s.update(
@@ -1180,7 +1198,7 @@ mod tests {
             &t,
             DVec3::new(5.0, 0.0, 34.0),
             Vec3::ZERO,
-            &|_, _| Water::default(),
+            &|_, _, _| Water::default(),
         );
         assert_eq!(s.tyres_wet, 0);
         assert!(s.len() <= n, "nothing new off the water");

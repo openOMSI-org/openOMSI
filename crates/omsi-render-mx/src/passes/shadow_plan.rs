@@ -17,6 +17,9 @@ pub(crate) struct ShadowPlan {
     /// The precipitation's roof map this frame (`passes::precip_map`): the window's own
     /// frame while it rains or snows.
     pub precip: Option<Mat4>,
+    /// Enhanced's dry map, when this frame redraws it (`passes::precip_map::DRY_RANGE`): its
+    /// matrix and its middle (world).
+    pub dry: Option<(Mat4, DVec3)>,
 }
 
 /// The light matrix of a cascade: an orthographic box `range` metres either side of the
@@ -97,6 +100,7 @@ impl Renderer {
                 && same(close_origin, close_sun);
             return ShadowPlan {
                 precip: None,
+                dry: None,
                 moon_shadows,
                 shadows: kept,
                 draw_shadows: false,
@@ -243,8 +247,30 @@ impl Renderer {
             && f.exclude_texture.is_none()
             && !f.env.no_precip_roof)
             .then(|| precip_matrix(cam_rel));
+        // (the dry map while the roads are wet: the window's own frame, Enhanced's picture,
+        // redrawn now and then - see `PrecipMap::dry_due`)
+        let cam_world = scene.render_origin + cam_rel.as_dvec3();
+        let dry = (f.enhanced_frame
+            && lighting.wetness > 0.0
+            && f.with_overlays
+            && projection.is_none()
+            && !second_eye
+            && f.exclude_texture.is_none()
+            && !f.env.no_precip_roof
+            && self.shadows.precip.dry_due(cam_world))
+        .then(|| {
+            // (its middle in whole texels of the map, as the other maps' are)
+            let texel = (DRY_RANGE * 2.0 / DRY_TEXELS as f32) as f64;
+            let mid = glam::DVec3::new(
+                (cam_world.x / texel).round() * texel,
+                (cam_world.y / texel).round() * texel,
+                cam_world.z,
+            );
+            (dry_matrix((mid - scene.render_origin).as_vec3()), mid)
+        });
         ShadowPlan {
             precip,
+            dry,
             moon_shadows,
             shadows,
             draw_shadows,
@@ -321,6 +347,8 @@ impl Renderer {
         ];
         // (the precipitation's roof map: what stands over the ground round the camera)
         let precip_box = sh.precip;
+        // (Enhanced's dry map: what stands over the roads, the vehicles left out)
+        let dry_box = sh.dry.map(|d| d.0);
         let dbg_shadow = f.env.debug_shadow;
         let dbg_r: f32 = f
             .env
@@ -343,7 +371,7 @@ impl Renderer {
                 // (the roof map takes the ground and the roads as well, which cast no shadow:
                 // the splashes land on them, see rain.wgsl `splash`)
                 let caster = inst.casts_shadow && !(omsi_shadow_casters && !inst.omsi_caster);
-                if !inst.visible || (!caster && precip_box.is_none()) {
+                if !inst.visible || (!caster && precip_box.is_none() && dry_box.is_none()) {
                     continue;
                 }
                 // a stand-in for far tiles (`set_near_only`) left out of the picture casts no
@@ -417,7 +445,17 @@ impl Renderer {
                         && lc.x.abs() <= 1.0 + rr
                         && lc.y.abs() <= 1.0 + rr
                 });
-                if !lamp_hit && !roof_hit && hits == [false; 3] {
+                // (the dry map: no vehicle - the road under a bus that drives on is wet - and
+                // nothing small: a lamp post, a wire or a sign keeps no rain off the road)
+                let dry_hit = inst.roof.is_none()
+                    && dry_box.is_some_and(|dm| {
+                        let lc = dm.project_point3(c);
+                        let rr = r / DRY_RANGE;
+                        !(m.bounds_radius > 0.0 && m.bounds_radius < 0.5)
+                            && lc.x.abs() <= 1.0 + rr
+                            && lc.y.abs() <= 1.0 + rr
+                    });
+                if !lamp_hit && !roof_hit && !dry_hit && hits == [false; 3] {
                     continue;
                 }
                 ranges.clear();
@@ -515,6 +553,23 @@ impl Renderer {
                         }
                     }
                 }
+                if dry_hit {
+                    // (what is solid only: rain comes through the cut-out leaves of a tree)
+                    for &(kind, ri, slot, mat_id, look) in ranges.iter() {
+                        if kind != PIPE_OPAQUE && kind != PIPE_KINDS {
+                            continue;
+                        }
+                        let (material, look) = depth_only_material(PIPE_OPAQUE, mat_id, look);
+                        out[DRY_LIST].push(DrawItem {
+                            pipe: PIPE_OPAQUE,
+                            mesh: inst.mesh as u32,
+                            range: ri,
+                            material,
+                            look,
+                            entry: inst.base + slot,
+                        });
+                    }
+                }
                 if roof_hit {
                     for &(kind, ri, slot, mat_id, look) in ranges.iter() {
                         let kind = if kind == PIPE_KINDS {
@@ -567,7 +622,11 @@ impl Renderer {
                 }
             }
         };
-        if active.iter().any(|a| *a) || !lamp_shadows.is_empty() || precip_box.is_some() {
+        if active.iter().any(|a| *a)
+            || !lamp_shadows.is_empty()
+            || precip_box.is_some()
+            || dry_box.is_some()
+        {
             let n = scene.instances.len();
             let parts = instance_parts(self.encoding_pool.as_ref(), n);
             let chunk = n.div_ceil(parts).div_ceil(CULL_BLOCK) * CULL_BLOCK;
@@ -579,6 +638,11 @@ impl Renderer {
                         || precip_box.is_some_and(|pm| {
                             let lc = pm.project_point3(c);
                             let rr = r / PRECIP_RANGE;
+                            lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
+                        })
+                        || dry_box.is_some_and(|dm| {
+                            let lc = dm.project_point3(c);
+                            let rr = r / DRY_RANGE;
                             lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
                         })
                         || boxes.iter().enumerate().any(|(k, &(range, lvp, _))| {
