@@ -1,5 +1,5 @@
-use super::*;
 use super::planning::lane_open_to;
+use super::*;
 
 #[cfg(test)]
 mod reaction_factor_tests {
@@ -40,8 +40,8 @@ mod reaction_factor_tests {
 
 #[cfg(test)]
 mod parked_lane_tests {
-    use super::*;
     use super::control::impact_zones;
+    use super::*;
 
     #[test]
     fn vehicle_impact_zones_cover_the_whole_body_with_distinct_front_rear_and_sides() {
@@ -54,10 +54,7 @@ mod parked_lane_tests {
             DVec2::new(1.05, 0.7),
         ];
         for point in samples {
-            let probe = crate::collision::Obb::point(
-                DVec3::new(point.x, point.y, 1.0),
-                0.02,
-            );
+            let probe = crate::collision::Obb::point(DVec3::new(point.x, point.y, 1.0), 0.02);
             assert!(zones.iter().any(|zone| zone.overlaps(&probe)), "{point:?}");
         }
         assert!(zones.iter().all(|zone| zone.id == -44));
@@ -311,7 +308,7 @@ mod junction_arrival_tests {
         // is empty; a car whose rear is 1 m into the second leaves only 3 m beyond the exit.
         let way = [(10, -20.0), (20, 5.0), (21, 7.0), (22, 10.0), (23, 40.0)];
         assert_eq!(
-            queued_exit_vehicle(&way, (20, 5.0), 8.0, [(21, 1.0, 0.0, 0.0, 0.9, 3.5)]),
+            queued_exit_vehicle(&way, (20, 5.0), 8.0, [(21, 1.0, 0.0)]),
             Some((3.0, 0.0, 21))
         );
     }
@@ -320,7 +317,7 @@ mod junction_arrival_tests {
     fn traffic_beyond_the_space_the_car_needs_does_not_close_the_exit() {
         let way = [(10, -20.0), (20, 5.0), (21, 7.0), (22, 10.0), (23, 40.0)];
         assert_eq!(
-            queued_exit_vehicle(&way, (20, 5.0), 8.0, [(22, 5.0, 0.0, 0.0, 0.9, 3.5), (23, 0.0, 0.0, 0.0, 0.9, 3.5)]),
+            queued_exit_vehicle(&way, (20, 5.0), 8.0, [(22, 5.0, 0.0), (23, 0.0, 0.0)]),
             None
         );
     }
@@ -333,7 +330,7 @@ mod junction_arrival_tests {
                 &way,
                 (20, 5.0),
                 10.0,
-                [(21, 4.0, 1.0, 0.0, 0.9, 3.5), (20, 5.0, 0.5, 0.0, 0.9, 3.5), (22, -1.0, 0.0, 0.0, 0.9, 3.5)]
+                [(21, 4.0, 1.0), (20, 5.0, 0.5), (22, -1.0, 0.0)]
             ),
             Some((4.0, 0.0, 22))
         );
@@ -354,13 +351,49 @@ mod group_density_tests {
     fn a_bus_under_a_bridge_is_not_in_the_way_on_it() {
         use super::in_player_box;
         use glam::DVec3;
-        let (c, f, r) = (DVec3::new(0.0, 0.0, 32.0), DVec2::new(0.0, 1.0), DVec2::new(1.0, 0.0));
+        let (c, f, r) = (
+            DVec3::new(0.0, 0.0, 32.0),
+            DVec2::new(0.0, 1.0),
+            DVec2::new(1.0, 0.0),
+        );
         // the road through the bus's box, on its level and on a bridge 5.4 m above it
-        assert!(in_player_box(DVec3::new(0.5, 3.0, 32.3), c, f, r, 2.5, 6.0, 6.0));
-        assert!(!in_player_box(DVec3::new(0.5, 3.0, 37.4), c, f, r, 2.5, 6.0, 6.0));
-        assert!(!in_player_box(DVec3::new(0.5, 3.0, 26.0), c, f, r, 2.5, 6.0, 6.0));
+        assert!(in_player_box(
+            DVec3::new(0.5, 3.0, 32.3),
+            c,
+            f,
+            r,
+            2.5,
+            6.0,
+            6.0
+        ));
+        assert!(!in_player_box(
+            DVec3::new(0.5, 3.0, 37.4),
+            c,
+            f,
+            r,
+            2.5,
+            6.0,
+            6.0
+        ));
+        assert!(!in_player_box(
+            DVec3::new(0.5, 3.0, 26.0),
+            c,
+            f,
+            r,
+            2.5,
+            6.0,
+            6.0
+        ));
         // beside it
-        assert!(!in_player_box(DVec3::new(3.5, 3.0, 32.0), c, f, r, 2.5, 6.0, 6.0));
+        assert!(!in_player_box(
+            DVec3::new(3.5, 3.0, 32.0),
+            c,
+            f,
+            r,
+            2.5,
+            6.0,
+            6.0
+        ));
     }
 
     #[test]
@@ -377,37 +410,125 @@ mod group_density_tests {
         let oncoming = on_arc(28.5, 30.0);
         // straight ahead, the reach lay across the oncoming lane
         assert!(in_player_box(oncoming, c, f, r, 2.6, 27.0, 6.5));
-        assert!(!in_player_sweep(oncoming, c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
+        assert!(!in_player_sweep(
+            oncoming,
+            c,
+            f,
+            r,
+            2.6,
+            6.5,
+            27.0,
+            6.5,
+            1.0 / 25.0
+        ));
         // along the turn, the bus's own lane round the bend is in its way
         let own = on_arc(25.0, 50.0);
         assert!(!in_player_box(own, c, f, r, 2.6, 27.0, 6.5));
-        assert!(in_player_sweep(own, c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
+        assert!(in_player_sweep(
+            own,
+            c,
+            f,
+            r,
+            2.6,
+            6.5,
+            27.0,
+            6.5,
+            1.0 / 25.0
+        ));
         // but not beyond its reach, nor behind it
-        assert!(!in_player_sweep(on_arc(25.0, 70.0), c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
-        assert!(!in_player_sweep(DVec3::new(0.0, -10.0, 0.0), c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
+        assert!(!in_player_sweep(
+            on_arc(25.0, 70.0),
+            c,
+            f,
+            r,
+            2.6,
+            6.5,
+            27.0,
+            6.5,
+            1.0 / 25.0
+        ));
+        assert!(!in_player_sweep(
+            DVec3::new(0.0, -10.0, 0.0),
+            c,
+            f,
+            r,
+            2.6,
+            6.5,
+            27.0,
+            6.5,
+            1.0 / 25.0
+        ));
         // the band covers the body, and a straight path is the old box
-        assert!(in_player_sweep(DVec3::new(-2.0, 5.0, 0.0), c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
+        assert!(in_player_sweep(
+            DVec3::new(-2.0, 5.0, 0.0),
+            c,
+            f,
+            r,
+            2.6,
+            6.5,
+            27.0,
+            6.5,
+            1.0 / 25.0
+        ));
         assert!(in_player_sweep(oncoming, c, f, r, 2.6, 6.5, 27.0, 6.5, 0.0));
         let beside_the_front = on_arc(25.0 + 2.97, 6.0f64.atan2(27.97).to_degrees());
-        assert!(!in_player_sweep(beside_the_front, c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
-        assert!(in_player_sweep(on_arc(25.0, -10.0), c, f, r, 2.6, 6.5, 27.0, 6.5, 1.0 / 25.0));
+        assert!(!in_player_sweep(
+            beside_the_front,
+            c,
+            f,
+            r,
+            2.6,
+            6.5,
+            27.0,
+            6.5,
+            1.0 / 25.0
+        ));
+        assert!(in_player_sweep(
+            on_arc(25.0, -10.0),
+            c,
+            f,
+            r,
+            2.6,
+            6.5,
+            27.0,
+            6.5,
+            1.0 / 25.0
+        ));
         // the curvature from two boxes 0.1 s apart: 14 m/s turning 3.2 degrees to the right
         let a = (DVec3::ZERO, 0.0, 6.0, 1.25, 14.0);
-        let b = (DVec3::new(0.0, 1.4, 0.0), 14.0 * 0.1 / 25.0 * 57.29578, 6.0, 1.25, 14.0);
+        let b = (
+            DVec3::new(0.0, 1.4, 0.0),
+            14.0 * 0.1 / 25.0 * 57.29578,
+            6.0,
+            1.25,
+            14.0,
+        );
         let k = player_turn_of(1.0 / 25.0, Some(a), Some(b), 0.1);
         assert!((k - 0.04).abs() < 1e-3, "{k}");
         // standing: no turn
-        assert_eq!(player_turn_of(0.04, Some(a), Some((b.0, b.1, 6.0, 1.25, 0.2)), 0.1), 0.0);
+        assert_eq!(
+            player_turn_of(0.04, Some(a), Some((b.0, b.1, 6.0, 1.25, 0.2)), 0.1),
+            0.0
+        );
     }
 
     #[test]
     fn a_following_bus_is_no_bus_in_the_way() {
         let north = DVec2::new(0.0, 1.0);
         // a car ahead going the same way: only the bus itself counts
-        assert_eq!(player_reach_ahead(6.0, 14.0, 1.5, north, DVec2::new(0.1, 3.0)), 6.0);
+        assert_eq!(
+            player_reach_ahead(6.0, 14.0, 1.5, north, DVec2::new(0.1, 3.0)),
+            6.0
+        );
         // a car crossing its way (or coming towards it): where the bus will be counts too
-        assert_eq!(player_reach_ahead(6.0, 14.0, 1.5, north, DVec2::new(3.0, 0.0)), 27.0);
-        assert_eq!(player_reach_ahead(6.0, 14.0, 1.5, north, DVec2::new(0.0, -3.0)), 27.0);
+        assert_eq!(
+            player_reach_ahead(6.0, 14.0, 1.5, north, DVec2::new(3.0, 0.0)),
+            27.0
+        );
+        assert_eq!(
+            player_reach_ahead(6.0, 14.0, 1.5, north, DVec2::new(0.0, -3.0)),
+            27.0
+        );
     }
 
     #[test]
@@ -437,7 +558,6 @@ mod group_density_tests {
     }
 }
 
-
 #[cfg(test)]
 mod way_user_tests {
     use super::*;
@@ -453,7 +573,10 @@ mod way_user_tests {
         let b = street(a.end(), 0.0, 20.0, 0.0);
         let mut c = street(a.end(), 0.0, 15.7, -10.0);
         c.turn = 1;
-        let mut net = Network { lanes: vec![a, b, c], ..Default::default() };
+        let mut net = Network {
+            lanes: vec![a, b, c],
+            ..Default::default()
+        };
         net.link(1.5);
         net.build_grid();
         net
@@ -469,18 +592,48 @@ mod way_user_tests {
         assert!((u.lanes[0].1 + 20.0).abs() < 0.1, "{:?}", u.lanes);
         // no indicator: either way (the cars cannot know)
         assert!(lanes.contains(&1) && lanes.contains(&2), "{lanes:?}");
-        assert!(u.lanes.iter().filter(|l| l.0 != 0).all(|l| (l.1 - 30.0).abs() < 0.1), "{:?}", u.lanes);
+        assert!(
+            u.lanes
+                .iter()
+                .filter(|l| l.0 != 0)
+                .all(|l| (l.1 - 30.0).abs() < 0.1),
+            "{:?}",
+            u.lanes
+        );
         // indicating left: the left turn only; right (no such branch): both
-        let left: Vec<usize> = way_user_on(&net, &bus, 1, 0.0, false).unwrap().lanes.iter().map(|l| l.0).collect();
+        let left: Vec<usize> = way_user_on(&net, &bus, 1, 0.0, false)
+            .unwrap()
+            .lanes
+            .iter()
+            .map(|l| l.0)
+            .collect();
         assert_eq!(left, vec![0, 2]);
-        assert_eq!(way_user_on(&net, &bus, 2, 0.0, false).unwrap().lanes.len(), 3);
+        assert_eq!(
+            way_user_on(&net, &bus, 2, 0.0, false).unwrap().lanes.len(),
+            3
+        );
         // reversing, or off the road: not on the lanes
         assert!(way_user_on(&net, &(bus.0, 0.0, 6.0, 1.25, -2.0), 0, 0.0, false).is_none());
-        assert!(way_user_on(&net, &(DVec3::new(30.0, 20.0, 0.0), 0.0, 6.0, 1.25, 5.0), 0, 0.0, false).is_none());
+        assert!(
+            way_user_on(
+                &net,
+                &(DVec3::new(30.0, 20.0, 0.0), 0.0, 6.0, 1.25, 5.0),
+                0,
+                0.0,
+                false
+            )
+            .is_none()
+        );
     }
 
     fn user(lanes: Vec<(usize, f32)>, speed: f32, still: f32) -> WayUser {
-        WayUser { lanes, speed, half_len: 6.0, still, prio: false }
+        WayUser {
+            lanes,
+            speed,
+            half_len: 6.0,
+            still,
+            prio: false,
+        }
     }
 
     /// A side road's car 15 m before the meeting place with the main road the bus drives on.
@@ -493,38 +646,182 @@ mod way_user_tests {
 
     #[test]
     fn a_car_on_the_side_road_gives_way_to_the_players_bus() {
-        let c = Crossing { other: 1, at: 2.0, other_at: 2.0, merge: false, before: 1.5, after: 1.5, other_before: 1.5, other_after: 1.5 };
+        let c = Crossing {
+            other: 1,
+            at: 2.0,
+            other_at: 2.0,
+            merge: false,
+            before: 1.5,
+            after: 1.5,
+            other_before: 1.5,
+            other_after: 1.5,
+        };
         let st = side_road_car(5.0);
         let point = 17.5; // the car's origin to the meeting point
         // the bus 50 m off on the main road at 11 m/s (there in about four seconds)
         let coming = user(vec![(7, -10.0), (1, 40.0)], 11.0, 0.0);
-        assert_eq!(way_user_verdict(&st, &coming, 40.0, &c, point, false, false, false, (true, false), 1.0).0, Verdict::Ruled);
+        assert_eq!(
+            way_user_verdict(
+                &st,
+                &coming,
+                40.0,
+                &c,
+                point,
+                false,
+                false,
+                false,
+                (true, false),
+                1.0
+            )
+            .0,
+            Verdict::Ruled
+        );
         // the car has the right of way, or has claimed the junction already: it goes
-        assert_eq!(way_user_verdict(&st, &coming, 40.0, &c, point, false, false, false, (false, false), 1.0).0, Verdict::Free);
-        assert_eq!(way_user_verdict(&st, &coming, 40.0, &c, point, false, true, false, (true, false), 1.0).0, Verdict::Free);
+        assert_eq!(
+            way_user_verdict(
+                &st,
+                &coming,
+                40.0,
+                &c,
+                point,
+                false,
+                false,
+                false,
+                (false, false),
+                1.0
+            )
+            .0,
+            Verdict::Free
+        );
+        assert_eq!(
+            way_user_verdict(
+                &st,
+                &coming,
+                40.0,
+                &c,
+                point,
+                false,
+                true,
+                false,
+                (true, false),
+                1.0
+            )
+            .0,
+            Verdict::Free
+        );
         // far off (a gap any driver takes), or standing at a stop: it goes
         let far = user(vec![(1, 140.0)], 11.0, 0.0);
-        assert_eq!(way_user_verdict(&st, &far, 140.0, &c, point, false, false, false, (true, false), 1.0).0, Verdict::Free);
+        assert_eq!(
+            way_user_verdict(
+                &st,
+                &far,
+                140.0,
+                &c,
+                point,
+                false,
+                false,
+                false,
+                (true, false),
+                1.0
+            )
+            .0,
+            Verdict::Free
+        );
         let standing = user(vec![(1, 20.0)], 0.0, 30.0);
-        assert_eq!(way_user_verdict(&st, &standing, 20.0, &c, point, false, false, false, (true, false), 1.0).0, Verdict::Free);
+        assert_eq!(
+            way_user_verdict(
+                &st,
+                &standing,
+                20.0,
+                &c,
+                point,
+                false,
+                false,
+                false,
+                (true, false),
+                1.0
+            )
+            .0,
+            Verdict::Free
+        );
         // in the meeting place: whoever has the right of way, the car waits
         let there = user(vec![(1, -6.0)], 0.0, 30.0);
-        assert_eq!(way_user_verdict(&st, &there, -6.0, &c, point, false, false, false, (false, false), 1.0).0, Verdict::Hard);
+        assert_eq!(
+            way_user_verdict(
+                &st,
+                &there,
+                -6.0,
+                &c,
+                point,
+                false,
+                false,
+                false,
+                (false, false),
+                1.0
+            )
+            .0,
+            Verdict::Hard
+        );
         // in the junction and on its way through, there first: the car waits
         let crossing = user(vec![(1, -1.0)], 8.0, 0.0);
-        assert_eq!(way_user_verdict(&st, &crossing, -1.0, &c, 4.0, false, false, false, (false, false), 1.0).0, Verdict::Hard);
+        assert_eq!(
+            way_user_verdict(
+                &st,
+                &crossing,
+                -1.0,
+                &c,
+                4.0,
+                false,
+                false,
+                false,
+                (false, false),
+                1.0
+            )
+            .0,
+            Verdict::Hard
+        );
         // through already
         let through = user(vec![(1, -20.0)], 8.0, 0.0);
-        assert_eq!(way_user_verdict(&st, &through, -20.0, &c, point, false, false, false, (true, false), 1.0).0, Verdict::Free);
+        assert_eq!(
+            way_user_verdict(
+                &st,
+                &through,
+                -20.0,
+                &c,
+                point,
+                false,
+                false,
+                false,
+                (true, false),
+                1.0
+            )
+            .0,
+            Verdict::Free
+        );
     }
 
     /// Two lanes running into one (lane 0 from the south, lane 1 slanting in from the
     /// south-east) and on as lane 2.
     fn joint() -> Network {
-        let main = LaneBuilder::polyline(vec![DVec3::ZERO, DVec3::new(0.0, 50.0, 0.0)], LaneKind::Street, 3.0);
-        let side = LaneBuilder::polyline(vec![DVec3::new(30.0, 20.0, 0.0), DVec3::new(0.0, 50.0, 0.0)], LaneKind::Street, 3.0);
-        let on = LaneBuilder::polyline(vec![DVec3::new(0.0, 50.0, 0.0), DVec3::new(0.0, 120.0, 0.0)], LaneKind::Street, 3.0);
-        let mut net = Network { lanes: vec![main, side, on], ..Default::default() };
+        let main = LaneBuilder::polyline(
+            vec![DVec3::ZERO, DVec3::new(0.0, 50.0, 0.0)],
+            LaneKind::Street,
+            3.0,
+        );
+        let side = LaneBuilder::polyline(
+            vec![DVec3::new(30.0, 20.0, 0.0), DVec3::new(0.0, 50.0, 0.0)],
+            LaneKind::Street,
+            3.0,
+        );
+        let on = LaneBuilder::polyline(
+            vec![DVec3::new(0.0, 50.0, 0.0), DVec3::new(0.0, 120.0, 0.0)],
+            LaneKind::Street,
+            3.0,
+        );
+        let mut net = Network {
+            lanes: vec![main, side, on],
+            ..Default::default()
+        };
         net.link(1.5);
         net.build_grid();
         net
@@ -644,9 +941,9 @@ mod lane_permission_tests {
 #[cfg(test)]
 mod headless_tests {
     use super::*;
+    use crate::ai_traffic::setup::RandomTypes;
     use crate::traffic::LaneBuilder;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use crate::ai_traffic::setup::RandomTypes;
 
     /// A vehicle type with no model and no scripts, in a folder of its own.
     struct Fixture {
@@ -663,7 +960,7 @@ mod headless_tests {
                 NEXT.fetch_add(1, Ordering::Relaxed)
             ));
             std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join("car.bus"), "[model]\nmodel.cfg\n").unwrap();
+            std::fs::write(dir.join("car.bus"), "[model]\nmodel.cfg\n[mass]\n7\n").unwrap();
             std::fs::write(dir.join("model.cfg"), "").unwrap();
             let ty = Arc::new(VehicleType::load_ai(&dir, &dir.join("car.bus")).unwrap());
             Fixture { dir, ty }
@@ -686,7 +983,10 @@ mod headless_tests {
             start = l.end();
             lanes.push(l);
         }
-        let mut net = Network { lanes, ..Default::default() };
+        let mut net = Network {
+            lanes,
+            ..Default::default()
+        };
         net.link(1.5);
         net
     }
@@ -699,14 +999,38 @@ mod headless_tests {
             group_uvg: Vec::new(),
             uvg_defaults: Vec::new(),
         };
-        TrafficSim::assemble(&f.dir, net, random, Vec::new(), HashMap::new(), (Vec::new(), Vec::new()), Vec::new(), (1.0, 0), 0)
+        TrafficSim::assemble(
+            &f.dir,
+            net,
+            random,
+            Vec::new(),
+            HashMap::new(),
+            (Vec::new(), Vec::new()),
+            Vec::new(),
+            (1.0, 0),
+            0,
+        )
     }
 
     /// A random car of the fixture's type on `lane` at `s` (as `create_car` puts one, without
     /// its picture and the ground under it).
     fn add_car(t: &mut TrafficSim, f: &Fixture, lane: usize, s: f32, seed: u64) -> u64 {
-        let vehicle = VehicleInstance::new(f.ty.clone(), crate::VehicleHost::new(crate::SimClock::default()));
-        t.place_car(vehicle, LaneKind::Street, lane, s, f.ty.clone(), seed, None, None, None, None)
+        let vehicle = VehicleInstance::new(
+            f.ty.clone(),
+            crate::VehicleHost::new(crate::SimClock::default()),
+        );
+        t.place_car(
+            vehicle,
+            LaneKind::Street,
+            lane,
+            s,
+            f.ty.clone(),
+            seed,
+            None,
+            None,
+            None,
+            None,
+        )
     }
 
     fn car(t: &TrafficSim, id: u64) -> &AiCar {
@@ -719,17 +1043,33 @@ mod headless_tests {
         let mut t = traffic(&f, road(&[300.0, 300.0, 300.0]));
         let lead = add_car(&mut t, &f, 0, 60.0, 0x1234_5678);
         let follow = add_car(&mut t, &f, 0, 20.0, 0x8765_4321);
-        let start = (car(&t, lead).vehicle.position, car(&t, follow).vehicle.position);
+        let start = (
+            car(&t, lead).vehicle.position,
+            car(&t, follow).vehicle.position,
+        );
         for _ in 0..600 {
             t.tick(0.05, None);
             let (a, b) = (car(&t, lead), car(&t, follow));
             // the follower stays behind its lead, its front clear of the lead's rear
-            let gap = (a.vehicle.position.y - b.vehicle.position.y) as f32 - a.state.rear - b.state.front;
-            assert!(gap > 0.5, "the cars touch: gap {gap:.2} m at t={:.2}", t.time);
+            let gap =
+                (a.vehicle.position.y - b.vehicle.position.y) as f32 - a.state.rear - b.state.front;
+            assert!(
+                gap > 0.5,
+                "the cars touch: gap {gap:.2} m at t={:.2}",
+                t.time
+            );
         }
         let (a, b) = (car(&t, lead), car(&t, follow));
-        assert!(a.vehicle.position.y - start.0.y > 100.0, "the lead drove {:.1} m", a.vehicle.position.y - start.0.y);
-        assert!(b.vehicle.position.y - start.1.y > 100.0, "the follower drove {:.1} m", b.vehicle.position.y - start.1.y);
+        assert!(
+            a.vehicle.position.y - start.0.y > 100.0,
+            "the lead drove {:.1} m",
+            a.vehicle.position.y - start.0.y
+        );
+        assert!(
+            b.vehicle.position.y - start.1.y > 100.0,
+            "the follower drove {:.1} m",
+            b.vehicle.position.y - start.1.y
+        );
         assert_eq!(b.lead_car, Some(lead));
         assert!((t.time - 30.0).abs() < 1e-3);
     }
@@ -744,7 +1084,11 @@ mod headless_tests {
             t.tick(0.05, None);
             steps += 1;
         }
-        assert!(t.cars.is_empty(), "the car still stands at s {:.1}", t.cars[0].state.s);
+        assert!(
+            t.cars.is_empty(),
+            "the car still stands at s {:.1}",
+            t.cars[0].state.s
+        );
     }
 
     #[test]
@@ -758,7 +1102,10 @@ mod headless_tests {
             for _ in 0..200 {
                 t.tick(0.05, None);
             }
-            t.cars.iter().map(|c| (c.id, c.state.lane, c.state.s, c.state.speed)).collect::<Vec<_>>()
+            t.cars
+                .iter()
+                .map(|c| (c.id, c.state.lane, c.state.s, c.state.speed))
+                .collect::<Vec<_>>()
         };
         assert_eq!(run(), run());
     }
