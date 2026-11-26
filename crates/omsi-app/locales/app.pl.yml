@@ -3595,6 +3595,8 @@
 "For passengers whose file gives no weight; default 75 kg": "Dla pasażerów, których plik nie podaje masy; domyślnie 75 kg"
 "Road dirt on the vehicles": "Brud drogowy na pojazdach"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: pojazdy zbierają brud drogowy tam, gdzie trafia - rozbryzgi za kołami i na dolnych bokach na mokrej drodze, nalot z tyłu, kurz na sucho, błoto pośniegowe zimą - a deszcz go zmywa; wyłączone: własny brud autobusu jak w OMSI 2"
+"Draw the mouse cursor in the game": "Rysuj kursor myszy w grze"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "Dla ekranu G-SYNC, który tnie się przy ruchu myszy: gra rysuje własną strzałkę, a Windows nigdy nie przesuwa kursora sprzętowego"
 "Entry doors": "Drzwi wejściowe"
 "As the bus says": "Jak w autobusie"
 "Front door only": "Tylko przednie drzwi"

@@ -4488,6 +4488,8 @@
 "For passengers whose file gives no weight; default 75 kg": "Для пассажиров, в файле которых вес не указан; по умолчанию 75 кг"
 "Road dirt on the vehicles": "Дорожная грязь на транспорте"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: на транспорте собирается дорожная грязь там, куда она попадает - брызги за колёсами и на нижних бортах на мокрой дороге, налёт сзади, пыль в сухую погоду, слякоть зимой - а дождь её смывает; выключено - собственная грязь автобуса, как в OMSI 2"
+"Draw the mouse cursor in the game": "Рисовать курсор мыши в игре"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "Для экрана G-SYNC, который подтормаживает при движении мыши: игра рисует свою стрелку, а Windows никогда не перемещает аппаратный курсор"
 "Entry doors": "Двери для входа"
 "As the bus says": "Как задано в автобусе"
 "Front door only": "Только передняя дверь"
