@@ -273,6 +273,7 @@ fn a_drag_after_a_quick_tap_before_a_frame_moves_the_second_control() {
             def_index: k,
             data: Default::default(),
             file: Default::default(),
+            stamp: 0,
             materials: vec![],
             overrides: vec![],
             pivot: glam::Mat4::IDENTITY,
