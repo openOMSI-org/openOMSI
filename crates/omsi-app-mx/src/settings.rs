@@ -82,8 +82,7 @@ pub struct Settings {
     /// The IBIS's stop follows the duty's as the bus serves them (#2267): off, the driver
     /// presses the IBIS's "next stop" key as in OMSI; only where the game types the IBIS.
     pub ibis_auto_stop: bool,
-    /// The fare is paid without a ticket (#2742).
-    pub pax_no_ticket: bool,
+    pub pax_no_ticket: bool, // the fare paid without a ticket (#2742)
     /// How late the player's bus may be before boarding passengers complain (#2718), in
     /// minutes. Zero turns it off.
     pub pax_late_tolerance_min: f32,
