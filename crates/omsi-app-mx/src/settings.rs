@@ -82,15 +82,13 @@ pub struct Settings {
     /// The IBIS's stop follows the duty's as the bus serves them (#2267): off, the driver
     /// presses the IBIS's "next stop" key as in OMSI; only where the game types the IBIS.
     pub ibis_auto_stop: bool,
-    /// The fare is paid without a ticket (#2742).
-    pub pax_no_ticket: bool,
+    pub pax_no_ticket: bool, // the fare paid without a ticket (#2742)
     /// How late the player's bus may be before boarding passengers complain (#2718), in
     /// minutes. Zero turns it off.
     pub pax_late_tolerance_min: f32,
     /// Whether the stops of the map fill in free drive (#2712): `auto`, `on` or `off`.
     pub pax_free_drive: String,
-    /// Other players' buses in less detail when far away (#2538); kept for the file, the mX
-    /// game does not use it yet.
+    /// Other players' buses in less detail when far away or with the game struggling (#2538).
     pub others_detail: bool,
     /// At each stop of a depot file that keeps two recordings per stop, the game presses the
     /// IBIS's "next stop" key so that the arrival recording is heard as well (see

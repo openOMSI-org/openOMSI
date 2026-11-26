@@ -123,6 +123,23 @@ What Omsi.exe does, read from the game itself, where openOMSI did something of i
 - **Multiplayer traffic**: players on foot or riding get traffic and people around them; a
   dedicated server builds its traffic where its players are; far cars are updated more
   often and smoothed longer against jitter; the nearest traffic lights are sent first.
+- **Road dirt on every vehicle in sight**: the Enhanced picture lays it on 64 bodies instead
+  of the nearest 6, whole vehicles first, and a vehicle hides its own dirt overlay only while
+  the road dirt is on it: past the limit it keeps its own dirt instead of standing there
+  washed clean. An articulated bus's joint takes the dirt of both sections.
+- **`[matl_emissive]` on scenery objects**: the object's script switches, dims and tints the
+  slot, with its fade, as on a vehicle; it shone at full level whatever the variable said.
+- **mX Graphics after the card ran out of memory**: the rebuild lets go of the shadow maps,
+  the ray tracing, the sky cube and the fog first and builds once more if the shadow maps came
+  out smaller, as the standard graphics do. Other players' buses in less detail far away,
+  `--export-stop-labels` and the loading's memory log are in mX Graphics too.
+- **Standard graphics**: puddle reflections no longer shimmer on the move, no grid of diamonds
+  over the shaded parts of the clouds, and far lamps are round points of light, as in mX
+  Graphics.
+- **Chat commands**: only a line that starts with `/` and a letter or digit is a command for
+  the plugins; ` /...`, `/ ...` or `/)` are said to everybody.
+- **The launcher's graphics profiles build again** (the DLSS sharpness key made 52 of them).
+
 - **Passenger settings work outside online rooms**: which doors passengers get in through, paying
   without a ticket, how late the bus may be, free-drive passengers and waiting for the doors to
   open reached the passengers of an online room only; in single player, in a LAN game and after

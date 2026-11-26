@@ -400,11 +400,12 @@ impl Renderer {
         true
     }
 
-    fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
+    pub(crate) fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
         // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
-        // without one in the new options it is dropped here, with its context and textures)
+        // without one in the new options it is dropped here, with its context and textures -
+        // unless it is to be tried again, see `fall_back_without_upscaler`)
         // (frame generation reads the depth, the motion and the pictures before the HUD at the
-        // window's present, after wgpu is done with them: its work is waited for before they go)
+        // window's present, after the GPU is done with them: its work is waited for before they go)
         if let Some(g) = &self.frame_generation {
             g.wait();
         }
@@ -412,19 +413,89 @@ impl Renderer {
             .temporal_runtime()
             .or_else(|| self.temporal_kept.take())
             .filter(|_| options.temporal.is_some() || self.upscaler_retry.is_some());
-        // Release render targets before building their replacements. Keeping the old
-        // targets alive while the new renderer is built can turn a recoverable OOM into
-        // another allocation failure.
+        // Release what the new renderer makes again before it is built (as the wgpu renderer
+        // does, #4302): with the old targets, shadow maps, ray tracing, sky cube and clouds
+        // still held, a rebuild with the card full had no room for its own shadow maps and
+        // went down to smaller ones for the rest of the session.
+        self.release_for_rebuild(scene);
+        let _ = wait_gpu(&self.device, None);
+        let ceiling_before = ceiling();
+        let built = self.rebuilt(options);
+        let shadows_short = built.options.shadow_size < options.shadow_size;
+        self.take_over(scene, built, upscaler);
+        // What the old renderer still held is gone now: shadow maps smaller than asked for
+        // are made once more, with the memory it freed.
+        if shadows_short {
+            log::warn!(
+                "the renderer was rebuilt with a {} shadow map instead of {}: built once more now that the old one is gone",
+                self.options.shadow_size,
+                options.shadow_size
+            );
+            let _ = wait_gpu(&self.device, None);
+            update_ceiling(|c| *c = ceiling_before);
+            let upscaler = self.temporal_kept.take();
+            self.release_for_rebuild(scene);
+            let _ = wait_gpu(&self.device, None);
+            let built = self.rebuilt(options);
+            self.take_over(scene, built, upscaler);
+        }
+    }
+
+    /// Let go of what a rebuild makes anew, before it is built: the size-keyed targets, the
+    /// shadow maps, the ray tracing, the reflection probe (the sky cube and the clouds), the
+    /// volumetric fog, the recorded passes and the scene's heaps that point at them.
+    fn release_for_rebuild(&mut self, scene: &mut Scene) {
         self.targets.depth = None;
         self.pane_depth = None;
         self.targets.msaa_targets.clear();
         self.targets.ao = None;
+        self.targets.ground = None;
         self.targets.hdr_targets.clear();
         self.targets.scale_targets.clear();
         self.targets.triple_targets = None;
         self.targets.glass_picture = None;
         self.targets.glass_mips = None;
         self.targets.target_use.clear();
+        // (the shadow maps, the largest of the renderer's own textures; the stand-in is never
+        // drawn with, the new renderer takes the place of this one before any frame)
+        let stand_in = || {
+            self.device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some("shadow map released for a rebuild"),
+                    size: mx::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format: mx::TextureFormat::R8Unorm,
+                    usage: mx::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })
+                .and_then(|t| t.create_view(&Default::default()))
+                .ok()
+        };
+        if let (Some(near), Some(far)) = (stand_in(), stand_in()) {
+            self.shadows.shadow_view = near;
+            self.shadows.shadow_view_far = far;
+        }
+        self.rt = None;
+        self.tone.probe = None;
+        self.lights.vol_fog = None;
+        *self.history.main_bundles.borrow_mut() = None;
+        self.history.mirror_bundles.borrow_mut().clear();
+        scene.camera_heaps = None;
+    }
+
+    /// `built` in the place of this renderer, with what goes on from the old one.
+    fn take_over(
+        &mut self,
+        scene: &mut Scene,
+        built: Renderer,
+        upscaler: Option<temporal::Runtime>,
+    ) {
         let (mesh_pages, frame_generation) = (self.mesh_pages, self.frame_generation.take());
         let (upscaler_retry, upscaler_retried) = (self.upscaler_retry, self.upscaler_retried);
         *self = Renderer {
@@ -433,7 +504,7 @@ impl Renderer {
             frame_generation,
             upscaler_retry,
             upscaler_retried,
-            ..self.rebuilt(options)
+            ..built
         };
         scene.dirty = true;
         scene.model_buf = None;

@@ -4430,3 +4430,5 @@
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "Anuncios automáticos: este autobús no tiene tecla IBIS de «siguiente parada», por lo que sus anuncios se mantienen propios."
 "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
 "Automatic announcements are off.": "Los anuncios automáticos están desactivados."
+"Draw other players' buses in less detail when far away": "Dibujar los autobuses de otros jugadores con menos detalle a lo lejos"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multijugador: más allá de 120 m y con menos de 20 FPS, los autobuses de otros jugadores conservan la carrocería pero pierden conductores y letreros; se recuperan por completo sobre 26 FPS"
