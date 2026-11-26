@@ -348,6 +348,24 @@ pub fn run() -> Result<()> {
         println!("Support package written to {} - look inside before you attach it to an issue", out.display());
         return Ok(());
     }
+    // (a report of the mods, without a window: the content folder's `Mods/`, read against
+    // the content folder and the installation, in the order the game searches them - #3606)
+    if let Some(out) = &args.export_mod_report {
+        let Some(c) = omsi_cfg::content_dir() else { anyhow::bail!("no content folder: --export-mod-report needs one") };
+        let folders = omsi_cfg::mod_dirs(&c);
+        let names: Vec<String> = folders.iter().filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).collect();
+        let mut roots = folders.clone();
+        roots.push(c.clone());
+        roots.push(args.root.clone());
+        let entries = omsi_cfg::overrides::overrides_in(&c, &roots, &folders, omsi_cfg::overrides::DEFAULT_LIMIT);
+        if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(out, omsi_cfg::overrides::report(&entries, &names))?;
+        let shared = entries.iter().filter(|e| e.between_mods(&names)).count();
+        println!("{} mods, {} files they override ({} shipped by two packs) written to {}", names.len(), entries.len(), shared, out.display());
+        return Ok(());
+    }
     // (also without the content and the device: the map's `TTData` is all it reads)
     if let Some(out) = &args.export_stop_labels {
         let map_dir = Path::new(&args.map).parent().map(|p| args.root.join(p)).unwrap_or_else(|| args.root.clone());
