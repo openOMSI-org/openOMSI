@@ -107,7 +107,10 @@ mod tests {
             ..Default::default()
         };
         let clean = VehicleDirt::default();
-        let list = [clean, dirty, dirty, dirty, dirty, dirty, dirty, dirty];
+        // (a clean one, left out, and more dirty ones than the uniform holds)
+        let list: Vec<VehicleDirt> = std::iter::once(clean)
+            .chain(std::iter::repeat_n(dirty, DIRT_VEHICLES + 2))
+            .collect();
         let (n, rows) = pack_all(&list, DVec3::new(100.0, 0.0, 0.0));
         assert_eq!(n[0], DIRT_VEHICLES as f32);
         assert_eq!(rows[0][..3], [0.0, 50.0, 2.0]);

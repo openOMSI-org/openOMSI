@@ -448,13 +448,8 @@ impl Renderer {
                 // (the dry map: no vehicle - the road under a bus that drives on is wet - and
                 // nothing small: a lamp post, a wire or a sign keeps no rain off the road)
                 let dry_hit = inst.roof.is_none()
-                    && dry_box.is_some_and(|dm| {
-                        let lc = dm.project_point3(c);
-                        let rr = r / DRY_RANGE;
-                        !(m.bounds_radius > 0.0 && m.bounds_radius < 0.5)
-                            && lc.x.abs() <= 1.0 + rr
-                            && lc.y.abs() <= 1.0 + rr
-                    });
+                    && !(m.bounds_radius > 0.0 && m.bounds_radius < 0.5)
+                    && dry_box.is_some_and(|dm| in_dry_map(dm, c, r));
                 if !lamp_hit && !roof_hit && !dry_hit && hits == [false; 3] {
                     continue;
                 }
@@ -554,21 +549,7 @@ impl Renderer {
                     }
                 }
                 if dry_hit {
-                    // (what is solid only: rain comes through the cut-out leaves of a tree)
-                    for &(kind, ri, slot, mat_id, look) in ranges.iter() {
-                        if kind != PIPE_OPAQUE && kind != PIPE_KINDS {
-                            continue;
-                        }
-                        let (material, look) = depth_only_material(PIPE_OPAQUE, mat_id, look);
-                        out[DRY_LIST].push(DrawItem {
-                            pipe: PIPE_OPAQUE,
-                            mesh: inst.mesh as u32,
-                            range: ri,
-                            material,
-                            look,
-                            entry: inst.base + slot,
-                        });
-                    }
+                    push_dry(&mut out[DRY_LIST], ranges, inst.mesh as u32, inst.base);
                 }
                 if roof_hit {
                     for &(kind, ri, slot, mat_id, look) in ranges.iter() {
@@ -640,11 +621,7 @@ impl Renderer {
                             let rr = r / PRECIP_RANGE;
                             lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
                         })
-                        || dry_box.is_some_and(|dm| {
-                            let lc = dm.project_point3(c);
-                            let rr = r / DRY_RANGE;
-                            lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
-                        })
+                        || dry_box.is_some_and(|dm| in_dry_map(dm, c, r))
                         || boxes.iter().enumerate().any(|(k, &(range, lvp, _))| {
                             let lc = lvp.project_point3(c);
                             let rr = r / range;
@@ -702,6 +679,32 @@ impl Renderer {
             );
         }
         shadow_batches
+    }
+}
+
+/// Whether a sphere at `c` of radius `r` (render origin) lies on Enhanced's dry map `dm`.
+fn in_dry_map(dm: Mat4, c: Vec3, r: f32) -> bool {
+    let lc = dm.project_point3(c);
+    let rr = r / DRY_RANGE;
+    lc.x.abs() <= 1.0 + rr && lc.y.abs() <= 1.0 + rr
+}
+
+/// An instance's ranges on Enhanced's dry map: what is solid only, depth only (rain comes
+/// through the cut-out leaves of a tree).
+fn push_dry(list: &mut Vec<DrawItem>, ranges: &[(u8, u32, u32, usize, u32)], mesh: u32, base: u32) {
+    for &(kind, ri, slot, mat_id, look) in ranges {
+        if kind != PIPE_OPAQUE && kind != PIPE_KINDS {
+            continue;
+        }
+        let (material, look) = depth_only_material(PIPE_OPAQUE, mat_id, look);
+        list.push(DrawItem {
+            pipe: PIPE_OPAQUE,
+            mesh,
+            range: ri,
+            material,
+            look,
+            entry: base + slot,
+        });
     }
 }
 
