@@ -3507,32 +3507,9 @@ fn weight_value(key: &str, val: &str) -> Value {
 }
 
 // (one setting a line, as the settings file has them: rustfmt would triple it)
-pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
-    let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
-    v["rear_door_boarding"] = json!(false);
-    graphics_and_interface_defaults(&mut v);
-    if phone {
-        for (k, d) in [
-            ("msaa", json!(2)),
-            ("anisotropy", json!(4)),
-            ("ssao", json!(false)),
-            ("shadow_size", json!(1024)),
-            ("mirror_size", json!(128)),
-            ("max_fps", json!(60)),
-            ("max_obj_dist", json!("900")),
-            ("pax_density", json!(0.7)),
-            ("navigator_corner", json!("top-center")),
-        ] {
-            v[k] = d;
-        }
-    }
-    v["touch_door_mode"] = json!("standard");
-    v["touch_pedal_length"] = json!(1.0);
-    v["touch_pedal_deadzone"] = json!(0.15);
-    // (the game's menus switch these: saved through this page's writer, unknown they were dropped)
-    for k in ["full_tank", "trip_summary"] {
-        v[k] = json!(true);
-    }
+/// The screens' defaults: three screens, the headset, the mirrors, and what the Discord
+/// status shows.
+fn display_defaults(v: &mut Value) {
     v["triple_screen"] = json!(false);
     v["triple_span"] = json!(true);
     v["triple_hud_center"] = json!(true);
@@ -3561,6 +3538,35 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     ] {
         v[k] = json!(true);
     }
+}
+
+pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
+    let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
+    v["rear_door_boarding"] = json!(false);
+    graphics_and_interface_defaults(&mut v);
+    if phone {
+        for (k, d) in [
+            ("msaa", json!(2)),
+            ("anisotropy", json!(4)),
+            ("ssao", json!(false)),
+            ("shadow_size", json!(1024)),
+            ("mirror_size", json!(128)),
+            ("max_fps", json!(60)),
+            ("max_obj_dist", json!("900")),
+            ("pax_density", json!(0.7)),
+            ("navigator_corner", json!("top-center")),
+        ] {
+            v[k] = d;
+        }
+    }
+    v["touch_door_mode"] = json!("standard");
+    v["touch_pedal_length"] = json!(1.0);
+    v["touch_pedal_deadzone"] = json!(0.15);
+    // (the game's menus switch these: saved through this page's writer, unknown they were dropped)
+    for k in ["full_tank", "trip_summary"] {
+        v[k] = json!(true);
+    }
+    display_defaults(&mut v);
     // Only fresh installs opt in; existing settings files retain enabled plugins.
     v["disable_plugins"] = json!(text.is_none());
     // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
@@ -4719,6 +4725,11 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let legacy_arrows = b("nav_arrows", false) != 0;
     let dynamic_arrows = b("nav_dynamic_arrows", legacy_arrows);
     let map_arrows = b("nav_map_arrows", legacy_arrows);
+    let graphics = graphics_mode(
+        v.get("graphics")
+            .and_then(|x| x.as_str())
+            .unwrap_or("vanilla_plus"),
+    );
     let text = format!(
         "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
@@ -4734,19 +4745,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         v.get("boarding").and_then(|x| x.as_str()).unwrap_or("auto"),
         b("detail_textures", true),
         b("exact_fare", true),
-        matches!(
-            graphics_mode(
-                v.get("graphics")
-                    .and_then(|x| x.as_str())
-                    .unwrap_or("vanilla_plus")
-            ),
-            "enhanced" | "enhanced_plus"
-        ) as u8,
-        match graphics_mode(
-            v.get("graphics")
-                .and_then(|x| x.as_str())
-                .unwrap_or("vanilla_plus")
-        ) {
+        matches!(graphics, "enhanced" | "enhanced_plus") as u8,
+        match graphics {
             "enhanced_plus" => "enhanced",
             g => g,
         },
