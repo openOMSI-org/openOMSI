@@ -604,7 +604,20 @@ impl World {
             let known = numbers.get(&o.id).copied();
             Some(known.unwrap_or_else(|| {
                 let program = ot.sco.traffic_lights.iter().map(|l| (l.phases.iter().map(|p| (p.state, p.duration)).collect(), l.approach_dist)).collect();
-                let c = TrafficLightController::from_program(program, ot.sco.traffic_lights_group, &ot.sco.traffic_light_stop, &ot.sco.traffic_light_jump);
+                let mut c = TrafficLightController::from_program(program, ot.sco.traffic_lights_group, &ot.sco.traffic_light_stop, &ot.sco.traffic_light_jump);
+                // The other times of day (`[traffic_light_time]`, openOMSI's own line): the
+                // object runs each of these programs in its window, the file's own otherwise.
+                if !ot.sco.traffic_light_times.is_empty() {
+                    let times = ot.sco.traffic_light_times.iter().map(|t| {
+                        let program = t.lights.iter().map(|l| (l.phases.iter().map(|p| (p.state, p.duration)).collect(), l.approach_dist)).collect();
+                        omsi_sim::traffic::TimedProgram {
+                            from: f64::from(t.from),
+                            to: f64::from(t.to),
+                            program: omsi_sim::traffic::LightProgram::from_parts(program, t.group, &t.stop, &t.jump),
+                        }
+                    }).collect();
+                    c.set_time_programs(times);
+                }
                 // (one program per owning object: the next number is the count so far; handed
                 // over under the lock, so the programs arrive in the order of their numbers)
                 let idx = numbers.len();

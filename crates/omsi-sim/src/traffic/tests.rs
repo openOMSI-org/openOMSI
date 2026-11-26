@@ -2308,3 +2308,85 @@ fn a_queue_spreads_over_the_ways_on() {
     }
     assert_eq!(took, vec![1, 2, 1, 2, 1, 2]);
 }
+
+#[test]
+fn a_crossing_runs_the_program_the_time_of_day_calls_for() {
+    use crate::traffic::{Aspect, LightProgram, TimedProgram, TrafficLightController};
+    // (green 20 s, red the rest of the 40 s cycle; the rush hour's green is 40 of 60)
+    let day = LightProgram::from_parts(
+        vec![(vec![(6, 20.0), (0, 0.0)], None)],
+        Some(40.0),
+        &[],
+        &[],
+    );
+    let rush = LightProgram::from_parts(
+        vec![(vec![(6, 40.0), (0, 0.0)], None)],
+        Some(60.0),
+        &[],
+        &[],
+    );
+    let night = LightProgram::from_parts(vec![(vec![(9, 2.0)], None)], Some(2.0), &[], &[]);
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(6, 20.0), (0, 0.0)], None)],
+        Some(40.0),
+        &[],
+        &[],
+    );
+    let h = |h: f64| h * 3600.0;
+
+    // no window, no change: the file's own program runs all day, as it always did
+    assert!(!c.select_time_program(h(3.0)));
+    assert_eq!(c.cycle_len(), 40.0);
+
+    c.set_time_programs(vec![
+        TimedProgram {
+            from: h(7.5),
+            to: h(9.0),
+            program: rush,
+        },
+        TimedProgram {
+            from: h(22.0),
+            to: h(5.0),
+            program: night,
+        },
+    ]);
+    // 08:00: the rush hour's longer green
+    assert!(
+        c.select_time_program(h(8.0)),
+        "08:00 is in the rush hour window"
+    );
+    assert_eq!(c.cycle_len(), 60.0);
+    assert_eq!(TrafficLightController::aspect(c.state(0)), Aspect::Green);
+    // within the same window nothing changes over, whatever the minute
+    assert!(!c.select_time_program(h(8.5)));
+    // 12:00: back to the file's own program
+    assert!(c.select_time_program(h(12.0)));
+    assert_eq!(c.cycle_len(), 40.0);
+    // 23:00 until 05:00: the night program, across midnight
+    assert!(c.select_time_program(h(23.0)));
+    assert_eq!(c.cycle_len(), 2.0);
+    assert_eq!(
+        TrafficLightController::aspect(c.state(0)),
+        Aspect::Yellow,
+        "the night program's flashing yellow"
+    );
+    assert!(
+        !c.select_time_program(h(4.0)),
+        "04:00 is still the same night window"
+    );
+    assert!(
+        c.select_time_program(h(6.0)),
+        "06:00 is the file's own program again"
+    );
+    assert_eq!(c.cycle_len(), 40.0);
+    // and it runs: the clock moves on inside the chosen program
+    let mut seen = Vec::new();
+    for _ in 0..100 {
+        seen.push(TrafficLightController::aspect(c.state(0)));
+        c.advance(0.5);
+    }
+    assert!(
+        seen.contains(&Aspect::Red),
+        "the day program ran a full cycle"
+    );
+}

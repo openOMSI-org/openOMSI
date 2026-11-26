@@ -38,8 +38,8 @@ pub use lane::{
     pool_density, wrap_deg,
 };
 pub use lights::{
-    Aspect, DEFAULT_APPROACH, LightStop, PLAYER_SEARCH_RANGE, TrafficLightController,
-    UNLINKED_PHASE, WAITING_AT_LINE,
+    Aspect, DEFAULT_APPROACH, LightProgram, LightStop, PLAYER_SEARCH_RANGE, TimedProgram,
+    TrafficLightController, UNLINKED_PHASE, WAITING_AT_LINE,
 };
 pub use walk_path::PathFooting;
 
