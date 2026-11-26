@@ -88,7 +88,7 @@ pub(crate) fn count(app: &App) -> usize {
     players(app).len()
 }
 
-fn describe(p: &Player, tr: &dyn Fn(&str) -> String) -> String {
+fn describe(app: &App, p: &Player, tr: &dyn Fn(&str) -> String) -> String {
     let what = match p.state {
         PlayerState::Driving => tr("driving"),
         PlayerState::OnFoot => tr("on foot"),
@@ -99,7 +99,24 @@ fn describe(p: &Player, tr: &dyn Fn(&str) -> String) -> String {
         .filter(|b| !b.is_empty())
         .map(|b| format!(", {b}"))
         .unwrap_or_default();
-    format!("{what}{bus}")
+    // (#2859) the conductor of a bus: ours, or another player's that told the session
+    let crew = if app.net.crew.is_conductor(p.id) {
+        format!(", {}", tr("the conductor of my bus"))
+    } else if let Some(owner) = app
+        .net
+        .conductors
+        .iter()
+        .find(|(_, c)| **c == p.id)
+        .map(|(o, _)| *o)
+    {
+        format!(
+            ", {}",
+            tr("the conductor of #{owner}'s bus").replace("{owner}", &owner.to_string())
+        )
+    } else {
+        String::new()
+    };
+    format!("{what}{bus}{crew}")
 }
 
 /// The role a player is shown with: the host of a session, an admin or a moderator.
@@ -155,7 +172,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                     "{} (#{}){you} - {}{}{silenced}",
                     p.name,
                     p.id,
-                    describe(p, &tr),
+                    describe(app, p, &tr),
                     role_word(p, &tr)
                 );
                 // (a page of their own for every other player: their voice is muted there, and
@@ -190,7 +207,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                     "{} (#{}) - {}{}",
                     p.name,
                     p.id,
-                    describe(p, &tr),
+                    describe(app, p, &tr),
                     role_word(p, &tr)
                 )),
                 // (a mute is this player's own: by name, kept between sessions)

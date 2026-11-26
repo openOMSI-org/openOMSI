@@ -21,6 +21,16 @@ pub fn may_work(
     bus: Option<&omsi_sim::VehicleInstance>,
     ev: &str,
 ) -> bool {
+    aboard_inside(lan, from, bus) && passenger_trigger(ev)
+}
+
+/// Is player `from` aboard our bus `bus` and inside it - riding in it, not standing beside it?
+/// (What a passenger works, and what the conductor of the bus serves, hangs on it: #2859.)
+pub fn aboard_inside(
+    lan: &omsi_net::LanSession,
+    from: u32,
+    bus: Option<&omsi_sim::VehicleInstance>,
+) -> bool {
     let walker = lan
         .peers()
         .find(|p| p.pose.id == from)
@@ -35,7 +45,7 @@ pub fn may_work(
         ),
         _ => false,
     };
-    aboard.is_some() && inside && passenger_trigger(ev)
+    aboard.is_some() && inside
 }
 
 #[cfg(test)]

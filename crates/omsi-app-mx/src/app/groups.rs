@@ -64,6 +64,11 @@ pub(crate) struct NetState {
     /// Set only by the dedicated server's teleport capability response.
     /// None means an older server or a player-hosted LAN session.
     pub(crate) dedicated_teleport: Option<bool>,
+    /// Who of the other players serves our bus's cash desk (#2859): the conductor we named.
+    pub(crate) crew: omsi_lan::crew::Crew,
+    /// Whose bus another player is the conductor of, as each bus's driver announces it
+    /// (#2859): the bus owner's number -> the conductor's.
+    pub(crate) conductors: std::collections::HashMap<u32, u32>,
     pub(crate) mods_server: Option<omsi_lan::mods::Server>,
     pub(crate) remotes: lan::LanGame,
     /// The shared world: the host's traffic and people, sent (host) or mirrored (client).
