@@ -82,13 +82,10 @@ pub struct AiState {
     pub desire: f32,
     pub headway: f32,
     pub min_gap: f32,
-    pub standstill_gap: f32,
     pub accept_gap: f32,
     pub reaction: f32,
-    /// Additional personality settings: how long they wait to honk a horn (relative factor),
-    /// how often they can run a yellow light (probability) when they still can technically stop
+    /// Additional personality setting: how long they wait to honk a horn (relative factor).
     pub honk_factor: f32,
-    pub amber_factor: f32,
     /// From the vehicle's origin (the lane position `s`) to its front and rear bumper (m).
     pub front: f32,
     pub rear: f32,
@@ -387,7 +384,62 @@ const TRAP_DEPTH: u32 = 3;
 
 impl AiState {
     pub fn new(lane: usize, s: f32, seed: u64) -> AiState {
-        AiState { traffic_pool: None, veh_type: 0, lane, s, speed: 0.0, max_speed_kmh: 50.0, accel: 1.2, decel: 3.0, length: 5.0, rng: seed | 1, blinker: 0, braking: false, brake_lamp: 0.0, odometer: 0.0, planned_next: None, ahead: Vec::new(), change_plan: Vec::new(), prev_lane: None, yield_time: 0.0, route: Vec::new(), route_index: 0, change: None, change_cooldown: 5.0, lateral: 0.0, lateral_target: 0.0, lateral_ramp: (0.0, 0.0, 0.0, 1.0), turn_wish: 0, signal: 0, signal_time: 0.0, lat_accel: 2.8, desire: 1.0, headway: 1.4, min_gap: 2.0, standstill_gap: 1.2, accept_gap: 4.0, reaction: 0.7, honk_factor: 1.0, amber_factor: 0.03, front: 2.5, rear: 2.5, held: false, start_timer: 0.0, acc: 0.0, accel_cap: None, ordinary_brake: ORDINARY_BRAKE, emergency_brake: MAX_BRAKE, jerk: JERK, cmd: 0.0, emergency: false, emergency_began: false, body: BodyLink::default(), nudge_ramp: (0.0, 0.0, 0.0, 1.0), priority_drive: false, speed_cap: None, rail_power: None, bend: BendCache::default() }
+        AiState {
+            traffic_pool: None,
+            veh_type: 0,
+            lane,
+            s,
+            speed: 0.0,
+            max_speed_kmh: 50.0,
+            accel: 1.2,
+            decel: 3.0,
+            length: 5.0,
+            rng: seed | 1,
+            blinker: 0,
+            braking: false,
+            brake_lamp: 0.0,
+            odometer: 0.0,
+            planned_next: None,
+            ahead: Vec::new(),
+            change_plan: Vec::new(),
+            prev_lane: None,
+            yield_time: 0.0,
+            route: Vec::new(),
+            route_index: 0,
+            change: None,
+            change_cooldown: 5.0,
+            lateral: 0.0,
+            lateral_target: 0.0,
+            lateral_ramp: (0.0, 0.0, 0.0, 1.0),
+            turn_wish: 0,
+            signal: 0,
+            signal_time: 0.0,
+            lat_accel: 2.8,
+            desire: 1.0,
+            headway: 1.4,
+            min_gap: 2.0,
+            accept_gap: 4.0,
+            reaction: 0.7,
+            honk_factor: 1.0,
+            front: 2.5,
+            rear: 2.5,
+            held: false,
+            start_timer: 0.0,
+            acc: 0.0,
+            accel_cap: None,
+            ordinary_brake: ORDINARY_BRAKE,
+            emergency_brake: MAX_BRAKE,
+            jerk: JERK,
+            cmd: 0.0,
+            emergency: false,
+            emergency_began: false,
+            body: BodyLink::default(),
+            nudge_ramp: (0.0, 0.0, 0.0, 1.0),
+            priority_drive: false,
+            speed_cap: None,
+            rail_power: None,
+            bend: BendCache::default(),
+        }
     }
 
     fn rand(&mut self) -> u64 {
@@ -401,7 +453,9 @@ impl AiState {
 
     /// The lanes ahead, nearest first: `planned_next`, then the rest of the plan.
     pub fn upcoming(&self) -> impl Iterator<Item = usize> + '_ {
-        self.planned_next.into_iter().chain(self.ahead.iter().copied())
+        self.planned_next
+            .into_iter()
+            .chain(self.ahead.iter().copied())
     }
 
     /// A random way on from the end of `lane`. Lanes the map closes to this vehicle ([rule]
@@ -429,7 +483,13 @@ impl AiState {
                 // retain their existing behavior.
                 && (!nl.next.contains(&from) || nl.continues_from(fl, LINK_TOLERANCE))
         };
-        let open_to = |pooled: bool| -> Vec<usize> { l.next.iter().copied().filter(|&n| open(pooled, lane, n)).collect() };
+        let open_to = |pooled: bool| -> Vec<usize> {
+            l.next
+                .iter()
+                .copied()
+                .filter(|&n| open(pooled, lane, n))
+                .collect()
+        };
         let pooled = self.traffic_pool.is_some().then(|| open_to(true));
         let weighted = pooled.is_some();
         let open_now = pooled.unwrap_or_else(|| open_to(false));
@@ -440,13 +500,27 @@ impl AiState {
         // itself (no lane on at all) is the map's edge, where Omsi.exe takes its cars away.
         // (looked at a few lanes deep: the trap is often a junction's paths after a short
         // piece of road)
-        fn trapped(net: &Network, open: &dyn Fn(usize, usize) -> bool, n: usize, depth: u32) -> bool {
+        fn trapped(
+            net: &Network,
+            open: &dyn Fn(usize, usize) -> bool,
+            n: usize,
+            depth: u32,
+        ) -> bool {
             let nl = &net.lanes[n];
-            !nl.next.is_empty() && depth > 0 && nl.next.iter().all(|&m| !open(n, m) || trapped(net, open, m, depth - 1))
+            !nl.next.is_empty()
+                && depth > 0
+                && nl
+                    .next
+                    .iter()
+                    .all(|&m| !open(n, m) || trapped(net, open, m, depth - 1))
                 || (!nl.next.is_empty() && depth == 0 && !nl.next.iter().any(|&m| open(n, m)))
         }
         let open_for = |from: usize, n: usize| open(weighted, from, n);
-        let way_on: Vec<usize> = choices.iter().copied().filter(|&n| !trapped(net, &open_for, n, TRAP_DEPTH)).collect();
+        let way_on: Vec<usize> = choices
+            .iter()
+            .copied()
+            .filter(|&n| !trapped(net, &open_for, n, TRAP_DEPTH))
+            .collect();
         if !way_on.is_empty() {
             choices = way_on;
         }
@@ -454,7 +528,11 @@ impl AiState {
         // the choice (the map's edge is where OMSI takes its cars away; a village like
         // Grundorf had a queue of twenty growing at the end of its one outbound road)
         if l.kind == LaneKind::Street && net.reach.len() == net.lanes.len() {
-            let through: Vec<usize> = choices.iter().copied().filter(|&n| net.reach[n] >= DEAD_END).collect();
+            let through: Vec<usize> = choices
+                .iter()
+                .copied()
+                .filter(|&n| net.reach[n] >= DEAD_END)
+                .collect();
             if !through.is_empty() {
                 choices = through;
             }
@@ -467,20 +545,36 @@ impl AiState {
         // (`no_cars`, bus and truck rules, Omsi.exe 0x71d714) stay closed, and so does a
         // lane the map closes to the car's pool by a rule of its own (a group's
         // `trafficdensity` other than the first, which is the path's density itself).
-        if choices.is_empty() && l.kind == LaneKind::Street {
-            let pool_closed = |nl: &Lane| pool.is_some_and(|(p, _)| *p != 0 && nl.group_density.iter().any(|&(g, v)| g as usize == *p && v <= 0.0));
+        let fallback = choices.is_empty() && l.kind == LaneKind::Street;
+        if fallback {
+            let pool_closed = |nl: &Lane| {
+                pool.is_some_and(|(p, _)| {
+                    *p != 0
+                        && nl
+                            .group_density
+                            .iter()
+                            .any(|&(g, v)| g as usize == *p && v <= 0.0)
+                })
+            };
             choices = l
                 .next
                 .iter()
                 .copied()
                 .filter(|&n| {
                     let nl = &net.lanes[n];
-                    nl.kind == LaneKind::Street && nl.allows(veh_type) && !pool_closed(nl) && (!nl.next.contains(&lane) || nl.continues_from(l, LINK_TOLERANCE))
+                    nl.kind == LaneKind::Street
+                        && nl.allows(veh_type)
+                        && !pool_closed(nl)
+                        && (!nl.next.contains(&lane) || nl.continues_from(l, LINK_TOLERANCE))
                 })
                 .collect();
         }
         if self.turn_wish != 0 {
-            let wished: Vec<usize> = choices.iter().copied().filter(|&n| net.lanes[n].turn == self.turn_wish).collect();
+            let wished: Vec<usize> = choices
+                .iter()
+                .copied()
+                .filter(|&n| net.lanes[n].turn == self.turn_wish)
+                .collect();
             if !wished.is_empty() {
                 choices = wished;
                 self.turn_wish = 0;
@@ -488,18 +582,35 @@ impl AiState {
         }
         if choices.is_empty() {
             None
+        } else if choices.len() == 1 {
+            Some(choices[0])
+        } else if fallback || l.kind != LaneKind::Street {
+            // (no way on carries the car's traffic: Omsi.exe takes a random one, 0x71f6d8;
+            // the fill of the chains is the road traffic's)
+            Some(choices[(self.rand() % choices.len() as u64) as usize])
         } else {
-            if let Some((pool, defaults)) = self.traffic_pool.clone().filter(|_| weighted) {
-                let total: f32 = choices.iter().map(|&n| net.lanes[n].pool_density(&defaults, pool)).sum();
-                let mut pick = (self.rand() >> 32) as f32 / (u32::MAX as f32 + 1.0) * total;
-                for &n in &choices {
-                    let weight = net.lanes[n].pool_density(&defaults, pool);
-                    if pick < weight { return Some(n); }
-                    pick -= weight;
-                }
-                choices.last().copied()
-            } else { Some(choices[(self.rand() % choices.len() as u64) as usize]) }
+            Some(self.least_filled(net, &choices))
         }
+    }
+
+    /// Of the ways on from a fork, the one whose chain has the fewest of the car's traffic
+    /// group for its density, the first of them on a tie (Omsi.exe FUN_0071ee40,
+    /// 0x71f584..0x71f6c4: `fill < best || best == -1`; see `chain_load`).
+    fn least_filled(&self, net: &Network, choices: &[usize]) -> usize {
+        let pool = self.traffic_pool.as_ref();
+        let group = load_group(pool.map(|p| p.0));
+        let density = |l: &Lane| match pool {
+            Some((p, defaults)) => l.pool_density(defaults, *p),
+            None => l.density,
+        };
+        let mut best = (choices[0], f32::INFINITY);
+        for &n in choices {
+            let fill = net.chain_fill(n, group, &density);
+            if fill < best.1 {
+                best = (n, fill);
+            }
+        }
+        best.0
     }
 
     /// Decide the way on: the lane after the current one and enough lanes after it to
@@ -508,11 +619,22 @@ impl AiState {
         if !self.route.is_empty() {
             // a route step onto a lane beside this one is a lane change, not the way on
             let mut k = self.route_index + 1;
-            if self.route.get(k).map(|&b| net.parallel(self.lane, b)).unwrap_or(false) {
+            if self
+                .route
+                .get(k)
+                .map(|&b| net.parallel(self.lane, b))
+                .unwrap_or(false)
+            {
                 k += 1;
             }
             self.planned_next = self.route.get(k).copied();
-            self.ahead = self.route.iter().skip(k + 1).take(PLAN_LANES).copied().collect();
+            self.ahead = self
+                .route
+                .iter()
+                .skip(k + 1)
+                .take(PLAN_LANES)
+                .copied()
+                .collect();
             return;
         }
         if self.planned_next.is_none() {
@@ -520,7 +642,9 @@ impl AiState {
         }
         let planned: f32 = self.upcoming().map(|l| net.lanes[l].length()).sum();
         let rest = net.lanes[self.lane].length() - self.s;
-        if self.planned_next.is_some() && (rest + planned >= PLAN_AHEAD || self.ahead.len() >= PLAN_LANES) {
+        if self.planned_next.is_some()
+            && (rest + planned >= PLAN_AHEAD || self.ahead.len() >= PLAN_LANES)
+        {
             return;
         }
         let mut plan: Vec<usize> = self.upcoming().collect();
@@ -560,7 +684,9 @@ impl AiState {
     /// Begin a lane change onto the neighbour `to` (`dir` 1 left, 2 right): the indicator
     /// goes on at once, the car moves over after a moment.
     pub fn start_change(&mut self, net: &Network, to: usize, dir: i32) {
-        let Some(l) = net.lanes.get(self.lane) else { return };
+        let Some(l) = net.lanes.get(self.lane) else {
+            return;
+        };
         let Some(t) = net.lanes.get(to) else { return };
         // two to three and a half seconds at the speed the car has now, at least 12 m
         let duration = (3.5 - self.speed * 0.05).clamp(2.0, 3.5);
@@ -568,13 +694,27 @@ impl AiState {
         // (the same share of a lane that starts beside this one, else the point beside the car)
         let s_to = net.beside_s(self.lane, to, self.s.min(l.length()));
         let rest = t.length() - s_to;
-        self.change = Some(LaneChange { to, t: 0.0, length, s_to, dir, wait: SIGNAL_BEFORE_CHANGE, bypass: false });
+        self.change = Some(LaneChange {
+            to,
+            t: 0.0,
+            length,
+            s_to,
+            dir,
+            wait: SIGNAL_BEFORE_CHANGE,
+            bypass: false,
+        });
         self.blinker = dir;
         let mut plan = Vec::new();
         if self.route.is_empty() {
             self.extend_plan(net, to, rest, &mut plan);
         } else {
-            plan.extend(self.route.iter().skip(self.route_index + 2).take(PLAN_LANES).copied());
+            plan.extend(
+                self.route
+                    .iter()
+                    .skip(self.route_index + 2)
+                    .take(PLAN_LANES)
+                    .copied(),
+            );
         }
         self.change_plan = plan;
     }
@@ -623,7 +763,14 @@ impl AiState {
         let pb = lb.at(net.beside_s(self.lane, b, self.s)).0;
         let h = (ha as f64).to_radians();
         let side = (pb - pa).truncate().dot(DVec2::new(h.cos(), -h.sin()));
-        Some((b, if side > 0.0 || (side.abs() < 0.5 && lb.offset > la.offset) { 2 } else { 1 }))
+        Some((
+            b,
+            if side > 0.0 || (side.abs() < 0.5 && lb.offset > la.offset) {
+                2
+            } else {
+                1
+            },
+        ))
     }
 
     /// Pull out into `to` from behind a standing obstacle: a short, steep move.
@@ -648,7 +795,11 @@ impl AiState {
 
     /// The lane sequence the car is driving along: where it came from, where it is, the plan.
     fn seq(&self) -> LaneSeq {
-        let mut q = LaneSeq { lanes: [0; PLAN_LANES + 2], n: 0, cur: 0 };
+        let mut q = LaneSeq {
+            lanes: [0; PLAN_LANES + 2],
+            n: 0,
+            cur: 0,
+        };
         if let Some(p) = self.prev_lane {
             q.lanes[0] = p;
             q.n = 1;
@@ -668,7 +819,11 @@ impl AiState {
 
     /// The lane sequence of the lane the car is changing to, with the way on it chose.
     fn change_seq(&self, to: usize) -> LaneSeq {
-        let mut q = LaneSeq { lanes: [0; PLAN_LANES + 2], n: 1, cur: 0 };
+        let mut q = LaneSeq {
+            lanes: [0; PLAN_LANES + 2],
+            n: 1,
+            cur: 0,
+        };
         q.lanes[0] = to;
         for &l in &self.change_plan {
             if q.n == q.lanes.len() {
@@ -730,7 +885,10 @@ impl AiState {
 
     fn bend_at(net: &Network, q: &LaneSeq, s: f32, d: f32, lat: f32) -> Option<f32> {
         let (i, u) = q.locate(net, s, d);
-        let turn = wrap_deg(q.heading(net, s, d + 3.0) - q.heading(net, s, d - 3.0)).abs().to_radians() / 6.0;
+        let turn = wrap_deg(q.heading(net, s, d + 3.0) - q.heading(net, s, d - 3.0))
+            .abs()
+            .to_radians()
+            / 6.0;
         let k = net.lanes[q.lanes[i]].curvature_at(u).abs().max(turn);
         (k > 1e-4).then(|| (lat / k).sqrt().max(2.5))
     }
@@ -743,7 +901,11 @@ impl AiState {
         let (s, lat, reach) = (self.s, self.bend_lat(), self.bend_reach());
         let offset = s - self.odometer;
         let c = &mut self.bend;
-        if c.cur != q.cur || c.lanes[..] != q.lanes[..q.n] || c.lat != lat || (c.offset - offset).abs() > 0.05 {
+        if c.cur != q.cur
+            || c.lanes[..] != q.lanes[..q.n]
+            || c.lat != lat
+            || (c.offset - offset).abs() > 0.05
+        {
             c.lanes.clear();
             c.lanes.extend_from_slice(&q.lanes[..q.n]);
             c.cur = q.cur;
@@ -759,7 +921,8 @@ impl AiState {
             c.next += 2.5;
         }
         while c.next - s <= reach {
-            c.samples.push_back((c.next, Self::bend_at(net, &q, 0.0, c.next, lat)));
+            c.samples
+                .push_back((c.next, Self::bend_at(net, &q, 0.0, c.next, lat)));
             c.next += 2.5;
         }
         let mut best = Self::bend_at(net, &q, s, 0.0, lat).unwrap_or(f32::MAX);
@@ -857,7 +1020,11 @@ impl AiState {
         } else if self.signal != 0 && self.signal_time > 0.0 {
             self.signal
         } else if (self.lateral_target - self.lateral).abs() > 0.3 {
-            if self.lateral_target > self.lateral { 2 } else { 1 }
+            if self.lateral_target > self.lateral {
+                2
+            } else {
+                1
+            }
         } else {
             let within = (self.speed * 4.0).clamp(25.0, 60.0);
             self.turn_ahead(net, within).map(|t| t.0).unwrap_or(0)
@@ -867,8 +1034,18 @@ impl AiState {
     /// Advance along the network. `obstacle` = distance from the car's origin to the rear of
     /// a standing vehicle ahead (m), `stop_at` = distance from its origin to a stop line
     /// (m). False at a dead end (the car is taken off the road).
-    pub fn advance(&mut self, net: &Network, dt: f32, obstacle: Option<f32>, stop_at: Option<f32>) -> bool {
-        let lead = obstacle.map(|d| Lead { gap: d - self.front, speed: 0.0, acc: 0.0 });
+    pub fn advance(
+        &mut self,
+        net: &Network,
+        dt: f32,
+        obstacle: Option<f32>,
+        stop_at: Option<f32>,
+    ) -> bool {
+        let lead = obstacle.map(|d| Lead {
+            gap: d - self.front,
+            speed: 0.0,
+            acc: 0.0,
+        });
         self.drive(net, dt, lead, stop_at)
     }
 
@@ -881,10 +1058,21 @@ impl AiState {
         self.desired_accel_bend(net, lead, stop, &|| self.curve_speed(net))
     }
 
-    fn desired_accel_bend(&self, net: &Network, lead: Option<Lead>, stop: Option<f32>, bend: &dyn Fn() -> f32) -> f32 {
-        let Some(lane) = net.lanes.get(self.lane) else { return 0.0 };
+    fn desired_accel_bend(
+        &self,
+        net: &Network,
+        lead: Option<Lead>,
+        stop: Option<f32>,
+        bend: &dyn Fn() -> f32,
+    ) -> f32 {
+        let Some(lane) = net.lanes.get(self.lane) else {
+            return 0.0;
+        };
         // (an emergency vehicle on its drive pulls away hard)
-        let (a, b) = (self.accel.max(0.1) * if self.priority_drive { 1.6 } else { 1.0 }, self.decel.max(0.5));
+        let (a, b) = (
+            self.accel.max(0.1) * if self.priority_drive { 1.6 } else { 1.0 },
+            self.decel.max(0.5),
+        );
         let v = self.speed;
         // a rail vehicle's pull falls with speed at constant power (and its adhesion with it)
         let a = power_limited(a, self.rail_power, v);
@@ -892,7 +1080,8 @@ impl AiState {
             // (the bonus is the driver's whole margin: his own liking for speed on top of it
             // would take him past it)
             let wanted = if self.priority_drive {
-                (l.speed_limit_kmh * EMERGENCY_LIMIT_FACTOR).min(l.speed_limit_kmh + EMERGENCY_LIMIT_PLUS)
+                (l.speed_limit_kmh * EMERGENCY_LIMIT_FACTOR)
+                    .min(l.speed_limit_kmh + EMERGENCY_LIMIT_PLUS)
             } else {
                 l.speed_limit_kmh * self.desire
             };
@@ -937,7 +1126,8 @@ impl AiState {
             acc = acc.min(acc + (track - acc) * k);
         }
         let interaction = |gap: f32, lead_speed: f32, s0: f32, headway: f32| -> f32 {
-            let s_star = s0 + (v * headway + v * (v - lead_speed) / (2.0 * (a * b).sqrt())).max(0.0);
+            let s_star =
+                s0 + (v * headway + v * (v - lead_speed) / (2.0 * (a * b).sqrt())).max(0.0);
             -a * (s_star / gap.max(0.05)).powi(2)
         };
         let mut out = acc;
@@ -949,11 +1139,19 @@ impl AiState {
             // and a gap that opens again over the next seconds, not an emergency stop.
             let (vl, s, al) = (l.speed.max(0.0), l.gap.max(0.05), l.acc.min(a));
             let den = vl * vl - 2.0 * s * al;
-            let cah = if vl * (v - vl) <= -2.0 * s * al && den > 1e-3 { v * v * al / den } else { al - (v - vl).max(0.0).powi(2) / (2.0 * s) };
+            let cah = if vl * (v - vl) <= -2.0 * s * al && den > 1e-3 {
+                v * v * al / den
+            } else {
+                al - (v - vl).max(0.0).powi(2) / (2.0 * s)
+            };
             // (a car beside or just ahead that drives away faster gives the model a gap of
             // nothing: its braking term is bounded so that the heuristic decides)
             let idm = idm.max(-2.0 * MAX_BRAKE);
-            let acc_lead = if idm >= cah { idm } else { 0.01 * idm + 0.99 * (cah + b * ((idm - cah) / b).tanh()) };
+            let acc_lead = if idm >= cah {
+                idm
+            } else {
+                0.01 * idm + 0.99 * (cah + b * ((idm - cah) / b).tanh())
+            };
             out = out.min(acc_lead);
         }
         if let Some(d) = stop {
@@ -996,8 +1194,18 @@ impl AiState {
     /// `emergency_began`) - before, such a stop was only the model's output clipped at the
     /// ceiling, and nobody could tell it from a firm brake. A car standing within
     /// `STANDSTILL_SLACK` of the gap it keeps behind a standing car stays there.
-    pub fn command(&mut self, net: &Network, dt: f32, lead: Option<Lead>, stop: Option<f32>) -> f32 {
-        let bend = if self.lane < net.lanes.len() { self.curve_speed_cached(net) } else { 0.0 };
+    pub fn command(
+        &mut self,
+        net: &Network,
+        dt: f32,
+        lead: Option<Lead>,
+        stop: Option<f32>,
+    ) -> f32 {
+        let bend = if self.lane < net.lanes.len() {
+            self.curve_speed_cached(net)
+        } else {
+            0.0
+        };
         let want = self.desired_accel_bend(net, lead, stop, &|| bend);
         let was = self.emergency;
         let limit = -self.ordinary_brake.max(self.decel);
@@ -1055,7 +1263,11 @@ impl AiState {
         if body.known && (body.lead > BODY_SLACK || !body.on_way) {
             self.speed = self.speed.min(body.speed.max(0.0));
         }
-        let room = if body.known { (BODY_MAX_LEAD - body.lead).max(0.0) } else { f32::INFINITY };
+        let room = if body.known {
+            (BODY_MAX_LEAD - body.lead).max(0.0)
+        } else {
+            f32::INFINITY
+        };
         let mut acc = self.command(net, dt, lead, stop);
         if let Some(cap) = self.accel_cap {
             acc = acc.min(cap);
@@ -1068,7 +1280,11 @@ impl AiState {
                 // as the cars on the ring come and go - winds the reaction back only a
                 // little: set back whole every frame, it never ran out, and the car stood at
                 // an empty roundabout for minutes, "about to go")
-                self.start_timer = if self.held { (self.start_timer + 3.0 * dt).min(self.reaction) } else { self.reaction };
+                self.start_timer = if self.held {
+                    (self.start_timer + 3.0 * dt).min(self.reaction)
+                } else {
+                    self.reaction
+                };
                 self.held = true;
                 acc = acc.min(0.0);
             } else if self.held {
@@ -1097,7 +1313,11 @@ impl AiState {
         let press = acc < BRAKE_LIGHT_ON || (v1 < 0.3 && self.held);
         if self.braking {
             self.brake_lamp += dt;
-            if !press && acc > BRAKE_LIGHT_OFF && !(v1 < 0.3 && self.held) && self.brake_lamp >= BRAKE_LIGHT_MIN {
+            if !press
+                && acc > BRAKE_LIGHT_OFF
+                && !(v1 < 0.3 && self.held)
+                && self.brake_lamp >= BRAKE_LIGHT_MIN
+            {
                 self.braking = false;
             }
         } else if press {
@@ -1159,7 +1379,9 @@ impl AiState {
         if self.planned_next.is_none() {
             self.plan_next(net);
         }
-        while (self.change.is_none() || self.route.is_empty()) && self.s >= net.lanes[self.lane].length() {
+        while (self.change.is_none() || self.route.is_empty())
+            && self.s >= net.lanes[self.lane].length()
+        {
             let l = &net.lanes[self.lane];
             let Some(next) = self.planned_next else {
                 // the end of a flight path: the aircraft flies on straight (the way runs on
@@ -1171,7 +1393,10 @@ impl AiState {
             };
             // (a missing map piece ends the drive; a step onto the parallel path of the next piece does not)
             let mut side_step = None;
-            if !self.route.is_empty() && !l.next.contains(&next) && (net.lanes[next].start() - l.end()).truncate().length() >= 2.0 {
+            if !self.route.is_empty()
+                && !l.next.contains(&next)
+                && (net.lanes[next].start() - l.end()).truncate().length() >= 2.0
+            {
                 side_step = beside_successor(net, self.lane, next);
                 if side_step.is_none() {
                     return false;
@@ -1179,18 +1404,29 @@ impl AiState {
             }
             if let Some(offset) = side_step {
                 let len = (offset.abs() * 8.0).clamp(8.0, 30.0);
-                self.lateral_ramp = (self.lateral + offset, self.lateral_target, self.odometer, len);
+                self.lateral_ramp = (
+                    self.lateral + offset,
+                    self.lateral_target,
+                    self.odometer,
+                    len,
+                );
                 self.lateral = self.lateral_at(self.odometer);
             }
             self.s -= l.length();
             self.prev_lane = Some(self.lane);
             self.lane = next;
             if self.route.is_empty() {
-                self.planned_next = if self.ahead.is_empty() { None } else { Some(self.ahead.remove(0)) };
+                self.planned_next = if self.ahead.is_empty() {
+                    None
+                } else {
+                    Some(self.ahead.remove(0))
+                };
             } else {
                 // the plan may have stepped over a lane-change entry of the route
                 let from = self.route_index + 1;
-                self.route_index = (from..(from + 3).min(self.route.len())).find(|&k| self.route[k] == next).unwrap_or(from);
+                self.route_index = (from..(from + 3).min(self.route.len()))
+                    .find(|&k| self.route[k] == next)
+                    .unwrap_or(from);
             }
             self.plan_next(net);
         }
