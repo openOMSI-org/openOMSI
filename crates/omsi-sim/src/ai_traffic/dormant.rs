@@ -1,5 +1,6 @@
 //! The random cars out of the player's range (see `DormantCar`).
 
+use super::density::Neighbourhood;
 use super::*;
 
 /// How far from the player cars are kept (m) and how far out of sight one may be before it
@@ -96,13 +97,18 @@ impl TrafficSim {
     }
 
     /// Fill the map: the streets the map has shown so far carry as many cars per metre as
-    /// the ones around the player, the ones out of range as dormant cars (see `DormantCar`).
-    pub fn fill_map(&mut self, center: DVec3, street_target: usize) {
+    /// the ones around the players, the ones out of range as dormant cars (see
+    /// `DormantCar`).
+    pub fn fill_map(&mut self, neighbourhoods: &[Neighbourhood]) {
+        // (what all the neighbourhoods ask for, over all their roads)
+        let street_target: usize = neighbourhoods.iter().map(|n| n.target).sum();
         if street_target == 0 {
             return;
         }
         let far = self.spawn_radius * DESPAWN_FACTOR;
-        let centers: Vec<DVec3> = std::iter::once(center)
+        let centers: Vec<DVec3> = neighbourhoods
+            .iter()
+            .map(|n| n.center)
             .chain(self.lan_centers.iter().copied())
             .collect();
         let mut nearby: Vec<usize> = centers

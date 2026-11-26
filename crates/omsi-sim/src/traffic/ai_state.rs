@@ -3,6 +3,8 @@
 
 use super::*;
 
+mod signal;
+
 /// How far ahead (m) a car decides which way it goes: far enough to signal a turn in good
 /// time and for the steering to look beyond the junction.
 const PLAN_AHEAD: f32 = 90.0;
@@ -13,6 +15,8 @@ const PLAN_LANES: usize = 10;
 const JOINT_BLEND: f32 = 6.0;
 /// Seconds of signalling before a lane change begins to move sideways.
 pub const SIGNAL_BEFORE_CHANGE: f32 = 1.2;
+/// A sideways move wider than this (m) is indicated.
+const SIGNALLED_SIDEWAYS: f32 = 0.8;
 
 /// One AI vehicle moving on the network: where it is along its lanes and which way it is
 /// going. The body that follows this way is `ai_motion::AiBody`.
@@ -1012,22 +1016,23 @@ impl AiState {
 
     /// Set the indicator for what the car is doing or about to do: a lane change, its own
     /// manoeuvre (pulling away from a stop), moving sideways into a bay or out round a
-    /// parked car and back, and a turn at the junction ahead - from about four seconds
-    /// before it (at least 25 m, at most 60 m) until the turn is done.
+    /// parked car and back, and a turn at the junction ahead - from about three seconds
+    /// before it (at least 25 m, at most 40 m) until the turn is done. A small swerve round
+    /// something at the kerb is not signalled.
     pub fn update_blinker(&mut self, net: &Network) {
         self.blinker = if let Some(c) = self.change {
             c.dir
         } else if self.signal != 0 && self.signal_time > 0.0 {
             self.signal
-        } else if (self.lateral_target - self.lateral).abs() > 0.3 {
+        } else if (self.lateral_target - self.lateral).abs() > SIGNALLED_SIDEWAYS {
             if self.lateral_target > self.lateral {
                 2
             } else {
                 1
             }
         } else {
-            let within = (self.speed * 4.0).clamp(25.0, 60.0);
-            self.turn_ahead(net, within).map(|t| t.0).unwrap_or(0)
+            let within = (self.speed * 3.0).clamp(25.0, 40.0);
+            self.turn_to_signal(net, within).unwrap_or(0)
         };
     }
 

@@ -50,6 +50,8 @@ pub fn player_reach_ahead(
 /// Seconds a car has stood behind one that waits to move over into its lane, and that one has
 /// waited, before the car drives on (`TrafficSim::break_lead_pairs`).
 const MOVE_OVER_PATIENCE: f32 = 8.0;
+/// A signalling player is let into the lane up to this speed (m/s).
+const MERGE_LET_IN_SPEED: f32 = 17.0;
 
 impl TrafficSim {
     /// Where car `i` has to stop for somebody on foot (the distance of its front from its
@@ -619,6 +621,37 @@ impl TrafficSim {
         let l = self.player_on_way(st, car.half_width, player, 2.5)?;
         let comfortable = st.speed * st.speed / (2.0 * st.decel.max(1.0));
         (l.gap > 0.5 && l.gap >= comfortable).then_some(l.gap)
+    }
+
+    /// The player moving with the indicator out towards the lane beside: a car coming up
+    /// there takes the bus for its leader already, if it can do so at an easy brake, rather
+    /// than only once the bus is in its way - then it braked late and hard, or drove
+    /// alongside and shut the bus out.
+    pub fn merging_player(&self, i: usize, player: &PlayerBox) -> Option<Lead> {
+        let car = &self.cars[i];
+        let st = &car.state;
+        let (centre, heading, half_len, _, speed) = *player;
+        if self.player_signal_age > 1.0
+            || !(3.0..=MERGE_LET_IN_SPEED).contains(&speed)
+            || (car.vehicle.position - centre).length() > 120.0
+        {
+            return None;
+        }
+        let h = heading.to_radians();
+        let fwd = DVec2::new(h.sin(), h.cos());
+        let way_dir = (st.way_point(&self.net, 3.0) - st.way_point(&self.net, 0.0)).truncate();
+        if way_dir.length() < 0.5 || way_dir.normalize().dot(fwd) < 0.9 {
+            return None;
+        }
+        // (only a car behind the bus lets it in)
+        if (car.vehicle.position - centre).truncate().dot(fwd)
+            > -(half_len as f64) - st.front as f64
+        {
+            return None;
+        }
+        let l = self.player_on_way(st, car.half_width, player, 2.5)?;
+        let closing = (st.speed - l.speed).max(0.0);
+        (l.gap >= closing * closing / (2.0 * st.decel.max(1.0)) + st.min_gap + 4.0).then_some(l)
     }
 
     /// `player_in_way` for a car of half width `half_width` on the way `st` lays out (also a

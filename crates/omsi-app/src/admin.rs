@@ -858,10 +858,10 @@ mod traffic_order_tests {
         );
         assert_eq!(
             TrafficOrder::parse("400", max),
-            Some(TrafficOrder::Density(120))
+            Some(TrafficOrder::Density(crate::game_lists::TRAFFIC_MAX))
         );
         assert_eq!(
-            TrafficOrder::parse("120", max),
+            TrafficOrder::parse("300", max),
             Some(TrafficOrder::Density(crate::game_lists::TRAFFIC_MAX))
         );
         for bad in ["", "next", "-5", "2.5"] {

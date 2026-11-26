@@ -733,3 +733,37 @@ fn a_holder_kept_short_of_its_point_serves_from_there_after_a_long_wait() {
 }
 
 const SERVE_HERE_LONG_TEST: f32 = 2.5;
+
+/// #2973: the player's bus left standing at or before a stop does not hold the AI bus due
+/// there for good: it serves the stop (or goes without it) and drives round the player.
+#[test]
+fn a_bus_gets_past_the_players_bus_standing_at_its_stop() {
+    let f = Fixture::new();
+    for (name, player_y) in [
+        ("at the stop point", 296.0f64),
+        ("ahead of the point", 310.0),
+        ("behind the point", 280.0),
+        ("far behind the point", 245.0),
+    ] {
+        let mut t = road(&f);
+        let bus = add_bus(&mut t, &f, 1, 150.0, 8.0, 0.0);
+        let player: PlayerBox = (DVec3::new(0.0, player_y, 0.0), 0.0, 6.0, 1.25, 0.0);
+        let mut passed = None;
+        let mut time = 0.0;
+        while time < 120.0 && passed.is_none() {
+            t.tick(super::fixed_step::SIM_DT, Some(player));
+            time += super::fixed_step::SIM_DT;
+            let c = car(&t, bus);
+            if c.state.s as f64 > player_y + 20.0 {
+                passed = Some(time);
+            }
+        }
+        let c = car(&t, bus);
+        assert!(
+            passed.is_some(),
+            "player {name}: the bus still stands at {:.1} ({:?})",
+            c.state.s,
+            c.why
+        );
+    }
+}

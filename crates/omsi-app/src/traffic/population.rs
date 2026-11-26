@@ -5,6 +5,8 @@ use super::*;
 use crate::scene::World;
 use omsi_sim::ai_traffic::admission::{Budgets, Class, Denial, Retry, Verdict, decide_batch};
 use omsi_sim::ai_traffic::control::Removal;
+use omsi_sim::ai_traffic::density::{Neighbourhood, street_cap};
+use omsi_sim::ai_traffic::viewer::NEVER_VANISH_WITHIN;
 
 /// A car that gave up and has stood this long (s) held by nothing anybody can see goes even
 /// in view (see `Traffic::populate_seen`).
@@ -48,6 +50,9 @@ pub(super) fn terrain_height(world: &World, x: f64, y: f64) -> Option<f64> {
 /// camera (m, see `Traffic::hidden`): a tunnel's roof and the ground over it, not a cutting
 /// or an underpass a few metres down.
 const BURIED: f64 = 6.0;
+
+/// How far beyond the counted radius new cars may appear, as a multiple of it.
+const SPAWN_REACH: f64 = 1.3;
 
 impl Traffic {
     /// Is a vehicle of radius `r` at `p` hidden from the viewer by buildings (or a hill)?
@@ -246,6 +251,12 @@ impl Traffic {
         }
         let far = self.sim.spawn_radius * DESPAWN_FACTOR;
         self.advance_dormant();
+        // more cars awake than the whole neighbourhood may hold: those out of the counted
+        // radius go to sleep early (where nobody sees it), so that the road near a player
+        // can be filled again
+        let neighbourhoods = self.sim.neighbourhoods(center);
+        let cap = street_cap(&neighbourhoods);
+        let crowded = self.sim.target > 0 && self.sim.awake_street_cars() > cap;
         // the cars somebody stands behind
         let queued: std::collections::HashSet<u64> = self
             .sim
@@ -345,7 +356,10 @@ impl Traffic {
                 // road in view, and the queue behind it - timetable buses with their
                 // passengers among them - never moved again)
                 true
-            } else if c.gone || dist > far {
+            } else if c.gone
+                || dist > far
+                || (crowded && sleeps_instead && dist > self.sim.spawn_radius)
+            {
                 // in plain view a car stays until the renderer leaves it out anyway, and
                 // close by (the mirrors, a turn of the head) it stays in any case
                 // (one that gave up in a gridlock goes after four minutes even in view,
@@ -355,7 +369,10 @@ impl Traffic {
                 // nobody it gives way to - goes then: whatever held it, it stood against
                 // an invisible wall with the traffic queued up behind it for as long as the
                 // player looked)
-                (dist > VISIBLE_RANGE * 1.3 && from_eye > NEAR_HIDE)
+                // (a car stuck for good goes at once, watched or not, as in Omsi.exe: kept
+                // until nobody saw it, it stood on with the traffic queued up behind it)
+                (c.gone && c.stuck_for_good())
+                    || (dist > VISIBLE_RANGE * 1.3 && from_eye > NEAR_HIDE)
                     || self.out_of_sight(world, c, r)
                     || (c.gone && c.stopped > 240.0 && from_eye > 40.0)
                     || (c.gone
@@ -423,54 +440,26 @@ impl Traffic {
         }
         // aircraft: a few on the flight paths, independent of the street target
         let has_air = self.sim.types.iter().any(|t| t.2 == LaneKind::Air);
-        // the map's traffic density by hour (and group) scales the street traffic ...
-        let density = self.street_density();
-        // ... and so does how much road there is around: the same number of cars looks
-        // empty on a six-lane Berlin junction and crowded on a village lane, so the count
-        // asked for is per a neighbourhood of about 250 lanes; and as Omsi spawns on each
-        // path at a rate of its [rule] trafficdensity, paths of low density bring fewer cars
-        // and those of density 0 (or kept clear of cars) none
-        let near_density: Vec<f32> = self
-            .sim
-            .net
-            .lanes_starting_near(center, self.sim.spawn_radius)
-            .into_iter()
-            .map(|i| &self.sim.net.lanes[i])
-            .filter(|l| {
-                l.kind == LaneKind::Street
-                    && l.points
-                        .first()
-                        .map(|p| (*p - center).length() < self.sim.spawn_radius)
-                        .unwrap_or(false)
-            })
-            .map(|l| {
-                if l.no_cars {
-                    0.0
-                } else {
-                    l.density.clamp(0.0, 4.0)
-                }
-            })
-            .collect();
-        let street_target =
-            (self.sim.target as f32 * density * road_scale(&near_density)).round() as usize;
+        let street_target = neighbourhoods[0].target;
         // the cars that come into range again, where they have got to
-        self.wake_dormant(world, center, street_target);
-        // the whole map's population: as dense as around the player, on every street the
-        // map has shown so far (sleeping where the player is not)
-        self.fill_map(center, street_target);
+        self.wake_dormant(world, center, &neighbourhoods);
+        // the whole map's population: as dense as around the players, on every street the
+        // map has shown so far (sleeping where nobody is)
+        self.fill_map(&neighbourhoods);
         for (kind, target) in [
             (LaneKind::Street, street_target),
             (LaneKind::Air, if has_air { 3 } else { 0 }),
         ] {
-            // (a LAN host counts the cars round itself only: counted over the whole map,
-            // the traffic it keeps round the other players met its own target and the
-            // host drove through empty streets, #342)
-            if kind == LaneKind::Street && !self.sim.lan_centers.is_empty() {
+            // (the number asked for is what drives round the player: counted over the whole
+            // map, the cars far off - and the traffic a LAN host keeps round the other
+            // players, #342 - met the target and the player drove through empty streets,
+            // #1963, #2085)
+            if kind == LaneKind::Street {
                 self.sim.count_near = Some((center, self.sim.spawn_radius));
             }
-            self.populate_kind(world, center, kind, target);
+            self.populate_kind(world, center, kind, target, cap);
         }
-        self.populate_lan_centers(world, center, street_target);
+        self.populate_lan_centers(world, &neighbourhoods, cap);
         if !self.sim.initial {
             self.pull_out_parked(world, center);
             self.park_in(world, center);
@@ -499,11 +488,16 @@ impl Traffic {
         center: DVec3,
         kind: LaneKind,
         target: usize,
+        cap: usize,
     ) {
+        // (once the world is there, new cars may also come from a little beyond the counted
+        // radius, where far more places are out of everybody's sight)
         let radius = if kind == LaneKind::Air {
             self.sim.spawn_radius * 6.0
-        } else {
+        } else if self.sim.initial {
             self.sim.spawn_radius
+        } else {
+            self.sim.spawn_radius * SPAWN_REACH
         };
         // the pieces of lane within the radius, wherever their lanes start (#3518), 3 m off
         // either end of the lane
@@ -580,7 +574,10 @@ impl Traffic {
                         .unwrap_or(false)
             })
             .count();
-        let want = target.saturating_sub(unscheduled);
+        let mut want = target.saturating_sub(unscheduled);
+        if kind == LaneKind::Street {
+            want = want.min(cap.saturating_sub(self.sim.awake_street_cars()));
+        }
         let class = if kind == LaneKind::Air {
             Class::Aircraft
         } else {
@@ -621,6 +618,18 @@ impl Traffic {
                 let (p, heading) = self.sim.net.lanes[lane].at(s);
                 if (p - center).length() < 40.0 {
                     continue; // not right next to the player
+                }
+                // nor, once the world is there, anywhere so close that it may never appear:
+                // such places used up the pass's looks and left the road empty further out
+                if !self.sim.initial
+                    && kind == LaneKind::Street
+                    && self
+                        .sim
+                        .nearest_eye(p)
+                        .is_some_and(|d| d < NEVER_VANISH_WITHIN)
+                    && !terrain_height(world, p.x, p.y).is_some_and(|g| p.z + BURIED <= g)
+                {
+                    continue;
                 }
                 // not into a car parked in the lane
                 if self.parked.get(&lane).is_some_and(|l| {
@@ -700,20 +709,45 @@ impl Traffic {
     /// nobody sees it happen, in the order they went to sleep, up to a little over the number
     /// asked for around the player; one whose ground is not loaded stays asleep, and none
     /// wakes onto another (`admission::decide_batch`).
-    pub(super) fn wake_dormant(&mut self, world: &World, center: DVec3, target: usize) {
+    pub(super) fn wake_dormant(
+        &mut self,
+        world: &World,
+        center: DVec3,
+        neighbourhoods: &[Neighbourhood],
+    ) {
         if self.sim.dormant.is_empty() || self.sim.mirror {
             return;
         }
-        // (those that gave up and still stand on the road count, see `populate_kind`)
-        let active = self.sim.cars.iter().filter(|c| !c.is_bus()).count();
-        let budget = ((target as f32 * 1.25).ceil() as usize).saturating_sub(active);
-        let centers: Vec<DVec3> = std::iter::once(center)
-            .chain(self.sim.lan_centers.iter().copied())
-            .collect();
-        if budget == 0 {
-            return;
+        // each neighbourhood has its own room: counted over the whole map, the cars round
+        // one player left none for another's, whose sleeping cars then never woke
+        let cap = street_cap(neighbourhoods);
+        for &Neighbourhood {
+            center: near,
+            target,
+        } in neighbourhoods
+        {
+            // (those that gave up and still stand on the road count, see `populate_kind`)
+            let active = self
+                .sim
+                .cars
+                .iter()
+                .filter(|c| {
+                    !c.is_bus() && (c.vehicle.position - near).length() < self.sim.spawn_radius
+                })
+                .count();
+            let room = cap.saturating_sub(self.sim.awake_street_cars());
+            let budget = ((target as f32 * 1.25).ceil() as usize)
+                .saturating_sub(active)
+                .min(room);
+            if budget > 0 {
+                self.wake_near(world, center, near, budget);
+            }
         }
-        let requests = self.sim.wake_requests(&centers, self.sim.spawn_radius);
+    }
+
+    /// Wake up to `budget` of the sleeping cars within range of `near`.
+    fn wake_near(&mut self, world: &World, center: DVec3, near: DVec3, budget: usize) {
+        let requests = self.sim.wake_requests(&[near], self.sim.spawn_radius);
         let mut budgets = Budgets::default();
         budgets.set(Class::Dormant, Some(budget));
         let verdicts = decide_batch(&requests, &mut budgets, |r| {
@@ -1005,21 +1039,18 @@ impl Traffic {
     }
 
     /// Street traffic around the other players of a LAN session too (host): each of them
-    /// gets its own share of cars where no other player's share lies already.
-    pub(super) fn populate_lan_centers(&mut self, world: &World, center: DVec3, target: usize) {
-        let centers = self.sim.lan_centers.clone();
-        let mut done = vec![center];
-        for c in centers {
-            if done
-                .iter()
-                .any(|d| (*d - c).truncate().length() < self.sim.spawn_radius)
-            {
-                continue;
-            }
-            self.sim.count_near = Some((c, self.sim.spawn_radius));
-            self.populate_kind(world, c, LaneKind::Street, target);
+    /// gets its own share of cars where no other player's share lies already (the first
+    /// neighbourhood is the host's own, filled already).
+    pub(super) fn populate_lan_centers(
+        &mut self,
+        world: &World,
+        neighbourhoods: &[Neighbourhood],
+        cap: usize,
+    ) {
+        for n in neighbourhoods.iter().skip(1) {
+            self.sim.count_near = Some((n.center, self.sim.spawn_radius));
+            self.populate_kind(world, n.center, LaneKind::Street, n.target, cap);
             self.sim.count_near = None;
-            done.push(c);
         }
     }
 }

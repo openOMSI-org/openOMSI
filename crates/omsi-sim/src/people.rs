@@ -187,7 +187,7 @@ const BODY_OUTSIDE: f64 = 0.28;
 /// and the eight round the camera's, sub_61bf94).
 const STOP_RANGE: f64 = 450.0;
 /// Pedestrians stroll within this distance of the player (m).
-const STROLL_RADIUS: f64 = 200.0;
+const STROLL_RADIUS: f64 = 330.0;
 /// How far in front of a seat's hip point somebody stands to sit down - where the feet
 /// stay while seated (m).
 const SEAT_FRONT: f32 = 0.34;

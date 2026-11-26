@@ -811,10 +811,11 @@ impl TrafficSim {
         let left = car.pull_out - ts.dt;
         let st = &car.state;
         let clear = left > 0.0 || self.traffic_lets_in(i, st.lane, st.s, &ts.by_lane);
+        let left_hand = self.net.left_hand;
         let car = &mut self.cars[i];
         car.pull_out = if clear { left.max(0.0) } else { ts.dt };
         if !clear {
-            car.state.signal = 1;
+            car.state.signal = if left_hand { 2 } else { 1 };
             car.state.signal_time = car.state.signal_time.max(0.5);
         }
     }
@@ -822,6 +823,7 @@ impl TrafficSim {
     /// Parking: stop beside the space, move over into it along the last metres and stand
     /// there. Returns where it stops (distance from its origin to its front).
     fn park_step(&mut self, i: usize) -> Option<f32> {
+        let kerb_side = if self.net.left_hand { 1 } else { 2 };
         let way = self.way_lanes(&self.cars[i].state, 200.0);
         let car = &mut self.cars[i];
         let mut plan = car.park?;
@@ -837,7 +839,7 @@ impl TrafficSim {
                 let d = dl + plan.s; // origin to the space's middle
                 if d < 80.0 {
                     stop = Some(d + st.front + 0.3);
-                    st.signal = 2;
+                    st.signal = kerb_side;
                     st.signal_time = st.signal_time.max(1.0);
                 }
                 // over into the space along the last metres, the move ending where the car

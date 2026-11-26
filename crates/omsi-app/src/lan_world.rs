@@ -52,7 +52,7 @@ pub const PERSON_RADIUS: f64 = 260.0;
 pub const LIGHT_RADIUS: f64 = 450.0;
 /// How far in the past a client draws the host's world (ms): two frames of moving things
 /// to glide between, and room for a late datagram.
-const INTERP_DELAY: f64 = 160.0;
+const INTERP_DELAY: f64 = 220.0;
 /// A description asked for is asked again after this long (s).
 const WANT_AGAIN: f32 = 0.8;
 const MOVING_EVERY_S: f32 = nw::MOVING_EVERY;
@@ -488,11 +488,15 @@ impl LanWorld {
         me: Option<DVec3>,
     ) {
         // where the players are: the world is kept around them too
-        let players: Vec<(u32, DVec3)> = lan
+        let places: Vec<(u32, DVec3, f32)> = lan
             .peers()
-            .filter(|p| p.has_pose && p.pose.has_vehicle())
-            .map(|p| (p.pose.id, DVec3::new(p.pose.x, p.pose.y, p.pose.z)))
+            .filter(|p| p.has_pose)
+            .filter_map(|p| {
+                let (at, heading) = p.pose.whereabouts()?;
+                Some((p.pose.id, DVec3::from_array(at), heading))
+            })
             .collect();
+        let players: Vec<(u32, DVec3)> = places.iter().map(|p| (p.0, p.1)).collect();
         let centers: Vec<DVec3> = players.iter().map(|p| p.1).collect();
         if let Some(t) = traffic.as_deref_mut() {
             t.lan_centers = centers.clone();
@@ -500,12 +504,9 @@ impl LanWorld {
             // (the list is kept: no allocation a frame)
             t.lan_eyes.clear();
             t.lan_eyes.extend(
-                lan.peers()
-                    .filter(|p| p.has_pose && p.pose.has_vehicle())
-                    .map(|p| {
-                        let at = DVec3::new(p.pose.x, p.pose.y, p.pose.z);
-                        crate::traffic::Viewer::lan_player(at, p.pose.heading as f64)
-                    }),
+                places.iter().map(|&(_, at, heading)| {
+                    crate::traffic::Viewer::lan_player(at, heading as f64)
+                }),
             );
         }
         if let Some(h) = humans.as_deref_mut() {

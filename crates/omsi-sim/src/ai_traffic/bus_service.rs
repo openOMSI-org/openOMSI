@@ -379,6 +379,9 @@ pub struct Ctx<'a> {
     pub time: f32,
     /// The front stop's berth as the traffic stands (`TrafficSim::berth_scene`).
     pub berth: BerthScene,
+    /// A player's bus has been standing just ahead of it for longer than a wait at a light
+    /// or a stop in passing (`PLAYER_PATIENCE`).
+    pub held_by_player: bool,
 }
 
 impl BusService {
@@ -407,6 +410,12 @@ impl BusService {
                 .unwrap_or(self.delay)
         } as f32;
         vehicle.set_var("schedule_active", vehicle.host.schedule_active);
+    }
+
+    /// Is the map object `id` a stop this bus still has to serve, or the one it holds the
+    /// berth of (until its rear has left it)?
+    pub fn at_own_stop(&self, id: i64) -> bool {
+        self.stops.iter().any(|s| s.id == id) || self.held.is_some_and(|h| h.0.stop == id)
     }
 
     pub fn new(stops: Vec<Stop>) -> BusService {
@@ -1159,6 +1168,26 @@ impl BusService {
             } else {
                 0.0
             };
+            // held short of its stop by a player who stays: it waited there for good
+            // (#2973)
+            if ctx.held_by_player && self.rest_t >= PLAYER_PATIENCE && d > SERVE_HERE_LONG {
+                if d < SERVE_BEHIND_REACH {
+                    berths.release(key, ctx.id);
+                    berths.withdraw(key, ctx.id);
+                    self.held = None;
+                    self.near_d = f32::INFINITY;
+                    self.arrive(ctx, stop.depart, (st.lane, st.s));
+                    return Some(st.front);
+                }
+                self.miss(
+                    vehicle,
+                    ctx,
+                    berths,
+                    Some(key),
+                    "a player's bus stands in the way",
+                );
+                continue;
+            }
             if self.serve.is_none() {
                 // not settled yet whether it stops there: braking for it all the same
                 self.near_d = d;
@@ -1262,6 +1291,10 @@ impl BusService {
         Some((d < STOP_REACH).then(|| (d - st.rear - QUEUE_STANDOFF).max(st.front)))
     }
 }
+
+/// How long an AI bus waits behind a player's bus standing between it and its stop before
+/// it serves the stop from where it stands, or goes without it, and drives round (s).
+pub const PLAYER_PATIENCE: f32 = 15.0;
 
 /// How far before a station's point a vehicle stops with its origin, as Omsi.exe measures
 /// the way to the station (0x7da4e3): from the origin of the vehicle that leads, less half

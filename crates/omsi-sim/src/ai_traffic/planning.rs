@@ -580,10 +580,21 @@ impl TrafficSim {
             );
         }
         let st = &self.cars[i].state;
+        // what will not move for a while and shows it - a bus serving its stop, a car at
+        // the kerb - is seen coming: the driver moves over while still rolling up to it
+        // instead of stopping behind it and waiting there first
+        let foreseen = match lead.and_then(|l| l.1) {
+            Some(j) => self
+                .cars
+                .get(j)
+                .is_some_and(|o| o.standing_for(self.day_time) > 4.0),
+            None => lead.is_some(),
+        };
+        let early = foreseen && st.speed > 1.0;
         if st.change.is_some()
             || self.cars[i].is_rail()
             || st.change_cooldown > 0.0
-            || stuck < 4.0
+            || (stuck < 4.0 && !early)
             || !standing
             || self.cars[i].light_hold
             || self.cars[i].yielding
@@ -591,7 +602,12 @@ impl TrafficSim {
             return;
         }
         let Some(d) = gap else { return };
-        if d > 25.0 {
+        let reach = if early {
+            (st.speed * st.speed / (2.0 * st.decel.max(1.0)) + 25.0).clamp(25.0, 60.0)
+        } else {
+            25.0
+        };
+        if d > reach {
             return;
         }
         let lane = &self.net.lanes[st.lane];
@@ -656,7 +672,11 @@ impl TrafficSim {
                     .fold(0.0, f32::max);
             if side_on > 30.0
                 && self.open_run(st, side, s_side, 30.0) >= 30.0
-                && self.lane_clear(i, side, s_side, 12.0, 30.0, by_lane)
+                // (changing on the move takes more room than creeping out from a stand)
+                && {
+                    let (behind, ahead) = if early { (22.0, 45.0) } else { (12.0, 30.0) };
+                    self.lane_clear(i, side, s_side, behind, ahead, by_lane)
+                }
             {
                 sides.push((side, dir, rejoin));
             }
@@ -668,7 +688,13 @@ impl TrafficSim {
             if let Some(n) = rejoin {
                 self.splice_route(i, at, Some([side, n]));
             }
-            if !self.try_change(i, side, dir, super::lateral::ChangeKind::Bypass, ts, skip) {
+            // (with room to spare it is an ordinary lane change)
+            let kind = if early && d > 18.0 {
+                super::lateral::ChangeKind::Choice
+            } else {
+                super::lateral::ChangeKind::Bypass
+            };
+            if !self.try_change(i, side, dir, kind, ts, skip) {
                 if rejoin.is_some() {
                     self.splice_route(i, at, None);
                 }

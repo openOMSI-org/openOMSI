@@ -3,8 +3,16 @@
 
 use super::*;
 
-/// Seconds a random car stands before it gives up and leaves out of sight (Omsi.exe: 200).
+/// Seconds a random car stands before it is deleted, in sight or not (Omsi.exe: 200).
 pub const GIVE_UP_STOOD: f32 = 200.0;
+
+impl AiCar {
+    /// Has this random car been stuck for so long that it is deleted where it stands? Not
+    /// the car a red light holds, and no timetable bus.
+    pub fn stuck_for_good(&self) -> bool {
+        !self.is_bus() && !self.light_hold && self.stopped.max(self.progress.1) > GIVE_UP_STOOD
+    }
+}
 
 /// Seconds a timetable bus waits where the route it has ends for the rest of its route
 /// (tiles bring it as they load) before it gives the trip up (see `Traffic::tick`).
@@ -14,6 +22,10 @@ pub const ROUTE_WAIT_MAX: f32 = 40.0;
 /// this far past the obstacle's rear (m).
 pub const CREEP_PAST: f32 = 2.0;
 pub const PLAYER_AT_LIGHT: f32 = 55.0;
+/// A player's bus this near ahead of a car's front (m) is what holds it.
+const PLAYER_HOLDS_WITHIN: f32 = 20.0;
+/// The room an AI bus keeps behind a player's standing bus (m).
+const PLAYER_PULL_OUT_ROOM: f32 = 9.0;
 
 /// Where every car is (see `Traffic::occupancy`): per lane, (car, distance along the lane,
 /// lateral place, out on that lane passing something).
@@ -695,6 +707,12 @@ impl TrafficSim {
                 }
             }
         }
+        // (or about to move over into it, signalling)
+        if let Some(l) = player.as_ref().and_then(|p| self.merging_player(i, p)) {
+            if lead.map(|x| l.gap < x.0.gap).unwrap_or(true) {
+                lead = Some((l, Some(usize::MAX)));
+            }
+        }
         // (or coming to the joint where this car's lane runs into its own)
         if let Some(l) = merging_lead(&self.net, &self.cars[i].state, &self.way_users) {
             if lead.map(|x| l.gap < x.0.gap).unwrap_or(true) {
@@ -971,7 +989,11 @@ impl TrafficSim {
                                 < real + obstacle_len + st.front + 15.0
                     })
                     .unwrap_or(false);
-                let want = if queues {
+                // (a bus does not close up to a player's bus, which may never move on:
+                // from close behind it no bus could pull out round it)
+                let want = if who == Some(usize::MAX) && car.is_bus() {
+                    car.pass_room.max(PLAYER_PULL_OUT_ROOM)
+                } else if queues {
                     st.min_gap + 2.0
                 } else {
                     car.pass_room.max(st.min_gap)
@@ -1192,6 +1214,25 @@ impl TrafficSim {
         (stop_at, why)
     }
 
+    /// Does a player's bus stand just ahead of car `i`, and has for `PLAYER_PATIENCE` -
+    /// not one waiting at a red light?
+    fn held_by_player(&self, i: usize, ts: &TickScene) -> bool {
+        let car = &self.cars[i];
+        let near = |p: &PlayerBox, still: f32| {
+            still.min(car.since_player_at_light) > super::bus_service::PLAYER_PATIENCE
+                && self
+                    .player_in_way(i, p)
+                    .is_some_and(|l| l.gap < PLAYER_HOLDS_WITHIN)
+        };
+        ts.player
+            .as_ref()
+            .is_some_and(|p| near(p, ts.player_standing))
+            || ts
+                .others
+                .iter()
+                .any(|(id, p)| near(p, self.others_still.get(id).copied().unwrap_or(0.0)))
+    }
+
     /// A timetable bus's service (its stops and its place at them); where a car parking
     /// stops beside its space (`park`, from `steer_sideways`).
     #[allow(clippy::too_many_arguments)]
@@ -1211,6 +1252,7 @@ impl TrafficSim {
         } else {
             Default::default()
         };
+        let held_by_player = self.cars[i].is_bus() && self.held_by_player(i, ts);
         let berths = &mut self.berths;
         let car = &mut self.cars[i];
         if let Some(service) = car.bus.as_mut() {
@@ -1235,6 +1277,7 @@ impl TrafficSim {
                 timed_waits_only: self.timed_waits_only,
                 time: self.time,
                 berth,
+                held_by_player,
             };
             if let Some(at) = service.step(&mut car.state, &mut car.vehicle, &ctx, berths) {
                 stop_at = Some(stop_at.map(|x| x.min(at)).unwrap_or(at));
@@ -1400,23 +1443,22 @@ impl TrafficSim {
         } else {
             car.progress.1 += dt;
         }
-        let stood = car.stopped.max(car.progress.1);
-        // a random car that has stood for long has given up: it leaves as soon as nobody
-        // sees it. Omsi.exe deletes random traffic after 200 s standing (FUN_007d9128,
+        // a random car that has stood for long has given up, and the population takes it off
+        // the road. Omsi.exe deletes random traffic after 200 s standing (FUN_007d9128,
         // inst+0x870 > 200); taken off after a minute, the cars waiting at a side road's
         // line for a gap in a busy main road were taken away one after the other (their
         // giving way flickers off for a step as the gap is weighed again), Grundorf.
-        if stood > GIVE_UP_STOOD && !car.is_bus() && !car.light_hold && !car.gone {
+        if car.stuck_for_good() && !car.gone {
             car.gone = true;
             if let Some(s) = self.stats.as_mut() {
                 s.window.gave_up += 1;
             }
             if debug {
                 log::info!(
-                    "t={:.1}: car {} stood for {:.0} s: taken off once out of sight",
+                    "t={:.1}: car {} stood for {:.0} s: deleted",
                     self.time,
                     car.id,
-                    stood
+                    car.stopped.max(car.progress.1)
                 );
             }
         }

@@ -871,6 +871,19 @@ impl Pose {
         self.flags & FLAG_VEHICLE != 0 && !self.bus.is_empty()
     }
 
+    /// Where the player is, and which way they face: on foot (or riding) where their walker
+    /// is, else in their vehicle; None for a player who is neither. The world is kept and
+    /// sent around this place - around the vehicle alone, a player who had left it, or had
+    /// none, got no traffic and no people.
+    pub fn whereabouts(&self) -> Option<([f64; 3], f32)> {
+        match &self.walker {
+            Some(w) => Some(([w.x, w.y, w.z], w.heading)),
+            None => self
+                .has_vehicle()
+                .then_some(([self.x, self.y, self.z], self.heading)),
+        }
+    }
+
     fn encode_info(&self) -> String {
         let head = format!(
             "INFO|{}|{}|{}|{}|{}|{}|{:.2}|{:.2}|{:.2}|{:08X}|{}|",

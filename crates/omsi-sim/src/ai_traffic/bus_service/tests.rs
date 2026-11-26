@@ -195,6 +195,7 @@ fn service_context(net: &Network, day_time: f64, dt: f32) -> Ctx<'_> {
         timed_waits_only: false,
         time: day_time as f32,
         berth: BerthScene::default(),
+        held_by_player: false,
     }
 }
 
