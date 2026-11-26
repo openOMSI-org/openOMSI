@@ -210,6 +210,13 @@ impl App {
         for u in updates {
             self.apply_world_update(u);
         }
+        if let (Some(lan), Some(h), Some(s)) = (
+            self.net.lan.as_ref(),
+            self.session.humans.as_mut(),
+            self.session.schedule.as_mut(),
+        ) {
+            super::lan_duties::lan_tour_progress(lan, &mut h.sim, &mut s.sim);
+        }
         let apply_ms = phase.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
         let cmds = self

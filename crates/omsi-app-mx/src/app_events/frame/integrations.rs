@@ -93,6 +93,10 @@ impl App {
                 ui.set_themes(list, &self.settings.ui_theme_pack);
             }
         }
+        // (#2536) a `/`-line the player typed: the plugins' while one of them hears it, and
+        // not said to the session (the app's chat send asks the same question)
+        let hears_commands = !plugins.is_empty() && plugins.hears("chat_command");
+        self.sync_plugin_commands(hears_commands);
         if !plugins.is_empty() && !self.paused {
             let keys = std::mem::take(&mut self.integrations.plugin_keys);
             let events = std::mem::take(&mut self.integrations.plugin_events);
@@ -230,6 +234,19 @@ impl App {
         self.integrations.discord_max.get(&target, |t| {
             omsi_net::ws::query(t, false).ok().map(|i| i.max_players)
         })
+    }
+
+    pub(crate) fn sync_plugin_commands(&mut self, hears: bool) {
+        self.net.remotes.take_commands = hears;
+        if hears && !self.paused {
+            for text in std::mem::take(&mut self.net.remotes.plugin_commands) {
+                crate::plugins::queue_event_ex(
+                    &mut self.integrations.plugin_events_ex,
+                    "chat_command",
+                    vec![omsi_plugin::api::Value::Str(text)],
+                );
+            }
+        }
     }
 }
 

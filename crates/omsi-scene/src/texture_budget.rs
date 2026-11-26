@@ -165,4 +165,13 @@ impl World {
         self.texture_limit
             .load(std::sync::atomic::Ordering::Relaxed)
     }
+
+    /// Whether the textures were over their budget, or the card over the video memory, at the
+    /// budget's last look (see [`World::update_texture_budget`]): the time to let go of what
+    /// nobody draws rather than make the rest smaller.
+    pub fn textures_over_budget(&self) -> bool {
+        let limit = self.texture_budget_bytes();
+        let in_use = self.budget_checked.lock().in_use;
+        limit > 0 && in_use > limit
+    }
 }

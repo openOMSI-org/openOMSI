@@ -44,6 +44,11 @@ fn model_references(out: &mut Vec<String>, program: &Program, model: &omsi_model
             if let Some((_, name)) = &mat.lightmap {
                 float(name);
             }
+            if let Some(e) = &mat.emission {
+                for name in [&e.variable, &e.kelvin_variable].into_iter().flatten() {
+                    float(name);
+                }
+            }
             for (_, name) in &mat.lightmaps {
                 float(name);
             }

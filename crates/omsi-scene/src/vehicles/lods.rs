@@ -94,8 +94,8 @@ impl World {
         renderer: &Renderer,
         scene: &mut Scene,
         up: &mut VehicleUpload,
-        mesh_ids: &mut HashMap<(PathBuf, usize), (MeshId, usize)>,
-        mesh_keys: &mut Vec<(PathBuf, usize)>,
+        mesh_ids: &mut HashMap<MeshKey, (MeshId, usize)>,
+        mesh_keys: &mut Vec<MeshKey>,
         skip: bool,
     ) -> Vec<FarMesh> {
         let vt = up.vt;
@@ -130,7 +130,7 @@ impl World {
                 .enumerate()
                 .map(|(slot, m)| self.far_material(renderer, scene, up, vm, slot, m))
                 .collect();
-            let key = (vt.def.path.clone(), FAR_MESH_KEY + k);
+            let key = (vt.def.path.clone(), FAR_MESH_KEY + k, vm.stamp);
             let id = match mesh_ids.get_mut(&key) {
                 Some(e) => {
                     if !mesh_keys.contains(&key) {

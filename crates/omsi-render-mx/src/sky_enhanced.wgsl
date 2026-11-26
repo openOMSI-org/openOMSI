@@ -401,18 +401,33 @@ fn high_clouds(d: vec3<f32>, bg: vec3<f32>, pix: f32) -> vec4<f32> {
         // (a pixel's footprint on the sheet, m: stretched along the view towards the horizon)
         let fa = t_alto * pix / max(d.z, 0.05);
         // (its cells: the detail volume's billows on a slice, at the mip level of the
-        // footprint, in patches the weather map's small field lays out)
+        // footprint, roughened by the weather map's small field and a finer billow, so a
+        // cloudlet's rim is ragged, not a cut-out)
         let rolls = textureSampleLevel(t_cloud_weather, s_cloud, pa / 9000.0, log2(max(fa / (9000.0 / 512.0), 1.0))).a;
         let cl = log2(max(fa / (1400.0 / 32.0), 1.0));
         let cells = 1.0 - textureSampleLevel(t_cloud_detail, s_cloud, vec3<f32>(pa / 1400.0, 0.37), cl).r;
-        let dens = rolls * 0.6 + cells * 0.4;
-        let edge = 0.1 + 0.1 * min(cl, 3.0);
-        let thick = smoothstep(1.0 - alto_cover * 0.9 - edge, 1.0 - alto_cover * 0.9 + edge, dens);
+        let cf = log2(max(fa / (500.0 / 32.0), 1.0));
+        let fine = 1.0 - textureSampleLevel(t_cloud_detail, s_cloud, vec3<f32>(pa / 500.0 + vec2<f32>(0.31, 0.17), 0.61), cf).r;
+        // The cover says where the sheet's fields lie, some 15 km across as the cirrus'
+        // patches, and in a field the cloudlets close up towards its middle. (Cut at the
+        // cells alone, a thin cover left their highest points all over the sky: a sprinkle of
+        // small pale flecks over every gap between the cumulus.)
+        let fields = hc_fbm(pa / 15000.0 + vec2<f32>(6.3, 2.1), fa / 15000.0, 3);
+        let field = smoothstep(0.7 - 0.45 * alto_cover, 0.85 - 0.35 * alto_cover, fields);
+        let dens = cells * 0.5 + rolls * 0.25 + fine * 0.25;
+        let thr = 0.78 - 0.4 * field;
+        let edge = 0.07 + 0.1 * min(cl, 3.0);
+        // A cloudlet is thin at its rim and thicker in its middle: the rim lit through by the
+        // sun and see-through, the middle a little greyer and denser. (Drawn as one flat grey
+        // over a sharp cut - and at some 15 % of white paper's brightness, where a sheet this
+        // thin lets through about half the sun's light - every cell was a dull paper shape
+        // stuck on the blue, in front of the soft cumulus by its look.)
+        let shape = smoothstep(thr - edge, thr + edge, dens) * smoothstep(0.0, 0.35, field);
+        let depth = smoothstep(thr, thr + 0.12 + edge, dens);
         let sun = mix(enh.cloud_sun[2].rgb, enh.cloud_sun[3].rgb, 0.4);
-        let lit = sun * (0.10 + 0.55 * hg_phase(cos_sun, 0.7)) / PI;
-        let under = mix(1.0, 0.55, thick * thick);
-        let alto_col = (lit * mix(0.6, 1.0, cells) + sky_top * 0.85) * under;
-        let alto_a = thick * 0.75 * (1.0 - smoothstep(25000.0, 70000.0, t_alto));
+        let lit = sun * (0.3 + 0.5 * hg_phase(cos_sun, 0.7)) * mix(1.15, 0.7, depth) / PI;
+        let alto_col = lit * mix(0.7, 1.0, fine) + sky_top * 0.85;
+        let alto_a = shape * mix(0.25, 0.7, depth) * (1.0 - smoothstep(25000.0, 70000.0, t_alto));
         col = mix(col, alto_col, alto_a);
         cover = alto_a;
     }

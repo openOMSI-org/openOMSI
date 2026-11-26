@@ -326,7 +326,7 @@ frame by frame.
 
 | Variable | Values / default | What it does |
 | --- | --- | --- |
-| `OMSI_DEBUG_ENHANCED` | number; default `0` | Enhanced main pass shows one of its terms alone (n selects it: 1 sun shadow, 2 occlusion, ...). |
+| `OMSI_DEBUG_ENHANCED` | number; default `0` | Enhanced main pass shows one of its terms alone (n selects it: 1 sun shadow, 2 occlusion, ..., 18 traced bounced light, 19 traced share of the sky light). |
 | `OMSI_DEBUG_SHADOW` | number; unset: off | Shadow debug overlay (with a number: its radius, default 3). |
 | `OMSI_DEBUG_PUDDLES` | number; default `0` | Puddle debug view (a number selects it). |
 | `OMSI_DEBUG_RT` | number; unset: off | Log the ray tracing structures every 30 frames (with a number: a debug view). |

@@ -3480,6 +3480,7 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["fsr_sharpness"] = json!(0.8);
     v["street_light"] = json!("off");
     v["ray_tracing"] = json!(false);
+    v["rt_gi"] = json!(false);
     v["light_shadows"] = json!("off");
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
@@ -3492,6 +3493,17 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["traffic_headlights"] = json!(1.0);
     v["puddles"] = json!("high"); // (apart: the literal above is at the json! macro's recursion limit)
     v["vehicle_smoke"] = json!("all");
+}
+
+/// `passenger_weight_kg` or `passenger_weight_spread` as the settings text has it.
+fn weight_value(key: &str, val: &str) -> Value {
+    let (def, lo, hi) = if key == "passenger_weight_kg" {
+        (75.0, 20.0, 200.0)
+    } else {
+        (0.0, 0.0, 50.0)
+    };
+    let n = val.parse::<f64>().ok().filter(|x| x.is_finite());
+    json!(n.unwrap_or(def).clamp(lo, hi))
 }
 
 // (one setting a line, as the settings file has them: rustfmt would triple it)
@@ -3724,6 +3736,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // (#3154: OMSI 2's own rounding of a stop's passenger numbers until the player asks)
     v["pax_stop_numbers_exact"] = json!(false);
     v["others_detail"] = json!(false);
+    // (#1247: the game draws the cursor itself, so the system's is never moved)
+    v["software_cursor"] = json!(false);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
     v["ctrl_background"] = json!(false);
@@ -3883,6 +3897,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "cloud_quality" => v[&k] = json!(cloud_quality(val)),
             "street_light" => v[&k] = json!(street_light(val)),
             "ray_tracing" | "rt" => v["ray_tracing"] = json!(b(val)),
+            "rt_gi" => v[&k] = json!(b(val)),
             "light_shadows" => v[&k] = json!(light_shadows(val)),
             "cloud_shadows" | "light_glow" | "volumetric_fog" => v[&k] = json!(b(val)),
             "rain_quality" => v[&k] = json!(rain_quality(val)),
@@ -4010,20 +4025,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     "simple"
                 })
             }
-            "passenger_weight_kg" | "passenger_weight_spread" => {
-                let (def, lo, hi) = if k == "passenger_weight_kg" {
-                    (75.0, 20.0, 200.0)
-                } else {
-                    (0.0, 0.0, 50.0)
-                };
-                v[&k] = json!(
-                    val.parse::<f64>()
-                        .ok()
-                        .filter(|x| x.is_finite())
-                        .unwrap_or(def)
-                        .clamp(lo, hi)
-                )
-            }
+            "passenger_weight_kg" | "passenger_weight_spread" => v[&k] = weight_value(&k, val),
             "passenger_transfer_percent" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4320,9 +4322,10 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 )
             }
             "zoom_hold_latch" => v[&k] = json!(b(val)),
-            "flashlight_cursor" | "others_detail" | "pax_stop_numbers_exact" => {
-                v[&k] = json!(b(val))
-            }
+            "flashlight_cursor"
+            | "others_detail"
+            | "pax_stop_numbers_exact"
+            | "software_cursor" => v[&k] = json!(b(val)),
             "pad_steer_smooth" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -5124,6 +5127,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
                 .unwrap_or("off")
         )
     ));
+    // (experimental: the traced global illumination, with the ray tracing)
+    text.push_str(&format!("rt_gi={}\n", b("rt_gi", false)));
     text.push_str(&format!(
         "ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\nvolumetric_fog={}\n",
         b("ray_tracing", false)
@@ -5169,8 +5174,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("zoom_hold_latch", false)
     ));
     text.push_str(&format!(
-        "flashlight_cursor={}\n",
-        b("flashlight_cursor", false)
+        "flashlight_cursor={}\nsoftware_cursor={}\n",
+        b("flashlight_cursor", false),
+        b("software_cursor", false)
     ));
     text.push_str(&format!(
         "pax_stop_numbers_exact={}\n",

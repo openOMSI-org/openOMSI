@@ -452,3 +452,18 @@ fn unsupported_and_unavailable_hof_layouts_are_not_reported_as_single_recording(
     assert_eq!(a.pairs, 0);
     assert_eq!(a.take_note(), None);
 }
+
+#[test]
+fn the_same_reason_is_told_once_not_at_every_trip() {
+    let mut a = AutoAnnounce::new();
+    a.note = Some(announce::QuietReason::SingleRecordingHof);
+    assert_eq!(
+        a.take_note(),
+        Some(announce::QuietReason::SingleRecordingHof)
+    );
+    a.new_trip(1, true);
+    a.note = Some(announce::QuietReason::SingleRecordingHof);
+    assert_eq!(a.take_note(), None, "the next trip says nothing new");
+    a.note = Some(announce::QuietReason::NoBusstopCounter);
+    assert_eq!(a.take_note(), Some(announce::QuietReason::NoBusstopCounter));
+}

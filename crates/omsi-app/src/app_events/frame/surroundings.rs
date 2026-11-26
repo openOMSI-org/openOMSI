@@ -399,7 +399,11 @@ fn update_light_textures_and_snow(cx: &mut LightsCx, dt: f32) {
             &v,
         );
         // the road dirt on the vehicles near the camera (omsi_scene::road_dirt)
-        omsi_scene::road_dirt::frame(r, cx.common.settings.procedural_dirt, cam.position, &v);
+        // (the vehicles the player placed and left keep theirs: with their own dirt
+        // overlays hidden and no road dirt they stood there washed clean)
+        let mut dirty = v.clone();
+        dirty.extend(cx.player.placed.iter().map(|q| (0, &q.vehicle)));
+        omsi_scene::road_dirt::frame(r, cx.common.settings.procedural_dirt, cam.position, &dirty);
         omsi_scene::road_snow::show_roofs(r, scene, v.iter().map(|x| x.0), |k| {
             if k == 0 {
                 p.map(|p| (&p.render, &p.trailer_renders[..]))

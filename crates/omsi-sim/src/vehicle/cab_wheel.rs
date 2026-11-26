@@ -177,6 +177,7 @@ mod tests {
                 def_index,
                 data: Default::default(),
                 file: Default::default(),
+                stamp: 0,
                 materials: Vec::new(),
                 overrides: Vec::new(),
                 pivot: glam::Mat4::IDENTITY,

@@ -2087,6 +2087,7 @@ mod more;
 mod night_coverage;
 mod pbr_maps;
 mod prepass_reach;
+mod rebuild;
 mod snow_track_field;
 mod transparency;
 mod vanilla_lighting;

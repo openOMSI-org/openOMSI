@@ -383,7 +383,7 @@ impl LanWorld {
             self.ups.entry(id).or_default().files.insert(pid, file);
         }
         for (id, at, f) in lan.take_world_up() {
-            self.points.came_up(&f.points);
+            self.points.came_up(id, &f.points);
             let up = self.ups.entry(id).or_default();
             let arrived = at
                 .checked_duration_since(epoch)
