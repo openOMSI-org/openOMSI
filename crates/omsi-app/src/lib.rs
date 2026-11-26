@@ -350,7 +350,9 @@ pub fn run() -> Result<()> {
     }
     // (a report of the mods, without a window: the content folder's `Mods/`, read against
     // the content folder and the installation, in the order the game searches them - #3606)
-    if let Some(out) = &args.export_mod_report {
+    if let Some(out) = args.export_mod_report.clone() {
+        let mut args = args;
+        discover_root(&mut args, find_root);
         let Some(c) = omsi_cfg::content_dir() else { anyhow::bail!("no content folder: --export-mod-report needs one") };
         let folders = omsi_cfg::mod_dirs(&c);
         let names: Vec<String> = folders.iter().filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).collect();
@@ -361,7 +363,7 @@ pub fn run() -> Result<()> {
         if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(dir)?;
         }
-        std::fs::write(out, omsi_cfg::overrides::report(&entries, &names))?;
+        std::fs::write(&out, omsi_cfg::overrides::report(&entries, &names))?;
         let shared = entries.iter().filter(|e| e.between_mods(&names)).count();
         println!("{} mods, {} files they override ({} shipped by two packs) written to {}", names.len(), entries.len(), shared, out.display());
         return Ok(());
@@ -423,6 +425,18 @@ fn game_event_loop() -> Result<EventLoop<()>> {
     Ok(EventLoop::new()?)
 }
 
+/// The original installation a start would use: the folder it was given when that is already
+/// complete, else the one found by the same search a game start uses. A start script checking
+/// its folder with `--list-maps` never gets another one instead.
+#[rustfmt::skip]
+fn discover_root(args: &mut Args, find: impl FnOnce() -> Option<PathBuf>) -> bool {
+    if is_omsi_root(&args.root) || args.list_maps { return false; }
+    let Some(root) = find() else { return false; };
+    log::info!("OMSI 2 found at {}", root.display());
+    args.root = root;
+    true
+}
+
 /// Everything before a window: the language, the session's random seed, the original
 /// installation and the content roots (mods, archives). None when the program has
 /// nothing more to do (a fatal error was shown).
@@ -468,35 +482,27 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     omsi_script::set_session_seed(seed);
     log::info!("script random seed {seed} (OMSI_SEED={seed} repeats it)");
     let launcher_mode = bare && !args.menu;
-    if !is_omsi_root(&args.root) {
-        // (a start script checks the folder it was given: never another one found instead)
-        match find_root().filter(|_| !args.list_maps) {
-            Some(p) => {
-                log::info!("OMSI 2 found at {}", p.display());
-                args.root = p;
+    if !discover_root(&mut args, find_root) && !is_omsi_root(&args.root) {
+        if launcher_mode {
+            // the launcher opens without the game: its Setup page is where the folder is
+            // chosen (only a session needs the original installation)
+            log::warn!("the original OMSI 2 was not found; the launcher asks for it");
+        } else {
+            // openOMSI plays on the original game's content: without a complete
+            // installation of it there is nothing to play on, and every player must have
+            // the same base whatever copy of OMSI 2 they own
+            let missing = omsi_cfg::missing_original_essentials(&args.root);
+            let text = omsi_ui::tr(MISSING_ORIGINAL).replace("{folder}", &args.root.display().to_string()).replace("{missing}", &missing.join(", "));
+            if server_cfg.is_some() || args.list_maps {
+                eprintln!("{text}");
+            } else {
+                fatal_dialog(&omsi_ui::tr("openOMSI cannot start"), &text);
             }
-            None if launcher_mode => {
-                // the launcher opens without the game: its Setup page is where the folder is
-                // chosen (only a session needs the original installation)
-                log::warn!("the original OMSI 2 was not found; the launcher asks for it");
+            if cfg!(any(target_os = "android", target_os = "ios")) {
+                // (a phone's app is not ended from inside: back to the launcher)
+                return Ok(None);
             }
-            None => {
-                // openOMSI plays on the original game's content: without a complete
-                // installation of it there is nothing to play on, and every player must have
-                // the same base whatever copy of OMSI 2 they own
-                let missing = omsi_cfg::missing_original_essentials(&args.root);
-                let text = omsi_ui::tr(MISSING_ORIGINAL).replace("{folder}", &args.root.display().to_string()).replace("{missing}", &missing.join(", "));
-                if server_cfg.is_some() || args.list_maps {
-                    eprintln!("{text}");
-                } else {
-                    fatal_dialog(&omsi_ui::tr("openOMSI cannot start"), &text);
-                }
-                if cfg!(any(target_os = "android", target_os = "ios")) {
-                    // (a phone's app is not ended from inside: back to the launcher)
-                    return Ok(None);
-                }
-                std::process::exit(1);
-            }
+            std::process::exit(1);
         }
     }
     if let Some(memo) = root_memo().filter(|_| is_omsi_root(&args.root) && server_cfg.is_none() && args.pack_map.is_none()) {
@@ -1013,6 +1019,19 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_export_root_uses_the_same_discovery_as_a_game_start() {
+        let missing = format!("missing-{}", std::process::id());
+        let found = PathBuf::from("found").join("OMSI 2");
+        let mut args = Args::parse_from(["omsi", "--root", missing.as_str()]);
+        assert!(discover_root(&mut args, || Some(found.clone())));
+        assert_eq!(args.root, found);
+
+        let mut args = Args::parse_from(["omsi", "--root", missing.as_str(), "--list-maps"]);
+        assert!(!discover_root(&mut args, || Some(found.clone())));
+        assert_ne!(args.root, found);
+    }
 
     #[test]
     fn streaming_starts_around_the_bus() {
