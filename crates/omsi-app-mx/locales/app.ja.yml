@@ -3324,3 +3324,5 @@
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "自動アナウンス：このバスにはIBIS「次停留所」キーがないため、車内独自のアナウンスが維持されます。"
 "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
 "Automatic announcements are off.": "自動アナウンスはオフです。"
+"Draw other players' buses in less detail when far away": "遠くにある他のプレイヤーのバスを低いディテールで描画"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "マルチプレイヤー: 120 m以上離れているか20 FPS未満の場合、他のプレイヤーのバスは車体を維持しつつ運転手と行先表示を非表示にします。26 FPSを超えると完全に復帰します"

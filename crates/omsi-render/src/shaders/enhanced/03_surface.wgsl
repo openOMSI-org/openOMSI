@@ -235,7 +235,7 @@ fn emission_light(buv: vec2<f32>, base: vec3<f32>, slot: f32, pre: f32) -> vec3<
 // (and how wet the dirt that `road_dirt` found is, 0..1)
 var<private> dirt_wet: f32;
 fn road_dirt(world: vec3<f32>, n: vec3<f32>, pane: bool) -> vec4<f32> {
-    let count = min(i32(enh.dirt_n.x + 0.5), 6);
+    let count = min(i32(enh.dirt_n.x + 0.5), 64);
     for (var i = 0; i < count; i = i + 1) {
         let b = i * 8;
         let o = enh.dirt[b];
@@ -266,8 +266,10 @@ fn road_dirt(world: vec3<f32>, n: vec3<f32>, pane: bool) -> vec4<f32> {
         let on_end = smoothstep(0.7, 0.25, to_end) * smoothstep(-0.3, 0.2, end_out);
         let on_roof = smoothstep(0.35, 0.1, hi.z - p.z) * smoothstep(0.6, 0.9, ln.z);
         let outside = max(on_side, on_end);
+        // (not this one's outside: the next box may hold the point too - an articulated
+        // bus's sections overlap at the joint, two vehicles parked nose to tail)
         if (outside + on_roof <= 0.0) {
-            return vec4<f32>(0.0);
+            continue;
         }
         let am = enh.dirt[b + 6];
         let kind = enh.dirt[b + 7];
