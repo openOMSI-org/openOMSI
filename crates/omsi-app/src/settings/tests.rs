@@ -1141,3 +1141,21 @@ fn the_note_kinds_go_round_the_file() {
         (false, true, false, true)
     );
 }
+
+/// DLSS's sharpening: 25 % unless set (the fixed amount it had before), kept through the
+/// launcher's file and handed to the renderer.
+#[test]
+fn dlss_sharpness_round_trips_into_renderer() {
+    let default = Settings::from_text("");
+    assert!((default.dlss_sharpness - omsi_render::DLSS_SHARPEN).abs() < 1e-6);
+    assert!((default.render_options().dlss_sharpness - 0.25).abs() < 1e-6);
+    let mut ui = omsi_launcher_lib::settings_from_text(None);
+    assert!((ui["dlss_sharpness"].as_f64().unwrap() - 0.25).abs() < 1e-6);
+    ui["upscaler"] = serde_json::json!("dlss");
+    ui["dlss_sharpness"] = serde_json::json!(0.6);
+    let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None));
+    assert!((game.dlss_sharpness - 0.6).abs() < 1e-6);
+    assert!((game.render_options().dlss_sharpness - 0.6).abs() < 1e-6);
+    assert_eq!(Settings::from_text(&game.to_text()), game);
+    assert!((Settings::from_text("dlss_sharpness=7\n").dlss_sharpness - 1.0).abs() < 1e-6);
+}

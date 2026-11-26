@@ -2220,6 +2220,8 @@
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "Стандартты Catmull-Rom немесе тәжірибелік FSR 1; өзгерістер бірден көрінеді"
 "FSR quality": "FSR сапасы"
 "FSR sharpness": "FSR анықтығы"
+"DLSS sharpness": "DLSS анықтығы"
+"How much the picture is sharpened after DLSS; 25 % as before": "DLSS-тен кейін сурет қаншалықты айқындалады; 25 % — бұрынғыдай"
 "RCAS sharpening strength": "RCAS анықтау күші"
 "Ultra Quality (77%)": "Ультра сапа (77%)"
 "Quality (67%)": "Сапа (67%)"
