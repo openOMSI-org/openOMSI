@@ -18,7 +18,7 @@ impl App {
         if self.session.duty.is_none() {
             self.session.career.no_trip();
         }
-        let announce = self.settings.auto_announce;
+        let announce = self.settings.announce_policy();
         if let (Some(d), Some(p), Some(w), false) = (
             self.session.duty.as_mut(),
             self.player.as_mut(),

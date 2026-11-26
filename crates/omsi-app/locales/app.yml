@@ -575,6 +575,22 @@ _version: 2
   en: "Arrival announcements at the stop"
 "On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS's next stop key, pressed as the driver would":
   en: "On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS's next stop key, pressed as the driver would"
+"…the arrival recording at the stop":
+  en: "…the arrival recording at the stop"
+"The \"… arrived\" half of each stop, pressed as the bus stands at it; off leaves the stops to their scripts":
+  en: "The \"… arrived\" half of each stop, pressed as the bus stands at it; off leaves the stops to their scripts"
+"…the departure recording when pulling out":
+  en: "…the departure recording when pulling out"
+"The \"next stop is …\" half, which the bus's own scripts play; off stops the game making up for a script that does not step its counter":
+  en: "The \"next stop is …\" half, which the bus's own scripts play; off stops the game making up for a script that does not step its counter"
+"…the next stop on the way in":
+  en: "…the next stop on the way in"
+"A city that announces before the stop rather than when pulling out: the next stop's recording is played a distance before it, once a stop":
+  en: "A city that announces before the stop rather than when pulling out: the next stop's recording is played a distance before it, once a stop"
+"Approach distance":
+  en: "Approach distance"
+"How far before the stop the approach announcement plays; two stops closer together than twice this announce halfway between them":
+  en: "How far before the stop the approach announcement plays; two stops closer together than twice this announce halfway between them"
 "Passenger voices":
   en: "Passenger voices"
 "Greetings and tickets":
