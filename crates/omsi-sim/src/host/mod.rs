@@ -96,6 +96,10 @@ pub struct VehicleHost {
     /// Enabled by LAN for vehicles this machine owns. Independent of local audio drains.
     pub capture_sound_triggers: bool,
     pub network_sound_triggers: Vec<(String, Option<String>, Option<Vec<f32>>)>,
+    /// `(T.F.x)` triggers (lower case) whose last file sent to the other players was blank:
+    /// a blank frees the entry, so another one changes nothing there, and the MB_C2 gearbox
+    /// says `" "` in every frame in neutral - sent each time, it filled the LAN sound queue.
+    blank_file_sent: hashbrown::HashSet<String>,
     /// Triggers (lower case) whose sounds read variables in their volume curves: when one
     /// fires, the variables of that moment are kept in `fired_trigger_vars` (the door's
     /// hit sound reads `doorSpeed_<n>`, which the script turns round right after it).
@@ -714,14 +718,25 @@ impl Host for VehicleHost {
     }
 
     fn sound_trigger_file(&mut self, name: &str, file: &str) {
-        // `" " (T.F.ev_nbs_on)` is how the MB_C2 gearbox script says "no sound" (every
-        // frame in neutral, 80 times a minute per bus at Ahlheim): nothing to play. An empty
-        // name is not that: Omsi.exe (0x74f2e8) plays the entry's sound again with the file
-        // it has, see `SoundSet::play_file_trigger`.
-        if self.remote_sound_triggers || (!file.is_empty() && file.trim().is_empty()) {
+        // Every name is passed on, `""` and `" "` too: Omsi.exe (0x74f2e8) plays the entry's
+        // sound again with the file it has for `""`, and `" "` (the MB_C2 gearbox script's
+        // "no sound" in neutral) frees the entry's buffer, stopping what it plays, see
+        // `SoundSet::play_file_trigger`.
+        if self.remote_sound_triggers {
             return;
         }
-        self.record_network_sound(name, Some(file));
+        let blank = !file.is_empty() && file.trim().is_empty();
+        let repeat = if blank {
+            !self.blank_file_sent.insert(name.to_ascii_lowercase())
+        } else {
+            if !file.is_empty() {
+                self.blank_file_sent.remove(&name.to_ascii_lowercase());
+            }
+            false
+        };
+        if !repeat {
+            self.record_network_sound(name, Some(file));
+        }
         self.fired_file_triggers
             .push((name.to_string(), file.to_string()));
         self.file_triggers_fired += 1;
@@ -856,6 +871,7 @@ mod tests {
                     Some("../Announcements/stop.wav".into()),
                     None
                 ),
+                ("announcement".into(), Some(" ".into()), None),
             ]
         );
         h.network_sound_triggers.clear();
@@ -882,16 +898,45 @@ mod tests {
         assert_eq!(h.falling_precip(), 0.125);
     }
 
-    /// `"" (T.F.x)` fires the entry again with the file it has (0x74f2e8); `" " (T.F.x)`
-    /// is no sound.
+    /// `"" (T.F.x)` fires the entry again with the file it has and `" " (T.F.x)` stops and
+    /// frees it (0x74f2e8, 0x74fb3c): both reach the sound set, and another player's copy.
     #[test]
-    fn an_empty_file_trigger_is_passed_on_and_a_blank_one_is_not() {
+    fn empty_and_blank_file_triggers_are_passed_on() {
         let mut h = VehicleHost::default();
+        h.capture_sound_triggers = true;
         h.sound_trigger_file("ann", "");
         h.sound_trigger_file("ann", " ");
         h.sound_trigger_file("ann", "  ");
-        assert_eq!(h.fired_file_triggers, vec![("ann".into(), String::new())]);
-        assert_eq!(h.file_triggers_fired, 1);
+        let want: Vec<(String, String)> = ["", " ", "  "]
+            .map(|f| ("ann".to_string(), f.to_string()))
+            .to_vec();
+        assert_eq!(h.fired_file_triggers, want);
+        assert_eq!(h.file_triggers_fired, 3);
+        // (the second blank in a row changes nothing for the other players' copy)
+        assert_eq!(h.network_sound_triggers.len(), 2);
+    }
+
+    /// A blank file said again (the MB_C2 gearbox in every frame in neutral) is sent to the
+    /// other players once, until a file names a sound again; the local entry hears each.
+    #[test]
+    fn a_repeated_blank_file_trigger_is_sent_once() {
+        let mut h = VehicleHost::default();
+        h.capture_sound_triggers = true;
+        for _ in 0..10 {
+            h.sound_trigger_file("ev_nbs_on", " ");
+        }
+        h.sound_trigger_file("EV_NBS_ON", "");
+        h.sound_trigger_file("ev_nbs_on", " ");
+        h.sound_trigger_file("ev_nbs_on", "gear.wav");
+        h.sound_trigger_file("ev_nbs_on", " ");
+        let sent: Vec<Option<String>> = h
+            .network_sound_triggers
+            .iter()
+            .map(|(_, f, _)| f.clone())
+            .collect();
+        let want = [" ", "", "gear.wav", " "].map(|f| Some(f.to_string()));
+        assert_eq!(sent, want);
+        assert_eq!(h.fired_file_triggers.len(), 14);
     }
 
     #[test]

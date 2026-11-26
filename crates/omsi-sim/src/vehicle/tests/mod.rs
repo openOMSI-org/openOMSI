@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 mod articulation;
 mod fuel;
+mod mesh_identity;
 mod model_variables;
 mod nf6d;
 mod rail_power;
@@ -1259,6 +1260,54 @@ fn a_trolleybus_moves_only_on_current() {
     };
     assert!(at(0.0));
     assert!(!at(30.0));
+}
+
+/// An AI vehicle's wheels turn at its speed over their own axle's size, the inner and the
+/// outer wheel of a bend alike (Omsi.exe 0x7debb0: 2·v/d rad/s for both wheels of an axle).
+#[test]
+fn ai_wheels_turn_at_the_speed_over_their_axle_size() {
+    let base = crate::timetable_run::tests::script_test_vehicle(
+        "{frame}\n{end}\n",
+        "Wheel_RotationSpeed_0_L\nWheel_RotationSpeed_0_R\nWheel_RotationSpeed_1_L\nWheel_RotationSpeed_1_R\n",
+        "",
+    );
+    let mut ty = (*base.ty).clone();
+    ty.def.axles = vec![
+        omsi_vehicle::Axle {
+            long: 2.5,
+            wheel_diameter: 1.0,
+            ..Default::default()
+        },
+        omsi_vehicle::Axle {
+            long: -3.0,
+            wheel_diameter: 0.8,
+            ..Default::default()
+        },
+    ];
+    let mut v = VehicleInstance::new(Arc::new(ty), VehicleHost::new(Default::default()));
+    // 10 m/s through a tight bend
+    v.update_ai(
+        0.1,
+        &AiFrame {
+            speed: 10.0,
+            odometer: 1.0,
+            steer_deg: 25.0,
+            ..Default::default()
+        },
+    );
+    let pi = std::f32::consts::PI;
+    for (axle, d) in [(0, 1.0f32), (1, 0.8)] {
+        for side in ["L", "R"] {
+            let rpm = v
+                .var(&format!("Wheel_RotationSpeed_{axle}_{side}"))
+                .unwrap();
+            let want = 600.0 / (pi * d);
+            assert!(
+                (rpm - want).abs() < 1e-2,
+                "{axle}_{side}: {rpm}, want {want}"
+            );
+        }
+    }
 }
 
 /// An AI vehicle's `n_Wheel` is its speed over the first axle's wheel (Omsi.exe 0x7debb0),

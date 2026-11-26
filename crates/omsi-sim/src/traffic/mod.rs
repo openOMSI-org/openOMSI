@@ -10,6 +10,7 @@ use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 
 mod ai_state;
+mod chain_load;
 mod extend;
 mod lane;
 mod lights;
@@ -28,6 +29,7 @@ pub use ai_state::{
     Envelope, JERK, LaneChange, Lead, MAX_BRAKE, ORDINARY_BRAKE, SIGNAL_BEFORE_CHANGE,
     arrival_time, ramp_progress_for,
 };
+pub use chain_load::{LaneLoad, NO_DENSITY_FILL, load_group};
 pub use extend::LINK_TOLERANCE;
 #[cfg(test)]
 use lane::heading_dir;
@@ -36,8 +38,8 @@ pub use lane::{
     pool_density, wrap_deg,
 };
 pub use lights::{
-    Aspect, DEFAULT_APPROACH, LightStop, RAIL_ASK_DISTANCE, TrafficLightController, UNLINKED_PHASE,
-    WAITING_AT_LINE,
+    Aspect, DEFAULT_APPROACH, LightStop, PLAYER_SEARCH_RANGE, TrafficLightController,
+    UNLINKED_PHASE, WAITING_AT_LINE,
 };
 pub use walk_path::PathFooting;
 
@@ -70,6 +72,9 @@ pub struct Network {
     /// The map drives on the left (`global.cfg` `[lht]`): priority to the left, the
     /// oncoming lane on the right, turning right across the oncoming traffic.
     pub left_hand: bool,
+    /// The AI cars of each traffic group on each lane this step (see `chain_load`): how
+    /// full the ways on from a fork are.
+    pub load: LaneLoad,
 }
 
 /// `Network::reach` is counted up to this far (m).

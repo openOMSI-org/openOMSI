@@ -601,7 +601,8 @@ fn ai_train_couplings_hide_inner_tail_lights_and_light_the_last_car() {
     );
 }
 
-// the rear cab's BKK FUTAR says its stops with (T.F.x), and looks them up by $.yard
+// the rear cab's BKK FUTAR says its stops with (T.F.x), and looks them up by $.yard; a
+// blank file is passed on too, as it frees the entry (0x74f2e8 -> 0x75030c)
 #[test]
 fn a_car_keeps_its_file_sounds_and_takes_the_new_yard() {
     let mut lead = VehicleInstance::new(
@@ -619,7 +620,10 @@ fn a_car_keeps_its_file_sounds_and_takes_the_new_yard() {
     run.frame(&mut lead, [1.0, 0.0, 0.0], None, &mut Vec::new());
     assert_eq!(
         run.take_fired_files(),
-        vec![("ev_mp3".to_string(), "a.wav".to_string())]
+        vec![
+            ("ev_mp3".to_string(), "a.wav".to_string()),
+            ("ev_mp3".to_string(), " ".to_string()),
+        ]
     );
     assert!(run.take_fired_files().is_empty());
     run.set_str_var("yard", "Budafok 141-250");

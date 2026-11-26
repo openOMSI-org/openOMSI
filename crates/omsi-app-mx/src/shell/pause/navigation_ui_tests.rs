@@ -168,7 +168,7 @@ fn pause_navigation_write_preview() {
         ("world", "World options..."),
         ("controls", "Controls..."),
         ("saveslot", "Save to a slot..."),
-        ("load", "Load the quicksave"),
+        ("load", "Load a situation..."),
         ("photo", "Photo mode"),
         ("skipstop", "Skip the next stop"),
         ("endduty", "End the tour"),

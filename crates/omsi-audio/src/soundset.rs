@@ -466,7 +466,12 @@ impl SoundSet {
     /// trigger had fired (0x74f2e8). An empty `file` loads nothing: 0x74f2e8 skips the
     /// load for an empty string and fires the entry all the same, so it plays again the
     /// file it already has (its own, or the one the last `(T.F.)` gave it) from the start.
-    /// A name of blanks only names no file that exists: silent.
+    ///
+    /// Any other name first frees the entry's buffer (0x74fb3c calls 0x75030c: the playing
+    /// sound stops) before the new file is loaded. A file that cannot be loaded - `" "`, a
+    /// name of blanks only, names none - leaves the entry without a buffer and marked
+    /// "not loaded" (0x74fe28 sets +0x1c, which 0x750340 skips the entry for): silent, its
+    /// `""` re-fires too, until a `(T.F.)` names a file that loads.
     pub fn play_file_trigger(
         &mut self,
         engine: &AudioEngine,
@@ -480,7 +485,6 @@ impl SoundSet {
             return;
         }
         if !engine.enabled
-            || (!file.is_empty() && file.trim().is_empty())
             || !self.sounds.iter().any(|s| {
                 s.def
                     .triggers
@@ -493,9 +497,18 @@ impl SoundSet {
         let loaded = if file.is_empty() {
             None
         } else {
-            let path = omsi_cfg::resolve_path(&self.dir, &file_trigger_name(file));
-            let Some(clip) = engine.load_clip(&path) else {
-                warn_missing_once(trigger, &path);
+            // (blanks only: no file, and nothing to look for on disk)
+            let clip = (!file.trim().is_empty())
+                .then(|| omsi_cfg::resolve_path(&self.dir, &file_trigger_name(file)))
+                .and_then(|path| {
+                    let clip = engine.load_clip(&path);
+                    if clip.is_none() {
+                        warn_missing_once(trigger, &path);
+                    }
+                    clip
+                });
+            let Some(clip) = clip else {
+                self.free_file_trigger_entries(engine, trigger);
                 return;
             };
             Some(clip)
@@ -523,6 +536,24 @@ impl SoundSet {
             let e = ctx.eval(s, var, object_to_world);
             if e.audible && !e.wrong_view {
                 s.voice = Some(engine.play(clip, ctx.params(s, &e, false, object_to_world)));
+            }
+        }
+    }
+
+    /// The entries listening to `trigger` after a `(T.F.)` whose file did not load: their
+    /// buffer freed (0x75030c stops the playing sound) and none in its place, so they stay
+    /// silent until a `(T.F.)` gives them a file that loads (see `play_file_trigger`).
+    fn free_file_trigger_entries(&mut self, engine: &AudioEngine, trigger: &str) {
+        for s in self.sounds.iter_mut() {
+            if s.def
+                .triggers
+                .iter()
+                .any(|d| d.trim().eq_ignore_ascii_case(trigger))
+            {
+                if let Some(id) = s.voice.take() {
+                    engine.stop(id);
+                }
+                s.clip = None;
             }
         }
     }

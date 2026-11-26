@@ -150,7 +150,7 @@ fn fs_depth_transmap(in: DepthIn) {
 fn fs_depth_cover(in: DepthIn) {
     let mode = material.params.x;
     if (mode < 0.5 || mode > 1.5 || material.params.z > 0.5 || material.extra.x > 0.5
-        || material.wipe_bounds.z != 0.0 || abs(material.emissive.w) > 1.5
+        || material.wipe_bounds.z != 0.0 || material.wipe_bounds.w < 0.0 || abs(material.emissive.w) > 1.5
         || material.color.a < 1.0 || in.params.x < 1.0 || in.surf > 1.5) {
         discard;
     }

@@ -67,7 +67,9 @@ pub(crate) fn ssao(device: &wgpu::Device, gl: bool) -> Ssao {
         "ssao params",
         std::mem::size_of::<SsaoUniform>() as u64,
     );
-    let ao_sampler = clamped_linear_sampler(device);
+    // (also the camera group's `s_ao`: the wet panes read the picture behind them through it
+    // at their blur's level, see scene/08_rain_glass.wgsl `glass_blur`)
+    let ao_sampler = clamped_trilinear_sampler(device);
     let ao_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("ssao"),
         bind_group_layouts: &[Some(&ao_layout)],

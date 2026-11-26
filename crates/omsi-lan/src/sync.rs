@@ -96,6 +96,18 @@ pub fn var_table(program: &omsi_script::Program) -> VarTable {
     }
 }
 
+/// The variables of the emissive materials' temperatures (K): sent as values, since a
+/// temperature is no lamp's 0..1 (their levels go with the lamps).
+fn emission_temperatures<'a>(
+    types: &'a [&omsi_sim::VehicleType],
+) -> impl Iterator<Item = String> + 'a {
+    types
+        .iter()
+        .flat_map(|t| t.model.meshes.iter())
+        .flat_map(|m| m.materials.iter())
+        .filter_map(|mat| mat.emission.as_ref()?.kelvin_variable.clone())
+}
+
 /// Sound entries of the full `[sound]` set that are heard from outside as well: the horn,
 /// the indicator relay, kneeling.
 pub fn outside_entry(e: &omsi_vehicle::SoundEntry) -> bool {
@@ -182,6 +194,7 @@ impl SyncTable {
                             .map(|l| l.1.clone())
                             .into_iter()
                             .chain(mat.change.as_ref().map(|c| c.2.clone()))
+                            .chain(mat.emission.as_ref().and_then(|e| e.variable.clone()))
                     })
                     .chain(m.light_enh.iter().map(|l| l.variable.clone()))
                     .chain(m.light_enh_2.iter().map(|l| l.variable.clone()))
@@ -352,6 +365,7 @@ impl SyncTable {
                     .cloned()
             }));
         }
+        value_names.extend(emission_temperatures(&types));
         let taken: Vec<VarId> = lamps.iter().chain(&switches).map(|l| l.1).collect();
         // What is seen first, then the leading vehicle's sounds, then the rear sections',
         // each sorted by name: the list is capped, and taken as one list in name order the

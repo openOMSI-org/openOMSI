@@ -182,6 +182,10 @@ pub struct VehicleMesh {
     pub data: MeshData,
     /// The `.o3d` file the mesh came from.
     pub file: PathBuf,
+    /// What that file was when the mesh was read (see [`source_stamp`]): a mesh rebuilt on
+    /// disk is a different mesh, so "Reload this vehicle" uploads it again instead of handing
+    /// the bus the copy the GPU already has (#2618). 0 when the file could not be read.
+    pub stamp: u64,
     pub materials: Vec<omsi_o3d::Material>,
     pub overrides: Vec<MaterialDef>,
     pub pivot: Mat4,
@@ -328,6 +332,36 @@ pub(super) fn winding_pack(p: &Path) -> String {
     match comps.iter().rposition(|c| c == "vehicles") {
         Some(i) if i + 2 < comps.len() => comps[i + 1].clone(),
         _ => comps[..comps.len().saturating_sub(1)].join("/"),
+    }
+}
+
+/// What a file was when it was read: its size and the time it was last written, or a hash of
+/// its bytes when VFS serves it from an archive with no filesystem timestamp.
+/// A mesh rebuilt by a modder has another stamp, which is how the world tells the mesh it
+/// already has on the GPU from the new one - the vehicle reads its files again on "Reload
+/// this vehicle", but the GPU kept what it uploaded the first time (#2618). 0 for a file of a
+/// pack that is not installed (nothing reads it, nothing uploads it).
+pub fn source_stamp(path: &Path) -> u64 {
+    let size = omsi_cfg::vfs::file_size(path).unwrap_or(0);
+    let written = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos() as u64);
+    if let Some(written) = written {
+        return written.wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(17) ^ size;
+    }
+    // An archived (or in-memory) file has no filesystem timestamp: hash what VFS reads, so a
+    // replacement mesh of the very same size still gets another stamp.
+    match omsi_cfg::vfs::read(path) {
+        Ok(bytes) => {
+            let mut hash = 0xcbf2_9ce4_8422_2325u64;
+            for byte in bytes {
+                hash = (hash ^ u64::from(byte)).wrapping_mul(0x100_0000_01b3);
+            }
+            hash ^ size
+        }
+        Err(_) => 0,
     }
 }
 
@@ -494,6 +528,7 @@ impl VehicleType {
                         meshes.push(VehicleMesh {
                             def_index: start + i,
                             data: mesh_from_o3d(&m),
+                            stamp: source_stamp(&p),
                             file: p,
                             materials: m.materials.clone(),
                             overrides: md.materials.clone(),
@@ -516,6 +551,21 @@ impl VehicleType {
                 }
             }
         }
+        // `[light_emitter_interior]`: lamps made from the light-mapped meshes' textures
+        if model
+            .meshes
+            .iter()
+            .any(|m| m.light_emitter_interior.is_some())
+        {
+            let dirs = [
+                omsi_cfg::resolve_path(def.dir(), "Texture"),
+                omsi_cfg::resolve_path(&model_dir, "Texture"),
+                model_dir.clone(),
+                omsi_cfg::resolve_path(root, "Texture"),
+            ];
+            let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
+            super::light_emitters::add(&mut model, &meshes, &dirs);
+        }
         // The lower levels of detail (`[LOD]` 2 and on): the meshes a vehicle is drawn with
         // from farther away, as Omsi.exe picks them by the vehicle's size on the screen. They
         // are small (a few thousand triangles against tens of thousands) and kept whole, and
@@ -535,6 +585,7 @@ impl VehicleType {
                 lod_meshes.push(VehicleMesh {
                     def_index: first + i,
                     data: mesh_from_o3d(&m),
+                    stamp: source_stamp(&p),
                     file: p,
                     materials: m.materials.clone(),
                     overrides: md.materials.clone(),
@@ -1657,6 +1708,7 @@ mod legacy_trolley_tests {
             def_index,
             data: Default::default(),
             file: PathBuf::new(),
+            stamp: 0,
             materials: Vec::new(),
             overrides: Vec::new(),
             pivot: Mat4::IDENTITY,

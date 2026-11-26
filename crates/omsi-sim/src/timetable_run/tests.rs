@@ -118,6 +118,26 @@ fn complex_line_keeps_letter_suffix() {
     assert_eq!(line_code_from_text("5", Some(505)), Some(500));
 }
 
+/// #2369: the IBIS's line and letter code written back as text give the same line code, so a
+/// destination picked by hand keeps the IBIS's letter.
+#[test]
+fn ibis_line_text_round_trips_every_letter_code() {
+    for suffix in 0..100 {
+        if let Some(text) = line_text_from_code(6, suffix) {
+            assert_eq!(
+                line_code_from_text(&text, None),
+                Some(600 + suffix),
+                "{suffix} '{text}'"
+            );
+        }
+    }
+    assert_eq!(line_text_from_code(6, 10).as_deref(), Some("6E"));
+    assert_eq!(line_text_from_code(6, 12).as_deref(), Some("C6"));
+    assert_eq!(line_text_from_code(6, 0).as_deref(), Some("6"));
+    assert_eq!(line_text_from_code(6, 99), None);
+    assert_eq!(line_text_from_code(0, 10), None);
+}
+
 /// #459: a four-digit line keeps its number and gets no suffix from its route code.
 #[test]
 fn four_digit_line_keeps_its_number() {

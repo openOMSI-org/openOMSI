@@ -53,7 +53,7 @@ pub(crate) struct Io<'a> {
     /// `omsi.command`: game menu lines to run after the frame.
     pub commands: Vec<String>,
     /// Keys pressed and let go since the last frame.
-    pub keys: Vec<(String, bool)>,
+    pub keys: Vec<op::KeyEvent>,
     /// What happened since the last frame (see [`queue_event`]).
     pub events: Vec<GameEvent>,
     pub events_ex: Vec<(&'static str, Vec<omsi_plugin::api::Value>)>,
@@ -65,7 +65,7 @@ impl<'a> Io<'a> {
     pub(crate) fn new(
         app: &'a mut crate::App,
         dt: f32,
-        keys: Vec<(String, bool)>,
+        keys: Vec<op::KeyEvent>,
         events: Vec<GameEvent>,
         events_ex: Vec<(&'static str, Vec<omsi_plugin::api::Value>)>,
     ) -> Io<'a> {
@@ -425,155 +425,8 @@ pub(crate) const PLUGIN_COMMANDS: [&str; 14] = [
     "uncouple",
 ];
 
-/// What the game is doing, for `omsi.info()`.
-pub(crate) fn game_info(app: &crate::App) -> Vec<(&'static str, InfoValue)> {
-    use InfoValue::{Bool, Num, Text};
-    let mut v: Vec<(&'static str, InfoValue)> = Vec::new();
-    v.push((
-        "map",
-        Text(
-            app.world
-                .as_ref()
-                .map(|w| w.global.name.clone())
-                .unwrap_or_default(),
-        ),
-    ));
-    v.push(("clock", Num(app.clock.time)));
-    v.push(("day", Num(app.clock.day_of_year as f64)));
-    v.push(("year", Num(app.clock.year as f64)));
-    v.push(("view", Text(app.view.clone())));
-    v.push(("paused", Bool(app.paused)));
-    v.push(("on_foot", Bool(app.session.on_foot.is_some())));
-    v.push(("multiplayer", Bool(app.net.lan.is_some())));
-    // the situation the game started from (the launcher's "continue": `laststn.osn`)
-    // (relative to the OMSI folder, `/`-separated, whether the launcher passed it absolute or not)
-    if let Some(s) = app.args.situation.as_ref() {
-        let p = std::path::Path::new(s);
-        let rel = p.strip_prefix(&app.args.root).unwrap_or(p);
-        v.push(("situation", Text(rel.to_string_lossy().replace('\\', "/"))));
-    }
-    // this session's, as the personnel file counts them
-    v.push(("crashes", Num(app.session.career.crashes[0] as f64)));
-    v.push(("heavy_crashes", Num(app.session.career.crashes[3] as f64)));
-    v.push(("pedestrians_hit", Num(app.session.career.crashes[1] as f64)));
-    if let Some(t) = app.session.traffic.as_ref() {
-        v.push(("traffic", Num(t.cars.len() as f64)));
-    }
-    if let Some(w) = app.world.as_ref() {
-        v.push((
-            "map_path",
-            Text(w.global.path.to_string_lossy().into_owned()),
-        ));
-    }
-    v.push(("version", Text(crate::startup::VERSION.to_string())));
-    if let Some(p) = app.player.as_ref() {
-        let veh = &p.vehicle;
-        v.push(("speed", Num(veh.physics.velocity_kmh().abs() as f64)));
-        v.push(("delay", Num(veh.host.tt_delay as f64)));
-        // Tile coordinates from global.cfg and metres within the tile (x east, y north).
-        let ((tx, ty), (lx, ly)) = omsi_map::world_to_tile_local(veh.position.x, veh.position.y);
-        v.push(("tile_x", Num(tx as f64)));
-        v.push(("tile_y", Num(ty as f64)));
-        v.push(("tile_pos_x", Num(lx)));
-        v.push(("tile_pos_y", Num(ly)));
-        v.push(("heading", Num(veh.heading.rem_euclid(360.0))));
-        v.push((
-            "vehicle_manufacturer",
-            Text(veh.ty.def.manufacturer.trim().to_string()),
-        ));
-        v.push((
-            "vehicle_model",
-            Text(veh.ty.def.type_name.trim().to_string()),
-        ));
-        // the terminus the bus shows (the hof entry its scripts chose; none for an
-        // `[addterminus_allexit]` one), which is not always the timetable's
-        let shown = match (veh.var("target_index_int"), veh.host.hof.as_ref()) {
-            (Some(i), Some(hof)) if i.is_finite() && i >= 0.0 => hof
-                .termini
-                .get(i.round() as usize)
-                .filter(|t| !t.all_exit)
-                .map(|t| t.texture_id.trim().to_string()),
-            _ => None,
-        };
-        v.push(("destination", Text(shown.unwrap_or_default())));
-        v.push((
-            "passengers",
-            Num(app.session.humans.as_ref().map(|h| h.riding()).unwrap_or(0) as f64),
-        ));
-    }
-    if let Some(d) = app.session.duty.as_ref() {
-        v.push(("line", Text(d.line.trim().to_string())));
-        v.push(("tour", Text(d.tour.trim().to_string())));
-        if let Some(trip) = d.trips.get(d.trip_index) {
-            v.push(("trip", Num(d.trip_index as f64 + 1.0)));
-            v.push(("trips", Num(d.trips.len() as f64)));
-            v.push(("terminus", Text(trip.terminus.trim().to_string())));
-            v.push(("trip_name", Text(trip.name.trim().to_string())));
-            v.push(("stops", Num(trip.stops.len() as f64)));
-            // the bus reached the trip's last stop: the trip is over, though the duty moves on to
-            // the next one only a minute before it leaves
-            v.push(("trip_done", Bool(d.trip_done())));
-            let bus = app.player.as_ref().map(|p| p.vehicle.position);
-            let next_calling = omsi_sim::timetable_run::next_calling_stop(&trip.stops, d.next_stop);
-            stop_info(
-                &mut v,
-                &trip.stops,
-                next_calling,
-                d.at_stop() && next_calling == d.next_stop,
-                bus,
-            );
-            if let Some(stop) = trip.stops.get(next_calling) {
-                if let Some(distance) = app
-                    .menus
-                    .navigator
-                    .as_ref()
-                    .and_then(|n| n.next_stop_distance_for(stop.object_id))
-                {
-                    v.push(("next_stop_distance_nav", Num(distance)));
-                }
-            }
-        }
-    }
-    v
-}
-
-/// `omsi.info()`'s keys of the next stop and the one before it: `stops` the trip's, `next`
-/// the index of the next one, `bus` where the player's bus is.
-fn stop_info(
-    v: &mut Vec<(&'static str, InfoValue)>,
-    stops: &[crate::schedule::PlannedStop],
-    next: usize,
-    at_stop: bool,
-    bus: Option<glam::DVec3>,
-) {
-    use InfoValue::{Bool, Num, Text};
-    // straight-line metres from the bus, where the stop's place is known
-    let distance = |s: &crate::schedule::PlannedStop| {
-        let (bus, stop) = (bus?, s.position?);
-        Some((stop.x - bus.x).hypot(stop.y - bus.y))
-    };
-    if let Some(s) = stops.get(next) {
-        v.push(("next_stop", Text(s.name.trim().to_string())));
-        v.push(("next_stop_number", Num(next as f64 + 1.0)));
-        v.push(("next_stop_arrival", Num(s.arr)));
-        v.push(("next_stop_departure", Num(s.dep)));
-        // the map's object ID of the stop, as the timetable and the map files name it:
-        // outside tools match the stop by it, the name can occur twice
-        v.push(("next_stop_id", Num(s.object_id as f64)));
-        v.push(("at_stop", Bool(at_stop)));
-        if let Some(m) = distance(s) {
-            v.push(("next_stop_distance", Num(m)));
-        }
-    }
-    // the last stop before the next one the trip calls at (passing stations left out)
-    if let Some(s) = stops.iter().take(next).rev().find(|s| s.calls()) {
-        v.push(("previous_stop", Text(s.name.trim().to_string())));
-        v.push(("previous_stop_id", Num(s.object_id as f64)));
-        if let Some(m) = distance(s) {
-            v.push(("previous_stop_distance", Num(m)));
-        }
-    }
-}
+mod game_info;
+pub(crate) use game_info::game_info;
 
 impl Io<'_> {
     /// The `omsi.info()` key of an `.opl` list's `openomsi_<key>` name (any case).
@@ -882,7 +735,7 @@ impl PluginIo for Io<'_> {
         }
     }
 
-    fn keys(&self) -> Vec<(String, bool)> {
+    fn key_events(&self) -> Vec<op::KeyEvent> {
         self.keys.clone()
     }
 
@@ -1046,6 +899,23 @@ impl PluginIo for Io<'_> {
             forward: r.along,
             travelled,
         })
+    }
+    fn bus_cruise(&self) -> Option<f32> {
+        self.app()?.player.as_ref()?.cruise.as_ref().map(|c| c.kmh)
+    }
+    fn bus_set_cruise(&mut self, kmh: Option<f32>) -> bool {
+        let Some(p) = self.player_mut() else {
+            return false;
+        };
+        let min = crate::player::cruise::MIN_KMH;
+        match kmh {
+            Some(k) if k.is_finite() && k >= min && p.vehicle.physics.velocity_kmh() >= min => {
+                p.cruise = Some(crate::player::cruise::Cruise::new(k))
+            }
+            Some(_) => return false,
+            None => p.cruise = None,
+        }
+        true
     }
     fn bus_steer(&self) -> Option<(f32, f32)> {
         self.veh()
@@ -1551,194 +1421,4 @@ fn body_frame_of(v: &omsi_sim::VehicleInstance, section: usize) -> Option<[f64; 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn disabled_session_accepts_cli_flag_and_returns_no_plugins() {
-        use clap::Parser;
-        let normal = crate::cli::Args::try_parse_from(["openomsi"]).unwrap();
-        assert!(!normal.no_plugins);
-        let disabled = crate::cli::Args::try_parse_from(["openomsi", "--no-plugins"]).unwrap();
-        assert!(disabled.no_plugins);
-        assert!(load(disabled.no_plugins).is_empty());
-    }
-
-    fn snapshot(info: Vec<(&'static str, InfoValue)>) -> Io<'static> {
-        Io::snapshot(info)
-    }
-
-    /// A ticket's price or a jolt's acceleration reaches Lua as the number it reads as.
-    #[test]
-    fn f32_values_reach_lua_as_they_read() {
-        assert_eq!(num_f32(2.1), InfoValue::Num(2.1));
-        assert_eq!(num_f32(-5.4), InfoValue::Num(-5.4));
-        assert_eq!(num_f32(38.0), InfoValue::Num(38.0));
-    }
-
-    #[test]
-    fn game_info_names_require_prefix_and_ignore_ascii_case() {
-        let io = snapshot(vec![("heading", InfoValue::Num(93.0))]);
-        assert_eq!(io.game_number("OPENOMSI_Heading"), Some(93.0));
-        for name in [
-            "heading",
-            "openomsi",
-            "openomsi_",
-            "openomsi_unknown",
-            "openomsí_heading",
-            "💡💡💡heading",
-        ] {
-            assert_eq!(io.game_value(name), None, "{name}");
-        }
-    }
-
-    #[test]
-    fn game_info_callbacks_keep_number_boolean_and_text_types() {
-        let io = snapshot(vec![
-            ("speed", InfoValue::Num(42.5)),
-            ("paused", InfoValue::Bool(true)),
-            ("on_foot", InfoValue::Bool(false)),
-            ("destination", InfoValue::Text("Žďár nad Sázavou".into())),
-            ("map_path", InfoValue::Text(String::new())),
-        ]);
-        assert_eq!(io.game_number("openomsi_speed"), Some(42.5));
-        assert_eq!(io.game_number("openomsi_paused"), Some(1.0));
-        assert_eq!(io.game_number("openomsi_on_foot"), Some(0.0));
-        assert_eq!(
-            io.game_string("openomsi_destination").as_deref(),
-            Some("Žďár nad Sázavou")
-        );
-        assert_eq!(io.game_string("openomsi_map_path"), Some(String::new()));
-        assert_eq!(io.game_number("openomsi_destination"), None);
-        assert_eq!(io.game_string("openomsi_speed"), None);
-        assert_eq!(io.game_string("openomsi_paused"), None);
-    }
-
-    #[test]
-    fn game_info_numbers_reject_non_finite_values_and_float_overflow() {
-        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, f64::MAX] {
-            let io = snapshot(vec![("speed", InfoValue::Num(value))]);
-            assert_eq!(io.game_number("openomsi_speed"), None);
-        }
-    }
-
-    #[test]
-    fn legacy_vehicle_callbacks_still_require_a_player_vehicle() {
-        let mut io = snapshot(vec![
-            ("clock", InfoValue::Num(32400.0)),
-            (
-                "map_path",
-                InfoValue::Text("maps/example/global.cfg".into()),
-            ),
-        ]);
-        assert_eq!(io.var("openomsi_clock"), None);
-        assert_eq!(io.string("openomsi_map_path"), None);
-    }
-
-    #[test]
-    fn plugins_next_stop_skips_pass_through_station() {
-        let stop = |id: i64, name: &str, stops: bool| crate::schedule::PlannedStop {
-            object_id: id,
-            name: name.into(),
-            arr: 0.0,
-            dep: 0.0,
-            position: None,
-            dir: Default::default(),
-            stops,
-            closed: None,
-        };
-        let mut closed = stop(12, "Closed stop", true);
-        closed.closed = Some("plugin diversion".into());
-        let stops = vec![
-            stop(11, "Due stop", true),
-            stop(12, "Pass-through", false),
-            closed,
-            stop(13, "Next calling stop", true),
-        ];
-
-        let next = omsi_sim::timetable_run::next_calling_stop(&stops, 1);
-        assert_eq!(next, 3);
-
-        let mut info = Vec::new();
-        stop_info(&mut info, &stops, next, false, None);
-        let get = |key: &str| {
-            info.iter()
-                .find(|(name, _)| *name == key)
-                .map(|(_, value)| value.clone())
-        };
-        assert_eq!(
-            get("next_stop"),
-            Some(InfoValue::Text("Next calling stop".into()))
-        );
-        assert_eq!(get("next_stop_number"), Some(InfoValue::Num(4.0)));
-        assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
-        assert_eq!(get("at_stop"), Some(InfoValue::Bool(false)));
-
-        let depot_stops = vec![
-            stop(21, "Depot start", false),
-            stop(22, "Depot next", false),
-        ];
-        let depot_next = omsi_sim::timetable_run::next_calling_stop(&depot_stops, 0);
-        assert_eq!(depot_next, 0);
-
-        let mut depot_info = Vec::new();
-        stop_info(&mut depot_info, &depot_stops, depot_next, false, None);
-        let depot_get = |key: &str| {
-            depot_info
-                .iter()
-                .find(|(name, _)| *name == key)
-                .map(|(_, value)| value.clone())
-        };
-
-        assert_eq!(
-            depot_get("next_stop"),
-            Some(InfoValue::Text("Depot start".into()))
-        );
-        assert_eq!(depot_get("next_stop_number"), Some(InfoValue::Num(1.0)));
-        assert_eq!(depot_get("at_stop"), Some(InfoValue::Bool(false)));
-    }
-
-    /// The next stop and the one before it, by object ID, with their distances: the stop
-    /// before skips a passing station, and a stop with no known place has no distance.
-    #[test]
-    fn info_names_the_stops_on_either_side_of_the_bus() {
-        let stop = |id: i64, name: &str, x: f64, stops: bool| crate::schedule::PlannedStop {
-            object_id: id,
-            name: name.into(),
-            arr: 0.0,
-            dep: 0.0,
-            position: (x >= 0.0).then_some(glam::DVec3::new(x, 0.0, 5.0)),
-            dir: Default::default(),
-            stops,
-            closed: None,
-        };
-        let stops = vec![
-            stop(11, "A", 0.0, true),
-            stop(12, "B", 100.0, false),
-            stop(13, "C", -1.0, true),
-        ];
-        let mut v = Vec::new();
-        stop_info(
-            &mut v,
-            &stops,
-            2,
-            true,
-            Some(glam::DVec3::new(30.0, 40.0, 0.0)),
-        );
-        let get = |k: &str| v.iter().find(|(key, _)| *key == k).map(|(_, x)| x.clone());
-        assert_eq!(get("next_stop"), Some(InfoValue::Text("C".into())));
-        assert_eq!(get("next_stop_id"), Some(InfoValue::Num(13.0)));
-        assert_eq!(get("at_stop"), Some(InfoValue::Bool(true)));
-        assert_eq!(get("next_stop_distance"), None);
-        assert_eq!(get("previous_stop"), Some(InfoValue::Text("A".into())));
-        assert_eq!(get("previous_stop_id"), Some(InfoValue::Num(11.0)));
-        assert_eq!(get("previous_stop_distance"), Some(InfoValue::Num(50.0)));
-        // at the first stop there is none before it
-        let mut v = Vec::new();
-        stop_info(&mut v, &stops, 0, false, None);
-        assert!(
-            v.iter()
-                .all(|(k, _)| !k.starts_with("previous_stop") && *k != "next_stop_distance")
-        );
-    }
-}
+mod tests;

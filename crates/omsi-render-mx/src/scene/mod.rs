@@ -10,6 +10,15 @@ pub(crate) mod overlay;
 mod upload;
 pub(crate) use lod::object_screen_size;
 
+/// What `Renderer::set_sky_textures_vanilla` was given last.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SkyTextures {
+    pub(crate) gradients: [TextureId; 3],
+    pub(crate) clouds: Option<TextureId>,
+    pub(crate) vanilla_clouds: Option<TextureId>,
+    pub(crate) sun: Option<TextureId>,
+}
+
 #[derive(Clone, Copy, Default)]
 pub(crate) struct InstanceBounds {
     pub(crate) centre: Vec3,
@@ -274,6 +283,10 @@ pub struct Scene {
     /// Which snow track field `camera_heaps` holds (see `LightRes::snow_track_made`).
     pub(crate) snow_track_seen: u32,
     pub(crate) sky_bind_group: Option<HeapGroup>,
+    /// The textures `sky_bind_group` was made with (`set_sky_textures_vanilla`): the group
+    /// also binds the renderer's own sky buffers and cloud noise, so a rebuilt renderer
+    /// makes it again from these (`Renderer::rebuild_in_place`).
+    pub(crate) sky_textures: Option<SkyTextures>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the

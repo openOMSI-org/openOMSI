@@ -16,9 +16,22 @@ pub(super) fn fleet_ahead() -> f64 {
         .unwrap_or(FLEET_AHEAD)
 }
 
+/// How near the player a trip's way must come for its vehicles to be read ahead: the tiles
+/// are loaded to about 1.2 km round the player (a bus is only put on loaded tiles), and the
+/// rest gives the reading and uploading time while the player drives towards the trip.
+/// Every trip of the map was read ahead before: 131 vehicle sets, 108 s of the loading and
+/// more graphics memory than an 8 GB card has, on a map of 1971 tiles.
+pub(super) const FLEET_NEAR: f64 = 3000.0;
+
 /// A vehicle set nobody has drawn for this long, and that no departure of the next
 /// minutes wants, leaves the GPU.
 pub(super) const FLEET_IDLE: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// The same while the textures are over their budget (or the card over the video memory):
+/// a set nobody draws goes after a few seconds, before the budget makes the textures of what
+/// is drawn smaller. Kept for 90 s whatever the memory, the sets of the buses gone by held
+/// the card's memory while the scenery round the player lost its detail (#4031).
+pub(super) const FLEET_IDLE_SHORT: std::time::Duration = std::time::Duration::from_secs(5);
 
 impl Schedule {
     /// Upload the vehicles of the buses on the road at `day_time` and of the departures of the
@@ -29,6 +42,11 @@ impl Schedule {
     /// Every type of the fleet is started once, which reads the files its scripts and
     /// displays need: done on the first bus of a type that comes along, those were frames of
     /// 60 to 170 ms in the middle of a drive.
+    ///
+    /// The texture budget is kept between the sets (`centers`: where the player starts): the
+    /// whole fleet went up in one stage of the loading with no look at it, and 131 sets took
+    /// an 8 GB card past its memory before the first frame, every texture after that one
+    /// refused (1451 of them).
     pub fn precache(
         &mut self,
         world: &World,
@@ -36,17 +54,27 @@ impl Schedule {
         scene: &mut Scene,
         traffic: Option<&mut crate::traffic::Traffic>,
         day_time: f64,
+        centers: &[glam::DVec3],
     ) {
         let t0 = std::time::Instant::now();
         let Some(t) = traffic else { return };
-        let sets = self.upcoming_sets(world, t, day_time);
+        self.fleet_near = centers.to_vec();
+        let sets = self.upcoming_sets(world, t, day_time, None);
         // a few sets at a time: read on the workers, uploaded, and the copies let go
         let mut most_held = 0usize;
+        let mut shrunk = 0usize;
         for chunk in sets.chunks(3) {
             most_held = most_held.max(world.prefetch_vehicle_sets(renderer, chunk));
             for (ty, scheme) in chunk {
                 world.precache_vehicle(renderer, scene, ty, *scheme);
             }
+            shrunk += world.update_texture_budget(renderer, scene, centers, true);
+            renderer.flush_uploads();
+        }
+        if shrunk > 0 {
+            log::info!(
+                "timetable fleet: {shrunk} textures made smaller or sent to be read again on the way to keep the texture budget"
+            );
         }
         let t1 = std::time::Instant::now();
         let mut seen = std::collections::HashSet::new();
@@ -154,16 +182,21 @@ impl Schedule {
     }
 
     /// The vehicle sets of the trips on the road at `day_time` and of the departures of the
-    /// next [`FLEET_AHEAD`] seconds.
+    /// next [`FLEET_AHEAD`] seconds that come near the player. The ways of trips not seen yet
+    /// are worked out until `until`; a trip left for later counts as coming near.
     pub(super) fn upcoming_sets(
         &mut self,
         world: &World,
         traffic: &mut Traffic,
         day_time: f64,
+        until: Option<std::time::Instant>,
     ) -> Vec<(Arc<VehicleType>, Option<usize>)> {
         let mut out = Vec::new();
         let mut seen: HashSet<crate::scene::VehicleKey> = HashSet::new();
         for i in self.sim.upcoming(day_time, fleet_ahead()) {
+            if !self.comes_near(i, until) {
+                continue;
+            }
             let Some(c) = self.sim.choose(i, &*world.data()) else {
                 continue;
             };
@@ -174,6 +207,44 @@ impl Schedule {
             }
         }
         out
+    }
+
+    /// Whether the trip of departure `i` comes within [`FLEET_NEAR`] of the player (see
+    /// `fleet_near`); a trip whose way the timetable does not give, or whose way is not
+    /// worked out yet and `until` has passed, is taken as coming near.
+    fn comes_near(&mut self, i: usize, until: Option<std::time::Instant>) -> bool {
+        if self.fleet_near.is_empty() {
+            return true;
+        }
+        let trip = self.sim.trip_index(i);
+        if !self.trip_tiles.contains_key(&trip) {
+            if until.is_some_and(|t| std::time::Instant::now() >= t) {
+                return true;
+            }
+            let t0 = std::time::Instant::now();
+            let tiles = self.sim.trip_tiles(i);
+            if omsi_cfg::flags::OMSI_PROFILE.is_set() && t0.elapsed().as_secs_f64() > 0.005 {
+                log::info!(
+                    "timetable fleet: the way of trip {} worked out in {:.1} ms",
+                    self.sim.trip_of(i).name,
+                    t0.elapsed().as_secs_f64() * 1000.0
+                );
+            }
+            self.trip_tiles.insert(trip, tiles);
+        }
+        let tiles = &self.trip_tiles[&trip];
+        if tiles.is_empty() {
+            return true;
+        }
+        let ts = omsi_map::tile_size();
+        tiles.iter().any(|&(x, y)| {
+            let (x0, y0) = (x as f64 * ts, y as f64 * ts);
+            self.fleet_near.iter().any(|c| {
+                let dx = (x0 - c.x).max(c.x - (x0 + ts)).max(0.0);
+                let dy = (y0 - c.y).max(c.y - (y0 + ts)).max(0.0);
+                dx * dx + dy * dy <= FLEET_NEAR * FLEET_NEAR
+            })
+        })
     }
 
     /// Keep the GPU's fleet to the vehicles of the next minutes: read the sets of the
@@ -212,7 +283,10 @@ impl Schedule {
         self.fleet_check = day_time;
         // (the sets a departure found missing go first: they are what the next tries wait for)
         let mut sets = std::mem::take(&mut self.fleet_wanted);
-        sets.extend(self.upcoming_sets(world, traffic, day_time));
+        // (the trips' ways worked out for 2 ms a look at most: a dozen trips coming into the
+        // window at once took a frame of half a second)
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(2);
+        sets.extend(self.upcoming_sets(world, traffic, day_time, Some(until)));
         let keep: HashSet<crate::scene::VehicleKey> = sets
             .iter()
             .map(|(t, s)| (t.def.path.clone(), *s))
@@ -228,7 +302,11 @@ impl Schedule {
         let idle = omsi_cfg::flags::OMSI_FLEET_IDLE
             .parse::<f32>()
             .map(std::time::Duration::from_secs_f32)
-            .unwrap_or(FLEET_IDLE);
+            .unwrap_or(if world.textures_over_budget() {
+                FLEET_IDLE_SHORT
+            } else {
+                FLEET_IDLE
+            });
         if world.trim_vehicle_sets(renderer, scene, &keep, idle) > 0 {
             crate::release_free_memory();
         }

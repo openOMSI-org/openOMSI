@@ -25,6 +25,7 @@ use glam::{DVec2, DVec3, Quat, Vec2, Vec3};
 use omsi_vehicle::Vehicle;
 
 mod body;
+pub mod load;
 pub mod realism;
 #[cfg(test)]
 mod tests;
@@ -492,6 +493,52 @@ pub struct CoupledPart {
     pub load: f32,
     /// The weight it hangs on the coupling (N), pressing the body down there.
     pub joint_load: f32,
+    /// The turning of its driven wheels (rad/s), whether they spin (or slide) against the
+    /// road, and their axle's `achse_inertia_inv` (see [`CoupledPart::drive_step`]).
+    pub spin: f32,
+    pub slipping: bool,
+    pub inertia_inv: f32,
+}
+
+impl CoupledPart {
+    /// One substep of the part's driven wheels, given the drive each of them is handed
+    /// (`want`, N at the tyre), the road's friction and the part's speed over the road (m/s):
+    /// what they push the part with (N, all of them). Omsi.exe runs a rear section as a
+    /// vehicle of its own whose driven wheels turn as the bus's own do (0x7e2574 adds their
+    /// turning to `n_Wheel`): they grip until the drive asks more than the road gives, and
+    /// then spin, passing on the sliding friction, until their speed meets the road's again
+    /// - as [`RigidWheel::advance_spin`]. Held at the grip without turning faster, the driven
+    /// rear axle of an articulated bus never spun on ice and the bus crept off as if the
+    /// drive were on the front section's axle (#1083).
+    pub fn drive_step(&mut self, want: f32, friction: f32, v: f32, h: f32) -> f32 {
+        let n = self.driven_wheels as f32;
+        if n == 0.0 {
+            return 0.0;
+        }
+        let r = self.radius.max(0.1);
+        let mu_n = friction * self.driven_load / n;
+        let ground = v / r;
+        let no_slip = omsi_cfg::flags::OMSI_NO_WHEEL_SLIP.is_set();
+        if !self.slipping || no_slip {
+            self.spin = ground;
+            if want.abs() <= mu_n * 1.02 || mu_n <= 0.0 || no_slip {
+                self.slipping = false;
+                return (want * n).clamp(-mu_n * n, mu_n * n);
+            }
+            self.slipping = true;
+        }
+        let slide = self.spin * r - v;
+        let pass = sign(slide) * mu_n;
+        self.spin += h * self.inertia_inv * (want - pass);
+        let after = self.spin * r - v;
+        if sign(after) * sign(slide) < 0.0
+            || (v.abs() < STANDING && self.spin.abs() * r < STANDING && want.abs() <= mu_n)
+        {
+            self.slipping = false;
+            self.spin = ground;
+        }
+        pass * n
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -560,6 +607,9 @@ pub struct RigidBody {
     /// is passed, one grip, no unevenness, no air drag of its own: the vehicle scripts add it to
     /// their brake force, as in Omsi.exe).
     pub realistic: bool,
+    /// The body as its file made it, before the people aboard were put in (see
+    /// `RigidBody::set_load`); None while nothing was ever loaded.
+    pub unloaded: Option<load::Unloaded>,
 }
 
 static REALISTIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

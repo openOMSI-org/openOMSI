@@ -199,23 +199,11 @@ pub(crate) fn duty_args_with_settings(d: &Duty, root: &Path, st: &Value) -> Resu
         date = Some(format!("{year:04}-{mo:02}-{dd:02}"));
     }
     if let Some(dt) = date {
-        // (only the machine's calendar is fitted to the map's [years], so that its AI lists,
-        // chrono and timetables fit; the date the player chose in the launcher stays)
-        let real_date = on("use_real_date") && !on("use_real_year");
-        let span = if real_date {
-            let file = root.join(&d.map);
-            let file = if file.is_file() {
-                file
-            } else {
-                resolve_content(&d.map).unwrap_or(file)
-            };
-            omsi_map::GlobalCfg::load(&file)
-                .ok()
-                .and_then(|g| year_span_of(&g))
-        } else {
-            None
-        };
-        a.extend(["--date".into(), date_for_game(&dt, real_date, span)]);
+        // (the year stays the duty's: Omsi.exe's [useActDate] takes the day alone from the
+        // computer's calendar and leaves the year as it is, 0x708780; a map's [years] only
+        // pick the year of a random start, 0x678518. Fitted to them, a chrono scenario of
+        // 2021 on a map whose [years] end in 2018 was never reached, #3283)
+        a.extend(["--date".into(), dt]);
     }
     if let Some(w) = d.weather.as_deref().filter(|x| !x.trim().is_empty()) {
         a.extend(["--weather".into(), w.trim().to_string()]);

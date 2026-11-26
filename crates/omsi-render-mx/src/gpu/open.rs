@@ -160,30 +160,7 @@ impl Renderer {
                 mb(m.budget_bytes)
             );
         }
-        // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
-        // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
-        // violation, so wgpu cannot turn it into a recoverable error. Start those adapters
-        // with the conservative feature set instead. OMSI_INTEL_FULL_GPU=1 is useful for
-        // retesting after a driver update without rebuilding the game.
-        let intel_vulkan_safe = cfg!(windows)
-            && info.backend == mx::Backend::Vulkan
-            && info.vendor == 0x8086
-            && !omsi_cfg::flags::OMSI_INTEL_FULL_GPU.is_set();
-        let options = if intel_vulkan_safe {
-            log::warn!(
-                "Intel Vulkan adapter detected ({}): using the stable driver profile (1x MSAA, 1x anisotropy, SSAO and runtime texture compression off); set OMSI_INTEL_FULL_GPU=1 after updating the Intel driver to retry the requested settings",
-                info.name
-            );
-            RenderOptions {
-                msaa: 1,
-                anisotropy: 1,
-                ssao: false,
-                compress_textures: false,
-                ..options
-            }
-        } else {
-            options
-        };
+        let (options, intel_vulkan_safe) = intel_vulkan_profile(&info, options);
         // a small or shared graphics chip gets a lighter picture (see `lighter_picture`)
         GL_BACKEND.store(
             info.backend == mx::Backend::Gl,
@@ -841,6 +818,7 @@ impl Renderer {
                 cloud_shape_view: sky.cloud_shape_view,
                 cloud_detail_view: sky.cloud_detail_view,
                 cloud_sampler: sky.cloud_sampler,
+                moon_view: sky.moon_view,
                 cloud_shape_cpu: sky.cloud_shape_cpu,
                 cloud_view_buf: sky.cloud_view_buf,
                 cloud_sun: None,
@@ -950,6 +928,7 @@ impl Renderer {
             clamp_sampler: defaults.clamp_sampler,
             mirror_sampler: defaults.mirror_sampler,
             address_next: std::cell::Cell::new(TexAddressing::Wrap),
+            vehicle_dirt: Default::default(),
             light_map_next: std::cell::Cell::new(false),
             puddles,
             texture_aspect: None,
@@ -980,6 +959,8 @@ impl Renderer {
             temporal_failed: false,
             temporal_window: false,
             temporal_kept: None,
+            upscaler_retry: None,
+            upscaler_retried: false,
             frame_generation: None,
             temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,
@@ -1036,5 +1017,36 @@ impl Renderer {
             rt,
             mesh_pages: false,
         }
+    }
+}
+
+/// The options an adapter opens with: an Intel one on Vulkan under Windows gets the
+/// conservative profile (see the comment inside), any other the options as they are; and
+/// whether it got the profile.
+fn intel_vulkan_profile(info: &mx::AdapterInfo, options: RenderOptions) -> (RenderOptions, bool) {
+    // The legacy Intel Windows Vulkan branch has repeatedly crashed inside igvk64.dll
+    // while compiling the larger multisampled/SSAO pipeline set. This is a driver access
+    // violation, so wgpu cannot turn it into a recoverable error. Start those adapters
+    // with the conservative feature set instead. OMSI_INTEL_FULL_GPU=1 is useful for
+    // retesting after a driver update without rebuilding the game.
+    let intel_vulkan_safe = cfg!(windows)
+        && info.backend == mx::Backend::Vulkan
+        && info.vendor == 0x8086
+        && !omsi_cfg::flags::OMSI_INTEL_FULL_GPU.is_set();
+    if intel_vulkan_safe {
+        log::warn!(
+            "Intel Vulkan adapter detected ({}): using the stable driver profile (1x MSAA, 1x anisotropy, SSAO and runtime texture compression off); set OMSI_INTEL_FULL_GPU=1 after updating the Intel driver to retry the requested settings",
+            info.name
+        );
+        let options = RenderOptions {
+            msaa: 1,
+            anisotropy: 1,
+            ssao: false,
+            compress_textures: false,
+            ..options
+        };
+        (options, true)
+    } else {
+        (options, false)
     }
 }

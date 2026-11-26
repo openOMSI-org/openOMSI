@@ -70,8 +70,11 @@ fn cs_trace(@builtin(global_invocation_id) gid: vec3<u32>) {
     // --- the sky's occlusion
     let b = basis(n);
     var ao = 0.0;
-    for (var j = 0u; j < 2u; j++) {
-        let u = hammersley(cell * 2u + j, 32u);
+    // (one ray a pixel: the 4 x 4 cells' sixteen directions are what the 5 x 5 filter below
+    // averages anyway - a second ray a pixel cost a quarter of the trace for no change the
+    // filtered picture shows)
+    for (var j = 0u; j < 1u; j++) {
+        let u = fract(hammersley(cell, 16u) + vec2<f32>(0.5, 0.37));
         let rr = sqrt(u.x);
         let phi = 2.0 * PI * u.y;
         let d = b * vec3<f32>(rr * cos(phi), rr * sin(phi), sqrt(max(1.0 - u.x, 0.0)));
@@ -79,7 +82,7 @@ fn cs_trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         // (a hit at the far end of the radius takes away less than one right beside it)
         ao += select(1.0, mix(0.35, 1.0, smoothstep(0.0, 1.0, h.t / p.proj.w)), h.t >= 0.0);
     }
-    textureStore(t_out, px, vec4<f32>(ao * 0.5, lin, vis, 1.0));
+    textureStore(t_out, px, vec4<f32>(ao, lin, vis, 1.0));
 }
 
 // A workgroup's pixels and a border of two round them, read once.

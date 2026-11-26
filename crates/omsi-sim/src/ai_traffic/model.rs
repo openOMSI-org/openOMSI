@@ -336,9 +336,24 @@ impl Footprint {
 pub type PlayerBox = (DVec3, f64, f32, f32, f32);
 
 /// A train: a `.ovh` of `[type] 2` (the A3 underground, the OHE railcar, the regional
-/// trains). A tram is rail-bound too but no train: it asks its lights as a car does.
+/// trains). A tram is rail-bound too but no train: it plans its way as a car does, and asks
+/// the lights on its rails within its own search range (`ai_search_range`).
 pub fn is_train(def: &omsi_vehicle::Vehicle) -> bool {
     matches!(def.kind, omsi_vehicle::VehicleKind::Other(2))
+}
+
+/// How far ahead (m) an AI vehicle's path search runs, by its `[type]`: Omsi.exe's AI
+/// driver (0x7d9128) hands the search (0x716970) 500 m for type 0 (a bus, a car), 20 m for
+/// type 1, 1500 m for type 2 (a train), 5000 m for type 3 (an aircraft) and 1000 m for any
+/// other. The lights on the rails it finds are asked whatever their `[approachdist]`.
+pub fn ai_search_range(def: &omsi_vehicle::Vehicle) -> f32 {
+    match def.kind {
+        omsi_vehicle::VehicleKind::Bus | omsi_vehicle::VehicleKind::Other(0) => 500.0,
+        omsi_vehicle::VehicleKind::Other(1) => 20.0,
+        omsi_vehicle::VehicleKind::Other(2) => 1500.0,
+        omsi_vehicle::VehicleKind::Other(3) => 5000.0,
+        omsi_vehicle::VehicleKind::Other(_) => 1000.0,
+    }
 }
 
 /// The player's rail vehicle on the track, set before each `tick`: the rail lane, the
@@ -895,6 +910,12 @@ impl TrafficSim {
                 .map(|pool| (pool, self.uvg_defaults.clone()));
         }
         state.plan_next(&self.net);
+        if bus.is_none() {
+            // (counted at once: the cars put on the road together spread over the forks)
+            let group = crate::traffic::load_group(state.traffic_pool.as_ref().map(|p| p.0));
+            let plan: Vec<usize> = state.upcoming().collect();
+            self.net.add_load(lane, group, plan);
+        }
         // heavy vehicles (trucks, vans) cruise slower, which is what gets them overtaken
         let heavy = ty.def.mass > 6.0 || bus.is_some();
         personality(&mut state, seed, heavy, ty.def.rowdy_factor);

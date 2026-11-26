@@ -47,8 +47,9 @@ pub struct World {
     pub(super) vehicle_textures: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
     pub(super) player_textures: Arc<Mutex<hashbrown::HashSet<PathBuf>>>,
     pub(super) freetex_reloads: Arc<FreeTextureReloads>,
-    /// GPU meshes of vehicles by (bus file, mesh index), shared across paint schemes.
-    pub(super) vehicle_meshes: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,
+    /// GPU meshes of vehicles by (bus file, mesh index, the mesh file's stamp), shared across
+    /// paint schemes (see `MeshKey`: a mesh rebuilt on disk is a new key, #2618).
+    pub(super) vehicle_meshes: Arc<Mutex<HashMap<MeshKey, (MeshId, usize)>>>,
     /// Vehicle meshes and textures made on a worker, until their set is uploaded.
     pub(super) vehicle_ready: Arc<Mutex<PreparedVehicles>>,
     /// Textures uploaded as RGBA to spare a frame, being compressed on the workers, and the
