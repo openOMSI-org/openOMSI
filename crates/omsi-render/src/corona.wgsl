@@ -445,6 +445,9 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
     // (taken here, in uniform control flow: how much of the sprite one pixel spans)
     let r = length(qin.uv - vec2<f32>(0.5)) * 2.0;
     let px = fwidth(r);
+    // (the same, alike in every direction: `fwidth` of a radius is up to 1.4 times wider
+    // along the diagonals, and a far lamp's spot came out a diamond)
+    let px_round = 2.0 * max(length(dpdx(qin.uv)), length(dpdy(qin.uv)));
     if (in.kind > 0.5 && in.beam < 0.5) {
         // This is the pulled-forward fog halo. Compress just its additive light
         // so the corona core and the volume can still show through it.
@@ -495,6 +498,24 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
             // pass gives it a small halo, not so bright that a tail lamp floods the screen)
             let peak = max(light.r, max(light.g, light.b));
             light = light * (2.5 / max(peak, 2.5));
+        }
+        // A far lamp's sprite is a few pixels across. Drawn as above, its core spans the
+        // whole sprite and every pixel of it is far brighter than white, so the tone curve
+        // flattens it into a disc cut out of the pixel grid: a small square with its corners
+        // torn off, for every distant headlamp, tail lamp and street lamp. Below a radius of
+        // some eight pixels it becomes a round spot instead, laid out in pixels (a bell at
+        // least three quarters of a pixel wide, so that it does not shrink to one hard
+        // pixel), its peak held to three times white: the tone curve keeps the falloff, and
+        // the spot reads as a point of light in the lamp's own colour.
+        let sprite_px = 1.0 / max(px_round, 1e-4);
+        let small = 1.0 - smoothstep(3.0, 8.0, sprite_px);
+        if (small > 0.0) {
+            let s = max(0.42, 0.75 * px_round);
+            let bell = exp(-0.5 * r * r / (s * s)) * (1.0 - smoothstep(1.0 - px_round, 1.0, r));
+            let point = in.color.rgb * max(lit, vec3<f32>(0.25)) * in.color.a * scale;
+            let top = max(point.r, max(point.g, point.b));
+            let spot = point * (3.0 / max(top, 3.0)) * bell;
+            light = mix(light, spot, small);
         }
         return vec4<f32>(light, 1.0);
     }

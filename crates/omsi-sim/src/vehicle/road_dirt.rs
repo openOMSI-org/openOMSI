@@ -18,10 +18,12 @@ pub fn procedural_dirt() -> bool {
     PROCEDURAL.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Whether a vehicle of `def` shows the road dirt in place of its own dirt overlays: not one
-/// whose file says `[procedural_dirt_off]`.
-pub fn procedural_for(def: &omsi_vehicle::Vehicle) -> bool {
-    procedural_dirt() && !def.procedural_dirt_off
+/// Whether a body of `def` shows the road dirt in place of its own dirt overlays: not one
+/// whose file says `[procedural_dirt_off]`, and only while the picture lays it on its vehicle
+/// (`drawn`, `VehicleInstance::road_dirt_drawn`) - a vehicle past the picture's limit keeps
+/// its own dirt instead of standing there washed clean.
+pub fn procedural_for(def: &omsi_vehicle::Vehicle, drawn: bool) -> bool {
+    procedural_dirt() && !def.procedural_dirt_off && drawn
 }
 
 /// How dirty the parts of a body are (0..1 each), and of what.

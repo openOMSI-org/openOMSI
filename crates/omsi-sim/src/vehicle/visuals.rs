@@ -201,7 +201,11 @@ impl VehicleInstance {
                     &self.state.vars,
                     0.0,
                 )
-            } else if super::road_dirt::procedural_for(&self.ty.def) {
+            } else if super::road_dirt::procedural_for(
+                &self.ty.def,
+                self.road_dirt_drawn
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ) {
                 // (the road dirt of the enhanced picture takes its place: one or the other)
                 0.0
             } else {
