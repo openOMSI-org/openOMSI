@@ -176,8 +176,10 @@ impl App {
             && self.player.is_some()
             && self.input.both_drag.is_none()
             && matches!(self.view.as_str(), "driver" | "outside" | "pax" | "free");
+        // 5 is the closed hand for a drag; 4 stays the up-down resize the right-button zoom
+        // shows - they used to share a kind, so the software cursor drew a fist while zooming.
         let kind: u8 = if self.input.both_drag.is_some() && self.menus.game_menu.is_none() {
-            4
+            5
         } else if rmb_zoom && self.menus.game_menu.is_none() {
             4
         } else if self.input.mouse_look && self.menus.game_menu.is_none() {
@@ -225,12 +227,13 @@ impl App {
                 .is_some_and(|m| crate::money::money_hit(m, o, d, &p.vehicle).is_some())
     }
 
-    /// Show the mouse cursor `kind` (0 arrow, 1 pointing hand, 2 cross, 3 arrows, 4 closed hand).
+    /// Show the mouse cursor `kind` (0 arrow, 1 pointing hand, 2 cross, 3 arrows, 4 up-down resize, 5 closed hand).
     pub(crate) fn set_cursor_kind(&mut self, kind: u8) {
         if kind != self.input.cursor_kind {
             self.input.cursor_kind = kind;
             if let Some(w) = self.window.as_ref() {
                 w.set_cursor(match kind {
+                    5 => winit::window::CursorIcon::Grabbing,
                     4 => winit::window::CursorIcon::NsResize,
                     3 => winit::window::CursorIcon::Move,
                     2 => winit::window::CursorIcon::Crosshair,
@@ -250,7 +253,7 @@ impl App {
             || self.menus.dd_scroll_drag.is_some()
             || self.menus.pane_scroll_drag.is_some()
         {
-            return 4;
+            return 5; // the closed hand, not the kind 4 the zoom resize uses
         }
         let Some(u) = self.ui.as_ref() else { return 0 };
         let (x, y) = self.input.cursor;
