@@ -300,12 +300,13 @@ impl App {
             // a switch worked by a passenger of ours: only by one who is in our bus
             Command::Trigger(ev) => {
                 let may = self.net.lan.as_ref().is_some_and(|l| {
-                    omsi_lan::passenger::may_work(
-                        l,
-                        from,
-                        self.player.as_ref().map(|p| &p.vehicle),
-                        &ev,
-                    )
+                    let bus = self.player.as_ref().map(|p| &p.vehicle);
+                    omsi_lan::passenger::may_work(l, from, bus, &ev)
+                        || self.net.crew.may_serve_switch(
+                            from,
+                            omsi_lan::passenger::aboard_inside(l, from, bus),
+                            &ev,
+                        )
                 });
                 match self.player.as_mut().filter(|_| may) {
                     Some(p) => {
@@ -317,6 +318,26 @@ impl App {
                     ),
                 }
             }
+            // who serves another player's bus: its driver tells the session (#2859)
+            Command::Crew(conductor) => match conductor {
+                Some(id) => {
+                    log::info!("LAN: player {id} is the conductor of player {from}'s bus");
+                    self.net.conductors.insert(from, id);
+                    if self.net.lan.as_ref().is_some_and(|l| l.my_id == id) {
+                        self.service_msg = Some((
+                            format!(
+                                "You are the conductor of player {from}'s bus: its cash desk is yours"
+                            ),
+                            5.0,
+                        ));
+                    }
+                }
+                None => {
+                    if self.net.conductors.remove(&from).is_some() {
+                        log::info!("LAN: player {from}'s bus has no conductor now");
+                    }
+                }
+            },
             // what the session allows of voice chat: asked of the host, told by it
             Command::SpeedLimitAsked => {
                 if let Some(l) = self
