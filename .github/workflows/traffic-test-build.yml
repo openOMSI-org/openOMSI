@@ -14,10 +14,8 @@ jobs:
     name: Build Windows x64
     runs-on: windows-latest
     steps:
-      - name: Check out functional traffic fixes
+      - name: Check out current branch commit
         uses: actions/checkout@v4
-        with:
-          ref: 29eb88d50bd6f66cbca182bb2dbb62cb3451b59b
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
