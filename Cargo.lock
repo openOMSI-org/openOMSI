@@ -4898,6 +4898,7 @@ dependencies = [
  "omsi-world",
  "parking_lot 0.13.0",
  "rayon",
+ "zip",
 ]
 
 [[package]]

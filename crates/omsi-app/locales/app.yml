@@ -8981,3 +8981,25 @@ _version: 2
   en: "Draw the mouse cursor in the game"
 "For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor":
   en: "For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor"
+"Entry doors":
+  en: "Entry doors"
+"As the bus says":
+  en: "As the bus says"
+"Front door only":
+  en: "Front door only"
+"First two doors":
+  en: "First two doors"
+"Rear door only":
+  en: "Rear door only"
+"Pay without a ticket":
+  en: "Pay without a ticket"
+"Accepted lateness":
+  en: "Accepted lateness"
+"Stops fill up in free drive":
+  en: "Stops fill up in free drive"
+"Only for due trips":
+  en: "Only for due trips"
+"Passengers wait for open doors":
+  en: "Passengers wait for open doors"
+"IBIS stop follows the duty":
+  en: "IBIS stop follows the duty"

@@ -57,6 +57,39 @@ impl std::ops::DerefMut for Humans {
     }
 }
 
+impl Humans {
+    /// The passenger settings, handed over the same way wherever the people are made (single
+    /// player, LAN, online room, offscreen) and when the options change in the game.
+    /// `transfers` says whether connections are allowed in this session at all.
+    pub(crate) fn apply_settings(&mut self, s: &crate::settings::Settings, transfers: bool) {
+        use omsi_sim::people::{entry_doors::EntryDoors, free_drive::FreeDriveFill};
+        let enhanced = s.passenger_animation == "enhanced";
+        self.exact_fare = s.exact_fare;
+        self.transfer_percent = if transfers && s.passenger_connections {
+            s.passenger_transfer_percent
+        } else {
+            0.0
+        };
+        self.visual_hailing = s.passenger_hailing && enhanced;
+        self.visual_full_bus_reaction = s.passenger_full_bus_reaction && enhanced;
+        self.bad_driving = s.pax_bad_driving;
+        self.entry_doors = EntryDoors::from_setting(&s.pax_entry_doors);
+        self.no_ticket = s.pax_no_ticket;
+        self.late_tolerance = (s.pax_late_tolerance_min as f64 * 60.0).max(0.0);
+        self.free_drive_fill = FreeDriveFill::from_setting(&s.pax_free_drive);
+        self.board_when_stopped = s.pax_board_when_stopped;
+        self.boarding = s.boarding.clone();
+        self.rear_door_boarding = s.rear_door_boarding;
+        self.stand_chance = s.standing_chance;
+        self.short_rides_stand = s.pax_short_rides_stand;
+        self.voices = match s.pax_voices.as_str() {
+            "off" => 2,
+            "tickets" => 1,
+            _ => 0,
+        };
+    }
+}
+
 /// Where the player looks from (`omsi_sim::people::Eye`), made from the camera.
 pub struct Eye;
 

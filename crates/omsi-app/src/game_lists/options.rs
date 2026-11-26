@@ -613,6 +613,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "detail_textures" => s.detail_textures,
         "clouds" => s.clouds,
         "ray_tracing" => s.ray_tracing_on,
+        "rt_gi" => s.rt_gi,
         "cloud_shadows" => s.cloud_shadows,
         "light_glow" => s.light_glow,
         "volumetric_fog" => s.volumetric_fog,
@@ -1043,6 +1044,10 @@ fn toggle_set_graphics_and_controls(
         "clouds" => {
             app.settings.clouds = on;
             Some(("clouds", bit))
+        }
+        "rt_gi" => {
+            app.settings.rt_gi = on;
+            Some(("rt_gi", bit))
         }
         "ray_tracing" => {
             app.settings.ray_tracing_on = on;

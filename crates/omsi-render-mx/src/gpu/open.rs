@@ -959,6 +959,8 @@ impl Renderer {
             temporal_failed: false,
             temporal_window: false,
             temporal_kept: None,
+            upscaler_retry: None,
+            upscaler_retried: false,
             frame_generation: None,
             temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,

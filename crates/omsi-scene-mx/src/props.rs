@@ -1829,7 +1829,7 @@ pub(super) struct BudgetMemo {
     limit: u64,
     room: u64,
     centers: Vec<DVec3>,
-    in_use: u64,
+    pub(super) in_use: u64,
 }
 
 impl BudgetMemo {

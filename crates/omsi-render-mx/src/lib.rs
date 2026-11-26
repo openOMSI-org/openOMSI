@@ -168,6 +168,12 @@ pub struct Renderer {
     temporal_failed: bool,
     temporal_window: bool,
     temporal_kept: Option<temporal::Runtime>,
+    /// The upscaler failed while the card was out of memory: the options it was drawn with,
+    /// tried once more when the texture budget has had its time (`retry_upscaler`), its
+    /// runtime kept meanwhile in `temporal_kept` (Streamline on Vulkan cannot start twice).
+    upscaler_retry: Option<(std::time::Instant, RenderOptions)>,
+    /// That retry was made (there is no second).
+    upscaler_retried: bool,
     /// The window's frame generation, while it has one (`SurfaceState::set_frame_generation`).
     frame_generation: Option<temporal::FrameGeneration>,
     /// The frame's numbers, waiting for `temporal_present` at the end of it.
@@ -368,6 +374,11 @@ pub struct RenderOptions {
     /// reflections, where the device can trace rays (hardware ray queries); elsewhere the
     /// enhanced picture as it is.
     pub ray_tracing: bool,
+    /// Experimental, with `ray_tracing`: ray-traced global illumination (the settings'
+    /// `rt_gi`) - the light the surfaces round a point send back to it, one diffuse bounce
+    /// traced at half size and gathered over the frames (rt/gi.rs). Read every frame: it
+    /// needs no rebuild.
+    pub rt_gi: bool,
     /// The Enhanced picture's street-scale light: the sky's occlusion by houses and trees
     /// over 18 m, and the light the surfaces send to each other (the settings'
     /// `street_light`). `None`: as the chip allows (off on a small or shared one, see
@@ -419,6 +430,7 @@ impl Default for RenderOptions {
             no_enhanced: false,
             preview_only: false,
             ray_tracing: false,
+            rt_gi: false,
             street_light: None,
             light_shadows: 1,
             cloud_shadows: false,

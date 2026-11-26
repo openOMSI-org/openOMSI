@@ -98,11 +98,7 @@ impl PeopleSim {
     }
 
     /// The stops and pavements around the other players of a LAN session (host).
-    pub fn populate_lan_centers(
-        &mut self,
-        world: &dyn World,
-        net: &Network,
-    ) {
+    pub fn populate_lan_centers(&mut self, world: &dyn World, net: &Network) {
         if self.lan_centers.is_empty() {
             return;
         }
@@ -142,7 +138,9 @@ impl PeopleSim {
                     Place::Ground => None,
                 };
                 let waiting = match &p.state {
-                    State::Pax(x) if aboard.is_none() && x.task == Task::WaitingForBus => x.stop.zip(x.spot),
+                    State::Pax(x) if aboard.is_none() && x.task == Task::WaitingForBus => {
+                        x.stop.zip(x.spot)
+                    }
                     _ => None,
                 };
                 Some(LanPerson {
@@ -150,7 +148,11 @@ impl PeopleSim {
                     ty: p.ty.clone(),
                     pos: p.position,
                     heading: p.heading,
-                    speed: if aboard.is_some() { 0.0 } else { p.vel.length() },
+                    speed: if aboard.is_some() {
+                        0.0
+                    } else {
+                        p.vel.length()
+                    },
                     activity: p.activity,
                     aboard,
                     waiting,
@@ -168,7 +170,9 @@ impl PeopleSim {
             let Some(i) = self.people.iter().position(|p| p.id == *id) else {
                 continue;
             };
-            if !matches!(&self.people[i].state, State::Pax(x) if x.task == Task::WaitingForBus) || self.people[i].remote {
+            if !matches!(&self.people[i].state, State::Pax(x) if x.task == Task::WaitingForBus)
+                || self.people[i].remote
+            {
                 continue;
             }
             // (still counted at their stop while that bus stands there, as the people
@@ -182,6 +186,28 @@ impl PeopleSim {
             out.push(*id);
         }
         out
+    }
+
+    /// LAN play (host): the stops player `player`'s bus has stood at and now left: more than
+    /// 60 m behind it, as Omsi.exe counts a bus past a station (0x7d5124). Each is told once.
+    pub fn remote_stops_left(&mut self, player: u32) -> Vec<i64> {
+        let id = remote_bus_id(player);
+        let Some(bus) = self.remote_now.iter().find(|b| b.id == BusId::Ai(id)) else {
+            self.remote_stood.retain(|s| s.0 != id);
+            return Vec::new();
+        };
+        let mut left = Vec::new();
+        for (&stop, s) in &self.stops {
+            if (bus.pos - s.pos).length() < 60.0 {
+                if bus.speed.abs() < 0.5 {
+                    self.remote_stood.insert((id, stop));
+                }
+            } else if self.remote_stood.remove(&(id, stop)) {
+                left.push(stop);
+            }
+        }
+        left.sort_unstable();
+        left
     }
 
     /// Draw the host's people from now on (`on`), or simulate our own again. Everybody who
@@ -208,7 +234,10 @@ impl PeopleSim {
         if on {
             self.next_id = self.next_id.max(1 << 30);
             for p in self.people.iter_mut().filter(|p| p.puppet.is_none()) {
-                self.bodies.ops.push(BodyOp::Renamed { from: p.id, to: self.next_id });
+                self.bodies.ops.push(BodyOp::Renamed {
+                    from: p.id,
+                    to: self.next_id,
+                });
                 p.id = self.next_id;
                 self.next_id += 1;
             }
@@ -246,20 +275,12 @@ impl PeopleSim {
     }
 
     /// One of the host's people appears here (client).
-    pub fn mirror_add(
-        &mut self,
-        world: &dyn World,
-        id: u32,
-        ty: usize,
-        pose: &MirrorPose,
-    ) -> bool {
+    pub fn mirror_add(&mut self, world: &dyn World, id: u32, ty: usize, pose: &MirrorPose) -> bool {
         if self.people.iter().any(|p| p.id == id) {
             return false;
         }
         let state = State::Idle;
-        let Some(i) =
-            self.spawn_as(world, pose.pos, pose.heading, state, Some(ty))
-        else {
+        let Some(i) = self.spawn_as(world, pose.pos, pose.heading, state, Some(ty)) else {
             return false;
         };
         self.next_id -= 1;
@@ -340,8 +361,12 @@ impl PeopleSim {
     /// game stay the host's: nothing is taken over.)
     pub fn grant(&mut self, id: u32) -> bool {
         self.claimed.remove(&id);
-        let Some((stop, spot)) = self.mirror_wait.remove(&id) else { return false };
-        let Some(i) = self.people.iter().position(|p| p.id == id && p.remote) else { return false };
+        let Some((stop, spot)) = self.mirror_wait.remove(&id) else {
+            return false;
+        };
+        let Some(i) = self.people.iter().position(|p| p.id == id && p.remote) else {
+            return false;
+        };
         if !self.stops.contains_key(&stop) {
             return false;
         }

@@ -896,6 +896,7 @@ fn a_skin_plan_moves_the_vertices_as_the_weighted_bones_do() {
             ..Default::default()
         },
         file: PathBuf::new(),
+        stamp: 0,
         materials: Vec::new(),
         overrides: Vec::new(),
         pivot: Mat4::IDENTITY,
