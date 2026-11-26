@@ -111,8 +111,17 @@ impl Hof {
             )
             .max(2);
         let (a, b) = (lines[0].trim(), lines[1].trim());
+        // a `*.tchof.xml` beside the file says what each string is: the text keeps that
+        // slot's length and capitals (a bus's front box in capitals, its interior display as
+        // typed); without one the lines go in as they are (#732)
+        let template = self.template();
         let strings = (0..n)
-            .map(|k| if k == 1 { b } else { a }.to_string())
+            .map(|k| {
+                let text = if k == 1 { b } else { a };
+                template
+                    .as_ref()
+                    .map_or_else(|| text.to_string(), |t| t.fit_terminus(k, text))
+            })
             .collect();
         let index = hof
             .termini
@@ -145,6 +154,14 @@ impl Hof {
     pub fn load(path: &Path) -> Result<Hof, omsi_cfg::CfgError> {
         let f = CfgFile::read(path)?;
         Ok(Self::parse(&f))
+    }
+
+    /// The `*.tchof.xml` template that belongs to this depot file, if its pack ships one
+    /// (#732): what each terminus string is, how long it may be and whether it is written in
+    /// capitals. OMSI 2 ignores the file; nothing changes without it.
+    pub fn template(&self) -> Option<crate::hof_template::HofTemplate> {
+        let path = crate::hof_template::template_for(&self.path, &self.name)?;
+        crate::hof_template::HofTemplate::load(&path)
     }
 
     /// Whether the IBIS trips carry line `line` (a map's line name, "11-11s"): a trip coded
