@@ -272,6 +272,8 @@
 "Arrow keys only": "Лише стрілки"
 "Volume": "Гучність"
 "Doppler effect": "Ефект Доплера"
+"5.1 sound (five speakers)": "Звук 5.1 (п'ять динаміків)"
+"On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off": "У системі 5.1 кожен звук іде від динаміка, що відповідає його розташуванню: двері з боку, з якого вони відчиняються, двигун з-за кабіни. Лише два динаміки: вимкнено"
 "Traffic": "Рух"
 "Surroundings": "Оточення"
 "Timetable vehicles": "Транспорт за розкладом"

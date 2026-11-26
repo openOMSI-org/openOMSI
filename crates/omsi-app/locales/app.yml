@@ -619,6 +619,10 @@ _version: 2
   en: "Volume"
 "Doppler effect":
   en: "Doppler effect"
+"5.1 sound (five speakers)":
+  en: "5.1 sound (five speakers)"
+"On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off":
+  en: "On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off"
 "Traffic":
   en: "Traffic"
 "Surroundings":
