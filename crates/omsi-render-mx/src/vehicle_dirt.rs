@@ -8,9 +8,10 @@
 use crate::Renderer;
 use glam::{DVec3, Vec3};
 
-/// How many vehicles carry their dirt in a frame (the nearest the camera, as the app lists
-/// them).
-pub const DIRT_VEHICLES: usize = 6;
+/// How many bodies carry their road dirt in a frame (the nearest the camera, whole vehicles
+/// only, as `omsi_scene::road_dirt` lists them); the vehicles past them keep their own dirt
+/// overlays.
+pub const DIRT_VEHICLES: usize = 64;
 /// The uniform's vectors per vehicle (see `VehicleDirt::pack`).
 pub(crate) const DIRT_ROWS: usize = 8;
 

@@ -2978,3 +2978,5 @@
 "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.": "การประกาศอัตโนมัติ: รถคันนี้ไม่มีปุ่ม IBIS \"ป้ายถัดไป\" เสียงประกาศจึงยังคงเป็นของรถเอง"
 "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.": "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
 "Automatic announcements are off.": "การประกาศอัตโนมัติปิดอยู่"
+"Draw other players' buses in less detail when far away": "วาดรถบัสของผู้เล่นคนอื่นโดยมีรายละเอียดน้อยลงเมื่ออยู่ไกล"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "ผู้เล่นหลายคน: เกิน 120 ม. และเมื่ออัตราเฟรมต่ำกว่า 20 รถบัสของผู้เล่นคนอื่นจะยังคงตัวถังไว้ แต่จะไม่แสดงคนขับและป้ายแสดงจุดหมายปลายทาง โดยจะกลับมาแสดงเต็มรูปแบบเมื่อเกิน 26 fps"

@@ -8,6 +8,7 @@ use glam::{DVec3, Vec3};
 use omsi_render::{DIRT_VEHICLES, Renderer, VehicleDirt};
 use omsi_sim::VehicleInstance;
 use omsi_sim::vehicle::RoadDirt;
+use std::sync::atomic::Ordering;
 
 /// The shape of one body (`def`) at `origin` turned by `rotation` (model frame to world),
 /// carrying `dirt`.
@@ -99,22 +100,52 @@ fn bodies(v: &VehicleInstance) -> impl Iterator<Item = VehicleDirt> + '_ {
 /// One frame: the dirt of the `vehicles` nearest `eye` with any on them, or none (`on`: the
 /// setting). The road dirt is drawn by the enhanced picture alone: without one the vehicles
 /// keep their own dirt overlays (`omsi_sim::vehicle::road_dirt::set_procedural_dirt`).
+/// The picture holds `DIRT_VEHICLES` bodies; the vehicles are given them whole, nearest
+/// first, and each is told whether it got them (`VehicleInstance::road_dirt_drawn`): one
+/// that did not keeps its own dirt overlays, a clean one has nothing to lay on.
 pub fn frame(r: &Renderer, on: bool, eye: DVec3, vehicles: &[(u64, &VehicleInstance)]) {
     let on = on && !r.options.no_enhanced;
     omsi_sim::vehicle::road_dirt::set_procedural_dirt(on);
     if !on {
+        for (_, v) in vehicles {
+            v.road_dirt_drawn.store(false, Ordering::Relaxed);
+        }
         r.set_vehicle_dirt(&[]);
         return;
     }
-    let mut list: Vec<(f64, VehicleDirt)> = vehicles
-        .iter()
-        .filter(|(_, v)| !v.road_dirt.clean() || forced().is_some())
-        .flat_map(|(_, v)| bodies(v).collect::<Vec<_>>())
-        .map(|b| (b.origin.distance_squared(eye), b))
-        .collect();
-    list.sort_by(|a, b| a.0.total_cmp(&b.0));
-    let list: Vec<VehicleDirt> = list.into_iter().take(DIRT_VEHICLES).map(|x| x.1).collect();
+    let forced = forced().is_some();
+    let mut dirty: Vec<(f64, &VehicleInstance)> = Vec::new();
+    for (_, v) in vehicles {
+        if v.road_dirt.clean() && !forced {
+            v.road_dirt_drawn.store(true, Ordering::Relaxed);
+        } else {
+            dirty.push((v.position.distance_squared(eye), v));
+        }
+    }
+    dirty.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let list = allot(dirty.into_iter().map(|(_, v)| v), DIRT_VEHICLES, |v| {
+        bodies(v).filter(VehicleDirt::any).collect()
+    });
     r.set_vehicle_dirt(&list);
+}
+
+/// The bodies of `vehicles` (nearest first) that fit in `room`, whole vehicles only, each
+/// told whether it got its place.
+fn allot<'a>(
+    vehicles: impl Iterator<Item = &'a VehicleInstance>,
+    room: usize,
+    bodies_of: impl Fn(&VehicleInstance) -> Vec<VehicleDirt>,
+) -> Vec<VehicleDirt> {
+    let mut list: Vec<VehicleDirt> = Vec::new();
+    for v in vehicles {
+        let b = bodies_of(v);
+        let fits = list.len() + b.len() <= room;
+        if fits {
+            list.extend(b);
+        }
+        v.road_dirt_drawn.store(fits, Ordering::Relaxed);
+    }
+    list
 }
 
 #[cfg(test)]

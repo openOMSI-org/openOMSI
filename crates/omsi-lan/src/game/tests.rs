@@ -199,10 +199,18 @@ fn a_slash_line_is_a_command_and_not_chat() {
         ChatLine::Command("/login driver hunter2".into())
     );
     assert_eq!(
-        chat_line("  /duty 12 A  "),
+        chat_line("/duty 12 A  "),
         ChatLine::Command("/duty 12 A".into()),
-        "trimmed"
+        "trimmed at the end"
     );
+    // only a line that starts with the slash and a letter or digit right after it
+    for said in ["  /duty 12 A", "/ hello", "//", "/)", "and/or"] {
+        assert_eq!(
+            chat_line(said),
+            ChatLine::Say(said.trim().into()),
+            "{said:?} is said"
+        );
+    }
     assert_eq!(
         chat_line("hello there"),
         ChatLine::Say("hello there".into())
