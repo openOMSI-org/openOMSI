@@ -25,7 +25,7 @@ impl App {
             self.world.as_ref(),
             self.paused,
         ) {
-            steps::duty_step(
+            let note = steps::duty_step(
                 d,
                 p,
                 w,
@@ -38,6 +38,19 @@ impl App {
                 Some(&mut self.integrations.plugin_events),
                 announce,
             );
+            // (#3281) a bus whose announcements the game cannot press on says so once a trip,
+            // where the player is looking, rather than only in `game.log`
+            if let Some(text) = note {
+                crate::ui::push_notice(
+                    &mut self.menus.notices,
+                    crate::ui::Notice {
+                        kind: crate::ui::NoticeKind::Info,
+                        text: text.to_string(),
+                        left: 8.0,
+                        total: 8.0,
+                    },
+                );
+            }
         }
         if let Some(p) = self.player.as_mut() {
             let riders = self

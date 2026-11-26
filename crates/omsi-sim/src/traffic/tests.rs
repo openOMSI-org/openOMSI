@@ -1324,8 +1324,11 @@ fn rejecting_a_short_return_preserves_reach_and_existing_exit_choices() {
     assert!(net.reach[5] >= DEAD_END);
     let mut at_joint = AiState::new(3, 0.0, 7);
     assert_eq!(at_joint.choose_after(&net, 3), Some(4));
+    // both exits stay ways on: the emptier is taken (Omsi.exe 0x71f584), so a car on the
+    // first sends the next one to the other
     let mut selected = [0; 2];
-    for seed in 1..128 {
+    for (seed, load) in (1..16).flat_map(|s| [(s, None), (s, Some(1usize)), (s, Some(5))]) {
+        net.refresh_load(load.map(|l| (l, 0u32, Vec::new())));
         let mut car = AiState::new(0, 0.0, seed);
         car.plan_next(&net);
         match car.planned_next {
@@ -1333,6 +1336,11 @@ fn rejecting_a_short_return_preserves_reach_and_existing_exit_choices() {
             Some(5) => selected[1] += 1,
             other => panic!("unexpected exit {other:?}"),
         }
+        assert_eq!(
+            car.planned_next,
+            Some(if load == Some(1) { 5 } else { 1 }),
+            "seed {seed}, a car on {load:?}"
+        );
     }
     assert!(
         selected.iter().all(|&n| n > 0),
@@ -2205,4 +2213,98 @@ fn a_door_program_without_green_holds_its_stop_in_state_four() {
         !gdr.held,
         "green with yellow (state 8) is a go phase: the changeover to it is not held"
     );
+}
+
+/// A road north (0) forking into straight on (1, then 3) and a right turn (2).
+fn fork() -> Network {
+    let a = LaneBuilder::arc(DVec3::ZERO, 0.0, 60.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let b = LaneBuilder::arc(a.end(), 0.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let c = LaneBuilder::arc(a.end(), 0.0, 30.0, 20.0, 0.0, LaneKind::Street, 3.0);
+    let d = LaneBuilder::arc(b.end(), 0.0, 600.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let e = LaneBuilder::arc(
+        c.end(),
+        c.headings[c.headings.len() - 1] as f64,
+        600.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut net = Network {
+        lanes: vec![a, b, c, d, e],
+        ..Default::default()
+    };
+    for l in net.lanes.iter_mut() {
+        l.density = 1.0;
+    }
+    net.link(1.5);
+    net.compute_reach();
+    net
+}
+
+/// Omsi.exe (FUN_0071ee40, 0x71f584): at a fork a random car takes the way on whose chain
+/// has the fewest cars for its density, the first on a tie - not a dice throw, after which
+/// a queue all went the same way (#2909).
+#[test]
+fn a_car_takes_the_emptiest_way_on_from_a_fork() {
+    let mut net = fork();
+    assert_eq!(net.lanes[0].next, vec![1, 2]);
+    assert_eq!(net.chain_of(1), vec![1, 3]);
+    for seed in 1..40u64 {
+        // both empty: the first
+        net.refresh_load(Vec::<(usize, u32, Vec<usize>)>::new());
+        let mut car = AiState::new(0, 0.0, seed);
+        assert_eq!(car.choose_after(&net, 0), Some(1), "seed {seed}");
+        // a car far along the straight on (lane 3 is the same chain): the turn
+        net.refresh_load(vec![(3usize, 0u32, Vec::new())]);
+        let mut car = AiState::new(0, 0.0, seed);
+        assert_eq!(car.choose_after(&net, 0), Some(2), "seed {seed}");
+        // one each: the first again; a car of another group does not count
+        net.refresh_load(vec![
+            (3, 0, Vec::new()),
+            (2, 0, Vec::new()),
+            (4, 1, Vec::new()),
+        ]);
+        let mut car = AiState::new(0, 0.0, seed);
+        assert_eq!(car.choose_after(&net, 0), Some(1), "seed {seed}");
+    }
+}
+
+/// The fill is the cars over the density: twice the density takes two cars to one.
+#[test]
+fn the_ways_on_fill_in_proportion_to_their_density() {
+    let mut net = fork();
+    for l in [1, 3] {
+        net.lanes[l].density = 2.0;
+    }
+    // 1 car on the straight on (fill 1/4) and none on the turn (0): the turn
+    net.refresh_load(vec![(3usize, 0u32, Vec::new())]);
+    assert_eq!(AiState::new(0, 0.0, 3).choose_after(&net, 0), Some(2));
+    // 2 straight on (2/4), 1 on the turn (1/2): a tie, the first
+    net.refresh_load(vec![
+        (3usize, 0u32, Vec::new()),
+        (1, 0, Vec::new()),
+        (4, 0, Vec::new()),
+    ]);
+    assert_eq!(AiState::new(0, 0.0, 3).choose_after(&net, 0), Some(1));
+    // 2 straight on, 0 on the turn: the turn
+    net.refresh_load(vec![(3usize, 0u32, Vec::new()), (1, 0, Vec::new())]);
+    assert_eq!(AiState::new(0, 0.0, 3).choose_after(&net, 0), Some(2));
+}
+
+/// A queue of cars coming to the fork one after the other spreads over both ways: each
+/// counts on the branch it has planned before it gets there.
+#[test]
+fn a_queue_spreads_over_the_ways_on() {
+    let mut net = fork();
+    net.refresh_load(Vec::<(usize, u32, Vec<usize>)>::new());
+    let mut took = Vec::new();
+    for k in 0..6u64 {
+        let mut car = AiState::new(0, 50.0 - k as f32 * 8.0, 11 + k);
+        car.plan_next(&net);
+        let plan: Vec<usize> = car.upcoming().collect();
+        took.push(plan[0]);
+        net.add_load(0, 0, plan);
+    }
+    assert_eq!(took, vec![1, 2, 1, 2, 1, 2]);
 }

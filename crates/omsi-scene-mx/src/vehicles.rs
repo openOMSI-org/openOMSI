@@ -1732,9 +1732,21 @@ struct SlotAlpha {
     see_through: bool,
     transparent_layer_hint: bool,
     named_body: bool,
+    has_volume: bool,
     repair_body_depth: bool,
     /// Blended, and cut below Omsi.exe's alpha reference as well (see `MaterialExtra::alpha_cut`).
     tint_cut: bool,
+}
+
+pub(super) fn is_reflective_body(
+    named_body: bool,
+    named_pane: bool,
+    has_transmap: bool,
+    has_envmap: bool,
+    has_volume: bool,
+    clear_window: bool,
+) -> bool {
+    named_body && has_volume && !named_pane && !has_transmap && has_envmap && !clear_window
 }
 
 /// The alpha mode of a vehicle's material slot: what the model.cfg declares, mended for dirt films, shadow decals, panes and (on request) bodies.
@@ -1833,12 +1845,27 @@ fn slot_alpha(
             m.texture
         );
     }
-    let see_through = !named_pane
-        && !cover
-        && declared_alpha == AlphaMode::Blend
+    let named_body = ["body", "wagenkasten", "karos", "chassis", "kuzov"]
+        .iter()
+        .any(|part| mesh_name.contains(part));
+    let has_volume = material_has_vehicle_volume(&vm.data, slot);
+    let texture_see_through = declared_alpha == AlphaMode::Blend
         && coverage
             .as_ref()
             .is_some_and(|mask| slot_is_see_through(&vm.data, slot, mask));
+    let clear_window = declared_alpha == AlphaMode::Blend
+        && coverage
+            .as_ref()
+            .is_some_and(|mask| slot_is_clear_window(&vm.data, slot, mask));
+    let is_env_body = is_reflective_body(
+        named_body,
+        named_pane,
+        transmap.is_some(),
+        ov.iter().any(|o| o.envmap.is_some()),
+        has_volume,
+        clear_window,
+    );
+    let see_through = !named_pane && !cover && !is_env_body && texture_see_through;
     if see_through {
         log::debug!(
             "  {} slot {slot} '{}': see-through by its texture's alpha, writes no depth",
@@ -1864,14 +1891,11 @@ fn slot_alpha(
     // (the name alone still says what is drawn as glass: the same test finds
     // a gauge's needle film, a blind's net and the shadow under the bus)
     let transparent_layer_hint = named_pane;
-    let named_body = ["body", "wagenkasten", "karos", "chassis", "kuzov"]
-        .iter()
-        .any(|part| mesh_name.contains(part));
     let mesh_has_overlay = def.materials.iter().any(|o| o.no_z_write);
     // (a body-sized part in any case: a name or a bump map alone also took a
     // dashboard's display or a sticker on a mesh called "body" for bodywork)
-    let body_hint = (named_body || ov.iter().any(|o| o.bumpmap.is_some()) || !mesh_has_overlay)
-        && material_has_vehicle_volume(&vm.data, slot);
+    let body_hint =
+        (named_body || ov.iter().any(|o| o.bumpmap.is_some()) || !mesh_has_overlay) && has_volume;
     // a layer over another mesh of the same shape drawn before it (the WH UK
     // AI cars' baked shading over their paint, `[matl_alpha] 2`): blended as
     // the model says - made opaque, the dark bake covered the paint and the
@@ -1931,6 +1955,7 @@ fn slot_alpha(
         see_through,
         transparent_layer_hint,
         named_body,
+        has_volume,
         repair_body_depth,
         tint_cut,
     }
@@ -1959,9 +1984,7 @@ fn slot_extra(
     ),
     lm_white: &dyn Fn(&[&MaterialDef]) -> bool,
 ) -> ([f32; 4], [f32; 3], MaterialExtra) {
-    let SlotCx {
-        vm, def, slot, m, ..
-    } = *cx;
+    let SlotCx { vm, def, m, .. } = *cx;
     let SlotAlpha {
         alpha,
         declared_alpha,
@@ -1970,6 +1993,7 @@ fn slot_extra(
         see_through,
         transparent_layer_hint,
         named_body,
+        has_volume,
         repair_body_depth,
         tint_cut,
     } = *a;
@@ -2013,10 +2037,7 @@ fn slot_extra(
     extra.alpha_cut = tint_cut && alpha == AlphaMode::Blend;
     // (chrome: a small opaque part with a sphere map, not the body - see
     // `MaterialExtra::metal_ok`)
-    extra.metal_ok = envmap.is_some()
-        && alpha == AlphaMode::Opaque
-        && !named_body
-        && !material_has_vehicle_volume(&vm.data, slot);
+    extra.metal_ok = envmap.is_some() && alpha == AlphaMode::Opaque && !named_body && !has_volume;
     // A few stock vehicles leave noZwrite off on window/dirt materials even
     // though their alpha mode is Blend. They are transparent colour layers,
     // not solid shadow casters; letting them into the shadow map paints the
