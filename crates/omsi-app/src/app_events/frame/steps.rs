@@ -80,6 +80,17 @@ pub(crate) fn traffic_tick(
     0.0
 }
 
+/// The blind spot the traffic sees around the player's bus, written into the bus's scripts
+/// (#2090): `BSM_Left`, `BSM_Right` and `BSM_Rear` turn 1 while there is a car beside or
+/// behind, and their `_Dist` give the gap in metres. Measured from the AI traffic's own
+/// bodies (`omsi_sim::ai_traffic::blind_spot`), so it costs one pass over the cars near the
+/// bus. A vehicle whose `[varlist]` declares none of the six is left exactly as it was.
+pub(crate) fn blind_spot(t: &traffic::Traffic, player: Option<&mut Player>) {
+    let Some(p) = player else { return };
+    let spot = t.sim.blind_spot(player_outline(p));
+    p.vehicle.apply_blind_spot(spot);
+}
+
 /// The AI vehicles round the player's bus that it collides with (none with `collide` off:
 /// the options' [no_collision_vehToVeh], the bus drives through the traffic).
 pub(crate) fn traffic_boxes(t: &traffic::Traffic, player: Option<&mut Player>, collide: bool) {

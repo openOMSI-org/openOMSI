@@ -193,6 +193,8 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
             cx.player.player.as_mut(),
             cx.common.settings.collision_vehicles,
         );
+        // the blind spot the traffic sees beside and behind the bus (#2090)
+        steps::blind_spot(t, cx.player.player.as_mut());
         // (the sounds and the picture only in the frame's last tick: the triggers the cars
         // fire wait in them until then, and only the last tick's state is drawn)
         let view_due = cx.clock.fixed_tick.view_due();
