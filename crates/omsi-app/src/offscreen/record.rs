@@ -240,7 +240,7 @@ impl Offscreen<'_> {
             reverb_mix,
         });
         if let Some(p) = self.player.as_mut() {
-            p.sound_step(Some(a), inside, inside);
+            p.sound_step(Some(a), inside, inside, self.settings.vol_traction);
         }
         let street = crate::weather_setup::street_condition(&self.weather, self.wetness);
         if let Some(t) = self.traffic.as_mut() {

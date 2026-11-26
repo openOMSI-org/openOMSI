@@ -145,6 +145,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "ambient", "Ambience", "The place, the weather, the birds of the season and the town's life, from real recordings"),
         slider_row(app, "vol_ambient", "Ambience volume", "How loud the ambience is", &pct),
         slider_row(app, "vol_scenery", "Surroundings", "How loud the sounds of the scenery are", &pct),
+        slider_row(app, "vol_traction", "Traction", "How loud the motor of the bus you drive is (trams and trolleybuses too)", &pct),
         switch_row(app, "doppler", "Doppler effect", "Approaching sounds higher, receding ones lower"),
         pick("pax_voices", "Passenger voices", "What passengers say"),
         switch_row(app, "voice_enabled", "Voice chat in multiplayer", "Hold the nearby (V) or radio (B) key to talk. The microphone is used only while a key is held; nothing is recorded"),

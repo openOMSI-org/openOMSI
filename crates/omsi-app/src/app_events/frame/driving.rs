@@ -138,6 +138,7 @@ pub(super) fn player_step(cx: PlayerStepCx, dt: f32) {
             cx.sound.audio.as_ref(),
             cx.view.cam.in_cab,
             !matches!(cx.view.view.as_str(), "free" | "foot"),
+            cx.common.settings.vol_traction,
         );
         crate::devtools::apply_holds(cx.ui.devtools.as_deref(), &mut p.vehicle);
         if let Some(n) = p.cruise_note.take() {
