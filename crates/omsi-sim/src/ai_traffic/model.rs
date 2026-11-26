@@ -90,14 +90,10 @@ pub struct AiCar {
     pub since_player_at_light: f32,
     /// Junction lanes this car has claimed to drive through (`TPathInfo::reservePaths`).
     pub reserved: Vec<usize>,
-    /// The light (controller, lamp) the driver decided to pass on yellow.
+    /// The light (controller, lamp) whose line its front went over while it showed
+    /// yellow, until that light is behind it.
     pub amber: Option<(usize, usize)>,
-    /// That decision was taken standing first at the light's line as it went green.
-    pub amber_start: bool,
     pub passing: Option<Passing>,
-    /// The current light and the car's random choice for approaching it on yellow.
-    pub current_light: Option<(usize, usize)>,
-    pub amber_decision: f32,
     /// Finished (a dead end, the end of a timetable trip, given up): taken off the road as
     /// soon as nobody can see it.
     pub gone: bool,
@@ -340,9 +336,24 @@ impl Footprint {
 pub type PlayerBox = (DVec3, f64, f32, f32, f32);
 
 /// A train: a `.ovh` of `[type] 2` (the A3 underground, the OHE railcar, the regional
-/// trains). A tram is rail-bound too but no train: it asks its lights as a car does.
+/// trains). A tram is rail-bound too but no train: it plans its way as a car does, and asks
+/// the lights on its rails within its own search range (`ai_search_range`).
 pub fn is_train(def: &omsi_vehicle::Vehicle) -> bool {
     matches!(def.kind, omsi_vehicle::VehicleKind::Other(2))
+}
+
+/// How far ahead (m) an AI vehicle's path search runs, by its `[type]`: Omsi.exe's AI
+/// driver (0x7d9128) hands the search (0x716970) 500 m for type 0 (a bus, a car), 20 m for
+/// type 1, 1500 m for type 2 (a train), 5000 m for type 3 (an aircraft) and 1000 m for any
+/// other. The lights on the rails it finds are asked whatever their `[approachdist]`.
+pub fn ai_search_range(def: &omsi_vehicle::Vehicle) -> f32 {
+    match def.kind {
+        omsi_vehicle::VehicleKind::Bus | omsi_vehicle::VehicleKind::Other(0) => 500.0,
+        omsi_vehicle::VehicleKind::Other(1) => 20.0,
+        omsi_vehicle::VehicleKind::Other(2) => 1500.0,
+        omsi_vehicle::VehicleKind::Other(3) => 5000.0,
+        omsi_vehicle::VehicleKind::Other(_) => 1000.0,
+    }
 }
 
 /// The player's rail vehicle on the track, set before each `tick`: the rail lane, the
@@ -485,6 +496,55 @@ pub fn point_at(trail: &std::collections::VecDeque<(f64, DVec3)>, u: f64) -> Opt
     Some(a.1 + (b.1 - a.1) * t)
 }
 
+/// The track behind a rail vehicle just put at `s` on `lane` (odometer `odometer` there), as a
+/// trail it could have come along: back along its lane, then on into the lane before it that
+/// runs on most nearly straight, a metre at a time (past as many short lanes as a metre takes).
+pub fn rail_track_behind(
+    net: &Network,
+    lane: usize,
+    s: f32,
+    odometer: f64,
+) -> std::collections::VecDeque<(f64, DVec3)> {
+    let mut points = Vec::new();
+    let (mut lane, mut s) = (lane, s.max(0.0));
+    let mut d = 0.0f64;
+    'walk: while d <= RAIL_TRAIL {
+        points.push((odometer - d, net.lanes[lane].at(s).0));
+        s -= 1.0;
+        // (a bounded number of lanes: a loop of lanes without length would never end)
+        for _ in 0..64 {
+            if s >= 0.0 {
+                break;
+            }
+            let start = net.lanes[lane].headings.first().copied().unwrap_or(0.0);
+            let before = net
+                .prev
+                .get(lane)
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|&p| net.lanes[p].kind == LaneKind::Rail)
+                .min_by(|&a, &b| {
+                    let turn = |p: usize| {
+                        crate::traffic::wrap_deg(
+                            start - net.lanes[p].headings.last().copied().unwrap_or(start),
+                        )
+                        .abs()
+                    };
+                    turn(a).total_cmp(&turn(b))
+                });
+            let Some(p) = before else { break 'walk };
+            s += net.lanes[p].length();
+            lane = p;
+        }
+        if s < 0.0 {
+            break;
+        }
+        d += 1.0;
+    }
+    points.into_iter().rev().collect()
+}
+
 /// A body for a vehicle that has just been put on the way `state` describes, with the
 /// vehicle posed on it.
 pub fn place_body(
@@ -573,8 +633,6 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Op
     } else {
         (1.01 + 0.11 * rg(3)).clamp(0.7, 1.3)
     };
-    state.standstill_gap = 0.8 + 0.7 * ru(20);
-
 
     let r_bias = rowdy.map(|r| r.clamp(-1.5, 1.5)).unwrap_or(0.0);
 
@@ -596,7 +654,6 @@ pub fn personality(state: &mut AiState, seed: u64, heavy: bool, rowdy_factor: Op
 
     state.honk_factor =
         (1.0 - 0.25 * r_bias + 0.2 * rg(8)).max(if rowdy.is_some() { 0.1 } else { 0.2 });
-    state.amber_factor = (0.03 + 0.02 * r_bias + 0.01 * rg(9)).clamp(0.0, 0.2);
     // the hardest braking of ordinary driving: a lorry's or a bus's driver stays further
     // under the emergency stop's ceiling than a car's
     let r2 = (((seed >> 7) ^ (seed >> 41)) & 0xff) as f32 / 255.0;
@@ -618,6 +675,96 @@ pub fn is_bicycle(def: &omsi_vehicle::Vehicle) -> bool {
             || part.contains("bicicleta")
             || matches!(part, "bike" | "bike.ovh")
     })
+}
+
+#[cfg(test)]
+mod rail_track_tests {
+    use super::*;
+    use crate::traffic::LaneBuilder;
+
+    /// A tram put 10 m into a straight that follows a 30 m bend to the right: the track behind
+    /// it runs back round the bend, not on along the straight's line, and not into another
+    /// lane that meets the bend's end at a right angle.
+    #[test]
+    fn a_tram_put_on_its_track_has_the_bend_behind_it() {
+        let mut net = Network::default();
+        let r = 30.0;
+        let bend_len = r * std::f64::consts::FRAC_PI_2;
+        net.lanes.push(LaneBuilder::arc(
+            DVec3::ZERO,
+            0.0,
+            bend_len,
+            r,
+            0.0,
+            LaneKind::Rail,
+            1.5,
+        ));
+        net.lanes.push(LaneBuilder::arc(
+            DVec3::new(r, r, 0.0),
+            90.0,
+            50.0,
+            0.0,
+            0.0,
+            LaneKind::Rail,
+            1.5,
+        ));
+        net.lanes.push(LaneBuilder::arc(
+            DVec3::new(r, 0.0, 0.0),
+            0.0,
+            r,
+            0.0,
+            0.0,
+            LaneKind::Rail,
+            1.5,
+        ));
+        net.prev = vec![Vec::new(), vec![2, 0], Vec::new()];
+        let trail = rail_track_behind(&net, 1, 10.0, 500.0);
+        assert_eq!(
+            trail.back().map(|t| t.0),
+            Some(500.0),
+            "it ends where the tram stands"
+        );
+        let back = |d: f64| point_at(&trail, 500.0 - d).unwrap();
+        let on_bend =
+            |p: DVec3| ((p - DVec3::new(r, 0.0, 0.0)).truncate().length() - r).abs() < 0.3;
+        assert!(
+            on_bend(back(25.0)) && on_bend(back(40.0)),
+            "round the bend: {} {}",
+            back(25.0),
+            back(40.0)
+        );
+        assert!((back(5.0).y - r).abs() < 0.01, "on its own straight first");
+    }
+
+    /// Lanes shorter than the metre between two points of the trail are crossed in one go:
+    /// the trail runs on through them into the long lane behind, on the line of the track.
+    #[test]
+    fn the_track_behind_runs_through_short_lanes() {
+        let mut net = Network::default();
+        let mut y = 0.0;
+        for len in [20.0, 0.3, 0.4, 10.0] {
+            net.lanes.push(LaneBuilder::arc(
+                DVec3::new(0.0, y, 0.0),
+                0.0,
+                len,
+                0.0,
+                0.0,
+                LaneKind::Rail,
+                1.5,
+            ));
+            y += len;
+        }
+        net.prev = vec![Vec::new(), vec![0], vec![1], vec![2]];
+        let trail = rail_track_behind(&net, 3, 5.0, 500.0);
+        for back in 0..=20 {
+            let p = point_at(&trail, 500.0 - back as f64).unwrap();
+            let want = 25.7 - back as f64;
+            assert!(
+                p.x.abs() < 0.01 && (p.y - want).abs() < 0.01,
+                "{back} m back: {p}, not y = {want}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -763,6 +910,12 @@ impl TrafficSim {
                 .map(|pool| (pool, self.uvg_defaults.clone()));
         }
         state.plan_next(&self.net);
+        if bus.is_none() {
+            // (counted at once: the cars put on the road together spread over the forks)
+            let group = crate::traffic::load_group(state.traffic_pool.as_ref().map(|p| p.0));
+            let plan: Vec<usize> = state.upcoming().collect();
+            self.net.add_load(lane, group, plan);
+        }
         // heavy vehicles (trucks, vans) cruise slower, which is what gets them overtaken
         let heavy = ty.def.mass > 6.0 || bus.is_some();
         personality(&mut state, seed, heavy, ty.def.rowdy_factor);
@@ -883,10 +1036,7 @@ impl TrafficSim {
             since_player_at_light: f32::MAX,
             reserved: Vec::new(),
             amber: None,
-            amber_start: false,
             passing: None,
-            current_light: None,
-            amber_decision: 0.0,
             gone: false,
             fresh: 1.5,
             merge_after: None,
@@ -922,6 +1072,13 @@ impl TrafficSim {
             scheme,
             guard: Default::default(),
         });
+        if kind == LaneKind::Rail && !self.cars[self.cars.len() - 1].vehicle.trailers.is_empty() {
+            let net = &self.net;
+            let c = self.cars.last_mut().unwrap();
+            c.rail_trail = rail_track_behind(net, lane, s, c.state.odometer as f64);
+            let (trail, state, vehicle) = (&c.rail_trail, &c.state, &mut c.vehicle);
+            vehicle.retrail(0.0, &|d| Some(rail_behind(trail, state, net, d)));
+        }
         if kind != LaneKind::Air {
             let i = self.cars.len() - 1;
             if let Some(gap) = self.red_ahead(i) {
