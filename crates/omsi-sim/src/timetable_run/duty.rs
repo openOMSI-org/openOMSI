@@ -681,6 +681,24 @@ impl PlayerDuty {
         self.left_late.map(|l| l.max(due)).unwrap_or(due)
     }
 
+    /// How far the bus still is from the stop it is due at, and how far that stop stands from
+    /// the one before it on the trip (metres, straight line) - what an approach announcement
+    /// is measured against (#4033, see `announce::approach_metres`). The stop before is None
+    /// at a trip's first stop, or where it has no place; the pair is None while the bus or the
+    /// stop has no place at all.
+    pub fn leg_distances(&self) -> Option<(f32, Option<f32>)> {
+        let trip = self.trip();
+        let here = self.position?;
+        let next = trip.stops.get(self.next_stop)?.position?;
+        let before = self
+            .next_stop
+            .checked_sub(1)
+            .and_then(|k| trip.stops.get(k))
+            .and_then(|s| s.position);
+        let length = |a: glam::DVec3, b: glam::DVec3| (b - a).truncate().length() as f32;
+        Some((length(here, next), before.map(|p| length(p, next))))
+    }
+
     /// The clock's time of day as the duty counts it: the day before or after when that is
     /// nearer the trip under way, so a duty across midnight (picked at 23:00 for trips from
     /// 0:49, or running from 23:40 into the night) is neither 22 hours late nor early.

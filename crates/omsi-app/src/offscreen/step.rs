@@ -453,8 +453,8 @@ impl Offscreen<'_> {
     /// The player's duty and the personnel file.
     pub(super) fn duty_step(&mut self) {
         let (args, dt) = (self.args, self.dt);
-        let announce = self.settings.auto_announce;
         let weight = self.settings.passenger_weight();
+        let announce = self.settings.announce_policy();
         let Self {
             ref mut player,
             ref mut duty,

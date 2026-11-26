@@ -3628,6 +3628,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     passenger_defaults(&mut v);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
+    announce_defaults(&mut v);
     // OMSI's own options
     for (k, d) in [
         ("maintenance", json!(0)),
@@ -4508,6 +4509,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "auto_announce"
             | "rear_door_boarding"
             | "ambient" => v[&k] = json!(b(val)),
+            k if k.starts_with("announce_") => set_announce_setting(&mut v, &k, val),
             "pax_late_tolerance_min" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4580,6 +4582,48 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         v["passenger_animation"] = json!("original");
     }
     v
+}
+
+fn announce_defaults(v: &mut Value) {
+    v["announce_arrival"] = json!(true);
+    v["announce_departure"] = json!(true);
+    v["announce_approach"] = json!(false);
+    v["announce_approach_m"] = json!(120);
+}
+
+fn set_announce_setting(v: &mut Value, key: &str, val: &str) {
+    let b = |s: &str| {
+        matches!(
+            s.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on" | "yes"
+        )
+    };
+    match key {
+        "announce_arrival" | "announce_departure" | "announce_approach" => v[key] = json!(b(val)),
+        "announce_approach_m" => {
+            v[key] = json!(
+                val.trim()
+                    .parse::<f64>()
+                    .map(|x| x.clamp(0.0, 1000.0))
+                    .unwrap_or(120.0)
+            )
+        }
+        _ => {}
+    }
+}
+
+fn push_announce_settings(
+    text: &mut String,
+    b: impl Fn(&str, bool) -> u8,
+    f: impl Fn(&str, f64) -> f64,
+) {
+    text.push_str(&format!(
+        "announce_arrival={}\nannounce_departure={}\nannounce_approach={}\nannounce_approach_m={}\n",
+        b("announce_arrival", true),
+        b("announce_departure", true),
+        b("announce_approach", false),
+        f("announce_approach_m", 120.0).clamp(0.0, 1000.0)
+    ));
 }
 
 /// OMSI's tutorials (`Tutorials/menu_<n>_<LANG>.html`): per lesson its title and what
@@ -5336,6 +5380,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("auto_announce", false),
         b("pax_no_ticket", false)
     ));
+    push_announce_settings(&mut text, &b, &f);
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),
