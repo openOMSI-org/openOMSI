@@ -1355,10 +1355,6 @@ impl Plugins {
     /// Load the plugins of each `plugins` folder given (the first folder's copy of an
     /// `.opl` name wins).
     pub fn load(dirs: &[PathBuf], hosts: &HostConfig) -> Plugins {
-        // the hosts a plugin's WebSocket feeds may reach: the player's file beside the plugins
-        if let Some(root) = dirs.first().and_then(|d| d.parent()) {
-            ws::load_hosts(root);
-        }
         Self::load_with_process_grants(dirs, hosts, api::process::ProcessGrants::from_env())
     }
 
@@ -1386,6 +1382,9 @@ impl Plugins {
         process_grants: api::process::ProcessGrants,
         process_permissions: Option<std::sync::Arc<api::process::ProcessPermissions>>,
     ) -> Plugins {
+        if let Some(dir) = dirs.first() {
+            ws::load_hosts(dir);
+        }
         let mut loaded: Vec<Plugin> = Vec::new();
         let mut status = status::Status::new(hosts.status_file.clone());
         let off = |name: &str, stem: &str| status::is_off(&hosts.off, name, stem);

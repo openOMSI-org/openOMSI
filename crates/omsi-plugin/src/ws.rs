@@ -159,10 +159,10 @@ pub fn hosts_from(text: &str) -> Vec<String> {
 /// [`load_hosts`]). Empty until then, which allows nothing.
 static HOSTS: Mutex<Option<Vec<String>>> = Mutex::new(None);
 
-/// Read `websocket-hosts.txt` from the plugins folder `root` (`#` comments, one host per
+/// Read `websocket-hosts.txt` from the plugins folder `dir` (`#` comments, one host per
 /// line, at most [`SLOTS`]) and keep it. A missing file allows nothing.
-pub fn load_hosts(root: &std::path::Path) {
-    let text = std::fs::read_to_string(root.join(HOSTS_FILE)).unwrap_or_default();
+pub fn load_hosts(dir: &std::path::Path) {
+    let text = std::fs::read_to_string(dir.join(HOSTS_FILE)).unwrap_or_default();
     let hosts = hosts_from(&text);
     if !hosts.is_empty() {
         log::info!(
