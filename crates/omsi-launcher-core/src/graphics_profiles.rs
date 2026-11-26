@@ -11,6 +11,7 @@ pub const GRAPHICS_PROFILE_KEYS: [&str; 51] = [
     "frame_generation",
     "fsr_quality",
     "fsr_sharpness",
+    "dlss_sharpness",
     "anisotropy",
     "shadow_size",
     "ssao",

@@ -1927,6 +1927,8 @@
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "Catmull-Rom tiêu chuẩn hoặc FSR 1 thử nghiệm; thay đổi có hiệu lực ngay"
 "FSR quality": "Chất lượng FSR"
 "FSR sharpness": "Độ sắc nét FSR"
+"DLSS sharpness": "Độ sắc nét DLSS"
+"How much the picture is sharpened after DLSS; 25 % as before": "Mức làm nét hình ảnh sau DLSS; 25 % như trước"
 "RCAS sharpening strength": "Mức làm sắc nét RCAS"
 "Ultra Quality (77%)": "Chất lượng siêu cao (77%)"
 "Quality (67%)": "Chất lượng (67%)"

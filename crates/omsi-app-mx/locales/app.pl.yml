@@ -2482,6 +2482,8 @@
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "Standardowy Catmull-Rom lub eksperymentalny FSR 1; zmiany widać od razu"
 "FSR quality": "Jakość FSR"
 "FSR sharpness": "Ostrość FSR"
+"DLSS sharpness": "Ostrość DLSS"
+"How much the picture is sharpened after DLSS; 25 % as before": "Jak mocno obraz jest wyostrzany po DLSS; 25 % jak dotąd"
 "RCAS sharpening strength": "Siła wyostrzania RCAS"
 "Ultra Quality (77%)": "Ultrajakość (77%)"
 "Quality (67%)": "Jakość (67%)"
