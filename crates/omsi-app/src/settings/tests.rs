@@ -1180,4 +1180,7 @@ fn audio_surround_is_written_on_its_own_line_by_both_writers() {
         "{saved:?}"
     );
     assert!(Settings::from_text(&saved).audio_surround);
+
+    let legacy = omsi_launcher_lib::settings_to_text(&serde_json::json!({}), None);
+    assert!(legacy.contains("audio_surround=0\n"), "{legacy:?}");
 }

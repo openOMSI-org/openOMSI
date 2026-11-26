@@ -4843,7 +4843,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             x => x.clamp(64, 2048),
         },
         b("doppler", true),
-        b("audio_surround", true),
+        b("audio_surround", false),
         b("driver", true),
         n("max_fps", 0).max(0),
         f("min_obj_size", 0.013),
