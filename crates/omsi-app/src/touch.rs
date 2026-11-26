@@ -16,6 +16,7 @@ use omsi_ui::paint::Align;
 use omsi_ui::{Atlas, Color, Draw, Fonts, Gpu, Layer, Painter, Rect, Weight};
 use winit::event::{Touch as Finger, TouchPhase};
 
+mod layout;
 mod paint;
 #[cfg(test)]
 mod tests;
@@ -84,7 +85,18 @@ enum Btn {
 impl Btn {
     /// Held down while the finger stays (a push button), rather than a tap.
     fn held(self) -> bool {
-        matches!(self, Btn::Door(_) | Btn::DirectDoor(_) | Btn::Horn | Btn::Engine | Btn::Announce | Btn::VoiceNearby | Btn::VoiceRadio | Btn::FlyUp | Btn::FlyDown)
+        matches!(
+            self,
+            Btn::Door(_)
+                | Btn::DirectDoor(_)
+                | Btn::Horn
+                | Btn::Engine
+                | Btn::Announce
+                | Btn::VoiceNearby
+                | Btn::VoiceRadio
+                | Btn::FlyUp
+                | Btn::FlyDown
+        )
     }
 }
 
@@ -102,7 +114,11 @@ fn direct_door_buttons<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<usiz
     DIRECT_DOOR_GROUPS
         .iter()
         .enumerate()
-        .filter(|(_, group)| group.iter().any(|cmd| names.iter().any(|n| n.eq_ignore_ascii_case(cmd))))
+        .filter(|(_, group)| {
+            group
+                .iter()
+                .any(|cmd| names.iter().any(|n| n.eq_ignore_ascii_case(cmd)))
+        })
         .map(|(index, _)| index)
         .collect()
 }
@@ -163,6 +179,9 @@ use glam::Vec2;
 /// The touch controls' state (a field of `App`).
 pub struct Touch {
     pub enabled: bool,
+    /// The cursor the game draws itself (#1247): its kind, its place in physical pixels and
+    /// the interface's scale; `None` when the player uses the system's cursor.
+    pub(crate) cursor: Option<(u8, Vec2, f32)>,
     fingers: Vec<Touched>,
     /// The wheel's turn (-1 .. 1), the pedals (0 .. 1).
     steer: f32,
@@ -212,12 +231,15 @@ pub struct Touch {
 
 impl Touch {
     pub(crate) fn pointing(&self) -> bool {
-        self.fingers.iter().any(|f| matches!(f.role, Role::Cockpit | Role::Mouse))
+        self.fingers
+            .iter()
+            .any(|f| matches!(f.role, Role::Cockpit | Role::Mouse))
     }
 
     pub fn new() -> Touch {
         Touch {
             enabled: crate::platform::touch_controls(),
+            cursor: None,
             fingers: Vec::new(),
             steer: 0.0,
             throttle: 0.0,
@@ -268,7 +290,9 @@ impl Touch {
     /// when no finger is on it or it is not shown.
     pub fn stick_analog(&self) -> Vec2 {
         match self.stick_at {
-            Some((_, d)) if self.enabled && self.stick_r > 0.0 => (d / self.stick_r).clamp_length_max(1.0),
+            Some((_, d)) if self.enabled && self.stick_r > 0.0 => {
+                (d / self.stick_r).clamp_length_max(1.0)
+            }
             _ => Vec2::ZERO,
         }
     }
@@ -318,8 +342,19 @@ fn panel_rects(n: usize, w: f32, h: f32, pad: f32, r: f32, u: f32) -> Vec<Rect> 
     let pw = cols as f32 * cw + (cols - 1) as f32 * gap;
     let ph = rows as f32 * ch + (rows - 1) as f32 * gap;
     let x0 = (w - pw) * 0.5;
-    let y0 = (pad + r * 2.0 + 16.0 * u).max((h - ph) * 0.42).min((h - ph - pad).max(pad));
-    (0..n).map(|k| Rect::new(x0 + (k % cols) as f32 * (cw + gap), y0 + (k / cols) as f32 * (ch + gap), cw, ch)).collect()
+    let y0 = (pad + r * 2.0 + 16.0 * u)
+        .max((h - ph) * 0.42)
+        .min((h - ph - pad).max(pad));
+    (0..n)
+        .map(|k| {
+            Rect::new(
+                x0 + (k % cols) as f32 * (cw + gap),
+                y0 + (k / cols) as f32 * (ch + gap),
+                cw,
+                ch,
+            )
+        })
+        .collect()
 }
 
 impl App {
@@ -358,279 +393,6 @@ impl App {
         }
     }
 
-    fn touch_layout_in(&mut self, w: f32, h: f32) {
-        let dpi = self.window.as_ref().map(|w| w.scale_factor() as f32).unwrap_or(1.0).max(0.5);
-        // (a point is the screen's density, a little larger on a big tablet and smaller
-        // on a small phone)
-        let short = w.min(h) / dpi;
-        let mut u = dpi * (short / 400.0).clamp(0.85, 1.35);
-        // ... and no larger than the bottom row fits across: the wheel and the horn on the
-        // left, the speed in the middle, the brakes, the pedals (a manual's clutch too) on
-        // the right - in points of the layout below. On a tablet held upright (an iPad mini's
-        // 744 points) the clutch pedal ran under the speed and the horn.
-        let clutch = self.player.as_ref().is_some_and(|p| p.vehicle.ty.program.manual_gearbox()) && !self.settings.auto_clutch;
-        let side = if clutch { 300.0 } else { 238.0 };
-        // (only where that row is: the free camera and walking have a stick and a few buttons)
-        if self.player.is_some() && self.photo.is_none() && matches!(self.view.as_str(), "driver" | "outside" | "pax") {
-            u = u.min(w / (2.0 * (side + 67.0) + 28.0)).max(dpi * 0.7);
-        }
-        let pad = 14.0 * u;
-        if self.photo.is_some() {
-            self.touch_photo_layout(w, h, pad, u);
-            return;
-        }
-        let t = &mut self.input.touch;
-        t.u = u;
-        t.size = (w, h);
-        let mut b: Vec<Button> = Vec::new();
-        let rb = |x: f32, y: f32, r: f32| Rect::new(x - r, y - r, r * 2.0, r * 2.0);
-        let push = |b: &mut Vec<Button>, btn: Btn, rect: Rect, icon: &'static str, label: &str, on: bool, round: bool| {
-            b.push(Button { btn, rect, icon, label: label.to_string(), on, round });
-        };
-        let menu_mode = self.menus.game_menu.is_some() || self.menus.chooser.is_some() || self.menus.navigator.as_ref().is_some_and(|n| n.map_open());
-        t.top_gap = None;
-        if menu_mode {
-            // only the way out: the menu is worked with the fingers as a mouse
-            let r = 24.0 * u;
-            if self.menus.game_menu.is_some() || self.menus.chooser.is_some() {
-                push(&mut b, Btn::CloseMenu, rb(w - pad - r, pad + r, r), "close", "", false, true);
-            } else {
-                push(&mut b, Btn::Map, rb(w - pad - r, pad + r, r), "close", "", false, true);
-            }
-            t.info_room = Some(info_room(w, pad, pad, w - pad - r * 2.0, pad + r * 2.0, u));
-            t.buttons = b;
-            return;
-        }
-        // --- the top bar
-        // (the buttons shrink to fit the screen's width: on a narrow phone the two groups ran
-        // into each other where the free camera and walking, with a larger `u`, had them)
-        let count = 4.0 + if t.hidden { 1.0 } else if self.session.duty.is_some() { 5.0 } else { 4.0 };
-        let fit = ((w - 2.0 * pad - 8.0 * u) / (count * 52.0 * u)).clamp(0.72, 1.0);
-        let r = 21.0 * u * fit;
-        let y = pad + r;
-        let step = r * 2.0 + 10.0 * u * fit;
-        let mut x = pad + r;
-        for (btn, icon) in [(Btn::Menu, "menu"), (Btn::Pause, if self.paused { "play_arrow" } else { "pause" }), (Btn::Camera, "videocam"), (Btn::LookReset, "360")] {
-            push(&mut b, btn, rb(x, y, r), icon, "", btn == Btn::Pause && self.paused, true);
-            x += step;
-        }
-        let left_end = x - step + r;
-        let mut x = w - pad - r;
-        let hidden = t.hidden;
-        push(&mut b, Btn::Hide, rb(x, y, r), if hidden { "visibility" } else { "visibility" }, "", hidden, true);
-        // (the free camera's way back stays when the controls are hidden: nothing else of the
-        // screen is a button then)
-        let free = self.view == "free";
-        if hidden {
-            t.stick_r = 0.0;
-            if free {
-                push(&mut b, Btn::FreeCam, Rect::new(w - pad - 178.0 * u, h * 0.5 - 22.0 * u, 178.0 * u, 44.0 * u), "close", "Exit free camera", false, false);
-            }
-            t.info_room = Some(info_room(w, pad, left_end, x - r, pad + r * 2.0, u));
-            t.buttons = b;
-            return;
-        }
-        let driving = self.player.is_some() && matches!(self.view.as_str(), "driver" | "outside" | "pax");
-        x -= step;
-        push(&mut b, Btn::Panel, rb(x, y, r), "tune", "", t.panel, true);
-        x -= step;
-        push(&mut b, Btn::Map, rb(x, y, r), "map", "", false, true);
-        if self.session.duty.is_some() {
-            x -= step;
-            push(&mut b, Btn::Timetable, rb(x, y, r), "departure_board", "", self.menus.timetable, true);
-        }
-        x -= step;
-        push(&mut b, Btn::Screenshot, rb(x, y, r), "photo_camera", "", false, true);
-        t.info_room = Some(info_room(w, pad, left_end, x - r, pad + r * 2.0, u));
-        t.top_gap = Some([left_end + 6.0 * u, x - r - 6.0 * u, pad + r * 2.0]);
-        if !driving {
-            // on foot or the free camera: a stick to walk or fly
-            t.stick_r = 62.0 * u;
-            t.stick_c = Vec2::new(pad + t.stick_r + 10.0 * u, h - pad - t.stick_r - 10.0 * u);
-            // on foot, out of the eyes: kneel for a picture from low down (#1148)
-            if let Some(f) = self.session.on_foot.as_ref().filter(|f| f.cam == crate::on_foot::FootCam::First && f.seat.is_none()) {
-                let kr = 26.0 * u;
-                push(&mut b, Btn::Kneel, rb(w - pad - kr, h - pad - kr, kr), "keyboard_arrow_down", "", f.kneel, true);
-            }
-            if free {
-                // the free camera: the stick moves it, a drag looks, a pinch zooms; up and
-                // down and the speed beside them in the corner, the way back at the side
-                // (what the walk of `cam.ego` has no use for: it keeps to the ground)
-                if !t.panel {
-                    push(&mut b, Btn::FreeCam, Rect::new(w - pad - 178.0 * u, h * 0.5 - 22.0 * u, 178.0 * u, 44.0 * u), "close", "Exit free camera", false, false);
-                }
-                if !self.cam.ego {
-                    let fr = 26.0 * u;
-                    let (x1, y0) = (w - pad - fr, h - pad - fr);
-                    let (x0, y1) = (x1 - fr * 2.0 - 12.0 * u, y0 - fr * 2.0 - 12.0 * u);
-                    push(&mut b, Btn::FlyDown, rb(x1, y0, fr), "keyboard_arrow_down", "", false, true);
-                    push(&mut b, Btn::FlyUp, rb(x1, y1, fr), "keyboard_arrow_up", "", false, true);
-                    push(&mut b, Btn::FlySlower, rb(x0, y0, fr), "remove", "", false, true);
-                    push(&mut b, Btn::FlyFaster, rb(x0, y1, fr), "add", "", false, true);
-                }
-            }
-        } else {
-            t.stick_r = 0.0;
-        }
-        if driving {
-            let p = self.player.as_ref().unwrap();
-            let has = |name: &str| p.vehicle.ty.program.trigger(name).is_some() || p.bound_actions().iter().any(|a| a.eq_ignore_ascii_case(name));
-            // --- the wheel, bottom left
-            t.wheel_r = 78.0 * u;
-            t.wheel_c = Vec2::new(pad + t.wheel_r + 6.0 * u, h - pad - t.wheel_r);
-            // --- the pedals, bottom right
-            // (as long as the settings make them, within what the screen's height leaves)
-            let long = self.settings.touch_pedal_length.clamp(0.8, 1.6).min((h * 0.45 / (150.0 * u)).max(0.8));
-            let th = 150.0 * u * long;
-            t.throttle_r = Rect::new(w - pad - 64.0 * u, h - pad - th, 64.0 * u, th);
-            let bh = 112.0 * u * long;
-            t.brake_r = Rect::new(t.throttle_r.x - 14.0 * u - 80.0 * u, h - pad - bh, 80.0 * u, bh);
-            // the gearbox above the pedals: an automatic's R N D, a sequential lever's - N +,
-            // else a manual's whole gate - R, N and every gear its script has (`kw_s_1` ...),
-            // in two rows as the H of the lever (R 1 3 5 over N 2 4 6)
-            const MANUAL: [(&str, &str); 10] = [("kw_s_R", "R"), ("kw_s_N", "N"), ("kw_s_1", "1"), ("kw_s_2", "2"), ("kw_s_3", "3"), ("kw_s_4", "4"), ("kw_s_5", "5"), ("kw_s_6", "6"), ("kw_s_7", "7"), ("kw_s_8", "8")];
-            // (the kind of gearbox by what the bus's own scripts answer to: every key of
-            // the keyboard layout is bound whatever the bus, the automatic's D included)
-            let scripted = |name: &str| p.vehicle.ty.program.trigger(name).is_some();
-            // (a manual's scripts answer to the gear keys; the LiAZ's KPP has - and + too, and
-            // triggers up to 10 whatever its box has: `antrieb_number_gears` says how many)
-            // (a dashboard script answers to the automatic's keys for its own display on a
-            // manual bus as well - the Sprinter W906 MT showed R N D, #279: a gearbox
-            // script that reads the clutch pedal is a manual one)
-            let program = &p.vehicle.ty.program;
-            let manual = program.manual_gearbox();
-            let count = p.vehicle.ty.program.constant("antrieb_number_gears").map(|n| n.round() as usize).filter(|n| (1..=8).contains(n));
-            let gears: Vec<(&'static str, &'static str)> = if manual {
-                MANUAL.iter().copied().enumerate().filter(|(k, (a, _))| {
-                    matches!(*a, "kw_s_N") || (scripted(a) && count.is_none_or(|n| *k < n + 2))
-                }).map(|(_, g)| g).collect()
-            } else if has("automatic_D") {
-                vec![("automatic_R", "R"), ("automatic_N", "N"), ("automatic_D", "D")]
-            } else if has("kw_s_plus") {
-                vec![("kw_s_minus", "-"), ("kw_s_N", "N"), ("kw_s_plus", "+")]
-            } else {
-                vec![("kw_s_R", "R"), ("kw_s_N", "N"), ("kw_s_1", "1")]
-            };
-            // (the top of the gearbox: the doors go above it)
-            let gy;
-            if manual && gears.len() > 3 {
-                // the gear engaged, as the lever's script has it
-                let engaged = p.vehicle.var("antrieb_getr_aktugang").or_else(|| p.vehicle.var("antrieb_getr_gang")).map(|g| g.round() as i32);
-                let label_of = |g: i32| match g {
-                    -1 => "R",
-                    0 => "N",
-                    g => MANUAL.get(g as usize + 1).map(|x| x.1).unwrap_or(""),
-                };
-                let cols = gears.len().div_ceil(2);
-                let gw = (t.throttle_r.right() - t.brake_r.x) / cols as f32;
-                let gh = 36.0 * u;
-                let top = t.throttle_r.y - 10.0 * u - 2.0 * gh - 6.0 * u;
-                gy = top;
-                for (k, (action, letter)) in gears.iter().enumerate() {
-                    let (col, row) = (k / 2, k % 2);
-                    let on = match engaged {
-                        Some(g) => label_of(g) == *letter,
-                        None => t.gear == Some(*letter),
-                    };
-                    push(&mut b, Btn::Gear(action, letter), Rect::new(t.brake_r.x + gw * col as f32 + 3.0 * u, top + row as f32 * (gh + 6.0 * u), gw - 6.0 * u, gh), "", letter, on, false);
-                }
-            } else {
-                let gw = (t.throttle_r.right() - t.brake_r.x) / 3.0;
-                gy = t.throttle_r.y - 10.0 * u - 40.0 * u;
-                for (k, (action, letter)) in gears.iter().enumerate() {
-                    let on = t.gear == Some(*letter) && matches!(*letter, "R" | "N" | "D");
-                    push(&mut b, Btn::Gear(action, letter), Rect::new(t.brake_r.x + gw * k as f32 + 3.0 * u, gy, gw - 6.0 * u, 40.0 * u), "", letter, on, false);
-                }
-            }
-            // a manual without the automatic clutch of the settings: its clutch pedal, left of
-            // the brake's buttons
-            t.clutch_r = if manual && !self.settings.auto_clutch {
-                let ch = 112.0 * u;
-                Rect::new(t.brake_r.x - 14.0 * u - 50.0 * u - 14.0 * u - 64.0 * u, h - pad - ch, 64.0 * u, ch)
-            } else {
-                Rect::new(0.0, 0.0, 0.0, 0.0)
-            };
-            // the brakes left of the brake pedal
-            let br = 25.0 * u;
-            let bx = t.brake_r.x - 14.0 * u - br;
-            let pb_on = p.vehicle.var("parkingbrake").or_else(|| p.vehicle.var("Handbremse")).or_else(|| p.vehicle.var("parking_brake")).is_some_and(|v| v > 0.5);
-            push(&mut b, Btn::ParkingBrake, rb(bx, h - pad - br, br), "local_parking", "", pb_on, true);
-            let sb_on = p.vehicle.var("bremse_halte_sw").or_else(|| p.vehicle.var("haltestellenbremse")).is_some_and(|v| v > 0.5);
-            push(&mut b, Btn::StopBrake, rb(bx, h - pad - br * 3.0 - 10.0 * u, br), "back_hand", "", sb_on, true);
-            // Preserve the current door detection in Standard mode. Direct mode
-            // uses 0, 1 and combined 2+3; the fourth trigger button is not shown.
-            let door_buttons: Vec<Btn> = if self.settings.touch_door_mode == "direct" {
-                direct_door_buttons(p.vehicle.ty.program.triggers.keys().map(String::as_str))
-                    .into_iter()
-                    .map(Btn::DirectDoor)
-                    .collect()
-            } else {
-                (1..=crate::player::door_keys(&p.vehicle.ty).len().clamp(1, 4))
-                    .map(Btn::Door)
-                    .collect()
-            };
-            let doors = door_buttons.len();
-            let dr = 23.0 * u;
-            let dy = gy - 12.0 * u - dr;
-            for (k, action) in door_buttons.into_iter().enumerate() {
-                let dx = t.throttle_r.right() - dr - (doors - 1 - k) as f32 * (dr * 2.0 + 10.0 * u);
-                push(&mut b, action, rb(dx, dy, dr), "door_sliding", &(k + 1).to_string(), false, true);
-            }
-            // the indicators and the horn beside the wheel
-            let ir = 23.0 * u;
-            let iy = t.wheel_c.y - t.wheel_r - 14.0 * u - ir;
-            let blink = p.vehicle.var("lights_sw_blinker").map(|v| v.round() as i32).unwrap_or(0);
-            let warn = p.vehicle.var("lights_sw_warnblinker").is_some_and(|v| v > 0.5);
-            push(&mut b, Btn::BlinkLeft, rb(t.wheel_c.x - t.wheel_r + ir, iy, ir), "turn_left", "", blink == 1, true);
-            push(&mut b, Btn::Hazard, rb(t.wheel_c.x, iy, ir), "warning", "", warn, true);
-            push(&mut b, Btn::BlinkRight, rb(t.wheel_c.x + t.wheel_r - ir, iy, ir), "turn_right", "", blink == 2, true);
-            let hr = 26.0 * u;
-            push(&mut b, Btn::Horn, rb(t.wheel_c.x + t.wheel_r + 18.0 * u + hr, h - pad - hr, hr), "campaign", "", false, true);
-            // --- the cab panel: the rest of the switches, over the middle
-            if t.panel {
-                let items: Vec<(Btn, &'static str, &str, bool)> = vec![
-                    (Btn::Battery, "power_settings_new", "Battery", p.vehicle.var("elec_busbar_main").or_else(|| p.vehicle.var("bat_switch")).is_some_and(|v| v > 0.5)),
-                    (Btn::Engine, "key", "Engine start (hold)", p.vehicle.var("engine_on").is_some_and(|v| v > 0.5)),
-                    (Btn::AutoStart, "autorenew", "Start the bus by itself", false),
-                    (Btn::Headlights, "light", "Headlights", p.vehicle.var("lights_fern").or_else(|| p.vehicle.var("lights_sw_licht")).is_some_and(|v| v > 0.5)),
-                    (Btn::HighBeam, "flashlight_on", "High beam", false),
-                    (Btn::Wipers, "water_drop", "Wipers", p.vehicle.var("wiper_sw").is_some_and(|v| v > 0.5)),
-                    (Btn::SaloonLights, "highlight", "Saloon lights", false),
-                    (Btn::Ticket, "confirmation_number", "Sell ticket", false),
-                    (Btn::Announce, "campaign", "Announcement (Q)", false),
-                    (Btn::VoiceNearby, "record_voice_over", "Voice: nearby (hold)", t.voice_held[0]),
-                    (Btn::VoiceRadio, "settings_voice", "Voice: radio (hold)", t.voice_held[1]),
-                    (Btn::InteriorCam, "airline_seat_recline_normal", "Next seat view", false),
-                    (Btn::FreeCam, "videocam", "Free camera", false),
-                    (Btn::Navigator, "navigation", "Navigator", self.menus.navigator.as_ref().is_some_and(|n| n.enabled)),
-                    (Btn::Info, "info", "Information bar", self.menus.info_bar),
-                    (Btn::Tilt, "screen_rotation", "Tilt steering", t.tilt),
-                ];
-                // (the talk buttons only where voice chat is on, in a session)
-                let voice_on = self.settings.voice_enabled && self.net.lan.is_some();
-                let items: Vec<_> = items.into_iter().filter(|i| voice_on || !matches!(i.0, Btn::VoiceNearby | Btn::VoiceRadio)).collect();
-                for (rect, (btn, icon, label, on)) in panel_rects(items.len(), w, h, pad, r, u).into_iter().zip(items) {
-                    push(&mut b, btn, rect, icon, label, on, false);
-                }
-            }
-        }
-        // the free camera's own panel: the way back, the speed, what the cab panel has of the
-        // screen's furniture
-        if free && t.panel && !driving {
-            let items: Vec<(Btn, &'static str, &str, bool)> = vec![
-                (Btn::FreeCam, "close", "Exit free camera", false),
-                (Btn::FlySlower, "remove", "Slower", false),
-                (Btn::FlyFaster, "add", "Faster", false),
-                (Btn::Navigator, "navigation", "Navigator", self.menus.navigator.as_ref().is_some_and(|n| n.enabled)),
-                (Btn::Info, "info", "Information bar", self.menus.info_bar),
-            ];
-            for (rect, (btn, icon, label, on)) in panel_rects(items.len(), w, h, pad, r, u).into_iter().zip(items) {
-                push(&mut b, btn, rect, icon, label, on, false);
-            }
-        }
-        t.buttons = b;
-    }
-
     /// A finger on the screen.
     pub(crate) fn on_touch(&mut self, event_loop: &ActiveEventLoop, f: Finger) {
         if !self.input.touch.enabled {
@@ -647,12 +409,18 @@ impl App {
 
     pub(crate) fn finger_down(&mut self, event_loop: &ActiveEventLoop, id: u64, p: Vec2) {
         self.input.touch.fingers.retain(|f| f.id != id);
-        let menu_mode = self.menus.game_menu.is_some() || self.menus.chooser.is_some() || self.menus.navigator.as_ref().is_some_and(|n| n.map_open());
+        let menu_mode = self.menus.game_menu.is_some()
+            || self.menus.chooser.is_some()
+            || self.menus.navigator.as_ref().is_some_and(|n| n.map_open());
         let t = &self.input.touch;
         let role = if let Some(k) = t.button_at(p) {
             Role::Button(k, t.buttons[k].btn)
         } else if let Some(ph) = self.photo.as_ref() {
-            let in_sheet = ph.touch_panel && !ph.hide_ui && ph.panel_rect.is_some_and(|r| p.x >= r[0] && p.x <= r[0] + r[2] && p.y >= r[1] && p.y <= r[1] + r[3]);
+            let in_sheet = ph.touch_panel
+                && !ph.hide_ui
+                && ph.panel_rect.is_some_and(|r| {
+                    p.x >= r[0] && p.x <= r[0] + r[2] && p.y >= r[1] && p.y <= r[1] + r[3]
+                });
             if in_sheet {
                 Role::Menu
             } else if t.stick_r > 0.0 && p.distance(t.stick_c) <= t.stick_r * 1.3 {
@@ -666,25 +434,56 @@ impl App {
             Role::Mouse
         } else if t.stick_r > 0.0 && p.distance(t.stick_c) <= t.stick_r * 1.3 {
             Role::Stick
-        } else if self.player.is_some() && t.stick_r == 0.0 && !t.hidden && t.throttle_r.pad(6.0 * t.u, 6.0 * t.u).contains(p) {
+        } else if self.player.is_some()
+            && t.stick_r == 0.0
+            && !t.hidden
+            && t.throttle_r.pad(6.0 * t.u, 6.0 * t.u).contains(p)
+        {
             Role::Throttle
-        } else if self.player.is_some() && t.stick_r == 0.0 && !t.hidden && t.brake_r.pad(6.0 * t.u, 6.0 * t.u).contains(p) {
+        } else if self.player.is_some()
+            && t.stick_r == 0.0
+            && !t.hidden
+            && t.brake_r.pad(6.0 * t.u, 6.0 * t.u).contains(p)
+        {
             Role::Brake
-        } else if self.player.is_some() && t.stick_r == 0.0 && !t.hidden && t.clutch_r.w > 0.0 && t.clutch_r.pad(6.0 * t.u, 6.0 * t.u).contains(p) {
+        } else if self.player.is_some()
+            && t.stick_r == 0.0
+            && !t.hidden
+            && t.clutch_r.w > 0.0
+            && t.clutch_r.pad(6.0 * t.u, 6.0 * t.u).contains(p)
+        {
             Role::Clutch
-        } else if self.player.is_some() && t.stick_r == 0.0 && !t.hidden && !t.tilt && p.distance(t.wheel_c) <= t.wheel_r * 1.15 {
+        } else if self.player.is_some()
+            && t.stick_r == 0.0
+            && !t.hidden
+            && !t.tilt
+            && p.distance(t.wheel_c) <= t.wheel_r * 1.15
+        {
             {
                 let d = p - t.wheel_c;
                 Role::Wheel(d.y.atan2(d.x), d.length())
             }
         } else if self.game_panel_touch(p.x, p.y) {
             Role::Panel
-        } else if self.menus.navigator.as_ref().is_some_and(|n| n.over_panel(p.x, p.y)) {
+        } else if self
+            .menus
+            .navigator
+            .as_ref()
+            .is_some_and(|n| n.over_panel(p.x, p.y))
+        {
             Role::Navigator
         } else {
             // the cockpit's switch under the finger, else the camera's
             self.on_cursor(p.x, p.y);
-            if self.menus.hover.is_some() && self.view == "driver" && self.input.touch.fingers.iter().all(|f| f.role != Role::Cockpit) {
+            if self.menus.hover.is_some()
+                && self.view == "driver"
+                && self
+                    .input
+                    .touch
+                    .fingers
+                    .iter()
+                    .all(|f| f.role != Role::Cockpit)
+            {
                 self.left_button(event_loop, true);
                 Role::Cockpit
             } else {
@@ -704,15 +503,45 @@ impl App {
             // (the line under the finger lights up; it is picked when the finger comes up
             // without having moved - a finger that came down to scroll used to pick the
             // line it landed on)
-            Role::Menu if !self.input.touch.fingers.iter().any(|f| f.role == Role::MenuSlider) => self.on_cursor(p.x, p.y),
+            Role::Menu
+                if !self
+                    .input
+                    .touch
+                    .fingers
+                    .iter()
+                    .any(|f| f.role == Role::MenuSlider) =>
+            {
+                self.on_cursor(p.x, p.y)
+            }
             Role::Wheel(..) => self.input.touch.steering = true,
             _ => {}
         }
-        let moved = role == Role::Menu && self.input.touch.fingers.iter().any(|f| f.role == Role::MenuSlider);
-        self.input.touch.fingers.push(Touched { id, start: p, pos: p, role, moved, since: Instant::now() });
-        self.input.touch_pedals(p, self.settings.touch_pedal_deadzone);
+        let moved = role == Role::Menu
+            && self
+                .input
+                .touch
+                .fingers
+                .iter()
+                .any(|f| f.role == Role::MenuSlider);
+        self.input.touch.fingers.push(Touched {
+            id,
+            start: p,
+            pos: p,
+            role,
+            moved,
+            since: Instant::now(),
+        });
+        self.input
+            .touch_pedals(p, self.settings.touch_pedal_deadzone);
         // two fingers on the picture: a pinch
-        let looks: Vec<Vec2> = self.input.touch.fingers.iter().filter(|f| matches!(f.role, Role::Look | Role::Mouse | Role::Photo)).map(|f| f.pos).collect();
+        let looks: Vec<Vec2> = self
+            .input
+            .touch
+            .fingers
+            .iter()
+            .filter(|f| matches!(f.role, Role::Look | Role::Mouse | Role::Photo))
+            .map(|f| f.pos)
+            .collect();
         if looks.len() == 2 {
             self.input.touch.pinch = Some(looks[0].distance(looks[1]).max(1.0));
         }
@@ -720,8 +549,14 @@ impl App {
 
     pub(crate) fn finger_move(&mut self, id: u64, p: Vec2) {
         let u = self.input.touch.u;
-        let Some(k) = self.input.touch.fingers.iter().position(|f| f.id == id) else { return };
-        let (last, start, was_moved) = (self.input.touch.fingers[k].pos, self.input.touch.fingers[k].start, self.input.touch.fingers[k].moved);
+        let Some(k) = self.input.touch.fingers.iter().position(|f| f.id == id) else {
+            return;
+        };
+        let (last, start, was_moved) = (
+            self.input.touch.fingers[k].pos,
+            self.input.touch.fingers[k].start,
+            self.input.touch.fingers[k].moved,
+        );
         {
             let f = &mut self.input.touch.fingers[k];
             f.pos = p;
@@ -730,11 +565,34 @@ impl App {
             }
         }
         let role = self.input.touch.fingers[k].role;
-        if role == Role::Menu && self.input.touch.fingers.iter().any(|f| f.role == Role::MenuSlider) { return; }
+        if role == Role::Menu
+            && self
+                .input
+                .touch
+                .fingers
+                .iter()
+                .any(|f| f.role == Role::MenuSlider)
+        {
+            return;
+        }
         let sideways = (p.x - start.x).abs() >= (p.y - start.y).abs();
-        let grip = if role == Role::Menu && !was_moved && self.input.touch.fingers[k].moved && sideways && self.shell_takes_mouse() { self.shell.onto_slider(start, p) } else { None };
+        let grip = if role == Role::Menu
+            && !was_moved
+            && self.input.touch.fingers[k].moved
+            && sideways
+            && self.shell_takes_mouse()
+        {
+            self.shell.onto_slider(start, p)
+        } else {
+            None
+        };
         if let Some(q) = grip {
-            self.input.touch.fingers.iter_mut().filter(|f| f.role == Role::Menu).for_each(|f| f.moved = true);
+            self.input
+                .touch
+                .fingers
+                .iter_mut()
+                .filter(|f| f.role == Role::Menu)
+                .for_each(|f| f.moved = true);
             self.input.touch.fingers[k].role = Role::MenuSlider;
             self.on_cursor(q.x, q.y);
             self.shell.button(true);
@@ -758,18 +616,29 @@ impl App {
                     } else if da < -std::f32::consts::PI {
                         da += std::f32::consts::TAU;
                     }
-                    self.input.touch.steer = (self.input.touch.steer + da / touch_lock_angle(&self.settings)).clamp(-1.0, 1.0);
+                    self.input.touch.steer = (self.input.touch.steer
+                        + da / touch_lock_angle(&self.settings))
+                    .clamp(-1.0, 1.0);
                 }
                 self.input.touch.fingers[k].role = Role::Wheel(a, d.length());
             }
-            Role::Throttle | Role::Brake => self.input.touch_pedals(p, self.settings.touch_pedal_deadzone),
+            Role::Throttle | Role::Brake => self
+                .input
+                .touch_pedals(p, self.settings.touch_pedal_deadzone),
             Role::Stick => {
                 let d = p - self.input.touch.stick_c;
-                self.input.touch.stick_at = Some((self.input.touch.stick_c, d.clamp_length_max(self.input.touch.stick_r)));
+                self.input.touch.stick_at = Some((
+                    self.input.touch.stick_c,
+                    d.clamp_length_max(self.input.touch.stick_r),
+                ));
                 // (the free camera flies by how far the stick is pushed, see `Touch::stick_analog`;
                 // walking is by the keys' steps)
                 let flying = self.view == "free" && !self.cam.ego;
-                self.stick_keys(if flying { Vec2::ZERO } else { d / self.input.touch.stick_r });
+                self.stick_keys(if flying {
+                    Vec2::ZERO
+                } else {
+                    d / self.input.touch.stick_r
+                });
             }
             // (only a finger that has gone a way drags it: one wavering on a tap still opens
             // the city map)
@@ -802,13 +671,21 @@ impl App {
                         // wheel to whichever scroll area was touched, including
                         // nested lists. Dragging upwards must scroll down.
                         self.shell.pointer(p.x, p.y);
-                        self.shell.wheel(touch_menu_scroll_lines(p.y - last.y, self.shell.scale));
+                        self.shell
+                            .wheel(touch_menu_scroll_lines(p.y - last.y, self.shell.scale));
                     } else {
                         // Legacy UI / VR still uses menu_top, in rows rather than pixels.
                         self.on_cursor(-1e4, -1e4);
-                        let (start, row_h) = self.ui.as_ref().map(|u| (u.menu_start as f32, u.menu_row_h.max(1.0))).unwrap_or((0.0, 1.0));
+                        let (start, row_h) = self
+                            .ui
+                            .as_ref()
+                            .map(|u| (u.menu_start as f32, u.menu_row_h.max(1.0)))
+                            .unwrap_or((0.0, 1.0));
                         let top = self.menus.menu_top.unwrap_or(start) - (p.y - last.y) / row_h;
-                        let (n, rows) = (self.menu_len() as f32, self.ui.as_ref().map(|u| u.menu_rows).unwrap_or(0) as f32);
+                        let (n, rows) = (
+                            self.menu_len() as f32,
+                            self.ui.as_ref().map(|u| u.menu_rows).unwrap_or(0) as f32,
+                        );
                         self.menus.menu_top = Some(top.clamp(0.0, (n - rows).max(0.0)));
                     }
                 } else {
@@ -840,7 +717,14 @@ impl App {
     }
 
     fn touch_pinch(&mut self) {
-        let looks: Vec<Vec2> = self.input.touch.fingers.iter().filter(|f| matches!(f.role, Role::Look | Role::Mouse | Role::Photo)).map(|f| f.pos).collect();
+        let looks: Vec<Vec2> = self
+            .input
+            .touch
+            .fingers
+            .iter()
+            .filter(|f| matches!(f.role, Role::Look | Role::Mouse | Role::Photo))
+            .map(|f| f.pos)
+            .collect();
         if looks.len() < 2 {
             return;
         }
@@ -858,21 +742,52 @@ impl App {
         }
     }
 
-    pub(crate) fn finger_up(&mut self, event_loop: &ActiveEventLoop, id: u64, p: Vec2, cancelled: bool) {
-        let Some(k) = self.input.touch.fingers.iter().position(|f| f.id == id) else { return };
+    pub(crate) fn finger_up(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        id: u64,
+        p: Vec2,
+        cancelled: bool,
+    ) {
+        let Some(k) = self.input.touch.fingers.iter().position(|f| f.id == id) else {
+            return;
+        };
         let f = self.input.touch.fingers.remove(k);
-        if self.input.touch.fingers.iter().filter(|f| matches!(f.role, Role::Look | Role::Mouse | Role::Photo)).count() < 2 {
+        if self
+            .input
+            .touch
+            .fingers
+            .iter()
+            .filter(|f| matches!(f.role, Role::Look | Role::Mouse | Role::Photo))
+            .count()
+            < 2
+        {
             self.input.touch.pinch = None;
         }
         match f.role {
             Role::Button(_, b) => {
                 if b.held() {
                     self.touch_button(event_loop, b, false);
-                } else if !cancelled && self.input.touch.button_at(p).and_then(|k| self.input.touch.buttons.get(k)).map(|x| x.btn) == Some(b) {
+                } else if !cancelled
+                    && self
+                        .input
+                        .touch
+                        .button_at(p)
+                        .and_then(|k| self.input.touch.buttons.get(k))
+                        .map(|x| x.btn)
+                        == Some(b)
+                {
                     self.touch_button(event_loop, b, true);
                 }
             }
-            Role::Wheel(..) => self.input.touch.steering = self.input.touch.fingers.iter().any(|f| matches!(f.role, Role::Wheel(..))),
+            Role::Wheel(..) => {
+                self.input.touch.steering = self
+                    .input
+                    .touch
+                    .fingers
+                    .iter()
+                    .any(|f| matches!(f.role, Role::Wheel(..)))
+            }
             Role::Throttle => self.input.touch.throttle = 0.0,
             Role::Brake => self.input.touch.brake = 0.0,
             Role::Clutch => self.input.touch.clutch = 0.0,
@@ -900,7 +815,11 @@ impl App {
                 }
             }
             Role::MenuSlider => {
-                let at = if cancelled { Vec2::splat(-1e4) } else { self.shell.onto_slider(f.start, p).unwrap_or(p) };
+                let at = if cancelled {
+                    Vec2::splat(-1e4)
+                } else {
+                    self.shell.onto_slider(f.start, p).unwrap_or(p)
+                };
                 self.on_cursor(at.x, at.y);
                 self.shell.button(false);
             }
@@ -916,15 +835,26 @@ impl App {
                 }
             }
             Role::Photo => {
-                if !f.moved && !cancelled && f.since.elapsed().as_secs_f32() < 0.45 && self.input.touch.fingers.is_empty() {
+                if !f.moved
+                    && !cancelled
+                    && f.since.elapsed().as_secs_f32() < 0.45
+                    && self.input.touch.fingers.is_empty()
+                {
                     let (w, h) = self.input.touch.size;
-                    self.photo_request(crate::photo::Request::FocusAt(p.x / w.max(1.0), p.y / h.max(1.0)));
+                    self.photo_request(crate::photo::Request::FocusAt(
+                        p.x / w.max(1.0),
+                        p.y / h.max(1.0),
+                    ));
                 }
             }
             Role::Look => {
                 // a tap on the picture: a click there (a switch the finger missed by a hair
                 // is still found: the cursor's pick is generous)
-                if !f.moved && !cancelled && f.since.elapsed().as_secs_f32() < 0.45 && self.input.touch.fingers.is_empty() {
+                if !f.moved
+                    && !cancelled
+                    && f.since.elapsed().as_secs_f32() < 0.45
+                    && self.input.touch.fingers.is_empty()
+                {
                     self.on_cursor(p.x, p.y);
                     self.left_button(event_loop, true);
                     self.left_button(event_loop, false);
@@ -1050,7 +980,11 @@ impl App {
                 }
             }
             Btn::FlyUp | Btn::FlyDown => {
-                let key = if b == Btn::FlyUp { KeyCode::KeyE } else { KeyCode::KeyQ };
+                let key = if b == Btn::FlyUp {
+                    KeyCode::KeyE
+                } else {
+                    KeyCode::KeyQ
+                };
                 if down {
                     self.input.keys.insert(key);
                 } else {
@@ -1068,7 +1002,14 @@ impl App {
                 // driver → outside → passenger → driver (on foot: back to the bus)
                 self.view = match self.view.as_str() {
                     "driver" => "outside",
-                    "outside" if self.player.as_ref().is_some_and(|p| p.pax_camera_count() > 0) => "pax",
+                    "outside"
+                        if self
+                            .player
+                            .as_ref()
+                            .is_some_and(|p| p.pax_camera_count() > 0) =>
+                    {
+                        "pax"
+                    }
                     _ => "driver",
                 }
                 .into();
@@ -1097,14 +1038,23 @@ impl App {
             }
             Btn::Screenshot => self.take_screenshot(),
             Btn::Door(n) => {
-                let code = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4][(n - 1).min(3)];
+                let code = [
+                    KeyCode::Digit1,
+                    KeyCode::Digit2,
+                    KeyCode::Digit3,
+                    KeyCode::Digit4,
+                ][(n - 1).min(3)];
                 self.tap_key(event_loop, code, down, down);
             }
             Btn::DirectDoor(group) => {
                 if let Some(names) = DIRECT_DOOR_GROUPS.get(group) {
                     for name in *names {
                         // A partial group is valid for buses exposing only one trigger.
-                        if self.player.as_ref().is_some_and(|p| p.vehicle.ty.program.trigger(name).is_some()) {
+                        if self
+                            .player
+                            .as_ref()
+                            .is_some_and(|p| p.vehicle.ty.program.trigger(name).is_some())
+                        {
                             self.vehicle_action(name, down);
                         }
                     }
@@ -1174,7 +1124,11 @@ impl App {
             Btn::Tilt => {
                 self.input.touch.tilt = !self.input.touch.tilt;
                 crate::platform::set_tilt(self.input.touch.tilt);
-                let t = if self.input.touch.tilt { "Tilt steering on: hold the phone like a wheel" } else { "Tilt steering off" };
+                let t = if self.input.touch.tilt {
+                    "Tilt steering on: hold the phone like a wheel"
+                } else {
+                    "Tilt steering off"
+                };
                 self.touch_note(t);
             }
         }
@@ -1207,7 +1161,12 @@ impl App {
                 t.note = None;
             }
         }
-        let (steer, thr, brk, active) = (steer_curve(t.steer), t.throttle, t.brake, t.steering || t.tilt || t.steer != 0.0);
+        let (steer, thr, brk, active) = (
+            steer_curve(t.steer),
+            t.throttle,
+            t.brake,
+            t.steering || t.tilt || t.steer != 0.0,
+        );
         let clu = t.clutch;
         if let Some(p) = self.player.as_mut() {
             let a = &mut p.analog;
@@ -1229,15 +1188,34 @@ impl App {
     /// Lay the controls out for a frame of `w` x `h` and paint them (drawn by
     /// `Touch::render` once the game's picture is in the frame).
     pub(crate) fn touch_prepare(&mut self, w: u32, h: u32) {
-        if !self.input.touch.enabled {
-            return;
+        if self.input.touch.enabled {
+            self.touch_layout(w as f32, h as f32);
+            self.touch_paint();
+        } else if self.input.touch.cursor.is_some() {
+            // (no controls to paint, but the cursor of this frame still goes into the painter,
+            // which is cleared once a frame either way)
+            self.input.touch.painter.clear();
         }
-        self.touch_layout(w as f32, h as f32);
-        self.touch_paint();
+        if let Some((kind, at, scale)) = self.input.touch.cursor {
+            omsi_ui::cursor::paint(&mut self.input.touch.painter, kind, at, scale);
+        }
+    }
+
+    /// Put the software cursor `kind` at `at` (physical pixels) at the interface's `scale`, or
+    /// take it away (`None`). Nothing is drawn while the system's own cursor is used.
+    pub(crate) fn software_cursor(&mut self, cursor: Option<(u8, Vec2, f32)>) {
+        self.input.touch.cursor = cursor;
     }
 
     /// `touch down|move|up x,y [id]` of an input script: a finger, through the same path.
-    pub(crate) fn script_touch(&mut self, event_loop: &ActiveEventLoop, verb: &str, x: f32, y: f32, id: u64) {
+    pub(crate) fn script_touch(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        verb: &str,
+        x: f32,
+        y: f32,
+        id: u64,
+    ) {
         let p = Vec2::new(x, y);
         match verb {
             "down" => self.finger_down(event_loop, id, p),
@@ -1250,7 +1228,7 @@ impl App {
 impl Touch {
     /// Draw the controls painted last over the frame (`view`, `w` x `h`).
     pub(crate) fn render(&mut self, r: &Renderer, view: &wgpu::TextureView, w: u32, h: u32) {
-        if !self.enabled || self.painter.is_empty() {
+        if (!self.enabled && self.cursor.is_none()) || self.painter.is_empty() {
             return;
         }
         let format = r.format();
@@ -1258,13 +1236,33 @@ impl Touch {
             self.gpu = Some((Gpu::new(&r.device, format, 1, self.atlas.size), format));
             self.atlas.mark_all_dirty();
         }
-        let Some((gpu, _)) = self.gpu.as_mut() else { return };
+        let Some((gpu, _)) = self.gpu.as_mut() else {
+            return;
+        };
         gpu.upload(&r.device, &r.queue, 0, &self.painter.verts);
         gpu.upload_atlas(&r.queue, &mut self.atlas);
         let layers = [Layer::flat([0.0, 0.0, w as f32, h as f32], 0.0, 1.0)];
-        let draws = [Draw { buffer: 0, range: 0..self.painter.len(), layer: 0, texture: 0 }];
-        let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("touch controls") });
-        gpu.render(&r.device, &r.queue, &mut enc, view, (w, h), None, &layers, &draws);
+        let draws = [Draw {
+            buffer: 0,
+            range: 0..self.painter.len(),
+            layer: 0,
+            texture: 0,
+        }];
+        let mut enc = r
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("touch controls"),
+            });
+        gpu.render(
+            &r.device,
+            &r.queue,
+            &mut enc,
+            view,
+            (w, h),
+            None,
+            &layers,
+            &draws,
+        );
         r.queue.submit([enc.finish()]);
     }
 
@@ -1276,21 +1274,70 @@ impl Touch {
         }
         let format = wgpu::TextureFormat::Rgba8UnormSrgb;
         let size = self.atlas.size;
-        let gpu = self.shot_gpu.get_or_insert_with(|| Gpu::new(&r.device, format, 1, size));
+        let gpu = self
+            .shot_gpu
+            .get_or_insert_with(|| Gpu::new(&r.device, format, 1, size));
         gpu.upload(&r.device, &r.queue, 0, &self.painter.verts);
         self.atlas.mark_all_dirty();
         gpu.upload_atlas(&r.queue, &mut self.atlas);
         // (the window's pipeline has the atlas sent again next frame)
         self.atlas.mark_all_dirty();
-        let tex = r.device.create_texture(&wgpu::TextureDescriptor { label: Some("touch shot"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
+        let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("touch shot"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
         let view = tex.create_view(&Default::default());
         let layers = [Layer::flat([0.0, 0.0, w as f32, h as f32], 0.0, 1.0)];
-        let draws = [Draw { buffer: 0, range: 0..self.painter.len(), layer: 0, texture: 0 }];
+        let draws = [Draw {
+            buffer: 0,
+            range: 0..self.painter.len(),
+            layer: 0,
+            texture: 0,
+        }];
         let mut enc = r.device.create_command_encoder(&Default::default());
-        gpu.render(&r.device, &r.queue, &mut enc, &view, (w, h), Some(wgpu::Color::TRANSPARENT), &layers, &draws);
+        gpu.render(
+            &r.device,
+            &r.queue,
+            &mut enc,
+            &view,
+            (w, h),
+            Some(wgpu::Color::TRANSPARENT),
+            &layers,
+            &draws,
+        );
         let stride = (w * 4).div_ceil(256) * 256;
-        let buf = r.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-        enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
+        let buf = r.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (stride * h) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        enc.copy_texture_to_buffer(
+            tex.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buf,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(stride),
+                    rows_per_image: None,
+                },
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
         r.queue.submit([enc.finish()]);
         buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
         omsi_render::wait_gpu(&r.device, None).ok();
@@ -1322,7 +1369,11 @@ pub(crate) fn composite(base: &mut [u8], over: &[u8]) {
 /// drawn wheel could not be made to turn as the bus's own (#856). (120 degrees was a lock in
 /// a flick.)
 fn touch_lock_angle(s: &crate::settings::Settings) -> f32 {
-    let lock_to_lock = if s.wheel_lock >= 45.0 { s.wheel_lock } else { s.wheel_range };
+    let lock_to_lock = if s.wheel_lock >= 45.0 {
+        s.wheel_lock
+    } else {
+        s.wheel_range
+    };
     (lock_to_lock.clamp(90.0, 2880.0) * 0.5).to_radians()
 }
 
@@ -1357,7 +1408,8 @@ impl InputState {
     fn touch_pedals(&mut self, _p: Vec2, rest: f32) {
         let rest = rest.clamp(0.0, 0.4);
         let t = &mut self.touch;
-        let depth = |r: Rect, y: f32| pedal_press(((r.bottom() - y) / r.h.max(1.0)).clamp(0.0, 1.0), rest);
+        let depth =
+            |r: Rect, y: f32| pedal_press(((r.bottom() - y) / r.h.max(1.0)).clamp(0.0, 1.0), rest);
         for f in &t.fingers {
             match f.role {
                 Role::Throttle => t.throttle = depth(t.throttle_r, f.pos.y),
@@ -1366,7 +1418,8 @@ impl InputState {
                 // to take a gear, see `pedal_ends`, and a thumb seldom sits at the top edge)
                 // (the clutch as it was: no rest zone, straight up the pedal)
                 Role::Clutch => {
-                    let c = (0.2 + 0.8 * ((t.clutch_r.bottom() - f.pos.y) / t.clutch_r.h.max(1.0))).clamp(0.2, 1.0);
+                    let c = (0.2 + 0.8 * ((t.clutch_r.bottom() - f.pos.y) / t.clutch_r.h.max(1.0)))
+                        .clamp(0.2, 1.0);
                     t.clutch = if c >= 0.75 { 1.0 } else { c };
                 }
                 _ => {}

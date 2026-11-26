@@ -635,6 +635,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "zoom_hold_latch" => s.zoom_hold_latch,
         "others_detail" => s.others_detail,
         "flashlight_cursor" => s.flashlight_cursor,
+        "software_cursor" => s.software_cursor,
         "triple_screen" => s.triple.enabled,
         "triple_hud_center" => s.triple_hud_center,
         "triple_span" => s.triple_span,
@@ -1148,6 +1149,10 @@ fn toggle_set_graphics_and_controls(
         "others_detail" => {
             app.settings.others_detail = on;
             Some(("others_detail", bit))
+        }
+        "software_cursor" => {
+            app.settings.software_cursor = on;
+            Some(("software_cursor", bit))
         }
         "flashlight_cursor" => {
             app.settings.flashlight_cursor = on;
