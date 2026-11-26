@@ -968,6 +968,60 @@ impl Cabin {
         found
     }
 
+    /// The entry to walk to with the launcher's `rear_door_boarding` (#4055), as
+    /// `choose_entry` asks it: every door of `list` is worth walking to, open or shut - the
+    /// nearest one wins wherever the passenger stands, and they wait there and ask for it
+    /// (`PAX_Entry<n>_Req`), as neoOMSI's rear doors work. `avoid` (a passenger who still
+    /// has to buy a ticket) still keeps them at a door that sells. `fallback`: they have
+    /// waited long enough at a shut door, so only the open ones (and the buttons) count.
+    pub fn entry_nearest(
+        &self,
+        p: Vec3,
+        list: &[Option<usize>],
+        avoid: bool,
+        flags: &[(bool, bool)],
+        open: &[bool],
+        fallback: bool,
+    ) -> Option<usize> {
+        let has_ticket_door = avoid
+            && list
+                .iter()
+                .enumerate()
+                .any(|(k, pt)| pt.is_some() && flags.get(k).is_some_and(|f| !f.0));
+        let search_list: Vec<_> = if has_ticket_door {
+            list.iter()
+                .enumerate()
+                .map(|(k, pt)| {
+                    if flags.get(k).is_some_and(|f| f.0) {
+                        None
+                    } else {
+                        *pt
+                    }
+                })
+                .collect()
+        } else {
+            list.to_vec()
+        };
+        let first = if fallback {
+            // (Omsi.exe counts a shut button door whether or not another is open; the way
+            // back after the wait is to an open one, so the buttons count only while every
+            // door of the list is shut)
+            let any_open = search_list
+                .iter()
+                .enumerate()
+                .any(|(k, pt)| pt.is_some() && open.get(k).copied().unwrap_or(false));
+            let flags: Vec<_> = flags.iter().map(|f| (f.0, f.1 && !any_open)).collect();
+            self.omsi_nearest(p, &search_list, avoid, false, Some(&flags), Some(open))
+        } else {
+            self.omsi_nearest(p, &search_list, avoid, false, Some(flags), None)
+        };
+        // A filtered list can begin with a door on the opposite side (None): with every
+        // matching door still shut, `omsi_nearest`'s rigid-bus fallback returns the first
+        // slot. The search again without the open mask keeps the ticket-sale filter and the
+        // nearest platform-facing door.
+        first.or_else(|| self.omsi_nearest(p, &search_list, avoid, false, Some(flags), None))
+    }
+
     /// The validator nearest `p` (bus frame, the height weighed as in `omsi_nearest`): the
     /// one a passenger who came in there stamps at. The first of equally near ones; in a
     /// cabin of sections nobody walks between, one in the sections of `p`'s nearest point.

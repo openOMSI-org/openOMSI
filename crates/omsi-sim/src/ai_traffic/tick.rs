@@ -155,6 +155,7 @@ impl TrafficSim {
             c.tail = body_tail(c);
         }
         self.berths_begin_step();
+        self.refresh_lane_load();
         let (by_lane, coming, mut reservations) = self.occupancy();
         self.request_lights(player);
         let walkers = self.walker_requests();
@@ -216,6 +217,17 @@ impl TrafficSim {
             // its sounds stop and the renders go back to the world at the next sync
             self.retired.push(c.id);
         }
+    }
+
+    /// Count the random cars on the lanes by traffic group, for the choice at the forks
+    /// (`Network::refresh_load`; Omsi.exe keeps the count in its chains, FUN_0071dc9c).
+    pub(crate) fn refresh_lane_load(&mut self) {
+        let cars = self.cars.iter().filter(|c| !c.is_bus()).map(|c| {
+            let st = &c.state;
+            let group = crate::traffic::load_group(st.traffic_pool.as_ref().map(|p| p.0));
+            (st.lane, group, st.upcoming())
+        });
+        self.net.refresh_load(cars);
     }
 
     /// Where every car is: its lane with its lateral place (and the lane a passing car is
@@ -322,9 +334,6 @@ impl TrafficSim {
             .flat_map(|c| c.approach.iter().flatten().copied())
             .fold(160.0f32, f32::max)
             .min(1200.0);
-        // (how far ahead a rail vehicle looks for lights: a level crossing asks no distance
-        // and is asked from far off)
-        let rail_reach = reach.max(crate::traffic::RAIL_ASK_DISTANCE);
         let mut indicating: Vec<(PlayerBox, u8)> = Vec::new();
         for c in &self.cars {
             // (a car indicating stands on the paths marked with its turn: the rear sections
@@ -345,14 +354,24 @@ impl TrafficSim {
                     }
                 }
             }
-            let rail = c.is_train();
-            let way = if rail {
-                self.train_way(&c.state, rail_reach)
+            // (as far as its path search runs, by its `[type]`: the lights on the rails
+            // within it are asked whatever their distance, the others within theirs)
+            let range = super::model::ai_search_range(&c.vehicle.ty.def);
+            let train = c.is_train();
+            let on_rails = train
+                || self
+                    .net
+                    .lanes
+                    .get(c.state.lane)
+                    .is_some_and(|l| l.kind == LaneKind::Rail);
+            let way = if on_rails {
+                self.train_way(&c.state, range)
             } else {
-                self.way_lanes(&c.state, reach)
+                self.way_lanes(&c.state, reach.min(range))
             };
             for (k, &(l, d)) in way.iter().enumerate() {
-                let light = if rail || k == 0 {
+                let rail = self.net.lanes[l].kind == LaneKind::Rail;
+                let light = if on_rails || k == 0 {
                     self.net.lanes[l].traffic_light
                 } else {
                     super::lights::entry_light(&self.net, &way, k)
@@ -362,7 +381,8 @@ impl TrafficSim {
                         let gap = d - c.state.front;
                         // (asked until its rear has left the lane, not its middle; a car
                         // standing at the line asks whatever the light's distance)
-                        if ctl.is_asked_by(li, gap, c.state.speed, rail)
+                        if gap < range
+                            && ctl.is_asked_by(li, gap, c.state.speed, rail)
                             && d + self.net.lanes[l].length() + c.state.rear >= 0.0
                         {
                             if let Some(r) = ctl.request.get_mut(li) {
@@ -385,23 +405,23 @@ impl TrafficSim {
                 r.along == (speed > 0.0)
             };
             if forward && r.lane < self.net.lanes.len() {
-                let ahead =
-                    self.track_after(r.lane, -r.s, if r.train { rail_reach } else { reach });
-                let lit: Vec<(usize, usize, f32, f32)> = std::iter::once((r.lane, -r.s))
+                let range = crate::traffic::PLAYER_SEARCH_RANGE;
+                let ahead = self.track_after(r.lane, -r.s, range);
+                let lit: Vec<(usize, usize, f32, f32, bool)> = std::iter::once((r.lane, -r.s))
                     .chain(ahead)
                     .filter_map(|(lane, d)| {
-                        self.net.lanes[lane]
-                            .traffic_light
-                            .map(|(ci, li)| (ci, li, d, self.net.lanes[lane].length()))
+                        let lane = &self.net.lanes[lane];
+                        lane.traffic_light
+                            .map(|(ci, li)| (ci, li, d, lane.length(), lane.kind == LaneKind::Rail))
                     })
                     .collect();
-                for (ci, li, d, lane_len) in lit {
+                for (ci, li, d, lane_len, rail) in lit {
                     // (while some of the player's vehicle is still on the light's lane)
                     let still_on = d + lane_len + half_len >= 0.0;
                     let Some(ctl) = self.lights.get_mut(ci) else {
                         continue;
                     };
-                    if still_on && ctl.is_asked_by(li, d - half_len, speed, r.train) {
+                    if still_on && d < range && ctl.is_asked_by(li, d - half_len, speed, rail) {
                         if let Some(q) = ctl.request.get_mut(li) {
                             *q = true;
                         }
@@ -480,7 +500,9 @@ impl TrafficSim {
             .collect();
         for ((pos, heading, half_len, _, speed), blinker) in askers.into_iter().zip(blinkers) {
             let mut near: Vec<(usize, usize, i32, f32)> = Vec::new();
-            for (l, d) in self.lanes_ahead_of(pos, heading, reach) {
+            for (l, d) in
+                self.lanes_ahead_of(pos, heading, reach.min(crate::traffic::PLAYER_SEARCH_RANGE))
+            {
                 if let Some((ci, li)) = self.net.lanes[l].traffic_light {
                     // (`d` from the vehicle's middle; standing at the line it asks)
                     if self.lights.get(ci).is_some_and(|ctl| {

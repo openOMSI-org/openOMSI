@@ -3,7 +3,7 @@
 mod common;
 
 use common::{Game, run};
-use omsi_plugin::{AiCar, InfoValue, Light, TicketAsk, TicketKind};
+use omsi_plugin::{AiCar, InfoValue, KeyEvent, Light, TicketAsk, TicketKind};
 
 /// Run `body` (Lua) in a plugin's first frame; it reports with `omsi.message`.
 fn check(tag: &str, body: &str, g: &mut Game) -> Vec<String> {
@@ -39,6 +39,8 @@ fn the_bus() {
         local d = omsi.bus.damage(); assert(d.crashes == 1 and d.last_impact_kj == 136 and d.repair_minutes == 30)
         local t, b, c, st = omsi.bus.controls(); assert(t == 0.5 and st == -0.25)
         assert(omsi.bus.steering_angle() == -10)
+        assert(omsi.bus.cruise() == nil and not omsi.bus.set_cruise(3) and omsi.bus.set_cruise(50) and omsi.bus.cruise() == 50)
+        assert(omsi.bus.set_cruise() and omsi.bus.cruise() == nil)
         local tr = omsi.bus.track(); assert(tr.lane == 12 and tr.s == 40.5 and tr.lane_length == 120 and tr.forward == true and tr.travelled == 1234.5)
         assert(#omsi.bus.wheels() == 1 and omsi.bus.wheels()[1].radius == 0.5)
         assert(omsi.bus.horn() == false and omsi.bus.sound_horn(true) and omsi.bus.horn() == true)
@@ -246,6 +248,8 @@ fn camera_input_and_sound() {
           assert(omsi.input.bindings()[1].action == "sim_pause" and omsi.input.bindings(true)[1].action == "horn")
           assert(not pcall(omsi.input.hotkey, "Ctrl+", function() end))
           omsi.input.hotkey("Shift+KeyH", function(k) omsi.message("hotkey " .. k) end)
+          omsi.input.hotkey("Ctrl+KeyL", function(k) omsi.message("hotkey " .. k) end)
+          omsi.on("key", function(key, down, combo) omsi.message("key " .. combo) end)
           local id = omsi.audio.play("ding.wav", { volume = 0.5, on_bus = true })
           assert(id and omsi.audio.playing(id) and omsi.audio.set(id, { volume = 1 }))
           local none, why = omsi.audio.play("../ding.wav"); assert(none == nil and why)
@@ -260,13 +264,43 @@ fn camera_input_and_sound() {
         std::fs::write(d.join("media/ding.wav"), b"RIFF").unwrap();
         let mut p = omsi_plugin::Plugins::load(&[d.clone()], &omsi_plugin::HostConfig::default());
         p.frame(&mut g);
-        g.keys = vec![("KeyH".into(), true)];
+        g.key_events = vec![KeyEvent {
+            key: "KeyH".into(),
+            down: true,
+            shift: true,
+            ..Default::default()
+        }];
         p.frame(&mut g);
         g.held.clear();
+        g.key_events = vec![
+            KeyEvent {
+                key: "KeyL".into(),
+                down: true,
+                ctrl: true,
+                ..Default::default()
+            },
+            KeyEvent {
+                key: "KeyM".into(),
+                down: true,
+                ..Default::default()
+            },
+        ];
+        p.frame(&mut g);
+        g.key_events.clear();
         p.frame(&mut g);
         std::mem::take(&mut g.messages)
     };
-    assert_eq!(out, ["ok", "hotkey KeyH"]);
+    assert_eq!(
+        out,
+        [
+            "ok",
+            "hotkey KeyH",
+            "key Shift+KeyH",
+            "hotkey KeyL",
+            "key Ctrl+KeyL",
+            "key KeyM"
+        ]
+    );
     let sounds = g.sounds.borrow();
     assert_eq!(sounds.len(), 1);
     assert!(

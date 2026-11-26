@@ -928,6 +928,7 @@ impl Renderer {
             dt,
             self.options.cloud_shadows,
         );
+        let dirt = crate::vehicle_dirt::pack_all(&self.vehicle_dirt.borrow(), ro);
         let u = EnhancedUniform {
             // (self-lit surfaces at their own brightness after the metering, see ExposureLog)
             exposure: [
@@ -1040,6 +1041,8 @@ impl Renderer {
                 [beam.clamp(0.0, 1.0), 1.0, 0.0, 0.0]
             },
             rt_ext: [0.0; 4],
+            dirt_n: dirt.0,
+            dirt: dirt.1,
             moon_light: st
                 .moon_light
                 .extend(if lighting.casts_moon_shadows() {
@@ -1132,9 +1135,9 @@ pub(crate) const NIGHT_VISION: f32 = 0.3;
 /// The sun's angular radius: the real 0.2665° (16 minutes of arc). Drawn 40 % larger, with
 /// the glare round it, the sun looked far too big (#2400).
 pub(crate) const SUN_RADIUS: f32 = 0.00465;
-/// The moon's, as drawn (the real one is as large as the sun's; a little more, as the
-/// eye sees it).
-pub(crate) const MOON_RADIUS: f32 = 0.0062;
+/// The moon's, as drawn (the real one is 0.0045, as large as the sun; a little more, as
+/// the eye sees it).
+pub(crate) const MOON_RADIUS: f32 = 0.0052;
 
 #[cfg(test)]
 mod beam_tests {

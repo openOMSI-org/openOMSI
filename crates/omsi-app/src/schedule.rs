@@ -47,6 +47,11 @@ pub struct Schedule {
     /// departure is tried again (see `Schedule::sets_ready`), not built on the frame it
     /// is put on the road.
     fleet_wanted: Vec<(Arc<VehicleType>, Option<usize>)>,
+    /// Where the player is (the frame sets it): the fleet reads ahead only the vehicles of
+    /// the trips that come within `fleet::FLEET_NEAR` of it. Empty: every trip's.
+    pub(crate) fleet_near: Vec<glam::DVec3>,
+    /// The tiles each trip runs over (by its index in the timetable), worked out once.
+    trip_tiles: HashMap<usize, Vec<(i32, i32)>>,
     /// Seconds until the next look for due departures (see `frame_traffic`).
     pub(crate) tick_t: f32,
     /// The tracks of the map's transport routes, being found on a worker once the map's whole
@@ -90,6 +95,8 @@ impl Schedule {
             fleet_ready: Default::default(),
             fleet_check: f64::NEG_INFINITY,
             fleet_wanted: Vec::new(),
+            fleet_near: Vec::new(),
+            trip_tiles: HashMap::new(),
             // (a second after the population's, never in the same frame)
             tick_t: 1.0,
             transit_rx: None,

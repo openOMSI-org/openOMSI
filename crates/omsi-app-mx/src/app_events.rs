@@ -239,7 +239,10 @@ impl ApplicationHandler for App {
                     && (self.menus.menu_edit_search
                         || matches!(
                             self.menus.list_kind,
-                            Some(crate::game_lists::ListKind::RouteNumbers)
+                            Some(
+                                crate::game_lists::ListKind::RouteNumbers
+                                    | crate::game_lists::ListKind::SaveSlots
+                            )
                         ))
                 {
                     if let Some(text) = event.text.as_deref() {

@@ -120,6 +120,44 @@ pub fn mirror_in_view(eye: DVec3, radius: f32, view: &(Camera, f32)) -> bool {
     d.dot(r).abs() <= z.max(0.0) * tan_x + slack_x && d.dot(u).abs() <= z.max(0.0) * tan_y + slack_y
 }
 
+/// The mirrors to draw and the order to draw them in: `seen`, plus every mirror `shows(j, i)`
+/// (the picture of mirror `j` holds mirror `i`'s glass, or its camera) among the `count` of
+/// the vehicle, but none of `skip` - and the mirrors a drawn mirror shows come first, because
+/// a picture drawn before the mirror it shows would show the frame before.
+///
+/// A mirror reflected in another is drawn then although the main view does not hold it: the
+/// interior mirror over the doors shows the door mirrors, and looking into it left them
+/// standing still until they were looked at directly (#3043). One level only - a mirror shown
+/// by a mirror shown by another waits for its turn like any other.
+pub fn mirror_draw_plan(
+    seen: &[usize],
+    skip: &[usize],
+    count: usize,
+    mut shows: impl FnMut(usize, usize) -> bool,
+) -> Vec<usize> {
+    let mut plan: Vec<usize> = seen.to_vec();
+    let direct = plan.len();
+    for k in 0..direct {
+        let j = seen[k];
+        for i in 0..count {
+            if i == j || plan.contains(&i) || skip.contains(&i) {
+                continue;
+            }
+            if shows(j, i) {
+                plan.push(i);
+            }
+        }
+    }
+    // (what a mirror of the plan shows goes before it; the order of the rest stays as it was)
+    let keys: Vec<u8> = plan
+        .iter()
+        .map(|&i| u8::from(!plan.iter().any(|&j| j != i && shows(j, i))))
+        .collect();
+    let mut order: Vec<usize> = (0..plan.len()).collect();
+    order.sort_by_key(|&k| keys[k]);
+    order.into_iter().map(|k| plan[k]).collect()
+}
+
 /// A mirror's camera as Omsi.exe aims it, every frame (0x6f6468 -> 0x7ed0e8): the yaw and
 /// pitch of an `[add_camera_reflexion]` are not where it looks but which way the mirror's
 /// face is turned - (cos p sin y, cos p cos y, sin p) in the vehicle's frame (0x7edfd0); the
@@ -262,5 +300,34 @@ mod tests {
             [5.0, -60.0],
         );
         assert_eq!((turned.yaw, turned.pitch), (95.0, -89.0));
+    }
+
+    /// The interior mirror over the doors (0) shows the two door mirrors (1, 2): with only the
+    /// interior one in the picture, all three are drawn, the door mirrors first (#3043).
+    #[test]
+    fn a_mirror_seen_in_another_is_drawn_before_it() {
+        let shows = |j: usize, i: usize| j == 0 && (i == 1 || i == 2);
+        assert_eq!(super::mirror_draw_plan(&[0], &[], 3, shows), vec![1, 2, 0]);
+        // (the door mirrors in the picture themselves: each drawn once, the interior one last)
+        assert_eq!(
+            super::mirror_draw_plan(&[0, 1, 2], &[], 3, shows),
+            vec![1, 2, 0]
+        );
+        // (and a mirror the interior one does not show waits for its turn)
+        assert_eq!(super::mirror_draw_plan(&[0], &[], 4, shows), vec![1, 2, 0]);
+    }
+
+    /// A mirror left out of the turns (`skip`: the panels drawn every frame) is not brought
+    /// in by the one showing it.
+    #[test]
+    fn a_skipped_mirror_is_not_drawn_for_another_mirror() {
+        let shows = |j: usize, i: usize| j == 0 && (i == 1 || i == 2);
+        assert_eq!(super::mirror_draw_plan(&[0], &[2], 3, shows), vec![1, 0]);
+        // (nothing shows anything: the plan is what was seen, in its order)
+        assert_eq!(
+            super::mirror_draw_plan(&[1, 0, 2], &[], 3, |_, _| false),
+            vec![1, 0, 2]
+        );
+        assert!(super::mirror_draw_plan(&[], &[], 3, shows).is_empty());
     }
 }

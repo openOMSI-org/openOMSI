@@ -16,6 +16,7 @@ pub(crate) use clock::{
 pub(crate) use hover::{hud_cursor, hud_size, sight_extent, triple_rig};
 pub(crate) use vehicles::{PlacementCx, placement, placement_args};
 mod accident;
+pub(crate) mod lan_duties;
 pub(crate) mod lan_tick;
 mod menu_lists;
 mod menus;

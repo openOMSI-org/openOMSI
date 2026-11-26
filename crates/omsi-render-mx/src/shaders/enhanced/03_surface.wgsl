@@ -22,6 +22,10 @@ fn relief_masking(nl: f32, nv: f32, rough: f32, footprint: f32) -> f32 {
 // The light inside a cab relative to the average light outside: a bus's big windows let in
 // most of the sky, and the dashboard lies right under the windscreen.
 const CAB_AMBIENT: f32 = 1.15;
+// With the traced global illumination (`rt_gi`): the even cabin light's share inside the
+// cab (0.6 without it); the rest what the rays bring in through the windows and off the
+// seats, the floor and the walls - at 0.6 the even light hid it.
+const GI_CAB_SHARE: f32 = 0.15;
 
 // How far the puddle threshold drops with the wetness: see the puddle mask in `shade_enhanced`.
 const PUDDLE_SPREAD: f32 = 0.37;
@@ -162,6 +166,147 @@ fn display_level(t: vec3<f32>) -> vec3<f32> {
 fn matl_glow_light(buv: vec2<f32>, col: vec3<f32>) -> vec3<f32> {
     let gm = textureSampleBias(t_light, s_diffuse, buv, camera.lod.x);
     return col * dot(gm.rgb, vec3<f32>(0.299, 0.587, 0.114)) * material.glow.x * max(enh.exposure.z * 2.0, 0.8);
+}
+
+// The colour (linear rgb, luminance 1) of a black body at `kelvin`: its chromaticity on the
+// Planckian locus (Kim et al.'s cubic fit, 1667..25000 K, held at the ends), as
+// `omsi_model::blackbody_rgb` computes it.
+fn blackbody(kelvin: f32) -> vec3<f32> {
+    let t = clamp(kelvin, 1667.0, 25000.0);
+    let t2 = t * t;
+    let t3 = t2 * t;
+    var x = -3.0258469e9 / t3 + 2.1070379e6 / t2 + 0.2226347e3 / t + 0.240390;
+    if (t <= 4000.0) {
+        x = -0.2661239e9 / t3 - 0.2343589e6 / t2 + 0.8776956e3 / t + 0.179910;
+    }
+    let x2 = x * x;
+    let x3 = x2 * x;
+    var y = 3.0817580 * x3 - 5.8733867 * x2 + 3.75112997 * x - 0.37001483;
+    if (t <= 2222.0) {
+        y = -1.1063814 * x3 - 1.3481102 * x2 + 2.18555832 * x - 0.20219683;
+    } else if (t <= 4000.0) {
+        y = -0.9549476 * x3 - 1.37418593 * x2 + 2.09137015 * x - 0.16748867;
+    }
+    let xyz = vec3<f32>(x / y, 1.0, (1.0 - x - y) / y);
+    let rgb = max(vec3<f32>(
+        dot(xyz, vec3<f32>(3.2406, -1.5372, -0.4986)),
+        dot(xyz, vec3<f32>(-0.9689, 1.8758, 0.0415)),
+        dot(xyz, vec3<f32>(0.0557, -0.2040, 1.0570)),
+    ), vec3<f32>(0.0));
+    return rgb / max(dot(rgb, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-6);
+}
+
+// [matl_emissive] (openOMSI, `EmissionLight`): the material's own light, in HDR - it blooms
+// by its brightness (post.wgsl) and keeps its colour however bright. `buv` is where its
+// texture is read (the light map's coordinate, the slot it rides in), `base` the diffuse
+// texture's colour it shines through without one, `slot` the instance's slot value (the
+// level, or `-(K + level)` with a temperature: `omsi_model::slot_value`) and `pre` the
+// frame's exposure. The artist's strength is on the scale of the screens and `[matl_glow]`
+// (held against the metering as they are); a luminance in cd/m² is exposed as the scene is.
+fn emission_light(buv: vec2<f32>, base: vec3<f32>, slot: f32, pre: f32) -> vec3<f32> {
+    let bits = u32(material.emission.w + 0.5);
+    var col = material.emission.rgb;
+    var level = 1.0;
+    if ((bits & 8u) != 0u) {
+        if ((bits & 16u) != 0u && slot < 0.0) {
+            col = blackbody(floor(-slot));
+            level = min(fract(-slot) / 0.999, 1.0);
+        } else {
+            level = clamp(slot, 0.0, 1.0);
+        }
+    }
+    var map = base;
+    if ((bits & 2u) != 0u) {
+        map = textureSampleBias(t_light, s_diffuse, buv, camera.lod.x).rgb;
+    }
+    let scale = select(max(enh.exposure.z * 2.0, 0.8), pre, (bits & 4u) != 0u) * material.glow.z;
+    return col * map * level * scale;
+}
+
+// The road dirt on a vehicle's outside (openOMSI #1386, vehicle_dirt.rs): rgb its colour,
+// a how much of the surface it covers (0..1), for a point `world` of a vehicle's part with
+// the normal `n` (`pane`: a window, dirty on both faces). The vehicle is the one of the
+// frame's dirty ones whose box holds the point. Only its outside takes dirt: surfaces near
+// the box's sides or ends that face out of it, and the roof's dust - the saloon's walls face
+// in, its seats and floor lie far inside. Where it lands: the spray off each wheel behind and
+// above it, thinning with height; the road film all round low down and higher up the back,
+// which the wake behind the vehicle coats; dust all over, the roof too. Broken up in
+// splashes, run down in streaks where it is wet.
+// (and how wet the dirt that `road_dirt` found is, 0..1)
+var<private> dirt_wet: f32;
+fn road_dirt(world: vec3<f32>, n: vec3<f32>, pane: bool) -> vec4<f32> {
+    let count = min(i32(enh.dirt_n.x + 0.5), 6);
+    for (var i = 0; i < count; i = i + 1) {
+        let b = i * 8;
+        let o = enh.dirt[b];
+        let r = enh.dirt[b + 1];
+        let f = enh.dirt[b + 2];
+        let lo = enh.dirt[b + 3].xyz;
+        let hi = enh.dirt[b + 4].xyz;
+        let u = normalize(cross(r.xyz, f.xyz));
+        let d = world - o.xyz;
+        let p = vec3<f32>(dot(d, r.xyz), dot(d, f.xyz), dot(d, u));
+        if (any(p < lo - vec3<f32>(0.15)) || any(p > hi + vec3<f32>(0.15))) {
+            continue;
+        }
+        let ln = vec3<f32>(dot(n, r.xyz), dot(n, f.xyz), dot(n, u));
+        let mid = 0.5 * (lo + hi);
+        // facing out of the side or the end it is near (a pane: either face)
+        var side_out = select(-ln.x, ln.x, p.x > mid.x);
+        var end_out = select(-ln.y, ln.y, p.y > mid.y);
+        if (pane) {
+            side_out = abs(ln.x);
+            end_out = abs(ln.y);
+        }
+        let to_side = min(p.x - lo.x, hi.x - p.x);
+        let to_end = min(p.y - lo.y, hi.y - p.y);
+        // (soft: an inset door or a rounded edge facing a little away takes nearly as much,
+        // without a seam where one mesh meets the next)
+        let on_side = smoothstep(0.65, 0.2, to_side) * smoothstep(-0.3, 0.2, side_out);
+        let on_end = smoothstep(0.7, 0.25, to_end) * smoothstep(-0.3, 0.2, end_out);
+        let on_roof = smoothstep(0.35, 0.1, hi.z - p.z) * smoothstep(0.6, 0.9, ln.z);
+        let outside = max(on_side, on_end);
+        if (outside + on_roof <= 0.0) {
+            return vec4<f32>(0.0);
+        }
+        let am = enh.dirt[b + 6];
+        let kind = enh.dirt[b + 7];
+        let h = max(p.z - lo.z, 0.0);
+        let radius = r.w;
+        // the spray off the wheels: round the arch and behind it, low down
+        var spray = 0.0;
+        let axles = i32(o.w + 0.5);
+        for (var k = 0; k < axles; k = k + 1) {
+            let ay = enh.dirt[b + 5][k];
+            let behind = ay - p.y;
+            // (round the arch the tyre throws it up and back: little ahead of the wheel)
+            let arch = smoothstep(radius * 2.0, radius * 1.05, length(vec2<f32>(behind, h - radius))) * smoothstep(-radius * 0.6, radius * 0.4, behind) * 0.7;
+            let trail = smoothstep(-0.3, 0.5, behind) * exp(-max(behind, 0.0) / 2.2) * exp(-h / (radius * 2.4));
+            spray = max(spray, max(arch, trail));
+        }
+        // the back: what the last wheels throw and the wake lay on it, reaching high
+        let back = on_end * select(0.0, 1.0, p.y < mid.y);
+        let film = exp(-h / 0.9) * outside + back * exp(-h / 1.8) * 0.75;
+        spray = spray * on_side + back * exp(-h / 1.0) * 0.45;
+        let dust = outside * (0.55 + 0.45 * exp(-h / 1.6)) + on_roof * 0.8;
+        var c = clamp(am.x * spray * 1.2 + am.y * film + am.z * dust * 0.6, 0.0, 1.0);
+        // splashes and, where it is wet, streaks running down
+        let q = vec2<f32>(p.y + p.x * 0.7, p.z);
+        let splash = vnoise_f(q, 6.0, vec2<f32>(3.7, 1.3)) * 0.45 + vnoise_f(q, 19.0, vec2<f32>(9.1, 4.4)) * 0.3 + vnoise_f(q, 57.0, vec2<f32>(2.2, 7.9)) * 0.25;
+        let streak = vnoise_f(vec2<f32>(q.x * 9.0, q.y * 0.6), 1.0, vec2<f32>(5.3, 2.9));
+        let grain = mix(splash, streak, am.w * 0.6);
+        // a thin film where any lies, and crisp-edged splashes over it where it is thick
+        let spots = smoothstep(grain * 0.85 - 0.03, grain * 0.85 + 0.03, c) * (0.5 + 0.35 * c);
+        c = max(c * 0.5, spots);
+        // ordinary grime grey-brown, salt and slush pale grey, mud dark brown; darker wet
+        var col = vec3<f32>(0.20, 0.17, 0.13);
+        col = mix(col, vec3<f32>(0.42, 0.42, 0.40), kind.x);
+        col = mix(col, vec3<f32>(0.14, 0.10, 0.06), kind.y);
+        col = col * mix(1.0, 0.6, am.w);
+        dirt_wet = am.w;
+        return vec4<f32>(col, c);
+    }
+    return vec4<f32>(0.0);
 }
 
 // How much of the light crossing the player's bus's pane its condensation scatters (0..1,

@@ -173,6 +173,7 @@ fn create_texture_checked(
     let out_of_memory = pollster::block_on(memory.pop());
     if out_of_memory.is_some() {
         TEXTURE_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
+        crate::pipelines::errors::note_out_of_memory();
     }
     let reason = if out_of_memory.is_some() {
         TextureCreationError::OutOfMemory

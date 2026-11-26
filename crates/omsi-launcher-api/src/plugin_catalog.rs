@@ -5,7 +5,7 @@ use omsi_launcher_lib::plugin_catalog as cat;
 use serde_json::{Value, json};
 
 /// A URL's body, at most `max` bytes.
-fn fetch(url: &str, max: u64) -> anyhow::Result<Vec<u8>> {
+pub(crate) fn fetch(url: &str, max: u64) -> anyhow::Result<Vec<u8>> {
     let r = omsi_platform::updater::agent()
         .get(url)
         .call()
@@ -23,10 +23,12 @@ fn entries() -> anyhow::Result<Vec<cat::Entry>> {
     cat::parse(&String::from_utf8_lossy(&bytes))
 }
 
-/// `{plugins: [entry + {installed, update, source}]}`.
+/// `{plugins: [entry + {installed, update, source}]}`, then `{id, name, installed, removed}`
+/// of each plugin the catalog installed and no longer lists.
 pub(crate) fn list() -> Answer {
     let list = entries().map_err(err)?;
     let dir = cat::plugins_dir().ok();
+    let gone = dir.as_deref().map(|d| gone(d, &list)).unwrap_or_default();
     let plugins: Vec<Value> = list
         .into_iter()
         .map(|e| {
@@ -41,8 +43,31 @@ pub(crate) fn list() -> Answer {
             v["source"] = json!(format!("{}{}", cat::SOURCE_URL, e.id));
             v
         })
+        .chain(gone)
         .collect();
     Ok(json!({ "plugins": plugins }))
+}
+
+/// The plugins the catalog installed that it no longer lists (taken out of openOMSI-Plugins):
+/// the page shows them so they can be removed; nothing is removed by itself, as a plugin's
+/// saved data goes with it.
+fn gone(plugins: &std::path::Path, list: &[cat::Entry]) -> Vec<Value> {
+    let mut out: Vec<Value> = std::fs::read_dir(plugins)
+        .map(|rd| {
+            rd.flatten()
+                .filter_map(|e| {
+                    let id = e.file_name().to_string_lossy().into_owned();
+                    let installed = cat::installed(plugins, &id)?;
+                    (!list.iter().any(|x| x.id == id)).then(|| {
+                        json!({ "id": id, "name": id, "installed": installed, "removed": true,
+                                "update": false, "tags": [] })
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
+    out
 }
 
 /// Install (or update) the catalog's plugin `id`; its version.

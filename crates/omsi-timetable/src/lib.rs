@@ -1,5 +1,6 @@
 //! `maps/<map>/TTData/*` - bus stops, station links, trips, tracks and lines.
 
+pub mod stop_labels;
 pub mod transit;
 
 use omsi_cfg::CfgFile;
@@ -375,6 +376,20 @@ pub fn write_text(path: &Path, text: &str) -> std::io::Result<()> {
         std::io::ErrorKind::InvalidData,
         "its texts fit in no code page the map's timetable is written in",
     ))
+}
+
+impl Trip {
+    /// The ids of the stops the trip calls at: its `[station_typ2]` blocks, or, in a file
+    /// that has only the old `[station]` blocks, the first line of each.
+    pub fn station_ids(&self) -> Vec<i64> {
+        if !self.stations.is_empty() {
+            return self.stations.clone();
+        }
+        self.stations_legacy
+            .iter()
+            .filter_map(|s| s.first().and_then(|id| id.trim().parse::<i64>().ok()))
+            .collect()
+    }
 }
 
 impl Trip {

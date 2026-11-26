@@ -336,6 +336,7 @@ fn synthetic_material_plan_preserves_lightmap_thresholds_and_alpha_slots() {
         def_index: 0,
         data: MeshData::default(),
         file: PathBuf::new(),
+        stamp: 0,
         materials: (0..2)
             .map(|_| omsi_o3d::Material {
                 texture: "display.dds".into(),
@@ -401,6 +402,7 @@ fn a_number_in_alphascale_is_the_scale_itself() {
         def_index: 0,
         data: MeshData::default(),
         file: PathBuf::new(),
+        stamp: 0,
         materials: ["film.png", "frost.tga", "pane.tga", "tint.tga"]
             .into_iter()
             .map(|texture| omsi_o3d::Material {

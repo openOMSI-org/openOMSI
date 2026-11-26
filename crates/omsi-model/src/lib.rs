@@ -7,7 +7,10 @@
 use omsi_cfg::{CfgFile, CfgReader, Entry};
 use std::path::{Path, PathBuf};
 
+mod emission;
+pub use emission::{Emission, blackbody_rgb, filament_kelvin, slot_value};
 mod extensions;
+mod factors;
 pub use extensions::SpotlightCookie;
 #[cfg(test)]
 mod extension_tests;
@@ -125,6 +128,26 @@ pub struct MaterialDef {
     /// picture otherwise makes from the slot's `\S:n` mask and white light map.
     pub led_glow: Option<f32>,
     pub allcolor: Option<[f32; 14]>,
+    /// PBR factors (openOMSI, see docs/PBR.md): Omsi.exe does not know these keywords and
+    /// the classic picture ignores them; the enhanced one takes them as glTF takes its
+    /// material factors. `[matl_basecolor] r g b`: a colour (sRGB, 0..1) the texture is
+    /// multiplied with - the whole colour of a slot without a texture.
+    pub base_color: Option<[f32; 3]>,
+    /// `[matl_metallic] <0..1>`: the metalness, or the factor a metalness map is scaled by.
+    pub metallic: Option<f32>,
+    /// `[matl_roughness] <0..1>`: the roughness, or the factor a roughness map is scaled by.
+    pub roughness: Option<f32>,
+    /// `[matl_normal_strength] <factor>`: how strongly a normal map bends the surface
+    /// (0 flat, 1 as painted).
+    pub normal_strength: Option<f32>,
+    /// `[matl_occlusion_strength] <0..1>`: how much of an occlusion map counts (0 none).
+    pub occlusion_strength: Option<f32>,
+    /// `[matl_emissive]` and its companions (openOMSI, see [`Emission`]): the slot gives off
+    /// light of its own. The classic picture ignores them.
+    pub emission: Option<Emission>,
+    /// `[matl_nodirt]` (openOMSI): the slot takes none of the enhanced picture's road dirt -
+    /// a destination display, a chrome strip, a logo. OMSI 2 skips the keyword.
+    pub no_dirt: bool,
 }
 
 impl MaterialDef {
@@ -158,9 +181,16 @@ impl MaterialDef {
             nightmap,
             glow,
             led_glow,
-            allcolor
+            allcolor,
+            base_color,
+            metallic,
+            roughness,
+            normal_strength,
+            occlusion_strength,
+            emission
         );
         self.envmap_realtime |= base.envmap_realtime;
+        self.no_dirt |= base.no_dirt;
         if self.tex_address == TexAddress::Wrap {
             self.tex_address = base.tex_address;
             if self.border_color == [0.0; 4] {
@@ -1401,6 +1431,12 @@ impl Model {
                     m.glow = Some((t, v));
                 }
             }
+            k if k.starts_with("matl_emissive") && self.read_emission(k, r) => {}
+            "matl_nodirt" => {
+                if let Some(m) = self.cur_matl() {
+                    m.no_dirt = true;
+                }
+            }
             "led_glow_effect" => {
                 // (a value out of 0..1 is taken to the nearer end; a line that is no number
                 // reads as 0, as any number of the format does)
@@ -1413,6 +1449,7 @@ impl Model {
                     });
                 }
             }
+            k if k.starts_with("matl_") && self.read_factor(k, r) => {}
             "matl_allcolor" => {
                 let v = r.f32s::<14>();
                 if let Some(m) = self.cur_matl() {
@@ -1811,6 +1848,45 @@ mod tests {
         let a = mats.iter().find(|d| d.texture == "Absperr_gr.dds").unwrap();
         assert_eq!(a.alpha, 1);
         assert!(a.envmap.is_some());
+    }
+
+    /// The PBR factors (openOMSI) of a `[matl]`, each on its own line, and a `[matl_item]`
+    /// taking those it leaves unset from its slot.
+    #[test]
+    fn pbr_factors_are_read_and_inherited() {
+        let text = "[mesh]\nm.o3d\n\n[matl]\nm.dds\n0\n[matl_basecolor]\n1\n0.5\n2\n[matl_metallic]\n1\n[matl_roughness]\n0,15\n[matl_normal_strength]\n0.5\n[matl_occlusion_strength]\n-1\n";
+        let model = Model::parse(&omsi_cfg::CfgFile::from_str("m.cfg", text));
+        let d = &model.meshes[0].materials[0];
+        assert_eq!(d.base_color, Some([1.0, 0.5, 1.0]));
+        assert_eq!(d.metallic, Some(1.0));
+        assert_eq!(d.roughness, Some(0.15));
+        assert_eq!(d.normal_strength, Some(0.5));
+        assert_eq!(d.occlusion_strength, Some(0.0));
+        let mut item = MaterialDef {
+            roughness: Some(0.6),
+            ..Default::default()
+        };
+        item.inherit(d);
+        assert_eq!(item.roughness, Some(0.6));
+        assert_eq!(item.metallic, Some(1.0));
+        // (a material without them has none)
+        let plain = Model::parse(&omsi_cfg::CfgFile::from_str(
+            "m.cfg",
+            "[mesh]\nm.o3d\n\n[matl]\nm.dds\n0\n",
+        ));
+        let p = &plain.meshes[0].materials[0];
+        assert!(p.base_color.is_none() && p.metallic.is_none() && p.roughness.is_none());
+    }
+
+    /// `[matl_nodirt]` (openOMSI) marks its slot; a `[matl_item]` keeps its slot's.
+    #[test]
+    fn matl_nodirt_marks_the_slot() {
+        let m = Model::parse(&omsi_cfg::CfgFile::from_str(
+            "m.cfg",
+            "[mesh]\nm.o3d\n\n[matl]\na.dds\n0\n[matl_nodirt]\n\n[matl]\nb.dds\n0\n",
+        ));
+        assert!(m.meshes[0].materials[0].no_dirt);
+        assert!(!m.meshes[0].materials[1].no_dirt);
     }
 
     /// `[matl_glow] <texture> <value>`: the material is its own light - the picture and the

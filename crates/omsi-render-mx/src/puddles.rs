@@ -47,6 +47,31 @@ pub(super) struct Uniform {
     vehicle_parts: [VehicleBox; 4],
     /// x: the farthest wet pixel traced (m), y: the most steps a ray takes (see `reach`).
     quality: [f32; 4],
+    /// The last frame's camera, moved to this frame's render origin (`History`).
+    prev_view_proj: [[f32; 4]; 4],
+    prev_inv_view_proj: [[f32; 4]; 4],
+    /// x: 1 when the last frame's reflections may be carried on, y: how much of them is kept,
+    /// z: the frame's number (0..1024), which moves the rays' steps on (`fs_trace`).
+    history: [f32; 4],
+}
+
+/// How much of the last frames' reflections a puddle keeps each frame (`fs_accumulate`). A
+/// ray finds or misses a thin pole, a branch or a gap in a tree's leaves anew every frame, as
+/// its steps fall on the screen; alone, every frame's reflection was a little different, and
+/// on the move they shimmered. Kept over some frames (and held near what this frame's rays see
+/// round the pixel), they hold still.
+const HISTORY_KEEP: f32 = 0.9;
+
+/// How far the eye may move from one frame to the next for the last frame's reflections to
+/// be carried on (m): further is a cut to another view.
+const HISTORY_JUMP: f64 = 5.0;
+
+/// The last frame a puddle picture was drawn for: its camera and render origin.
+#[derive(Clone, Copy)]
+struct History {
+    view_proj: Mat4,
+    origin: DVec3,
+    eye: DVec3,
 }
 
 /// puddle_reflection.wgsl and its parts, its groups read from the heap.
@@ -69,6 +94,7 @@ pub(super) struct Pipelines {
     trace: mx::RenderPipeline,
     blur_x: mx::RenderPipeline,
     blur_y: mx::RenderPipeline,
+    accumulate: mx::RenderPipeline,
     resolve: mx::RenderPipeline,
     glass: [mx::RenderPipeline; 2],
     vehicle: Vec<mx::RenderPipeline>,
@@ -239,6 +265,7 @@ impl Pipelines {
             trace: pipeline("fs_trace"),
             blur_x: pipeline("fs_blur_x"),
             blur_y: pipeline("fs_blur_y"),
+            accumulate: pipeline("fs_accumulate"),
             resolve: pipeline("fs_resolve"),
             glass,
             vehicle,
@@ -262,11 +289,19 @@ pub(super) struct Targets {
     trace: mx::TextureView,
     blur: mx::TextureView,
     filtered: mx::TextureView,
+    /// the reflections kept from frame to frame (`fs_accumulate`): this frame's is
+    /// `history[current]`, the last frame's the other
+    history: [mx::TextureView; 2],
+    current: usize,
+    last: Option<History>,
+    /// frames drawn with these targets (moves the rays' steps on, see `fs_trace`)
+    frame: u32,
     pub(super) view: mx::TextureView,
     trace_bg: HeapGroup,
     blur_x_bg: HeapGroup,
     blur_y_bg: HeapGroup,
-    resolve_bg: HeapGroup,
+    accumulate_bg: [HeapGroup; 2],
+    resolve_bg: [HeapGroup; 2],
     pub(super) down_bg: HeapGroup,
     pub(super) tonemap_bg: [HeapGroup; 2],
     pub(super) classic_bg: HeapGroup,
@@ -368,12 +403,16 @@ impl Targets {
             .expect("mX: a texture view");
         let blur = target("puddle reflection horizontal filter", size);
         let filtered = target("puddle reflection filtered", size);
+        let history = [
+            target("puddle reflection history", size),
+            target("puddle reflection history", size),
+        ];
         let view = target("scene with puddle reflections", (w, h));
         let binding = |binding, view| mx::BindGroupEntry {
             binding,
             resource: mx::BindingResource::TextureView(view),
         };
-        let group = |ray_view| {
+        let group = |ray_view, history_view| {
             HeapGroup::of(
                 PUDDLES.layout(),
                 0,
@@ -395,15 +434,19 @@ impl Targets {
                         binding(6, &r.tone.probe.as_ref().unwrap().view),
                         binding(7, &hit_depth_view),
                         binding(8, &vehicle_view),
+                        binding(9, history_view),
                     ],
                 },
             )
         };
         // The trace target must never appear in its own bind group, including unused slots.
-        let trace_bg = group(&r.black_texture.view);
-        let blur_x_bg = group(&trace);
-        let blur_y_bg = group(&blur);
-        let resolve_bg = group(&filtered);
+        let none = &r.black_texture.view;
+        let trace_bg = group(none, none);
+        let blur_x_bg = group(&trace, none);
+        let blur_y_bg = group(&blur, none);
+        // (frame i writes history[i] from the filtered rays and the other history)
+        let accumulate_bg = [group(&filtered, &history[1]), group(&filtered, &history[0])];
+        let resolve_bg = [group(&history[0], none), group(&history[1], none)];
         let post_group = |base, adapt, screen_mask| {
             HeapGroup::of(
                 crate::pipelines::post::POST.layout(),
@@ -444,10 +487,15 @@ impl Targets {
             trace,
             blur,
             filtered,
+            history,
+            current: 0,
+            last: None,
+            frame: 0,
             view,
             trace_bg,
             blur_x_bg,
             blur_y_bg,
+            accumulate_bg,
             resolve_bg,
             down_bg,
             tonemap_bg,
@@ -546,7 +594,7 @@ impl Renderer {
             DVec3::new(o.x, o.y, lighting.puddle_ground.unwrap_or(o.z))
         });
         let plane = reflection_plane(plane_point, plane_normal, ro).to_array();
-        let u = Uniform {
+        let mut u = Uniform {
             view_proj: cu.view_proj,
             inv_view_proj: vp.inverse().to_cols_array_2d(),
             eye_time: [cu.cam_pos[0], cu.cam_pos[1], cu.cam_pos[2], cu.post[1]],
@@ -586,7 +634,35 @@ impl Renderer {
                 q[2] = footprint(w, h, low);
                 q
             },
+            prev_view_proj: vp.to_cols_array_2d(),
+            prev_inv_view_proj: vp.inverse().to_cols_array_2d(),
+            history: [0.0; 4],
         };
+        {
+            // The last frame's camera, as it sees a point given against this frame's origin.
+            let targets = self.targets.hdr_targets.get_mut(&(w, h)).unwrap();
+            let targets = targets.puddles.as_mut().unwrap();
+            let eye = ro
+                + DVec3::new(
+                    cu.cam_pos[0] as f64,
+                    cu.cam_pos[1] as f64,
+                    cu.cam_pos[2] as f64,
+                );
+            if let Some(last) = targets.last.filter(|l| l.eye.distance(eye) < HISTORY_JUMP) {
+                let prev = last.view_proj * Mat4::from_translation((ro - last.origin).as_vec3());
+                u.prev_view_proj = prev.to_cols_array_2d();
+                u.prev_inv_view_proj = prev.inverse().to_cols_array_2d();
+                u.history = [1.0, HISTORY_KEEP, 0.0, 0.0];
+            }
+            targets.last = Some(History {
+                view_proj: vp,
+                origin: ro,
+                eye,
+            });
+            targets.current ^= 1;
+            targets.frame = (targets.frame + 1) % 1024;
+            u.history[2] = targets.frame as f32;
+        }
         self.queue
             .write_buffer(
                 &self.puddles.as_ref().unwrap().vehicle_params,
@@ -750,10 +826,17 @@ impl Renderer {
         );
         post_pass(
             encoder,
+            &targets.history[targets.current],
+            pass_timer(queries, timed, "puddle history"),
+            &pipelines.accumulate,
+            &targets.accumulate_bg[targets.current],
+        );
+        post_pass(
+            encoder,
             &targets.view,
             pass_timer(queries, timed, "puddle resolve"),
             &pipelines.resolve,
-            &targets.resolve_bg,
+            &targets.resolve_bg[targets.current],
         );
     }
 }

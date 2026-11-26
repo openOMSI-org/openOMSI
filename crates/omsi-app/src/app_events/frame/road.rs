@@ -105,6 +105,10 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
                 s.tick_t = if s.pending() > 0 { 0.1 } else { 2.0 };
                 heavy = true;
                 steps::set_keep_clear(t, cx.player.player.as_ref(), &cx.net.remotes);
+                // (a LAN host puts the timetable's buses on the road round the others too)
+                s.fleet_near = std::iter::once(center)
+                    .chain(t.sim.lan_centers.iter().copied())
+                    .collect();
                 let __t6 = Instant::now();
                 steps::schedule_tick(s, w, t, &mut cx.gfx.gfx.sim_view.traffic, r, scene, first);
                 cx.perf.profile.add(

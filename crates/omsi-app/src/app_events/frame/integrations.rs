@@ -93,6 +93,10 @@ impl App {
                 ui.set_themes(list, &self.settings.ui_theme_pack);
             }
         }
+        // (#2536) a `/`-line the player typed: the plugins' while one of them hears it, and
+        // not said to the session (the app's chat send asks the same question)
+        let hears_commands = !plugins.is_empty() && plugins.hears("chat_command");
+        self.sync_plugin_commands(hears_commands);
         if !plugins.is_empty() && !self.paused {
             let keys = std::mem::take(&mut self.integrations.plugin_keys);
             let events = std::mem::take(&mut self.integrations.plugin_events);
@@ -232,6 +236,19 @@ impl App {
             omsi_net::ws::query(t, false).ok().map(|i| i.max_players)
         })
     }
+
+    pub(crate) fn sync_plugin_commands(&mut self, hears: bool) {
+        self.net.remotes.take_commands = hears;
+        if hears && !self.paused {
+            for text in std::mem::take(&mut self.net.remotes.plugin_commands) {
+                crate::plugins::queue_event_ex(
+                    &mut self.integrations.plugin_events_ex,
+                    "chat_command",
+                    vec![omsi_plugin::api::Value::Str(text)],
+                );
+            }
+        }
+    }
 }
 
 /// The game's interface themes as the plugins see them (`ui.themes`).
@@ -243,4 +260,26 @@ fn theme_infos() -> Vec<omsi_plugin::ui::ThemeInfo> {
             name: name.clone(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn commands_preserved_while_paused_until_unpaused() {
+        use clap::Parser;
+        let mut app = crate::assemble_app(Args::parse_from(["openomsi"]), Default::default());
+        app.net.remotes.plugin_commands.push("/cmd 1".into());
+        app.paused = true;
+        app.sync_plugin_commands(true);
+        assert_eq!(app.net.remotes.plugin_commands, vec!["/cmd 1"]);
+        assert!(app.integrations.plugin_events_ex.is_empty());
+
+        app.paused = false;
+        app.sync_plugin_commands(true);
+        assert!(app.net.remotes.plugin_commands.is_empty());
+        assert_eq!(app.integrations.plugin_events_ex.len(), 1);
+        assert_eq!(app.integrations.plugin_events_ex[0].0, "chat_command");
+    }
 }

@@ -31,8 +31,101 @@ pub(crate) struct MaterialUniform {
     /// Window mask: mesh X/Z origin and inverse size; zero disables it.
     pub(crate) wipe_bounds: [f32; 4],
     /// x: `[matl_glow]` strength (`MaterialExtra::glow`); 0 = the keyword is not there.
-    /// y/z/w free.
+    /// y: an LED panel's share of its glow; z: `[matl_emissive]`'s scale
+    /// (`EmissionLight::scale`); w free.
     pub(crate) glow: [f32; 4],
+    /// The PBR factors (`PbrFactors`): x metalness, y roughness, z the normal map's
+    /// strength, w the occlusion map's; each counts only where `base_color.w` says so.
+    pub(crate) pbr_factor: [f32; 4],
+    /// rgb: `[matl_basecolor]` (linear), the texture's factor; w: bits of what the
+    /// material's commands set - 1 the base colour, 2 the metalness, 4 the roughness,
+    /// 8 the normal strength, 16 the occlusion strength (0: none, as OMSI's materials).
+    pub(crate) base_color: [f32; 4],
+    /// `[matl_emissive]` (`EmissionLight`): rgb its colour (linear); w bits - 1 it shines,
+    /// 2 its texture is bound in the light map's slot, 4 physical units, 8 the instance's
+    /// slot value scales it, 16 that value carries its temperature (0: not emissive).
+    pub(crate) emission: [f32; 4],
+}
+
+/// A material's own light (openOMSI `[matl_emissive]`, see `omsi_model::Emission`), as the
+/// enhanced picture draws it: in HDR, so that it blooms by its brightness and keeps its
+/// colour however bright. The classic picture does not draw it.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct EmissionLight {
+    /// Its colour (linear rgb): the temperature's where the material gives one.
+    pub color: [f32; 3],
+    /// How bright: the artist's strength (1 as a lit display), or with `physical` the
+    /// luminance in the renderer's radiance units (1 = 10 000 cd/m²).
+    pub scale: f32,
+    pub physical: bool,
+    /// Its texture (`[matl_emissive_texture]`) rides in the light map's slot (a slot with a
+    /// light map or a `[matl_glow]` keeps those, and the texture is left out).
+    pub textured: bool,
+    /// The instance's slot value (`Instance::slot_light`, see `omsi_model::slot_value`)
+    /// scales it, 0..1 ...
+    pub dimmed: bool,
+    /// ... and carries its temperature, whose colour takes the place of `color`.
+    pub tinted: bool,
+}
+
+impl EmissionLight {
+    /// The material uniform's vector (`MaterialUniform::emission`); the light map's slot
+    /// holds its texture where `bound`.
+    pub(crate) fn uniform(&self, bound: bool) -> [f32; 4] {
+        let bit = |set: bool, b: f32| if set { b } else { 0.0 };
+        [
+            self.color[0].max(0.0),
+            self.color[1].max(0.0),
+            self.color[2].max(0.0),
+            1.0 + bit(self.textured && bound, 2.0)
+                + bit(self.physical, 4.0)
+                + bit(self.dimmed, 8.0)
+                + bit(self.tinted, 16.0),
+        ]
+    }
+}
+
+/// The PBR factors of a material (openOMSI `[matl_basecolor]`, `[matl_metallic]`,
+/// `[matl_roughness]`, `[matl_normal_strength]`, `[matl_occlusion_strength]`, and a glTF
+/// material's factors): what the enhanced picture takes in place of, or times, a PBR map
+/// as glTF does - a factor alone is the value, with a map the map is scaled by it. None of
+/// them set: the material is as it was (see docs/PBR.md).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct PbrFactors {
+    /// The base colour (linear rgb) the texture is multiplied with.
+    pub base_color: Option<[f32; 3]>,
+    pub metallic: Option<f32>,
+    pub roughness: Option<f32>,
+    pub normal_strength: Option<f32>,
+    pub occlusion_strength: Option<f32>,
+}
+
+impl PbrFactors {
+    /// The two vectors of the material's uniform (`MaterialUniform::pbr_factor` and
+    /// `base_color`).
+    pub(crate) fn uniform(&self) -> ([f32; 4], [f32; 4]) {
+        let c = self.base_color.unwrap_or([1.0; 3]);
+        let bit = |set: bool, b: f32| if set { b } else { 0.0 };
+        let flags = bit(self.base_color.is_some(), 1.0)
+            + bit(self.metallic.is_some(), 2.0)
+            + bit(self.roughness.is_some(), 4.0)
+            + bit(self.normal_strength.is_some(), 8.0)
+            + bit(self.occlusion_strength.is_some(), 16.0);
+        (
+            [
+                self.metallic.unwrap_or(0.0).clamp(0.0, 1.0),
+                self.roughness.unwrap_or(1.0).clamp(0.0, 1.0),
+                self.normal_strength.unwrap_or(1.0).max(0.0),
+                self.occlusion_strength.unwrap_or(1.0).clamp(0.0, 1.0),
+            ],
+            [c[0].max(0.0), c[1].max(0.0), c[2].max(0.0), flags],
+        )
+    }
+
+    /// Whether the material's commands set any of them.
+    pub fn any(&self) -> bool {
+        *self != PbrFactors::default()
+    }
 }
 
 /// The maps of a PBR set found beside a diffuse texture (`foo_n.png` and the rest, see
@@ -76,9 +169,9 @@ pub enum TexAddressing {
 pub(crate) struct BindKey {
     pub(crate) textures: [(usize, u64); 7],
     pub(crate) address: TexAddressing,
-    // 13 vec4: the MaterialUniform's own fields (see the count in
+    // 16 vec4: the MaterialUniform's own fields (see the count in
     // `shaders_validate_and_match_the_uniforms`)
-    pub(crate) uniform: [u32; 52],
+    pub(crate) uniform: [u32; 64],
 }
 
 pub struct Material {
@@ -256,6 +349,15 @@ pub struct MaterialExtra {
     /// the modeller has said whether the slot is an LED panel at all (`led` follows it),
     /// so this is only read where `led` is set.
     pub led_glow: Option<f32>,
+    /// The PBR factors of the slot (openOMSI, see `PbrFactors`); the enhanced picture alone
+    /// draws them.
+    pub pbr: PbrFactors,
+    /// `[matl_emissive]` (openOMSI, see `EmissionLight`); None: the slot gives off no light
+    /// of its own beyond OMSI's.
+    pub emission: Option<EmissionLight>,
+    /// `[matl_nodirt]` (openOMSI): the slot takes none of the road dirt (`params2.w` bit 32,
+    /// see enhanced/04_shade.wgsl).
+    pub no_dirt: bool,
 }
 
 /// The textures a material's bind group samples.
@@ -459,7 +561,23 @@ impl Renderer {
         } else {
             bounds[3].abs()
         };
-        self.copy_material(scene, base, texture, Some((mask, drops, bounds)))
+        self.copy_material(scene, base, texture, Some((Some((mask, drops)), bounds)))
+    }
+
+    /// The snow variant of a rain film's layer on a pane without a wiper mask of its own (a
+    /// door, an opening window, a side window away from the wipers): the pane of glass that
+    /// shows settled snow while it snows, as `add_window_wetness_material`'s snow variant
+    /// does, its cover the layer's own wetness (`window_wetness` without a mask). Without it
+    /// such a pane kept drawing the rain film's water drops in a snowfall.
+    pub fn add_window_snow_material(
+        &self,
+        scene: &mut Scene,
+        base: MaterialId,
+    ) -> Option<MaterialId> {
+        let texture = scene.materials.get(base)?.texture;
+        // (no mask: `wipe_bounds.z` 0, the vertex stage lays no `wipe_uv`; `w` below zero
+        // marks the snow variant, `is_snow_pane`)
+        self.copy_material(scene, base, texture, Some((None, [0.0, 0.0, 0.0, -1.0])))
     }
 
     pub(crate) fn copy_material(
@@ -467,7 +585,7 @@ impl Renderer {
         scene: &mut Scene,
         base: MaterialId,
         texture: Option<TextureId>,
-        wetness: Option<(TextureId, TextureId, [f32; 4])>,
+        wetness: Option<(Option<(TextureId, TextureId)>, [f32; 4])>,
     ) -> Option<MaterialId> {
         let (
             alpha,
@@ -507,11 +625,13 @@ impl Renderer {
                 src.uniform,
             )
         };
-        if let Some((mask, drops, bounds)) = wetness {
-            transmap = Some((mask, true));
-            bump = Some((drops, 0.0));
+        if let Some((maps, bounds)) = wetness {
+            if let Some((mask, drops)) = maps {
+                transmap = Some((mask, true));
+                bump = Some((drops, 0.0));
+                uniform.params[2] = 0.0;
+            }
             uniform.wipe_bounds = bounds;
-            uniform.params[2] = 0.0;
             // the snow variant is a pane of glass, not the film of water (`emissive.w` 2)
             if bounds[3] < 0.0 && uniform.emissive[3] > 1.5 {
                 uniform.emissive[3] = 1.0;
@@ -832,7 +952,11 @@ impl Renderer {
                 // ([matl_glow]'s mask rides in the light map's slot, but the material is
                 // not a light-mapped one: `params2.x` stays off so the classic picture is as
                 // it was - the enhanced one draws the glow, see `MaterialExtra::glow`)
-                if lightmap.is_some() && extra.glow <= 0.0 {
+                // (nor is one whose emission texture rides there, `EmissionLight::textured`)
+                if lightmap.is_some()
+                    && extra.glow <= 0.0
+                    && !extra.emission.is_some_and(|e| e.textured)
+                {
                     1.0
                 } else {
                     0.0
@@ -841,7 +965,8 @@ impl Renderer {
                 moisture,
                 // bit 1: a [matl_envmap_mask]; bit 2: a [matl_transmap]; bit 4: a vehicle's
                 // part that may be metal; bit 8: a body, never foliage; bit 16: the active
-                // night texture supplies a clear vehicle material's coverage
+                // night texture supplies a clear vehicle material's coverage; bit 32: no road
+                // dirt (`[matl_nodirt]`)
                 (if env_mask.is_some() { 1.0 } else { 0.0 })
                     + if extra.transmap_declared || transmap.is_some() {
                         2.0
@@ -850,6 +975,7 @@ impl Renderer {
                     }
                     + if extra.metal_ok { 4.0 } else { 0.0 }
                     + if extra.solid { 8.0 } else { 0.0 }
+                    + if extra.no_dirt { 32.0 } else { 0.0 }
                     + if extra.night_alpha
                         && alpha == AlphaMode::Blend
                         && nightmap.is_some()
@@ -934,9 +1060,14 @@ impl Renderer {
                     0.0
                 },
                 extra.led_glow.map_or(1.0, |g| g.clamp(0.0, 1.0)),
-                0.0,
+                extra.emission.map_or(0.0, |e| e.scale.max(0.0)),
                 0.0,
             ],
+            pbr_factor: extra.pbr.uniform().0,
+            base_color: extra.pbr.uniform().1,
+            emission: extra
+                .emission
+                .map_or([0.0; 4], |e| e.uniform(lightmap.is_some())),
         };
         let slot = |t: Option<TextureId>| {
             t.and_then(|t| scene.textures.get(t).map(|g| (t, g.generation)))

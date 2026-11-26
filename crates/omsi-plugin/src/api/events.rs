@@ -65,9 +65,9 @@ pub static EVENTS: &[EventDef] = &[
     ),
     ev(
         "key",
-        &["key", "down"],
+        &["key", "down", "combo"],
         OLD10,
-        "A key went down (`true`) or came up: winit's name of it (`\"KeyH\"`, `\"F5\"`, `\"Numpad8\"`).",
+        "A key went down (`true`) or came up: winit's name of it (`\"KeyH\"`, `\"F5\"`, `\"Numpad8\"`), and the combination it made with the modifiers held, spelled as `input.hotkey` takes them (`\"Ctrl+KeyH\"`, `\"F5\"`).",
     ),
     ev(
         "next_stop",
@@ -379,6 +379,12 @@ pub static EVENTS: &[EventDef] = &[
         &["name", "text"],
         NEW,
         "A line was said in the LAN session's chat (by another player or this one).",
+    ),
+    ev(
+        "chat_command",
+        &["text"],
+        NEW,
+        "The player typed a `/`-line into the chat (`\"/login name pass\"`): while a plugin hears this, such a line is not said to the session at all (a password never reaches the other players). Say something back with `lan.chat`.",
     ),
     ev(
         "object_init",

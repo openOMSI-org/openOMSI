@@ -19,6 +19,7 @@ fn d3d_material_colours() {
         emissive: [0.0; 3],
         specular_power: 96.0,
         texture: "int_glass.tga".into(),
+        metallic_roughness: None,
     };
     let (color, emissive, specular, ambient) = d3d_material(&m, None, true);
     // textured: the texture's alpha alone counts
@@ -499,4 +500,163 @@ fn portuguese_panes_are_glass() {
         false,
         true
     ));
+}
+
+/// The PBR factors (openOMSI) reach the renderer's material: the last of each command of a
+/// slot, the base colour from sRGB to linear; a slot without them has none (as before).
+#[test]
+fn pbr_factors_of_a_slot() {
+    let plain = MaterialDef::default();
+    assert!(!material_extra(&[&plain], None, None, [0.0; 4]).pbr.any());
+    let a = MaterialDef {
+        base_color: Some([1.0, 0.5, 0.0]),
+        metallic: Some(1.0),
+        roughness: Some(0.5),
+        ..Default::default()
+    };
+    let b = MaterialDef {
+        roughness: Some(0.1),
+        ..Default::default()
+    };
+    let p = material_extra(&[&a, &b], None, None, [0.0; 4]).pbr;
+    assert_eq!(p.metallic, Some(1.0));
+    assert_eq!(p.roughness, Some(0.1));
+    assert_eq!(p.normal_strength, None);
+    let c = p.base_color.unwrap();
+    assert_eq!(c[0], 1.0);
+    assert!((c[1] - 0.214).abs() < 0.001, "{c:?}");
+    assert_eq!(c[2], 0.0);
+}
+
+/// `[matl_emissive]` (openOMSI) reaches the renderer's material: none without it; the colour
+/// linear, the temperature's colour where one is given, the luminance in radiance units, the
+/// texture in the light map's slot unless that holds a light map, driven only without one.
+#[test]
+fn emission_of_a_slot() {
+    assert_eq!(
+        material_extra(&[&MaterialDef::default()], None, None, [0.0; 4]).emission,
+        None
+    );
+    let lamp = MaterialDef {
+        emission: Some(omsi_model::Emission {
+            color: [1.0, 0.5, 0.0],
+            strength: 8.0,
+            variable: Some("lights_main".into()),
+            texture: Some("lamp_e.png".into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let e = material_extra(&[&lamp], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert_eq!(e.scale, 8.0);
+    assert!(!e.physical && e.textured && e.dimmed && !e.tinted);
+    assert!((e.color[1] - 0.214).abs() < 0.001);
+    assert_eq!(glow_mask(&[&lamp]), Some("lamp_e.png"));
+    let bulb = MaterialDef {
+        emission: Some(omsi_model::Emission {
+            kelvin: Some(3200.0),
+            filament: true,
+            nits: Some(2.0e7),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let e = material_extra(&[&bulb], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert!(e.physical && e.tinted && e.dimmed && !e.textured);
+    assert_eq!(e.scale, 2000.0);
+    assert!(e.color[0] > e.color[2]);
+    let lit = MaterialDef {
+        lightmaps: vec![("l.bmp".into(), "lights".into())],
+        lightmap: Some(("l.bmp".into(), "lights".into())),
+        ..lamp.clone()
+    };
+    let e = material_extra(&[&lit], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert!(!e.textured && !e.dimmed);
+    assert_eq!(glow_mask(&[&lit]), None);
+}
+
+#[test]
+fn reflective_car_body_stays_solid_while_unnamed_pane_on_non_body_mesh_is_see_through() {
+    use crate::vehicles::is_reflective_body;
+    assert!(is_reflective_body(true, false, false, true, true, false));
+    assert!(!is_reflective_body(false, false, false, true, true, false));
+    assert!(!is_reflective_body(true, true, false, true, true, false));
+    assert!(!is_reflective_body(true, false, true, true, true, false));
+}
+
+#[test]
+fn envmapped_atlas_window_on_body_named_mesh_is_see_through() {
+    use crate::vehicle_materials::{ALPHA_MASK, slot_is_clear_window, slot_is_see_through};
+    use crate::vehicles::is_reflective_body;
+    use glam::Vec2;
+    use omsi_geometry::MeshData;
+
+    let mesh = MeshData {
+        positions: vec![],
+        normals: vec![],
+        uvs: vec![
+            Vec2::new(0.1, 0.1),
+            Vec2::new(0.1, 0.2),
+            Vec2::new(0.2, 0.1),
+        ],
+        ranges: vec![(0, 3, 0)],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    let paint = vec![40u8; ALPHA_MASK * ALPHA_MASK];
+    let mut atlas = vec![255u8; ALPHA_MASK * ALPHA_MASK];
+    for (x, y) in [
+        (25, 25),
+        (25, 51),
+        (51, 25),
+        (25, 38),
+        (38, 25),
+        (38, 38),
+        (34, 34),
+    ] {
+        atlas[y * ALPHA_MASK + x] = 0;
+    }
+
+    assert!(slot_is_see_through(&mesh, 0, &paint));
+    assert!(!slot_is_clear_window(&mesh, 0, &paint));
+    assert!(is_reflective_body(true, false, false, true, true, false));
+    assert!(slot_is_see_through(&mesh, 0, &atlas));
+    assert!(slot_is_clear_window(&mesh, 0, &atlas));
+    assert!(!is_reflective_body(true, false, false, true, true, true));
+}
+
+#[test]
+fn envmapped_atlas_window_clear_away_from_centroid_stays_see_through() {
+    use crate::vehicle_materials::{ALPHA_MASK, slot_is_clear_window, slot_is_see_through};
+    use crate::vehicles::is_reflective_body;
+    use glam::Vec2;
+    use omsi_geometry::MeshData;
+
+    let mesh = MeshData {
+        positions: vec![],
+        normals: vec![],
+        uvs: vec![
+            Vec2::new(0.1, 0.1),
+            Vec2::new(0.1, 0.2),
+            Vec2::new(0.2, 0.1),
+        ],
+        ranges: vec![(0, 3, 0)],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    let mut atlas = vec![255u8; ALPHA_MASK * ALPHA_MASK];
+    for (x, y) in [(25, 25), (25, 51), (51, 25), (25, 38), (38, 25), (38, 38)] {
+        atlas[y * ALPHA_MASK + x] = 0;
+    }
+    atlas[34 * ALPHA_MASK + 34] = 40;
+
+    assert!(slot_is_see_through(&mesh, 0, &atlas));
+    assert!(slot_is_clear_window(&mesh, 0, &atlas));
+    assert!(!is_reflective_body(true, false, false, true, true, true));
 }

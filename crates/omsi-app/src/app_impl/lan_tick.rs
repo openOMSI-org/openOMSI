@@ -234,6 +234,8 @@ impl App {
             self.renderer.as_ref(),
             self.scene.as_mut(),
         ) {
+            self.gfx.sim_view.lan.fps = self.perf.fps;
+            self.gfx.sim_view.lan.others_detail = self.settings.others_detail;
             crate::view_sync::apply_lan(
                 &mut self.net.remotes,
                 &mut self.gfx.sim_view.lan,
@@ -251,6 +253,13 @@ impl App {
         }
         for u in updates {
             self.apply_world_update(u);
+        }
+        if let (Some(lan), Some(h), Some(s)) = (
+            self.net.lan.as_ref(),
+            self.session.humans.as_mut(),
+            self.session.schedule.as_mut(),
+        ) {
+            super::lan_duties::lan_tour_progress(lan, &mut h.sim, &mut s.sim);
         }
         let apply_ms = phase.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();

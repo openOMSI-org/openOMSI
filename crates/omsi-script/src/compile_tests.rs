@@ -141,35 +141,39 @@ fn unterminated_multiline_string_reports_an_error_and_keeps_later_blocks() {
     assert_eq!(p.frame.len(), 1);
 }
 
+/// Omsi.exe sub_5d1db8 keeps one entry of each kind, the first header's: identical or
+/// distinct, a second `{init}` / `{frame}` / `{frame_ai}` is never an entry of its own.
 #[test]
-fn a_file_deduplicates_identical_frame_blocks_and_keeps_distinct_ones() {
-    let dup = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n1 (S.L.a)\n{end}\n");
-    assert_eq!(dup.frame.len(), 1);
-    let distinct = program_of("{frame}\n1 (S.L.a)\n{end}\n{frame}\n2 (S.L.b)\n{end}\n");
-    assert_eq!(distinct.frame.len(), 2);
+fn a_script_keeps_only_its_first_entry_block_of_each_kind() {
+    for kind in ["init", "frame", "frame_ai"] {
+        let entries = |p: &Program| match kind {
+            "init" => p.init.clone(),
+            "frame" => p.frame.clone(),
+            _ => p.frame_ai.clone(),
+        };
+        let dup = program_of(&format!(
+            "{{{kind}}}\n1 (S.L.a)\n{{end}}\n{{{kind}}}\n1 (S.L.a)\n{{end}}\n"
+        ));
+        assert_eq!(entries(&dup).len(), 1, "{kind}");
+        let distinct = program_of(&format!(
+            "{{{kind}}}\n1 (S.L.a)\n{{end}}\n{{{kind}}}\n2 (S.L.b)\n{{end}}\n"
+        ));
+        let first = entries(&distinct);
+        assert_eq!(first.len(), 1, "{kind}");
+        assert_eq!(distinct.blocks[first[0] as usize].line, 1, "{kind}");
+        // (one with its macro calls, as the SKM6126's: the later ones never run)
+        let calls = program_of(&format!(
+            "{{{kind}}}\n(M.L.m)\n{{end}}\n{{{kind}}}\n(M.L.m)\n{{end}}\n{{macro:m}}\n1 (S.L.a)\n{{end}}\n"
+        ));
+        assert_eq!(entries(&calls).len(), 1, "{kind}");
+    }
     let stacked = program_of("{frame}\n{frame}\n3 (S.L.c)\n{end}\n");
     assert_eq!(stacked.frame.len(), 1);
-    // a frame block without its end runs on into the next one, which runs there only
+    // a frame block without its end runs on into the next one
     let cut_short = program_of("{frame}\n1 (S.L.a)\n{frame}\n2 (S.L.b)\n{end}\n");
     assert_eq!(cut_short.frame.len(), 1);
     let first = &cut_short.blocks[cut_short.frame[0] as usize].ops;
     assert_eq!(first.last(), Some(&Op::FallThrough(cut_short.frame[0] + 1)));
-}
-
-#[test]
-#[rustfmt::skip]
-fn frame_blocks_compare_pending_macro_calls_before_deduplicating() {
-    for kind in ["frame", "frame_ai"] {
-        let p = program_of(&format!("{{{kind}}}\n(M.L.first)\n{{end}}\n{{{kind}}}\n(M.L.second)\n{{end}}\n{{{kind}}}\n(M.L.first)\n{{end}}\n{{macro:first}}\n1 (S.L.a)\n{{end}}\n{{macro:second}}\n2 (S.L.b)\n{{end}}\n"));
-        let frames = match kind { "frame" => &p.frame, _ => &p.frame_ai };
-        assert_eq!(frames.len(), 2, "{kind}");
-        let (f0, f1) = (frames[0] as usize, frames[1] as usize);
-        assert_ne!(p.blocks[f0].ops, p.blocks[f1].ops);
-
-        let p_str = program_of(&format!("{{{kind}}}\n\"x\" (S.$.name)\n{{end}}\n{{{kind}}}\n\"x\" (S.$.name)\n{{end}}\n{{{kind}}}\n\"y\" (S.$.name)\n{{end}}\n"));
-        let s_frames = match kind { "frame" => &p_str.frame, _ => &p_str.frame_ai };
-        assert_eq!(s_frames.len(), 2, "string literals {kind}");
-    }
 }
 
 #[test]

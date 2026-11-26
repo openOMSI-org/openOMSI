@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Default)]
 pub struct Game {
+    pub cruise: Option<f32>,
     pub hof: Option<api::Value>,
     pub vehicle: bool,
     pub vars: HashMap<String, f32>,
@@ -19,6 +20,7 @@ pub struct Game {
     pub events_ex: Vec<(&'static str, Vec<api::Value>)>,
     pub info: Vec<(&'static str, InfoValue)>,
     pub keys: Vec<(String, bool)>,
+    pub key_events: Vec<KeyEvent>,
     pub held: Vec<String>,
     pub pos: [f64; 4],
     pub doors: Vec<f32>,
@@ -218,6 +220,25 @@ impl PluginIo for Game {
     fn keys(&self) -> Vec<(String, bool)> {
         self.keys.clone()
     }
+    fn key_events(&self) -> Vec<KeyEvent> {
+        if !self.key_events.is_empty() {
+            return self.key_events.clone();
+        }
+        let ctrl = self.key_held("ControlLeft") || self.key_held("ControlRight");
+        let shift = self.key_held("ShiftLeft") || self.key_held("ShiftRight");
+        let alt = self.key_held("AltLeft") || self.key_held("AltRight");
+        self.keys
+            .clone()
+            .into_iter()
+            .map(|(key, down)| KeyEvent {
+                key,
+                down,
+                ctrl,
+                shift,
+                alt,
+            })
+            .collect()
+    }
     fn events(&self) -> Vec<GameEvent> {
         self.events.clone()
     }
@@ -298,6 +319,16 @@ impl PluginIo for Game {
     }
     fn bus_steer(&self) -> Option<(f32, f32)> {
         Some((-10.0, 45.0))
+    }
+    fn bus_cruise(&self) -> Option<f32> {
+        self.cruise
+    }
+    fn bus_set_cruise(&mut self, kmh: Option<f32>) -> bool {
+        if kmh.is_some_and(|k| k < 5.0) {
+            return false;
+        }
+        self.cruise = kmh;
+        true
     }
     fn bus_track(&self) -> Option<omsi_plugin::io::TrackPos> {
         Some(omsi_plugin::io::TrackPos {
