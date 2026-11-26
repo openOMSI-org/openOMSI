@@ -12,6 +12,10 @@ pub enum Command {
     /// A passenger of ours works this switch of our bus (`passenger::may_work` says whether
     /// they may).
     Trigger(String),
+    /// The driver of a bus says who serves its cash desk - `crew <id>`, `crew none` (#2859).
+    /// From any player, since every player drives a bus of their own; `crew` is the driver's,
+    /// not the host's.
+    Crew(Option<u32>),
     /// A game asks the host what the session allows of voice chat.
     VoiceAsked,
     /// A player asks the host for the optional RP speed limit.
@@ -103,6 +107,18 @@ impl Command {
     pub fn parse(from: u32, text: &str) -> Option<Command> {
         if let Some(ev) = text.strip_prefix("trigger ") {
             return Some(Command::Trigger(ev.trim().to_string()));
+        }
+        // (#2859) any player's, not the host's: each bus's driver says who serves its desk
+        if let Some(c) = text.strip_prefix("crew ") {
+            let c = c.trim();
+            return match c {
+                "none" => Some(Command::Crew(None)),
+                id => id
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|id| *id != 0 && *id != from)
+                    .map(|id| Command::Crew(Some(id))),
+            };
         }
         if text == "speed-limit?" {
             return Some(Command::SpeedLimitAsked);
