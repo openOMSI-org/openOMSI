@@ -277,6 +277,8 @@ pub struct Scene {
     pub(crate) frame_heap: FrameHeap,
     pub(crate) frame_views: Vec<mx::BufferView>,
     pub(crate) precip_heap: FrameHeap,
+    /// The same with the dry map's camera (`passes::precip_map::DRY_RANGE`).
+    pub(crate) dry_heap: FrameHeap,
     /// The camera group's places in the heap for the modules beside the scene shader that read
     /// it; none until they are made (again: `rebuild_camera_bind_group`).
     pub(crate) camera_heaps: Option<CameraHeaps>,

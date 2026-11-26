@@ -702,6 +702,11 @@ impl World {
         self.data.peek().ground_height(x, y)
     }
 
+    /// Whether the rain is kept off the road at world (x, y, z) (see `WorldData::roofed_at`).
+    pub fn roofed_at(&self, x: f64, y: f64, z: f64) -> bool {
+        self.data.peek().roofed_at(x, y, z)
+    }
+
     /// The wetness a puddle would use at world (x, y) (see `WorldData::wet_road_at`).
     pub fn wet_road_at(&self, x: f64, y: f64, wetness: f32) -> f32 {
         self.data.peek().wet_road_at(x, y, wetness)

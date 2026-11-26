@@ -648,6 +648,47 @@ fn clouds_ss_bicubic(uv: vec2<f32>) -> vec4<f32> {
     return clamp(c, min(min(a, b), min(e, g)), max(max(a, b), max(e, g)));
 }
 
+// Rain falling far off: grey curtains hanging from the dark clouds down to the horizon,
+// where the weather rains or storms (only the picture - the weather here is the weather's).
+// Along the level way towards d, six places 3 to 27 km off: where the ray passes under the
+// clouds' base there, and the clouds over that place are dense (the weather map's own
+// cells, which the clouds above are drawn from), the rain under them takes some of the
+// view (about one optical depth a kilometre of a heavy shower), streaked in columns, fading
+// up into the cloud's base. Gives how much of what lies behind it hides (0..1).
+fn rain_curtains(d: vec3<f32>) -> f32 {
+    let sky = cloud_sky();
+    let rainy = clamp(max(enh.weather.z * 1.6, max(storm_cb(), sky.deck * smoothstep(0.6, 0.95, enh.weather.w) * 0.6)), 0.0, 1.0);
+    if (rainy <= 0.01 || sky.cover < 0.3 || d.z < -0.03 || d.z > 0.25) {
+        return 0.0;
+    }
+    let level = max(length(d.xy), 1e-3);
+    var tau = 0.0;
+    var dist = 3000.0;
+    for (var k = 0; k < 6; k = k + 1) {
+        let t = dist / level;
+        let h = cloud_height(d, t);
+        let under = 1.0 - smoothstep(cloud_bottom() - 450.0, cloud_bottom(), h);
+        if (under > 0.0) {
+            let p = cloud_ground(d, t);
+            let w = textureSampleLevel(t_cloud_weather, s_cloud, (p + cloud_drift()) / WEATHER_PERIOD, 1.0);
+            let f = w.r * 0.7 + w.a * 0.3;
+            // (the densest cells rain, and where the clouds grow tall: under a closed deck as
+            // well only some of it, so that the rain hangs in curtains with gaps between them
+            // rather than a grey wall all round)
+            let wet_cell = smoothstep(0.56, 0.8, f + (w.b - 0.5) * 0.3 * max(sky.storm, 0.4));
+            // (the shafts: the rain is heavier in some columns than in others)
+            let s = textureSampleLevel(t_cloud_weather, s_cloud, (p + cloud_drift()) / 1700.0, 0.0).g;
+            let shafts = 0.55 + 0.9 * smoothstep(0.3, 0.8, s);
+            tau = tau + wet_cell * shafts * under * dist * 0.55 * 0.0009;
+        }
+        dist = dist * 1.55;
+    }
+    // (towards the horizon's haze they sink into it; below it the ground takes over; up
+    // the sky they thin out into the clouds' base, from 4.5 to 14 degrees)
+    let horizon = smoothstep(-0.03, 0.0, d.z) * (1.0 - smoothstep(0.08, 0.25, d.z));
+    return min(1.0 - exp(-tau), 0.6) * rainy * horizon;
+}
+
 @fragment
 fn fs_enhanced(in: VsOut) -> @location(0) vec4<f32> {
     return enhanced_sky(in, true);
@@ -672,6 +713,14 @@ fn enhanced_sky(in: VsOut, screen: bool) -> vec4<f32> {
         let hi = high_clouds(d, sky_table(d), pix);
         col = hi.rgb * ss.a + ss.rgb * enh.ground.w;
         cover = 1.0 - ss.a * (1.0 - hi.a);
+        // the rain far off, in front of the clouds and the sky behind it: what lies behind
+        // goes greyer and darker, as under the cloud it falls from (`rain_curtains`)
+        let curtain = rain_curtains(d);
+        if (curtain > 0.0) {
+            let grey = dot(col, vec3<f32>(0.2126, 0.7152, 0.0722)) * vec3<f32>(0.62, 0.65, 0.69);
+            col = mix(col, grey, curtain);
+            cover = max(cover, curtain);
+        }
         // the weather's fog along the whole way to the horizon (the clear air is in the
         // table already: taken again, it whitened the whole sky)
         let h0 = camera.cam_pos.z - enh.fog.z;

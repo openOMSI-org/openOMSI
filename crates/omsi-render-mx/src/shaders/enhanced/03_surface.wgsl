@@ -30,6 +30,53 @@ const GI_CAB_SHARE: f32 = 0.15;
 // How far the puddle threshold drops with the wetness: see the puddle mask in `shade_enhanced`.
 const PUDDLE_SPREAD: f32 = 0.37;
 
+// The water in the lanes' wheel tracks (`lane_ruts`: 0..1, how worn the road is there),
+// on a road `wet` (0..1): x the cover of the water standing in the ruts, y how far the
+// tyres have dried the wheel paths. A road soaked through holds a broken line of water in
+// each rut (the traffic has worn them a few millimetres deep), which the tyres run through
+// and throw up; as it dries, the wheels' paths dry first, lighter strips down each lane
+// before the rest of the road. The same as `rut_water` in omsi-scene's puddles.rs (the
+// spray), which keeps the numbers in step.
+fn rut_water(world: vec3<f32>, ruts: f32, wet: f32) -> vec2<f32> {
+    let breaks = vnoise_f(world_pattern_xy(world), 0.9, vec2<f32>(5.3, -2.2));
+    let level = ruts * smoothstep(0.75, 0.95, wet) * (0.7 + 0.6 * breaks);
+    return vec2<f32>(smoothstep(0.45, 0.55, level), ruts * (1.0 - smoothstep(0.6, 0.85, wet)));
+}
+
+// The dry map (passes/precip_map.rs, `DRY_RANGE` either side of its middle, seen from
+// straight above): what stands over the ground round the camera, the vehicles and the cut-out
+// leaves left out. `enh.glass_ext`: xy its middle, z its top (`DRY_DEPTH` over the middle),
+// w 1 when there is one.
+@group(0) @binding(23) var t_dry: texture_depth_2d;
+const DRY_RANGE: f32 = 128.0;
+const DRY_TEXELS: f32 = 1024.0;
+const DRY_DEPTH: f32 = 150.0;
+
+// How far the rain is kept off the ground at `world` (0 open sky .. 1 under a roof): a
+// bridge, the roof of a depot, a shelter or a petrol station, a tunnel. The road under a
+// bridge stood wet, with puddles and the rain's rings on them, because the ground was always
+// taken for out in the weather (`weather_outside_n`). A place is covered where something
+// stands at least 1.8 m over it; the edge of the dry patch is the map's filtered texels, a
+// quarter of a metre, and a lamp post, a sign or a wire over the road keeps nearly nothing
+// dry (the map leaves out what is small, see `ShadowPlan::dry`). (At 0.8 m the grass beside a
+// pavement on an embankment went dry in a strip: the pavement's edge stands that high over
+// the ground falling away below it.) Faded out towards the map's edge,
+// where the wet road takes over again (from 109 m off).
+fn roof_dry(world: vec3<f32>) -> f32 {
+    let m = enh.glass_ext;
+    let d = (world.xy - m.xy) / DRY_RANGE;
+    let c = vec2<f32>(d.x * 0.5 + 0.5, 0.5 - d.y * 0.5);
+    // (the map's depth of a roof 1.8 m over the point: what is drawn nearer is higher)
+    let roof = (m.z - world.z - 1.8) / (2.0 * DRY_DEPTH);
+    // (one look, through the comparison sampler as the sun's maps are read - 1 where nothing
+    // stands that high, filtered over the four texels round the place, a quarter of a metre
+    // each: more looks than one, or a plain load of the depth, brought Apple's M4 shader
+    // compiler service down in the lean pipelines)
+    let open = textureSampleCompareLevel(t_dry, s_shadow, c, roof);
+    let edge = max(abs(d.x), abs(d.y));
+    return (1.0 - open) * select(0.0, 1.0, m.w > 0.5) * (1.0 - smoothstep(0.82, 0.96, edge));
+}
+
 /// The mip level a pixel's footprint asks for, in levels of the texture whose size is
 /// `texels` (the usual `log2` of the larger derivative, held at 0 and up). An LED panel is
 /// sampled with this, held at `enh.led.y` (`Lighting::led_mips`): 0 point-samples it, which

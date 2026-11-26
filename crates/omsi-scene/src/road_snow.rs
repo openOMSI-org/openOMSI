@@ -65,8 +65,11 @@ pub fn frame(
     // the weather's picture - there is nothing to do: the roofs go back to the weather's
     // snow (see `Roofs::amount`), which shows none either, so none of them changes, and the
     // field keeps what it had, unseen under no cover, until it snows again.
+    // (on a wet road as well: Enhanced keeps the water in the lanes' ruts, `lane_ruts_at`)
+    let wet = wet_ruts() > 0.0;
     if cover > 0.0
         || snow.falling
+        || wet
         || !snow.roofs.bare()
         || snow.roofs.weather.is_some_and(|w| w > 0.0)
     {
@@ -75,7 +78,7 @@ pub fn frame(
         for &(key, v) in vehicles {
             vehicle_tyres(v, key, &mut tyres);
         }
-        tracks.update(r, eye, net, &tyres, cover, fallen);
+        tracks.update(r, eye, net, &tyres, cover, fallen, wet);
         snow.tyres = tyres;
         // (the roofs once the weather's snow is known, from the first picture: till then
         // they show it, see `Roofs::amount`)
@@ -120,6 +123,15 @@ pub fn frame(
 pub fn light(lighting: &mut omsi_render::Lighting, on: bool) {
     choose(on);
     DRAWN.store(!lighting.classic, std::sync::atomic::Ordering::Relaxed);
+    // (the wet roads' ruts: Enhanced draws the water in them, see `lane_ruts_at`)
+    WET_RUTS.store(
+        if lighting.enhanced && !lighting.classic {
+            lighting.wetness.clamp(0.0, 1.0).to_bits()
+        } else {
+            0
+        },
+        std::sync::atomic::Ordering::Relaxed,
+    );
     if let (true, Some((snow, tracks))) = (enabled(), STATE.lock().as_mut()) {
         // (the weather's own snow on everything: what a roof not kept here shows)
         snow.roofs.weather = Some(lighting.snow.clamp(0.0, 1.0));
@@ -212,6 +224,29 @@ fn switched_on_by(flag: Option<&str>, chosen: bool) -> bool {
         Some(_) => true,
         None => chosen,
     }
+}
+
+/// The roads' wetness the last Enhanced picture was drawn with (`f32` bits; 0 for another
+/// picture): the field keeps the lanes' ruts while it is above 0.
+static WET_RUTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn wet_ruts() -> f32 {
+    f32::from_bits(WET_RUTS.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// The lanes' wheel tracks at world (x, y) as the field holds them (0..1, road_snow.wgsl
+/// `lane_ruts`), on the wet roads of an Enhanced picture: the water stands in them
+/// (`puddles::rut_water`), and the tyres throw it up. 0 off the field, before its ruts
+/// are drawn, and for another picture.
+pub fn lane_ruts_at(x: f64, y: f64) -> f32 {
+    if wet_ruts() <= 0.0 || !enabled() {
+        return 0.0;
+    }
+    // (never waits: the frame's own step holds the state for a moment)
+    let Some(state) = STATE.try_lock() else {
+        return 0.0;
+    };
+    state.as_ref().map_or(0.0, |(_, t)| t.rut_at(x, y))
 }
 
 /// The player's `road_snow` setting (see `choose`).
@@ -607,8 +642,28 @@ impl SnowTracks {
         self.ready
     }
 
+    /// The rut at world (x, y): its texel's `r` (0..1), 0 where the field holds no ruts.
+    fn rut_at(&self, x: f64, y: f64) -> f32 {
+        if !self.ready {
+            return 0.0;
+        }
+        let (tx, ty) = ((x / TILE_M).floor() as i64, (y / TILE_M).floor() as i64);
+        let Some(s) = self.slots.get(slot_of(tx, ty)) else {
+            return 0.0;
+        };
+        if s.tile != Some((tx, ty)) || !s.drawn {
+            return 0.0;
+        }
+        let px = (((x - tx as f64 * TILE_M) / TEXEL) as usize).min(TILE_PX - 1);
+        let py = (((y - ty as f64 * TILE_M) / TEXEL) as usize).min(TILE_PX - 1);
+        s.px.get((py * TILE_PX + px) * 4)
+            .map_or(0.0, |&r| r as f32 / 255.0)
+    }
+
     /// The field around `eye`: the ruts of `net`'s lanes, the tracks of `tyres` pressed in
-    /// while the roads carry snow (`cover`), with the snow `fallen` so far.
+    /// while the roads carry snow (`cover`), with the snow `fallen` so far; the ruts alone on
+    /// a `wet` road.
+    #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
         r: &Renderer,
@@ -617,12 +672,13 @@ impl SnowTracks {
         tyres: &[Tyre],
         cover: f32,
         fallen: f64,
+        wet: bool,
     ) {
         debug_assert_eq!(SLOTS * TILE_PX, SNOW_TRACK_TEXELS as usize);
         debug_assert_eq!(TILE_PX, SNOW_TRACK_TILE as usize);
         debug_assert!((SLOTS as f64 * TILE_M - SNOW_TRACK_SIDE).abs() < 1e-9);
-        if cover <= 0.0 && !self.ready {
-            // (no snow on the roads, none before: nothing to keep)
+        if cover <= 0.0 && !self.ready && !wet {
+            // (no snow on the roads, none before, a dry road: nothing to keep)
             self.last.clear();
             return;
         }
