@@ -110,7 +110,7 @@ pub(super) enum Back {
 /// reads again in the rare case the numbers changed while it read).
 pub(super) struct ListenerCell {
     seq: AtomicU32,
-    v: [AtomicU32; 13],
+    v: [AtomicU32; 14],
 }
 
 impl ListenerCell {
@@ -142,6 +142,8 @@ impl ListenerCell {
             l.reverb_time,
             l.reverb_mix,
             0.0,
+            // (#2037: a 5.1 output places the [3d] sounds on the five speakers)
+            if l.surround { 1.0 } else { 0.0 },
         ];
         for (a, x) in self.v.iter().zip(n) {
             a.store(x.to_bits(), Ordering::Relaxed);
@@ -152,7 +154,7 @@ impl ListenerCell {
     pub(super) fn load(&self) -> Listener {
         loop {
             let s1 = self.seq.load(Ordering::Acquire);
-            let n: [f32; 13] =
+            let n: [f32; 14] =
                 std::array::from_fn(|i| f32::from_bits(self.v[i].load(Ordering::Relaxed)));
             fence(Ordering::Acquire);
             if s1 & 1 == 0 && self.seq.load(Ordering::Relaxed) == s1 {
@@ -163,6 +165,7 @@ impl ListenerCell {
                     master: n[9],
                     reverb_time: n[10],
                     reverb_mix: n[11],
+                    surround: n[13] > 0.5,
                 };
             }
             std::hint::spin_loop();
@@ -472,10 +475,15 @@ fn mix_voice(
     // spatialisation
     let (mut left, mut right) = (1.0f32, 1.0f32);
     let mut spatial_gain = 1.0f32;
+    // (#2037: on a 5.1 device the sound goes to the speakers it faces, not across two)
+    let mut surround: Option<[f32; 6]> = None;
     if let Some(p) = v.params.position {
         let d = p - listener.position;
         spatial_gain = distance_gain(v.params.range, d.length());
         (left, right) = pan_gains(listener, d, stereo);
+        if listener.surround && ch >= 6 {
+            surround = Some(crate::mixer::surround_gains(listener, d));
+        }
     }
     let target_gain = (v.params.gain * spatial_gain * listener.master).max(0.0);
     if let Some(sb) = v.stream.clone() {
@@ -515,9 +523,20 @@ fn mix_voice(
                 (l, r) = fx.process(l, r);
             }
             let g = v.cur_gain;
-            out[f * ch] += l * g * left;
-            if ch > 1 {
-                out[f * ch + 1] += r * g * right;
+            if let Some(sg) = surround {
+                // (front left, front right, centre, sub, back left, back right: the left
+                // channel goes where the sound's left does, the right where its right does,
+                // the centre takes the middle of both, the sub nothing - #2037)
+                out[f * ch] += l * g * sg[0];
+                out[f * ch + 1] += r * g * sg[1];
+                out[f * ch + 2] += (l + r) * 0.5 * g * sg[2];
+                out[f * ch + 4] += l * g * sg[4];
+                out[f * ch + 5] += r * g * sg[5];
+            } else {
+                out[f * ch] += l * g * left;
+                if ch > 1 {
+                    out[f * ch + 1] += r * g * right;
+                }
             }
             v.pos += step;
             while v.pos >= 1.0 {
@@ -586,9 +605,17 @@ fn mix_voice(
             (l, r)
         };
         let g = v.cur_gain;
-        out[f * ch] += l * g * left;
-        if ch > 1 {
-            out[f * ch + 1] += r * g * right;
+        if let Some(sg) = surround {
+            out[f * ch] += l * g * sg[0];
+            out[f * ch + 1] += r * g * sg[1];
+            out[f * ch + 2] += (l + r) * 0.5 * g * sg[2];
+            out[f * ch + 4] += l * g * sg[4];
+            out[f * ch + 5] += r * g * sg[5];
+        } else {
+            out[f * ch] += l * g * left;
+            if ch > 1 {
+                out[f * ch + 1] += r * g * right;
+            }
         }
         v.pos += step;
     }

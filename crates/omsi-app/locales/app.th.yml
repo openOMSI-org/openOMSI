@@ -271,6 +271,8 @@
 "Arrow keys only": "เฉพาะปุ่มลูกศร"
 "Volume": "ระดับเสียง"
 "Doppler effect": "เอฟเฟกต์ดอปเพลอร์"
+"5.1 sound (five speakers)": "เสียง 5.1 (ลำโพงห้าตัว)"
+"On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off": "ในระบบ 5.1 เสียงแต่ละเสียงจะมาจากลำโพงตามตำแหน่งของเสียงนั้น: ประตูมาจากด้านที่เปิดออก เครื่องยนต์มาจากด้านหลังห้องคนขับ หากมีลำโพงเพียงสองตัว: ปิด"
 "Traffic": "การจราจร"
 "Surroundings": "สภาพแวดล้อม"
 "Timetable vehicles": "รถตามตารางเวลา"

@@ -308,6 +308,8 @@
 "Arrow keys only": "Только стрелки"
 "Volume": "Громкость"
 "Doppler effect": "Эффект Доплера"
+"5.1 sound (five speakers)": "Звук 5.1 (пять динамиков)"
+"On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off": "В системе 5.1 каждый звук идёт от динамика, соответствующего его положению: дверь со стороны, с которой она открывается, двигатель из-за кабины. Только два динамика: выключено"
 "Traffic": "Транспорт"
 "Surroundings": "Окружение"
 "Timetable vehicles": "Машины по расписанию"

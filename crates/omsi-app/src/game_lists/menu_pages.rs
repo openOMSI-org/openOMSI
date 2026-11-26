@@ -150,6 +150,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         slider_row(app, "vol_ambient", "Ambience volume", "How loud the ambience is", &pct),
         slider_row(app, "vol_scenery", "Surroundings", "How loud the sounds of the scenery are", &pct),
         switch_row(app, "doppler", "Doppler effect", "Approaching sounds higher, receding ones lower"),
+        switch_row(app, "audio_surround", "5.1 sound (five speakers)", "On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off"),
         pick("pax_voices", "Passenger voices", "What passengers say"),
         switch_row(app, "voice_enabled", "Voice chat in multiplayer", "Hold the nearby (V) or radio (B) key to talk. The microphone is used only while a key is held; nothing is recorded"),
         switch_row(app, "voice_all_off", "Everybody else's voice chat off", "Single players are muted in the player list"),

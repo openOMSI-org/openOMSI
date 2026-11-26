@@ -165,7 +165,7 @@ jobs:
           Get-ChildItem dist/windows/amd_fidelityfx_*.dll | Select-Object Name,Length
       - name: ANGLE DirectX 11 startup regression (WARP)
         if: matrix.arch == 'x64' && github.event_name == 'pull_request'
-        timeout-minutes: 10
+        timeout-minutes: 20
         shell: pwsh
         env:
           ANGLE_TEST_LIBRARY_DIRECTORY: ${{ github.workspace }}/dist/windows

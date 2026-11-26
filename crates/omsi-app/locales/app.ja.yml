@@ -272,6 +272,8 @@
 "Arrow keys only": "矢印キーのみ"
 "Volume": "音量"
 "Doppler effect": "ドップラー効果"
+"5.1 sound (five speakers)": "5.1 サウンド（5 つのスピーカー）"
+"On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off": "5.1 システムでは、それぞれの音がその位置のスピーカーから聞こえます。ドアは開く側から、エンジンは運転席の後ろからです。スピーカーが 2 つだけの場合はオフ"
 "Traffic": "交通"
 "Surroundings": "周辺"
 "Timetable vehicles": "時刻表車両"
