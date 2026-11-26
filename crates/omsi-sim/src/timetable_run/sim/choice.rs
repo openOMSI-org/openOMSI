@@ -43,8 +43,35 @@ impl ScheduleSim {
                 // depot the same share as the whole SD200 fleet.
                 // A tour's vehicle for the day: the one `car_use` gives it, else one drawn now
                 // and kept (a fleet number no other tour has, while there are any left).
-                let (k, j) = match self.tour_vehicle.get(&key) {
-                    Some(&kj) => kj,
+                let (k, j) = match self.tour_vehicle.get(&key).copied() {
+                    Some((k, j)) => {
+                        let cached_is_mine = vehicles
+                            .get(k)
+                            .and_then(|v| v.1.get(j).map(|e| (v, e)))
+                            .is_some_and(|(v, e)| player_entry(self.player_bus.as_ref(), &v.0, e));
+                        if cached_is_mine {
+                            if let Some(n) = vehicles[k].1.get(j) {
+                                self.used_numbers
+                                    .remove(&(group.clone(), n.number.trim().to_string()));
+                            }
+                            let j = draw_number(
+                                &group,
+                                vehicles,
+                                k,
+                                h,
+                                self.player_bus.as_ref(),
+                                &self.used_numbers,
+                            );
+                            if let Some(n) = vehicles[k].1.get(j) {
+                                self.used_numbers
+                                    .insert((group.clone(), n.number.trim().to_string()));
+                            }
+                            self.tour_vehicle.insert(key, (k, j));
+                            (k, j)
+                        } else {
+                            (k, j)
+                        }
+                    }
                     None => {
                         let weights: Vec<usize> =
                             vehicles.iter().map(|(_, n, _)| n.len().max(1)).collect();
@@ -58,22 +85,15 @@ impl ScheduleSim {
                             }
                             x -= w;
                         }
-                        let nums = &vehicles[k].1;
-                        let start = ((h >> 21) % nums.len().max(1) as u64) as usize;
-                        let free = (0..nums.len())
-                            .map(|o| (start + o) % nums.len())
-                            .find(|&j| {
-                                !self
-                                    .used_numbers
-                                    .contains(&(group.clone(), nums[j].number.trim().to_string()))
-                                    && !player_entry(
-                                        self.player_bus.as_ref(),
-                                        &vehicles[k].0,
-                                        &nums[j],
-                                    )
-                            });
-                        let j = free.unwrap_or(start);
-                        if let Some(n) = nums.get(j) {
+                        let j = draw_number(
+                            &group,
+                            vehicles,
+                            k,
+                            h,
+                            self.player_bus.as_ref(),
+                            &self.used_numbers,
+                        );
+                        if let Some(n) = vehicles[k].1.get(j) {
                             self.used_numbers
                                 .insert((group.clone(), n.number.trim().to_string()));
                         }
@@ -327,9 +347,35 @@ fn player_entry(
     mine.is_number_or_plate(&e.number, &plate)
 }
 
+fn draw_number(
+    group: &str,
+    vehicles: &[DepotVehicle],
+    k: usize,
+    h: u64,
+    player: Option<&crate::livery::PlayerLivery>,
+    used_numbers: &HashSet<(String, String)>,
+) -> usize {
+    let nums = &vehicles[k].1;
+    let start = ((h >> 21) % nums.len().max(1) as u64) as usize;
+    let free = (0..nums.len())
+        .map(|o| (start + o) % nums.len())
+        .find(|&j| {
+            !used_numbers.contains(&(group.to_string(), nums[j].number.trim().to_string()))
+                && !player_entry(player, &vehicles[k].0, &nums[j])
+        });
+    free.unwrap_or_else(|| {
+        (0..nums.len())
+            .map(|o| (start + o) % nums.len())
+            .find(|&j| !player_entry(player, &vehicles[k].0, &nums[j]))
+            .unwrap_or(start)
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use super::super::Departure;
     use crate::livery::PlayerLivery;
+    use std::sync::Arc;
 
     /// A vehicle type of its own file with no model and no scripts.
     fn vehicle(file: &str, default_paint: &str) -> crate::VehicleType {
@@ -429,5 +475,64 @@ mod tests {
             &ty,
             &entry("1234", "B-V 1234", "BVG Gelb")
         ));
+    }
+
+    #[test]
+    fn a_cached_tour_does_not_keep_the_players_livery_after_boarding() {
+        let mut ty = vehicle("Vehicles/bus.bus", "Standard");
+        ty.paint_schemes = vec![
+            crate::vehicle::PaintScheme {
+                name: "BVG Gelb".into(),
+                ..Default::default()
+            },
+            crate::vehicle::PaintScheme {
+                name: "BVG Rot".into(),
+                ..Default::default()
+            },
+        ];
+        let ty = Arc::new(ty);
+        let world = crate::world_data::WorldData::default();
+        let mut sim = crate::timetable_run::sim::ScheduleSim::new(
+            std::path::Path::new(""),
+            &world,
+            &crate::SimClock::default(),
+        );
+        sim.vehicle_seed = 0;
+        sim.departures.push(Departure {
+            time: 0.0,
+            trip: 0,
+            profile: 0,
+            line: "7".into(),
+            ai_group: "depot".into(),
+            tour: "1".into(),
+            mask: 1023,
+            spawned: false,
+            yesterday: false,
+        });
+        let start = ((sim.tour_key(0) >> 21) % 2) as usize;
+        let mine_line = entry("1234", "B-V 1234", "BVG Gelb");
+        let other_line = entry("5678", "B-V 5678", "BVG Rot");
+        let lines = if start == 0 {
+            vec![mine_line, other_line]
+        } else {
+            vec![other_line, mine_line]
+        };
+        sim.depots.insert("depot".into(), vec![(ty, lines, None)]);
+
+        let before = sim.choose(0, &world).unwrap();
+        assert_eq!(before.number.as_ref().unwrap().0, "1234");
+        assert_eq!(before.scheme, Some(0));
+
+        sim.set_player_bus(Some(mine("BVG Gelb", "1234", "B-V 1234")));
+        let after = sim.choose(0, &world).unwrap();
+        assert_eq!(after.number.as_ref().unwrap().0, "5678");
+        assert_eq!(after.number.as_ref().unwrap().1, "B-V 5678");
+        assert_eq!(after.scheme, Some(1));
+
+        sim.set_player_bus(Some(mine("BVG Rot", "5678", "B-V 5678")));
+        let switched = sim.choose(0, &world).unwrap();
+        assert_eq!(switched.number.as_ref().unwrap().0, "1234");
+        assert_eq!(switched.number.as_ref().unwrap().1, "B-V 1234");
+        assert_eq!(switched.scheme, Some(0));
     }
 }
