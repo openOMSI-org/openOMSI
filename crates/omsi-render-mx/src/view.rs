@@ -236,7 +236,7 @@ pub struct Lighting {
     pub moon_illum: f32,
     /// The day of the year (1..366) and the latitude (degrees north): the season's air.
     pub day_of_year: f32,
-    pub latitude: f32,
+    pub lat_deg: f32,
     /// One number per calendar day, which the enhanced sky draws the day's own air from.
     pub day_seed: u32,
     /// The optical depth of a high ice-cloud veil (0 none .. 2 a thick milky one).
@@ -343,7 +343,7 @@ impl Default for Lighting {
             moon_dir: Vec3::new(0.0, -0.5, -0.866),
             moon_illum: 0.0,
             day_of_year: 150.0,
-            latitude: 52.5,
+            lat_deg: 52.5,
             day_seed: 0,
             veil: 0.0,
             air: None,

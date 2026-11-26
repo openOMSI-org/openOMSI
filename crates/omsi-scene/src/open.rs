@@ -71,8 +71,8 @@ impl World {
                 .collect();
             log::info!(
                 "sun: {:.3} N {:.3} E, UTC{:+}, {} summer time periods",
-                place.latitude,
-                place.longitude,
+                place.lat_deg,
+                place.lon_deg,
                 place.timezone,
                 place.dst.len()
             );
