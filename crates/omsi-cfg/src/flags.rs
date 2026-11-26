@@ -325,6 +325,7 @@ flags! {
     OMSI_GPU_LIMITS: Text, Test, Use, "-", "default or downlevel: request only the WebGPU default (or downlevel) limits. Set by the small_chip test.";
     OMSI_GPU_TIMERS: Bool, Debug, Use, "off", "Measure GPU time per pass with timestamp queries.";
     OMSI_GPU_TIMERS_RAW: Bool, Debug, Use, "off", "With OMSI_GPU_TIMERS: the passes in the order the GPU finished them.";
+    OMSI_GRADE: Text, Tuning, Once, "on", "0: Enhanced draws without its colour grade (white balance, saturation, the shadows' lift by the sun's height and the weather), for comparisons.";
     OMSI_GRAPHICS: Text, Tuning, Use, "settings", "vanilla, vanilla_plus or enhanced: another renderer for one run.";
     OMSI_GROUND_GAP: Text, Debug, Use, "-", "Offscreen CSV (or -): how far every drawn tyre stands over or sinks into the ground.";
     OMSI_GROUND_GAP_RADIUS: Num, Debug, Use, "150", "With OMSI_GROUND_GAP: the radius in metres.";
@@ -484,6 +485,8 @@ flags! {
     OMSI_RENDER_OCCLUDED: Bool, Test, Use, "off", "Draw frames into a texture while the window is hidden (macOS gives none).";
     OMSI_REPAIR_BODY_DEPTH: Bool, Switch, Use, "off", "The old guess for [matl_alpha] 2 vehicle bodies (A/B).";
     OMSI_ROAD_CUT: Bool, Switch, Once, "off", "Take the ground away under every road surface (Omsi.exe does not).";
+    OMSI_ROAD_DIRT: Text, Test, Use, "-", "spray,film,dust,wet[,slush,mud]: the road dirt every vehicle carries (0..1 each), whatever it gathered - pictures of the procedural dirt without driving for an hour first.";
+    OMSI_ROAD_DIRT_RATE: Num, Test, Use, "1", "How many times faster the vehicles gather road dirt (procedural_dirt): 60 lays an hour's dirt in a minute of driving, for trying it out.";
     OMSI_ROAD_PHOTO: Bool, Test, Use, "off", "Map check: photograph the road network from above and report grass where a carriageway should be.";
     OMSI_ROAD_PHOTO_N: Num, Test, Use, "400", "With OMSI_ROAD_PHOTO: number of sample points.";
     OMSI_ROAD_PHOTO_SIDE: Num, Test, Use, "0", "With OMSI_ROAD_PHOTO: metres to either side of the carriageway.";
@@ -528,6 +531,7 @@ flags! {
     OMSI_TOMORROW_API_KEY: Text, Setup, Use, "private key file", "Private Tomorrow.io API key for map-selected weather; never include it in map configs or logs.";
     OMSI_TOMORROW_CACHE_DIR: Text, Setup, Use, "settings/weather-cache", "Private Tomorrow.io response cache and shared request-budget directory.";
     OMSI_TOMORROW_KEY_FILE: Text, Setup, Use, "settings/tomorrow-api-key.txt", "Private text file containing the player's Tomorrow.io API key.";
+    OMSI_TONEMAP: Text, Tuning, Once, "agx", "natural, agx or neutral: Enhanced's tone curve (the old natural curve, AgX, Khronos PBR Neutral).";
     OMSI_TONE_CONTRAST: Text, Tuning, Once, "1", "day[,night]: tone mapping contrast.";
     OMSI_TOUCH: Bool, Test, Use, "off", "The on-screen touch controls on a computer.";
     OMSI_TRACE_AI: Text, Debug, Use, "-", "CSV: every AI car's pose, steering and speed every frame.";

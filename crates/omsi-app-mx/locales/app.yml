@@ -2871,6 +2871,10 @@ _version: 2
   en: "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still"
 "Built-up snow on roads and roofs":
   en: "Built-up snow on roads and roofs"
+"Road dirt on the vehicles":
+  en: "Road dirt on the vehicles"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2":
+  en: "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2"
 "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2":
   en: "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2"
 "How much the view sways on its own when nothing is done to it - a head at rest is never quite still, most of it seen while the bus waits at a stop":
@@ -8427,6 +8431,12 @@ _version: 2
   en: "Projects made for openOMSI by others. Their own websites say what they do and how to get them."
 "No add-on yet":
   en: "No add-on yet"
+"The add-on list could not be loaded. Check the internet connection and try again.":
+  en: "The add-on list could not be loaded. Check the internet connection and try again."
+"No longer in the catalog":
+  en: "No longer in the catalog"
+"This plugin was taken out of the catalog. It stays in your game until you remove it.":
+  en: "This plugin was taken out of the catalog. It stays in your game until you remove it."
 "by {author}":
   en: "by {author}"
 "Open website":
@@ -8451,6 +8461,14 @@ _version: 2
   en: "Optional visual hailing; only effective with supported natural animations"
 "Passengers signal approaching buses":
   en: "Passengers signal approaching buses"
+"Passengers add weight to the bus":
+  en: "Passengers add weight to the bus"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says":
+  en: "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says"
+"Passenger weight":
+  en: "Passenger weight"
+"For passengers whose file gives no weight; default 75 kg":
+  en: "For passengers whose file gives no weight; default 75 kg"
 "Multiplayer...":
   en: "Multiplayer..."
 "Connection code or server address":
@@ -8803,3 +8821,43 @@ _version: 2
   en: "to the left"
 "to the right":
   en: "to the right"
+"Cruise control: {} km/h":
+  en: "Cruise control: {} km/h"
+"Cruise control off":
+  en: "Cruise control off"
+"Cruise control works above {} km/h":
+  en: "Cruise control works above {} km/h"
+"Yes":
+  en: "Yes"
+"Take control of this bus?":
+  en: "Take control of this bus?"
+"The bus cannot be changed while a timetable is active":
+  en: "The bus cannot be changed while a timetable is active"
+"The bus could not be taken over":
+  en: "The bus could not be taken over"
+"You have control of the bus":
+  en: "You have control of the bus"
+"Load a situation...":
+  en: "Load a situation..."
+"Enter saves, Esc cancels":
+  en: "Enter saves, Esc cancels"
+"Save under a name...":
+  en: "Save under a name..."
+"No saved situation of this map yet":
+  en: "No saved situation of this map yet"
+"Saved as \"{}\"":
+  en: "Saved as \"{}\""
+"sent to the plugins":
+  en: "sent to the plugins"
+"no plugin is listening for commands":
+  en: "no plugin is listening for commands"
+"plugin command queue is full":
+  en: "plugin command queue is full"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.":
+  en: "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.":
+  en: "Automatic announcements are off."

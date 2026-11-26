@@ -55,6 +55,54 @@ traces:
 
 Its shadows, occlusion and reflections cannot be switched off one by one.
 
+#### Ray-traced global illumination (experimental)
+
+**Ray-traced global illumination** (`rt_gi=1`, default *Off*) works only while Real-Time Ray
+Tracing is on and can be switched on and off during the drive. It traces the light that surfaces
+send to each other:
+
+- a ray per 4 x 4 pixels leaves each surface within 160 m of the camera in a new direction every
+  frame and looks up to 40 m;
+- where it meets something the last frame's picture showed, it brings back the light the picture
+  had there: everything the scene was lit with (the lamps with their shadows, lit windows and
+  signs) and the bounced light already in it, so the light bounces on from frame to frame;
+- where it meets something off the picture or hidden, that surface is lit by the sun (with its
+  own shadow ray), the sky, the street lamps of the light grid (without their shadow maps) and
+  its own light if it is an unlit material; panes let part of the light through;
+- the rays are gathered over up to 24 frames and over the pixels round each, then brought up to
+  the full picture.
+
+The result replaces approximations of Enhanced:
+
+- the sky light is dimmed by how much of it the rays saw within 40 m (not only within the
+  occlusion's two metres; the ground part of the sky light is replaced by the light the rays
+  brought back from the real ground);
+- the bounced light replaces the multi-bounce brightening of the occlusion and the lamps' guessed
+  bounce from the ground;
+- a rough surface reflects the sky only as much as its rays saw it, so ceilings, the saloon and
+  the space under a roof lose the grey sheen of an open sky;
+- in the saloon the even cabin light keeps a quarter of its share; the rest comes in through the
+  windows and off the seats, the floor and the walls.
+
+The difference is largest in the saloon with a low sun and in enclosed places; on an open square
+it is small.
+
+It costs about 2 ms a frame on an Apple M4 at 1920x1080 (the rays 1.1 ms, the denoiser 0.8 ms,
+the picture taken for the next frame 0.1 ms).
+
+Limits:
+
+- the bounced light lags a few frames behind fast changes (a door opening, a passing bus) and
+  can shimmer in motion;
+- what the picture does not show (behind the camera, round a corner) is lit without the saloon
+  lamps, headlamps, lit windows and the moon;
+- with mX Graphics off, the ground drawn from its albedo picture gets no traced light (as it
+  gets no traced occlusion there), and a graphics card that takes only 16 textures a shader
+  stage (the Intel Vulkan profile) has no global illumination.
+
+`OMSI_DEBUG_ENHANCED=18` shows the bounced light alone, `19` the share of the sky light that
+reaches each point (magenta where nothing was traced).
+
 ## Quality presets
 
 **Quality preset** sets the mode and most options at once. A preset that matches your settings
@@ -169,6 +217,34 @@ and spray keep their own settings. It works at once.
 **Built-up snow on roads and roofs** (`road_snow`, off by default, not in Vanilla): while it
 snows, snow builds up on roads and roofs, with ruts and tyre tracks, and thaws again. Off, the
 weather's own road snow of OMSI 2 is used.
+
+### Road dirt
+
+**Road dirt on the vehicles** (`procedural_dirt`, on by default, Enhanced and Enhanced+ only):
+every bus, including stock, DLC and old mod buses, gathers road dirt where it would land, with
+no dirt texture of its own needed. It takes the place of the bus's own dirt overlay (OMSI's
+`Dirt_Norm` layer): with the setting on the overlay is hidden, off the overlay shows as in OMSI 2,
+never both. Vanilla and Vanilla+ always show the bus's own dirt.
+
+- **Wet roads:** spray behind and above each wheel, on the lower sides and on the back, where
+  the air behind the bus lays a film that reaches higher up.
+- **Dry roads:** a thin dust all over, the roof included. Off the road it builds up fast, and
+  wet ground throws up mud.
+- **Winter roads:** grey slush and salt.
+- **Rain** washes the dust off within minutes and the caked spray slowly; the wheels keep
+  laying it on below. Wet dirt is darker and glossy, dry dirt matt.
+- **Windows** get dirty too, and a dirty pane is harder to see through from inside as well.
+- **The wash** (game menu, or a bus wash) cleans it along with OMSI's own dirt.
+
+How fast it builds up: an hour on wet roads leaves the wheel arches and lower sides plainly dirty;
+an hour on dry roads barely shows. Only the outside of the body is dirtied: surfaces near the
+`.bus` file's `[boundingbox]` that face out of it. Interior panels, seats and the dashboard stay
+clean. The `Dirt_Norm` and `DirtRate` variables are kept for the scripts, and the windscreen's
+dirt that the wipers clear stays. Dirt is drawn on the six vehicle bodies nearest the camera that
+have any. Modders can switch it off for a bus, change how fast it gathers, lay it out on a box of
+their own and keep materials clean (see [Road dirt](MODDING.md#road-dirt)).
+`OMSI_ROAD_DIRT` sets the dirt on every vehicle for pictures (see
+[Debug flags](DEBUG_FLAGS.md)).
 
 ### Trees
 

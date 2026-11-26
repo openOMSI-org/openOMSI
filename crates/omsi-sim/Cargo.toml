@@ -31,3 +31,4 @@ arc-swap.workspace = true
 # (the tests and examples read pictures with the game's decoder, see `image_decode`)
 omsi-texture = { path = "../omsi-texture" }
 omsi-audio = { path = "../omsi-audio" }
+zip.workspace = true

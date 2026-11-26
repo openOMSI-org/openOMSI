@@ -21,6 +21,7 @@ fn player() -> Player {
         def_index: 0,
         data: Default::default(),
         file: Default::default(),
+        stamp: 0,
         materials: vec![],
         overrides: vec![],
         pivot: glam::Mat4::IDENTITY,

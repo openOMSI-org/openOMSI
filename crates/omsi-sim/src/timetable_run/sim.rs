@@ -296,6 +296,9 @@ pub struct ScheduleSim {
     player_twins: HashSet<usize>,
     /// A player tour was just taken over: its buses already on the road go at the next tick.
     purge_player_tour: bool,
+    /// LAN play (host): how far the other players' buses have got on their tours
+    /// ([`ScheduleSim::lan_bus_left`]).
+    lan_progress: TourBuses,
     /// LAN play (host): the tours the other players drive (line, tour; lower case), left to
     /// them like our own.
     lan_tours: HashSet<(String, String)>,

@@ -173,7 +173,7 @@ impl ScriptedSet {
             // (the way its +y axis points: compass degrees, north 0 and east 90)
             s.heading = xf.y_axis.x.atan2(xf.y_axis.y).to_degrees();
         }
-        s.switch_dirs = ty.sco.path_switch_dir.clone();
+        s.switch_dirs = ty.sco.inherit_switch_dirs();
         if s.switch_dirs.iter().any(|d| d.is_some()) {
             s.sco_path = Some(Arc::from(ty.sco.path.as_path()));
         }

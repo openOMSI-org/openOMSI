@@ -106,6 +106,11 @@ pub(crate) struct PostUniform {
     /// x how much of a metered shortfall (a picture darker than the light model expects: a
     /// tunnel, a dark cab) the eye makes up, the rest as post.wgsl's `c.x` does for a surplus
     pub(crate) e: [f32; 4],
+    /// The colour grade of the moment (lighting/grade.rs `ColorGrade::uniform`): white
+    /// balance and saturation, the shadows' lift and the tone curve, the highlights' tint.
+    pub(crate) f: [f32; 4],
+    pub(crate) g: [f32; 4],
+    pub(crate) h: [f32; 4],
 }
 
 /// The enhanced lighting (enhanced_common.wgsl `Enhanced`).
@@ -174,6 +179,10 @@ pub(crate) struct EnhancedUniform {
     pub(crate) pbr_ext: [f32; 4],
     /// the ray tracing
     pub(crate) rt_ext: [f32; 4],
+    /// The vehicles' road dirt (`vehicle_dirt::pack_all`): x how many, then their rows.
+    pub(crate) dirt_n: [f32; 4],
+    pub(crate) dirt:
+        [[f32; 4]; crate::vehicle_dirt::DIRT_VEHICLES * crate::vehicle_dirt::DIRT_ROWS],
 }
 
 #[repr(C)]

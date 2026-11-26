@@ -229,6 +229,14 @@ pub struct Vehicle {
     pub mass: f32,
     pub moment_of_inertia: [f32; 3],
     pub bounding_box: Option<[f32; 6]>,
+    /// The road dirt of the enhanced picture (openOMSI, #1386; OMSI 2 skips the keywords):
+    /// `[procedural_dirt_off]` - this vehicle gathers none and keeps its own dirt textures
+    /// whatever the setting; `[procedural_dirt_rate] <factor>` - how fast it gathers it
+    /// (1 as any vehicle, 0 never); `[procedural_dirt_box]` - the box the dirt is laid out on,
+    /// as `[boundingbox]` (sizes, then the middle), where that one does not fit the body.
+    pub procedural_dirt_off: bool,
+    pub procedural_dirt_rate: Option<f32>,
+    pub procedural_dirt_box: Option<[f32; 6]>,
     /// `[cog]`: centre of gravity (x right, y forward, z up) of the physics object.
     pub cog: Option<[f32; 3]>,
     /// `[schwerpunkt]`: height of the centre of gravity.
@@ -619,6 +627,22 @@ impl Vehicle {
                         *x = x.abs();
                     }
                     v.bounding_box = Some(bb);
+                }
+                "procedural_dirt_off" => v.procedural_dirt_off = true,
+                "procedural_dirt_rate" => {
+                    let x = r.f32();
+                    v.procedural_dirt_rate = Some(if x.is_finite() {
+                        x.clamp(0.0, 20.0)
+                    } else {
+                        1.0
+                    });
+                }
+                "procedural_dirt_box" => {
+                    let mut bb = r.f32s::<6>();
+                    for x in &mut bb[..3] {
+                        *x = x.abs();
+                    }
+                    v.procedural_dirt_box = Some(bb);
                 }
                 "cog" => v.cog = Some(r.f32s::<3>()),
                 "schwerpunkt" => v.cog_height = r.f32(),
@@ -1109,6 +1133,23 @@ mod tests {
             "[boundingbox]\n-2.62\n12.2\n-3.4\n0\n-0.3\n1.7\n",
         ));
         assert_eq!(v.bounding_box, Some([2.62, 12.2, 3.4, 0.0, -0.3, 1.7]));
+    }
+
+    /// The road dirt's keywords (openOMSI): off, its rate and its own box; none of them,
+    /// the vehicle as any other.
+    #[test]
+    fn procedural_dirt_keywords() {
+        let v = Vehicle::parse(&CfgFile::from_str(
+            "x.bus",
+            "[procedural_dirt_off]\n\n[procedural_dirt_rate]\n0,5\n\n[procedural_dirt_box]\n2.5\n-12\n3\n0\n0\n1.6\n",
+        ));
+        assert!(v.procedural_dirt_off);
+        assert_eq!(v.procedural_dirt_rate, Some(0.5));
+        assert_eq!(v.procedural_dirt_box, Some([2.5, 12.0, 3.0, 0.0, 0.0, 1.6]));
+        let plain = Vehicle::parse(&CfgFile::from_str("x.bus", "[mass]\n10\n"));
+        assert!(!plain.procedural_dirt_off);
+        assert_eq!(plain.procedural_dirt_rate, None);
+        assert_eq!(plain.procedural_dirt_box, None);
     }
 
     #[test]

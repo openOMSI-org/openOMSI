@@ -69,6 +69,28 @@ fn sound_opts(c: &mut Ctx<'_>, t: Option<&Value>) -> Result<Sound, ApiError> {
     Ok(s)
 }
 
+/// The combination of a key the player pressed, as the `key` event gives it and `input.hotkey`
+/// takes it: the modifiers held besides the key itself, in one order - `"Ctrl+KeyH"`,
+/// `"Ctrl+Shift+Digit1"`, `"F10"`. A modifier pressed on its own is no modifier of its own
+/// combination (`"ControlLeft"`, not `"Ctrl+ControlLeft"`), and the others held with it still
+/// count (`"Ctrl+ShiftLeft"`).
+pub fn combo(ctrl: bool, shift: bool, alt: bool, key: &str) -> String {
+    let own = |m: &str| key == m;
+    let mut out = String::new();
+    for (held, names, name) in [
+        (ctrl, ["ControlLeft", "ControlRight"], "Ctrl"),
+        (shift, ["ShiftLeft", "ShiftRight"], "Shift"),
+        (alt, ["AltLeft", "AltRight"], "Alt"),
+    ] {
+        if held && !names.iter().any(|n| own(n)) {
+            out.push_str(name);
+            out.push('+');
+        }
+    }
+    out.push_str(key);
+    out
+}
+
 /// A key combination: `"F10"`, `"Ctrl+KeyH"`, `"Shift+Alt+Digit1"`.
 fn hotkey(spec: &str, cb: u64) -> Result<Hotkey, ApiError> {
     let mut h = Hotkey {
@@ -97,6 +119,52 @@ fn hotkey(spec: &str, cb: u64) -> Result<Hotkey, ApiError> {
         )));
     }
     Ok(h)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_combination_names_the_modifiers_held_and_the_key() {
+        assert_eq!(combo(false, false, false, "F10"), "F10");
+        assert_eq!(combo(true, false, false, "KeyH"), "Ctrl+KeyH");
+        assert_eq!(combo(true, true, false, "KeyL"), "Ctrl+Shift+KeyL");
+        assert_eq!(combo(true, true, true, "Digit1"), "Ctrl+Shift+Alt+Digit1");
+        assert_eq!(combo(false, true, true, "Digit1"), "Shift+Alt+Digit1");
+    }
+
+    #[test]
+    fn a_modifier_pressed_on_its_own_is_no_modifier_of_its_combination() {
+        assert_eq!(combo(true, false, false, "ControlLeft"), "ControlLeft");
+        assert_eq!(combo(false, true, false, "ShiftRight"), "ShiftRight");
+        assert_eq!(combo(false, false, true, "AltLeft"), "AltLeft");
+        // (the others held with it still count)
+        assert_eq!(combo(true, true, false, "ShiftLeft"), "Ctrl+ShiftLeft");
+        // (Ctrl is the key itself here: the other two are what is held with it)
+        assert_eq!(
+            combo(true, true, true, "ControlRight"),
+            "Shift+Alt+ControlRight"
+        );
+    }
+
+    #[test]
+    fn what_a_combination_says_is_what_a_hotkey_reads() {
+        for (ctrl, shift, alt) in [
+            (false, false, false),
+            (true, false, false),
+            (true, true, false),
+            (false, true, true),
+        ] {
+            let spec = combo(ctrl, shift, alt, "KeyH");
+            let h = hotkey(&spec, 7).expect("a combination of our own");
+            assert_eq!(
+                (h.ctrl, h.shift, h.alt, h.key.as_str()),
+                (ctrl, shift, alt, "KeyH"),
+                "{spec}"
+            );
+        }
+    }
 }
 
 pub static FNS: &[ApiFn] = &[

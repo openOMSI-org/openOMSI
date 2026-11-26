@@ -214,7 +214,7 @@ impl Default for Vm {
 
 const MAX_DEPTH: u32 = 64;
 
-/// Instructions one vehicle's frame (all its `{frame}` or `{frame_ai}` blocks together), or
+/// Instructions one vehicle's frame (its `{frame}` or `{frame_ai}` block), or
 /// one trigger, may take, macros included. The language has no loops, but
 /// a macro that calls itself a few times over, 64 deep, would run for ever - a script that
 /// came from another machine (a host's mods, another player's bus) would stop this game. The
@@ -248,19 +248,19 @@ impl Vm {
         (r as f32) / ((1u64 << 24) as f32)
     }
 
-    /// Run the `{init}` blocks.
+    /// Run the `{init}` block (a set has one: its first, see `Program::init`).
     pub fn run_init(&mut self, p: &Program, state: &mut State, host: &mut dyn Host) {
         for &b in &p.init {
             self.run_top(p, b, state, host);
         }
     }
 
-    /// Run the `{frame}` blocks - one budget (`MAX_OPS`) for all of them: a vehicle's frame.
+    /// Run the `{frame}` block on one budget (`MAX_OPS`): a vehicle's frame.
     pub fn run_frame(&mut self, p: &Program, state: &mut State, host: &mut dyn Host) {
         self.run_frame_blocks(p, &p.frame, state, host);
     }
 
-    /// Run the `{frame_ai}` blocks (falls back to nothing when absent), on one budget too.
+    /// Run the `{frame_ai}` block (falls back to nothing when absent), on one budget too.
     pub fn run_frame_ai(&mut self, p: &Program, state: &mut State, host: &mut dyn Host) {
         self.run_frame_blocks(p, &p.frame_ai, state, host);
     }
@@ -885,9 +885,8 @@ mod tests {
         );
     }
 
-    /// The budget is one vehicle's frame, not one block's: a script split into many
-    /// `{frame}` blocks, each of which would run for ever, takes no more than one budget in
-    /// all (with a budget for each, 50 blocks would stall the game 50 times as long).
+    /// A script set with a `{frame}` in each of 50 files, each of which would run for ever,
+    /// runs the first only (as Omsi.exe) and takes no more than one budget.
     #[test]
     fn many_frame_blocks_share_one_budget() {
         let dir = std::env::temp_dir().join(format!("omsi_script_frames_{}", std::process::id()));
@@ -911,12 +910,11 @@ mod tests {
             ..Default::default()
         });
         assert!(p.errors.is_empty(), "{:?}", p.errors);
-        assert_eq!(p.frame.len(), 50);
+        assert_eq!(p.frame.len(), 1);
         let mut vm = Vm::new();
         let mut st = State::new(&p);
         vm.run_frame(&p, &mut st, &mut NullHost);
-        // every op of `m` that counts `a` is one of the budget's: the 50 blocks together
-        // stayed within one budget, not 50
+        // every op of `m` that counts `a` is one of the budget's
         let a = st.get(p.var("a").unwrap());
         assert!(a > 1000.0 && (a as u64) < MAX_OPS, "{a}");
     }

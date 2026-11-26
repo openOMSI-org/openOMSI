@@ -121,3 +121,33 @@ fn a_spotlight_cookie_reads_its_lines() {
         "the keyword after it is not taken as its line"
     );
 }
+
+/// `[light_emitter_interior]`'s lines are all optional: a blank line or the next keyword ends
+/// it, a comma is a decimal point, and a free text line is a comment, not a variable.
+#[test]
+fn light_emitter_interior_reads_its_optional_lines() {
+    let parse = |text: &str| {
+        Model::parse(&CfgFile::from_str("model.cfg", text)).meshes[0]
+            .light_emitter_interior
+            .clone()
+            .expect("the tag")
+    };
+    let full = parse("[mesh]\nlamps.o3d\n[light_emitter_interior]\n1,5\n6\nlights_innen\n");
+    assert_eq!(
+        (full.strength, full.max_lamps, full.variable.as_deref()),
+        (1.5, 6, Some("lights_innen"))
+    );
+    let bare = parse("[mesh]\nlamps.o3d\n[light_emitter_interior]\n\n[viewpoint]\n1\n");
+    assert_eq!(
+        (bare.strength, bare.max_lamps, bare.variable),
+        (1.0, 4, None)
+    );
+    let commented = parse("[mesh]\nlamps.o3d\n[light_emitter_interior]\n2\nthe ceiling strips\n");
+    assert_eq!((commented.strength, commented.variable), (2.0, None));
+    // (the keyword after it is read as one)
+    let m = Model::parse(&CfgFile::from_str(
+        "model.cfg",
+        "[mesh]\nlamps.o3d\n[light_emitter_interior]\n[viewpoint]\n2\n",
+    ));
+    assert_eq!(m.meshes[0].viewpoint, 2);
+}

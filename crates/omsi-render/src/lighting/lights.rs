@@ -608,7 +608,7 @@ impl Renderer {
         // (the player's headlamps, which share a map of their own: see `passes::headlamp_shadow`)
         let own = eye
             .vehicle
-            .filter(|_| lamp_shadows && enhanced)
+            .filter(|_| lamp_shadows && enhanced && eye.level > 0)
             .map(|(b, _)| passes::VehicleBox::new(b, ro));
         self.lights.cookies.begin_frame();
         // The grid is made in a room kept all unused but for the cells the last one filled,

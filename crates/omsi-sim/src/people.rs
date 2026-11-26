@@ -78,6 +78,8 @@ pub mod tick;
 pub mod walk;
 #[rustfmt::skip]
 pub mod report;
+pub mod load;
+pub use load::{PassengerWeight, SectionLoads};
 #[rustfmt::skip]
 pub mod avatar;
 #[rustfmt::skip]
@@ -133,6 +135,8 @@ mod destination_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod entry_doors_tests;
+#[cfg(test)]
+mod button_door_tests;
 #[cfg(test)]
 #[rustfmt::skip]
 mod no_ticket_tests;

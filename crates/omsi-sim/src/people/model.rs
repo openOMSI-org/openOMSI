@@ -465,6 +465,10 @@ pub struct PeopleSim {
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to
     /// sell it (and show a pass after `PAY_PATIENCE`); `walk` - no cash desk at all.
     pub boarding: String,
+    /// Rear door boarding (`rear_door_boarding` in the settings, #4055): the passengers may
+    /// get in at any door of the bus on their side of it, not only the front one - each walks
+    /// to the nearest and asks for it there.
+    pub rear_door_boarding: bool,
     /// The chance a boarding passenger takes a standing place although a seat is free
     /// (`standing_chance` in the settings).
     pub stand_chance: f32,
@@ -523,6 +527,9 @@ pub struct PeopleSim {
     /// up - and the client's bus took them all, one stream of passengers that never ended
     /// (#842, #840, #830).
     pub handed: Vec<(i64, u64)>,
+    /// LAN play (host): the other players' buses standing at a stop, or just driven off it
+    /// but not yet out of its reach (bus id, stop; see `remote_stops_left`).
+    pub remote_stood: hashbrown::HashSet<(u64, i64)>,
     /// The step's working lists, kept from frame to frame (see `scratch`).
     pub scratch: super::scratch::Scratch,
     /// Where the people's frames spent their time, stage by stage (OMSI_PROFILE).

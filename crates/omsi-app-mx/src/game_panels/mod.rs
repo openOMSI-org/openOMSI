@@ -16,6 +16,7 @@ mod dest_form;
 mod move_here;
 mod multiplayer;
 pub(crate) mod radio_panel;
+pub(crate) mod take_control;
 pub(crate) use dest_form::open as open_dest_form;
 pub(crate) use move_here::ask as ask_move;
 #[cfg(test)]
@@ -50,6 +51,7 @@ pub(crate) struct GamePanels {
     pub(crate) move_to: Option<glam::DVec3>,
     /// The phone's keyboard was asked up for a field of the panels or the LAN chat line.
     keyboard: bool,
+    pub(crate) take: Option<u64>,
 }
 
 impl GamePanels {
@@ -62,6 +64,7 @@ impl GamePanels {
             || self.view.is_some()
             || self.radio.is_some()
             || self.move_to.is_some()
+            || self.take.is_some()
             || self.remote.is_some()
     }
 
@@ -262,6 +265,7 @@ impl crate::App {
                 "multiplayer" => multiplayer::click(self, el),
                 "view" => view_editor::click(self, el),
                 "move" => move_here::click(self, el),
+                "take" => take_control::click(self, el),
                 "radio" => radio_panel::click(self, el),
                 "remote" => remote_panel::click(self, el),
                 _ => {}
@@ -308,6 +312,7 @@ impl crate::App {
                 }
             }
         }
+        take_control::forget_gone(self);
         let panels: Vec<(&str, Option<Panel>)> = vec![
             (
                 "view",
@@ -343,6 +348,14 @@ impl crate::App {
                     .game_panels
                     .move_to
                     .map(|at| move_here::panel(at, pal)),
+            ),
+            (
+                "take",
+                self.menus
+                    .game_panels
+                    .take
+                    .and_then(|id| take_control::name_of(self, id))
+                    .map(|n| take_control::panel(&n, pal)),
             ),
             (
                 "radio",
@@ -482,6 +495,7 @@ impl crate::App {
                 || gp.trip.is_some()
                 || gp.dest.is_some()
                 || gp.move_to.is_some()
+                || gp.take.is_some()
                 || gp.remote.is_some();
         };
         match (pr.kind, pr.element.as_deref()) {
@@ -547,6 +561,7 @@ impl crate::App {
         let gp = &mut self.menus.game_panels;
         if gp.quick.take().is_some()
             || gp.move_to.take().is_some()
+            || gp.take.take().is_some()
             || gp.dest.take().is_some()
             || gp.trip.take().is_some()
             || gp.radio.take().is_some()

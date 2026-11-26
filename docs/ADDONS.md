@@ -11,57 +11,16 @@ Each entry is a card with the project's name, author, a short description and an
 The page is a directory of links, nothing more:
 
 - The launcher downloads, installs and runs nothing of an add-on.
-- It shows no picture or text from the web. Everything on the cards ships with openOMSI, so the list changes only with a new openOMSI version.
+- The list is [openOMSI-org/add-ons-list](https://github.com/openOMSI-org/add-ons-list). The launcher reads it each time the page opens, so an entry added there shows up for everyone, and an entry taken out disappears, without a new openOMSI version.
+- An icon is downloaded from the same repository and shown only when it is exactly the file the list names (its size and SHA-256). The page loads nothing else from the web.
+- Without an internet connection the page says the list could not be loaded, with a **Refresh** button.
 - An add-on is not part of openOMSI, and the maintainers do not vouch for it.
 
 The description is shown in your language when the entry has a translation, else in English.
 
 ## Get your add-on listed
 
-1. Open a pull request that adds your entry at the end of the `addons` list in `launcher/ui/addons/addons.json`.
-2. Optionally add your icon to `launcher/ui/addons/`.
-3. Change nothing else in the same pull request.
-
-The file looks like this; your entry goes into the `addons` array:
-
-```json
-{
-  "version": 1,
-  "addons": [
-    {
-      "id": "my-addon",
-      "name": "My add-on",
-      "author": "Your name",
-      "description": "What it does, in one or two plain sentences.",
-      "translations": { "de": "Was es tut, in ein oder zwei Sätzen." },
-      "homepage": "https://example.org/my-addon",
-      "icon": "my-addon.svg",
-      "tags": ["tools"]
-    }
-  ]
-}
-```
-
-### Fields
-
-| Field | Required | Rules |
-|---|---|---|
-| `id` | yes | Lowercase letters, digits and `-`, at most 40. Unique in the list. |
-| `name` | yes | At most 40 characters. |
-| `author` | yes | A person, group or company, at most 40 characters. |
-| `description` | yes | English, at most 200 characters. What it does, not why it is the best. |
-| `translations` | no | The description in other languages, keyed by the game's language codes (`de`, `pt-pt`, `zh-tw`, ...), each at most 200 characters. |
-| `homepage` | yes | See below. |
-| `icon` | no | A `.svg` or `.png` in `launcher/ui/addons/`, square, at most 10 KB. Without one the card shows a globe. |
-| `tags` | no | Up to 5; lowercase letters, digits and `-`; at most 20 characters each. |
-
-The `homepage` must be:
-
-- an `https://` address of the project's own page on a named website, at most 200 characters;
-- without a user name or password, a port, an IP address or `localhost`;
-- without spaces, quotes, backslashes or `< > ^ { } |`.
-
-An entry that breaks a rule is left out of the page. `cargo test -p omsi-launcher-api` checks the rules.
+Open a pull request in [openOMSI-org/add-ons-list](https://github.com/openOMSI-org/add-ons-list) that adds a folder `addons/<id>/` with your `addon.json` and, optionally, `icon.svg` or `icon.png`, and the rebuilt `addons.json` (`python3 tools/build_list.py`). Its [CONTRIBUTING.md](https://github.com/openOMSI-org/add-ons-list/blob/main/CONTRIBUTING.md) lists the fields and their rules; the repository's checks run them on every pull request, and the launcher checks them again and leaves out an entry that breaks one.
 
 ### Review
 
@@ -72,4 +31,4 @@ Before merging, the maintainers check that:
 - nothing harms players or breaks the project's contributing rules or trademark policy (`CONTRIBUTING.md` and `TRADEMARKS.md` in the repository). An add-on does not present itself as openOMSI;
 - the icon is your own work, or one you may share under the project's licence.
 
-An entry is removed when its homepage is gone or no longer matches what the entry says.
+An entry is removed when its homepage is gone or no longer matches what the entry says. The launcher stops showing it as soon as the removal is merged.

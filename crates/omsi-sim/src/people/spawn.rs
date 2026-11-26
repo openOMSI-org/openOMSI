@@ -171,6 +171,7 @@ impl PeopleSim {
             fares_no_ticket: 0,
             board_when_stopped: false,
             boarding: "auto".into(),
+            rear_door_boarding: false,
             stand_chance: 0.05,
             short_rides_stand: false,
             give_ticket: false,
@@ -193,6 +194,7 @@ impl PeopleSim {
             mirror_wait: HashMap::new(),
             comfort: RideComfort::default(),
             handed: Vec::new(),
+            remote_stood: Default::default(),
             scratch: Default::default(),
             stage_stats: Default::default(),
         }

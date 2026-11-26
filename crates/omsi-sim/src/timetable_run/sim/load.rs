@@ -279,6 +279,7 @@ impl ScheduleSim {
             player_departure: None,
             purge_player_tour: false,
             player_twins: HashSet::new(),
+            lan_progress: Default::default(),
             lan_tours: HashSet::new(),
             last_tod: 0.0,
             deactivated,
@@ -443,6 +444,8 @@ impl ScheduleSim {
         }
         let days = ((day_time - self.day_base) / DAY).floor() as i64;
         if days > 0 {
+            // (the departures are numbered anew)
+            self.lan_progress = Default::default();
             self.shift_calendar_days(days);
         }
     }

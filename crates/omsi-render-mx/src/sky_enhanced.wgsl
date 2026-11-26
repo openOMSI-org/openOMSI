@@ -401,18 +401,33 @@ fn high_clouds(d: vec3<f32>, bg: vec3<f32>, pix: f32) -> vec4<f32> {
         // (a pixel's footprint on the sheet, m: stretched along the view towards the horizon)
         let fa = t_alto * pix / max(d.z, 0.05);
         // (its cells: the detail volume's billows on a slice, at the mip level of the
-        // footprint, in patches the weather map's small field lays out)
+        // footprint, roughened by the weather map's small field and a finer billow, so a
+        // cloudlet's rim is ragged, not a cut-out)
         let rolls = textureSampleLevel(t_cloud_weather, s_cloud, pa / 9000.0, log2(max(fa / (9000.0 / 512.0), 1.0))).a;
         let cl = log2(max(fa / (1400.0 / 32.0), 1.0));
         let cells = 1.0 - textureSampleLevel(t_cloud_detail, s_cloud, vec3<f32>(pa / 1400.0, 0.37), cl).r;
-        let dens = rolls * 0.6 + cells * 0.4;
-        let edge = 0.1 + 0.1 * min(cl, 3.0);
-        let thick = smoothstep(1.0 - alto_cover * 0.9 - edge, 1.0 - alto_cover * 0.9 + edge, dens);
+        let cf = log2(max(fa / (500.0 / 32.0), 1.0));
+        let fine = 1.0 - textureSampleLevel(t_cloud_detail, s_cloud, vec3<f32>(pa / 500.0 + vec2<f32>(0.31, 0.17), 0.61), cf).r;
+        // The cover says where the sheet's fields lie, some 15 km across as the cirrus'
+        // patches, and in a field the cloudlets close up towards its middle. (Cut at the
+        // cells alone, a thin cover left their highest points all over the sky: a sprinkle of
+        // small pale flecks over every gap between the cumulus.)
+        let fields = hc_fbm(pa / 15000.0 + vec2<f32>(6.3, 2.1), fa / 15000.0, 3);
+        let field = smoothstep(0.7 - 0.45 * alto_cover, 0.85 - 0.35 * alto_cover, fields);
+        let dens = cells * 0.5 + rolls * 0.25 + fine * 0.25;
+        let thr = 0.78 - 0.4 * field;
+        let edge = 0.07 + 0.1 * min(cl, 3.0);
+        // A cloudlet is thin at its rim and thicker in its middle: the rim lit through by the
+        // sun and see-through, the middle a little greyer and denser. (Drawn as one flat grey
+        // over a sharp cut - and at some 15 % of white paper's brightness, where a sheet this
+        // thin lets through about half the sun's light - every cell was a dull paper shape
+        // stuck on the blue, in front of the soft cumulus by its look.)
+        let shape = smoothstep(thr - edge, thr + edge, dens) * smoothstep(0.0, 0.35, field);
+        let depth = smoothstep(thr, thr + 0.12 + edge, dens);
         let sun = mix(enh.cloud_sun[2].rgb, enh.cloud_sun[3].rgb, 0.4);
-        let lit = sun * (0.10 + 0.55 * hg_phase(cos_sun, 0.7)) / PI;
-        let under = mix(1.0, 0.55, thick * thick);
-        let alto_col = (lit * mix(0.6, 1.0, cells) + sky_top * 0.85) * under;
-        let alto_a = thick * 0.75 * (1.0 - smoothstep(25000.0, 70000.0, t_alto));
+        let lit = sun * (0.3 + 0.5 * hg_phase(cos_sun, 0.7)) * mix(1.15, 0.7, depth) / PI;
+        let alto_col = lit * mix(0.7, 1.0, fine) + sky_top * 0.85;
+        let alto_a = shape * mix(0.25, 0.7, depth) * (1.0 - smoothstep(25000.0, 70000.0, t_alto));
         col = mix(col, alto_col, alto_a);
         cover = alto_a;
     }
@@ -737,9 +752,8 @@ fn star_hash(c: vec3<i32>) -> vec4<f32> {
     return vec4<f32>(x & vec4<u32>(0xffffffu)) / 16777216.0;
 }
 
-// The moon and the stars towards d (radiance), behind what cloud covers it. The moon is a
-// lit sphere: its lit side faces the sun, its phase is what the sun's direction makes of
-// it, and its grey seas darken parts of the disc. The stars are a few thousand points
+// The moon (sky.wgsl `moon_face`) and the stars towards d (radiance), behind what cloud
+// covers them. The stars are a few thousand points
 // fixed in the sky, of a few magnitudes, slightly coloured; they show only where the sky
 // behind them is dark - a lit city's glow and the haze leave the brightest few.
 fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
@@ -755,24 +769,23 @@ fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
     let m = enh.moon.xyz;
     let r = enh.moon.w;
     let cm = dot(d, m);
-    if (cm > cos(r * 1.3) && max(enh.moon_disc.r, enh.moon_disc.g) > 0.0) {
-        // the point on the moon's sphere seen in direction d
-        let right = normalize(cross(m, vec3<f32>(0.0, 0.0, 1.0)) + vec3<f32>(1e-5, 0.0, 0.0));
-        let up = cross(right, m);
-        let q = vec2<f32>(dot(d, right), dot(d, up)) / r;
-        let q2 = dot(q, q);
-        let rim = 1.0 - smoothstep(0.92, 1.05, sqrt(q2));
-        let nz = sqrt(max(1.0 - q2, 0.0));
-        let n = normalize(right * q.x + up * q.y - m * nz);
-        let sun_side = smoothstep(-0.04, 0.08, dot(n, normalize(camera.sun_dir.xyz)));
-        // the seas: a few broad dark patches fixed on the face
-        let sea = smoothstep(0.45, 0.7, cloud_fbm(q * 1.7 + vec2<f32>(3.1, 7.7)));
-        let albedo = 1.0 - 0.38 * sea;
-        // (as bright as the lit part's share of the irradiance spread over the disc; the
-        // dark part keeps a trace of earthshine)
-        let lit_share = max(0.5 + 0.5 * dot(-m, normalize(camera.sun_dir.xyz)), 0.03);
-        let l = enh.moon_disc.rgb / (PI * r * r * lit_share) * (sun_side + 0.004) * albedo * rim;
-        col = col + l * through;
+    // how much of this pixel the disc covers (the stars are behind it)
+    var covered = 0.0;
+    if (cm > cos(r * 1.5) && max(enh.moon_disc.r, enh.moon_disc.g) > 0.0) {
+        let sun = normalize(camera.sun_dir.xyz);
+        let f = moon_face(d, m, r, sun, length(pix));
+        covered = f.y;
+        // (as bright as the lit part's share of the irradiance spread over the disc)
+        let lit_share = max(0.5 + 0.5 * dot(-m, sun), 0.03);
+        var face = enh.moon_disc.rgb / (PI * r * r * lit_share) * through;
+        // a low moon is orange, not as red as the clear air's numbers alone make it
+        face = mix(face, vec3<f32>(dot(face, vec3<f32>(0.2126, 0.7152, 0.0722))), 0.45);
+        // The night's exposure is for the street: the moon shown by it was a white lamp
+        // with a halo. It is held under the screen's white, whatever the metering adds
+        // (`exposure.y`, as for the displays), so its face shows and it does not glow.
+        let peak = max(face.r, max(face.g, face.b)) * enh.exposure.x;
+        face = face * min(1.0, 0.55 * enh.exposure.y / max(peak, 1e-6));
+        col = col + face * f.x * covered;
     }
     // the stars: one candidate in some of the cells of a grid on the sphere
     let vis = enh.moon_disc.w;
@@ -798,7 +811,7 @@ fn night_sky(d: vec3<f32>, cover: f32, pix: vec3<f32>) -> vec3<f32> {
             let sky_l = dot(sky_table(d), vec3<f32>(0.2126, 0.7152, 0.0722)) * enh.exposure.x;
             let limit = clamp(sky_l * 90.0 + (1.0 - vis), 0.0, 1.2);
             let shows = smoothstep(limit, limit + 0.15, b) * (1.0 - smoothstep(0.03, 0.1, sky_l));
-            col = col + tint * (0.04 + 1.4 * b) * spot * shows * through / max(enh.exposure.x, 1e-6) * smoothstep(0.0, 0.15, d.z);
+            col = col + tint * (0.04 + 1.4 * b) * spot * shows * through * (1.0 - covered) / max(enh.exposure.x, 1e-6) * smoothstep(0.0, 0.15, d.z);
         }
     }
     return col;

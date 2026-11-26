@@ -69,6 +69,27 @@ impl VehicleInstance {
             * (2.5e-3 + 6.0e-3 * rain.max(self.host.street_cond.clamp(0.0, 1.0)));
         self.dirt = (self.dirt + dt * speed * (8.0e-5 + 1.2e-3 * rain + off)).clamp(0.0, 1.0);
         self.set_engine_ev(Ev::DirtNorm, self.dirt);
+        // (and the dirt by where it lands, for the enhanced picture: `RoadDirt`)
+        let rate = if self.ty.def.procedural_dirt_off {
+            0.0
+        } else {
+            self.ty.def.procedural_dirt_rate.unwrap_or(1.0)
+        } * omsi_cfg::flags::OMSI_ROAD_DIRT_RATE
+            .var()
+            .and_then(|v| v.trim().parse::<f32>().ok())
+            .filter(|x| x.is_finite() && *x > 0.0)
+            .unwrap_or(1.0);
+        self.road_dirt.step_at(
+            dt,
+            DirtWeather {
+                kmh: self.physics.velocity_kmh(),
+                street: self.host.street_cond,
+                precip: rain,
+                snow: self.host.precip_type as i32 == 2,
+                offroad: self.host.offroad,
+            },
+            rate,
+        );
         // spray off a wet road, dust off a dry one
         self.set_engine_ev(Ev::DirtRate, speed * (1.5e-4 + 6.0e-3 * rain));
         // rain soaks the glass in a few seconds; without it the film dries in twenty seconds.
@@ -426,7 +447,8 @@ impl VehicleInstance {
         };
         // `steer_deg` is the front wheel angle of a bicycle model turning about the
         // `[rot_pnt_long]` line: every axle ahead of that line points at the common turning
-        // centre, and every wheel rolls as far as its own track through the bend is long
+        // centre. The wheels turn as the speed over their own axle's size, both sides alike
+        // and whatever the bend (Omsi.exe 0x7debb0, see `ai_wheel_rpm`)
         let (rot, wheelbase) = crate::ai_motion::rotation_point(&self.ty.def);
         let k = ai.steer_deg.to_radians().tan() / wheelbase;
         for ai_idx in 0..self.v_wheels.len() {
@@ -436,7 +458,6 @@ impl VehicleInstance {
                     continue;
                 };
                 let arm = ws.long - rot;
-                let across = 1.0 - ws.lat * k;
                 // (the axle's angle, the same for both sides, as Omsi.exe hands it to the
                 // scripts: see `RigidBody::axle_steer`)
                 let steer = if arm > 0.5 {
@@ -444,12 +465,10 @@ impl VehicleInstance {
                 } else {
                     0.0
                 };
-                let travel = (across * across + (arm * k) * (arm * k)).sqrt();
                 let r = ws.radius.max(0.05);
-                ws.rotation_deg =
-                    (ws.rotation_deg + (ds * travel / r).to_degrees()).rem_euclid(360.0);
-                ws.turned += ds * travel / r;
-                ws.rpm = ai.speed * travel / (std::f32::consts::TAU * r) * 60.0;
+                ws.rotation_deg = (ws.rotation_deg + (ds / r).to_degrees()).rem_euclid(360.0);
+                ws.turned += ds / r;
+                ws.rpm = ai_wheel_rpm(ai.speed, 2.0 * r);
                 let (rpm, suspension) = (ws.rpm, ws.suspension);
                 self.put_turn(w[0], ai_idx, si);
                 self.put(w[1], rpm);
@@ -787,9 +806,6 @@ impl OmsiFrames {
     }
 }
 
-/// The body-frame acceleration the scripts see as `A_Trans_*` (Omsi.exe 0x7d5124: the
-/// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
-/// an accelerometer would read, less gravity's share in the body frame.
 /// `n_Wheel` (rpm) of a vehicle the AI moves along its path: Omsi.exe (0x7debb0) takes it
 /// straight from the speed, 60·v / (π·d) with `d` the first axle's wheel size, the rpm a
 /// wheel of that size turns at rolling straight ahead - whichever axle drives and however
@@ -798,11 +814,26 @@ impl OmsiFrames {
 /// already the vehicle's own, backwards negative.)
 pub(super) fn ai_n_wheel(speed: f32, first_diameter: Option<f32>) -> f32 {
     match first_diameter {
-        Some(d) if d > 0.0 => 60.0 * speed / (std::f32::consts::PI * d),
+        Some(d) if d > 0.0 => ai_wheel_rpm(speed, d),
         _ => 0.0,
     }
 }
 
+/// A wheel's rpm (`Wheel_RotationSpeed_*`) on a vehicle the AI moves, or on a coupled part
+/// that follows one: Omsi.exe (0x7debb0) gives both wheels of every axle 2·v/d rad/s, `d`
+/// that axle's wheel size and `v` the vehicle's speed, and shows it as 60·ω/2π - the same
+/// on the inner and the outer wheel of a bend.
+pub(super) fn ai_wheel_rpm(speed: f32, diameter: f32) -> f32 {
+    if diameter > 0.0 {
+        60.0 * speed / (std::f32::consts::PI * diameter)
+    } else {
+        0.0
+    }
+}
+
+/// The body-frame acceleration the scripts see as `A_Trans_*` (Omsi.exe 0x7d5124: the
+/// velocity's change over the frame, rotated into the body): `accel_body`, the specific force
+/// an accelerometer would read, less gravity's share in the body frame.
 pub(super) fn scripts_acceleration(accel_body: Vec3, orientation: Quat) -> Vec3 {
     accel_body - orientation.inverse().mul_vec3(Vec3::new(0.0, 0.0, 9.81))
 }
