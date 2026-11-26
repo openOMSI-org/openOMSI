@@ -274,6 +274,7 @@ lower graphics defaults (2x MSAA, 4x anisotropic, no ambient occlusion, 1024 sha
 | --- | --- | --- |
 | Graphics (`graphics`) | Vanilla (as OMSI 2), Vanilla+, Enhanced | Vanilla+ |
 | Real-Time Ray Tracing (`ray_tracing`) | Enhanced: traced shadows, occlusion, reflections; next start | off |
+| Ray-traced global illumination (`rt_gi`) | experimental, with Real-Time Ray Tracing: light bounced between surfaces | off |
 | Quality preset | Low, Medium, High, Extra, Max, Ultra, or Custom | Medium |
 | Optimise for my PC | measures your next drive and adjusts the graphics | |
 | Anti-aliasing (`msaa`) | Off, 2x, 4x, 8x MSAA | 4x |

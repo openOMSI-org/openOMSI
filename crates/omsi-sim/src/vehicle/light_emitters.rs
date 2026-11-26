@@ -48,7 +48,12 @@ pub(crate) fn add(model: &mut Model, meshes: &[VehicleMesh], dirs: &[&Path]) {
         let mut lit: Vec<Lit> = Vec::new();
         let mut variable = tag.variable.clone();
         for &(first, count, slot) in &data.ranges {
-            let Some(ov) = vm.overrides.get(slot as usize) else {
+            // (the mesh's `[matl]` list is in the `.cfg`'s order: the one for this `.o3d`
+            // slot is found by its texture, the last of them winning, as everywhere else)
+            let Some(ov) = vm.overrides.iter().rev().find(|o| {
+                crate::vehicle::override_slot(&vm.materials, o) == Some(slot as usize)
+                    && (o.lightmap.is_some() || o.nightmap.is_some())
+            }) else {
                 continue;
             };
             let (tex, var) = match (&ov.lightmap, &ov.nightmap) {

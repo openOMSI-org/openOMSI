@@ -30,6 +30,14 @@ impl Renderer {
                 timers.set.as_ref(),
                 &mut timers.timed,
             );
+            // (the picture for the next frame's traced global illumination)
+            self.encode_rt_gi_capture(
+                encoder,
+                width,
+                height,
+                timers.set.as_ref(),
+                &mut timers.timed,
+            );
         }
         let puddles_on = f.puddles_wanted
             && !rt_frame

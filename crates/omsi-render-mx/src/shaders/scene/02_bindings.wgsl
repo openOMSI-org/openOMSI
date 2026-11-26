@@ -62,6 +62,51 @@ fn rt_at(frag: vec2<f32>, world: vec3<f32>) -> vec4<f32> {
     return best;
 }
 
+// Experimental (`rt_gi`, camera.clouds.w 3): the traced global illumination at the picture's
+// size (rt_gi_denoise.wgsl `cs_gi_upsample`): rgb the light the surroundings send back
+// (irradiance, not pre-exposed), a the sky's visibility.
+@group(0) @binding(22) var t_gi: texture_2d<f32>;
+
+// The traced global illumination at a pixel, taken where `rt_at` takes the traced lighting
+// (the texel at this surface's depth, the pixel's own or a neighbour's); a < 0 where there is
+// none for it (the surface is not in the depth prepass, or no ray stood for it): the main
+// pass then lights it as without it.
+fn gi_at(frag: vec2<f32>, world: vec3<f32>) -> vec4<f32> {
+    if (camera.clouds.w < 2.5) {
+        return vec4<f32>(0.0, 0.0, 0.0, -1.0);
+    }
+    let size = vec2<i32>(textureDimensions(t_ao));
+    let z = (camera.view_proj * vec4<f32>(world, 1.0)).w;
+    let tol = 0.03 + 0.01 * z;
+    let px = vec2<i32>(frag);
+    var best = vec2<i32>(-1);
+    var best_d = tol;
+    for (var k = 0; k < 5; k = k + 1) {
+        var o = vec2<i32>(0, 0);
+        switch k {
+            case 1: { o = vec2<i32>(1, 0); }
+            case 2: { o = vec2<i32>(-1, 0); }
+            case 3: { o = vec2<i32>(0, 1); }
+            case 4: { o = vec2<i32>(0, -1); }
+            default: {}
+        }
+        let q = clamp(px + o, vec2<i32>(0), size - vec2<i32>(1));
+        let s = textureLoad(t_ao, q, 0);
+        let d = abs(s.g - z);
+        if (s.g > 0.0 && d < best_d) {
+            best_d = d;
+            best = q;
+        }
+        if (k == 0 && d < tol * 0.3) {
+            break;
+        }
+    }
+    if (best.x < 0) {
+        return vec4<f32>(0.0, 0.0, 0.0, -1.0);
+    }
+    return textureLoad(t_gi, best, 0);
+}
+
 // The ambient occlusion at a pixel of the full picture. It is worked out at half size, and
 // a plain bilinear lookup blended the occlusion of the ground behind an edge with that of
 // the object in front: every wheel, pole and kerb stood in a pale outline on the shaded

@@ -23,6 +23,7 @@
 
 use super::*;
 
+mod gi;
 mod reflect;
 
 /// How far from the camera meshes are traced (m): beyond it the shadow map holds.
@@ -158,6 +159,8 @@ struct Params {
     vehicle_centre: [f32; 4],
     sky: [f32; 4],
     sun_light: [f32; 4],
+    light_grid: [f32; 4],
+    gi: [f32; 4],
 }
 
 /// The traced lighting's textures for one picture size (all rgba16float: r the ambient
@@ -222,6 +225,14 @@ pub(super) struct RayTracer {
     steps: mx::Buffer,
     step_stride: u64,
     denoise_groups: Option<(RtBindKey, [HeapGroup; 8])>,
+    /// Experimental: the traced global illumination (`gi.rs`) - on this frame, its
+    /// textures, pipelines and kept bind groups.
+    pub(super) gi_on: bool,
+    gi: Option<gi::GiState>,
+    gi_pipes: Option<gi::GiPipes>,
+    /// (the GI's pipelines were refused: it stays off)
+    gi_failed: bool,
+    gi_groups: Option<gi::GiGroups>,
 }
 
 /// The reflections' textures at the rays' size (all rgba16float).
@@ -274,6 +285,7 @@ pub(super) fn denoise_source() -> String {
     [
         crate::shaders::hot_wgsl(include_str!("rt_common.wgsl"), "rt_common.wgsl"),
         crate::shaders::hot_wgsl(include_str!("rt_denoise.wgsl"), "rt_denoise.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt_gi_denoise.wgsl"), "rt_gi_denoise.wgsl"),
     ]
     .join("\n")
 }
@@ -289,6 +301,7 @@ pub(super) fn reflect_source() -> String {
         crate::shaders::hot_wgsl(include_str!("rt_common.wgsl"), "rt_common.wgsl"),
         enh,
         crate::shaders::hot_wgsl(include_str!("rt_reflect.wgsl"), "rt_reflect.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("rt_gi.wgsl"), "rt_gi.wgsl"),
     ]
     .join("\n")
 }
@@ -405,7 +418,7 @@ impl RayTracer {
         let steps = device
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("rt reflections denoiser steps"),
-                size: 3 * step_stride,
+                size: 4 * step_stride,
                 usage: mx::BufferUsages::UNIFORM
                     | mx::BufferUsages::STORAGE
                     | mx::BufferUsages::COPY_DST,
@@ -476,6 +489,11 @@ impl RayTracer {
             steps,
             step_stride,
             denoise_groups: None,
+            gi_on: false,
+            gi: None,
+            gi_pipes: None,
+            gi_failed: false,
+            gi_groups: None,
         }
     }
 
@@ -608,11 +626,13 @@ impl Renderer {
         w: u32,
         h: u32,
         dt: f32,
+        grid: [f32; 4],
     ) -> bool {
         let Some(rt) = self.rt.as_mut() else {
             return false;
         };
         rt.frame += 1;
+        rt.gi_on = self.options.rt_gi && rt.gi.is_some();
         let frame = rt.frame;
         let ro = scene.render_origin;
         let cam = (camera.position - ro).as_vec3();
@@ -970,6 +990,8 @@ impl Renderer {
             vehicle_centre,
             sky: [0.0; 4],
             sun_light: [0.0; 4],
+            light_grid: gi::light_grid(scene, grid),
+            gi: gi::frame_params(rt, history, frame),
         };
         self.queue
             .write_buffer(&rt.params, 0, bytemuck::bytes_of(&p))
@@ -1199,6 +1221,7 @@ impl Renderer {
             bg.set_compute(&mut pass);
             pass.dispatch_workgroups(gx, gy, 1);
         }
+        self.encode_rt_gi(encoder, scene, queries, timed);
     }
 }
 

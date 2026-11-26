@@ -86,8 +86,44 @@ pub(crate) fn ask(app: &mut crate::App, id: u64) -> bool {
         ));
         return true;
     }
+    if let Some(reason) = refused_by_session(app, id) {
+        app.service_msg = Some((reason, 4.0));
+        return true;
+    }
     app.menus.game_panels.take = Some(id);
     true
+}
+
+/// A LAN host drives only its session's buses (`enforce_host_session_bus`): taken over,
+/// any other was removed again at once - the AI bus, its trip and its riders with it.
+fn refused_by_session(app: &crate::App, id: u64) -> Option<String> {
+    app.net
+        .lan
+        .as_ref()
+        .filter(|l| l.role == omsi_net::Role::Host)?;
+    let list = match app.net.session_buses.as_ref() {
+        Some(list) => list.clone(),
+        None => app.args.session_bus_list(),
+    };
+    let car = app
+        .session
+        .traffic
+        .as_ref()?
+        .cars
+        .iter()
+        .find(|c| c.id == id)?;
+    let bus = car.vehicle.ty.def.path.to_string_lossy();
+    if list.is_empty() || omsi_lan::server_cfg::allows(&list, &bus) {
+        return None;
+    }
+    let names: Vec<&str> = list
+        .iter()
+        .map(|v| v.rsplit('/').next().unwrap_or(v))
+        .collect();
+    Some(omsi_ui::i18n::tr_fill(
+        "only these buses can be driven here ({list})",
+        &[("{list}", &names.join(", "))],
+    ))
 }
 
 pub(crate) fn name_of(app: &crate::App, id: u64) -> Option<String> {

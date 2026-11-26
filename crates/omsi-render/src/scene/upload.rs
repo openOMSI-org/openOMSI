@@ -474,6 +474,17 @@ impl Renderer {
                     resource: wgpu::BindingResource::TextureView(probe.clouds.display_view()),
                 },
             ]);
+            if crate::gi_binding() {
+                entries.push(wgpu::BindGroupEntry {
+                    binding: 22,
+                    resource: wgpu::BindingResource::TextureView(
+                        self.rt
+                            .as_ref()
+                            .and_then(|r| r.gi_view())
+                            .unwrap_or(&self.black_texture.view),
+                    ),
+                });
+            }
         }
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("camera"),

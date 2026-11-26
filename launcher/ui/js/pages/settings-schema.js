@@ -88,6 +88,7 @@ const graphics = {
         // the mode first, then the quality presets for it: they set most of what follows
         { type: 'select', key: 'graphics', label: 'Graphics', options: [['vanilla', 'Vanilla (as OMSI 2)'], ['vanilla_plus', 'Vanilla+'], ['enhanced', 'Enhanced']] },
         { type: 'toggle', key: 'ray_tracing', label: 'Real-Time Ray Tracing', help: 'Enhanced: the sun\'s shadows, the ambient occlusion and the reflections traced with hardware ray queries, where the card has them; the heaviest option (takes effect when the game starts the next time)', heavy: (v) => !!v, when: enhanced },
+        { type: 'toggle', key: 'rt_gi', label: 'Ray-traced global illumination (experimental)', help: 'With Real-Time Ray Tracing: the light the surfaces round a point send back to it - a sunlit road brightening a wall, a red bus tinting the pavement, the light through the windows filling the saloon; traced at half size and gathered over a few frames, so it can lag or shimmer in motion', heavy: (v) => !!v, when: traced },
         { type: 'custom', id: 'preset' },
         { type: 'custom', id: 'optimise' },
         { type: 'select', key: 'msaa', label: 'Anti-aliasing', options: [['1', 'Off'], ['2', '2x MSAA'], ['4', '4x MSAA'], ['8', '8x MSAA']], heavy: (v, s) => v === '8' && !traced(s), when: (s, p) => !temporalOn(s, p) },
@@ -133,7 +134,7 @@ const graphics = {
         { type: 'toggle', key: 'windy_trees', label: 'Windy trees' },
         { type: 'toggle', key: 'detailed_trees', label: 'Detailed trees', help: 'Close up, the trees\' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time' },
         // (the snow built up on the roads and the vehicles' roofs; the classic picture shows the season's snow only)
-        { type: 'toggle', key: 'procedural_dirt', label: 'Road dirt on the vehicles', help: 'Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2', when: (s) => enhanced(s) },
+        { type: 'toggle', key: 'procedural_dirt', label: 'Road dirt on the vehicles', help: 'Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus\'s own dirt, as in OMSI 2', when: (s) => enhanced(s) },
         { type: 'toggle', key: 'road_snow', label: 'Built-up snow on roads and roofs', help: 'While it snows, snow builds up on the roads and on the vehicles\' roofs, with ruts and tyre tracks, and thaws again; off: the weather\'s own snow on road, as in OMSI 2', when: (s) => !classic(s) },
       ],
     },
@@ -383,6 +384,11 @@ const gameplay = {
       rows: [
         { type: 'select', key: 'boarding', label: 'Boarding', options: [['auto', 'Pay and take the ticket'], ['pay', 'The driver sells the ticket'], ['walk', 'Just walk in']] },
         { type: 'toggle', key: 'rear_door_boarding', label: 'Rear door boarding', help: 'Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)' },
+        { type: 'select', key: 'pax_entry_doors', label: 'Entry doors', options: [['as_bus', 'As the bus says'], ['first', 'Front door only'], ['first_two', 'First two doors'], ['last', 'Rear door only']] },
+        { type: 'toggle', key: 'pax_board_when_stopped', label: 'Passengers wait for open doors' },
+        { type: 'toggle', key: 'pax_no_ticket', label: 'Pay without a ticket' },
+        { type: 'slider', key: 'pax_late_tolerance_min', label: 'Accepted lateness', min: 0, max: 30, step: 1, def: 5, format: (v) => `${v} min` },
+        { type: 'select', key: 'pax_free_drive', label: 'Stops fill up in free drive', options: [['auto', 'Auto'], ['on', 'Always'], ['off', 'Only for due trips']] },
         { type: 'select', key: 'standing_chance', label: 'Standing passengers', options: [['0', 'Never'], ['5', '5%'], ['10', '10%'], ['25', '25%'], ['50', '50%'], ['100', 'Always']] },
         { type: 'select', key: 'passenger_animation', label: 'Passenger animations', options: [['original', 'Original OMSI'], ['enhanced', 'Natural (procedural)']] },
         // (drawn on this computer only; the avatars are downloaded once, about 310 MB)
@@ -396,6 +402,7 @@ const gameplay = {
         { type: 'toggle', key: 'passenger_hailing', label: 'Passengers signal approaching buses', help: 'Optional visual hailing; only effective with supported natural animations' },
         { type: 'toggle', key: 'passenger_full_bus_reaction', label: 'Passengers react to full buses', help: 'Optional visual acknowledgement when an approaching compatible bus is at passenger capacity' },
         { type: 'toggle', key: 'pax_short_rides_stand', label: 'Short rides stand by a door', help: 'Passengers with no set stop who ride only a few kilometres take a free standing place near an exit rather than a seat' },
+        { type: 'toggle', key: 'ibis_auto_stop', label: 'IBIS stop follows the duty' },
         { type: 'toggle', key: 'auto_announce', label: 'Arrival announcements at the stop', help: 'On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS\'s next stop key, pressed as the driver would' },
         { type: 'slider', key: 'pax_density', label: 'How many passengers', min: 0, max: 2, step: 0.1, def: 1, format: pct, store: r2 },
         { type: 'toggle', key: 'get_up', label: 'Ability to get up (Ctrl+Shift+G)' },
@@ -519,6 +526,6 @@ export const SETTINGS_TABS = [graphics, driving, camera, sound, gameplay, genera
 
 /** The settings a saved graphics profile holds (`GRAPHICS_PROFILE_KEYS`). */
 export const GRAPHICS_PROFILE_KEYS = [
-  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'frame_generation', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'detailed_trees', 'road_snow', 'procedural_dirt', 'ray_tracing', 'light_shadows', 'cloud_shadows', 'light_glow', 'volumetric_fog',
+  'graphics', 'msaa', 'render_scale', 'upscaler', 'upscale_quality', 'frame_generation', 'fsr_quality', 'fsr_sharpness', 'anisotropy', 'shadow_size', 'ssao', 'shadows', 'shadow_casters', 'detail_textures', 'night_brightness', 'led_glow', 'led_mips', 'shadow_blobs', 'lamp_shadows', 'reflections', 'road_glare', 'traffic_headlights', 'clouds', 'cloud_quality', 'street_light', 'rain_quality', 'vehicle_smoke', 'puddles', 'windy_trees', 'detailed_trees', 'road_snow', 'procedural_dirt', 'ray_tracing', 'rt_gi', 'light_shadows', 'cloud_shadows', 'light_glow', 'volumetric_fog',
   'vsync', 'max_fps', 'view_distance', 'max_obj_dist', 'min_obj_size', 'mirror_size', 'mirror_refresh', 'mirror_quality', 'mirror_hud_every_frame', 'video_memory', 'texture_compression', 'gpu_texture_compression',
 ];

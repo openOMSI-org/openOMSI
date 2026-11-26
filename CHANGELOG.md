@@ -8,6 +8,13 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### New and improved
 
+- **Ray-traced global illumination (experimental)**: with Real-Time Ray Tracing on, the new
+  `rt_gi` option traces the light surfaces send to each other. Where a ray meets something the
+  last frame showed, it takes the light the picture had there (lamps with their shadows, lit
+  windows, the light already bounced), so the light bounces on from frame to frame. The sky light
+  and the sky's reflection on rough surfaces are dimmed by how much of the sky each point sees,
+  and the saloon is lit by what comes in through its windows and off its seats. Off by default;
+  see [Graphics](docs/GRAPHICS.md#ray-traced-global-illumination-experimental).
 - **mX Graphics twice as fast on the GPU**: in Enhanced the main pass draws most surfaces with a
   lean pipeline that leaves out the shading they do not use (films, water, LEDs, bump maps, wet or
   snowy roads in dry weather), compiled in the background, and the ground's albedo pass works
@@ -99,6 +106,40 @@ What Omsi.exe does, read from the game itself, where openOMSI did something of i
 
 ### Fixes
 
+- **Passenger settings work outside online rooms**: which doors passengers get in through, paying
+  without a ticket, how late the bus may be, free-drive passengers and waiting for the doors to
+  open reached the passengers of an online room only; in single player, in a LAN game and after
+  changing them in the game they did nothing. They now have rows in the launcher, with the IBIS
+  stop following the duty.
+- **A ticket buyer no longer stands at the stop for good** when the chosen doors sell no tickets
+  (the rear door only on most German buses): they board at that door.
+- **The IBIS is not typed twice** after Shift+U on a trip change.
+- **The automatic announcements say why they are quiet once**, not at the start of every trip.
+- **`[light_emitter_interior]` takes the light map of the right material slot**: with a
+  `[matl]` for some slots only, the lamps came out in the wrong place or not at all.
+- **Stop labels (`--export-stop-labels`)** read trips written with the old `[station]` blocks,
+  and no longer list a line at the stop where it ends.
+- **A ground texture found in the map's folder** has its own surface sound.
+- **The upscaler is not switched back on** after the player turned it off while it was waiting
+  to be tried again after running out of graphics memory; and a renderer rebuilt once after
+  refused frames is rebuilt again an hour later instead of the device being taken for lost.
+- **mX Graphics get the changes merged for the standard graphics only**: the passenger and IBIS
+  settings, plugin commands typed in the chat (they were always answered "no plugin is
+  listening"), the automatic announcements' notes and departure timing, mirrors drawn in
+  mirrors, reflective AI bodies not drawn as glass, ground textures in the map's folder and
+  the clouds traced at the window's size under an upscaler.
+- **Other players' buses drawn in less detail** give back the graphics memory of their
+  destination displays.
+- **CI size budget passes again** (`window_wipers.rs` tests moved to their own file).
+
+- **Online play: the host knows what the others have served**: a stop another player's bus
+  has stood at and left no longer fills again for that player's trip, and the timetable's buses
+  near the other players are read ahead as the host's own are.
+- **Online play: emissive materials, rail points and taking over a bus**: the variables of
+  `[matl_emissive]` reach the other games, the host takes a thrown point only from a player
+  whose vehicle is near it, and a host can no longer take over an AI bus its session does not
+  allow (it was removed at once).
+- **Road dirt**: the vehicles you placed and left keep their dirt.
 - **mX Graphics have cruise control, named saves, taking over an AI bus and
   `omsi.bus.track()` too**: they came only to the standard graphics
   ([#4043](https://github.com/openOMSI-org/openOMSI/pull/4043), [#4045](https://github.com/openOMSI-org/openOMSI/pull/4045), [#4047](https://github.com/openOMSI-org/openOMSI/pull/4047), [#4051](https://github.com/openOMSI-org/openOMSI/pull/4051)).

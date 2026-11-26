@@ -527,6 +527,9 @@ pub struct PeopleSim {
     /// up - and the client's bus took them all, one stream of passengers that never ended
     /// (#842, #840, #830).
     pub handed: Vec<(i64, u64)>,
+    /// LAN play (host): the other players' buses standing at a stop, or just driven off it
+    /// but not yet out of its reach (bus id, stop; see `remote_stops_left`).
+    pub remote_stood: hashbrown::HashSet<(u64, i64)>,
     /// The step's working lists, kept from frame to frame (see `scratch`).
     pub scratch: super::scratch::Scratch,
     /// Where the people's frames spent their time, stage by stage (OMSI_PROFILE).
