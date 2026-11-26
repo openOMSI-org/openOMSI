@@ -3337,6 +3337,8 @@
 "For passengers whose file gives no weight; default 75 kg": "Azoknak az utasoknak, akiknek a fájlja nem ad meg tömeget; alapértelmezés 75 kg"
 "Road dirt on the vehicles": "Útszennyeződés a járműveken"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: a járművekre ott rakódik az útszennyeződés, ahová kerül - nedves úton fröccs a kerekek mögött és az oldalak alján, lerakódás hátul, szárazon por, télen latyak - és az eső lemossa; kikapcsolva: a busz saját szennyeződése, mint az OMSI 2-ben"
+"Draw the mouse cursor in the game": "Az egérkurzor rajzolása a játékban"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "Olyan G-SYNC kijelzőhöz, amely az egér mozgatásakor dadog: a játék a saját nyilát rajzolja, és a Windows soha nem mozgatja a hardveres kurzort"
 "Entry doors": "Felszálló ajtók"
 "As the bus says": "Ahogy a busz megadja"
 "Front door only": "Csak az első ajtó"

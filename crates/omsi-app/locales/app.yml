@@ -8989,6 +8989,10 @@ _version: 2
 "plugin command queue is full":
   en: "plugin command queue is full"
 
+"Draw the mouse cursor in the game":
+  en: "Draw the mouse cursor in the game"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor":
+  en: "For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor"
 "Entry doors":
   en: "Entry doors"
 "As the bus says":

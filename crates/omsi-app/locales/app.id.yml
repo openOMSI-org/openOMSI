@@ -3044,6 +3044,8 @@
 "For passengers whose file gives no weight; default 75 kg": "Untuk penumpang yang berkasnya tidak mencantumkan berat; bawaan 75 kg"
 "Road dirt on the vehicles": "Kotoran jalan pada kendaraan"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: kendaraan mengumpulkan kotoran jalan di tempat jatuhnya - cipratan di belakang roda dan sisi bawah di jalan basah, lapisan di bagian belakang, debu saat kering, lumpur salju di musim dingin - dan hujan mencucinya; jika mati: kotoran bawaan bus, seperti di OMSI 2"
+"Draw the mouse cursor in the game": "Gambar kursor mouse di game"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "Untuk layar G-SYNC yang tersendat saat mouse bergerak: game menggambar panahnya sendiri dan Windows tidak pernah memindahkan kursor perangkat keras"
 "Entry doors": "Pintu masuk"
 "As the bus says": "Sesuai bus"
 "Front door only": "Hanya pintu depan"

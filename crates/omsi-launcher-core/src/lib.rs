@@ -3736,6 +3736,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // (#3154: OMSI 2's own rounding of a stop's passenger numbers until the player asks)
     v["pax_stop_numbers_exact"] = json!(false);
     v["others_detail"] = json!(false);
+    // (#1247: the game draws the cursor itself, so the system's is never moved)
+    v["software_cursor"] = json!(false);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
     v["ctrl_background"] = json!(false);
@@ -4320,9 +4322,10 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 )
             }
             "zoom_hold_latch" => v[&k] = json!(b(val)),
-            "flashlight_cursor" | "others_detail" | "pax_stop_numbers_exact" => {
-                v[&k] = json!(b(val))
-            }
+            "flashlight_cursor"
+            | "others_detail"
+            | "pax_stop_numbers_exact"
+            | "software_cursor" => v[&k] = json!(b(val)),
             "pad_steer_smooth" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -5171,8 +5174,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("zoom_hold_latch", false)
     ));
     text.push_str(&format!(
-        "flashlight_cursor={}\n",
-        b("flashlight_cursor", false)
+        "flashlight_cursor={}\nsoftware_cursor={}\n",
+        b("flashlight_cursor", false),
+        b("software_cursor", false)
     ));
     text.push_str(&format!(
         "pax_stop_numbers_exact={}\n",
