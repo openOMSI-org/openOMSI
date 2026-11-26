@@ -278,6 +278,43 @@ fn traffic_light_program_requires_a_placed_signal() {
 }
 
 #[test]
+fn a_crossing_reads_the_programs_of_the_other_times_of_day() {
+    let sco = SceneryObject::parse(&omsi_cfg::CfgFile::from_str(
+        "junction.sco",
+        concat!(
+            "[traffic_lights_group]\n72\n[traffic_light]\nMain\n[phase]\n0\n10\n[phase]\n6\n62\n",
+            "[traffic_light_time]\n730 900\n[traffic_lights_group]\n90\n[traffic_light]\nMain\n",
+            "[phase]\n0\n20\n[phase]\n6\n70\n",
+            "[traffic_light_time]\n2200 500\n[traffic_light]\nMain\n[phase]\n9\n0\n",
+        ),
+    ));
+    // the object's own program, run at every other time of day, is untouched
+    assert_eq!(sco.traffic_lights_group, Some(72.0));
+    assert_eq!(sco.traffic_lights.len(), 1);
+    assert_eq!(sco.traffic_lights[0].phases.len(), 2);
+    // the windows, with their own group, lights and phases
+    assert_eq!(sco.traffic_light_times.len(), 2);
+    let rush = &sco.traffic_light_times[0];
+    assert_eq!((rush.from, rush.to), (7.0 * 3600.0 + 1800.0, 9.0 * 3600.0));
+    assert_eq!(rush.group, Some(90.0));
+    assert_eq!(rush.lights.len(), 1);
+    assert_eq!(rush.lights[0].phases.len(), 2);
+    let night = &sco.traffic_light_times[1];
+    assert_eq!((night.from, night.to), (22.0 * 3600.0, 5.0 * 3600.0));
+    assert_eq!(
+        night.group, None,
+        "a window may keep the object's own cycle"
+    );
+    assert_eq!(night.lights[0].phases.len(), 1);
+    // a file with no such line loads as it always did
+    let plain = SceneryObject::parse(&omsi_cfg::CfgFile::from_str(
+        "j2.sco",
+        "[traffic_lights_group]\n72\n[traffic_light]\nMain\n[phase]\n0\n10\n",
+    ));
+    assert!(plain.traffic_light_times.is_empty());
+}
+
+#[test]
 fn freetex_without_item_uses_current_base_when_powered() {
     let model = omsi_model::Model::parse(&omsi_cfg::CfgFile::from_str(
         "model.cfg",

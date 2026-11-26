@@ -109,6 +109,21 @@ mod mirror_light_tests {
         )
     }
 
+    fn timed_program() -> TrafficLightController {
+        let mut ctl = program();
+        ctl.set_time_programs(vec![crate::traffic::TimedProgram {
+            from: 7.5 * 3600.0,
+            to: 9.0 * 3600.0,
+            program: crate::traffic::LightProgram::from_parts(
+                vec![(vec![(6, 60.0), (0, 0.0)], None)],
+                Some(60.0),
+                &[],
+                &[],
+            ),
+        }]);
+        ctl
+    }
+
     #[test]
     fn host_hold_survives_missing_local_requests() {
         let mut ctl = program();
@@ -156,6 +171,20 @@ mod mirror_light_tests {
         mirror_light_tick(&mut ctl, 1.0, 10.0);
         assert_eq!(ctl.time, 6.5);
         assert!(ctl.held);
+    }
+
+    #[test]
+    fn a_mirrored_crossing_switches_to_the_program_for_the_time_of_day() {
+        let mut ctl = timed_program();
+        set_mirror_light_clock(&mut ctl, 5.0, false);
+        mirror_light_tick(&mut ctl, 0.0, 8.0 * 3600.0);
+        assert_eq!(ctl.cycle_len(), 60.0, "08:00 is in the rush-hour window");
+        mirror_light_tick(&mut ctl, 0.0, 12.0 * 3600.0);
+        assert_eq!(
+            ctl.cycle_len(),
+            8.0,
+            "12:00 is back to the file's own program"
+        );
     }
 
     #[test]

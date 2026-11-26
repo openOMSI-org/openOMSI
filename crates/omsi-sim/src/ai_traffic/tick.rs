@@ -555,6 +555,9 @@ impl TrafficSim {
     fn run_light_programs(&mut self, dt: f32) {
         let day_time = self.day_time;
         for c in self.lights.iter_mut() {
+            // A crossing with `[traffic_light_time]` programs changes over here, at the time
+            // of day; one without them never does.
+            c.select_time_program(day_time);
             c.start(day_time);
             c.advance(dt);
         }

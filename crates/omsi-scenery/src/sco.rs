@@ -63,6 +63,33 @@ pub struct TrafficLight {
     pub approach_dist: Option<f32>,
 }
 
+/// A `[traffic_light_time]` program of a crossing: the whole light program the object runs
+/// between two times of day, both written as `HHMM` (`730 900`: 07:30 until 09:00;
+/// `2200 500`: from 22:00 to 05:00 the next morning), on one line or one per line. The `[traffic_light]`s, their
+/// `[phase]`s, `[approachdist]`, `[traffic_lights_group]`, `[traffic_light_stop]` and
+/// `[traffic_light_jump]`s written after the line belong to it; the lights before it are the
+/// crossing's own program, run at every time no window holds. A file without the line loads
+/// exactly as it always did.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TrafficLightTime {
+    /// Start of the window, seconds of the day.
+    pub from: f32,
+    /// End of it, seconds of the day; below `from` the window runs across midnight.
+    pub to: f32,
+    pub group: Option<f32>,
+    pub lights: Vec<TrafficLight>,
+    pub stop: Vec<[f32; 3]>,
+    pub jump: Vec<[f32; 4]>,
+}
+
+/// A time of day written the way the stock timetables write it (`730` = 07:30), in seconds
+/// of the day, wrapped into a day.
+pub fn hhmm_seconds(value: f32) -> f32 {
+    let n = value.round() as i64;
+    let (h, m) = (n / 100, n % 100);
+    (h * 3600 + m * 60).rem_euclid(86_400) as f32
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SplineHelper {
     pub spline: String,
@@ -152,6 +179,9 @@ pub struct SceneryObject {
     pub traffic_light_stop: Vec<[f32; 3]>,
     /// `[traffic_light_jump] light time if_request jump_to`.
     pub traffic_light_jump: Vec<[f32; 4]>,
+    /// `[traffic_light_time] from to` programs (openOMSI's own line, ignored by OMSI 2):
+    /// the light programs of the other times of day, in file order.
+    pub traffic_light_times: Vec<TrafficLightTime>,
     pub spline_helpers: Vec<SplineHelper>,
     pub paths: Vec<PathDef>,
     /// `[use_traffic_light]` index per path (parallel to `paths`, -1 when none).
@@ -293,6 +323,9 @@ impl SceneryObject {
         };
         let base = file.dir().to_path_buf();
         let mut r = file.reader().disabled_blocks();
+        // The `[traffic_light_time]` program the reader is inside, if any: the light keywords
+        // after its line fill that program instead of the object's own one.
+        let mut timed: Option<usize> = None;
         let tokens: Vec<&str> = ATTACH_TOKENS
             .iter()
             .chain(omsi_model::ANIM_TOKENS)
@@ -357,33 +390,6 @@ impl SceneryObject {
                     if let Some(last) = o.path_switch_dir.last_mut() {
                         *last = Some(d);
                     }
-                }
-                "traffic_lights_group" => o.traffic_lights_group = Some(r.f32()),
-                "traffic_light" => o.traffic_lights.push(TrafficLight {
-                    name: r.str().to_string(),
-                    phases: Vec::new(),
-                    approach_dist: None,
-                }),
-                "phase" => {
-                    let state = r.i32();
-                    let duration = r.f32();
-                    if let Some(t) = o.traffic_lights.last_mut() {
-                        t.phases.push(TrafficLightPhase { state, duration });
-                    }
-                }
-                "approachdist" => {
-                    // belongs to the light before it (a request button or a detector loop)
-                    let d = r.f32();
-                    o.approach_dist = Some(d);
-                    if let Some(t) = o.traffic_lights.last_mut() {
-                        t.approach_dist = Some(d);
-                    }
-                }
-                "traffic_light_stop" => o.traffic_light_stop.push(light_point(&mut r)),
-                "traffic_light_jump" => {
-                    let [light, time, if_request] = light_point(&mut r);
-                    o.traffic_light_jump
-                        .push([light, time, if_request, r.f32()]);
                 }
                 "splinehelper" => {
                     let spline = r.str().to_string();
@@ -535,7 +541,9 @@ impl SceneryObject {
                 }
                 "joinable" => o.joinable = true,
                 _ => {
-                    if !o.model.handle_keyword(&k, &mut r) {
+                    if !traffic_light_keyword(&k, &mut r, &mut o, &mut timed)
+                        && !o.model.handle_keyword(&k, &mut r)
+                    {
                         o.unknown_keywords.push((k, r.block_line()));
                     }
                 }
@@ -620,6 +628,95 @@ pub const ATTACH_TOKENS: &[&str] = &[
 /// `-1`, `0.0`, a word - sets the flag.
 fn request_flag(line: &str) -> f32 {
     if line == "0" { 0.0 } else { 1.0 }
+}
+
+/// The traffic-light keywords that fill either the crossing's own program or, after a
+/// `[traffic_light_time]` line, that time window's program. Returns whether `k` was one of
+/// them; an unknown keyword leaves the reader untouched for the model parser.
+fn traffic_light_keyword(
+    k: &str,
+    r: &mut omsi_cfg::CfgReader<'_>,
+    o: &mut SceneryObject,
+    timed: &mut Option<usize>,
+) -> bool {
+    match k {
+        "traffic_lights_group" => {
+            let g = r.f32();
+            match *timed {
+                Some(i) => o.traffic_light_times[i].group = Some(g),
+                None => o.traffic_lights_group = Some(g),
+            }
+        }
+        "traffic_light_time" => {
+            // Both times on their own line (`730 900`), or one per line as the rest
+            // of the format writes its numbers.
+            let line = r.word();
+            let mut v: Vec<f32> = line
+                .split_whitespace()
+                .map(|t| t.replace(',', ".").parse::<f32>().unwrap_or(0.0))
+                .collect();
+            if v.len() < 2 {
+                v.push(r.f32());
+            }
+            o.traffic_light_times.push(TrafficLightTime {
+                from: hhmm_seconds(v[0]),
+                to: hhmm_seconds(v[1]),
+                ..Default::default()
+            });
+            *timed = Some(o.traffic_light_times.len() - 1);
+        }
+        "traffic_light" => {
+            let l = TrafficLight {
+                name: r.str().to_string(),
+                phases: Vec::new(),
+                approach_dist: None,
+            };
+            match *timed {
+                Some(i) => o.traffic_light_times[i].lights.push(l),
+                None => o.traffic_lights.push(l),
+            }
+        }
+        "phase" => {
+            let state = r.i32();
+            let duration = r.f32();
+            let light = match *timed {
+                Some(i) => o.traffic_light_times[i].lights.last_mut(),
+                None => o.traffic_lights.last_mut(),
+            };
+            if let Some(t) = light {
+                t.phases.push(TrafficLightPhase { state, duration });
+            }
+        }
+        "approachdist" => {
+            // belongs to the light before it (a request button or a detector loop)
+            let d = r.f32();
+            o.approach_dist = Some(d);
+            let light = match *timed {
+                Some(i) => o.traffic_light_times[i].lights.last_mut(),
+                None => o.traffic_lights.last_mut(),
+            };
+            if let Some(t) = light {
+                t.approach_dist = Some(d);
+            }
+        }
+        "traffic_light_stop" => {
+            let v = light_point(r);
+            match *timed {
+                Some(i) => o.traffic_light_times[i].stop.push(v),
+                None => o.traffic_light_stop.push(v),
+            }
+        }
+        "traffic_light_jump" => {
+            let [light, time, if_request] = light_point(r);
+            let v = [light, time, if_request, r.f32()];
+            match *timed {
+                Some(i) => o.traffic_light_times[i].jump.push(v),
+                None => o.traffic_light_jump.push(v),
+            }
+        }
+        _ => return false,
+    }
+    true
 }
 
 /// The light, the time and the `if_request` flag a `[traffic_light_stop]` or

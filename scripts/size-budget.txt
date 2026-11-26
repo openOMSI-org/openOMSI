@@ -77,7 +77,7 @@ file 1625 crates/omsi-sim/src/ai_traffic/junctions.rs
 file 1514 crates/omsi-sim/src/ai_traffic/planning.rs
 file 1951 crates/omsi-sim/src/ai_traffic/tick.rs
 file 1926 crates/omsi-sim/src/rigid/tests.rs
-file 2208 crates/omsi-sim/src/traffic/tests.rs
+file 2392 crates/omsi-sim/src/traffic/tests.rs
 file 1899 crates/omsi-sim/src/vehicle/types.rs
 file 2243 crates/omsi-trolley/src/pole.rs
 fn 354 crates/omsi-app-mx::act crates/omsi-app-mx/src/apple_bridge.rs
