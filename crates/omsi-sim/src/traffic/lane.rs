@@ -99,15 +99,19 @@ pub struct Lane {
     /// FUN_00710e98 and never written again), so a blockpath never holds anybody in the
     /// original either. No stock map places an object that has one.
     pub blocks: Vec<u16>,
-    /// `[crossingproblem]` (segment +0x1a2 in Omsi.exe): marks a path pair whose junction
-    /// geometry needs special handling. The AI keeps the conflict envelope at the measured
-    /// meeting area rather than treating the entire remaining approach lanes as occupied;
-    /// otherwise a vehicle far beyond the actual overlap can hold crossing traffic.
+    /// `[crossingproblem]` (segment +0x1a2 in Omsi.exe): where this path and one crossing it
+    /// meet, a vehicle holding either of them blocks the other for as long as it holds it,
+    /// not only until it has passed the crossing point (the look-ahead FUN_00716970 skips its
+    /// "already past the crossing" test for such a pair, 0x718013). Spandau sets it on T
+    /// junctions whose paths run side by side rather than cleanly across each other.
     pub crossing_problem: bool,
     /// Part of a roundabout's ring (see `rings::find_rings`).
     pub ring: bool,
     /// What a rail lane's track is: tram or railway, third rail, tunnel (see `rail::track`).
     pub track: Option<crate::rail::TrackInfo>,
+    /// The path's `[third_rail]`s, as the file lists them, their `x` to the right of the way
+    /// this lane runs (see `omsi_sim::vehicle::BogieGround`).
+    pub third_rails: Vec<[f32; 6]>,
 }
 
 /// Priority of a path without a `[rule] priority`.
@@ -168,7 +172,10 @@ impl Lane {
             let t = ((p - a).dot(ab) / ab.length_squared().max(1e-9)).clamp(0.0, 1.0);
             let d = (a + ab * t - p).length();
             if best.map(|b| d < b.1).unwrap_or(true) {
-                best = Some((self.dist[k] + (self.dist[k + 1] - self.dist[k]) * t as f32, d));
+                best = Some((
+                    self.dist[k] + (self.dist[k + 1] - self.dist[k]) * t as f32,
+                    d,
+                ));
             }
         }
         best
@@ -182,12 +189,19 @@ impl Lane {
     /// paths. A return whose entry and exit have already been passed folds the planned
     /// way back on itself. This checks the driving choice, not the network topology.
     pub(super) fn continues_from(&self, from: &Lane, tol: f64) -> bool {
-        if self.kind != LaneKind::Street || self.length() as f64 > tol || from.length() as f64 > tol {
+        if self.kind != LaneKind::Street || self.length() as f64 > tol || from.length() as f64 > tol
+        {
             return true;
         }
         let end = from.end();
-        let backwards = (self.start() - end).truncate().dot(heading_dir(self.start_heading() as f64)) < 0.0
-            && (self.end() - end).truncate().dot(heading_dir(self.end_heading() as f64)) <= 0.0;
+        let backwards = (self.start() - end)
+            .truncate()
+            .dot(heading_dir(self.start_heading() as f64))
+            < 0.0
+            && (self.end() - end)
+                .truncate()
+                .dot(heading_dir(self.end_heading() as f64))
+                <= 0.0;
         let forward_gap = (from.start() - self.end()).truncate().length_squared();
         let return_gap = (self.start() - from.end()).truncate().length_squared();
         !(backwards && forward_gap < return_gap)
@@ -201,7 +215,11 @@ impl Lane {
     /// Segment and fraction along it at distance `s` (clamped to the lane).
     fn locate(&self, s: f32) -> (usize, f32) {
         // (a position gone NaN takes the lane's start rather than stopping the game)
-        let s = if s.is_nan() { 0.0 } else { s.clamp(0.0, self.length()) };
+        let s = if s.is_nan() {
+            0.0
+        } else {
+            s.clamp(0.0, self.length())
+        };
         let i = match self.dist.binary_search_by(|d| d.total_cmp(&s)) {
             Ok(i) => i.min(self.points.len() - 2),
             Err(i) => i.saturating_sub(1).min(self.points.len() - 2),
@@ -216,7 +234,10 @@ impl Lane {
     /// jerks at every sample and at every lane joint.
     pub fn at(&self, s: f32) -> (DVec3, f32) {
         if self.points.len() < 2 {
-            return (self.points.first().copied().unwrap_or(DVec3::ZERO), self.headings.first().copied().unwrap_or(0.0));
+            return (
+                self.points.first().copied().unwrap_or(DVec3::ZERO),
+                self.headings.first().copied().unwrap_or(0.0),
+            );
         }
         let (i, t) = self.locate(s);
         let (h0, h1) = (self.headings[i], self.headings[i + 1]);
@@ -239,7 +260,10 @@ impl Lane {
             return lin;
         }
         let (t2, t3) = (t * t, t * t * t);
-        let xy = a.truncate() * (2.0 * t3 - 3.0 * t2 + 1.0) + d0 * len * (t3 - 2.0 * t2 + t) + b.truncate() * (3.0 * t2 - 2.0 * t3) + d1 * len * (t3 - t2);
+        let xy = a.truncate() * (2.0 * t3 - 3.0 * t2 + 1.0)
+            + d0 * len * (t3 - 2.0 * t2 + t)
+            + b.truncate() * (3.0 * t2 - 2.0 * t3)
+            + d1 * len * (t3 - t2);
         DVec3::new(xy.x, xy.y, lin.z)
     }
 
@@ -282,6 +306,21 @@ impl Lane {
         self.curvature[i] + (self.curvature[i + 1] - self.curvature[i]) * t
     }
 
+    /// How sharply the lane bends over `span` metres about `s` (1/m, unsigned), as a train's
+    /// bogies feel it: taken at a point, the kink where a switch's lanes meet read as the
+    /// sharpest curve there is. A lane shorter than that: its curvature at `s`.
+    pub fn curve_over(&self, s: f32, span: f32) -> f32 {
+        let (c0, c1) = (
+            (s - span * 0.5).max(0.0),
+            (s + span * 0.5).min(self.length()),
+        );
+        if c1 - c0 > 2.0 {
+            wrap_deg(self.at(c1).1 - self.at(c0).1).abs().to_radians() / (c1 - c0)
+        } else {
+            self.curvature_at(s).abs()
+        }
+    }
+
     pub fn start(&self) -> DVec3 {
         self.points[0]
     }
@@ -306,19 +345,46 @@ pub struct LaneBuilder;
 impl LaneBuilder {
     /// Sample an arc/straight lane: start position, heading (deg), length, radius (0 = straight,
     /// > 0 right turn), height change over the length.
-    pub fn arc(start: DVec3, heading_deg: f64, length: f64, radius: f64, dz: f64, kind: LaneKind, width: f32) -> Lane {
-        Self::sample_arc(start, heading_deg, length, radius, kind, width, |s| dz * s / length.max(1e-6))
+    pub fn arc(
+        start: DVec3,
+        heading_deg: f64,
+        length: f64,
+        radius: f64,
+        dz: f64,
+        kind: LaneKind,
+        width: f32,
+    ) -> Lane {
+        Self::sample_arc(start, heading_deg, length, radius, kind, width, |s| {
+            dz * s / length.max(1e-6)
+        })
     }
 
     /// Object-path gradients are rise per metre, not a total height change. Integrate
     /// the gradient between the ends so the lane meets the next path on a slope.
-    pub fn arc_with_gradients(start: DVec3, heading_deg: f64, length: f64, radius: f64, grad_start: f64, grad_end: f64, kind: LaneKind, width: f32) -> Lane {
+    pub fn arc_with_gradients(
+        start: DVec3,
+        heading_deg: f64,
+        length: f64,
+        radius: f64,
+        grad_start: f64,
+        grad_end: f64,
+        kind: LaneKind,
+        width: f32,
+    ) -> Lane {
         Self::sample_arc(start, heading_deg, length, radius, kind, width, |s| {
             grad_start * s + (grad_end - grad_start) * s * s / (2.0 * length.max(1e-6))
         })
     }
 
-    fn sample_arc(start: DVec3, heading_deg: f64, length: f64, radius: f64, kind: LaneKind, width: f32, height: impl Fn(f64) -> f64) -> Lane {
+    fn sample_arc(
+        start: DVec3,
+        heading_deg: f64,
+        length: f64,
+        radius: f64,
+        kind: LaneKind,
+        width: f32,
+        height: impl Fn(f64) -> f64,
+    ) -> Lane {
         let n = ((length / 2.0).ceil() as usize).clamp(1, 400);
         let mut points = Vec::with_capacity(n + 1);
         let mut headings = Vec::with_capacity(n + 1);
@@ -328,7 +394,11 @@ impl LaneBuilder {
             points.push(DVec3::new(p.x, p.y, start.z + height(s)));
             headings.push(h as f32);
         }
-        let k = if radius.abs() < 1e-6 { 0.0 } else { (1.0 / radius) as f32 };
+        let k = if radius.abs() < 1e-6 {
+            0.0
+        } else {
+            (1.0 / radius) as f32
+        };
         Self::curve(points, headings, vec![k; n + 1], kind, width)
     }
 
@@ -336,10 +406,51 @@ impl LaneBuilder {
     /// A flight path has no speed limit of its own unless the map gives it one with a
     /// `[rule] speedlimit`; the street default of 50 km/h had the Tegel approach flown at
     /// walking pace for an airliner.
-    pub fn curve(points: Vec<DVec3>, headings: Vec<f32>, curvature: Vec<f32>, kind: LaneKind, width: f32) -> Lane {
+    pub fn curve(
+        points: Vec<DVec3>,
+        headings: Vec<f32>,
+        curvature: Vec<f32>,
+        kind: LaneKind,
+        width: f32,
+    ) -> Lane {
         let dist = cumulative(&points);
-        let speed_limit_kmh = if kind == LaneKind::Air { AIR_NO_LIMIT_KMH } else { 50.0 };
-        Lane { key: None, reversed: false, kind, width, points, headings, curvature, dist, speed_limit_kmh, next: Vec::new(), traffic_light: None, turn: 0, source: 0, offset: 0.0, name: String::new(), invisible: false, density: 1.0, group_density: Vec::new(), no_cars: false, rule_bus: false, rule_trucks: false, no_overtaking: false, left: None, right: None, priority: DEFAULT_PRIORITY, blocks: Vec::new(), crossing_problem: false, ring: false, track: None }
+        let speed_limit_kmh = if kind == LaneKind::Air {
+            AIR_NO_LIMIT_KMH
+        } else {
+            50.0
+        };
+        Lane {
+            key: None,
+            reversed: false,
+            kind,
+            width,
+            points,
+            headings,
+            curvature,
+            dist,
+            speed_limit_kmh,
+            next: Vec::new(),
+            traffic_light: None,
+            turn: 0,
+            source: 0,
+            offset: 0.0,
+            name: String::new(),
+            invisible: false,
+            density: 1.0,
+            group_density: Vec::new(),
+            no_cars: false,
+            rule_bus: false,
+            rule_trucks: false,
+            no_overtaking: false,
+            left: None,
+            right: None,
+            priority: DEFAULT_PRIORITY,
+            blocks: Vec::new(),
+            crossing_problem: false,
+            ring: false,
+            track: None,
+            third_rails: Vec::new(),
+        }
     }
 
     /// Lane from bare points: headings from the neighbouring points on both sides (the
@@ -362,7 +473,11 @@ impl LaneBuilder {
             .map(|i| {
                 let (p, q) = (i.saturating_sub(1), (i + 1).min(n.saturating_sub(1)));
                 let ds = dist.get(q).copied().unwrap_or(0.0) - dist.get(p).copied().unwrap_or(0.0);
-                if ds > 1e-3 { wrap_deg(headings[q] - headings[p]).to_radians() / ds } else { 0.0 }
+                if ds > 1e-3 {
+                    wrap_deg(headings[q] - headings[p]).to_radians() / ds
+                } else {
+                    0.0
+                }
             })
             .collect();
         Self::curve(points, headings, curvature, kind, width)
@@ -409,5 +524,8 @@ pub fn arc_point(start: DVec3, heading_deg: f64, s: f64, radius: f64) -> (DVec2,
     let ang = -turn * s / r;
     let p = start.truncate() - centre;
     let (sa, ca) = ang.sin_cos();
-    (centre + DVec2::new(p.x * ca - p.y * sa, p.x * sa + p.y * ca), heading_deg + turn * (s / r).to_degrees())
+    (
+        centre + DVec2::new(p.x * ca - p.y * sa, p.x * sa + p.y * ca),
+        heading_deg + turn * (s / r).to_degrees(),
+    )
 }
