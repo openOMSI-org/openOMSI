@@ -134,7 +134,7 @@ const graphics = {
         { type: 'toggle', key: 'windy_trees', label: 'Windy trees' },
         { type: 'toggle', key: 'detailed_trees', label: 'Detailed trees', help: 'Close up, the trees\' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time' },
         // (the snow built up on the roads and the vehicles' roofs; the classic picture shows the season's snow only)
-        { type: 'toggle', key: 'procedural_dirt', label: 'Road dirt on the vehicles', help: 'Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2', when: (s) => enhanced(s) },
+        { type: 'toggle', key: 'procedural_dirt', label: 'Road dirt on the vehicles', help: 'Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus\'s own dirt, as in OMSI 2', when: (s) => enhanced(s) },
         { type: 'toggle', key: 'road_snow', label: 'Built-up snow on roads and roofs', help: 'While it snows, snow builds up on the roads and on the vehicles\' roofs, with ruts and tyre tracks, and thaws again; off: the weather\'s own snow on road, as in OMSI 2', when: (s) => !classic(s) },
       ],
     },
