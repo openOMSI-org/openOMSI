@@ -201,8 +201,7 @@ pub struct Settings {
     pub fsr_quality: String,
     /// FidelityFX RCAS sharpening strength (0 .. 1).
     pub fsr_sharpness: f32,
-    /// How much DLSS's picture is sharpened after it (0 .. 1; 0.25 by default, the amount it
-    /// had before it was a setting).
+    /// How much DLSS's picture is sharpened after it (0 .. 1; 0.25, as before the setting).
     pub dlss_sharpness: f32,
     /// Language of the texts the game shows about the cockpit: `ENG` (default), `DEU` or
     /// `FRA` - OMSI's own language file codes.
@@ -761,7 +760,6 @@ impl Settings {
             _ => {}
         }
     }
-    /// The settings a `settings.cfg` text describes (anything missing keeps its default).
     /// The upscaler's lines of settings.cfg (`from_text`): unknown values fall back to the
     /// standard upscaler, the Quality preset and 80 % sharpening.
     fn read_upscaler(&mut self, k: &str, v: &str) {
