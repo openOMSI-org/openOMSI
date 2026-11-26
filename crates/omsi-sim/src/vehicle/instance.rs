@@ -282,6 +282,7 @@ impl VehicleInstance {
             last_impact: 0.0,
             dirt: 0.0,
             road_dirt: RoadDirt::default(),
+            road_dirt_drawn: Default::default(),
             rigid: None,
             wheel_seats: None,
             ai_odometer: 0.0,

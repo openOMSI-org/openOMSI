@@ -207,7 +207,7 @@ impl World {
         };
         let faded = alpha_slots
             .iter()
-            .any(|l| !l.alpha.is_empty() || !l.uv.is_empty());
+            .any(|l| !l.alpha.is_empty() || !l.uv.is_empty() || !l.emit.is_empty());
         let mut alpha_last = Vec::new();
         if faded {
             for (l, &id) in alpha_slots.iter().zip(&all_instances) {
@@ -216,6 +216,11 @@ impl World {
                 let visible = scene.instances[id].visible;
                 renderer.set_params(scene, id, &a, visible, &uv);
                 alpha_last.push((a, uv));
+                // (its driven emissive slots as {init} leaves their variables, no fade)
+                if !l.emit.is_empty() {
+                    let levels: Vec<f32> = l.emit.iter().map(|e| e.target(&value)).collect();
+                    renderer.set_slot_light(scene, id, &l.emit_values(&levels, &value));
+                }
             }
         }
         let script_lamps = if lamp.is_none() {

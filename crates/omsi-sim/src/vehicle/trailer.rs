@@ -1096,7 +1096,11 @@ impl TrailerPart {
             .apply_emission(dt, vars, &mut self.mesh_props);
         // (its own dirt overlay goes where the road dirt takes its place, as the leading
         // vehicle's does: `road_dirt::procedural_for`)
-        if super::road_dirt::procedural_for(&self.ty.def) {
+        if super::road_dirt::procedural_for(
+            &self.ty.def,
+            main.road_dirt_drawn
+                .load(std::sync::atomic::Ordering::Relaxed),
+        ) {
             for &(i, slot, wiped) in &self.props_plan.dirt {
                 if let Some(a) = self
                     .mesh_props
