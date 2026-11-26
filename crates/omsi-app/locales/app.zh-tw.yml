@@ -4489,6 +4489,8 @@
 "For passengers whose file gives no weight; default 75 kg": "用於檔案未標明重量的乘客；預設 75 kg"
 "Road dirt on the vehicles": "車輛上的道路污垢"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced：車輛會在污垢落下之處累積道路污垢 - 濕路上車輪後方與車身下側的濺泥、車尾的污膜、乾燥時的灰塵、冬天的雪泥 - 雨水會將其沖刷，洗車可清除；關閉時：公車本身的污垢，同 OMSI 2"
+"Draw the mouse cursor in the game": "在遊戲中繪製滑鼠游標"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "針對滑鼠移動時會停頓的 G-SYNC 螢幕：遊戲自行繪製箭頭，Windows 永遠不會移動硬體游標"
 "Entry doors": "上車門"
 "As the bus says": "依車輛設定"
 "Front door only": "僅前門"

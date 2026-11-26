@@ -3330,6 +3330,8 @@
 "For passengers whose file gives no weight; default 75 kg": "जिन यात्रियों की फ़ाइल में वज़न नहीं है उनके लिए; डिफ़ॉल्ट 75 kg"
 "Road dirt on the vehicles": "वाहनों पर सड़क की गंदगी"
 "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2": "Enhanced: वाहनों पर सड़क की गंदगी वहीं जमती है जहाँ वह पड़ती है - गीली सड़क पर पहियों के पीछे और निचली दीवारों पर छींटे, पीछे परत, सूखे में धूल, सर्दियों में कीचड़ वाली बर्फ़ - और बारिश उसे धो देती है; बंद होने पर: बस की अपनी गंदगी, जैसे OMSI 2 में"
+"Draw the mouse cursor in the game": "गेमें माउस कर्सर दिखाएँ"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor": "G-SYNC स्क्रीन जो माउस चलाने पर अटकती है: गेम खुद का तीर बनाता है और Windows कभी हार्डवेयर कर्सर को नहीं चलाता"
 "Entry doors": "चढ़ने के दरवाज़े"
 "As the bus says": "जैसा बस बताए"
 "Front door only": "केवल आगे का दरवाज़ा"
