@@ -1212,6 +1212,9 @@ impl Offscreen<'_> {
                     s.set_lan_tours(tours);
                 }
             }
+            if let (Some(h), Some(s)) = (humans_off.as_mut(), schedule.as_mut()) {
+                crate::app_impl::lan_duties::lan_tour_progress(l, &mut h.sim, &mut s.sim);
+            }
             // the other games run in real time (see `RealTime`)
             std::thread::sleep(real_time.wait(Instant::now(), dt));
         }

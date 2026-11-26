@@ -97,6 +97,9 @@ pub(crate) struct AutoAnnounce {
     note: Option<announce::QuietReason>,
     /// This trip's silence was already accounted for.
     noted: bool,
+    /// The last line the player was given: the same reason again on the next trip (a map
+    /// whose every depot file keeps one recording per stop) is not shown again.
+    told: Option<announce::QuietReason>,
     /// The vehicle has no `IBIS_vor_stumm`: the counter can only be pressed on, not stepped
     /// over silently, so a press is only made where it lands on the recording wanted.
     no_skip: bool,
@@ -408,7 +411,12 @@ impl AutoAnnounce {
     /// announcing, where it cannot (a bus with no IBIS key, a depot file of one recording per
     /// stop). None where it is announcing as asked.
     pub(crate) fn take_note(&mut self) -> Option<announce::QuietReason> {
-        self.note.take()
+        let note = self.note.take()?;
+        if self.told == Some(note) {
+            return None;
+        }
+        self.told = Some(note);
+        Some(note)
     }
 
     fn played(&mut self, bus: &impl Ibis, want: Want) {

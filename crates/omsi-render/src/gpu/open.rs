@@ -884,6 +884,12 @@ impl Renderer {
         };
         let msaa = options.msaa;
         RT_GBUF.store(options.ray_tracing, std::sync::atomic::Ordering::Relaxed);
+        GI_BINDING.store(
+            options.ray_tracing
+                && device.limits().max_sampled_textures_per_shader_stage
+                    >= crate::pipelines::scene::PANE_MASK_TEXTURES,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let errors = errors::install(&device, format, &options);
         let leave_out_enhanced = passes::leave_out_enhanced(&options, &adapter_name);
         if sixteen_texture_units() && !options.no_enhanced && !options.preview_only {
@@ -1072,6 +1078,8 @@ impl Renderer {
                 rt_error: errors.rt_error,
                 out_of_memory: errors.out_of_memory,
                 device_lost: errors.device_lost,
+                refused_submits: errors.refused_submits,
+                rejected: Default::default(),
             },
             _device_poller: DevicePoller::start(&device),
             mip_pipeline: mip.pipeline,
@@ -1113,6 +1121,8 @@ impl Renderer {
             temporal_failed: false,
             temporal_window: false,
             temporal_kept: None,
+            upscaler_retry: None,
+            upscaler_retried: false,
             frame_generation: None,
             temporal_pending: None,
             prepass_msaa_pipelines: prepass.msaa_pipelines,

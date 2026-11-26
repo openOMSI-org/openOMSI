@@ -560,7 +560,7 @@ fn glass_blur(uv: vec2<f32>, lod: f32) -> vec3<f32> {
     return s / 6.0;
 }
 
-// The snow a wiped pane holds while it snows (see enhanced/07_glass.wgsl `glass_snow`):
+// The snow a pane holds while it snows (see enhanced/07_glass.wgsl `glass_snow`):
 // `defrost` how far the windscreen's defroster has cleared it (0..0.85), `fz` the height on
 // the glass in the bus's frame (-1 its bottom, 1 its top), for the drift along the bottom.
 fn glass_snow_with(in: FsIn, cover: f32, defrost: f32, fz: f32) -> vec4<f32> {
@@ -571,57 +571,73 @@ fn glass_snow_with(in: FsIn, cover: f32, defrost: f32, fz: f32) -> vec4<f32> {
     // drew the crystals and the drifts out long on the windscreen)
     let b = pane_base(in.world, in.local, in.normal, false);
     let an = abs(b.nl);
-    let axis = select(select(1, 0, an.y >= an.x), 2, an.z > max(an.x, an.y) * 2.0);
+    let roof = an.z > max(an.x, an.y) * 2.0;
+    let axis = select(select(1, 0, an.y >= an.x), 2, roof);
     let m = pane_proj(b, axis).q;
     let t = camera.post.y;
-    let front = material.wipe_bounds.z > 0.0;
-    let heat = select(0.15, 0.45 + 0.55 * clamp(defrost / 0.85, 0.0, 1.0), front);
+    // The defroster warms the glass that faces ahead on the panes the wipers sweep. By the
+    // pane's facing and not by its film's slot: a windscreen is several slots, a side one
+    // among them at its wrapped corner, and the slot's flag melted the snow on one and kept it
+    // on the next, a straight seam across the glass.
+    let ahead = select(smoothstep(-0.12, 0.12, an.y - an.x), 0.0, roof) * select(0.0, 1.0, material.wipe_bounds.z != 0.0);
+    let heat = mix(0.15, 0.45 + 0.55 * clamp(defrost / 0.85, 0.0, 1.0), ahead);
+    // The flakes as they land: soft clumps of a few millimetres (sharp six-armed stars a
+    // centimetre across were each a star drawn on the street behind), each staying a while
+    // and melting into a little water - soon on the warm windscreen, slowly on a side window.
+    // Where a flake is smaller than a pixel it is drawn as the share of the glass it covers
+    // (a speckle of single pixels flickered as the view moved); where its cell is, as the
+    // share all of them cover.
+    let px = b.px;
     var flakes = 0.0;
     var melt_water = 0.0;
     for (var layer = 0; layer < 2; layer = layer + 1) {
         let fl = f32(layer);
-        let cell = select(0.012, 0.022, layer == 1);
+        let cell = select(0.007, 0.012, layer == 1);
+        let density = clamp(cover * select(1.15, 0.85, layer == 1), 0.0, 1.0);
         let p = m / cell + fl * 37.0;
         let c = floor(p);
         let tm = rain_hash(c + vec2<f32>(5.0, 1.0 + fl));
-        let life = mix(40.0, 7.0, heat) * (0.6 + 0.8 * tm.y);
+        let life = mix(40.0, 6.0, heat) * (0.6 + 0.8 * tm.y);
         let cycle = t / life + tm.x;
         let ph = fract(cycle);
         let arrival = c + floor(cycle) * vec2<f32>(19.0, 47.0);
         let h = rain_hash(arrival);
         let h2 = rain_hash(arrival + vec2<f32>(91.0, 13.0));
-        // (a crystal shows once the cover passes its own threshold: they come one by one)
-        let shown = clamp((cover * select(1.15, 0.85, layer == 1) - h2.y) * 12.0, 0.0, 1.0) * smoothstep(0.0, 0.02, ph);
-        // the second half of its while it melts: it rounds off, shrinks and goes clear
+        // (a flake shows once the cover passes its own threshold: they come one by one)
+        let shown = clamp((density - h2.y) * 12.0, 0.0, 1.0) * smoothstep(0.0, 0.02, ph);
+        // the second half of its while it melts: it shrinks and goes clear
         let melt = smoothstep(0.45, 0.95, ph);
-        let d = p - (c + 0.25 + 0.5 * h);
-        let dl = length(d);
-        let r = (0.16 + 0.2 * h2.x) * (1.0 - 0.5 * melt);
-        // six arms, the rim reaching out along them
-        let arm = pow(abs(cos(3.0 * atan2(d.y, d.x) + h.x * 6.283185)), 4.0);
-        let rr = r * (0.55 + 0.45 * mix(arm, 1.0, melt));
-        let edge = 1.0 - smoothstep(rr * 0.7, rr, dl);
-        flakes = max(flakes, shown * edge * (0.6 + 0.4 * h.x) * (1.0 - melt));
-        melt_water = max(melt_water, shown * edge * melt * (1.0 - smoothstep(0.92, 1.0, ph)));
+        let d = (p - (c + 0.3 + 0.4 * h)) * cell;
+        let r = cell * (0.11 + 0.13 * h2.x) * (1.0 - 0.5 * melt);
+        // a clump is round only roughly: three soft lobes, turned its own way
+        let lobe = 0.88 + 0.12 * cos(3.0 * atan2(d.y, d.x) + h.x * 6.283185);
+        let aa = max(px * 0.7, r * 0.2);
+        let edge = 1.0 - smoothstep(r * lobe - aa, r * lobe + aa, length(d));
+        let detail = smoothstep(0.5, 1.5, r / px);
+        let own = mix(shown * 3.14159 * r * r / (cell * cell), shown * edge, detail);
+        // (the cells' average: a flake shows for some 70 % of its while, solid for some half)
+        let mean = density * 0.55 * 3.14159 * 0.0324;
+        let lit = mix(mean, own, smoothstep(1.0, 3.0, cell / px));
+        flakes = max(flakes, lit * (0.7 + 0.3 * h.x) * (1.0 - melt));
+        melt_water = max(melt_water, mix(mean * 0.5, shown * edge * detail, smoothstep(1.0, 3.0, cell / px)) * melt * (1.0 - smoothstep(0.92, 1.0, ph)));
     }
-    // settled snow is never even: a smooth noise of a few centimetres and a finer one break
-    // up where the layer closes and give the bank and the drifts their ragged edges
-    let lumps = snow_noise(m / 0.045) * 0.65 + snow_noise(m / 0.012 + 7.0) * 0.35;
+    // The settled layer closes evenly as the cover grows, its edge broken up at the scale of
+    // a hand (a noise of a few centimetres drew a blotchy film over the whole pane), deepest
+    // along the windscreen's bottom edge, where the blades and the airstream do not reach.
+    let lumps = snow_noise(m / 0.11) * 0.75 + snow_noise(m / 0.035 + 7.0) * 0.25;
     var drift = 0.0;
-    if (front) {
-        // (by the height in the bus's own frame, not by the wiper mask's `wipe_uv`: a
-        // windscreen's film is several slots - each wiper's field and the glass round them -
-        // each with its own mask and its own 0 .. 1, and a bank laid along their edges drew
-        // seams down the middle of the windscreen and round the wipers' arcs)
-        if (camera.inside_c.w > 0.5) {
-            let low = 1.0 - (fz * 0.5 + 0.5);
-            drift = smoothstep(0.5, 0.75, low + 0.12 * (lumps - 0.5)) * smoothstep(0.1, 0.6, cover);
-        }
+    // (by the height in the bus's own frame, not by the wiper mask's `wipe_uv`: a
+    // windscreen's film is several slots - each wiper's field and the glass round them -
+    // each with its own mask and its own 0 .. 1, and a bank laid along their edges drew
+    // seams down the middle of the windscreen and round the wipers' arcs)
+    if (camera.inside_c.w > 0.5 && ahead > 0.0) {
+        let low = 1.0 - (fz * 0.5 + 0.5);
+        drift = ahead * smoothstep(0.5, 0.75, low + 0.12 * (lumps - 0.5)) * smoothstep(0.1, 0.6, cover);
     }
-    let c = cover * (0.7 + 0.6 * lumps) * (1.0 - 0.3 * heat) + drift * 0.9;
-    let sheet = smoothstep(0.5, 1.2, c) * 0.75 + smoothstep(1.0, 1.7, c) * 0.22;
+    let c = cover * (0.8 + 0.4 * lumps) * (1.0 - 0.3 * heat) + drift * 0.9;
+    let sheet = smoothstep(0.65, 1.25, c) * 0.72 + smoothstep(1.05, 1.7, c) * 0.22;
     let white = mix(vec3<f32>(0.9, 0.92, 0.96), vec3<f32>(0.97, 0.98, 1.0), smoothstep(1.0, 1.8, c));
-    let solid = max(flakes * 0.92, sheet);
+    let solid = max(flakes * 0.9, sheet);
     // (the melt water: a faint clear bead, the street a shade darker through it)
     let wet = melt_water * 0.16 * (1.0 - solid);
     let alpha = clamp(solid + wet, 0.0, 0.97);

@@ -704,6 +704,16 @@ impl Renderer {
         self.env_heading.set(heading);
     }
 
+    /// Send the uploads written so far to the GPU and let go of their staging copies once it
+    /// has them (see the wgpu renderer's `flush_uploads`: a loading stage that uploads
+    /// without drawing held them all until the first frame).
+    pub fn flush_uploads(&self) {
+        self.queue.submit(Vec::<mx::CommandBuffer>::new());
+        if let Err(e) = self.device.poll() {
+            (self.errors.report)(&e);
+        }
+    }
+
     /// Whether the card ran out of memory since the last call (the game then keeps fewer
     /// textures, before the driver gives up the device).
     pub fn take_out_of_memory(&self) -> bool {

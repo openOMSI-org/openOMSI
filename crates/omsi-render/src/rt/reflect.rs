@@ -116,13 +116,14 @@ pub(super) fn tex_mean_pipeline(
 
 /// The reflections' a-trous passes' steps, 1, 2 and 4 rays apart, each at its own uniform
 /// offset `stride` (the first takes the variance from the moments; the temporal pass reads
-/// the first and ignores it).
+/// the first and ignores it); and 8 for the traced global illumination's fourth pass.
 pub(super) fn refl_steps(stride: u64) -> Vec<u8> {
-    let mut steps = vec![0u8; 3 * stride as usize];
+    let mut steps = vec![0u8; 4 * stride as usize];
     for (k, step) in [
         [1.0f32, 1.0, 0.0, 0.0],
         [2.0, 0.0, 0.0, 0.0],
         [4.0, 0.0, 0.0, 0.0],
+        [8.0, 0.0, 0.0, 0.0],
     ]
     .iter()
     .enumerate()

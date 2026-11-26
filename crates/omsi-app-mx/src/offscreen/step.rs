@@ -485,7 +485,7 @@ impl Offscreen<'_> {
         if let Some(d) = duty.as_mut() {
             // (no plugins in an offscreen run: what they would be told goes to the log)
             let mut events = Vec::new();
-            steps::duty_step(
+            let note = steps::duty_step(
                 d,
                 player,
                 world,
@@ -498,6 +498,9 @@ impl Offscreen<'_> {
                 Some(&mut events),
                 announce,
             );
+            if let Some(text) = note {
+                log::info!("{text}");
+            }
             for e in events {
                 log::info!("plugin event: {e:?}");
             }
@@ -1208,6 +1211,9 @@ impl Offscreen<'_> {
                 if let (lan::WorldUpdate::Tours(tours), Some(s)) = (u, schedule.as_mut()) {
                     s.set_lan_tours(tours);
                 }
+            }
+            if let (Some(h), Some(s)) = (humans_off.as_mut(), schedule.as_mut()) {
+                crate::app_impl::lan_duties::lan_tour_progress(l, &mut h.sim, &mut s.sim);
             }
             // the other games run in real time (see `RealTime`)
             std::thread::sleep(real_time.wait(Instant::now(), dt));

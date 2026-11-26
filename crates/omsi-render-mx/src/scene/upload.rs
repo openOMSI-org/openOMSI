@@ -502,6 +502,12 @@ impl Renderer {
             lmap: view(&self.lights.lm_uniform),
             snow_px: view(&snow_field),
             snow: view(&self.lights.snow_track_uniform),
+            gi: self
+                .rt
+                .as_ref()
+                .and_then(|r| r.gi_view())
+                .unwrap_or(&self.black_texture.view)
+                .index(),
         };
         let precip_camera = view(&self.shadows.precip.camera_buf);
         let mut heap = FrameHeap {

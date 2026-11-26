@@ -371,7 +371,11 @@ fn lamp_light(p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, sf: Surface, thin: bool,
     let snow = clamp(enh.weather.y, 0.0, 1.0);
     let rho = mix(0.18, 0.75, snow) * mix(1.0, 0.6, clamp(enh.weather.x, 0.0, 1.0) * (1.0 - snow));
     let seen = select((1.0 - clamp(n.z, -1.0, 1.0)) * 0.5, 0.5, thin);
-    sum = sum + ground_e * rho * seen * sf.albedo / PI;
+    // (the traced global illumination, `rt_gi`, brings this light back itself: the lamps
+    // light its rays' hits on the ground)
+    if (camera.clouds.w < 2.5) {
+        sum = sum + ground_e * rho * seen * sf.albedo / PI;
+    }
     lamp_ground = ground_e * rho / PI;
     return sum;
 }

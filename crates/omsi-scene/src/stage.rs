@@ -469,39 +469,41 @@ impl World {
                 (t3 - t2).as_secs_f64()
             );
         }
-        self.cut_terrain(&mut prepared, &staged, &layout);
-        let cut_secs = t3.elapsed().as_secs_f64();
+        let (cut_secs, texture_secs) = self.cut_terrain(&mut prepared, &staged, &layout);
         if initial_diag {
             let total = t0.elapsed().as_secs_f64();
             if total >= 2.0 {
                 log::warn!(
-                    "tile loading: first-area batch prepared in {:.2} s: index/layout {:.2}, stage {:.2}, place {:.2}, cut/textures {:.2}",
+                    "tile loading: first-area batch prepared in {:.2} s: index/layout {:.2}, stage {:.2}, place {:.2}, cut {:.2}, textures {:.2}",
                     total,
                     (t1 - t0).as_secs_f64(),
                     (t2 - t1).as_secs_f64(),
                     (t3 - t2).as_secs_f64(),
-                    cut_secs
+                    cut_secs,
+                    texture_secs
                 );
             } else {
                 log::info!(
-                    "tile loading: first-area batch prepared in {:.2} s: index/layout {:.2}, stage {:.2}, place {:.2}, cut/textures {:.2}",
+                    "tile loading: first-area batch prepared in {:.2} s: index/layout {:.2}, stage {:.2}, place {:.2}, cut {:.2}, textures {:.2}",
                     total,
                     (t1 - t0).as_secs_f64(),
                     (t2 - t1).as_secs_f64(),
                     (t3 - t2).as_secs_f64(),
-                    cut_secs
+                    cut_secs,
+                    texture_secs
                 );
             }
         } else if profile {
             log::info!(
-                "prepare {} tiles ({} staged, {} read now): index {:.2} s, read {:.2} s, place {:.2} s, cut + textures {:.2} s",
+                "prepare {} tiles ({} staged, {} read now): index {:.2} s, read {:.2} s, place {:.2} s, cut {:.2} s, textures {:.2} s",
                 tiles.len(),
                 staged.len(),
                 missing.len(),
                 (t1 - t0).as_secs_f64(),
                 (t2 - t1).as_secs_f64(),
                 (t3 - t2).as_secs_f64(),
-                cut_secs
+                cut_secs,
+                texture_secs
             );
         }
         let stats = stats.into_inner();

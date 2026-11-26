@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 mod emission;
 pub use emission::{Emission, blackbody_rgb, filament_kelvin, slot_value};
 mod extensions;
+mod factors;
 pub use extensions::SpotlightCookie;
 #[cfg(test)]
 mod extension_tests;
@@ -1448,43 +1449,7 @@ impl Model {
                     });
                 }
             }
-            "matl_basecolor" => {
-                // (openOMSI: the PBR factors, see `MaterialDef::base_color` and the rest;
-                // a value out of its range is taken to the nearer end)
-                let v = r.f32s::<3>().map(|c| unit(c));
-                if let Some(m) = self.cur_matl() {
-                    m.base_color = Some(v);
-                }
-            }
-            "matl_metallic" => {
-                let v = unit(r.f32());
-                if let Some(m) = self.cur_matl() {
-                    m.metallic = Some(v);
-                }
-            }
-            "matl_roughness" => {
-                let v = unit(r.f32());
-                if let Some(m) = self.cur_matl() {
-                    m.roughness = Some(v);
-                }
-            }
-            "matl_normal_strength" => {
-                let v = r.f32();
-                let v = if v.is_finite() {
-                    v.clamp(0.0, 4.0)
-                } else {
-                    1.0
-                };
-                if let Some(m) = self.cur_matl() {
-                    m.normal_strength = Some(v);
-                }
-            }
-            "matl_occlusion_strength" => {
-                let v = unit(r.f32());
-                if let Some(m) = self.cur_matl() {
-                    m.occlusion_strength = Some(v);
-                }
-            }
+            k if k.starts_with("matl_") && self.read_factor(k, r) => {}
             "matl_allcolor" => {
                 let v = r.f32s::<14>();
                 if let Some(m) = self.cur_matl() {
@@ -1646,16 +1611,6 @@ impl TexChangeMaster {
 }
 
 /// Read one `[texchanges]` file (`chtex_*.cfg`).
-/// A 0..1 value of a material keyword: out of range taken to the nearer end, a line that is
-/// no number 0 (as the format reads any number).
-fn unit(v: f32) -> f32 {
-    if v.is_finite() {
-        v.clamp(0.0, 1.0)
-    } else {
-        0.0
-    }
-}
-
 pub fn parse_texchanges(file: &CfgFile) -> Vec<TexChangeMaster> {
     let dir = file.path.parent().unwrap_or(Path::new(".")).to_path_buf();
     let mut out: Vec<TexChangeMaster> = Vec::new();

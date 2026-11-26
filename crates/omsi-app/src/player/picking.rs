@@ -438,6 +438,7 @@ mod reach_tests {
             def_index,
             data,
             file: Default::default(),
+            stamp: 0,
             materials: vec![material],
             overrides: if texture == "glass.dds" {
                 vec![glass.clone()]

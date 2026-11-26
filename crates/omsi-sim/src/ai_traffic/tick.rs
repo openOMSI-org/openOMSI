@@ -167,6 +167,7 @@ impl TrafficSim {
             c.tail = body_tail(c);
         }
         self.berths_begin_step();
+        self.refresh_lane_load();
         let (by_lane, coming, mut reservations) = self.occupancy();
         self.request_lights(player);
         let walkers = self.walker_requests();
@@ -228,6 +229,17 @@ impl TrafficSim {
             // its sounds stop and the renders go back to the world at the next sync
             self.retired.push(c.id);
         }
+    }
+
+    /// Count the random cars on the lanes by traffic group, for the choice at the forks
+    /// (`Network::refresh_load`; Omsi.exe keeps the count in its chains, FUN_0071dc9c).
+    pub(crate) fn refresh_lane_load(&mut self) {
+        let cars = self.cars.iter().filter(|c| !c.is_bus()).map(|c| {
+            let st = &c.state;
+            let group = crate::traffic::load_group(st.traffic_pool.as_ref().map(|p| p.0));
+            (st.lane, group, st.upcoming())
+        });
+        self.net.refresh_load(cars);
     }
 
     /// Where every car is: its lane with its lateral place (and the lane a passing car is

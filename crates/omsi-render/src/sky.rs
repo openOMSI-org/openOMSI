@@ -345,6 +345,32 @@ impl Renderer {
             ],
         });
         scene.sky_bind_group = Some(bg);
+        scene.sky_textures = Some(crate::scene::SkyTextures {
+            gradients: textures,
+            clouds,
+            vanilla_clouds,
+            sun,
+        });
+    }
+
+    /// The sky bind group made again with the textures it was last given, for a rebuilt
+    /// renderer: the old group still binds the old renderer's sky buffers and cloud noise,
+    /// which nothing writes any more (the clouds stood still or went wrong after a rebuild).
+    pub(crate) fn remake_sky_bind_group(&self, scene: &mut Scene) {
+        let Some(s) = scene.sky_textures else {
+            return;
+        };
+        let known = |t: TextureId| t < scene.textures.len();
+        if !s.gradients.iter().copied().all(known)
+            || ![s.clouds, s.vanilla_clouds, s.sun]
+                .into_iter()
+                .flatten()
+                .all(known)
+        {
+            scene.sky_bind_group = None;
+            return;
+        }
+        self.set_sky_textures_vanilla(scene, s.gradients, s.clouds, s.vanilla_clouds, s.sun);
     }
 }
 
