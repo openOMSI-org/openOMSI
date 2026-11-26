@@ -3378,6 +3378,8 @@
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "სტანდარტული Catmull-Rom ან ექსპერიმენტული FSR 1; ცვლილებები მაშინვე ჩანს"
 "FSR quality": "FSR-ის ხარისხი"
 "FSR sharpness": "FSR-ის სიმკვეთრე"
+"DLSS sharpness": "DLSS-ის სიმკვეთრე"
+"How much the picture is sharpened after DLSS; 25 % as before": "რამდენად გამკვეთრდეს გამოსახულება DLSS-ის შემდეგ; 25 % — როგორც ადრე"
 "RCAS sharpening strength": "RCAS-ის გამკვეთრების ძალა"
 "Ultra Quality (77%)": "ულტრა ხარისხი (77%)"
 "Quality (67%)": "ხარისხი (67%)"

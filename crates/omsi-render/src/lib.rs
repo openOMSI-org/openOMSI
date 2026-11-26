@@ -63,7 +63,7 @@ pub use sky::*;
 pub use surface::*;
 pub(crate) use targets::*;
 pub use temporal::{
-    FrameGeneration, FrameGenerationKind, Temporal, TemporalQuality, TemporalUpscaler,
+    DLSS_SHARPEN, FrameGeneration, FrameGenerationKind, Temporal, TemporalQuality, TemporalUpscaler,
 };
 pub(crate) use temporal::{
     TEMPORAL_MASK_FORMAT, TEMPORAL_MOTION_FORMAT, TemporalFrame, TemporalPipelines, TemporalState,
@@ -327,6 +327,9 @@ pub struct RenderOptions {
     pub msaa_fallback: u32,
     /// RCAS sharpening strength, from 0 (none) to 1.
     pub fsr_sharpness: f32,
+    /// How much DLSS's result is sharpened after it (DLSS no longer sharpens itself), from 0
+    /// (none) to 1; 0.25 was the fixed amount before it was a setting. Read every frame.
+    pub dlss_sharpness: f32,
     /// VR: each eye is drawn at this fraction of its headset image and scaled up to it (by
     /// FSR 1, or the standard upscaler with FSR 1 off); 1 = drawn at the image's size.
     /// Set by `start_xr`: below 1 only when VR started with FSR 1.
@@ -423,6 +426,7 @@ impl Default for RenderOptions {
             msaa_fallback: 0,
             xr_scale: 1.0,
             fsr_sharpness: 0.8,
+            dlss_sharpness: temporal::DLSS_SHARPEN,
             compress_textures: true,
             gpu_texture_compression: true,
             fxaa: true,

@@ -127,6 +127,7 @@ fn restore_runtime_graphics(
     target.frame_generation = source.frame_generation.clone();
     target.fsr_quality = source.fsr_quality.clone();
     target.fsr_sharpness = source.fsr_sharpness.clone();
+    target.dlss_sharpness = source.dlss_sharpness;
     target.anisotropy = source.anisotropy.clone();
     target.shadow_size = source.shadow_size.clone();
     target.ssao = source.ssao.clone();
