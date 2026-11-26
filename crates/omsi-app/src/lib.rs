@@ -488,6 +488,12 @@ pub(crate) fn prepare(mut args: Args, bare: bool) -> Result<Option<(Args, Option
     if let Some(c) = content_dir() {
         match omsi_cfg::ensure_content_layout(&c) {
             Ok(()) => {
+                // a pack lying in `Mods/` as it came is its own content root, searched
+                // before the content folder: not merged into its tree, and out again when
+                // its folder is deleted (#2135)
+                for r in omsi_cfg::mount_mod_dirs(&c) {
+                    log::info!("mod folder: {}", r.display());
+                }
                 omsi_cfg::add_content_root(c.clone());
                 log::info!("content folder (mods): {}", c.display());
             }

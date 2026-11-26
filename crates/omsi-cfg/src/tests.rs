@@ -321,3 +321,105 @@ fn utf16() {
     let f = CfgFile::from_bytes("g.cfg", &b);
     assert_eq!(f.lines, vec!["[name]", "Grundorf"]);
 }
+
+/// A pack dropped into `Mods/` is used where it lies, before the content folder's own tree
+/// (#2135): nothing is copied into the tree, the launcher's own folders are not mods, and a
+/// pack that kept its own folder inside is used from that folder.
+#[test]
+fn a_mod_folder_in_mods_is_a_content_root_of_its_own() {
+    let dir = std::env::temp_dir().join(format!("omsi-mod-roots-{}", std::process::id()));
+    let content = dir.join("content");
+    let w = |rel: &str, bytes: &[u8]| {
+        let f = content.join(rel);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(f, bytes).unwrap();
+    };
+    w("Vehicles/Stock/stock.bus", b"stock");
+    w("Mods/MyBus/Vehicles/ModBus/bus.bus", b"mod");
+    w("Mods/MyBus/Vehicles/ModBus/Sound/sound.cfg", b"cfg");
+    // unzipped with its own folder inside
+    w("Mods/SomeMap/SomeMap/maps/M/global.cfg", b"map");
+    // the launcher's own folders are not mods
+    w("Mods/installed/Vehicles/Old/old.bus", b"old");
+    w("Mods/waiting/Vehicles/Waiting/w.bus", b"w");
+    w("Mods/disabled/Off/Vehicles/Off/off.bus", b"off");
+    w("Mods/README.txt", b"readme");
+
+    let roots = mod_dirs(&content);
+    assert_eq!(
+        roots,
+        vec![
+            content.join("Mods/MyBus"),
+            content.join("Mods/SomeMap/SomeMap")
+        ]
+    );
+
+    let added = mount_mod_dirs(&content);
+    assert_eq!(added, roots);
+    add_content_root(content.clone());
+    // the mod's bus is found, the stock one as well, and the mod is searched first
+    assert_eq!(
+        find_in_roots("Vehicles/ModBus/bus.bus")
+            .unwrap()
+            .1
+            .file_name()
+            .unwrap(),
+        "bus.bus"
+    );
+    assert!(
+        find_in_roots("Vehicles/ModBus/bus.bus")
+            .unwrap()
+            .0
+            .starts_with(content.join("Mods/MyBus"))
+    );
+    assert!(
+        find_in_roots("Vehicles/Stock/stock.bus")
+            .unwrap()
+            .0
+            .starts_with(&content)
+    );
+    // the map inside the pack's own folder
+    assert!(
+        find_in_roots("maps/M/global.cfg")
+            .unwrap()
+            .1
+            .starts_with(content.join("Mods/SomeMap/SomeMap"))
+    );
+    // nothing of the launcher's own folders
+    assert!(find_in_roots("Vehicles/Old/old.bus").is_none());
+    assert!(find_in_roots("Vehicles/Waiting/w.bus").is_none());
+    assert!(find_in_roots("Vehicles/Off/off.bus").is_none());
+
+    for r in &roots {
+        remove_content_root(r);
+    }
+    remove_content_root(&content);
+    std::fs::remove_dir_all(&dir).ok();
+    content_changed();
+}
+
+/// A folder of a mod whose only child is one the game has at the top of a content root is a
+/// mod itself (`Mods/Winter/Texture/...` and `Mods/Audio/Sounds/...` lie at the mod folder,
+/// not at the inner content folder).
+#[test]
+fn a_mod_folder_with_one_top_level_name_is_its_own_root() {
+    let dir = std::env::temp_dir().join(format!("omsi-mod-top-{}", std::process::id()));
+    let content = dir.join("content");
+    std::fs::create_dir_all(content.join("Mods/Winter").join("Texture")).unwrap();
+    std::fs::write(
+        content.join("Mods/Winter").join("Texture").join("snow.dds"),
+        b"dds",
+    )
+    .unwrap();
+    std::fs::create_dir_all(content.join("Mods/Audio").join("Sounds")).unwrap();
+    std::fs::write(
+        content.join("Mods/Audio").join("Sounds").join("engine.wav"),
+        b"wav",
+    )
+    .unwrap();
+    assert_eq!(
+        mod_dirs(&content),
+        vec![content.join("Mods/Audio"), content.join("Mods/Winter")]
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
