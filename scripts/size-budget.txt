@@ -24,13 +24,13 @@ file 1703 crates/omsi-app/src/lan_world.rs
 file 2065 crates/omsi-app/src/on_foot.rs
 file 1775 crates/omsi-app/src/player.rs
 file 1740 crates/omsi-app/src/plugins.rs
-file 1502 crates/omsi-app/src/settings.rs
+file 1585 crates/omsi-app/src/settings.rs
 file 1678 crates/omsi-app/src/ui.rs
 file 2707 crates/omsi-input/src/controllers.rs
 file 2758 crates/omsi-lan/src/game.rs
 file 1569 crates/omsi-launcher-api/src/lib.rs
 file 5731 crates/omsi-launcher-core/src/lib.rs
-file 2051 crates/omsi-model/src/lib.rs
+file 2197 crates/omsi-model/src/lib.rs
 file 3646 crates/omsi-net/src/lib.rs
 file 1674 crates/omsi-net/src/tests.rs
 file 1821 crates/omsi-plugin/src/lib.rs
@@ -129,7 +129,7 @@ fn 435 crates/omsi-app::world_pages crates/omsi-app/src/game_lists/menu_pages.rs
 # Two functions at 301 lines came in with the merge of main, not this change.
 fn 301 crates/omsi-app::assemble_app crates/omsi-app/src/lib.rs
 fn 301 crates/omsi-launcher-model::handle crates/omsi-launcher-model/src/state.rs
-fn 1006 crates/omsi-launcher-core::settings_from_text_on crates/omsi-launcher-core/src/lib.rs
+fn 1068 crates/omsi-launcher-core::settings_from_text_on crates/omsi-launcher-core/src/lib.rs
 fn 681 crates/omsi-launcher-core::settings_to_text crates/omsi-launcher-core/src/lib.rs
 fn 610 crates/omsi-navigator-mx::city crates/omsi-navigator-mx/src/city_map.rs
 fn 557 crates/omsi-navigator-mx::draw crates/omsi-navigator-mx/src/panel.rs
@@ -174,6 +174,7 @@ fn 386 crates/omsi-lan::fetch_with crates/omsi-lan/src/mods.rs
 fn 306 crates/omsi-lan::session_files crates/omsi-lan/src/mods.rs
 fn 360 crates/omsi-lan::two_versions_of_a_bus_are_kept_side_by_side_by_their_content crates/omsi-lan/src/mods/upload/tests.rs
 fn 403 crates/omsi-launcher-core::run crates/omsi-launcher-core/src/install.rs
+fn 323 crates/omsi-model::handle_material_keyword crates/omsi-model/src/lib.rs
 fn 395 crates/omsi-model::handle_keyword crates/omsi-model/src/lib.rs
 fn 612 crates/omsi-navigator::city crates/omsi-navigator/src/city_map.rs
 fn 535 crates/omsi-navigator::lines_panel crates/omsi-navigator/src/lines_panel.rs
