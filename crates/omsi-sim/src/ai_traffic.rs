@@ -8,6 +8,7 @@
 
 pub mod admission;
 pub mod berths;
+pub mod blind_spot;
 pub mod blocks;
 pub mod body_link;
 #[cfg(test)]

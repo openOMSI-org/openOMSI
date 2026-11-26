@@ -438,6 +438,7 @@ impl Offscreen<'_> {
                 rail,
             );
             steps::traffic_boxes(t, player.as_mut(), settings.collision_vehicles);
+            steps::blind_spot(t, player.as_mut());
         }
         Ok(())
     }
