@@ -1163,6 +1163,7 @@ fn dlss_sharpness_round_trips_into_renderer() {
 #[test]
 fn audio_surround_is_written_on_its_own_line_by_both_writers() {
     let mut s = Settings::desktop();
+    assert!(!s.audio_surround);
     s.audio_surround = true;
     let native = s.to_text();
     assert!(
