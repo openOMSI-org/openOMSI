@@ -69,6 +69,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         pick("render_scale", "Render scale", if s.upscaler == "fsr1" { "With FSR 1 it changes at once" } else { later }).filter(|_| s.temporal_upscaling().is_none()),
         pick("anisotropy", "Anisotropic", later),
         switch_row(app, "ray_tracing", "Real-Time Ray Tracing", "Enhanced: the sun's shadows, the ambient occlusion and the reflections traced with hardware ray queries, where the card has them; the heaviest option (takes effect when the game starts the next time)").filter(|_| shown("ray_tracing")),
+        switch_row(app, "rt_gi", "Ray-traced global illumination (experimental)", "With Real-Time Ray Tracing: the light the surfaces round a point send back to it - a sunlit road brightening a wall, a red bus tinting the pavement, the light through the windows filling the saloon; traced at half size and gathered over a few frames, so it can lag or shimmer in motion").filter(|_| shown("rt_gi")),
         switch_row(app, "shadows", "Sun shadows", "Enables/Disables shadows").filter(|_| shown("shadows")),
         pick("shadow_size", "Shadow map", later).filter(|_| shown("shadow_size")),
         switch_row(app, "ssao", "Ambient occlusion", later).filter(|_| shown("ssao")),
@@ -180,6 +181,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "zoom_hold_latch", "Zoom key stays", "One press zooms in, the next zooms out; off: only while the key is held"),
         switch_row(app, "others_detail", "Draw other players' buses in less detail when far away", "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps"),
         switch_row(app, "flashlight_cursor", "Flashlight follows the cursor", "With the cursor free (on foot, or in the cab while the mouse does not steer) the flashlight lights where it points; otherwise straight ahead"),
+        switch_row(app, "software_cursor", "Draw the mouse cursor in the game", "For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor"),
         slider_row(app, "fov", "Field of view", "Vertical field of view; in triple screen Default uses physical measurements, an override moves the virtual eye", &|v| if v < 20.0 { "Default".to_string() } else { format!("{v:.0}°") }),
         slider_row(app, "seat 1", "Seat forward and back", "Adjust the driver's seat position forward or backward", &cm),
         slider_row(app, "seat 2", "Seat height", "Adjust the driver's seat height", &cm),
@@ -1050,6 +1052,8 @@ fn shown_in_mode(mode: &str, key: &str) -> bool {
         }
         // (the ray-traced picture has its own occlusion)
         "street_light" | "road_glare" => matches!(mode, "enhanced" | "enhanced_plus"),
+        // (the traced global illumination needs the ray tracing on)
+        "rt_gi" => mode == "enhanced_plus",
         "ray_tracing" | "light_shadows" | "cloud_shadows" | "light_glow" | "volumetric_fog" => {
             matches!(mode, "enhanced" | "enhanced_plus")
         }

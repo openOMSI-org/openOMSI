@@ -81,17 +81,20 @@ pub fn labels(data: &TimetableData) -> Vec<StopLabel> {
         if line.is_empty() {
             continue;
         }
+        // (the old `[station]` blocks too, as the game reads them)
+        let stations = trip.station_ids();
         let mut destination = trip.terminus.trim().to_string();
         if destination.is_empty() {
-            destination = trip
-                .stations
+            destination = stations
                 .last()
                 .and_then(|id| names.get(id))
                 .map(|n| n.trim().to_string())
                 .unwrap_or_default();
         }
         let mut seen: Vec<i64> = Vec::new();
-        for id in &trip.stations {
+        // (not the stop the trip ends at: nothing leaves from there towards its destination)
+        let calls = &stations[..stations.len().saturating_sub(1)];
+        for id in calls {
             if seen.contains(id) {
                 continue;
             }
@@ -330,6 +333,34 @@ mod tests {
     }
 
     #[test]
+    fn a_line_is_not_listed_at_the_stop_it_ends_at() {
+        let d = data(
+            vec![stop("Endstation", 0, 103)],
+            vec![trip("5", "Endstation", &[101, 102, 103])],
+        );
+        assert!(
+            labels(&d)[0].lines.is_empty(),
+            "nothing leaves from there towards it"
+        );
+    }
+
+    #[test]
+    fn trips_with_the_old_station_blocks_are_read_too() {
+        let mut old = trip("7", "", &[]);
+        old.stations_legacy = vec![
+            vec!["101".into(), "x".into()],
+            vec!["103".into(), "x".into()],
+        ];
+        let d = data(
+            vec![stop("Rathaus", 0, 101), stop("Hauptbahnhof", 0, 103)],
+            vec![old],
+        );
+        let l = &labels(&d)[0];
+        assert_eq!(l.lines[0].line, "7");
+        assert_eq!(l.lines[0].destinations, vec!["Hauptbahnhof"]);
+    }
+
+    #[test]
     fn a_trip_that_calls_twice_gives_one_destination() {
         // (a loop: the same stop before and after a turning circle)
         let d = data(
@@ -344,7 +375,7 @@ mod tests {
     fn the_csv_quotes_what_csv_must() {
         let d = data(
             vec![stop("Rathaus, \"alt\"", 0, 101)],
-            vec![trip("5", "Hauptbahnhof, Nord", &[101])],
+            vec![trip("5", "Hauptbahnhof, Nord", &[101, 102])],
         );
         let csv = to_csv(&labels(&d));
         assert!(

@@ -549,3 +549,22 @@ fn a_squeezed_restore_cut_short_by_a_fuller_budget_stays_squeezed() {
     assert_eq!(scene.texture_size_of(id), Some((512, 512)));
     assert!(world.gpu.lock().textures[&path].squeezed);
 }
+
+/// The fleet lets go of the vehicle sets nobody draws sooner while the textures are over
+/// their budget (`textures_over_budget`, as the budget's last look found it).
+#[test]
+fn over_budget_is_what_the_last_look_found() {
+    let (_fixture, world) = Fixture::world();
+    let renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let centers = [DVec3::new(150.0, 150.0, 0.0)];
+    scenery(&world, &renderer, &mut scene, "near.png", (0, 0));
+    assert!(!world.textures_over_budget(), "no look yet");
+    world.set_texture_budget(100_000_000);
+    world.update_texture_budget(&renderer, &mut scene, &centers, true);
+    assert!(!world.textures_over_budget());
+    // (one near 1024 picture, which the budget does not take from: still over)
+    world.set_texture_budget(100_000);
+    world.update_texture_budget(&renderer, &mut scene, &centers, true);
+    assert!(world.textures_over_budget());
+}

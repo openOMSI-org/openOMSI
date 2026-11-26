@@ -122,12 +122,14 @@ fn window_wetness(in: FsIn) -> f32 {
     return in.params.x;
 }
 
-// The snow variant of a tracked pane (`wipe_bounds.w` < 0): the snow the mask holds while it
-// snows, drawn instead of water drops (scene/08_rain_glass.wgsl `glass_snow_with`). The mask
-// value is the cover: 0 clear glass, up to 1 a pane closed by snow, above 1 the bank a blade
-// pushed to the end of its sweep, below 0 glass a blade has just cleared.
+// The snow variant of a rain film's pane (`wipe_bounds.w` < 0): the snow the pane holds while
+// it snows, drawn instead of water drops (scene/08_rain_glass.wgsl `glass_snow_with`). The
+// cover is the mask's on a tracked pane: 0 clear glass, up to 1 a pane closed by snow, above
+// 1 the bank a blade pushed to the end of its sweep, below 0 glass a blade has just cleared;
+// on a pane without a mask (`wipe_bounds.z` 0: a door, an opening window) the layer's own
+// wetness (`add_window_snow_material`).
 fn is_snow_pane() -> bool {
-    return material.wipe_bounds.z != 0.0 && material.wipe_bounds.w < 0.0;
+    return material.wipe_bounds.w < 0.0;
 }
 
 // Smooth value noise (0..1) from the cell hash: the corners' values blended with a

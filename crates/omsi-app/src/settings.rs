@@ -190,6 +190,9 @@ pub struct Settings {
     pub zoom_hold_latch: bool,
     pub flashlight_cursor: bool,
     pub others_detail: bool,
+    /// The game draws the mouse cursor itself and the system's is left alone (#1247): moving
+    /// the hardware cursor under Windows stops G-SYNC when there is no MPO plane for it.
+    pub software_cursor: bool,
     /// The 3D picture drawn at this fraction of the window's size and scaled up (0.5..1),
     /// 0 = automatic (full size unless the window has more pixels than a 2560x1080 screen,
     /// as a Retina window does). The HUD is always drawn at full size.
@@ -326,6 +329,9 @@ pub struct Settings {
     /// reflections traced with hardware ray queries where the card has them (what Enhanced+ was;
     /// a file that says `graphics=enhanced_plus` is read as `enhanced` with this on).
     pub ray_tracing_on: bool,
+    /// Experimental, with Real-Time Ray Tracing: ray-traced global illumination - the light
+    /// the surfaces round a point send back to it (off by default; see `RenderOptions::rt_gi`).
+    pub rt_gi: bool,
     /// Enhanced: which lights cast shadows - `off`, `street` (the street lamps and the vehicles'
     /// headlamps) or `all` (the spots along their own axis, the lamps that shine every way in
     /// cube maps; see `RenderOptions::light_shadows`).
@@ -666,7 +672,7 @@ impl Settings {
     }
     /// The defaults of a computer.
     fn desktop() -> Self {
-        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, lamp_shadows: true, navigator: true, ui_opacity: 0.85, ui_theme: "dark".into(), notes: true, notes_driving: true, notes_script: true, notes_trip: true, notes_tickets: true, ui_scale: 1.0, pause_quick_actions: "default".into(), ui_theme_pack: String::new(), ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), rear_door_boarding: false, passenger_animation: "original".into(), passenger_hailing: false, passenger_mass: false, passenger_weight_kg: passenger_mass::DEFAULT_WEIGHT_KG, passenger_weight_fixed: false, passenger_weight_spread: 0.0, passenger_full_bus_reaction: false, pax_short_rides_stand: false, passenger_connections: false, passenger_transfer_percent: 20.0, units: "metric".into(), photo_mode: "simple".into(), character_models: "original".into(), standing_chance: 0.05, ambient: true, vol_ambient: 0.8, radio_fx: Default::default(), detail_textures: true, exact_fare: true, pax_bad_driving: true, pax_entry_doors: "as_bus".into(), ibis_auto_stop: false, pax_no_ticket: false, pax_late_tolerance_min: 5.0, pax_free_drive: "auto".into(), pax_board_when_stopped: false, pax_stop_numbers_exact: false, auto_announce: false, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), touch_door_mode: "standard".into(), touch_pedal_length: 1.0, touch_pedal_deadzone: 0.15, post_aa: "fxaa".into(), render_scale: 0.0, upscaler: "default".into(), upscale_quality: "quality".into(), frame_generation: "off".into(), fsr_quality: "quality".into(), fsr_sharpness: 0.8, dlss_sharpness: omsi_render::DLSS_SHARPEN, language: "ENG".into(), pax_voices: "all".into(), nav_dynamic_arrows: false, nav_map_arrows: false, nav_ai: true, nav_ai_cars: true, nav_surface: true, nav_light: false, nav_3d: true, nav_classic_2d: false, nav_widget: true, milezero: false, nav_size: 1.0, get_up: false, trip_summary: true, full_tank: true, sim_thread: false, texture_compression: true, gpu_texture_compression: true, video_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, perf_overlay: "off".into(), clouds: true, cloud_quality: "high".into(), street_light: "off".into(), ray_tracing_on: false, light_shadows: "off".into(), cloud_shadows: false, light_glow: false, rain_quality: "high".into(), vehicle_smoke: "all".into(), puddles: "high".into(), rain_lights: true, volumetric_fog: true, windy_trees: true, detailed_trees: true, road_snow: false, procedural_dirt: true, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_hud_every_frame: false, mirror_refresh: "full".into(), mirror_quality: "standard".into(), mirror_shadows: false, mirror_particles: false, doppler: true, sound_maxcount: 200, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_reaction: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, parked_buses_drawn: -1, ai_wait_timed_stops_only: false, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, realistic_road_physics: false, head_movement: true, driverview_smooth: true, hands_in_cab: false, driver_like_omsi: false, alt_view: true, precision_zoom: false, zoom_hold_amount: 0.5, zoom_hold_latch: false, flashlight_cursor: false, others_detail: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, ctrl_deadzone_axes: String::new(), right_stick_look: true, ctrl_background: false, pad_steer_smooth: 120.0, pad_steer_linear: false, pad_steer_speed: 2.0, pad_deadzone: 0.08, pad_type: "auto".into(), pad_buttons: true, arrows_switch_cams: true, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: 1.0, road_glare: 1.0, traffic_headlights: 1.0, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, mouse_pedal_strength: 1.0, graphics_api: "auto".into(), mx_graphics: false, ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, mouse_hold: true, mouse_pedals: true, key_pedal_speed: 1.0, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, cab_wheel_rotation: 0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, head_tracking_source: "auto".into(), tobii_edges: false, head_tracking_smoothing: 0.5, head_tracking_dead_zone: 0.1, discord_status: false, discord_app_id: String::new(), discord_show: Default::default(), voice_enabled: false, voice_mode: "ptt".into(), voice_mic_gain: 1.0, voice_threshold_db: -45.0, voice_input_device: String::new(), voice_volume: 1.0, voice_volume_nearby: 1.0, voice_volume_radio: 1.0, voice_range: 75.0, voice_talker_list: true, voice_all_off: false, info_bar: false, hud_sizes: [1.0; 3], remote_cockpit: false, remote_cockpit_port: 8642 }
+        Self { msaa: 4, anisotropy: 8, ssao: true, shadows: true, shadow_size: 2048, shadow_blobs: true, lamp_shadows: true, navigator: true, ui_opacity: 0.85, ui_theme: "dark".into(), notes: true, notes_driving: true, notes_script: true, notes_trip: true, notes_tickets: true, ui_scale: 1.0, pause_quick_actions: "default".into(), ui_theme_pack: String::new(), ui_scale_window: true, navigator_corner: "bottom-left".into(), boarding: "auto".into(), rear_door_boarding: false, passenger_animation: "original".into(), passenger_hailing: false, passenger_mass: false, passenger_weight_kg: passenger_mass::DEFAULT_WEIGHT_KG, passenger_weight_fixed: false, passenger_weight_spread: 0.0, passenger_full_bus_reaction: false, pax_short_rides_stand: false, passenger_connections: false, passenger_transfer_percent: 20.0, units: "metric".into(), photo_mode: "simple".into(), character_models: "original".into(), standing_chance: 0.05, ambient: true, vol_ambient: 0.8, radio_fx: Default::default(), detail_textures: true, exact_fare: true, pax_bad_driving: true, pax_entry_doors: "as_bus".into(), ibis_auto_stop: false, pax_no_ticket: false, pax_late_tolerance_min: 5.0, pax_free_drive: "auto".into(), pax_board_when_stopped: false, pax_stop_numbers_exact: false, auto_announce: false, enhanced: false, graphics: "vanilla_plus".into(), triple: Default::default(), triple_span: true, triple_hud_center: true, vr: false, vr_scale: 0.65, vr_head_smoothing_ms: 0.0, vr_mirror_rate: 16.0, vr_desktop_mirror: true, fullscreen: false, vsync: true, volume: 0.6, drive_keys: "simple".into(), touch_door_mode: "standard".into(), touch_pedal_length: 1.0, touch_pedal_deadzone: 0.15, post_aa: "fxaa".into(), render_scale: 0.0, upscaler: "default".into(), upscale_quality: "quality".into(), frame_generation: "off".into(), fsr_quality: "quality".into(), fsr_sharpness: 0.8, dlss_sharpness: omsi_render::DLSS_SHARPEN, language: "ENG".into(), pax_voices: "all".into(), nav_dynamic_arrows: false, nav_map_arrows: false, nav_ai: true, nav_ai_cars: true, nav_surface: true, nav_light: false, nav_3d: true, nav_classic_2d: false, nav_widget: true, milezero: false, nav_size: 1.0, get_up: false, trip_summary: true, full_tank: true, sim_thread: false, texture_compression: true, gpu_texture_compression: true, video_memory: 0, auto_clutch: true, momentary_gears: false, auto_shift: false, min_obj_size: 0.013, max_obj_dist: -1.0, max_fps: 0, chat: true, chat_size: 1.0, tooltips: true, name_tags: true, show_fps: false, perf_overlay: "off".into(), clouds: true, cloud_quality: "high".into(), street_light: "off".into(), ray_tracing_on: false, rt_gi: false, light_shadows: "off".into(), cloud_shadows: false, light_glow: false, rain_quality: "high".into(), vehicle_smoke: "all".into(), puddles: "high".into(), rain_lights: true, volumetric_fog: true, windy_trees: true, detailed_trees: true, road_snow: false, procedural_dirt: true, pax_density: 1.0, vol_ai: 1.0, vol_scenery: 1.0, mirror_size: 256, mirror_hud: 0, mirror_hud_every_frame: false, mirror_refresh: "full".into(), mirror_quality: "standard".into(), mirror_shadows: false, mirror_particles: false, doppler: true, sound_maxcount: 200, driver: true, maintenance: 0, ai_unsched_factor: 1.0, ai_reaction: 1.0, ai_max_scheduled: 0, ai_max_parked: 0, ai_max_humans: 200, parked_buses_drawn: -1, ai_wait_timed_stops_only: false, collision_vehicles: true, collision_objects: true, collision_pedestrians: true, realistic_road_physics: false, head_movement: true, driverview_smooth: true, hands_in_cab: false, driver_like_omsi: false, alt_view: true, precision_zoom: false, zoom_hold_amount: 0.5, zoom_hold_latch: false, flashlight_cursor: false, others_detail: false, time_speed: 1.0, time_sync: false, metar_sync: false, metar_station: String::new(), machine_translation: false, shadow_casters: "all".into(), ctrl_deadzone: 0.0, ctrl_deadzone_axes: String::new(), right_stick_look: true, ctrl_background: false, pad_steer_smooth: 120.0, pad_steer_linear: false, pad_steer_speed: 2.0, pad_deadzone: 0.08, pad_type: "auto".into(), pad_buttons: true, arrows_switch_cams: true, ctrl_off: String::new(), steering_linear: false, old_steering: false, red_steer_spd: false, reflections: 1.0, road_glare: 1.0, traffic_headlights: 1.0, led_glow: 6, led_mips: 1.3, night_brightness: 0.0, mouse_sens: 1.0, mouse_pedal_strength: 1.0, graphics_api: "auto".into(), mx_graphics: false, ff_invert: false, ff_enabled: true, ff_road_vib: 1.0, ff_engine_vib: 1.0, ff_fade: 0.28, brake_hold: true, mouse_steering: false, mouse_right_off: false, mouse_smooth: true, mouse_hold: true, mouse_pedals: true, key_pedal_speed: 1.0, look_sens: 1.0, look_smoothing_ms: 0.0, blinker_cancel: true, wheel_range: 900.0, wheel_lock: 0.0, cab_wheel_rotation: 0, fov: 0.0, camera_collision: true, steer_look: false, steer_look_angle: 30.0, steer_look_response: 0.25, head_idle: 0.0, head_idle_pace: 1.0, pedal_throttle: 1.0, pedal_brake: 1.0, seat: [0.0; 3], seat_pitch_deg: 0.0, head_tracking: false, head_tracking_port: 4242, head_tracking_invert: String::new(), head_tracking_yaw_sens: 100.0, head_tracking_pitch_sens: 100.0, head_tracking_roll_sens: 100.0, head_tracking_x_sens: 100.0, head_tracking_y_sens: 100.0, head_tracking_z_sens: 100.0, head_tracking_invert_yaw: false, head_tracking_invert_pitch: false, head_tracking_invert_roll: false, head_tracking_invert_x: false, head_tracking_invert_y: false, head_tracking_invert_z: false, head_tracking_source: "auto".into(), tobii_edges: false, head_tracking_smoothing: 0.5, head_tracking_dead_zone: 0.1, discord_status: false, discord_app_id: String::new(), discord_show: Default::default(), voice_enabled: false, voice_mode: "ptt".into(), voice_mic_gain: 1.0, voice_threshold_db: -45.0, voice_input_device: String::new(), voice_volume: 1.0, voice_volume_nearby: 1.0, voice_volume_radio: 1.0, voice_range: 75.0, voice_talker_list: true, voice_all_off: false, info_bar: false, hud_sizes: [1.0; 3], remote_cockpit: false, remote_cockpit_port: 8642, software_cursor: false }
     }
 }
 
@@ -860,6 +866,7 @@ impl Settings {
                 "triple_eye_height_mm" => s.triple.eye_height_mm = bounded_float(v, -500.0, 500.0, s.triple.eye_height_mm),
                 "fullscreen" => s.fullscreen = b(v),
                 "vsync" => s.vsync = b(v),
+                "software_cursor" => s.software_cursor = b(v),
                 "volume" => s.volume = v.parse().unwrap_or(s.volume),
                 "upscaler" | "upscale_quality" | "frame_generation" | "fsr_quality" | "fsr_sharpness" | "dlss_sharpness" => s.read_upscaler(&k, v),
                 // "auto", a fraction (0.75) or a percentage (75)
@@ -905,7 +912,7 @@ impl Settings {
                 "perf_overlay" => s.perf_overlay = omsi_launcher_lib::perf_overlay_mode(v).into(),
                 "clouds" => s.clouds = b(v),
                 "cloud_quality" => s.cloud_quality = cloud_quality(v).into(),
-                "street_light" => s.street_light = street_light(v).into(), "ray_tracing" | "rt" | "light_shadows" | "cloud_shadows" | "light_glow" | "volumetric_fog" => s.set_light_option(k.as_str(), v),
+                "street_light" => s.street_light = street_light(v).into(), "ray_tracing" | "rt" | "rt_gi" | "light_shadows" | "cloud_shadows" | "light_glow" | "volumetric_fog" => s.set_light_option(k.as_str(), v),
                 "rain_quality" => s.rain_quality = rain_quality(v).into(),
                 "vehicle_smoke" => s.vehicle_smoke = omsi_launcher_lib::vehicle_smoke(v).into(),
                 "puddles" => s.puddles = omsi_launcher_lib::puddles(v).into(),
@@ -1071,6 +1078,7 @@ impl Settings {
         let on = matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes");
         match key {
             "ray_tracing" | "rt" => self.ray_tracing_on = on,
+            "rt_gi" => self.rt_gi = on,
             "light_shadows" => self.light_shadows = light_shadows(v).into(),
             "cloud_shadows" => self.cloud_shadows = on,
             "volumetric_fog" => self.volumetric_fog = on,
@@ -1151,7 +1159,7 @@ impl Settings {
             self.triple_hud_center as u8, self.triple.fov_deg, self.fov
         ));
         text.push_str(&format!("triple_screen={}\ntriple_span={}\ntriple_width_mm={}\ntriple_distance_mm={}\ntriple_bezel_mm={}\ntriple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n", self.triple.enabled as u8, self.triple_span as u8, self.triple.width_mm, self.triple.distance_mm, self.triple.bezel_mm, self.triple.left_angle_deg, self.triple.right_angle_deg, self.triple.eye_height_mm));
-        text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\nzoom_hold_amount={}\nzoom_hold_latch={}\nflashlight_cursor={}\nothers_detail={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8, self.zoom_hold_amount, self.zoom_hold_latch as u8, self.flashlight_cursor as u8, self.others_detail as u8));
+        text.push_str(&format!("steer_look={}\nsteer_look_angle={}\nsteer_look_response={}\nhead_idle={}\nhead_idle_pace={}\nlook_sens={}\nlook_smoothing_ms={}\nblinker_cancel={}\nzoom_hold_amount={}\nzoom_hold_latch={}\nflashlight_cursor={}\nothers_detail={}\nsoftware_cursor={}\n", self.steer_look as u8, self.steer_look_angle, self.steer_look_response, self.head_idle, self.head_idle_pace, self.look_sens, self.look_smoothing_ms, self.blinker_cancel as u8, self.zoom_hold_amount, self.zoom_hold_latch as u8, self.flashlight_cursor as u8, self.others_detail as u8, self.software_cursor as u8));
         text.push_str(&format!("seat_pitch_deg={}\n", self.seat_pitch_deg));
         text.push_str(&format!("cab_wheel_rotation={}\n", self.cab_wheel_rotation));
         text.push_str(&format!("head_tracking_yaw_sens={}\nhead_tracking_pitch_sens={}\nhead_tracking_roll_sens={}\nhead_tracking_x_sens={}\nhead_tracking_y_sens={}\nhead_tracking_z_sens={}\nhead_tracking_invert_yaw={}\nhead_tracking_invert_pitch={}\nhead_tracking_invert_roll={}\nhead_tracking_invert_x={}\nhead_tracking_invert_y={}\nhead_tracking_invert_z={}\n", self.head_tracking_yaw_sens, self.head_tracking_pitch_sens, self.head_tracking_roll_sens, self.head_tracking_x_sens, self.head_tracking_y_sens, self.head_tracking_z_sens, self.head_tracking_invert_yaw as u8, self.head_tracking_invert_pitch as u8, self.head_tracking_invert_roll as u8, self.head_tracking_invert_x as u8, self.head_tracking_invert_y as u8, self.head_tracking_invert_z as u8));
@@ -1192,6 +1200,7 @@ impl Settings {
         text.push_str(&format!("radio_speaker={}\nradio_hiss={}\nradio_dropouts={}\n", self.radio_fx.speaker, self.radio_fx.hiss, self.radio_fx.dropouts));
         text.push_str(&format!("cloud_quality={}\n", self.cloud_quality));
         text.push_str(&format!("street_light={}\n", self.street_light));
+        text.push_str(&format!("rt_gi={}\n", self.rt_gi as u8));
         text.push_str(&format!("ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\nvolumetric_fog={}\n", self.ray_tracing_on as u8, self.light_shadows, self.cloud_shadows as u8, self.light_glow as u8, self.volumetric_fog as u8));
         text.push_str(&format!("rain_quality={}\n", self.rain_quality));
         text.push_str(&format!("puddles={}\n", self.puddles));
@@ -1264,6 +1273,7 @@ impl Settings {
         // (the Enhanced extras are what the driver gave up on in the reports of 0.3.42: they
         // go at once, the mode itself after a second loss)
         self.ray_tracing_on = false;
+        self.rt_gi = false;
         self.cloud_shadows = false;
         self.light_glow = false;
         self.volumetric_fog = false;
@@ -1320,7 +1330,7 @@ impl Settings {
     pub fn render_options(&self) -> omsi_render::RenderOptions {
         let fsr1 = self.upscaler == "fsr1";
         let render_scale = self.scene_render_scale();
-        omsi_render::RenderOptions { msaa: self.msaa, msaa_fallback: 0, anisotropy: self.anisotropy, shadow_size: self.shadow_size, ssao: self.ssao, render_scale, fsr1, temporal: self.temporal_upscaling(), fsr_sharpness: self.fsr_sharpness, dlss_sharpness: self.dlss_sharpness, xr_scale: 1.0, compress_textures: self.texture_compression, gpu_texture_compression: self.gpu_texture_compression, fxaa: self.post_aa != "off", min_obj_size: self.min_obj_size, max_obj_dist: self.object_distance(), mirror_enhanced: self.mirror_quality == "enhanced", mirror_shadows: self.mirror_shadows, mirror_particles: self.mirror_particles, omsi_shadow_casters: self.shadow_casters == "omsi", shadow_blobs: self.shadow_blobs, reflections: self.reflections > 0.0, preview_only: false, no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"), ray_tracing: self.ray_tracing(), light_shadows: match self.light_shadows.as_str() { "off" => 0, "all" => 2, _ => 1 }, cloud_shadows: self.cloud_shadows, light_glow: self.light_glow, volumetric_fog: self.volumetric_fog, street_light: match self.street_light.as_str() { "on" => Some(true), "off" => Some(false), _ => None }, puddle_reflections: true, max_scene: None, detailed_trees: self.detailed_trees }
+        omsi_render::RenderOptions { msaa: self.msaa, msaa_fallback: 0, anisotropy: self.anisotropy, shadow_size: self.shadow_size, ssao: self.ssao, render_scale, fsr1, temporal: self.temporal_upscaling(), fsr_sharpness: self.fsr_sharpness, dlss_sharpness: self.dlss_sharpness, xr_scale: 1.0, compress_textures: self.texture_compression, gpu_texture_compression: self.gpu_texture_compression, fxaa: self.post_aa != "off", min_obj_size: self.min_obj_size, max_obj_dist: self.object_distance(), mirror_enhanced: self.mirror_quality == "enhanced", mirror_shadows: self.mirror_shadows, mirror_particles: self.mirror_particles, omsi_shadow_casters: self.shadow_casters == "omsi", shadow_blobs: self.shadow_blobs, reflections: self.reflections > 0.0, preview_only: false, no_enhanced: !matches!(graphics_mode(&self.graphics), "enhanced" | "enhanced_plus"), ray_tracing: self.ray_tracing(), rt_gi: self.ray_tracing() && self.rt_gi, light_shadows: match self.light_shadows.as_str() { "off" => 0, "all" => 2, _ => 1 }, cloud_shadows: self.cloud_shadows, light_glow: self.light_glow, volumetric_fog: self.volumetric_fog, street_light: match self.street_light.as_str() { "on" => Some(true), "off" => Some(false), _ => None }, puddle_reflections: true, max_scene: None, detailed_trees: self.detailed_trees }
     }
 }
 
@@ -1422,109 +1432,10 @@ impl Settings {
     }
 }
 
-/// The player's own turn of a bus's mirrors (degrees yaw, pitch per `[add_camera_reflexion]`),
-/// kept per `.bus` file in `~/.openomsi/mirrors.cfg` as `<bus file>|<mirror>=<yaw>,<pitch>`.
-#[rustfmt::skip]
-pub fn mirror_offsets(bus: &std::path::Path) -> Vec<[f32; 2]> {
-    let key = bus.to_string_lossy().to_ascii_lowercase();
-    let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
-    let text = std::fs::read_to_string(p).unwrap_or_default();
-    let mut out: Vec<[f32; 2]> = Vec::new();
-    for line in text.lines() {
-        let Some((k, v)) = line.rsplit_once('=') else { continue };
-        let Some((file, i)) = k.rsplit_once('|') else { continue };
-        let (Ok(i), Some((y, p))) = (i.trim().parse::<usize>(), v.split_once(',')) else { continue };
-        if file.trim().to_ascii_lowercase() != key || i > 64 {
-            continue;
-        }
-        if out.len() <= i {
-            out.resize(i + 1, [0.0; 2]);
-        }
-        out[i] = [y.trim().parse().unwrap_or(0.0), p.trim().parse().unwrap_or(0.0)];
-    }
-    out
-}
+#[path = "settings/mirrors.rs"]
+mod mirrors;
+pub use mirrors::{mirror_fovs, mirror_offsets, mirror_shifts, save_mirror_state};
 
-/// A bus's mirror shifts (bus frame, m: across, along, up), kept in the same file as the
-/// turns on lines `<bus>|s<n>=x,y,z` (a build that knows only turns skips them).
-#[rustfmt::skip]
-pub fn mirror_shifts(bus: &std::path::Path) -> Vec<[f32; 3]> {
-    let key = bus.to_string_lossy().to_ascii_lowercase();
-    let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
-    let text = std::fs::read_to_string(p).unwrap_or_default();
-    let mut out: Vec<[f32; 3]> = Vec::new();
-    for line in text.lines() {
-        let Some((k, v)) = line.rsplit_once('=') else { continue };
-        let Some((file, i)) = k.rsplit_once('|') else { continue };
-        let Some(i) = i.trim().strip_prefix('s').and_then(|n| n.parse::<usize>().ok()) else { continue };
-        let xyz: Vec<f32> = v.split(',').filter_map(|s| s.trim().parse().ok()).collect();
-        if file.trim().to_ascii_lowercase() != key || i > 64 || xyz.len() != 3 {
-            continue;
-        }
-        if out.len() <= i {
-            out.resize(i + 1, [0.0; 3]);
-        }
-        out[i] = [xyz[0], xyz[1], xyz[2]];
-    }
-    out
-}
-
-/// A bus's mirror field-of-view changes (degrees added to the mirror camera's), on lines
-/// `<bus>|f<n>=degrees` of the same file.
-#[rustfmt::skip]
-pub fn mirror_fovs(bus: &std::path::Path) -> Vec<f32> {
-    let key = bus.to_string_lossy().to_ascii_lowercase();
-    let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return Vec::new() };
-    let text = std::fs::read_to_string(p).unwrap_or_default();
-    let mut out: Vec<f32> = Vec::new();
-    for line in text.lines() {
-        let Some((k, v)) = line.rsplit_once('=') else { continue };
-        let Some((file, i)) = k.rsplit_once('|') else { continue };
-        let Some(i) = i.trim().strip_prefix('f').and_then(|n| n.parse::<usize>().ok()) else { continue };
-        let Ok(d) = v.trim().parse::<f32>() else { continue };
-        if file.trim().to_ascii_lowercase() != key || i > 64 {
-            continue;
-        }
-        if out.len() <= i {
-            out.resize(i + 1, 0.0);
-        }
-        out[i] = d.clamp(-60.0, 60.0);
-    }
-    out
-}
-
-/// Keep a bus's mirror turns, shifts and field-of-view changes (see [`mirror_offsets`],
-/// [`mirror_shifts`], [`mirror_fovs`]).
-#[rustfmt::skip]
-pub fn save_mirror_state(bus: &std::path::Path, offsets: &[[f32; 2]], shifts: &[[f32; 3]], fovs: &[f32]) {
-    let key = bus.to_string_lossy().to_ascii_lowercase();
-    let Some(p) = Settings::path().map(|p| p.with_file_name("mirrors.cfg")) else { return };
-    let text = std::fs::read_to_string(&p).unwrap_or_default();
-    let mut lines: Vec<String> = text
-        .lines()
-        .filter(|l| l.rsplit_once('=').and_then(|(k, _)| k.rsplit_once('|')).is_none_or(|(f, _)| f.trim().to_ascii_lowercase() != key))
-        .map(str::to_string)
-        .collect();
-    for (i, o) in offsets.iter().enumerate() {
-        if o[0].abs() > 0.01 || o[1].abs() > 0.01 {
-            lines.push(format!("{}|{i}={:.1},{:.1}", bus.to_string_lossy(), o[0], o[1]));
-        }
-    }
-    for (i, s) in shifts.iter().enumerate() {
-        if s.iter().any(|v| v.abs() > 0.002) {
-            lines.push(format!("{}|s{i}={:.3},{:.3},{:.3}", bus.to_string_lossy(), s[0], s[1], s[2]));
-        }
-    }
-    for (i, d) in fovs.iter().enumerate() {
-        if d.abs() > 0.05 {
-            lines.push(format!("{}|f{i}={:.1}", bus.to_string_lossy(), d));
-        }
-    }
-    if let Some(d) = p.parent() {
-        let _ = std::fs::create_dir_all(d);
-    }
-    let _ = std::fs::write(&p, lines.join("\n") + "\n");
-}
 /// `resolution=` (or `window_size=`) of a settings text, the last one written.
 #[rustfmt::skip]
 pub fn resolution_of(text: &str) -> Option<(u32, u32)> {

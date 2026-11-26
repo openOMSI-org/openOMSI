@@ -160,6 +160,7 @@ pub(crate) fn try_create_buffer(
     let out_of_memory = pollster::block_on(memory.pop());
     if out_of_memory.is_some() {
         MESH_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
+        crate::pipelines::errors::note_out_of_memory();
     }
     let Some(e) = out_of_memory.or(invalid) else {
         return Some(buffer);

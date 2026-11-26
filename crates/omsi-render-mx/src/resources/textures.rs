@@ -175,6 +175,7 @@ fn create_texture_checked(
     let out_of_memory = matches!(e, mx::Error::OutOfMemory(_));
     if out_of_memory {
         TEXTURE_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
+        crate::pipelines::errors::note_out_of_memory();
     }
     let reason = if out_of_memory {
         TextureCreationError::OutOfMemory

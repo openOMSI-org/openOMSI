@@ -254,6 +254,16 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
     } else {
         src
     };
+    // (the traced global illumination's result only where the camera group holds it,
+    // `gi_binding`: elsewhere none, and the lookup goes)
+    let src = if crate::gi_binding() || gl {
+        src
+    } else {
+        src.replace(
+            "gi_at(in.clip.xy, in.world)",
+            "vec4<f32>(0.0, 0.0, 0.0, -1.0)",
+        )
+    };
     let src = backend_forms(src, gl, amd_vulkan, multisampled_shading);
     if !gl {
         return src;
@@ -277,10 +287,6 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
             "textureSampleBias(t_night, s_tile, uv, camera.lod.x)",
             &clamped("t_night", "camera.lod.x"),
         )
-        .replace(
-            "textureSampleLevel(t_env, s_ao,",
-            "textureSampleLevel(t_env, s_diffuse,",
-        )
         .replace("ao = ao_at(in.clip.xy, in.world);", "ao = 1.0;")
         .replace(
             "let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);",
@@ -289,10 +295,17 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
         .replace(
             "rt_at(in.clip.xy, in.world)",
             "vec4<f32>(1.0, 0.0, -1.0, 0.0)",
+        )
+        .replace(
+            "gi_at(in.clip.xy, in.world)",
+            "vec4<f32>(0.0, 0.0, 0.0, -1.0)",
         );
     debug_assert!(!out.contains("s_tile, uv)") && !out.contains("s_tile, uv, "));
     debug_assert!(
-        !out.contains("ao_at(in.") && !out.contains("ao_gi_at(in.") && !out.contains("rt_at(in.")
+        !out.contains("ao_at(in.")
+            && !out.contains("ao_gi_at(in.")
+            && !out.contains("rt_at(in.")
+            && !out.contains("gi_at(in.")
     );
     out
 }

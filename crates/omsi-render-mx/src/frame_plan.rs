@@ -520,6 +520,11 @@ pub(crate) enum Lean {
     Glass,
     /// the `LEAN` pipelines: opaque, alpha-tested or terrain - never glass
     Plain,
+    /// as `Plain`, but a carriageway: not in a snowy frame, whose lean pipelines leave the
+    /// built-up snow on the roads out (`road_snow` in a `LEAN` pipeline brought Apple's
+    /// shader compiler down: the service crashed on each of them, and every lean pipeline
+    /// of the snow was left out for good)
+    PlainRoad,
 }
 
 /// The main pass's pipeline key of a batch: its `pipe`, with a lean bit when the frame may
@@ -532,6 +537,7 @@ pub(crate) fn main_key(pp: &PassPipelines, frame: FrameLean) -> impl Fn(&Batch) 
         b.pipe as u16
             | match b.lean {
                 Lean::Plain if lean => LEAN_PIPE | weather,
+                Lean::PlainRoad if lean && !frame.snow => LEAN_PIPE | weather,
                 Lean::Glass if lean && lean_glass_kind(b.pipe / 4) => LEAN_GLASS_PIPE | weather,
                 _ => 0,
             }
@@ -576,9 +582,11 @@ pub(crate) fn material_lean(m: &MaterialUniform) -> Lean {
         // (a base colour alone is drawn by the lean pipelines; the other PBR factors not)
         && m.base_color[3] < 1.5
         && m.emission[3] <= 0.0
-        && !(m.wipe_bounds[2] != 0.0 && m.wipe_bounds[3] < 0.0);
+        && m.wipe_bounds[3] >= 0.0;
     if !plain_branches {
         Lean::No
+    } else if m.params[0] < 1.5 && !terrain && m.params2[2] > 0.0 {
+        Lean::PlainRoad
     } else if m.params[0] < 1.5 || terrain {
         Lean::Plain
     } else {

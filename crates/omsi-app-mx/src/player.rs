@@ -282,6 +282,10 @@ pub(crate) struct Player {
     /// The duty is typed into the IBIS by itself (after Shift+U or `--autostart`): a new
     /// trip of the duty is typed too.
     pub(crate) duty_typed: bool,
+    pub(crate) duty_trip_pending: bool,
+    /// The duty's stop the IBIS was last given (#2267; None - never): `ibis_auto_stop` types it again as the bus serves them.
+    pub(crate) ibis_shown: Option<usize>,
+    pub(crate) ibis_auto_stop: bool,
     /// The plugins (by owner mark) that leave the IBIS to the driver (`duty.set_auto_ibis`):
     /// the game types the duty into it by itself (Shift+U, `--autostart`, each new trip) only
     /// while there is none. Each plugin lets go of its own hold as it goes.

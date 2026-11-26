@@ -126,28 +126,8 @@ impl App {
     fn enable_room_population(&mut self) {
         if self.session.humans.is_none() {
             let mut humans = humans::Humans::new(&self.args.root, &mut self.gfx.sim_view.people);
-            humans.exact_fare = self.settings.exact_fare;
-            humans.visual_hailing =
-                self.settings.passenger_hailing && self.settings.passenger_animation == "enhanced";
-            humans.bad_driving = self.settings.pax_bad_driving;
-            humans.entry_doors = omsi_sim::people::entry_doors::EntryDoors::from_setting(
-                &self.settings.pax_entry_doors,
-            );
-            humans.no_ticket = self.settings.pax_no_ticket;
-            humans.late_tolerance = (self.settings.pax_late_tolerance_min as f64 * 60.0).max(0.0);
-            humans.free_drive_fill = omsi_sim::people::free_drive::FreeDriveFill::from_setting(
-                &self.settings.pax_free_drive,
-            );
-            humans.board_when_stopped = self.settings.pax_board_when_stopped;
-            humans.boarding = self.settings.boarding.clone();
-            humans.rear_door_boarding = self.settings.rear_door_boarding;
-            humans.stand_chance = self.settings.standing_chance;
-            humans.short_rides_stand = self.settings.pax_short_rides_stand;
-            humans.voices = match self.settings.pax_voices.as_str() {
-                "off" => 2,
-                "tickets" => 1,
-                _ => 0,
-            };
+            // connections stay off in a room, as before
+            humans.apply_settings(&self.settings, false);
             if let Some(p) = self.player.as_mut() {
                 humans.set_cabin(&mut p.vehicle);
                 humans.ticket_key = ticket_key_name(&self.args.root, &p.bindings);

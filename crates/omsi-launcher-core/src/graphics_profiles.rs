@@ -38,6 +38,7 @@ pub const GRAPHICS_PROFILE_KEYS: [&str; 51] = [
     "road_snow",
     "procedural_dirt",
     "ray_tracing",
+    "rt_gi",
     "light_shadows",
     "cloud_shadows",
     "light_glow",

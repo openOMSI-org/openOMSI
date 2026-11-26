@@ -618,6 +618,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "detail_textures" => s.detail_textures,
         "clouds" => s.clouds,
         "ray_tracing" => s.ray_tracing_on,
+        "rt_gi" => s.rt_gi,
         "cloud_shadows" => s.cloud_shadows,
         "light_glow" => s.light_glow,
         "volumetric_fog" => s.volumetric_fog,
@@ -639,6 +640,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "zoom_hold_latch" => s.zoom_hold_latch,
         "others_detail" => s.others_detail,
         "flashlight_cursor" => s.flashlight_cursor,
+        "software_cursor" => s.software_cursor,
         "triple_screen" => s.triple.enabled,
         "triple_hud_center" => s.triple_hud_center,
         "triple_span" => s.triple_span,
@@ -1048,6 +1050,10 @@ fn toggle_set_graphics_and_controls(
             app.settings.clouds = on;
             Some(("clouds", bit))
         }
+        "rt_gi" => {
+            app.settings.rt_gi = on;
+            Some(("rt_gi", bit))
+        }
         "ray_tracing" => {
             app.settings.ray_tracing_on = on;
             app.service_msg = Some((
@@ -1148,6 +1154,10 @@ fn toggle_set_graphics_and_controls(
         "others_detail" => {
             app.settings.others_detail = on;
             Some(("others_detail", bit))
+        }
+        "software_cursor" => {
+            app.settings.software_cursor = on;
+            Some(("software_cursor", bit))
         }
         "flashlight_cursor" => {
             app.settings.flashlight_cursor = on;

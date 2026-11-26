@@ -304,6 +304,26 @@ pub(crate) fn render_mirrors(
     // static camera's screen is somewhere else than the camera: it always takes its turn)
     let glass = world.mirror_glass.lock().clone();
     let (v_pos, v_rot) = (v.position, v.body_rotation());
+    // each mirror's camera as it is drawn, and the place its glass is tested at
+    let radius = |i: usize| cams[i].0.extra.unwrap_or(0.0).max(MIRROR_MIN_RADIUS);
+    let views: Vec<Camera> = cams
+        .iter()
+        .map(|(c, at)| mirror_camera(*at, c, renderer))
+        .collect();
+    let places: Vec<DVec3> = (0..cams.len())
+        .map(|i| {
+            glass
+                .get(i)
+                .copied()
+                .flatten()
+                .map(|g| v_pos + v_rot.transform_vector3(g.centre).as_dvec3())
+                .unwrap_or(views[i].position)
+        })
+        .collect();
+    let in_view = |i: usize, view: &(Camera, f32)| {
+        mirror_in_view(views[i].position, radius(i), view)
+            || mirror_in_view(places[i], MIRROR_MIN_RADIUS, view)
+    };
     let seen: Vec<usize> = match pick {
         MirrorPick::Only(set) => (0..cams.len()).filter(|i| set.contains(i)).collect(),
         MirrorPick::All(skip) | MirrorPick::Turn(_, skip) => (0..cams.len())
@@ -311,70 +331,88 @@ pub(crate) fn render_mirrors(
             .filter(|&i| {
                 cams[i].0.fixed
                     || on_screen.contains(&i)
-                    || view
-                        .as_ref()
-                        .map(|v| {
-                            mirror_in_view(
-                                cams[i].1.0,
-                                cams[i].0.extra.unwrap_or(0.0).max(MIRROR_MIN_RADIUS),
-                                v,
-                            ) || glass.get(i).copied().flatten().is_some_and(|g| {
-                                mirror_in_view(
-                                    v_pos + v_rot.transform_vector3(g.centre).as_dvec3(),
-                                    MIRROR_MIN_RADIUS,
-                                    v,
-                                )
-                            })
-                        })
-                        .unwrap_or(true)
+                    || view.as_ref().map(|v| in_view(i, v)).unwrap_or(true)
             })
             .collect(),
     };
     if seen.is_empty() {
         return 0;
     }
-    let turn = match pick {
-        MirrorPick::Turn(k, _) => Some(seen[k % seen.len()]),
-        _ => None,
-    };
-    for (i, (c, at)) in cams.iter().enumerate() {
-        if !seen.contains(&i) || turn.is_some_and(|k| k != i) {
-            continue;
+    // A mirror the picture of another holds is drawn too, and before it: the interior mirror
+    // over the doors reflects the door mirrors, and looking into it left them standing still
+    // until the driver stood up and looked at them - their pictures were taken for unseen
+    // while the main view did not hold them, and a picture drawn before theirs showed the
+    // frame before (#3043). The panels drawn every frame (`Only`) are the screen's own: they
+    // bring nothing in.
+    let plan = match pick {
+        MirrorPick::Only(_) => seen.clone(),
+        MirrorPick::All(skip) | MirrorPick::Turn(_, skip) => {
+            mirror_draw_plan(&seen, skip, cams.len(), |j, i| {
+                in_view(i, &(views[j], MIRROR_ASPECT))
+            })
         }
+    };
+    // A turn that takes a mirror showing others takes them with it: their pictures are drawn
+    // first, so that the mirror shows the doors as they are now and not a turn before (#3043).
+    let draw: Vec<usize> = match pick {
+        MirrorPick::Turn(k, _) => {
+            let p = plan[k % plan.len().max(1)];
+            let mut v: Vec<usize> = plan
+                .iter()
+                .copied()
+                .filter(|&i| i != p && in_view(i, &(views[p], MIRROR_ASPECT)))
+                .collect();
+            v.push(p);
+            v
+        }
+        _ => plan.clone(),
+    };
+    for &i in &draw {
+        let (c, at) = &cams[i];
         let Some(Some(tex)) = textures.get(i) else {
             continue;
         };
-        let (eye, yaw, pitch, roll) = *at;
-        let pitch = pitch.clamp(-89.0, 89.0);
         if omsi_cfg::flags::OMSI_DEBUG_MIRRORS.is_set() {
+            let (eye, yaw, pitch, roll) = *at;
             log::info!(
-                "mirror {i}: eye {:.2},{:.2},{:.2} yaw {yaw:.1} pitch {pitch:.1} roll {roll:.2} fov {:.0} ({} of {} in view)",
+                "mirror {i}: eye {:.2},{:.2},{:.2} yaw {yaw:.1} pitch {:.1} roll {roll:.2} fov {:.0} ({} of {} drawn of {} in view)",
                 eye.x,
                 eye.y,
                 eye.z,
+                pitch.clamp(-89.0, 89.0),
                 c.fov,
+                plan.len(),
                 seen.len(),
                 cams.len()
             );
         }
-        let cam = Camera {
-            position: eye,
-            yaw,
-            pitch,
-            roll,
-            fov_deg: if c.fov > 1.0 { c.fov } else { 50.0 },
-            // (Omsi.exe's reflection pass, 0x6f68a8: near 0.1 m, far 100 km. Ours cut at
-            // 0.3 m and 450 m: what is close to an inside mirror's camera - a handrail, the
-            // driver's head - vanished, and the street behind ended at the next junction.
-            // The far end is the objects' own reach here, as in the main view.)
-            near: 0.1,
-            far: if renderer.options.max_obj_dist > 0.0 {
-                renderer.options.max_obj_dist.clamp(450.0, 6000.0)
-            } else {
-                3000.0
-            },
-        };
-        renderer.render_to_texture(scene, *tex, &cam, &lighting, MIRROR_ASPECT);
+        renderer.render_to_texture(scene, *tex, &views[i], &lighting, MIRROR_ASPECT);
     }
-    seen.len()
+    plan.len()
+}
+
+/// A mirror's camera as it is drawn: the reflection camera's eye and aim (`mirror_view_in`),
+/// the file's field of view, and the clipping of Omsi.exe's reflection pass (0x6f68a8: near
+/// 0.1 m, far 100 km). Ours cut at 0.3 m and 450 m: what is close to an inside mirror's
+/// camera - a handrail, the driver's head - vanished, and the street behind ended at the next
+/// junction. The far end is the objects' own reach here, as in the main view.
+fn mirror_camera(
+    at: (DVec3, f32, f32, f32),
+    c: &omsi_vehicle::Camera,
+    renderer: &Renderer,
+) -> Camera {
+    let (eye, yaw, pitch, roll) = at;
+    Camera {
+        position: eye,
+        yaw,
+        pitch: pitch.clamp(-89.0, 89.0),
+        roll,
+        fov_deg: if c.fov > 1.0 { c.fov } else { 50.0 },
+        near: 0.1,
+        far: if renderer.options.max_obj_dist > 0.0 {
+            renderer.options.max_obj_dist.clamp(450.0, 6000.0)
+        } else {
+            3000.0
+        },
+    }
 }

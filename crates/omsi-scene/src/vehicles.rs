@@ -130,8 +130,8 @@ impl World {
                     }
                 }
             }
-            let on_gpu: Vec<(PathBuf, usize)> = (0..vt.meshes.len())
-                .map(|i| (vt.def.path.clone(), i))
+            let on_gpu: Vec<MeshKey> = (0..vt.meshes.len())
+                .map(|i| (vt.def.path.clone(), i, vt.meshes[i].stamp))
                 .filter(|k| self.vehicle_meshes.lock().contains_key(k))
                 .collect();
             let mut r = self.vehicle_ready.lock();
@@ -540,18 +540,19 @@ impl World {
         Some(id)
     }
 
-    /// A shared vehicle mesh (by bus file and mesh index), uploaded on first use from what
-    /// the prefetch read, else from the type (read again for an AI type).
+    /// A shared vehicle mesh (by bus file, mesh index and the mesh file's stamp), uploaded on
+    /// first use from what the prefetch read, else from the type (read again for an AI type).
+    /// The stamp is what makes a mesh rebuilt on disk a mesh the GPU does not have yet.
     pub(super) fn vehicle_mesh(
         &self,
         renderer: &Renderer,
         scene: &mut Scene,
-        mesh_ids: &mut HashMap<(PathBuf, usize), (MeshId, usize)>,
-        keys: &mut Vec<(PathBuf, usize)>,
+        mesh_ids: &mut HashMap<MeshKey, (MeshId, usize)>,
+        keys: &mut Vec<MeshKey>,
         vt: &omsi_sim::VehicleType,
         i: usize,
     ) -> MeshId {
-        let key = (vt.def.path.clone(), i);
+        let key = (vt.def.path.clone(), i, vt.meshes[i].stamp);
         if let Some(e) = mesh_ids.get_mut(&key) {
             self.vehicle_ready.lock().meshes.remove(&key);
             if !keys.contains(&key) {
@@ -926,7 +927,7 @@ impl World {
         let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
         let tex_ids = self.vehicle_textures.lock();
         let mut mesh_ids = self.vehicle_meshes.lock();
-        let mut mesh_keys: Vec<(PathBuf, usize)> = Vec::new();
+        let mut mesh_keys: Vec<MeshKey> = Vec::new();
         let t_all = std::time::Instant::now();
         let mut mesh_secs = 0.0f64;
         // OMSI_ONLY_MESH=a|b draws only the meshes whose file names contain one of the

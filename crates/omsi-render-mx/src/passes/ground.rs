@@ -45,6 +45,7 @@ fn albedo_only(u: &MaterialUniform, paint: bool) -> bool {
         && u.bump[1] < 0.5
         && u.flags[0] < 0.5
         && u.wipe_bounds[2] == 0.0
+        && u.wipe_bounds[3] >= 0.0
         && u.sway[0] < 0.5
         && if paint {
             (1.5..2.5).contains(&mode)

@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 mod articulation;
 mod fuel;
+mod mesh_identity;
 mod model_variables;
 mod nf6d;
 mod rail_power;
