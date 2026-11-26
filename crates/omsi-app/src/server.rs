@@ -277,13 +277,13 @@ fn start_administration(cfg: &ServerCfg, path: &Path) {
     omsi_lan::admin::install_hub(hub.clone());
     omsi_net::ws::believe_cf_connecting_ip(cfg.gateway_cf_connecting_ip);
     // the web panel and its API on the gateway (`admin_web`: who may reach them)
-    let web = omsi_admin::WebCfg { mode: cfg.admin_web, origins: cfg.admin_web_origins.clone(), trusted_proxies: cfg.admin_trusted_proxies.clone(), proxy_header: cfg.admin_proxy_header, traffic_max: crate::game_lists::TRAFFIC_MAX };
+    let web = omsi_admin::WebCfg { mode: cfg.admin_web, origins: cfg.admin_web_origins.clone(), forwarding_proxies: cfg.admin_forwarding_proxies.clone(), proxy_header: cfg.admin_proxy_header, traffic_max: crate::game_lists::TRAFFIC_MAX };
     let has_password = !cfg.admin_password.is_empty() || !cfg.moderator_password.is_empty();
     match (web.mode, has_password) {
         (omsi_admin::WebMode::Off, _) => log::info!("server: no web administration (admin_web = off)"),
         (_, false) => log::info!("server: no admin_password: the administration is off"),
         (omsi_admin::WebMode::Local, true) => log::info!("server: web administration at http://127.0.0.1:{}/admin/ (from this machine only)", cfg.web_port),
-        (omsi_admin::WebMode::Remote, true) => log::warn!("server: web administration at http://127.0.0.1:{}/admin/ and over HTTPS through {:?}{}", cfg.web_port, web.trusted_proxies, if cfg.tunnel { " - with the public tunnel too: only the passwords guard it" } else { "" }),
+        (omsi_admin::WebMode::Remote, true) => log::warn!("server: web administration at http://127.0.0.1:{}/admin/ and over HTTPS through {:?}{}", cfg.web_port, web.forwarding_proxies, if cfg.tunnel { " - with the public tunnel too: only the passwords guard it" } else { "" }),
     }
     omsi_lan::gateway::open_admin_api(hub, web);
     let _ = SERVER_STATE.set(omsi_admin::ServerState {

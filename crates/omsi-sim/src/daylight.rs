@@ -43,7 +43,7 @@ pub struct Daylight {
     pub moon_illum: f32,
     /// The day of the year (1..366) and the map's latitude (degrees north): the season.
     pub day_of_year: f32,
-    pub latitude: f32,
+    pub lat_deg: f32,
     /// One number per calendar day: what the enhanced renderer draws the day's own air
     /// from (how clear or hazy it is), so that no two days look quite alike.
     pub day_seed: u32,
@@ -82,8 +82,8 @@ pub fn moon_position(clock: &SimClock, place: &SunPlace) -> (f64, f64, f64) {
     let ra = (lon.sin() * eps.cos() - lat.tan() * eps.sin()).atan2(lon.cos());
     let dec = (lat.sin() * eps.cos() + lat.cos() * eps.sin() * lon.sin()).asin();
     let gmst = 280.460_618_37 + 360.985_647_366_29 * d;
-    let ha = rad(gmst + place.longitude) - ra;
-    let phi = rad(place.latitude);
+    let ha = rad(gmst + place.lon_deg) - ra;
+    let phi = rad(place.lat_deg);
     let sin_alt = phi.sin() * dec.sin() + phi.cos() * dec.cos() * ha.cos();
     let alt = sin_alt.clamp(-1.0, 1.0).asin();
     let az = (-ha.sin()).atan2(dec.tan() * phi.cos() - phi.sin() * ha.cos());
@@ -101,8 +101,8 @@ pub fn moon_position(clock: &SimClock, place: &SunPlace) -> (f64, f64, f64) {
 /// `[DST]` periods). Without the file the exe keeps Spandau: 52.505 N, 13.2782 E, UTC+1.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SunPlace {
-    pub latitude: f64,
-    pub longitude: f64,
+    pub lat_deg: f64,
+    pub lon_deg: f64,
     pub timezone: f64,
     /// Daylight saving periods: first and last day (`YYYYMMDD`), the hour it starts on the
     /// first day and ends on the last, and the hours the clocks go forward.
@@ -113,8 +113,8 @@ impl SunPlace {
     pub fn locate(&mut self, timezone: f64, lat_lon: Option<(f64, f64)>) {
         self.timezone = timezone;
         match lat_lon {
-            Some((lat, lon)) => (self.latitude, self.longitude) = (lat, lon),
-            None if timezone != SunPlace::default().timezone => self.longitude = timezone * 15.0,
+            Some((lat, lon)) => (self.lat_deg, self.lon_deg) = (lat, lon),
+            None if timezone != SunPlace::default().timezone => self.lon_deg = timezone * 15.0,
             None => {}
         }
     }
@@ -123,8 +123,8 @@ impl SunPlace {
 impl Default for SunPlace {
     fn default() -> Self {
         SunPlace {
-            latitude: 52.505,
-            longitude: 13.2782,
+            lat_deg: 52.505,
+            lon_deg: 13.2782,
             timezone: 1.0,
             dst: Vec::new(),
         }
@@ -149,7 +149,7 @@ impl SunPlace {
     /// Local solar time (hours) for the map clock: the clock minus its time zone and summer
     /// time is UTC, and the sun stands south at 12:00 plus 4 minutes a degree west.
     pub fn solar_hours(&self, clock: &SimClock) -> f64 {
-        clock.time / 3600.0 - self.timezone - self.dst_hours(clock) + self.longitude / 15.0
+        clock.time / 3600.0 - self.timezone - self.dst_hours(clock) + self.lon_deg / 15.0
     }
 }
 
@@ -190,12 +190,12 @@ pub fn sun_position(clock: &SimClock, place: &SunPlace) -> (f64, f64) {
     let gmst_hours = (doy * 24) as f64 / 365.0 + 6.69 + clock.time / 3600.0
         - place.timezone
         - place.dst_hours(clock);
-    let local_sidereal = gmst_hours * 2.0 * PI / 24.0 + place.longitude.to_radians();
+    let local_sidereal = gmst_hours * 2.0 * PI / 24.0 + place.lon_deg.to_radians();
     let ecliptic = ((doy - 80) * 2) as f64 * PI / 365.0;
     let right_ascension = (OMSI_OBLIQUITY.cos() * ecliptic.sin()).atan2(ecliptic.cos());
     let decl = OMSI_OBLIQUITY.sin() * ecliptic.sin();
     let h = local_sidereal - right_ascension;
-    let lat = place.latitude.to_radians();
+    let lat = place.lat_deg.to_radians();
     let sin_alt = decl.sin() * lat.sin() + decl.cos() * h.cos() * lat.cos();
     let alt = sin_alt.clamp(-1.0, 1.0).asin();
     // (Omsi.exe's azimuth counts from the south towards the west; from the north here)
@@ -335,7 +335,7 @@ impl Daylight {
             moon_dir,
             moon_illum: moon_illum as f32,
             day_of_year: clock.day_of_year as f32,
-            latitude: here.latitude as f32,
+            lat_deg: here.lat_deg as f32,
             day_seed,
         }
     }
@@ -551,8 +551,8 @@ mod tests {
         // early May at 45 N on the Greenwich meridian: Omsi.exe's sun stands highest at about
         // 11:53 (its right ascension off the tilted equator), at 90 - 45 + 16.21 degrees
         let place = SunPlace {
-            latitude: 45.0,
-            longitude: 0.0,
+            lat_deg: 45.0,
+            lon_deg: 0.0,
             timezone: 0.0,
             dst: Vec::new(),
         };
@@ -586,8 +586,8 @@ mod tests {
         // full moon of 20 January 2000 04:40 UTC: nearly all lit, opposite the sun, high
         // in a Berlin winter night
         let berlin = SunPlace {
-            latitude: 52.5,
-            longitude: 13.4,
+            lat_deg: 52.5,
+            lon_deg: 13.4,
             timezone: 0.0,
             dst: Vec::new(),
         };
@@ -754,21 +754,21 @@ mod tests {
         caxias.locate(-3.0, None);
         assert!(sun_position(&c, &caxias).0 > 10.0);
         assert_eq!(
-            caxias.latitude,
-            SunPlace::default().latitude,
+            caxias.lat_deg,
+            SunPlace::default().lat_deg,
             "the climate keeps its latitude"
         );
         let mut moscow = SunPlace::default();
         moscow.locate(3.0, None);
         assert_eq!(
-            (moscow.latitude, moscow.longitude),
-            (SunPlace::default().latitude, 45.0)
+            (moscow.lat_deg, moscow.lon_deg),
+            (SunPlace::default().lat_deg, 45.0)
         );
         let mut berlin = SunPlace::default();
         berlin.locate(-3.0, Some((52.505, 13.2782)));
         assert!(sun_position(&c, &berlin).0 < 0.0);
         let mut spandau = SunPlace::default();
         spandau.locate(1.0, None);
-        assert_eq!(spandau.longitude, SunPlace::default().longitude);
+        assert_eq!(spandau.lon_deg, SunPlace::default().lon_deg);
     }
 }

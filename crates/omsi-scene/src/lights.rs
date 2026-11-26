@@ -38,7 +38,7 @@ pub fn lighting_from(d: &Daylight, fog_range: f32) -> Lighting {
         moon_dir: d.moon_dir,
         moon_illum: d.moon_illum,
         day_of_year: d.day_of_year,
-        latitude: d.latitude,
+        lat_deg: d.lat_deg,
         day_seed: d.day_seed,
         ..Default::default()
     }
