@@ -151,13 +151,7 @@ pub fn station_targets(
 }
 
 pub fn trip_stations(trip: &omsi_timetable::Trip) -> Vec<i64> {
-    if !trip.stations.is_empty() {
-        return trip.stations.clone();
-    }
-    trip.stations_legacy
-        .iter()
-        .filter_map(|s| s.first().and_then(|id| id.trim().parse::<i64>().ok()))
-        .collect()
+    trip.station_ids()
 }
 
 /// Whether `trip_stations` would list any station (without making the list).

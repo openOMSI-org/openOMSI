@@ -95,6 +95,14 @@ impl Renderer {
         true
     }
 
+    /// The size the window's clouds are traced at (the camera group reads them): the
+    /// picture's, or with an upscaler the window's, not the smaller picture it is given, as
+    /// in the wgpu renderer (#4306): traced at the render size they came out blurred on top
+    /// of the upscaler's own blur.
+    fn cloud_size(temporal: bool, window: (u32, u32), picture: (u32, u32)) -> (u32, u32) {
+        if temporal { window } else { picture }
+    }
+
     /// The frame's modes (render scale, Enhanced, the reflections, the prepass, ray
     /// tracing) and the targets they need, the lights, coronas and smoke prepared.
     pub(crate) fn begin_frame<'a>(
@@ -314,8 +322,8 @@ impl Renderer {
             scene.camera_heaps = None;
             self.targets.hdr_targets.clear();
         }
-        // (the window's clouds at its size: the camera group reads them)
-        if enhanced && lead_view && self.ensure_cloud_targets(width, height) {
+        let clouds = Self::cloud_size(temporal_frame, (full_w, full_h), (width, height));
+        if enhanced && lead_view && self.ensure_cloud_targets(clouds.0, clouds.1) {
             scene.camera_heaps = None;
         }
         // (the ground albedo picture only while that pass can run; read through the heap)

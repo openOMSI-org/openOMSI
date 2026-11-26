@@ -150,6 +150,8 @@ filament
   `[matl_glow]` are (strength 1 = `[matl_glow]` value 4).
 - The texture uses the light map's slot. A slot with a `[matl_lightmap]` or a `[matl_glow]` keeps
   those; its emission is then not driven by variables and has no texture of its own.
+- The variables and the fade drive the emission of vehicles only. On a scenery object
+  (`.sco`) the slot shines at its full level whatever the variable says.
 - The emission is the material's look. It does not light the surroundings: put a
   `[light_enh]`, `[interiorlight]` or `[spotlight]` beside it for that, switched by the same
   variable.

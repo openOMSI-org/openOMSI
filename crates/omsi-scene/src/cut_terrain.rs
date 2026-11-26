@@ -684,12 +684,15 @@ impl World {
         q: Option<&StagedTile>,
         drive: &omsi_geometry::DriveGrid,
     ) -> omsi_geometry::GroundSound {
-        let root = [self.root.as_path()];
+        // (the folders the ground textures are drawn from, the map's own too (#3931): a
+        // texture found only there gets its own `[surface]`, not the default one)
+        let dirs = self.ground_dirs();
+        let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
         let ids: Vec<u8> = self
             .global
             .ground_textures
             .iter()
-            .map(|g| surface_id(&g.texture, &root))
+            .map(|g| surface_id(&g.texture, &dirs))
             .collect();
         // (a map without ground textures is a meadow)
         let base = ids.first().copied().unwrap_or(4);

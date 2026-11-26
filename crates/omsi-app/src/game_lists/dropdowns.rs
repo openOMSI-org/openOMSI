@@ -727,28 +727,10 @@ pub(super) fn sync_live(app: &mut App) {
         n.light = s.is_light_theme();
     }
     if let Some(h) = app.session.humans.as_mut() {
-        h.exact_fare = s.exact_fare;
-        h.transfer_percent = if app
-            .args
-            .passenger_connections_allowed(app.net.lan.is_some())
-            && s.passenger_connections
-        {
-            s.passenger_transfer_percent
-        } else {
-            0.0
-        };
-        h.visual_hailing = s.passenger_hailing && s.passenger_animation == "enhanced";
-        h.visual_full_bus_reaction =
-            s.passenger_full_bus_reaction && s.passenger_animation == "enhanced";
-        h.bad_driving = s.pax_bad_driving;
-        h.boarding = s.boarding.clone();
-        h.rear_door_boarding = s.rear_door_boarding;
-        h.stand_chance = s.standing_chance;
-        h.short_rides_stand = s.pax_short_rides_stand;
-        h.voices = match s.pax_voices.as_str() {
-            "off" => 2,
-            "tickets" => 1,
-            _ => 0,
-        };
+        h.apply_settings(
+            s,
+            app.args
+                .passenger_connections_allowed(app.net.lan.is_some()),
+        );
     }
 }

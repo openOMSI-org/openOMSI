@@ -489,25 +489,7 @@ fn new_humans(
         // a dedicated server plays nowhere itself: its people are the LAN players' alone (at
         // the map's camera they filled the whole pool, and the players met nobody)
         h.players_only = args.server.is_some() && player.is_none();
-        h.exact_fare = settings.exact_fare;
-        h.transfer_percent =
-            if args.passenger_connections_allowed(false) && settings.passenger_connections {
-                settings.passenger_transfer_percent
-            } else {
-                0.0
-            };
-        h.visual_hailing = settings.passenger_hailing && settings.passenger_animation == "enhanced";
-        h.visual_full_bus_reaction =
-            settings.passenger_full_bus_reaction && settings.passenger_animation == "enhanced";
-        h.bad_driving = settings.pax_bad_driving;
-        h.boarding = settings.boarding.clone();
-        h.stand_chance = settings.standing_chance;
-        h.short_rides_stand = settings.pax_short_rides_stand;
-        h.voices = match settings.pax_voices.as_str() {
-            "off" => 2,
-            "tickets" => 1,
-            _ => 0,
-        };
+        h.apply_settings(settings, args.passenger_connections_allowed(false));
         if let Some(p) = player.as_mut() {
             h.set_cabin(&mut p.vehicle);
             h.ticket_key = ticket_key_name(&args.root, &p.bindings);

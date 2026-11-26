@@ -134,7 +134,7 @@ const graphics = {
         { type: 'toggle', key: 'windy_trees', label: 'Windy trees' },
         { type: 'toggle', key: 'detailed_trees', label: 'Detailed trees', help: 'Close up, the trees\' leaf pictures no longer show as streaks seen from the side, and their crowns get shade; costs a little graphics time' },
         // (the snow built up on the roads and the vehicles' roofs; the classic picture shows the season's snow only)
-        { type: 'toggle', key: 'procedural_dirt', label: 'Road dirt on the vehicles', help: 'Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2', when: (s) => enhanced(s) },
+        { type: 'toggle', key: 'procedural_dirt', label: 'Road dirt on the vehicles', help: 'Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus\'s own dirt, as in OMSI 2', when: (s) => enhanced(s) },
         { type: 'toggle', key: 'road_snow', label: 'Built-up snow on roads and roofs', help: 'While it snows, snow builds up on the roads and on the vehicles\' roofs, with ruts and tyre tracks, and thaws again; off: the weather\'s own snow on road, as in OMSI 2', when: (s) => !classic(s) },
       ],
     },
@@ -384,6 +384,11 @@ const gameplay = {
       rows: [
         { type: 'select', key: 'boarding', label: 'Boarding', options: [['auto', 'Pay and take the ticket'], ['pay', 'The driver sells the ticket'], ['walk', 'Just walk in']] },
         { type: 'toggle', key: 'rear_door_boarding', label: 'Rear door boarding', help: 'Passengers get in at the rear and middle doors too: each walks to the nearest door on their side of the bus and asks for it, instead of queueing at the front. Open that door as usual (its key, all doors, or the door release)' },
+        { type: 'select', key: 'pax_entry_doors', label: 'Entry doors', options: [['as_bus', 'As the bus says'], ['first', 'Front door only'], ['first_two', 'First two doors'], ['last', 'Rear door only']] },
+        { type: 'toggle', key: 'pax_board_when_stopped', label: 'Passengers wait for open doors' },
+        { type: 'toggle', key: 'pax_no_ticket', label: 'Pay without a ticket' },
+        { type: 'slider', key: 'pax_late_tolerance_min', label: 'Accepted lateness', min: 0, max: 30, step: 1, def: 5, format: (v) => `${v} min` },
+        { type: 'select', key: 'pax_free_drive', label: 'Stops fill up in free drive', options: [['auto', 'Auto'], ['on', 'Always'], ['off', 'Only for due trips']] },
         { type: 'select', key: 'standing_chance', label: 'Standing passengers', options: [['0', 'Never'], ['5', '5%'], ['10', '10%'], ['25', '25%'], ['50', '50%'], ['100', 'Always']] },
         { type: 'select', key: 'passenger_animation', label: 'Passenger animations', options: [['original', 'Original OMSI'], ['enhanced', 'Natural (procedural)']] },
         // (drawn on this computer only; the avatars are downloaded once, about 310 MB)
@@ -397,6 +402,7 @@ const gameplay = {
         { type: 'toggle', key: 'passenger_hailing', label: 'Passengers signal approaching buses', help: 'Optional visual hailing; only effective with supported natural animations' },
         { type: 'toggle', key: 'passenger_full_bus_reaction', label: 'Passengers react to full buses', help: 'Optional visual acknowledgement when an approaching compatible bus is at passenger capacity' },
         { type: 'toggle', key: 'pax_short_rides_stand', label: 'Short rides stand by a door', help: 'Passengers with no set stop who ride only a few kilometres take a free standing place near an exit rather than a seat' },
+        { type: 'toggle', key: 'ibis_auto_stop', label: 'IBIS stop follows the duty' },
         { type: 'toggle', key: 'auto_announce', label: 'Arrival announcements at the stop', help: 'On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS\'s next stop key, pressed as the driver would' },
         { type: 'slider', key: 'pax_density', label: 'How many passengers', min: 0, max: 2, step: 0.1, def: 1, format: pct, store: r2 },
         { type: 'toggle', key: 'get_up', label: 'Ability to get up (Ctrl+Shift+G)' },
