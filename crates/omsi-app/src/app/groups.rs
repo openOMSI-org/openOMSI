@@ -78,6 +78,11 @@ pub(crate) struct NetState {
     /// The host's own vehicle checked against `session_buses` (#1464), so a path is read only
     /// when the vehicle changes.
     pub(crate) host_bus_checked: Option<HostBusCheck>,
+    /// Who of the other players serves our bus's cash desk (#2859): the conductor we named.
+    pub(crate) crew: omsi_lan::crew::Crew,
+    /// Whose bus another player is the conductor of, as each bus's driver announces it
+    /// (#2859): the bus owner's number -> the conductor's.
+    pub(crate) conductors: std::collections::HashMap<u32, u32>,
 
     pub(crate) mods_server: Option<omsi_lan::mods::Server>,
     pub(crate) remotes: lan::LanGame,
@@ -89,7 +94,7 @@ pub(crate) struct NetState {
 /// website's "playing now" and the look for a newer release.
 pub(crate) struct Integrations {
     /// Keys pressed (true) and let go since the Lua plugins' last frame.
-    pub(crate) plugin_keys: Vec<(String, bool)>,
+    pub(crate) plugin_keys: Vec<omsi_plugin::KeyEvent>,
     /// What happened since the Lua plugins' last frame: crashes, people knocked down,
     /// stops skipped, services and moves of the bus, trips ended, jolts, tickets sold (see
     /// `plugins::queue_event`).

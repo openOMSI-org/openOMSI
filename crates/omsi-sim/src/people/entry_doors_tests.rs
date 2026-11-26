@@ -317,10 +317,27 @@ fn ticket_buyers_avoid_noticketsale_doors_when_setting_selects_only_those_doors(
         "[entry]\n0\n\n[entry]\n1\n{noticketsale}\n\n[entry]\n2\n{noticketsale}\n\n[exit]\n2\n\n",
     );
     h.pax_mut(0).unwrap().ticket = TICKET_BUY;
-    h.entry_doors = EntryDoors::Last;
-    assert_eq!(door_chosen(&mut h, &bus), None);
     h.entry_doors = EntryDoors::First;
     assert_eq!(door_chosen(&mut h, &bus), Some(0));
+    h.entry_doors = EntryDoors::FirstTwo;
+    assert_eq!(
+        door_chosen(&mut h, &bus),
+        Some(0),
+        "the selling door of the two"
+    );
+}
+
+#[test]
+fn a_ticket_buyer_whose_doors_all_sell_none_still_boards_at_one() {
+    let (mut h, bus) = bus_with_cabin_entries(
+        "no-ticket-sale-only",
+        "[entry]\n0\n\n[entry]\n1\n{noticketsale}\n\n[entry]\n2\n{noticketsale}\n\n[exit]\n2\n\n",
+    );
+    h.pax_mut(0).unwrap().ticket = TICKET_BUY;
+    // Only the rear door, and it sells no tickets: as Omsi.exe's second search without the
+    // `{noticketsale}` rule, the buyer goes to it rather than standing at the stop for good.
+    h.entry_doors = EntryDoors::Last;
+    assert_eq!(door_chosen(&mut h, &bus), Some(2));
 }
 
 #[test]
@@ -331,8 +348,11 @@ fn passengers_in_disconnected_cabin_section_preserve_reachable_doors() {
     assert_eq!(door_chosen(&mut h, &bus), Some(1));
 }
 
+/// #3759: with the selling front door shut (no button) and the rear door that sells no
+/// tickets open, a ticket buyer walks to the open rear door, as Omsi.exe searches again
+/// without avoiding `{noticketsale}` (sub_72506c, 0x725227) - not to the shut front door.
 #[test]
-fn ticket_buyers_avoid_open_noticketsale_doors_when_selling_door_is_shut() {
+fn ticket_buyers_take_an_open_noticketsale_door_when_the_selling_door_is_shut() {
     let (mut h, mut bus) = bus_with_cabin_entries(
         "shut-selling-open-nosale",
         "[entry]\n0\n\n[entry]\n1\n{noticketsale}\n\n[exit]\n1\n\n",
@@ -340,6 +360,13 @@ fn ticket_buyers_avoid_open_noticketsale_doors_when_selling_door_is_shut() {
     h.pax_mut(0).unwrap().ticket = TICKET_BUY;
     bus.entry_open = vec![false, true];
     h.entry_doors = EntryDoors::AsBus;
+    assert_eq!(door_chosen(&mut h, &bus), Some(1));
+    // (an AI bus the same)
+    bus.id = BusId::Ai(4);
+    h.pax_mut(0).unwrap().bus = Some(BusId::Ai(4));
+    assert_eq!(door_chosen(&mut h, &bus), Some(1));
+    // both open: the selling door, though the other is as near
+    bus.entry_open = vec![true, true];
     assert_eq!(door_chosen(&mut h, &bus), Some(0));
 }
 

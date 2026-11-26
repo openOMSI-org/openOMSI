@@ -69,6 +69,11 @@ pub struct ScriptedView {
     pub mesh_xf: Vec<Mat4>,
     pub mesh_visible: Vec<bool>,
     pub script_lamps: Vec<crate::staging::ScriptLamp>,
+    /// Per instance, its driven emissive slots' levels (`LampSlots::emit`) and the light
+    /// values last handed to the renderer; and when they were stepped.
+    pub emit_levels: Vec<Vec<f32>>,
+    pub emit_last: Vec<Vec<f32>>,
+    pub emit_at: Option<std::time::Instant>,
 }
 
 pub(crate) fn view_of(views: &[ScriptedView], key: u64) -> Option<usize> {
@@ -173,7 +178,7 @@ impl ScriptedSet {
             // (the way its +y axis points: compass degrees, north 0 and east 90)
             s.heading = xf.y_axis.x.atan2(xf.y_axis.y).to_degrees();
         }
-        s.switch_dirs = ty.sco.path_switch_dir.clone();
+        s.switch_dirs = ty.sco.inherit_switch_dirs();
         if s.switch_dirs.iter().any(|d| d.is_some()) {
             s.sco_path = Some(Arc::from(ty.sco.path.as_path()));
         }
@@ -196,6 +201,9 @@ impl ScriptedSet {
             mesh_xf,
             mesh_visible,
             script_lamps,
+            emit_levels: Vec::new(),
+            emit_last: Vec::new(),
+            emit_at: None,
         });
     }
 
@@ -1039,6 +1047,47 @@ impl World {
                     None => {
                         if p.visible != visible {
                             renderer.set_params(scene, *inst, &[], visible, &[]);
+                        }
+                    }
+                }
+            }
+            // the emissive slots its variables drive (`[matl_emissive]`), faded as
+            // `[matl_emissive_fade]` says over the time since the last step
+            if v.alpha_slots.iter().any(|l| !l.emit.is_empty()) {
+                let now = std::time::Instant::now();
+                let dt = v.emit_at.map_or(0.0, |t| (now - t).as_secs_f32().min(1.0));
+                v.emit_at = Some(now);
+                let value = |n: &str| n.trim().parse::<f32>().ok().or_else(|| var(n));
+                let first = v.emit_levels.len() != v.alpha_slots.len();
+                if first {
+                    v.emit_levels = v
+                        .alpha_slots
+                        .iter()
+                        .map(|l| vec![0.0; l.emit.len()])
+                        .collect();
+                    v.emit_last = vec![Vec::new(); v.alpha_slots.len()];
+                }
+                for (k, inst) in v.instances.iter().enumerate() {
+                    let (Some(l), Some(levels)) = (v.alpha_slots.get(k), v.emit_levels.get_mut(k))
+                    else {
+                        continue;
+                    };
+                    if l.emit.is_empty() {
+                        continue;
+                    }
+                    for (e, level) in l.emit.iter().zip(levels.iter_mut()) {
+                        // (the first step starts where the variable stands: no fade from dark)
+                        *level = if first {
+                            e.target(&value)
+                        } else {
+                            e.step(*level, dt, &value)
+                        };
+                    }
+                    let light = l.emit_values(levels, &value);
+                    if v.emit_last.get(k) != Some(&light) {
+                        renderer.set_slot_light(scene, *inst, &light);
+                        if let Some(last) = v.emit_last.get_mut(k) {
+                            *last = light;
                         }
                     }
                 }

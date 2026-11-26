@@ -52,7 +52,7 @@ pub struct ServerCfg {
     pub admin_web_origins: Vec<String>,
     /// The proxies whose word about a request's source and scheme is believed
     /// (`admin_trusted_proxies`; this machine by default).
-    pub admin_trusted_proxies: Vec<std::net::IpAddr>,
+    pub admin_forwarding_proxies: Vec<std::net::IpAddr>,
     /// The header in which they name the client (`admin_proxy_header`; the last
     /// `X-Forwarded-For` by default).
     pub admin_proxy_header: omsi_admin::ProxyHeader,
@@ -349,7 +349,7 @@ impl ServerCfg {
             .ok()
             .filter(|b| b.starts_with(b"\x89PNG") && b.len() < 256 * 1024)
             .unwrap_or_default();
-        Ok(remote_needs_long_passwords(ServerCfg {
+        let mut cfg = ServerCfg {
             name: get("name", "openOMSI server"),
             motd: get("motd", ""),
             map: get("map", "maps/Berlin-Spandau/global.cfg"),
@@ -382,7 +382,7 @@ impl ServerCfg {
             allow_player_teleport: flag("allow_player_teleport", false),
             admin_web: web_mode(kv.get("admin_web").map(String::as_str)),
             admin_web_origins: kv.get("admin_web_origins").map(|v| v.split(';').map(|o| o.trim().trim_end_matches('/').to_string()).filter(|o| o.starts_with("https://") || o.starts_with("http://")).collect()).unwrap_or_default(),
-            admin_trusted_proxies: trusted_proxies(kv.get("admin_trusted_proxies").map(String::as_str).unwrap_or("")),
+            admin_forwarding_proxies: forwarding_proxies(kv.get("admin_trusted_proxies").map(String::as_str).unwrap_or("")),
             admin_proxy_header: proxy_header(kv.get("admin_proxy_header").map(String::as_str).unwrap_or("")),
             gateway_cf_connecting_ip: kv.get("gateway_proxy_header").is_some_and(|v| v.trim().eq_ignore_ascii_case("cf-connecting-ip")),
             time_speed: kv.get("time_speed").and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite()).unwrap_or(1.0).clamp(1.0, 30.0),
@@ -403,7 +403,9 @@ impl ServerCfg {
             ai_drive_through_parked: flag("ai_drive_through_parked", false),
             log_addresses: flag("log_addresses", false),
             dir: dir.to_path_buf(),
-        }))
+        };
+        cfg.admin_web = web_admin_reach(&cfg);
+        Ok(cfg)
     }
 }
 
@@ -431,7 +433,10 @@ pub fn server_speed_limit_kmh() -> u32 {
 
 /// `admin_web = remote` puts the login on the internet: its passwords need
 /// `REMOTE_MIN_PASSWORD` characters, or the panel stays on this machine (and the log says so).
-fn remote_needs_long_passwords(mut cfg: ServerCfg) -> ServerCfg {
+/// Only the mode comes back: the configuration itself never passes through here, so the
+/// log lines about the server do not count as holding its passwords (CodeQL's
+/// `rust/cleartext-logging` took every one of them for a password written to the log).
+fn web_admin_reach(cfg: &ServerCfg) -> omsi_admin::WebMode {
     let short = |p: &str| !p.is_empty() && p.chars().count() < crate::admin::REMOTE_MIN_PASSWORD;
     if cfg.admin_web == omsi_admin::WebMode::Remote
         && (short(&cfg.admin_password) || short(&cfg.moderator_password))
@@ -440,9 +445,9 @@ fn remote_needs_long_passwords(mut cfg: ServerCfg) -> ServerCfg {
             "server.cfg: admin_web = remote needs passwords of {} characters at least: the web administration stays on this machine (local)",
             crate::admin::REMOTE_MIN_PASSWORD
         );
-        cfg.admin_web = omsi_admin::WebMode::Local;
+        return omsi_admin::WebMode::Local;
     }
-    cfg
+    cfg.admin_web
 }
 
 /// (one check for `server.cfg` and the admins: `omsi_admin::passenger_density`)
@@ -515,7 +520,7 @@ fn proxy_header(v: &str) -> omsi_admin::ProxyHeader {
 }
 
 /// `admin_trusted_proxies`: addresses separated by `;` (empty: this machine).
-fn trusted_proxies(v: &str) -> Vec<std::net::IpAddr> {
+fn forwarding_proxies(v: &str) -> Vec<std::net::IpAddr> {
     let list: Vec<std::net::IpAddr> = v
         .split(';')
         .map(str::trim)
@@ -531,7 +536,7 @@ fn trusted_proxies(v: &str) -> Vec<std::net::IpAddr> {
         })
         .collect();
     if list.is_empty() {
-        omsi_admin::WebCfg::default().trusted_proxies
+        omsi_admin::WebCfg::default().forwarding_proxies
     } else {
         list
     }
@@ -853,8 +858,8 @@ mod passenger_density_tests {
         // and keeps the web administration on this machine
         assert_eq!(d.admin_web, omsi_admin::WebMode::Local);
         assert_eq!(
-            d.admin_trusted_proxies,
-            omsi_admin::WebCfg::default().trusted_proxies
+            d.admin_forwarding_proxies,
+            omsi_admin::WebCfg::default().forwarding_proxies
         );
         assert_eq!(d.admin_proxy_header, omsi_admin::ProxyHeader::ForwardedFor);
         // the players' addresses are cut in the log unless the owner asks for them whole
@@ -897,7 +902,7 @@ mod passenger_density_tests {
             ]
         );
         assert_eq!(
-            r.admin_trusted_proxies,
+            r.admin_forwarding_proxies,
             vec![
                 "10.0.0.1".parse::<std::net::IpAddr>().unwrap(),
                 "::1".parse().unwrap()

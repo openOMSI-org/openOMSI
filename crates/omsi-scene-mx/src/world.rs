@@ -356,6 +356,7 @@ pub(super) fn push_lamp_sprites(
             inner_cos: halo_cone.1,
             texture: crate::lights::glow_texture_id(),
             halo: true,
+            vehicle_lamp: glow.vehicle_lamp,
             ..Default::default()
         });
     }
@@ -400,6 +401,12 @@ fn model_lights_into(
     let mut seq = 0usize;
     let mut li = 0usize;
     let model_dir = model.path.parent().unwrap_or(std::path::Path::new(""));
+    // (a vehicle's model - under `Vehicles` - not a scenery object's that names the same
+    // channels: a parked bus model, a garage's lamps)
+    let vehicle_model = model
+        .path
+        .components()
+        .any(|c| c.as_os_str().eq_ignore_ascii_case("vehicles"));
     for (i, md) in model.meshes.iter().enumerate() {
         // most meshes carry no light, and their transform is not free (every mesh of every
         // AI car, every frame)
@@ -409,6 +416,8 @@ fn model_lights_into(
         let first_li = li;
         li += md.light_enh_2.len();
         let xf = mesh_transforms(i);
+        // (a mesh seen from outside: a cab-only one may reuse an outside lamp's channel)
+        let exterior_mesh = vehicle_model && (md.viewpoint == 0 || md.viewpoint & 0b101 != 0);
         for l in &md.light_enh {
             if let Some(o) = owners.as_deref_mut() {
                 o.resize(out.len() - base, seq.wrapping_sub(1));
@@ -440,6 +449,7 @@ fn model_lights_into(
                 size: (l.size * 0.5).max(0.0),
                 color: [l.color[0] / 255.0, l.color[1] / 255.0, l.color[2] / 255.0],
                 brightness: b,
+                vehicle_lamp: exterior_mesh && is_exterior_lamp_channel(&l.variable),
                 direction: glam::Vec3::ZERO,
                 cone_cos: -1.0,
                 rotating: 2,
@@ -506,6 +516,7 @@ fn model_lights_into(
                 size: (l.size * 0.5).max(0.0),
                 color,
                 brightness: b,
+                vehicle_lamp: exterior_mesh && is_exterior_lamp_channel(&l.variable),
                 direction: dir,
                 cone_cos: half_cos(outer),
                 inner_cos: if inner > 0.0 { half_cos(inner) } else { -2.0 },
@@ -566,6 +577,28 @@ fn model_lights_into(
     if let Some(o) = owners {
         o.resize(out.len() - base, seq.wrapping_sub(1));
     }
+}
+
+/// Whether a lamp's channel is one of a vehicle's outside lamps (the stock and AI names).
+/// The lamp tags have no flag for it; a mod's own channels keep their authored look.
+fn is_exterior_lamp_channel(variable: &str) -> bool {
+    matches!(
+        variable.trim().to_ascii_lowercase().as_str(),
+        "ai_light"
+            | "ai_brakelight"
+            | "ai_blinker_l"
+            | "ai_blinker_r"
+            | "lights_abbl"
+            | "lights_main"
+            | "lights_fern"
+            | "lights_stand"
+            | "lights_brems"
+            | "lights_blinker_l"
+            | "lights_blinker_r"
+            | "lights_rueckfahr"
+            | "lights_nebel"
+            | "lights_nebelschluss"
+    )
 }
 
 /// The size (m) past which a `[light_enh_2]` is a damaged one, not a lamp.
@@ -667,6 +700,11 @@ impl World {
     /// Ground height (road surface where present, else terrain) at world x, y.
     pub fn ground_height(&self, x: f64, y: f64) -> Option<f64> {
         self.data.peek().ground_height(x, y)
+    }
+
+    /// Whether the rain is kept off the road at world (x, y, z) (see `WorldData::roofed_at`).
+    pub fn roofed_at(&self, x: f64, y: f64, z: f64) -> bool {
+        self.data.peek().roofed_at(x, y, z)
     }
 
     /// The wetness a puddle would use at world (x, y) (see `WorldData::wet_road_at`).

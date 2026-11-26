@@ -81,6 +81,9 @@ struct Enhanced {
     // clouds scatter, `sun_scattered` - y 1 when x is set)
     pbr_ext: vec4<f32>,
     rt_ext: vec4<f32>,
+    // the vehicles' road dirt (vehicle_dirt.rs `pack_all`): x how many, then eight rows each
+    dirt_n: vec4<f32>,
+    dirt: array<vec4<f32>, 512>,
 };
 @group(0) @binding(11) var<uniform> enh: Enhanced;
 @group(0) @binding(13) var s_lin: sampler;

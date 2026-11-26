@@ -303,6 +303,17 @@ pub fn run() -> Result<()> {
         );
         return Ok(());
     }
+    // (also without the content and the device: the map's `TTData` is all it reads)
+    if let Some(out) = &args.export_stop_labels {
+        let map_dir = Path::new(&args.map)
+            .parent()
+            .map(|p| args.root.join(p))
+            .unwrap_or_else(|| args.root.clone());
+        let n = omsi_timetable::stop_labels::export(&map_dir, out)
+            .with_context(|| format!("stop labels of {}", map_dir.display()))?;
+        println!("Stop labels of {} stops written to {}", n, out.display());
+        return Ok(());
+    }
     // Started by a double click or with no arguments at all: that is the launcher's job.
     // The launcher itself runs the game with a full command line (--no-menu, --map, ...).
     let bare = std::env::args().len() == 1;
@@ -874,6 +885,7 @@ fn assemble_app(args: Args, settings: settings::Settings) -> App {
             note_watch: Default::default(),
             loading: Default::default(),
             menu_edit: None,
+            load_request: None,
             menu_edit_icao: false,
             menu_edit_number: false,
             menu_edit_ident: false,

@@ -332,14 +332,14 @@ fn the_example_site_loads_and_draws() {
         ApiValue::Map(v.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
     };
     r.set_vehicle(&map(vec![
-        ("speed", map(vec![("kmh", ApiValue::Num(41.6))])),
         (
-            "route",
+            "info",
             map(vec![
-                ("line", ApiValue::Str("92".into())),
+                ("route", ApiValue::Str("92".into())),
                 ("nextStop", ApiValue::Str("Zitadelle".into())),
             ]),
         ),
+        ("motion", map(vec![("speedKmh", ApiValue::Num(41.6))])),
         (
             "doors",
             map(vec![(

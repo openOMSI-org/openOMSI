@@ -42,6 +42,7 @@ fn session_graphics_options(
     // Never switch the active Vanilla/Vanilla+/Enhanced renderer during the drive.
     if !session.enhanced {
         options.ray_tracing = false;
+        options.rt_gi = false;
     }
     options
 }
@@ -126,6 +127,7 @@ fn restore_runtime_graphics(
     target.frame_generation = source.frame_generation.clone();
     target.fsr_quality = source.fsr_quality.clone();
     target.fsr_sharpness = source.fsr_sharpness.clone();
+    target.dlss_sharpness = source.dlss_sharpness;
     target.anisotropy = source.anisotropy.clone();
     target.shadow_size = source.shadow_size.clone();
     target.ssao = source.ssao.clone();
@@ -150,11 +152,13 @@ fn restore_runtime_graphics(
     target.rain_lights = source.rain_lights;
     target.detailed_trees = source.detailed_trees;
     target.road_snow = source.road_snow.clone();
+    target.procedural_dirt = source.procedural_dirt;
     target.ray_tracing_on = source.ray_tracing_on.clone();
     target.light_shadows = source.light_shadows.clone();
     target.cloud_shadows = source.cloud_shadows.clone();
     target.light_glow = source.light_glow.clone();
     target.volumetric_fog = source.volumetric_fog;
+    target.rt_gi = source.rt_gi;
     target.vsync = source.vsync.clone();
     target.max_fps = source.max_fps.clone();
     target.max_obj_dist = source.max_obj_dist.clone();

@@ -248,15 +248,85 @@ impl Renderer {
     }
 
     /// The upscaler could not start or stopped working: back to the player's anti-aliasing.
+    /// With the card out of memory (the upscaler's own textures could not be made) the
+    /// player's multisampling would only take more of it - 8x MSAA after DLSS gave up, and
+    /// the shadows went down to 512 - so the picture is drawn with FXAA instead, and the
+    /// upscaler, kept, is tried once more when the texture budget has lowered the textures.
     pub(crate) fn fall_back_without_upscaler(&mut self, scene: &mut Scene) {
-        let msaa = self.options.msaa_fallback.max(1);
-        log::warn!("drawing without the upscaler from now on, with {msaa}x MSAA");
+        let memory_short = crate::pipelines::errors::out_of_memory_within(
+            crate::pipelines::errors::OUT_OF_MEMORY_SPELL,
+        );
+        if memory_short && !self.upscaler_retried && self.options.temporal.is_some() {
+            log::warn!(
+                "the upscaler failed with the graphics card out of memory: drawing without it, with FXAA, until it is tried once more in {} s",
+                crate::pipelines::errors::OUT_OF_MEMORY_SPELL.as_secs()
+            );
+            self.upscaler_retry = Some((std::time::Instant::now(), self.options));
+            self.rebuild_with(scene, Self::without_upscaler(self.options, true));
+            return;
+        }
+        let options = Self::without_upscaler(self.options, memory_short);
+        if memory_short {
+            log::warn!(
+                "drawing without the upscaler from now on, with FXAA (the graphics card is out of memory)"
+            );
+        } else {
+            log::warn!(
+                "drawing without the upscaler from now on, with {}x MSAA",
+                options.msaa
+            );
+        }
+        self.upscaler_retry = None;
+        self.rebuild_with(scene, options);
+    }
+
+    /// `options` without the upscaler: the player's multisampling back, or, with the card out
+    /// of memory, none and FXAA.
+    pub(crate) fn without_upscaler(options: RenderOptions, memory_short: bool) -> RenderOptions {
+        if memory_short {
+            RenderOptions {
+                temporal: None,
+                msaa: 1,
+                fxaa: true,
+                ..options
+            }
+        } else {
+            RenderOptions {
+                temporal: None,
+                msaa: options.msaa_fallback.max(1),
+                msaa_fallback: 0,
+                ..options
+            }
+        }
+    }
+
+    /// The upscaler again, once, after it failed with the card out of memory (see
+    /// `fall_back_without_upscaler`): with the options it was drawn with.
+    pub(crate) fn retry_upscaler(&mut self, scene: &mut Scene) {
+        let Some((_, was)) = self.upscaler_retry.take() else {
+            return;
+        };
+        // (only while the picture is still drawn as the fallback left it: a player who turned
+        // the upscaler off, or chose other anti-aliasing, in the meantime keeps that)
+        let fallback = Self::without_upscaler(was, true);
+        let o = &self.options;
+        if o.temporal.is_some()
+            || o.msaa != fallback.msaa
+            || o.fxaa != fallback.fxaa
+            || o.msaa_fallback != fallback.msaa_fallback
+        {
+            log::info!("the upscaler is not tried again: the anti-aliasing was changed since");
+            return;
+        }
+        self.upscaler_retried = true;
+        log::info!("the upscaler is tried once more, now that the textures were lowered");
         self.rebuild_with(
             scene,
             RenderOptions {
-                temporal: None,
-                msaa,
-                msaa_fallback: 0,
+                temporal: was.temporal,
+                msaa: was.msaa,
+                msaa_fallback: was.msaa_fallback,
+                fxaa: was.fxaa,
                 ..self.options
             },
         );
@@ -330,42 +400,117 @@ impl Renderer {
         true
     }
 
-    fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
+    pub(crate) fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
         // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
-        // without one in the new options it is dropped here, with its context and textures)
+        // without one in the new options it is dropped here, with its context and textures -
+        // unless it is to be tried again, see `fall_back_without_upscaler`)
         // (frame generation reads the depth, the motion and the pictures before the HUD at the
-        // window's present, after wgpu is done with them: its work is waited for before they go)
+        // window's present, after the GPU is done with them: its work is waited for before they go)
         if let Some(g) = &self.frame_generation {
             g.wait();
         }
         let upscaler = self
             .temporal_runtime()
             .or_else(|| self.temporal_kept.take())
-            .filter(|_| options.temporal.is_some());
-        // Release render targets before building their replacements. Keeping the old
-        // targets alive while the new renderer is built can turn a recoverable OOM into
-        // another allocation failure.
+            .filter(|_| options.temporal.is_some() || self.upscaler_retry.is_some());
+        // Release what the new renderer makes again before it is built (as the wgpu renderer
+        // does, #4302): with the old targets, shadow maps, ray tracing, sky cube and clouds
+        // still held, a rebuild with the card full had no room for its own shadow maps and
+        // went down to smaller ones for the rest of the session.
+        self.release_for_rebuild(scene);
+        let _ = wait_gpu(&self.device, None);
+        let ceiling_before = ceiling();
+        let built = self.rebuilt(options);
+        let shadows_short = built.options.shadow_size < options.shadow_size;
+        self.take_over(scene, built, upscaler);
+        // What the old renderer still held is gone now: shadow maps smaller than asked for
+        // are made once more, with the memory it freed.
+        if shadows_short {
+            log::warn!(
+                "the renderer was rebuilt with a {} shadow map instead of {}: built once more now that the old one is gone",
+                self.options.shadow_size,
+                options.shadow_size
+            );
+            let _ = wait_gpu(&self.device, None);
+            update_ceiling(|c| *c = ceiling_before);
+            let upscaler = self.temporal_kept.take();
+            self.release_for_rebuild(scene);
+            let _ = wait_gpu(&self.device, None);
+            let built = self.rebuilt(options);
+            self.take_over(scene, built, upscaler);
+        }
+    }
+
+    /// Let go of what a rebuild makes anew, before it is built: the size-keyed targets, the
+    /// shadow maps, the ray tracing, the reflection probe (the sky cube and the clouds), the
+    /// volumetric fog, the recorded passes and the scene's heaps that point at them.
+    fn release_for_rebuild(&mut self, scene: &mut Scene) {
         self.targets.depth = None;
         self.pane_depth = None;
         self.targets.msaa_targets.clear();
         self.targets.ao = None;
+        self.targets.ground = None;
         self.targets.hdr_targets.clear();
         self.targets.scale_targets.clear();
         self.targets.triple_targets = None;
         self.targets.glass_picture = None;
         self.targets.glass_mips = None;
         self.targets.target_use.clear();
+        // (the shadow maps, the largest of the renderer's own textures; the stand-in is never
+        // drawn with, the new renderer takes the place of this one before any frame)
+        let stand_in = || {
+            self.device
+                .create_texture(&mx::TextureDescriptor {
+                    label: Some("shadow map released for a rebuild"),
+                    size: mx::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: mx::TextureDimension::D2,
+                    format: mx::TextureFormat::R8Unorm,
+                    usage: mx::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })
+                .and_then(|t| t.create_view(&Default::default()))
+                .ok()
+        };
+        if let (Some(near), Some(far)) = (stand_in(), stand_in()) {
+            self.shadows.shadow_view = near;
+            self.shadows.shadow_view_far = far;
+        }
+        self.rt = None;
+        self.tone.probe = None;
+        self.lights.vol_fog = None;
+        *self.history.main_bundles.borrow_mut() = None;
+        self.history.mirror_bundles.borrow_mut().clear();
+        scene.camera_heaps = None;
+    }
+
+    /// `built` in the place of this renderer, with what goes on from the old one.
+    fn take_over(
+        &mut self,
+        scene: &mut Scene,
+        built: Renderer,
+        upscaler: Option<temporal::Runtime>,
+    ) {
         let (mesh_pages, frame_generation) = (self.mesh_pages, self.frame_generation.take());
+        let (upscaler_retry, upscaler_retried) = (self.upscaler_retry, self.upscaler_retried);
         *self = Renderer {
             mesh_pages,
             temporal_kept: upscaler,
             frame_generation,
-            ..self.rebuilt(options)
+            upscaler_retry,
+            upscaler_retried,
+            ..built
         };
         scene.dirty = true;
         scene.model_buf = None;
         scene.params_buf = None;
         scene.camera_heaps = None;
+        self.remake_sky_bind_group(scene);
     }
 
     /// Render the scene into `target` (which must have the renderer's format).
@@ -965,6 +1110,7 @@ impl Renderer {
         self.encode_shadow_maps(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
         self.encode_lamp_shadows(&mut enc.shadow, scene, &f, &shadow_batches, &mut timers);
         self.encode_precip_map(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
+        self.encode_dry_map(&mut enc.shadow, scene, &sh, &shadow_batches, &mut timers);
         let prepass_batches = if self.shares_prepass_depth(&f, &plan) {
             plan.prefill_batches()
         } else {
@@ -1263,4 +1409,43 @@ pub(crate) struct ToneMapping {
     /// From a view-space point to the last frame's clip space, and whether that picture can
     /// be read (0 or 1), for the AO pass.
     pub(crate) bounce_reproj: ([[f32; 4]; 4], f32),
+}
+
+#[cfg(test)]
+mod upscaler_fallback_tests {
+    use super::*;
+
+    fn upscaled() -> RenderOptions {
+        RenderOptions {
+            msaa: 1,
+            msaa_fallback: 8,
+            fxaa: false,
+            temporal: Some(Temporal {
+                upscaler: TemporalUpscaler::Dlss,
+                quality: TemporalQuality::Balanced,
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// The upscaler gone with memory to spare: the player's multisampling, as set.
+    #[test]
+    fn without_the_upscaler_the_player_s_msaa_comes_back() {
+        let o = Renderer::without_upscaler(upscaled(), false);
+        assert_eq!(
+            (o.temporal, o.msaa, o.msaa_fallback, o.fxaa),
+            (None, 8, 0, false)
+        );
+    }
+
+    /// The upscaler gone with the card out of memory: no multisampling (8x took more of the
+    /// memory that was short), FXAA instead, and the player's MSAA kept for later.
+    #[test]
+    fn without_the_upscaler_and_memory_fxaa_and_no_msaa() {
+        let o = Renderer::without_upscaler(upscaled(), true);
+        assert_eq!(
+            (o.temporal, o.msaa, o.msaa_fallback, o.fxaa),
+            (None, 1, 8, true)
+        );
+    }
 }

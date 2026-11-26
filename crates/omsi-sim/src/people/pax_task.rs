@@ -380,12 +380,13 @@ impl PeopleSim {
             .map(|k| bn.entry_open.get(k).copied().unwrap_or(false))
             .collect();
         let is_buying = p.ticket == TICKET_BUY;
-        let has_ticket_sale = flags
-            .iter()
-            .enumerate()
-            .any(|(k, f)| list[k].is_some() && !f.0);
-        let restrict_noticketsale =
-            is_buying && ((is_player && doors != EntryDoors::AsBus) || has_ticket_sale);
+        // A buyer skips the `{noticketsale}` doors only as `omsi_nearest` does (sub_625b98
+        // asks sub_72506c to avoid them for a passenger in state 3): with every door that sells shut and no
+        // button, Omsi.exe searches again without it and the buyer walks to an open door
+        // that sells none (#3759: they went to the shut front door while the rear stood
+        // open). Only the player's own door set (#3124, not Omsi.exe's) keeps them off
+        // those doors for good.
+        let restrict_noticketsale = is_buying && is_player && doors != EntryDoors::AsBus;
         let search_list: Vec<_> = if restrict_noticketsale {
             list.iter()
                 .enumerate()
@@ -400,20 +401,40 @@ impl PeopleSim {
         } else {
             list.clone()
         };
-        let pt = bn
-            .cabin
-            .omsi_nearest(
-                here,
-                &search_list,
-                is_buying,
-                false,
-                Some(&flags),
-                Some(&open),
-            )
-            .or_else(|| {
-                bn.cabin
-                    .omsi_nearest(here, &search_list, is_buying, false, Some(&flags), None)
-            });
+        // ... unless that leaves the buyer no door at all (`last` on a bus whose rear door
+        // sells no tickets): then they go to an allowed door as anybody else would, instead
+        // of never boarding.
+        let search_list = if restrict_noticketsale && search_list.iter().all(Option::is_none) {
+            list.clone()
+        } else {
+            search_list
+        };
+        // Rear door boarding (#4055): the doors past the front one count too, open or shut,
+        // so the nearest one wins instead of the queue filing to the front. A door that stays
+        // shut while another of the bus is open - a bus whose script never opens it - sends
+        // the passenger back to the open doors after half the `DOOR_GIVE_UP` wait, so the
+        // option cannot leave anybody standing at a door that will not open.
+        let pt = if self.rear_door_boarding {
+            let fallback = p
+                .door_since
+                .is_some_and(|since| self.time - since > DOOR_GIVE_UP * 0.5);
+            bn.cabin
+                .entry_nearest(here, &search_list, is_buying, &flags, &open, fallback)
+        } else {
+            bn.cabin
+                .omsi_nearest(
+                    here,
+                    &search_list,
+                    is_buying,
+                    false,
+                    Some(&flags),
+                    Some(&open),
+                )
+                .or_else(|| {
+                    bn.cabin
+                        .omsi_nearest(here, &search_list, is_buying, false, Some(&flags), None)
+                })
+        };
         let p = self.pax_mut(i).unwrap();
         if let Some(q) = pt.and_then(|k| bn.cabin.graph.points.get(k)) {
             p.target = q.as_dvec3();
@@ -711,8 +732,20 @@ impl PeopleSim {
         // for good: after `DOOR_GIVE_UP` the place is given back and the person waits at the
         // stop again, for this bus only once it opens a door (they stood at its doors for
         // ten minutes and more).
-        let at_shut_door = p.st == 2 && !bn.entry_open.iter().any(|o| *o);
-        let (since, give_up) = shut_door_wait(p.door_since, self.time, at_shut_door);
+        // (with rear door boarding the door they stand at is what counts, #4055: one other
+        // door being open does not send them away, but their own staying shut for
+        // `DOOR_GIVE_UP` takes them back to the open ones - see `choose_entry`)
+        let walking_to_open_fallback = p.st == 1
+            && open
+            && p.door_since
+                .is_some_and(|s| self.time - s > DOOR_GIVE_UP * 0.5);
+        let at_shut_door =
+            p.st == 2 && (!bn.entry_open.iter().any(|o| *o) || (self.rear_door_boarding && !open));
+        let (since, give_up) = if walking_to_open_fallback {
+            (p.door_since, false)
+        } else {
+            shut_door_wait(p.door_since, self.time, at_shut_door)
+        };
         self.pax_mut(i).unwrap().door_since = since;
         if give_up {
             if let Some(k) = p.seat {

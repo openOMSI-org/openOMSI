@@ -25,6 +25,9 @@ struct RemoteView {
     inside_sounds: Option<omsi_audio::SoundSet>,
     /// The driver at the wheel (their bus stood empty here), hidden while they walk about.
     driver: Option<crate::driver::DriverFigure>,
+    /// Its driver figure and its destination displays are left out this frame (#2538: it is
+    /// far away, or the game is struggling).
+    reduced: bool,
     /// The figure (`Pose::figure`) the driver was made for: made again when another comes.
     /// (Made once, it kept the figure guessed before their INFO named theirs - one of the
     /// map's drivers -, and on foot they were a passenger picked by their id.)
@@ -38,6 +41,10 @@ pub(crate) struct LanView {
     remotes: hashbrown::HashMap<u32, RemoteView>,
     /// The world's reader of vehicle sets, lent to `omsi_lan::remote_load` while this lives.
     prefetching: Option<omsi_lan::remote_load::Lent>,
+    /// Whether the frame rate has this game struggling, for how finely the others are drawn.
+    budget: omsi_lan::others::Budget,
+    pub(crate) fps: f32,
+    pub(crate) others_detail: bool,
 }
 
 impl LanView {
@@ -148,14 +155,38 @@ pub(crate) fn apply_lan(
         }
     }
     // draw them like AI traffic
+    let struggling = view.budget.step(view.fps);
+    let enabled = view.others_detail;
     for (id, rv) in game.remotes.iter_mut() {
         let Some(v) = view.remotes.get_mut(id) else {
             continue;
         };
-        if v.driver_for.as_deref() != Some(rv.last.figure.as_str())
+        // (#2538) far away, or with the game struggling, only the bus itself: its driver and
+        // its destination displays are what nobody reads from there (the bus we ride in is
+        // never thinned)
+        let inside = frame.inside_of == Some(*id);
+        let distance = frame
+            .listener
+            .map(|l| (rv.vehicle().position - l).length())
+            .unwrap_or(0.0);
+        let reduced = omsi_lan::others::detail(enabled, distance, inside, struggling)
+            == omsi_lan::others::Detail::Reduced;
+        if reduced && !v.reduced {
+            // (#2538) Retain the driver figure in v.driver to avoid reallocating meshes, materials,
+            // and scene instances on repeated transitions across the distance or FPS threshold.
+            // Hide its scene instances while detail is reduced.
+            if let Some(d) = v.driver.as_mut() {
+                d.hide(r, scene);
+            }
+        }
+        v.reduced = reduced;
+        if !reduced
+            && v.driver_for.as_deref() != Some(rv.last.figure.as_str())
             && !rv.stand_in
             && !omsi_net::is_parked(*id)
         {
+            // (#2538) Allocate a new driver figure only when the figure identity changes,
+            // reusing the retained figure across detail transitions.
             v.driver_for = Some(rv.last.figure.clone());
             if let Some(mut d) = v.driver.take() {
                 d.hide(r, scene);
@@ -170,16 +201,18 @@ pub(crate) fn apply_lan(
                 1000 + *id as u64,
             );
         }
-        if let Some(d) = v.driver.as_mut() {
-            d.update(
-                r,
-                scene,
-                rv.vehicle(),
-                &v.render,
-                dt.max(1.0 / 120.0),
-                rv.last.walker.is_none(),
-                false,
-            );
+        if !reduced {
+            if let Some(d) = v.driver.as_mut() {
+                d.update(
+                    r,
+                    scene,
+                    rv.vehicle(),
+                    &v.render,
+                    dt.max(1.0 / 120.0),
+                    rv.last.walker.is_none(),
+                    false,
+                );
+            }
         }
         // drawn as the own bus is: its outside meshes from outside, its inside ones to
         // whoever stands in it (the outside and the AI meshes together fought over the
@@ -223,6 +256,7 @@ fn made(w: &World, r: &Renderer, scene: &mut Scene, rv: &RemoteVehicle) -> Remot
         sounds: Vec::new(),
         inside_sounds: None,
         driver: None,
+        reduced: false,
         driver_for: None,
     };
     if !rv.stand_in && !rv.fallback {

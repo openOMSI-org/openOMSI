@@ -22,8 +22,9 @@ pub(crate) const TEMPORAL_MASK_FORMAT: mx::TextureFormat = mx::TextureFormat::R1
 /// bits of picture over the scene. 8 m is about 290 km/h at 10 fps.
 const MAX_FRAME_JUMP: f32 = 8.0;
 
-/// How much `upscale.wgsl` sharpens DLSS's result: DLSS no longer sharpens itself, FSR 3 does.
-const DLSS_SHARPEN: f32 = 0.25;
+/// How much `upscale.wgsl` sharpens DLSS's result unless the settings say otherwise
+/// (`RenderOptions::dlss_sharpness`): DLSS no longer sharpens itself, FSR 3 does.
+pub const DLSS_SHARPEN: f32 = 0.25;
 
 /// How much `upscale.wgsl` sharpens MetalFX's result, which MetalFX never sharpens itself. Chosen
 /// on St-Servan's pictures with `METALFX_MIP_BIAS`: 0.6 brought the gauges' numbers and the bark
@@ -639,7 +640,9 @@ impl Renderer {
         // (`upscale.wgsl`'s third mode: the upscalers return the sRGB-encoded numbers they were
         // given, and writing them to the sRGB window unconverted would encode them twice)
         let sharpen = match d.runtime.method() {
-            mx_upscale::Method::Dlss | mx_upscale::Method::DlssRayReconstruction => DLSS_SHARPEN,
+            mx_upscale::Method::Dlss | mx_upscale::Method::DlssRayReconstruction => {
+                self.options.dlss_sharpness.clamp(0.0, 1.0)
+            }
             mx_upscale::Method::MetalFxTemporal | mx_upscale::Method::MetalFxSpatial => {
                 METALFX_SHARPEN
             }

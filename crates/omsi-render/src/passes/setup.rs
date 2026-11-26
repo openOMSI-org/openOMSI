@@ -81,6 +81,46 @@ impl Renderer {
             && (self.temporal_failed || self.temporal_pipes.is_none())
         {
             self.fall_back_without_upscaler(scene);
+        } else if self
+            .upscaler_retry
+            .is_some_and(|(at, _)| at.elapsed() >= crate::pipelines::errors::OUT_OF_MEMORY_SPELL)
+        {
+            self.retry_upscaler(scene);
+        }
+        // the device turning the frames' work away, frame after frame: a resource of the
+        // renderer's that could not be made is made again, and if that does not help either,
+        // the device is taken for lost (the game starts anew)
+        let refused = self
+            .errors
+            .refused_submits
+            .swap(0, std::sync::atomic::Ordering::Relaxed)
+            > 0;
+        let mut run = self.errors.rejected.get();
+        let verdict = run.frame(refused);
+        self.errors.rejected.set(run);
+        match verdict {
+            crate::pipelines::errors::Rejected::Fine => {}
+            crate::pipelines::errors::Rejected::Rebuild => {
+                log::error!(
+                    "the graphics card refused {} frames in a row: the renderer is built again",
+                    crate::pipelines::errors::REJECTED_FRAMES
+                );
+                self.rebuild_in_place(scene, self.options);
+            }
+            crate::pipelines::errors::Rejected::Lost => {
+                log::error!(
+                    "the graphics card still refuses every frame after the renderer was built again: the device is taken for lost"
+                );
+                *self
+                    .errors
+                    .device_lost
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(format!(
+                    "Unknown: {} frames in a row refused, also after a rebuild",
+                    crate::pipelines::errors::REJECTED_FRAMES
+                ));
+                return false;
+            }
         }
         true
     }
@@ -233,8 +273,11 @@ impl Renderer {
             scene,
             &eye,
             enhanced_frame,
-            lighting.lamp_shadows
-                && self.options.light_shadows > 0
+            // (the saloon's lamps always have their maps in the Enhanced picture - the
+            // seats', the handrails' and the partitions' shadows under them; the street's
+            // and the headlamps' follow `light_shadows`, see `LampTiles::tiles`)
+            enhanced_frame
+                && lighting.lamp_shadows
                 && with_overlays
                 && projection.is_none()
                 && self.shadows.shadow_pipelines.len() > 6,
@@ -303,8 +346,16 @@ impl Renderer {
             scene.camera_bind_group = None;
             self.targets.hdr_targets.clear();
         }
-        // (the window's clouds at its size: the camera group reads them)
-        if enhanced && lead_view && self.ensure_cloud_targets(width, height) {
+        // (the window's clouds at its size: the camera group reads them. With an upscaler
+        // they are traced from the window's size, not from the smaller picture it is given:
+        // DLSS Balanced drew a 1680x1050 window at 974x609, and the clouds marched at a
+        // quarter of that, 244x153, came out blurred on top of the upscaler's own blur)
+        let cloud_size = if temporal_frame {
+            (full_w, full_h)
+        } else {
+            (width, height)
+        };
+        if enhanced && lead_view && self.ensure_cloud_targets(cloud_size.0, cloud_size.1) {
             scene.camera_bind_group = None;
         }
         // (the ground albedo picture only while that pass can run)
@@ -322,6 +373,9 @@ impl Renderer {
                 .is_some_and(|rt| rt.ensure_targets(&self.device, width, height))
         {
             // the camera bind group must point at the new lighting texture
+            scene.camera_bind_group = None;
+        }
+        if rt_frame && self.ensure_rt_gi(width, height) {
             scene.camera_bind_group = None;
         }
         if masked_frame {
@@ -508,6 +562,11 @@ impl Renderer {
                     if v.overcast { 1.0 } else { 0.0 },
                     ro.z as f32,
                 ],
+                moon: lighting
+                    .moon_dir
+                    .normalize_or_zero()
+                    .extend(crate::lighting::MOON_RADIUS)
+                    .to_array(),
             };
             self.queue
                 .write_buffer(&self.sky.vanilla_sky_buf, 0, bytemuck::bytes_of(&u));
@@ -599,7 +658,12 @@ impl Renderer {
                 lighting.cloud_offset[0],
                 lighting.cloud_offset[1],
                 // (2: the traced lighting, full size, see `ao_at`)
-                if rt_frame {
+                if rt_frame
+                    && self.options.rt_gi
+                    && self.rt.as_ref().is_some_and(|r| r.gi_view().is_some())
+                {
+                    3.0
+                } else if rt_frame {
                     2.0
                 } else if ao_on {
                     1.0
@@ -748,7 +812,7 @@ impl Renderer {
                 camera.near,
             );
             self.prepare_ray_tracing(
-                scene, camera, lighting, vp_mat, proj, f.width, f.height, f.dt,
+                scene, camera, lighting, vp_mat, proj, f.width, f.height, f.dt, f.grid,
             );
             clock.stage(self, "ray tracing", "mirror.ray tracing");
         }

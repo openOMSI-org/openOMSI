@@ -17,10 +17,31 @@ pub const DEFAULT_CAP: u64 = if cfg!(any(target_os = "ios", target_os = "android
     700_000_000
 };
 const MAX_ENTRY: u64 = 1 << 30;
-const TOUCH_AFTER: Duration = Duration::from_secs(3600);
 const STALE_TEMP: Duration = Duration::from_secs(600);
 const ENTRY_EXT: &str = "tex";
 const TEMP_EXT: &str = "tmp";
+
+/// What the cache did since the game started (`DiskCache::stats`): whether a map's textures
+/// come from it at the second start, or the cache throws out at every start what the same
+/// start reads again later (its cap is 700 MB, a large map's textures several GB).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DiskCacheStats {
+    pub hits: u64,
+    pub misses: u64,
+    pub stored: u64,
+    pub stored_bytes: u64,
+    /// Textures not stored: the cache was full of this start's own.
+    pub refused: u64,
+    /// Entries of earlier starts removed to make room, and their bytes.
+    pub evicted: u64,
+    pub evicted_bytes: u64,
+}
+
+static STATS: [AtomicU64; 7] = [const { AtomicU64::new(0) }; 7];
+
+fn count(i: usize, n: u64) {
+    STATS[i].fetch_add(n, Ordering::Relaxed);
+}
 
 pub struct DiskCache {
     dir: PathBuf,
@@ -94,11 +115,31 @@ impl DiskCache {
             .as_ref()
     }
 
+    /// What every cache did since the game started.
+    pub fn stats() -> DiskCacheStats {
+        let g = |i: usize| STATS[i].load(Ordering::Relaxed);
+        DiskCacheStats {
+            hits: g(0),
+            misses: g(1),
+            stored: g(2),
+            stored_bytes: g(3),
+            refused: g(4),
+            evicted: g(5),
+            evicted_bytes: g(6),
+        }
+    }
+
     pub fn dir(&self) -> &Path {
         &self.dir
     }
 
     pub(crate) fn load(&self, key: &Key) -> Option<Entry> {
+        let entry = self.load_entry(key);
+        count(if entry.is_some() { 0 } else { 1 }, 1);
+        entry
+    }
+
+    fn load_entry(&self, key: &Key) -> Option<Entry> {
         let path = self.dir.join(&key.name);
         let file = File::open(&path).ok()?;
         let md = file.metadata().ok()?;
@@ -108,12 +149,11 @@ impl DiskCache {
         let mut buf = Vec::with_capacity(md.len() as usize);
         file.take(MAX_ENTRY).read_to_end(&mut buf).ok()?;
         let entry = parse(&buf, key)?;
-        if md
-            .modified()
-            .ok()
-            .and_then(|m| m.elapsed().ok())
-            .is_none_or(|age| age > TOUCH_AFTER)
-        {
+        // (an entry read by this start is marked used by it, once: the trim takes only what
+        // no start since has read. Marked only after an hour, a map larger than the cap,
+        // started again within the hour, lost at every second start all the entries the
+        // start before had read, and that start read none from the cache)
+        if md.modified().ok().is_none_or(|m| m < self.started) {
             let _ = File::options()
                 .write(true)
                 .open(&path)
@@ -124,6 +164,7 @@ impl DiskCache {
 
     pub(crate) fn store(&self, key: &Key, t: &TextureData, info: Prepared) {
         if self.full.load(Ordering::Relaxed) {
+            count(4, 1);
             return;
         }
         let Some(body) = serialise(key, t, info) else {
@@ -134,6 +175,7 @@ impl DiskCache {
         }
         let len = body.len() as u64;
         if !self.admit(len) {
+            count(4, 1);
             return;
         }
         #[cfg(test)]
@@ -159,6 +201,8 @@ impl DiskCache {
         }
         budget.pending -= len;
         if stored {
+            count(2, 1);
+            count(3, len);
             budget.on_disk = Some((budget.on_disk.unwrap_or(0) + len).saturating_sub(replaced));
         }
     }
@@ -212,6 +256,8 @@ impl DiskCache {
             }
             if std::fs::remove_file(&path).is_ok() {
                 total -= len;
+                count(5, 1);
+                count(6, len);
             }
         }
         total
@@ -1058,5 +1104,59 @@ mod tests {
                 .iter()
                 .all(|p| p.extension().is_some_and(|x| x == ENTRY_EXT))
         );
+    }
+
+    /// A map whose textures outgrow the cap, started again and again: the textures a start
+    /// reads first (the first tiles round the player, the timetable's vehicles) are read from
+    /// the cache at every start after the first, and the cache does not throw out at every
+    /// start what that start reads again (L2 of the optimization plan: a 700 MB cap against
+    /// several GB of a large map's textures).
+    #[test]
+    fn a_map_larger_than_the_cap_keeps_its_first_textures_from_start_to_start() {
+        let s = Scratch::new("churn");
+        let (_, bytes) = pictures().into_iter().next().unwrap();
+        let probe = s.cache(DEFAULT_CAP);
+        let path = write(&s.0, "p0.tga", &bytes);
+        load_gpu_cached(&bytes, &path, ON, Some(&probe)).unwrap();
+        let one = s
+            .entries()
+            .iter()
+            .map(|p| std::fs::metadata(p).unwrap().len())
+            .sum::<u64>();
+        std::fs::remove_dir_all(s.0.join("cache")).unwrap();
+        let paths: Vec<PathBuf> = (0..10)
+            .map(|i| write(&s.0, &format!("t{i}.tga"), &bytes))
+            .collect();
+        let cap = one * 4 + one / 2;
+        let mut hits_by_start = Vec::new();
+        for start in 0..5u64 {
+            // (ten minutes between the starts: what the last start wrote is older than this
+            // one, and younger than the hour after which a hit marks an entry used)
+            for e in s.entries() {
+                let m = std::fs::metadata(&e).unwrap().modified().unwrap();
+                File::options()
+                    .write(true)
+                    .open(&e)
+                    .unwrap()
+                    .set_modified(m - Duration::from_secs(600))
+                    .unwrap();
+            }
+            let cache = s.cache(cap);
+            let mut hits = Vec::new();
+            for (i, p) in paths.iter().enumerate() {
+                let key = Key::new(&bytes, p, ON).unwrap();
+                if cache.dir().join(key.name()).exists() {
+                    hits.push(i);
+                }
+                load_gpu_cached(&bytes, p, ON, Some(&cache)).unwrap();
+            }
+            hits_by_start.push((start, hits));
+        }
+        for (start, hits) in &hits_by_start[1..] {
+            assert!(
+                hits.starts_with(&[0, 1, 2, 3]),
+                "start {start} read {hits:?} from the cache (every start: {hits_by_start:?})"
+            );
+        }
     }
 }

@@ -286,6 +286,16 @@ impl WorldData {
         }
     }
 
+    /// Whether the rain is kept off the road at world (x, y, z), `z` the road's height there:
+    /// something the picture draws as ground - a bridge deck, a canopy over a forecourt, the
+    /// ground over a tunnel - stands 1.5 to 60 m over it. Enhanced keeps the road dry there
+    /// (its dry map, which has the roofs of buildings as well: those are not ground here, so
+    /// a tyre in a depot hall still throws spray), and the tyres throw no spray from it.
+    pub fn roofed_at(&self, x: f64, y: f64, z: f64) -> bool {
+        self.drawn_ground(x, y, z + 60.0)
+            .is_some_and(|g| g > z + 1.5)
+    }
+
     /// Local visible road plane under a vehicle: the exact faces where there are any (raster
     /// heights are coarser). Choose the nearby deck, never a roof above it.
     pub fn puddle_surface(&self, position: DVec3) -> Option<(f64, glam::Vec3)> {

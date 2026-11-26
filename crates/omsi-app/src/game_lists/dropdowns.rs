@@ -708,6 +708,10 @@ pub(super) fn sync_live(app: &mut App) {
         r.options.cloud_shadows = live.cloud_shadows;
         r.options.light_glow = live.light_glow;
         r.options.volumetric_fog = live.volumetric_fog;
+        // (and DLSS's sharpening, read at every upscaled frame)
+        r.options.dlss_sharpness = live.dlss_sharpness;
+        // (and the traced global illumination, while the ray tracing runs)
+        r.options.rt_gi = live.rt_gi;
     }
     let s = &app.settings;
     if let Some(w) = app.world.as_ref() {
@@ -725,27 +729,10 @@ pub(super) fn sync_live(app: &mut App) {
         n.light = s.is_light_theme();
     }
     if let Some(h) = app.session.humans.as_mut() {
-        h.exact_fare = s.exact_fare;
-        h.transfer_percent = if app
-            .args
-            .passenger_connections_allowed(app.net.lan.is_some())
-            && s.passenger_connections
-        {
-            s.passenger_transfer_percent
-        } else {
-            0.0
-        };
-        h.visual_hailing = s.passenger_hailing && s.passenger_animation == "enhanced";
-        h.visual_full_bus_reaction =
-            s.passenger_full_bus_reaction && s.passenger_animation == "enhanced";
-        h.bad_driving = s.pax_bad_driving;
-        h.boarding = s.boarding.clone();
-        h.stand_chance = s.standing_chance;
-        h.short_rides_stand = s.pax_short_rides_stand;
-        h.voices = match s.pax_voices.as_str() {
-            "off" => 2,
-            "tickets" => 1,
-            _ => 0,
-        };
+        h.apply_settings(
+            s,
+            app.args
+                .passenger_connections_allowed(app.net.lan.is_some()),
+        );
     }
 }

@@ -20,6 +20,7 @@ const LOADING_BACKGROUND: wgpu::Color = wgpu::Color {
 };
 
 /// The game window's start while its renderer is being built (see `App::create_window`).
+#[rustfmt::skip]
 pub(crate) struct WindowStart {
     start: crate::startup::RendererStart,
     /// The map of a session given on the command line, opened on a worker meanwhile.
@@ -35,6 +36,7 @@ pub(crate) struct WindowStart {
 
 /// The log's word on the window's first picture (how long the start took to show anything).
 /// (A hidden window's - OMSI_HIDDEN_WINDOW - is drawn and not shown: said all the same.)
+#[rustfmt::skip]
 fn first_picture(started: Instant, shown: bool) {
     static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if (shown || omsi_cfg::flags::OMSI_HIDDEN_WINDOW.is_set())
@@ -52,6 +54,7 @@ fn first_picture(started: Instant, shown: bool) {
     }
 }
 
+#[rustfmt::skip]
 pub(crate) struct App {
     pub(crate) args: Args,
     /// What draws the picture besides the renderer and the scene (see `GfxState`).
@@ -108,6 +111,7 @@ pub(crate) struct App {
     pub(crate) pipeline: crate::sim_thread::Pipeline,
 }
 
+#[rustfmt::skip]
 impl App {
     #[cfg(windows)]
     pub(crate) fn vr_active(&self) -> bool {
@@ -815,30 +819,9 @@ impl App {
                     if let Some(lan) = self.net.lan.as_ref() {
                         h.set_lan_seed(lan::population_seed(lan));
                     }
-                    h.exact_fare = self.settings.exact_fare;
                     // Until owner handoff is validated, connections are single-player only.
-                    h.transfer_percent = if self
-                        .args
-                        .passenger_connections_allowed(self.net.lan.is_some())
-                        && self.settings.passenger_connections
-                    {
-                        self.settings.passenger_transfer_percent
-                    } else {
-                        0.0
-                    };
-                    h.visual_hailing = self.settings.passenger_hailing
-                        && self.settings.passenger_animation == "enhanced";
-                    h.visual_full_bus_reaction = self.settings.passenger_full_bus_reaction
-                        && self.settings.passenger_animation == "enhanced";
-                    h.bad_driving = self.settings.pax_bad_driving;
-                    h.boarding = self.settings.boarding.clone();
-                    h.stand_chance = self.settings.standing_chance;
-                    h.short_rides_stand = self.settings.pax_short_rides_stand;
-                    h.voices = match self.settings.pax_voices.as_str() {
-                        "off" => 2,
-                        "tickets" => 1,
-                        _ => 0,
-                    };
+                    let transfers = self.args.passenger_connections_allowed(self.net.lan.is_some());
+                    h.apply_settings(&self.settings, transfers);
                     if let Some(p) = self.player.as_mut() {
                         h.set_cabin(&mut p.vehicle);
                         h.ticket_key = ticket_key_name(&self.args.root, &p.bindings);
@@ -897,6 +880,11 @@ impl App {
                         }
                         Err(e) => log::error!("traffic: {e:#}"),
                     }
+                    crate::perf_report::log_load_memory(
+                        "the first tiles and the traffic",
+                        &renderer,
+                        &scene,
+                    );
                     if self.args.schedule {
                         let mut sch =
                             schedule::Schedule::new(&self.args.root, &w, &start_clock(&self.args));
@@ -906,12 +894,20 @@ impl App {
                                 lan::population_seed(lan) ^ 0x746f_7572_5f62_7573,
                             );
                         }
+                        let centers: Vec<glam::DVec3> =
+                            self.player.as_ref().map(|p| p.vehicle.position).into_iter().collect();
                         sch.precache(
                             &w,
                             &renderer,
                             &mut scene,
                             self.session.traffic.as_mut(),
                             parse_time(&self.args.time),
+                            &centers,
+                        );
+                        crate::perf_report::log_load_memory(
+                            "the timetable's vehicles",
+                            &renderer,
+                            &scene,
                         );
                         if let (Some(line), Some(p)) = (&self.args.line, self.player.as_mut()) {
                             self.session.duty = match sch.player_duty(
@@ -1259,6 +1255,7 @@ impl App {
 /// Where a streamed map loads around while it starts: the vehicle's spawn point (a bus must
 /// stand on ground when it appears, whatever `--cam` says), and the camera unless the view
 /// follows the bus (every view but the free camera does, `--cam` or not).
+#[rustfmt::skip]
 pub(crate) fn start_centers(args: &Args, cam: &Camera, world: Option<&World>) -> Vec<DVec3> {
     let mut out: Vec<DVec3> = spawn_point(args, world).into_iter().collect();
     let view_in_bus = args.bus.is_some() && args.view != "free";
@@ -1271,6 +1268,7 @@ pub(crate) fn start_centers(args: &Args, cam: &Camera, world: Option<&World>) ->
 /// What the map needs and this installation lacks, said on the screen and written to
 /// `~/.openomsi/missing_content.txt` by add-on folder: a map short of an add-on showed
 /// holes, bare roads and white objects, and nobody could tell that from a fault of the game.
+#[rustfmt::skip]
 pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>) {
     let (files, textures) = w.missing_content();
     if files.is_empty() && textures.is_empty() {
@@ -1333,17 +1331,21 @@ pub(crate) fn report_missing_content(w: &World, msg: &mut Option<(String, f32)>)
     }
 }
 
+#[rustfmt::skip]
 fn wrap_deg(a: f32) -> f32 {
     (a + 180.0).rem_euclid(360.0) - 180.0
 }
 
 /// A bus whose mirrors are frozen, and the seconds since they were first drawn.
+#[rustfmt::skip]
 pub(crate) struct FrozenMirrors {
     pub(crate) bus: u64,
     pub(crate) since: f32,
 }
 
+#[rustfmt::skip]
 #[derive(Default)]
+#[rustfmt::skip]
 pub(crate) struct CamBlend {
     /// (view, camera numbers) of the last frame: a change of the numbers inside the same
     /// view is a camera switch.
@@ -1370,7 +1372,9 @@ pub(crate) struct CamBlend {
 
 /// A small difference between two pictures of the camera (world position, angles in degrees,
 /// field of view) that is eased out instead of being cut.
+#[rustfmt::skip]
 #[derive(Clone, Copy)]
+#[rustfmt::skip]
 pub(crate) struct CamCarry {
     pub pos: glam::DVec3,
     pub yaw: f32,
@@ -1379,6 +1383,7 @@ pub(crate) struct CamCarry {
     pub fov: f32,
 }
 
+#[rustfmt::skip]
 impl CamCarry {
     /// `a` minus `b`.
     pub fn between(a: &omsi_render::Camera, b: &omsi_render::Camera) -> Self {
@@ -1416,6 +1421,7 @@ impl CamCarry {
     }
 }
 
+#[rustfmt::skip]
 crate::app::stage_ctx!(
     /// The streaming stage's part of the game.
     StreamingCx {
@@ -1428,6 +1434,7 @@ crate::app::stage_ctx!(
 /// the free camera flies off); when the loaded set changed, hand the new data to whatever
 /// keeps its own copy (the bus's obstacles, the traffic network, the navigator, the
 /// street lamps).
+#[rustfmt::skip]
 pub(crate) fn streaming(cx: StreamingCx) {
     let mut centers: Vec<DVec3> = cx.view.camera.iter().map(|c| c.position).collect();
     centers.extend(cx.player.player.iter().map(|p| p.vehicle.position));

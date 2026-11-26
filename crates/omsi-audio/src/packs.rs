@@ -81,6 +81,9 @@ impl Default for PackInfo {
     }
 }
 
+/// How many frames a pack counts after its last update.
+const KEEP_FRAMES: u64 = 60;
+
 /// A pack as it was updated this frame.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Pack {
@@ -91,7 +94,7 @@ pub(crate) struct Pack {
     pub entries: usize,
 }
 
-/// A frame's packs (in the order they were updated), sorted for `maxcount`.
+/// The packs of a frame, sorted for `maxcount`.
 #[derive(Default)]
 struct Sorted {
     /// Every pack sorted.
@@ -141,13 +144,24 @@ impl Sorted {
     }
 }
 
-/// The engine's record of the packs: this frame's, and the last one's sorted.
+/// The engine's record of the packs: those in being, and how they sorted at the end of the
+/// last frame.
+///
+/// Omsi.exe sorts all its packs every frame. Here a pack is known by its updates, and not
+/// every set is updated in every frame (the traffic's and the people's only in the frames
+/// the simulation ticks, see `SimTicks::view_due`): sorted over one frame's updates alone,
+/// a far car was heard after each frame without the traffic and cut after the next, its
+/// loops starting over several times a second. So a pack counts for [`KEEP_FRAMES`] after
+/// its last update.
 #[derive(Default)]
 pub(crate) struct Packs {
-    frame: Vec<Pack>,
-    /// Where each of this frame's packs is in `frame` (a set updated twice in a frame is
-    /// one pack, where it was last).
+    /// The packs, in the order they came in, each with the frame of its last update.
+    known: Vec<(Pack, u64)>,
+    /// Where each of them is in `known`.
     at: HashMap<u64, usize>,
+    frame: u64,
+    /// Was any pack updated since the last sort?
+    updated: bool,
     last: Sorted,
 }
 
@@ -155,11 +169,12 @@ impl Packs {
     /// Pack `p` is updated: whether it may be heard (as sorted at the end of the last
     /// frame).
     pub(crate) fn heard(&mut self, p: Pack) -> bool {
+        self.updated = true;
         match self.at.get(&p.id) {
-            Some(&i) => self.frame[i] = p,
+            Some(&i) => self.known[i] = (p, self.frame),
             None => {
-                self.at.insert(p.id, self.frame.len());
-                self.frame.push(p);
+                self.at.insert(p.id, self.known.len());
+                self.known.push((p, self.frame));
             }
         }
         !self.last.too_far(&p)
@@ -170,15 +185,26 @@ impl Packs {
         self.last.too_far.contains(&id)
     }
 
-    /// The frame is over: sort its packs for the next one. (A frame without any keeps the
+    /// The frame is over: sort the packs for the next one. (A frame without any keeps the
     /// last one's: the listener set twice in a frame.)
     pub(crate) fn end_frame(&mut self, maxcount: i32) {
-        if self.frame.is_empty() {
+        if !std::mem::take(&mut self.updated) {
             return;
         }
-        self.last = Sorted::of(&mut self.frame, maxcount);
-        self.frame.clear();
-        self.at.clear();
+        let frame = self.frame;
+        self.frame += 1;
+        let before = self.known.len();
+        self.known.retain(|k| frame - k.1 < KEEP_FRAMES);
+        if self.known.len() != before {
+            self.at = self
+                .known
+                .iter()
+                .enumerate()
+                .map(|(i, k)| (k.0.id, i))
+                .collect();
+        }
+        let mut packs: Vec<Pack> = self.known.iter().map(|k| k.0).collect();
+        self.last = Sorted::of(&mut packs, maxcount);
     }
 }
 
@@ -266,6 +292,36 @@ mod tests {
             p.is_too_far(1) && !p.is_too_far(2),
             "now the other way round"
         );
+    }
+
+    /// The traffic's sounds are updated in the frames the simulation ticks, the scenery's in
+    /// every frame, the listener set in every frame: a far car stays cut all along rather
+    /// than start again in each frame that follows one without the traffic.
+    #[test]
+    fn a_pack_stays_cut_through_frames_that_do_not_update_the_others() {
+        let mut p = Packs::default();
+        let (near, far, scenery) = (pack(1, 0.5, 10), pack(2, 2.0, 10), pack(3, 0.1, 1));
+        p.heard(scenery);
+        p.heard(near);
+        p.heard(far);
+        p.end_frame(5);
+        for tick in 0..40 {
+            // a frame between two ticks
+            p.heard(scenery);
+            p.end_frame(5);
+            // and the next with the traffic
+            p.heard(scenery);
+            assert!(p.heard(near), "tick {tick}");
+            assert!(!p.heard(far), "tick {tick}");
+            p.end_frame(5);
+        }
+        // a pack no longer updated is forgotten, and its entries no longer count
+        for _ in 0..=KEEP_FRAMES {
+            p.heard(scenery);
+            p.heard(far);
+            p.end_frame(5);
+        }
+        assert!(p.heard(far));
     }
 
     #[test]

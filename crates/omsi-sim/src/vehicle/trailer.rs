@@ -99,6 +99,9 @@ pub struct TrailerPart {
     pub(super) rest: Vec<(f32, f32, f32)>,
     /// The share of its weight the part hangs on its coupling with (N; see `joint_load`).
     pub(super) joint_load: f32,
+    /// The weight of the people aboard this part (kg, the `passenger_mass` setting; see
+    /// `VehicleInstance::set_passenger_load`).
+    pub load_kg: f32,
     /// `Axle_Brakeforce_<axle>_L/R` of this part's axles, in the leading vehicle's scripts.
     pub(super) v_brakes: Vec<Option<omsi_script::VarId>>,
     /// How far the part's origin stands above the ground under its axles (m).
@@ -110,6 +113,10 @@ pub struct TrailerPart {
     pub(super) axle_z: Option<f64>,
     /// How fast the axle's height moves (m/s), for the road part's springs (see `follow`).
     pub(super) axle_vz: f64,
+    /// The turning of the part's driven wheels (rad/s) and whether they spin against the
+    /// road, as the leading body's step left them (see `CoupledPart::drive_step`).
+    pub(super) drive_spin: f32,
+    pub(super) drive_slipping: bool,
     /// The track under its turning axle, when it runs on rails (`VehicleInstance::retrail`):
     /// it stands at the track's height, not on whatever the ground probe finds there.
     pub(super) track: Option<DVec3>,
@@ -398,6 +405,8 @@ impl TrailerPart {
             bank: 0.0,
             axle_z: None,
             axle_vz: 0.0,
+            drive_spin: 0.0,
+            drive_slipping: false,
             rail_bogies: None,
             sway: None,
             track: None,
@@ -424,6 +433,7 @@ impl TrailerPart {
             turned_put: 0.0,
             remote: false,
             reversed,
+            load_kg: 0.0,
             text_textures: Vec::new(),
             axle_ids: AxleVarIds::default(),
             skin_rest: Vec::new(),
@@ -599,6 +609,7 @@ impl TrailerPart {
         self.axle_z = None;
         self.track = None;
         self.kappa = 0.0;
+        (self.drive_spin, self.drive_slipping) = (0.0, false);
     }
 
     /// Where this part couples to the part in front of it, in the world, with the leading
@@ -988,14 +999,41 @@ impl TrailerPart {
         if let Some(id) = self.v_beta {
             main.state.vars[id as usize] = beta as f32;
         }
-        let rpm =
-            main.physics.velocity_kmh() / 3.6 / (2.0 * std::f32::consts::PI * self.wheel_radius)
-                * 60.0;
+        // A road part rolls at the speed of the vehicle times the cosine of the joint's
+        // angle, a train's car at the leading one's, and each axle's wheels turn by that over
+        // their own size: Omsi.exe 0x7de798 gives a coupled road part that speed (+0x30c),
+        // 0x7def5c a train's car the head's, then 0x7debb0 the wheels 2·v/d. (They all
+        // turned at the vehicle's speed over the part's first axle.)
+        let lead_speed = main.physics.velocity_kmh() / 3.6;
+        let speed = if main.ty.def.is_rail() {
+            lead_speed
+        } else {
+            part_speed(lead_speed, alpha as f32)
+        };
+        // (turned round, its wheels turn the other way, +0x4e0)
+        let speed = if self.reversed { -speed } else { speed };
         let turned = self.odometer / self.wheel_radius;
-        let step = turned - self.turned_put;
+        let rolled = (turned - self.turned_put) * self.wheel_radius;
+        let rolled = if self.reversed { -rolled } else { rolled };
         self.turned_put = turned;
+        // the driven wheels spinning on the road turn as fast as they spin
+        let spinning = self.drive_slipping.then_some(self.drive_spin);
         for a in 0..self.axle_count {
             let steer = self.axle_steer(a);
+            let diameter = self
+                .ty
+                .def
+                .axles
+                .get(a)
+                .map_or(2.0 * self.wheel_radius, |x| x.wheel_diameter.max(0.2));
+            let rpm = super::update::ai_wheel_rpm(speed, diameter);
+            let step = rolled / (diameter / 2.0);
+            let (step, rpm) = match spinning {
+                Some(w) if self.ty.def.axles.get(a).is_some_and(|x| x.driven) => {
+                    (w * dt, w * 60.0 / std::f32::consts::TAU)
+                }
+                _ => (step, rpm),
+            };
             for side in 0..2 {
                 if let (Some(Some(id)), Some(s)) =
                     (self.axle_ids.steering.get(a).map(|s| s[side]), steer)
@@ -1054,6 +1092,27 @@ impl TrailerPart {
         crate::anim::apply_parents(&self.animators, &mut self.mesh_transforms);
         self.props_plan.refresh(&self.ty, index);
         self.props_plan.apply(vars, &mut self.mesh_props);
+        self.props_plan
+            .apply_emission(dt, vars, &mut self.mesh_props);
+        // (its own dirt overlay goes where the road dirt takes its place, as the leading
+        // vehicle's does: `road_dirt::procedural_for`)
+        if super::road_dirt::procedural_for(
+            &self.ty.def,
+            main.road_dirt_drawn
+                .load(std::sync::atomic::Ordering::Relaxed),
+        ) {
+            for &(i, slot, wiped) in &self.props_plan.dirt {
+                if let Some(a) = self
+                    .mesh_props
+                    .get_mut(i)
+                    .and_then(|p| p.slot_alpha.get_mut(slot))
+                {
+                    if !wiped {
+                        *a = 0.0;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1125,4 +1184,11 @@ impl TrailerPart {
             }
         }
     }
+}
+
+/// The speed (m/s) a coupled road part rolls at: the vehicle's `speed` times the cosine of
+/// the joint's angle `alpha_deg` (Omsi.exe 0x7de798 sets the part's +0x30c so, which its
+/// wheels then turn by, 0x7debb0).
+pub(super) fn part_speed(speed: f32, alpha_deg: f32) -> f32 {
+    speed * alpha_deg.to_radians().cos()
 }

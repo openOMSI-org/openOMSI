@@ -84,7 +84,7 @@ impl SeasonChoice {
 
     /// The month of the phase (1..12) at `latitude` (degrees north): March, April, May for
     /// the northern spring, half a year later south of the equator.
-    pub fn month(&self, latitude: f64) -> u32 {
+    pub fn month(&self, lat_deg: f64) -> u32 {
         let first = match self.season {
             SeasonName::Spring => 3,
             SeasonName::Summer => 6,
@@ -96,19 +96,19 @@ impl SeasonChoice {
             Phase::Mid => 1,
             Phase::Late => 2,
         };
-        let south = if latitude < 0.0 { 6 } else { 0 };
+        let south = if lat_deg < 0.0 { 6 } else { 0 };
         (first + step + south - 1) % 12 + 1
     }
 
     /// The phase's typical day (month, day): early in its month for the early phase (the
     /// season has just begun), the middle for the middle, later for the late one.
-    pub fn day(&self, latitude: f64) -> (u32, u32) {
+    pub fn day(&self, lat_deg: f64) -> (u32, u32) {
         let d = match self.phase {
             Phase::Early => 10,
             Phase::Mid => 15,
             Phase::Late => 20,
         };
-        (self.month(latitude), d)
+        (self.month(lat_deg), d)
     }
 
     /// The two texture looks of the phase and the share of the plants in the second (see
@@ -163,24 +163,24 @@ pub fn phase_word(p: Phase) -> &'static str {
 }
 
 /// The map's latitude (degrees north) from its `timezone.txt`, else Berlin's as the sun's.
-pub fn map_latitude(root: &Path, map: &str) -> f64 {
+pub fn map_lat_deg(root: &Path, map: &str) -> f64 {
     let cfg = omsi_cfg::resolve_path(root, map);
     cfg.parent()
         .and_then(|dir| omsi_map::TimeZone::load(&omsi_cfg::resolve_path(dir, "timezone.txt")).ok())
         .and_then(|tz| tz.lat_lon())
         .map(|(lat, _)| lat)
-        .unwrap_or(omsi_sim::daylight::SunPlace::default().latitude)
+        .unwrap_or(omsi_sim::daylight::SunPlace::default().lat_deg)
 }
 
 /// The date of `choice` in `year` at `latitude`, or `date` itself (`(year, month, day)`)
 /// when that already lies in the phase's month: a date the player set within the phase
 /// (Christmas in early winter) stays; one outside it goes to the phase's typical day.
-pub fn phase_date(choice: SeasonChoice, date: (i32, u32, u32), latitude: f64) -> (i32, u32, u32) {
+pub fn phase_date(choice: SeasonChoice, date: (i32, u32, u32), lat_deg: f64) -> (i32, u32, u32) {
     let (year, month, _) = date;
-    if month == choice.month(latitude) {
+    if month == choice.month(lat_deg) {
         return date;
     }
-    let (m, d) = choice.day(latitude);
+    let (m, d) = choice.day(lat_deg);
     (year, m, d)
 }
 

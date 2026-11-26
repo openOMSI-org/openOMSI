@@ -822,30 +822,11 @@ impl App {
                     if let Some(lan) = self.net.lan.as_ref() {
                         h.set_lan_seed(lan::population_seed(lan));
                     }
-                    h.exact_fare = self.settings.exact_fare;
                     // Until owner handoff is validated, connections are single-player only.
-                    h.transfer_percent = if self
+                    let transfers = self
                         .args
-                        .passenger_connections_allowed(self.net.lan.is_some())
-                        && self.settings.passenger_connections
-                    {
-                        self.settings.passenger_transfer_percent
-                    } else {
-                        0.0
-                    };
-                    h.visual_hailing = self.settings.passenger_hailing
-                        && self.settings.passenger_animation == "enhanced";
-                    h.visual_full_bus_reaction = self.settings.passenger_full_bus_reaction
-                        && self.settings.passenger_animation == "enhanced";
-                    h.bad_driving = self.settings.pax_bad_driving;
-                    h.boarding = self.settings.boarding.clone();
-                    h.stand_chance = self.settings.standing_chance;
-                    h.short_rides_stand = self.settings.pax_short_rides_stand;
-                    h.voices = match self.settings.pax_voices.as_str() {
-                        "off" => 2,
-                        "tickets" => 1,
-                        _ => 0,
-                    };
+                        .passenger_connections_allowed(self.net.lan.is_some());
+                    h.apply_settings(&self.settings, transfers);
                     if let Some(p) = self.player.as_mut() {
                         h.set_cabin(&mut p.vehicle);
                         h.ticket_key = ticket_key_name(&self.args.root, &p.bindings);
@@ -904,6 +885,11 @@ impl App {
                         }
                         Err(e) => log::error!("traffic: {e:#}"),
                     }
+                    crate::perf_report::log_load_memory(
+                        "the first tiles and the traffic",
+                        &renderer,
+                        &scene,
+                    );
                     if self.args.schedule {
                         let mut sch =
                             schedule::Schedule::new(&self.args.root, &w, &start_clock(&self.args));
@@ -913,12 +899,24 @@ impl App {
                                 lan::population_seed(lan) ^ 0x746f_7572_5f62_7573,
                             );
                         }
+                        let centers: Vec<glam::DVec3> = self
+                            .player
+                            .as_ref()
+                            .map(|p| p.vehicle.position)
+                            .into_iter()
+                            .collect();
                         sch.precache(
                             &w,
                             &renderer,
                             &mut scene,
                             self.session.traffic.as_mut(),
                             parse_time(&self.args.time),
+                            &centers,
+                        );
+                        crate::perf_report::log_load_memory(
+                            "the timetable's vehicles",
+                            &renderer,
+                            &scene,
                         );
                         if let (Some(line), Some(p)) = (&self.args.line, self.player.as_mut()) {
                             self.session.duty = match sch.player_duty(

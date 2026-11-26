@@ -16,7 +16,7 @@ pub fn apply_season_date(args: &mut Args) {
     if args.situation.is_some() {
         return;
     }
-    let lat = map_latitude(&args.root, &args.map);
+    let lat = map_lat_deg(&args.root, &args.map);
     let c = start_clock(args);
     let code = c.date_code();
     let now = (code / 10000, (code / 100 % 100) as u32, (code % 100) as u32);

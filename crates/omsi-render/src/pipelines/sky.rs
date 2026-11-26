@@ -14,6 +14,7 @@ pub(crate) struct SkyBase {
     pub cloud_base_view: wgpu::TextureView,
     pub cloud_curl_view: wgpu::TextureView,
     pub cloud_sampler: wgpu::Sampler,
+    pub moon_view: wgpu::TextureView,
     pub cloud_shape_cpu: crate::lighting::CloudCpu,
     /// Where the screen's clouds were traced from (`CloudView`, binding 12).
     pub cloud_view_buf: wgpu::Buffer,
@@ -50,6 +51,7 @@ impl SkyBase {
                 uniform_entry(10, wgpu::ShaderStages::FRAGMENT),
                 float_texture_entry(11),
                 uniform_entry(12, wgpu::ShaderStages::FRAGMENT),
+                float_texture_entry(13),
             ],
         });
         let clouds = cloud_noise_textures(device, queue, enhanced);
@@ -83,6 +85,7 @@ impl SkyBase {
             cloud_base_view: clouds.base,
             cloud_curl_view: clouds.curl,
             cloud_sampler: clouds.sampler,
+            moon_view: crate::sky::moon_texture(device, queue),
             cloud_shape_cpu: clouds.cpu,
             cloud_view_buf,
             vanilla_buf,

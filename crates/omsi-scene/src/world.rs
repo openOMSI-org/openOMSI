@@ -47,8 +47,9 @@ pub struct World {
     pub(super) vehicle_textures: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
     pub(super) player_textures: Arc<Mutex<hashbrown::HashSet<PathBuf>>>,
     pub(super) freetex_reloads: Arc<FreeTextureReloads>,
-    /// GPU meshes of vehicles by (bus file, mesh index), shared across paint schemes.
-    pub(super) vehicle_meshes: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,
+    /// GPU meshes of vehicles by (bus file, mesh index, the mesh file's stamp), shared across
+    /// paint schemes (see `MeshKey`: a mesh rebuilt on disk is a new key, #2618).
+    pub(super) vehicle_meshes: Arc<Mutex<HashMap<MeshKey, (MeshId, usize)>>>,
     /// Vehicle meshes and textures made on a worker, until their set is uploaded.
     pub(super) vehicle_ready: Arc<Mutex<PreparedVehicles>>,
     /// Textures uploaded as RGBA to spare a frame, being compressed on the workers, and the
@@ -862,6 +863,11 @@ impl World {
     /// Ground height (road surface where present, else terrain) at world x, y.
     pub fn ground_height(&self, x: f64, y: f64) -> Option<f64> {
         self.data.peek().ground_height(x, y)
+    }
+
+    /// Whether the rain is kept off the road at world (x, y, z) (see `WorldData::roofed_at`).
+    pub fn roofed_at(&self, x: f64, y: f64, z: f64) -> bool {
+        self.data.peek().roofed_at(x, y, z)
     }
 
     /// The wetness a puddle would use at world (x, y) (see `WorldData::wet_road_at`).

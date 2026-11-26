@@ -258,6 +258,26 @@ pub(crate) fn career_step(
     crash
 }
 
+/// The people aboard the player's bus as part of its weight (the `passenger_mass` setting,
+/// #4014): each rider where they are, by the bus's sections. Off, a bus that carried some
+/// sheds them once and stays as its file makes it.
+pub(crate) fn passenger_load_step(
+    p: &mut Player,
+    humans: Option<&omsi_sim::people::PeopleSim>,
+    weight: omsi_sim::people::PassengerWeight,
+) {
+    if !weight.on() {
+        if p.vehicle.passenger_load_kg() > 0.0 {
+            p.vehicle.set_passenger_load(&[]);
+        }
+        return;
+    }
+    let loads = humans
+        .map(|h| h.player_loads(1 + p.vehicle.trailers.len(), weight))
+        .unwrap_or_default();
+    p.vehicle.set_passenger_load(&loads);
+}
+
 /// The cabin air of the player's bus and the condensation on its glass, `dt` on.
 pub(crate) fn cabin_air_step(
     cabin: &mut crate::condensation::CabinAir,
@@ -428,7 +448,7 @@ pub(crate) fn duty_step(
     learn_loaded: bool,
     plugin_events: Option<&mut Vec<omsi_plugin::GameEvent>>,
     announce: bool,
-) {
+) -> Option<String> {
     if let Some(stop) = p.html_next_stop.take() {
         if d.skip_to(stop) {
             let (trip, k) = d.trip_for_ibis();
@@ -442,11 +462,30 @@ pub(crate) fn duty_step(
     let served = d.update(&mut p.vehicle, time);
     // (the depot file's second recording of each stop, for the maps that keep two: a stock
     // IBIS steps on by itself only when a stop is left - see `auto_announce`)
+    let mut note = None;
     if announce {
         // (seconds of play, not the time of day: a night line runs past midnight, and a
         // clock that wraps would hold every press back until the same time the next day)
         let run = game_clock.unwrap_or(&p.vehicle.host.clock).run_time;
         p.announce.step(d, &mut p.vehicle, run);
+        // (#3281) where the game cannot announce, it says so once a trip rather than leaving the
+        // player to guess
+        if let Some(reason) = p.announce.take_note() {
+            use omsi_sim::timetable_run::announce::QuietReason;
+            let text = match reason {
+                QuietReason::SingleRecordingHof => {
+                    "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for."
+                }
+                QuietReason::NoIbisKey => {
+                    "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own."
+                }
+                QuietReason::NoBusstopCounter => {
+                    "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+                }
+                QuietReason::Off => "Automatic announcements are off.",
+            };
+            note = Some(omsi_ui::tr(text).into_owned());
+        }
     }
     // (also one ended between frames: the last stop skipped from the menu; a trip reopened
     // by a page counts from its start again, and its next end is told too)
@@ -511,14 +550,12 @@ pub(crate) fn duty_step(
         }
     }
     career.trip_driven(d.trip_run());
-    if d.take_trip_change() && p.duty_typed {
-        let (trip, stop) = d.trip_for_ibis();
-        p.set_duty_destination(trip, stop);
-    }
+    p.update_duty_ibis(d);
     let mut fonts = world.fonts.lock();
     if let Err(e) = crate::schedule_paper::update_vehicle(&mut p.vehicle, d, &mut fonts) {
         log::warn!("driver timetable paper: {e:#}");
     }
+    note
 }
 
 /// The tyres' spray (see `puddles`): what every vehicle's tyres throw up from the water on
@@ -566,7 +603,11 @@ pub(crate) fn throw_spray(
                 .map(|(id, r)| (puddles::REMOTE_KEY | *id as u64, r.vehicle())),
         );
     }
-    spray.frame(dt, &vehicles, eye, wind, &|x, y| {
+    spray.frame(dt, &vehicles, eye, wind, &|x, y, z| {
+        // (none under a bridge or a canopy: Enhanced draws the road dry there)
+        if world.roofed_at(x, y, z) {
+            return puddles::Water::default();
+        }
         puddles::water_at(x, y, world.wet_road_at(x, y, wetness))
     });
 }

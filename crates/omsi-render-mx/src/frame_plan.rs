@@ -59,6 +59,9 @@ pub(crate) struct Batch {
     /// on a dry frame the main pass draws it with the `LEAN` pipelines (`Lean::Glass`: those
     /// that keep the glass's branch).
     pub(crate) lean: Lean,
+    /// A vehicle's part (`GpuMesh::vehicle`) whose material shows the rain's drops
+    /// (`takes_drops`).
+    pub(crate) vehicle: bool,
 }
 
 /// Turn draw items into batches, appending their entries to `list`. `sort`: the order does
@@ -89,6 +92,11 @@ pub(crate) fn batch_items(
                 .materials
                 .get(last.1 as usize)
                 .map_or(Lean::No, |m| material_lean(&m.uniform)),
+            vehicle: scene.meshes[d.mesh as usize].vehicle
+                && scene
+                    .materials
+                    .get(last.1 as usize)
+                    .is_some_and(|m| takes_drops(&m.uniform)),
         });
     };
     if sort {
@@ -520,18 +528,27 @@ pub(crate) enum Lean {
     Glass,
     /// the `LEAN` pipelines: opaque, alpha-tested or terrain - never glass
     Plain,
+    /// as `Plain`, but a carriageway: not in a snowy frame, whose lean pipelines leave the
+    /// built-up snow on the roads out (`road_snow` in a `LEAN` pipeline brought Apple's
+    /// shader compiler down: the service crashed on each of them, and every lean pipeline
+    /// of the snow was left out for good)
+    PlainRoad,
 }
 
 /// The main pass's pipeline key of a batch: its `pipe`, with a lean bit when the frame may
 /// (`FrameCtx::lean`), the pass has those pipelines and the material needs no more, and the
-/// frame's weather with it.
+/// frame's weather with it. A vehicle's part on a wet frame takes the full pipelines: the
+/// rain's drops on its paint and mirrors are only there (the lean pipelines with them were
+/// more than Apple's M4 shader compiler service took, `vehicle_drops`).
 pub(crate) fn main_key(pp: &PassPipelines, frame: FrameLean) -> impl Fn(&Batch) -> u16 + '_ {
     let lean = frame.lean && pp.lean.is_some();
     let weather = (frame.weather() as u16) << WEATHER_SHIFT;
     move |b: &Batch| {
         b.pipe as u16
             | match b.lean {
+                _ if frame.wet && b.vehicle => 0,
                 Lean::Plain if lean => LEAN_PIPE | weather,
+                Lean::PlainRoad if lean && !frame.snow => LEAN_PIPE | weather,
                 Lean::Glass if lean && lean_glass_kind(b.pipe / 4) => LEAN_GLASS_PIPE | weather,
                 _ => 0,
             }
@@ -561,9 +578,17 @@ pub(crate) fn lean_glass_kind(kind: u8) -> bool {
     matches!(kind, PIPE_BLEND | PIPE_BLEND_NO_WRITE)
 }
 
+/// Whether a vehicle's material shows the rain's drops (`vehicle_drops` in the scene shader):
+/// a glossy paint (one with an environment map) or an outside mirror (unlit, `params.y`
+/// 0.9). The rest of a vehicle - its saloon, its seats, its dashboard - keeps the lean
+/// pipelines on a wet frame (all of it in the full ones cost a cab view some 2 ms on an M4).
+pub(crate) fn takes_drops(m: &MaterialUniform) -> bool {
+    m.params2[1] > 0.0 || (m.params[1] > 0.85 && m.params[1] < 0.95)
+}
+
 /// Which of the branches the `LEAN` scene pipelines leave out (see `override LEAN` in the
 /// scene shader) a material may take: none, when it is not the map's water, has no bump or
-/// PBR maps, is no LED panel, no pane's film, no glow and not a season's snow pane; and
+/// PBR maps or factors, is no LED panel, no pane's film, no glow and not a season's snow pane; and
 /// glass only when it is blended and no terrain.
 pub(crate) fn material_lean(m: &MaterialUniform) -> Lean {
     let terrain = m.extra[0] > 0.5;
@@ -573,9 +598,14 @@ pub(crate) fn material_lean(m: &MaterialUniform) -> Lean {
         && m.emissive[3] >= -1.5
         && m.emissive[3] <= 1.5
         && m.glow[0] <= 0.0
-        && !(m.wipe_bounds[2] != 0.0 && m.wipe_bounds[3] < 0.0);
+        // (a base colour alone is drawn by the lean pipelines; the other PBR factors not)
+        && m.base_color[3] < 1.5
+        && m.emission[3] <= 0.0
+        && m.wipe_bounds[3] >= 0.0;
     if !plain_branches {
         Lean::No
+    } else if m.params[0] < 1.5 && !terrain && m.params2[2] > 0.0 {
+        Lean::PlainRoad
     } else if m.params[0] < 1.5 || terrain {
         Lean::Plain
     } else {

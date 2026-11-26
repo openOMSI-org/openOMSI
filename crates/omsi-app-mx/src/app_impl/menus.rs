@@ -372,11 +372,12 @@ impl App {
         };
         match id {
             "load" => {
-                self.close_game_menu();
-                if self.load_quicksave() {
-                    self.finish_session();
-                    crate::platform::exit(event_loop);
-                }
+                let quicksave = self
+                    .integrations
+                    .plugin_command
+                    .then(|| self.quicksave_file())
+                    .flatten();
+                self.choose_load(quicksave);
             }
             "quit" => {
                 self.menus.game_menu = None;
@@ -887,7 +888,7 @@ pub(crate) const GAME_MENU: [(&str, &str); 17] = [
     ("endduty", "End the tour"),
     ("save", "Save the situation"),
     ("saveslot", "Save to a slot..."),
-    ("load", "Load the quicksave"),
+    ("load", "Load a situation..."),
     ("shot", "Screenshot"),
     ("photo", "Photo mode"),
     ("quit", "End the session"),

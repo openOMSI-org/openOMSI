@@ -202,6 +202,23 @@ impl LanView {
             else {
                 continue;
             };
+            // (#2538) a bus drawn less finely has no destination display here: the worker is
+            // not asked for its textures, and the ones it had go back
+            if v.reduced {
+                if !v.pixels.slots.is_empty() {
+                    for slot in v.pixels.slots.clone() {
+                        override_slot(v, &slot, None);
+                    }
+                    v.pixels.slots.clear();
+                    v.pixels.generation = 0;
+                }
+                for id in std::mem::take(&mut v.pixels.textures).into_values() {
+                    r.free_texture(scene, id);
+                }
+                v.pixels.bytes.clear();
+                v.pixels.schema = None;
+                continue;
+            }
             let Some(schema) = rv.freetex_subscription_table() else {
                 if v.pixels.welcome.take().is_some() {
                     for slot in v.pixels.slots.clone() {

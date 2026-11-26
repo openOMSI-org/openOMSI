@@ -1,0 +1,425 @@
+use super::*;
+use crate::{LanSession, PROTOCOL, Pose, WorldInfo};
+use std::net::UdpSocket;
+use std::time::{Duration, Instant};
+
+fn addr(s: &str) -> SocketAddr {
+    s.parse().unwrap()
+}
+
+fn raw() -> UdpSocket {
+    let s = UdpSocket::bind(("127.0.0.1", 0)).unwrap();
+    s.set_read_timeout(Some(Duration::from_millis(20))).unwrap();
+    s
+}
+
+fn knock(s: &UdpSocket, host: &mut LanSession, nonce: Option<u64>) -> Option<String> {
+    let port = host.local_addr().unwrap().port();
+    let nonce = nonce.map(|n| format!("{n:016x}")).unwrap_or_default();
+    let msg = format!("HELLO|{PROTOCOL}|-|p||m|1989-05-30|32400|||{nonce}");
+    let mut buf = [0u8; 1500];
+    for _ in 0..20 {
+        let _ = s.send_to(msg.as_bytes(), ("127.0.0.1", port));
+        host.tick(0.02, &Pose::default());
+        while let Ok((n, _)) = s.recv_from(&mut buf) {
+            let t = String::from_utf8_lossy(&buf[..n]).to_string();
+            if t.starts_with("WELCOME|") || t.starts_with("REJECT|") {
+                return Some(t);
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn a_move_is_proven_only_with_the_secret_and_a_challenge_for_that_address() {
+    let r = Rebind::new();
+    let secret = random_bytes::<16>();
+    let from = addr("198.51.100.4:5000");
+    let c = r.challenge(7, from);
+    let hex = format!("{c:016x}");
+    let good = format!("{:016x}", proof(&secret, c));
+    assert!(r.proven(7, from, &secret, &hex, &good));
+    assert!(!r.proven(7, from, &random_bytes::<16>(), &hex, &good));
+    assert!(!r.proven(7, addr("198.51.100.5:5000"), &secret, &hex, &good));
+    assert!(!r.proven(8, from, &secret, &hex, &good));
+    assert!(!r.proven(
+        7,
+        from,
+        &secret,
+        &format!("{:016x}", c ^ 1),
+        &format!("{:016x}", proof(&secret, c ^ 1))
+    ));
+    assert!(!r.proven(7, from, &secret, "", ""));
+    let s = random_bytes::<16>();
+    assert_eq!(parse_secret(&secret_hex(&s)), Some(s));
+    assert_eq!(parse_secret("abc"), None);
+}
+
+#[test]
+fn a_nonce_overheard_does_not_move_a_player_but_its_own_game_does() {
+    let mut host = LanSession::host(28250, "host", WorldInfo::default(), true).unwrap();
+    let port = host.local_addr().unwrap().port();
+    let mut c = LanSession::join(
+        &format!("127.0.0.1:{port}"),
+        "c",
+        WorldInfo::default(),
+        Duration::from_millis(10),
+    )
+    .unwrap();
+    c.heartbeat = 0.05;
+    let t0 = Instant::now();
+    while !host.peers.get(&c.my_id).is_some_and(|p| p.settled)
+        && t0.elapsed() < Duration::from_secs(5)
+    {
+        c.tick(0.05, &Pose::default());
+        host.tick(0.05, &Pose::default());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let id = c.my_id;
+    let home = host.peers[&id].addr;
+    assert!(home.is_some() && c.rebind_secret.is_some());
+    let thief = raw();
+    let msg = format!(
+        "HELLO|{PROTOCOL}|-|c||m|1989-05-30|32400|||{:016x}",
+        c.nonce
+    );
+    let mut buf = [0u8; 1500];
+    let mut challenge = None;
+    for _ in 0..20 {
+        let _ = thief.send_to(msg.as_bytes(), ("127.0.0.1", port));
+        host.tick(0.02, &Pose::default());
+        if let Ok((n, _)) = thief.recv_from(&mut buf) {
+            let t = String::from_utf8_lossy(&buf[..n]).to_string();
+            assert!(!t.starts_with("WELCOME|"), "{t}");
+            challenge = t.strip_prefix("CHALLENGE|").map(str::to_string);
+            if challenge.is_some() {
+                break;
+            }
+        }
+    }
+    assert_eq!(host.peers[&id].addr, home);
+    let challenge = challenge.expect("challenged");
+    let wrong = format!(
+        "{msg}|{challenge}|{:016x}",
+        proof(
+            &random_bytes::<16>(),
+            u64::from_str_radix(&challenge, 16).unwrap()
+        )
+    );
+    let _ = thief.send_to(wrong.as_bytes(), ("127.0.0.1", port));
+    for _ in 0..10 {
+        host.tick(0.02, &Pose::default());
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(host.peers[&id].addr, home);
+    let right = format!(
+        "{msg}|{challenge}|{:016x}",
+        proof(
+            &c.rebind_secret.unwrap(),
+            u64::from_str_radix(&challenge, 16).unwrap()
+        )
+    );
+    let _ = thief.send_to(right.as_bytes(), ("127.0.0.1", port));
+    let t0 = Instant::now();
+    while host.peers[&id].addr == home && t0.elapsed() < Duration::from_secs(2) {
+        host.tick(0.02, &Pose::default());
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(host.peers[&id].addr, Some(thief.local_addr().unwrap()));
+}
+
+#[test]
+fn a_game_reconnecting_with_several_addresses_answers_the_hosts_challenge() {
+    let mut host = LanSession::host(28260, "host", WorldInfo::default(), true).unwrap();
+    let port = host.local_addr().unwrap().port();
+    let spare = raw();
+    let addrs = vec![
+        addr(&format!("127.0.0.1:{port}")),
+        spare.local_addr().unwrap(),
+    ];
+    let mut c = LanSession::join_addr(addrs, None, "c", WorldInfo::default()).unwrap();
+    c.heartbeat = 0.05;
+    let t0 = Instant::now();
+    while c.rebind_secret.is_none() && t0.elapsed() < Duration::from_secs(5) {
+        c.tick(0.05, &Pose::default());
+        host.tick(0.05, &Pose::default());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(c.rebind_secret.is_some());
+    assert!(c.reconnect());
+    assert_eq!(c.host, None);
+    let to = addr(&format!("127.0.0.1:{}", c.local_addr().unwrap().port()));
+    host.send(b"CHALLENGE|00000000000000ab", to);
+    let stranger = raw();
+    let _ = stranger.send_to(b"CHALLENGE|00000000000000cd", to);
+    let t0 = Instant::now();
+    while c.answer.is_none() && t0.elapsed() < Duration::from_secs(2) {
+        c.tick(0.0, &Pose::default());
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(c.answer, Some(0xab));
+}
+
+#[test]
+fn a_hello_overheard_before_the_player_settles_does_not_get_the_secret() {
+    let mut host = LanSession::host(28270, "host", WorldInfo::default(), true).unwrap();
+    let real = raw();
+    let first = knock(&real, &mut host, Some(0x4444)).unwrap();
+    assert!(
+        parse_secret(first.split('|').nth(11).unwrap_or("")).is_some(),
+        "{first}"
+    );
+    let thief = raw();
+    let stolen = knock(&thief, &mut host, Some(0x4444)).unwrap();
+    assert!(stolen.starts_with("WELCOME|"), "{stolen}");
+    assert_eq!(
+        parse_secret(stolen.split('|').nth(11).unwrap_or("")),
+        None,
+        "{stolen}"
+    );
+    let again = knock(&real, &mut host, Some(0x4444)).unwrap();
+    assert!(
+        parse_secret(again.split('|').nth(11).unwrap_or("")).is_some(),
+        "{again}"
+    );
+}
+
+#[test]
+fn a_stranger_from_outside_who_names_no_session_is_not_told_it() {
+    let mut host = LanSession::host(28280, "host", WorldInfo::default(), true).unwrap();
+    let hex = crate::session_hex(host.session);
+    assert_eq!(host.welcome_session(addr("203.0.113.5:4000"), false), "-");
+    assert_eq!(host.welcome_session(addr("203.0.113.5:4000"), true), hex);
+    assert_eq!(host.welcome_session(addr("127.0.0.1:4000"), false), hex);
+    assert_eq!(host.welcome_session(addr("192.168.1.20:4000"), false), hex);
+    host.tell_strangers_the_session();
+    assert_eq!(host.welcome_session(addr("203.0.113.5:4000"), false), hex);
+}
+
+#[test]
+fn a_ban_holds_the_address_as_well_as_the_nonce() {
+    let bans = vec![Ban {
+        nonce: Some(5),
+        ip: Some("203.0.113.9".parse().unwrap()),
+        why: "griefing".into(),
+    }];
+    assert_eq!(
+        banned(&bans, Some(5), addr("192.0.2.1:1")),
+        Some("griefing")
+    );
+    assert_eq!(
+        banned(&bans, Some(6), addr("203.0.113.9:4000")),
+        Some("griefing")
+    );
+    assert_eq!(
+        banned(&bans, None, addr("203.0.113.9:4001")),
+        Some("griefing")
+    );
+    assert_eq!(banned(&bans, Some(6), addr("192.0.2.1:1")), None);
+    assert_eq!(source_ip(addr("127.0.0.1:9")), None);
+    let v6 = vec![Ban {
+        nonce: None,
+        ip: source_ip(addr("[2001:db8:5:6::1]:7")),
+        why: "v6".into(),
+    }];
+    assert_eq!(
+        banned(&v6, Some(1), addr("[2001:db8:5:6:aaaa::2]:9")),
+        Some("v6")
+    );
+    assert_eq!(banned(&v6, Some(1), addr("[2001:db8:5:7::1]:9")), None);
+    let local = raw();
+    let _g = crate::ws::GatewayClient::register(
+        local.local_addr().unwrap(),
+        "127.0.0.1".parse().unwrap(),
+    );
+    assert_eq!(source_ip(local.local_addr().unwrap()), None);
+}
+
+#[test]
+fn a_banned_player_stays_out_with_a_new_game_and_a_new_connection() {
+    let mut host = LanSession::host(28240, "host", WorldInfo::default(), true).unwrap();
+    let first = raw();
+    let _a = crate::ws::GatewayClient::register(
+        first.local_addr().unwrap(),
+        "198.51.100.4".parse().unwrap(),
+    );
+    let welcome = knock(&first, &mut host, Some(0x1111)).unwrap();
+    let id: u32 = welcome.split('|').nth(2).unwrap().parse().unwrap();
+    host.kick(id, "griefing", true);
+    let again = raw();
+    let _b = crate::ws::GatewayClient::register(
+        again.local_addr().unwrap(),
+        "198.51.100.4".parse().unwrap(),
+    );
+    assert!(
+        knock(&again, &mut host, Some(0x2222))
+            .unwrap()
+            .contains("griefing")
+    );
+    let elsewhere = raw();
+    let _c = crate::ws::GatewayClient::register(
+        elsewhere.local_addr().unwrap(),
+        "203.0.113.7".parse().unwrap(),
+    );
+    assert!(
+        knock(&elsewhere, &mut host, None)
+            .unwrap()
+            .starts_with("REJECT|")
+    );
+    let fresh = raw();
+    let _d = crate::ws::GatewayClient::register(
+        fresh.local_addr().unwrap(),
+        "203.0.113.7".parse().unwrap(),
+    );
+    assert!(
+        knock(&fresh, &mut host, Some(0x3333))
+            .unwrap()
+            .starts_with("WELCOME|")
+    );
+}
+
+fn knock_hw(
+    s: &UdpSocket,
+    host: &mut LanSession,
+    nonce: u64,
+    name: &str,
+    hw: &str,
+) -> Option<String> {
+    let port = host.local_addr().unwrap().port();
+    let msg = format!("HELLO|{PROTOCOL}|-|{name}||m|1989-05-30|32400|||{nonce:016x}|||{hw}");
+    let mut buf = [0u8; 1500];
+    for _ in 0..20 {
+        let _ = s.send_to(msg.as_bytes(), ("127.0.0.1", port));
+        host.tick(0.02, &Pose::default());
+        while let Ok((n, _)) = s.recv_from(&mut buf) {
+            let t = String::from_utf8_lossy(&buf[..n]).to_string();
+            if t.starts_with("WELCOME|") || t.starts_with("REJECT|") {
+                return Some(t);
+            }
+        }
+    }
+    None
+}
+
+/// The smoke test of the hardware ban: a player is sent away and its machine banned;
+/// the same machine comes back with a new game (a new nonce), another name and another
+/// address, and is turned away; another machine joins; lifting the ban lets it in; and a
+/// later hello of a connection cannot swap the identifier it joined with.
+#[test]
+fn a_banned_machine_stays_out_whatever_the_game_calls_itself() {
+    let hw = |n: u8| format!("{:032x}", 0xabcd_0000u128 + n as u128);
+    let mut host = LanSession::host(28290, "host", WorldInfo::default(), true).unwrap();
+    let first = raw();
+    let welcome = knock_hw(&first, &mut host, 0x1111, "Griefer", &hw(1)).unwrap();
+    assert!(welcome.starts_with("WELCOME|"), "{welcome}");
+    let id: u32 = welcome.split('|').nth(2).unwrap().parse().unwrap();
+    assert_eq!(host.peer_hardware_id(id), Some(hw(1).as_str()));
+    // (the same connection says another identifier later: the first one holds)
+    let port = host.local_addr().unwrap().port();
+    let _ = first.send_to(
+        format!(
+            "HELLO|{PROTOCOL}|-|Griefer||m|1989-05-30|32400|||{:016x}|||{}",
+            0x1111,
+            hw(2)
+        )
+        .as_bytes(),
+        ("127.0.0.1", port),
+    );
+    host.tick(0.02, &Pose::default());
+    assert_eq!(host.peer_hardware_id(id), Some(hw(1).as_str()));
+    // the ban: the player is sent away at once, and the door holds the machine
+    host.set_hardware_bans(vec![(hw(1), "griefing".into())]);
+    assert!(host.peer_hardware_id(id).is_none(), "sent away");
+    let again = raw();
+    let rejected = knock_hw(&again, &mut host, 0x2222, "Somebody Else", &hw(1)).unwrap();
+    assert!(
+        rejected.starts_with("REJECT|")
+            && rejected.contains("banned")
+            && rejected.contains("griefing"),
+        "{rejected}"
+    );
+    let third = raw();
+    assert!(
+        knock_hw(&third, &mut host, 0x3333, "Griefer", &hw(1))
+            .unwrap()
+            .starts_with("REJECT|")
+    );
+    // another machine is not touched, and a game that sends none is let in (unless required)
+    let other = raw();
+    assert!(
+        knock_hw(&other, &mut host, 0x4444, "Friend", &hw(9))
+            .unwrap()
+            .starts_with("WELCOME|")
+    );
+    let old = raw();
+    assert!(
+        knock(&old, &mut host, Some(0x5555))
+            .unwrap()
+            .starts_with("WELCOME|")
+    );
+    host.require_hardware_id(true);
+    let old2 = raw();
+    assert!(
+        knock(&old2, &mut host, Some(0x6666))
+            .unwrap()
+            .contains("REJECT|"),
+        "needs the identifier"
+    );
+    host.require_hardware_id(false);
+    // lifted: the machine may join again
+    host.set_hardware_bans(Vec::new());
+    let back = raw();
+    assert!(
+        knock_hw(&back, &mut host, 0x7777, "Griefer", &hw(1))
+            .unwrap()
+            .starts_with("WELCOME|")
+    );
+}
+
+#[test]
+fn a_host_with_a_realm_sends_it_and_lets_in_a_player_who_sends_no_identifier() {
+    let realm = "cd".repeat(16);
+    let mut host = LanSession::host(28330, "host", WorldInfo::default(), true).unwrap();
+    host.set_ban_realm(&realm);
+    let s = raw();
+    let port = host.local_addr().unwrap().port();
+    let msg = format!("HELLO|{PROTOCOL}|-|p||m|1989-05-30|32400|||{:016x}", 0x8888);
+    let mut buf = [0u8; 1500];
+    let mut got = String::new();
+    for _ in 0..20 {
+        let _ = s.send_to(msg.as_bytes(), ("127.0.0.1", port));
+        host.tick(0.02, &Pose::default());
+        if let Ok((n, _)) = s.recv_from(&mut buf) {
+            got = String::from_utf8_lossy(&buf[..n]).to_string();
+            break;
+        }
+    }
+    assert_eq!(got, format!("REALM|{realm}"));
+    let welcome = knock_hw(&s, &mut host, 0x8888, "p", "-").unwrap();
+    assert!(welcome.starts_with("WELCOME|"), "{welcome}");
+    let id: u32 = welcome.split('|').nth(2).unwrap().parse().unwrap();
+    assert!(host.peer_hardware_id(id).is_none());
+    host.require_hardware_id(true);
+    assert!(
+        knock_hw(&raw(), &mut host, 0x9999, "q", "-")
+            .unwrap()
+            .starts_with("REJECT|")
+    );
+}
+
+/// Two players behind the web gateway count as two sources (their own addresses), not
+/// as the gateway's one loopback; a socket of this machine counts as none.
+#[test]
+fn gateway_players_are_their_own_source() {
+    let (a, b) = (addr("127.0.0.1:40101"), addr("127.0.0.1:40102"));
+    let _a = crate::ws::GatewayClient::register(a, "198.51.100.1".parse().unwrap());
+    let _b = crate::ws::GatewayClient::register(b, "198.51.100.2".parse().unwrap());
+    assert_eq!(source_ip(a), Some("198.51.100.1".parse().unwrap()));
+    assert_eq!(source_ip(b), Some("198.51.100.2".parse().unwrap()));
+    assert_eq!(source_ip(addr("127.0.0.1:40103")), None);
+    assert_eq!(
+        source_ip(addr("[2001:db8:1:2:3:4:5:6]:9")),
+        Some("2001:db8:1:2::".parse().unwrap())
+    );
+}

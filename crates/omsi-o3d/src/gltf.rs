@@ -63,12 +63,19 @@ pub fn parse_glb_or_gltf(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
             .and_then(|t| images.get(t.texture().source().index()).cloned())
             .unwrap_or_default();
         let e = m.emissive_factor();
+        // (the factors alone: with a metallic-roughness texture - which is not read - the
+        // factors scale that, and alone they would make the whole of it the texture's peak)
+        let metallic_roughness = pbr
+            .metallic_roughness_texture()
+            .is_none()
+            .then(|| [pbr.metallic_factor(), pbr.roughness_factor()].map(|v| v.clamp(0.0, 1.0)));
         b.mesh.materials.push(Material {
             diffuse: pbr.base_color_factor(),
             specular: [0.0; 3],
             emissive: e,
             specular_power: 1.0,
             texture,
+            metallic_roughness,
         });
     }
     let default_material = b.mesh.materials.len() as u16;
@@ -427,6 +434,8 @@ mod tests {
         assert_eq!(m.triangles[0].indices, [0, 2, 1]);
         assert_eq!(m.materials[0].diffuse, [1.0, 0.5, 0.5, 1.0]);
         assert_eq!(m.materials[0].texture, "tex.png");
+        // (no metallic-roughness texture: glTF's default factors, 1 and 1)
+        assert_eq!(m.materials[0].metallic_roughness, Some([1.0, 1.0]));
         assert_eq!(
             omsi_cfg::model_texture("TEX.PNG"),
             Some(dir.join("tex.png"))

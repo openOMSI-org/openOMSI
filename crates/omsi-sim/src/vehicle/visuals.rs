@@ -183,6 +183,8 @@ impl VehicleInstance {
         self.props_plan.refresh(&self.ty, &self.var_index);
         self.props_plan
             .apply(&self.state.vars, &mut self.mesh_props);
+        self.props_plan
+            .apply_emission(dt, &self.state.vars, &mut self.mesh_props);
         // Dirt overlays are engine-owned layers. A model may declare Dirt_Norm or
         // Dirt_Wiped in its cfg without putting the name in the script varlist; the
         // generic alphascale fallback is 1.0 in that case, which makes Dreck.tga an
@@ -199,6 +201,13 @@ impl VehicleInstance {
                     &self.state.vars,
                     0.0,
                 )
+            } else if super::road_dirt::procedural_for(
+                &self.ty.def,
+                self.road_dirt_drawn
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ) {
+                // (the road dirt of the enhanced picture takes its place: one or the other)
+                0.0
             } else {
                 self.dirt
             };
