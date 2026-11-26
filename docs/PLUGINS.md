@@ -490,6 +490,12 @@ end)
 
 To see what arrives, run `nc -lu 47800` in a terminal.
 
+### WebSocket feeds
+
+`omsi.ws.open(url)` opens a read-only feed to a `wss://` address in one of three slots; `omsi.ws.state(slot)` says whether it is connecting, open, reconnecting, failed or closed; `omsi.ws.poll(slot)` takes the text messages that arrived (oldest first, at most 32 kept, each up to 64 KB); `omsi.ws.close(slot)` frees the slot. The connection runs on its own thread, so the game never waits, and a broken feed opens again after 5 seconds. Nothing is ever sent to the server.
+
+The player allows hosts in `websocket-hosts.txt` in the plugins folder: one host per line (`feeds.example.org`, or a whole `wss://feeds.example.org/live`), `#` starts a comment, at most the first three lines count. With no file, or an empty one, nothing is opened. A `ws://` address, a port of its own, a user name or password, a literal IP address (even when it is on the list), a redirect and a host not on the list are refused. These functions need the `network_remote` permission.
+
 ### The telemetry file
 
 A program that only wants to follow the player's bus (a fleet map, an in-vehicle terminal, a stream overlay) can read `~/.openomsi/telemetry.json` instead of being a plugin. On Windows it is `%USERPROFILE%\.openomsi\telemetry.json`.
@@ -605,7 +611,7 @@ scripts/ibis.oop
 
 The scripts start when the vehicle becomes the player's and stop when the player changes to another vehicle or none. They see the same `omsi.*` API as any plugin, and `omsi.var` reads their own bus. In the log they are named `vehicle:<file>`.
 
-A vehicle is content from anywhere, so its scripts get only these permissions: `ui`, `storage`, `vehicle_write` and `audio`. The world, the traffic, the camera, the LAN, UDP and native programs are only for the player's own plugins. An `.oop` that declares more keeps only these four.
+A vehicle is content from anywhere, so its scripts get only these permissions: `ui`, `storage`, `vehicle_write` and `audio`. The world, the traffic, the camera, the LAN, UDP, WebSocket feeds and native programs are only for the player's own plugins. An `.oop` that declares more keeps only these four.
 
 OMSI 2 ignores the keyword and runs the vehicle's `.osc` scripts as always. A vehicle can have both.
 
@@ -625,6 +631,7 @@ Scenery objects can also have Lua scripts, named with `[lua_script]` in the `.sc
 | `camera` | moving the camera |
 | `audio` | playing sounds |
 | `network_local` | `omsi.send` (UDP to this computer) |
+| `network_remote` | `omsi.ws` (read-only feeds to hosts the player allows) |
 | `lan` | sending in a LAN session |
 | `process` | starting native helper programs |
 
@@ -632,6 +639,7 @@ Scenery objects can also have Lua scripts, named with `[lua_script]` in the `.sc
 - A compiled `.oop` has only the permissions it declares. A function that needs another one raises an error the plugin can catch. An unknown permission name grants nothing.
 - Vehicle scripts have only `ui`, `storage`, `vehicle_write` and `audio`.
 - Reading the game needs no permission.
+- `network_remote` also needs the player to allow each WebSocket host in `websocket-hosts.txt` in the plugins folder. Nothing is sent to those servers.
 - `process` also always needs the player's approval for each helper.
 
 `omsi.plugin.permissions()` lists what the plugin has. The [API reference](PLUGIN_API.md) names the permission of each function.
@@ -643,7 +651,7 @@ A Lua plugin gets Lua 5.4 with the safe libraries only: `string`, `table`, `math
 - No `io`, no `os.execute` (not through `require("os")` either), no C modules, no `dofile` or `loadfile`.
 - No binary chunks anywhere. Plugin files, modules and `load` read text only, because Lua does not check compiled code. `string.dump` gives no code.
 - A plugin writes files only in its data folder, and reads only that and its own folder. `..` and absolute paths are refused.
-- It cannot reach the network. `omsi.send` talks only to programs on this computer, on ports from 1024 up.
+- It cannot reach the network except for read-only WebSocket feeds to hosts the player allowed in `websocket-hosts.txt`. `omsi.send` talks only to programs on this computer, on ports from 1024 up.
 - It holds at most 256 MB of memory.
 
 ### Errors and limits

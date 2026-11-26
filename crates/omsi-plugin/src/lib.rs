@@ -53,13 +53,16 @@ pub mod io;
 pub mod lua;
 pub mod oop;
 mod remote;
+mod script_names;
 pub mod status;
 pub mod ui;
 pub mod wasm;
 pub mod wasm_plugin;
+pub mod ws;
 
 pub use io::*;
 pub use remote::Remote;
+pub use script_names::{OBJECT_PREFIX, VEHICLE_PREFIX, object_script_name};
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -1330,32 +1333,6 @@ impl Plugin {
     }
 }
 
-/// The prefix of the name of a plugin that belongs to a vehicle.
-pub const VEHICLE_PREFIX: &str = "vehicle:";
-/// The prefix of the name of a plugin that drives scenery objects (`[lua_script]` of a `.sco`).
-pub const OBJECT_PREFIX: &str = "object:";
-
-/// The plugin name an object script runs under: its file name plus a short hash of the whole
-/// path, so `Objects/A/gate.lua` and `Objects/B/gate.lua` are two scripts. The game loads a
-/// script and routes its events by this name alone.
-pub fn object_script_name(path: &Path) -> String {
-    let stem = path
-        .file_stem()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "script".into());
-    // FNV-1a over the path as written, with one kind of separator and no letter case
-    let mut h: u32 = 0x811c_9dc5;
-    for b in path
-        .to_string_lossy()
-        .replace('\\', "/")
-        .to_ascii_lowercase()
-        .bytes()
-    {
-        h = (h ^ u32::from(b)).wrapping_mul(0x0100_0193);
-    }
-    format!("{OBJECT_PREFIX}{stem}-{h:08x}")
-}
-
 /// Every plugin of the plugins folders.
 #[derive(Default)]
 pub struct Plugins {
@@ -1405,6 +1382,9 @@ impl Plugins {
         process_grants: api::process::ProcessGrants,
         process_permissions: Option<std::sync::Arc<api::process::ProcessPermissions>>,
     ) -> Plugins {
+        if let Some(dir) = dirs.first() {
+            ws::load_hosts(dir);
+        }
         let mut loaded: Vec<Plugin> = Vec::new();
         let mut status = status::Status::new(hosts.status_file.clone());
         let off = |name: &str, stem: &str| status::is_off(&hosts.off, name, stem);

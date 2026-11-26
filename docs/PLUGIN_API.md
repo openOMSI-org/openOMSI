@@ -37,6 +37,7 @@ A plain `.lua` plugin has every permission. Starting a native helper (`process`)
 | `camera` | moving the camera |
 | `audio` | playing sounds |
 | `network_local` | `omsi.send` (UDP to this computer) |
+| `network_remote` | `omsi.ws` (read-only feeds to hosts the player allows) |
 | `lan` | sending in a LAN session |
 | `process` | starting native helper programs |
 
@@ -2934,6 +2935,50 @@ omsi.every(0.5, function()
   omsi.send(47800, omsi.json.encode({ speed = omsi.speed() }))
 end)
 ```
+
+## Read-only WebSocket feeds
+
+`omsi.ws.*` listens to `wss://` feeds from hosts the player allowed in `websocket-hosts.txt` in the plugins folder. The connection runs on its own thread and nothing is sent to the server.
+
+### omsi.ws.close
+
+`omsi.ws.close(slot)` → true
+
+Closes the feed of `slot` and frees it for another one.
+
+Parameters: `slot` integer.
+
+*Since 0.2.22. Permission: `network_remote`.*
+
+### omsi.ws.open
+
+`omsi.ws.open(url)` → the feed's slot (0-2), or an error
+
+Opens a read-only WebSocket feed to `url` in the first free slot. Only `wss://` addresses are opened, with no port of its own, no user name or password and no literal IP address, and only to a host the player allowed in `websocket-hosts.txt` in the plugins folder; the plugin never sends anything, it only drains what the server pushes. A plugin holds 3 feeds at the same time.
+
+Parameters: `url` string.
+
+*Since 0.2.22. Permission: `network_remote`.*
+
+### omsi.ws.poll
+
+`omsi.ws.poll(slot)` → a list of the text messages that arrived
+
+Takes what arrived in the feed of `slot` since the last call (oldest first, at most a few dozen are kept: a slow plugin loses the oldest). Each message is the text of one WebSocket message, at most 64 KB.
+
+Parameters: `slot` integer.
+
+*Since 0.2.22. Permission: `network_remote`.*
+
+### omsi.ws.state
+
+`omsi.ws.state(slot)` → `connecting`, `open`, `reconnecting`, `failed` or `closed`
+
+What the feed of `slot` is doing: it connects on its own thread, so the game never waits, and a connection that breaks is opened again after 5 seconds.
+
+Parameters: `slot` integer.
+
+*Since 0.2.22. Permission: `network_remote`.*
 
 ## LAN games
 
