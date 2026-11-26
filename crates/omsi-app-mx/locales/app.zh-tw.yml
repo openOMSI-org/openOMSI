@@ -3376,6 +3376,8 @@
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "標準 Catmull-Rom 或實驗性 FSR 1；變更立即生效"
 "FSR quality": "FSR 品質"
 "FSR sharpness": "FSR 銳利度"
+"DLSS sharpness": "DLSS 銳利度"
+"How much the picture is sharpened after DLSS; 25 % as before": "DLSS 之後畫面的銳利化程度；25 % 與以往相同"
 "RCAS sharpening strength": "RCAS 銳化強度"
 "Ultra Quality (77%)": "超高品質（77%）"
 "Quality (67%)": "品質（67%）"

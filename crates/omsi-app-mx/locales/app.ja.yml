@@ -2271,6 +2271,8 @@
 "Standard Catmull-Rom or experimental FSR 1; changes show at once": "標準の Catmull-Rom か試験的な FSR 1。変更はすぐに反映されます"
 "FSR quality": "FSR の品質"
 "FSR sharpness": "FSR のシャープネス"
+"DLSS sharpness": "DLSS のシャープネス"
+"How much the picture is sharpened after DLSS; 25 % as before": "DLSS の後に画像をどれだけシャープにするか。25 % は従来どおり"
 "RCAS sharpening strength": "RCAS シャープ化の強さ"
 "Ultra Quality (77%)": "ウルトラ品質（77%）"
 "Quality (67%)": "品質（67%）"
