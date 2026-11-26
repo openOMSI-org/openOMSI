@@ -107,6 +107,16 @@ pub(super) fn traffic(cx: TrafficCx, dt: f32) {
                     s.sim.set_player_bus(Some(mine));
                 }
             }
+        } else {
+            // (on foot there is no own livery to keep out of the AI's draw)
+            if t.sim.player_livery.is_some() {
+                t.sim.set_player_livery(None);
+            }
+            if let Some(s) = cx.traffic.schedule.as_mut() {
+                if s.sim.player_bus.is_some() {
+                    s.sim.set_player_bus(None);
+                }
+            }
         }
         if let Some(s) = cx.traffic.schedule.as_mut() {
             if let Some(blocks) = s.poll_transit() {
