@@ -17,6 +17,7 @@ mod frame;
 #[cfg(test)]
 mod tests;
 
+pub use frame::DLSS_SHARPEN;
 pub(crate) use frame::*;
 pub(crate) use mx_upscale::{Constants as FrameConstants, Inputs};
 
