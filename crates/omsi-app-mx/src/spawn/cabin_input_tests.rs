@@ -172,3 +172,134 @@ fn vr_menu_release_keeps_a_short_drag_and_stops_automatic_motion() {
     assert!(moving.auto_drag.is_none());
     assert_eq!(moving.vehicle.var("releases"), Some(2.0));
 }
+
+/// #3800: a click fires the switch's trigger and nothing else; the scripts act on it in the
+/// next frame, with that frame's time (Omsi.exe 0x7bad78). The O305-based buses' charge
+/// lamp, stock MAN SD `elec.osc` logic: the battery's voltage only moves with time, and a
+/// frame of the scripts run with none at the click left it at the generator's, so the lamp
+/// lit until the next frame.
+#[test]
+fn a_click_runs_no_frame_of_the_scripts_without_time() {
+    let vehicle = crate::schedule::tests::script_test_vehicle(
+        "{trigger:cp_n}\n1 (S.L.pressed)\n{end}\n\
+         {trigger:ibox_taste_1}\n1 (S.L.flag)\n{end}\n\
+         {trigger:ibox_taste_1_drag}\n0 (S.L.flag)\n{end}\n\
+         {frame}\n\
+         1 (L.S.Timegap) -3 * exp - 24 (L.L.bat) - * (L.L.bat) + (S.L.bat)\n\
+         (L.L.gen) <\n\
+         {if} 0 (S.L.lamp) (L.L.gen) (S.L.bat) {else} 1 (S.L.lamp) {endif}\n\
+         (L.L.flag) {if} (L.L.typed) 1 + (S.L.typed) {endif}\n\
+         {end}\n",
+        "gen\nbat\nlamp\npressed\nflag\ntyped\n",
+        "",
+    );
+    let mut p = test_player(vehicle, vec![]);
+    p.vehicle.set_var("gen", 28.0);
+    p.vehicle.set_var("bat", 28.0);
+    let dt = 1.0 / 60.0;
+    p.vehicle.update(dt);
+    p.settle_click();
+    assert_eq!(p.vehicle.var("lamp"), Some(0.0));
+    p.trigger_cab_control("cp_n");
+    assert_eq!(p.vehicle.var("pressed"), Some(1.0));
+    assert_eq!(p.vehicle.var("lamp"), Some(0.0), "the click lit the lamp");
+    p.vehicle.update(dt);
+    p.settle_click();
+    assert_eq!(p.vehicle.var("lamp"), Some(0.0));
+    // a momentary key's flag is seen by one frame, then cleared (#744)
+    p.trigger_cab_control("ibox_taste_1");
+    p.release();
+    assert_eq!(p.vehicle.var("flag"), Some(1.0));
+    for _ in 0..3 {
+        p.vehicle.update(dt);
+        p.settle_click();
+    }
+    assert_eq!(p.vehicle.var("typed"), Some(1.0));
+    assert_eq!(p.vehicle.var("flag"), Some(0.0));
+    assert!(p.unframed_click.is_none());
+}
+
+/// Two taps on the ticket printer's keys before the next frame: each key's flag is read by
+/// a frame of its own, in the order they were pressed, and no frame without time runs.
+#[test]
+fn two_taps_before_a_frame_both_reach_the_scripts_in_order() {
+    let vehicle = crate::schedule::tests::script_test_vehicle(
+        "{trigger:ibox_taste_1}\n1 (S.L.flag) 1 (S.L.digit)\n{end}\n\
+         {trigger:ibox_taste_1_drag}\n0 (S.L.flag)\n{end}\n\
+         {trigger:ibox_taste_2}\n1 (S.L.flag) 2 (S.L.digit)\n{end}\n\
+         {trigger:ibox_taste_2_drag}\n0 (S.L.flag)\n{end}\n\
+         {frame}\n\
+         (L.S.Timegap) 0 = {if} (L.L.zero_frames) 1 + (S.L.zero_frames) {endif}\n\
+         (L.L.flag) {if} (L.L.typed) 10 * (L.L.digit) + (S.L.typed) {endif}\n\
+         {end}\n",
+        "flag\ndigit\ntyped\nzero_frames\n",
+        "",
+    );
+    let mut p = test_player(vehicle, vec![]);
+    let dt = 1.0 / 60.0;
+    p.trigger_cab_control("ibox_taste_1");
+    p.release();
+    p.trigger_cab_control("ibox_taste_2");
+    p.release();
+    for _ in 0..4 {
+        p.vehicle.update(dt);
+        p.settle_click();
+    }
+    assert_eq!(p.vehicle.var("typed"), Some(12.0), "both digits, in order");
+    assert_eq!(p.vehicle.var("flag"), Some(0.0));
+    assert_eq!(p.vehicle.var("zero_frames"), Some(0.0));
+    assert!(p.unframed_click.is_none());
+}
+
+/// A quick tap on one control and a drag on another, both before the next frame: the
+/// second control waits for the frame that read the first, and the motion that came while
+/// it waited drags it, not the control let go before.
+#[test]
+fn a_drag_after_a_quick_tap_before_a_frame_moves_the_second_control() {
+    let mut vehicle = crate::schedule::tests::script_test_vehicle(
+        "{trigger:knob_drag}\n(L.L.value) (L.S.mouse_y) 100 / + (S.L.value)\n{end}\n\
+         {trigger:lever_drag}\n(L.L.lever) (L.S.mouse_y) 100 / + (S.L.lever)\n{end}\n\
+         {trigger:lever}\n(L.L.lever_pressed) 1 + (S.L.lever_pressed)\n{end}\n",
+        "value\nlever\nlever_pressed\n",
+        "",
+    );
+    let ty = Arc::make_mut(&mut vehicle.ty);
+    for (k, ev) in ["knob", "lever"].into_iter().enumerate() {
+        ty.model.meshes.push(omsi_model::MeshDef {
+            mouse_event: Some(ev.into()),
+            ..Default::default()
+        });
+        ty.meshes.push(omsi_sim::vehicle::VehicleMesh {
+            def_index: k,
+            data: Default::default(),
+            file: Default::default(),
+            stamp: 0,
+            materials: vec![],
+            overrides: vec![],
+            pivot: glam::Mat4::IDENTITY,
+            viewpoint: 0,
+            skin: vec![],
+            keep_winding: false,
+        });
+    }
+    vehicle.mesh_props.resize_with(2, Default::default);
+    let mut p = test_player(vehicle, vec![]);
+    let dt = 1.0 / 60.0;
+    p.click_target(crate::player::ClickTarget::Bus(0));
+    p.release();
+    p.click_target(crate::player::ClickTarget::Bus(1));
+    p.drag(0.0, 50.0);
+    assert_eq!(p.vehicle.var("lever_pressed"), Some(0.0), "the lever waits");
+    for _ in 0..3 {
+        p.vehicle.update(dt);
+        p.settle_click();
+    }
+    assert_eq!(
+        p.vehicle.var("value"),
+        Some(0.0),
+        "the knob let go is not dragged"
+    );
+    assert_eq!(p.vehicle.var("lever_pressed"), Some(1.0));
+    assert!((p.vehicle.var("lever").unwrap() - 0.5).abs() < 1e-6);
+    assert_eq!(p.pressed_mesh, Some(1));
+}

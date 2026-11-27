@@ -342,43 +342,119 @@ impl Player {
         Some((name, false))
     }
 
+    /// Fire a cab control's press trigger. Momentary `[mouseevent]` buttons (Aachen ibox /
+    /// ticket printer, #744) set a flag in it and clear it in `_drag` / `_off`; the next
+    /// frame's scripts act on the flag, and the flag is cleared after that frame (a held
+    /// click processed again appended digits twice, `1`→`11`), see `settle_click`.
+    /// A cab control's trigger as a click fires it; while a click waits for its frame, it
+    /// waits behind that one (see [`UnframedClick`]).
+    // (no key of this app fires a cab control by its trigger yet; its tests do)
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn trigger_cab_control(&mut self, ev: &str) -> bool {
+        if let Some(click) = self.unframed_click.as_mut() {
+            click.queue(ClickTarget::Control(ev.to_string()));
+            return self.vehicle.has_trigger(ev);
+        }
+        self.fire_cab_control(ev)
+    }
+
+    fn fire_cab_control(&mut self, ev: &str) -> bool {
+        let plain = self.vehicle.trigger(ev);
+        self.unframed_click = Some(UnframedClick::new(ev));
+        plain
+    }
+
     pub(crate) fn click(&mut self, origin: DVec3, dir: Vec3, spread: f32) -> Option<usize> {
+        match self.pick_click(origin, dir, spread) {
+            Some(target) => Some(self.click_target(target)),
+            None => {
+                // (a click on nothing lets the button go)
+                match self.unframed_click.as_mut() {
+                    Some(click) => click.let_go(true),
+                    None => self.release(),
+                }
+                None
+            }
+        }
+    }
+
+    /// Press what a click found. A second click before the frame that reads the first waits
+    /// for that frame and is pressed after it, so the scripts see both, in order.
+    pub(crate) fn click_target(&mut self, target: ClickTarget) -> usize {
+        let i = target.mesh();
+        if let Some(click) = self.unframed_click.as_mut() {
+            click.let_go(true);
+            click.queue(target);
+            return i;
+        }
         self.release();
+        self.press(target);
+        i
+    }
+
+    fn pick_click(&self, origin: DVec3, dir: Vec3, spread: f32) -> Option<ClickTarget> {
         if let Some(i) = self.pick(origin, dir, spread) {
-            let ev = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
-                .mouse_event
-                .clone()
-                .unwrap();
-            log::info!("mouse event {ev}");
-            let plain = self.vehicle.trigger(&ev);
-            // Momentary `[mouseevent]` buttons (Aachen ibox / ticket printer, #744) set a
-            // flag in the press trigger and clear it in `_drag` / `_off`. The frame script
-            // is what acts on the flag. Run that frame now, before the next redraw's
-            // `_drag` (or a quick `_off`) zeroes it and the click does nothing.
-            self.vehicle.update_scripts_only(0.0);
-            // Clear the press flag immediately after the frame consumed it. Otherwise a
-            // held click can be processed again on the next `tick` (digit keys append
-            // twice: `1`→`11`, and ibox `0`/`D11` becomes `1`→`10`→`100`).
-            self.clear_momentary_mouse_flag(&ev);
-            self.pressed_mesh = Some(i);
-            self.press_info = (plain, 0.0);
-            self.auto_drag = None;
-            return Some(i);
+            return Some(ClickTarget::Bus(i));
         }
         let (ti, i) = self.pick_trailer(origin, dir, spread)?;
-        let ev = self.vehicle.trailers[ti].ty.model.meshes
-            [self.vehicle.trailers[ti].ty.meshes[i].def_index]
-            .mouse_event
-            .clone()
-            .unwrap();
-        log::info!("trailer mouse event {ev} (part {ti})");
-        if !self.vehicle.trigger_part(ti, &ev) {
-            self.vehicle.trigger(&ev);
+        Some(ClickTarget::Trailer(ti, i))
+    }
+
+    fn press(&mut self, target: ClickTarget) {
+        match target {
+            ClickTarget::Bus(i) => {
+                let ev = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
+                    .mouse_event
+                    .clone()
+                    .unwrap();
+                log::info!("mouse event {ev}");
+                let plain = self.fire_cab_control(&ev);
+                self.pressed_mesh = Some(i);
+                self.press_info = (plain, 0.0);
+                self.auto_drag = None;
+            }
+            ClickTarget::Trailer(ti, i) => {
+                let ev = self.vehicle.trailers[ti].ty.model.meshes
+                    [self.vehicle.trailers[ti].ty.meshes[i].def_index]
+                    .mouse_event
+                    .clone()
+                    .unwrap();
+                log::info!("trailer mouse event {ev} (part {ti})");
+                if !self.vehicle.trigger_part(ti, &ev) {
+                    self.vehicle.trigger(&ev);
+                }
+                self.unframed_click = Some(UnframedClick::new(&ev));
+                self.pressed_trailer_mesh = Some((ti, i));
+            }
+            ClickTarget::Control(ev) => {
+                self.fire_cab_control(&ev);
+            }
         }
-        self.vehicle.update_scripts_only(0.0);
-        self.clear_momentary_mouse_flag(&ev);
-        self.pressed_trailer_mesh = Some((ti, i));
-        Some(i)
+    }
+
+    /// After the frame that met a click: a momentary key's flag is cleared (see
+    /// `clear_momentary_mouse_flag`), a button let go before the frame is let go now, and the
+    /// next click waiting is pressed (its frame is the next one).
+    pub(crate) fn settle_click(&mut self) {
+        let Some(mut click) = self.unframed_click.take() else {
+            return;
+        };
+        self.clear_momentary_mouse_flag(&click.ev);
+        if let Some(allow_auto_drag) = click.release {
+            self.release_mouse(allow_auto_drag);
+        }
+        let mut waiting = std::mem::take(&mut click.waiting);
+        if let Some(next) = waiting.pop_front() {
+            self.press(next.target);
+            // (the mouse moved while it waited: its drag, after its press)
+            if next.motion != (0.0, 0.0) {
+                self.drag(next.motion.0, next.motion.1);
+            }
+            if let Some(pressed) = self.unframed_click.as_mut() {
+                pressed.release = next.release;
+                pressed.waiting = waiting;
+            }
+        }
     }
 
     /// Aachen ibox / ticket-printer style: press sets a flag, `_drag` / `_off` clear it.
@@ -409,6 +485,21 @@ impl Player {
     /// movement in `mouse_x` / `mouse_y`, which is how the rotary knobs, the sun blind, the
     /// driver's window and the ignition key are operated.
     pub(crate) fn drag(&mut self, dx: f32, dy: f32) {
+        // A click waiting for its frame takes the motion that comes after it (it is dragged
+        // once it is pressed); a control let go before its frame is not dragged any more.
+        if let Some(click) = self.unframed_click.as_mut() {
+            match click.waiting.back_mut() {
+                Some(w) => {
+                    if w.release.is_none() {
+                        w.motion.0 += dx;
+                        w.motion.1 += dy;
+                    }
+                    return;
+                }
+                None if click.release.is_some() => return,
+                None => {}
+            }
+        }
         let (ev, trailer) = if let Some(i) = self.pressed_mesh {
             let Some(ev) = self.vehicle.ty.model.meshes[self.vehicle.ty.meshes[i].def_index]
                 .mouse_event
@@ -510,6 +601,10 @@ impl Player {
     }
 
     fn release_mouse(&mut self, allow_auto_drag: bool) {
+        if let Some(click) = self.unframed_click.as_mut() {
+            click.let_go(allow_auto_drag);
+            return;
+        }
         if let Some(i) = self.pressed_mesh.take() {
             let ty = self.vehicle.ty.clone();
             let def = &ty.model.meshes[ty.meshes[i].def_index];
@@ -556,6 +651,77 @@ impl Player {
                     self.vehicle.trigger(&off);
                 }
             }
+        }
+    }
+}
+
+/// A `[mouseevent]` pressed since the last frame. Omsi.exe fires a switch's trigger as the
+/// mouse message comes (0x7bad78: the press, `_drag` or `_off` trigger and nothing else) and
+/// its scripts act on it in the next frame, with that frame's `Timegap`. A frame of the
+/// scripts run at once, with no time passing, left the scripts' derived values where a
+/// frame of no time puts them: the O305-based buses' charge lamp lit for a frame at every
+/// click (their `elec_V_battery` does not move without time and stops reading under the
+/// generator's, #3800).
+pub(crate) struct UnframedClick {
+    ev: String,
+    /// The button was let go before that frame (whether a drag control may be dragged
+    /// over, see `release_mouse`): its `_off` waits for the frame, so that a quick tap
+    /// still reaches the scripts' frame.
+    release: Option<bool>,
+    /// Clicks that came before that frame, pressed one a frame after it: a second tap on the
+    /// ticket printer's keys before the frame that read the first would otherwise have
+    /// cleared the first key's flag unread.
+    waiting: std::collections::VecDeque<WaitingClick>,
+}
+
+impl UnframedClick {
+    fn new(ev: &str) -> Self {
+        Self {
+            ev: ev.to_string(),
+            release: None,
+            waiting: Default::default(),
+        }
+    }
+
+    fn queue(&mut self, target: ClickTarget) {
+        self.waiting.push_back(WaitingClick {
+            target,
+            release: None,
+            motion: (0.0, 0.0),
+        });
+    }
+
+    /// The button is let go: the last click pressed or waiting is the one let go.
+    fn let_go(&mut self, allow_auto_drag: bool) {
+        let release = match self.waiting.back_mut() {
+            Some(w) => &mut w.release,
+            None => &mut self.release,
+        };
+        release.get_or_insert(allow_auto_drag);
+    }
+}
+
+struct WaitingClick {
+    target: ClickTarget,
+    release: Option<bool>,
+    /// The mouse's movement while it waited, dragged after its press.
+    motion: (f32, f32),
+}
+
+/// What a click presses: a mesh of the bus, one of a coupled part, or a control by its
+/// trigger.
+pub(crate) enum ClickTarget {
+    Bus(usize),
+    Trailer(usize, usize),
+    #[cfg_attr(not(test), allow(dead_code))]
+    Control(String),
+}
+
+impl ClickTarget {
+    fn mesh(&self) -> usize {
+        match self {
+            ClickTarget::Bus(i) | ClickTarget::Trailer(_, i) => *i,
+            ClickTarget::Control(_) => 0,
         }
     }
 }
