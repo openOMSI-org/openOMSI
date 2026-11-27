@@ -862,19 +862,27 @@ fn watch_inbox(content: &Path) -> Vec<String> {
     let seen = guard.get_or_insert_with(Default::default);
     let waiting_dir = content.join("Mods").join(install::WAITING);
     let items = inbox_entries(content);
-    seen.retain(|p, _| items.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
+    // On installs with many packages, linear contains() made this a quadratic
+    // scan on every launcher poll. Keep the membership test O(1).
+    let present: std::collections::HashSet<&PathBuf> = items.iter().collect();
+    seen.retain(|p, _| present.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
     for p in items {
         if install::is_busy(&p) {
             continue;
         }
         let now = std::time::Instant::now();
-        if seen
-            .get(&p)
-            .map(|s| {
-                s.started && now.duration_since(s.checked) < std::time::Duration::from_secs(30)
-            })
-            .unwrap_or(false)
-        {
+        // Reading every file in a large mod tree for *every* UI poll consumed CPU
+        // and storage bandwidth while the package was still being copied. Check a
+        // growing package at most once per second; completed installs retain their
+        // existing 30-second recheck. The two-second stable-size requirement stays.
+        if seen.get(&p).is_some_and(|s| {
+            now.duration_since(s.checked)
+                < if s.started {
+                    std::time::Duration::from_secs(30)
+                } else {
+                    std::time::Duration::from_secs(1)
+                }
+        }) {
             continue;
         }
         let sig = tree_signature(&p);
