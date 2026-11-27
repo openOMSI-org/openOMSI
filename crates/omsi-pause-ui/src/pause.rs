@@ -279,6 +279,23 @@ fn settings_categories(sh: &mut Shell, list: &ListView, area: Rect) {
 
 /// An open list or settings window as a page inside the pause panel.
 fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
+    let dd_rect = list.dropdown.as_ref().and_then(|d| {
+        sh.dd_anchor
+            .map(|a| dropdown_rect(a, d.items.len(), sh.ui.size))
+    });
+    let mouse = sh.ui.input.mouse;
+    let popup_hovered = dd_rect.is_some_and(|r| r.contains(mouse));
+    let restore_mouse = mask_pointer_under_dropdown(&mut sh.ui, dd_rect);
+    let saved = (sh.ui.input.pressed, sh.ui.input.released);
+    let wheel = sh.ui.input.wheel;
+    if list.dropdown.is_some() {
+        sh.ui.input.wheel = Vec2::ZERO;
+    }
+    if dd_rect.is_some() && (popup_hovered || sh.ui.input.pressed) {
+        sh.ui.input.pressed = false;
+        sh.ui.input.released = false;
+    }
+
     let margin = if page.w < NARROW { 14.0 } else { 24.0 };
     let w = (page.w - margin * 2.0).min(1400.0);
     let area = Rect::new(
@@ -429,35 +446,22 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
             body = Rect::new(body.x, below, body.w, (body.bottom() - below).max(40.0));
         }
     }
-    // an open drop-down takes the mouse where it lies (the rows under it do not answer)
-    let dd_rect = list.dropdown.as_ref().and_then(|d| {
-        sh.dd_anchor
-            .map(|a| dropdown_rect(a, d.items.len(), sh.ui.size))
-    });
-    let mouse = sh.ui.input.mouse;
-    let saved = (sh.ui.input.pressed, sh.ui.input.released);
-    // Reserve the wheel for the popup before drawing controls underneath it.
-    let wheel = sh.ui.input.wheel;
-    if list.dropdown.is_some() {
-        sh.ui.input.wheel = Vec2::ZERO;
-    }
-    if let Some(r) = dd_rect {
-        if r.contains(mouse) || sh.ui.input.pressed {
-            sh.ui.input.pressed = false;
-            sh.ui.input.released = false;
-        }
-    }
     let mut anchor: Option<Rect> = None;
     match list.kind {
-        MenuKind::Options | MenuKind::Sections => settings_rows(sh, v, list, body, &mut anchor),
+        MenuKind::Options | MenuKind::Sections => {
+            settings_rows(sh, v, list, body, popup_hovered, &mut anchor)
+        }
         MenuKind::Lines | MenuKind::Tours => timetable_lists(sh, v, list, body),
         MenuKind::Vehicles => vehicles::draw(sh, v, list, body),
         _ => plain_list(sh, v, list, body),
     }
-    (sh.ui.input.pressed, sh.ui.input.released) = saved;
     if list.dropdown.is_some() {
         sh.ui.input.wheel = wheel;
     }
+    if let Some(mouse) = restore_mouse {
+        sh.ui.input.mouse = mouse;
+    }
+    (sh.ui.input.pressed, sh.ui.input.released) = saved;
     sh.dd_anchor = anchor;
     if let (Some(d), Some(a)) = (list.dropdown.as_ref(), anchor) {
         dropdown(sh, d, a, v.kbd);
@@ -500,6 +504,7 @@ fn settings_rows(
     v: &PauseView,
     list: &ListView,
     body: Rect,
+    popup_hovered: bool,
     anchor: &mut Option<Rect>,
 ) {
     let items = &list.items;
@@ -593,7 +598,7 @@ fn settings_rows(
     }
     let two = body.w >= 900.0 && groups.iter().flatten().count() > 6;
     let cols = settings_columns(groups, two, items);
-    let any_hover = sh.ui.hover(body);
+    let any_hover = popup_hovered || sh.ui.hover(body);
     let mut acts: Vec<Action> = Vec::new();
     let mut sel_y: Option<(f32, f32)> = None;
     let mut dd_anchor: Option<Rect> = None;
@@ -939,6 +944,39 @@ fn dropdown_rect(a: Rect, n: usize, size: Vec2) -> Rect {
         a.y - 4.0 - h
     };
     Rect::new(a.x, y, a.w, h.min(below.max(a.y - 12.0)))
+}
+
+fn mask_pointer_under_dropdown(ui: &mut Ui, popup: Option<Rect>) -> Option<Vec2> {
+    let mouse = ui.input.mouse;
+    if popup.is_some_and(|r| r.contains(mouse)) {
+        ui.input.mouse = Vec2::new(-1.0, -1.0);
+        Some(mouse)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod dropdown_tests {
+    use super::*;
+
+    #[test]
+    fn open_dropdown_masks_hover_from_the_overlapped_settings_row() {
+        let mut ui = Ui::new();
+        ui.begin(Vec2::new(400.0, 300.0), 1.0, 1.0 / 60.0);
+        let popup = Rect::new(40.0, 40.0, 180.0, 100.0);
+        let row = Rect::new(0.0, 80.0, 300.0, 50.0);
+        let mouse = Vec2::new(80.0, 95.0);
+        ui.input.mouse = mouse;
+        assert!(ui.hover(row));
+
+        let restore = mask_pointer_under_dropdown(&mut ui, Some(popup));
+        assert_eq!(restore, Some(mouse));
+        assert!(!ui.hover(row));
+
+        ui.input.mouse = restore.unwrap();
+        assert!(ui.hover(popup));
+    }
 }
 
 /// The open drop-down as the launcher's: a list over everything, the value in force ticked.
