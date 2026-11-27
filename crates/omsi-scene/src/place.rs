@@ -1160,16 +1160,32 @@ fn object_lamp(
 /// another source that must still see the fixture's shadow.
 const POLE_LAMP_SOURCE_REACH: f32 = 1.5;
 
-/// A point outside the mesh's bounds. A source inside the bounds but not enclosed sits in
-/// a cavity inside the fixture, not just outside its head.
-fn outside_mesh_bounds(mesh: &MeshData, point: glam::Vec3) -> bool {
-    let mut lo = glam::Vec3::splat(f32::INFINITY);
-    let mut hi = glam::Vec3::splat(f32::NEG_INFINITY);
-    for &p in &mesh.positions {
-        lo = lo.min(p);
-        hi = hi.max(p);
-    }
-    point.cmpgt(hi).any() || point.cmplt(lo).any()
+/// Whether a ray from a source further away from its emitter meets the fixture. A source
+/// just outside a lamp head looks into open air; one in a cavity inside the fixture meets
+/// the cavity wall on its way out.
+fn outward_ray_is_clear(mesh: &MeshData, from: glam::Vec3, dir: glam::Vec3) -> bool {
+    !mesh.indices.chunks_exact(3).any(|t| {
+        let a = mesh.positions[t[0] as usize];
+        let e1 = mesh.positions[t[1] as usize] - a;
+        let e2 = mesh.positions[t[2] as usize] - a;
+        let p = dir.cross(e2);
+        let det = e1.dot(p);
+        if det.abs() < 1e-6 {
+            return false;
+        }
+        let inv_det = 1.0 / det;
+        let tv = from - a;
+        let u = tv.dot(p) * inv_det;
+        if !(0.0..=1.0).contains(&u) {
+            return false;
+        }
+        let q = tv.cross(e1);
+        let v = dir.dot(q) * inv_det;
+        if v < 0.0 || u + v > 1.0 {
+            return false;
+        }
+        e2.dot(q) * inv_det > 1e-4
+    })
 }
 
 /// Legacy pole fixtures can put the virtual `[maplight]` behind the emitting mesh
@@ -1178,7 +1194,7 @@ fn outside_mesh_bounds(mesh: &MeshData, point: glam::Vec3) -> bool {
 /// was authored for an unoccluded light map, not as a bulb hidden behind opaque geometry.
 /// Require a pole. A directional effect must face away from the source, with that mesh
 /// standing between the two: the source may be inside it, or the emitter may be inside
-/// it and within reach of a source just outside its bounds. An omnidirectional effect at
+/// it and within reach of a source in open air behind the head. An omnidirectional effect at
 /// the source's exact position is the lamp's own bulb wherever the fixture lies
 /// (St-Servan's Eclatec Index has it above its head). An unrelated effect elsewhere on
 /// the same fixture does not qualify the source.
@@ -1195,10 +1211,15 @@ fn embedded_pole_light(ot: &ObjectType, source: glam::Vec3) -> bool {
                         source == glam::Vec3::from(effect.pos)
                     } else {
                         let emitter = glam::Vec3::from(effect.pos);
-                        (source - emitter).dot(glam::Vec3::from(effect.dir)) < 0.0
+                        let to_source = source - emitter;
+                        to_source.dot(glam::Vec3::from(effect.dir)) < 0.0
                             && (mesh_encloses_light(&mesh.0, source)
-                                || ((source - emitter).length() <= POLE_LAMP_SOURCE_REACH
-                                    && outside_mesh_bounds(&mesh.0, source)
+                                || (to_source.length() <= POLE_LAMP_SOURCE_REACH
+                                    && outward_ray_is_clear(
+                                        &mesh.0,
+                                        source,
+                                        to_source.normalize(),
+                                    )
                                     && mesh_encloses_light(&mesh.0, emitter)))
                     }
                 })
@@ -1472,6 +1493,14 @@ mod embedded_light_tests {
         }
     }
 
+    fn add_cube_at(mesh: &mut MeshData, size: f32, reverse: bool, centre: glam::Vec3) {
+        let first = mesh.positions.len();
+        add_cube(mesh, size, reverse);
+        for p in &mut mesh.positions[first..] {
+            *p += centre;
+        }
+    }
+
     fn pole_fixture() -> ObjectType {
         let mut mesh = MeshData::default();
         add_cube(&mut mesh, 1.0, false);
@@ -1597,6 +1626,15 @@ mod embedded_light_tests {
         // would shadow the street below it (Thüringer Wald's concrete-mast lamps).
         fixture.model.meshes[1].light_enh_2[0].pos = [0.0, 0.0, 0.25];
         let source = glam::Vec3::new(0.0, 0.0, 1.5);
+        assert!(embedded_pole_light(&fixture, source));
+        // A mast grows past the source, so the mesh's bounds still contain it: that must
+        // not turn the open air beside the head back into a shadowed cavity.
+        add_cube_at(
+            &mut fixture.meshes[0].0,
+            0.1,
+            false,
+            glam::Vec3::new(2.0, 0.0, 1.75),
+        );
         assert!(embedded_pole_light(&fixture, source));
         // A source the head shines towards is not shaded by it.
         fixture.model.meshes[1].light_enh_2[0].dir = [0.0, 0.0, 1.0];

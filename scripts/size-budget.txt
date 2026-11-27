@@ -42,7 +42,7 @@ file 2776 crates/omsi-render/src/tests/more.rs
 file 1734 crates/omsi-scene-mx/src/driver.rs
 file 2021 crates/omsi-scene-mx/src/lights.rs
 file 2106 crates/omsi-scene-mx/src/mapgen.rs
-file 1884 crates/omsi-scene-mx/src/place.rs
+file 1994 crates/omsi-scene-mx/src/place.rs
 file 1635 crates/omsi-scene-mx/src/place_step.rs
 file 1876 crates/omsi-scene-mx/src/props.rs
 file 1540 crates/omsi-scene-mx/src/road_snow.rs
@@ -52,7 +52,7 @@ file 2067 crates/omsi-scene-mx/src/vehicles.rs
 file 1534 crates/omsi-scene-mx/src/window_wipers.rs
 file 1715 crates/omsi-scene/src/driver.rs
 file 2179 crates/omsi-scene/src/mapgen.rs
-file 1921 crates/omsi-scene/src/place.rs
+file 2044 crates/omsi-scene/src/place.rs
 file 1637 crates/omsi-scene/src/place_step.rs
 file 1566 crates/omsi-scene/src/stage.rs
 file 2067 crates/omsi-scene/src/vehicles.rs
