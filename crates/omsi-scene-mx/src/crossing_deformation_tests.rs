@@ -58,6 +58,41 @@ fn strip(stations: &[(f32, f32)]) -> String {
     )
 }
 
+fn solid_bmp(red: u8) -> Vec<u8> {
+    let mut out = std::io::Cursor::new(Vec::new());
+    image::RgbImage::from_pixel(2, 2, image::Rgb([red, 0, 0]))
+        .write_to(&mut out, image::ImageFormat::Bmp)
+        .unwrap();
+    out.into_inner()
+}
+
+/// A one-material strip whose texture decides the `[surface]` id the tyres read.
+fn strip_with_surface(stations: &[(f32, f32)], texture: &str) -> String {
+    let vertices: Vec<_> = stations
+        .iter()
+        .flat_map(|&(y, z)| [-3.0, 3.0].map(|x| format!("{x};{z};{y};")))
+        .collect();
+    let faces: Vec<_> = (0..stations.len() - 1)
+        .flat_map(|i| {
+            let a = 2 * i;
+            [
+                format!("3;{a},{},{a_plus};", a + 2, a_plus = a + 1),
+                format!("3;{},{},{};", a + 1, a + 2, a + 3),
+            ]
+        })
+        .collect();
+    let indices = vec!["0"; faces.len()].join(",");
+    format!(
+        "xof 0303txt 0032\nMesh strip {{\n{};\n{};\n{};\n{};\nMeshMaterialList {{\n1;\n{};\n{};;\nMaterial {{\n1;1;1;1;; 1; 0;0;0;; 0;0;0;;\nTextureFilename {{ \"{texture}\"; }}\n}}\n}}\n}}\n",
+        vertices.len(),
+        vertices.join(",\n"),
+        faces.len(),
+        faces.join(",\n"),
+        faces.len(),
+        indices
+    )
+}
+
 fn staged(path: PathBuf, ot: Arc<ObjectType>, pose: Pose) -> StagedTile {
     StagedTile {
         tx: 0,
@@ -702,4 +737,78 @@ fn a_failed_fit_cuts_holes_only_where_the_ground_covers_the_spline() {
         );
         assert_eq!(!rims.is_empty(), cut, "spline {height} m over the ground");
     }
+}
+
+/// X10 Berlin's `StrSchaden3.sco` has no render mesh: OMSI hides it with `[onlyeditor]` but
+/// still drives over its `[collision_mesh]` because it is a `[surface]`. Its cobblestone
+/// texture must reach the wheels even though nothing of the object is drawn.
+#[test]
+fn invisible_surface_object_drives_on_its_collision_mesh() {
+    let fixture = Fixture::new();
+    fixture.write(
+        "global.cfg",
+        "[name]\nInvisible road damage\n[map]\n0\n0\ntile_0_0.map\n",
+    );
+    fixture.write(
+        "damage.sco",
+        "[onlyeditor]\n[surface]\n[collision_mesh]\ndamage.x\n",
+    );
+    fixture.write(
+        "damage.x",
+        &strip_with_surface(&[(0.0, 0.1), (2.0, 0.1)], "kopfstein.bmp"),
+    );
+    std::fs::create_dir_all(fixture.0.join("texture")).unwrap();
+    let cobblestone = solid_bmp(255);
+    std::fs::write(fixture.0.join("texture/kopfstein.bmp"), &cobblestone).unwrap();
+    std::fs::write(fixture.0.join("texture/kopfstein.bmp.surf"), &cobblestone).unwrap();
+    fixture.write(
+        "tile_0_0.map",
+        "[version]\n14\n[object]\n0\ndamage.sco\n1\n100\n100\n0\n0\n0\n0\n0\n\n",
+    );
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+    assert_eq!(prepared.len(), 1);
+    assert_eq!(
+        world.surface_under(DVec3::new(100.0, 101.0, 0.1)),
+        Some(surface_by_name("kopfstein.bmp")),
+        "the meshless surface object's cobblestone id reaches the tyre"
+    );
+    assert!(
+        (world.ground_height(100.0, 101.0).unwrap() - 0.1).abs() < 1e-5,
+        "the collision mesh becomes the ground the wheels stand on"
+    );
+}
+
+#[test]
+fn editor_only_surface_with_a_render_mesh_stays_hidden() {
+    let fixture = Fixture::new();
+    fixture.write(
+        "global.cfg",
+        "[name]\nEditor-only road damage\n[map]\n0\n0\ntile_0_0.map\n",
+    );
+    // This one has a render mesh as well as a collision mesh, so it is not a drive-only
+    // plate: `[onlyeditor]` must keep it out of the game even though it is a `[surface]`.
+    fixture.write(
+        "damage.sco",
+        "[onlyeditor]\n[surface]\n[mesh]\ndamage.x\n[collision_mesh]\ndamage.x\n",
+    );
+    fixture.write(
+        "damage.x",
+        &strip_with_surface(&[(0.0, 0.1), (2.0, 0.1)], "kopfstein.bmp"),
+    );
+    std::fs::create_dir_all(fixture.0.join("texture")).unwrap();
+    let cobblestone = solid_bmp(255);
+    std::fs::write(fixture.0.join("texture/kopfstein.bmp"), &cobblestone).unwrap();
+    std::fs::write(fixture.0.join("texture/kopfstein.bmp.surf"), &cobblestone).unwrap();
+    fixture.write(
+        "tile_0_0.map",
+        "[version]\n14\n[object]\n0\ndamage.sco\n1\n100\n100\n0\n0\n0\n0\n0\n\n",
+    );
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+    assert_eq!(prepared.len(), 1);
+    assert!(
+        prepared[0].objects.is_empty(),
+        "an editor-only surface with a render mesh must not be placed"
+    );
 }

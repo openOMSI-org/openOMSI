@@ -42,6 +42,9 @@ pub struct ObjectType {
     pub deform: Option<MeshData>,
     /// `[collision_mesh]`: what vehicles actually hit (often much plainer than the model).
     pub collision: Option<MeshData>,
+    /// Materials of `[collision_mesh]`, in its own order: a meshless `[surface]` object
+    /// drives on this mesh, so its texture's roughness still reaches the wheels.
+    pub collision_materials: Vec<omsi_o3d::Material>,
     /// A plain object that is only paint at its foot ([`paint_at_foot`]).
     pub paint: bool,
     /// What of the type stops the outside camera (decided on first use).
