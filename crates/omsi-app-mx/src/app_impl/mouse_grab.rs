@@ -126,14 +126,22 @@ impl MouseGrab {
         }
     }
 
-    /// The frame put the steering point and the system cursor at `centre` after mouse
-    /// steering was switched on. Reports from before that move have been seen by now; the
-    /// next one is the hand's, even if it goes straight into the outer pedal band (#4346).
-    pub(crate) fn recentred(&mut self, centre: (f32, f32)) {
+    /// The frame reset the steering point to `centre` after mouse steering was switched on.
+    /// `moved` says the window system accepted putting the physical cursor there as well.
+    /// In Warp mode its echo is still to come: an outer report queued before this frame stays
+    /// stale until the echo arrives, and only the first real pedal move after it is counted
+    /// (#4346). When the move failed the cursor is still where it was, so no echo is awaited
+    /// and the next report counts from the last place the system reported, not from `centre`.
+    pub(crate) fn recentred(&mut self, centre: (f32, f32), moved: bool) {
         self.at = Some(centre);
-        self.last = Some(centre);
-        self.warp_pending = false;
         self.stray = 0;
+        if moved {
+            self.last = Some(centre);
+            self.warp_pending = self.mode == Some(GrabMode::Warp);
+        } else {
+            self.last = None;
+            self.warp_pending = false;
+        }
     }
 
     /// The steering point within the full lock - `reach` half widths of the window either
@@ -537,8 +545,9 @@ mod tests {
     }
 
     /// Switching mouse steering off and on again leaves the cursor at the pedal it held.
-    /// The frame recentres the steering point; a report from before that move is still stale,
-    /// but the first deliberate move into the pedal band is the hand's (#4346).
+    /// The frame recentres the steering point; a report from before that move can still arrive
+    /// after it and before the echo, and only the first deliberate move after the echo is
+    /// the hand's (#4346).
     #[test]
     fn a_pedal_move_after_reenabling_is_not_a_stale_warp_report() {
         let centre = (800.0, 450.0);
@@ -547,14 +556,39 @@ mod tests {
         g.caught(GrabMode::Warp, Some(centre));
         g.at = Some((800.0, 150.0));
         assert_eq!(g.cursor_at(800.0, 150.0, centre, SIZE), CursorStep::Ignore);
-        // the frame puts the steering point and the cursor in the middle
-        g.recentred(centre);
+        // the frame puts the steering point and the cursor in the middle; its echo is pending
+        g.recentred(centre, true);
+        // a stale report queued before the frame, delivered after it: still no movement
+        assert_eq!(g.cursor_at(800.0, 150.0, centre, SIZE), CursorStep::Ignore);
+        // the echo of the move to the middle: no movement either
+        assert_eq!(
+            g.cursor_at(centre.0, centre.1, centre, SIZE),
+            CursorStep::Moved { warp: false }
+        );
         // up into the throttle band again: counted at once, with the cursor put back
         assert_eq!(
             g.cursor_at(800.0, 150.0, centre, SIZE),
             CursorStep::Moved { warp: true }
         );
         assert_eq!(g.at, Some((800.0, 150.0)));
+    }
+
+    /// If the window system refuses the recentring move the cursor is still out at the pedal:
+    /// no echo is to be awaited, and its report must not be read as the way from the middle
+    /// to the pedal (#4346).
+    #[test]
+    fn a_failed_recentre_does_not_claim_the_cursor_moved() {
+        let centre = (800.0, 450.0);
+        let mut g = MouseGrab::default();
+        g.caught(GrabMode::Warp, Some(centre));
+        g.at = Some((800.0, 150.0));
+        g.recentred(centre, false);
+        // the cursor stayed where the system last saw it; a report from there adds no travel
+        assert_eq!(
+            g.cursor_at(800.0, 150.0, (800.0, 150.0), SIZE),
+            CursorStep::Moved { warp: true }
+        );
+        assert_eq!(g.at, Some(centre));
     }
 
     #[test]

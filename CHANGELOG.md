@@ -12,9 +12,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
   ([#2945](https://github.com/openOMSI-org/openOMSI/issues/2945)).
-- **Mouse steering works the pedals again after it is switched off and on**: the first move up
-  or down after re-enabling is no longer thrown away as a stale cursor report from before the
-  steering point was centred ([#4346](https://github.com/openOMSI-org/openOMSI/issues/4346)).
+- **Mouse steering works the pedals again after it is switched off and on**: a cursor report
+  queued before the steering point was centred stays stale until the echo of that move arrives,
+  while the first deliberate move after it is counted - and a refused cursor move no longer
+  pretends the physical cursor reached the middle
+  ([#4346](https://github.com/openOMSI-org/openOMSI/issues/4346)).
 
 ## 0.3.59 - 2026-11-26
 
