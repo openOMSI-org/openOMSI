@@ -244,18 +244,23 @@ impl App {
         if let (true, Some(s)) = (self.mouse_steering_now(), self.gfx.surface.as_ref()) {
             let (w, h) = (s.config.width as f32, s.config.height as f32);
             if std::mem::take(&mut self.input.center_cursor) {
-                self.input.cursor = (w * 0.5, h * 0.5);
-                self.input.mouse_grab.at = Some(self.input.cursor);
+                let centre = (w * 0.5, h * 0.5);
                 // (a locked cursor stands in the middle already, and moving it unlocks it)
-                if let (Some(win), false) = (
-                    self.window.as_ref(),
-                    self.input.mouse_grab.mode == Some(crate::app_impl::GrabMode::Locked),
-                ) {
-                    let _ = win.set_cursor_position(winit::dpi::PhysicalPosition::new(
-                        (w * 0.5) as f64,
-                        (h * 0.5) as f64,
-                    ));
+                let locked = self.input.mouse_grab.mode == Some(crate::app_impl::GrabMode::Locked);
+                let moved = locked
+                    || self.window.as_ref().is_some_and(|win| {
+                        win.set_cursor_position(winit::dpi::PhysicalPosition::new(
+                            centre.0 as f64,
+                            centre.1 as f64,
+                        ))
+                        .is_ok()
+                    });
+                // (do not claim the physical cursor moved when the system refused: its next
+                // report still counts from where the system last saw it, #4346)
+                if moved {
+                    self.input.cursor = centre;
                 }
+                self.input.mouse_grab.recentred(centre, moved);
             }
             // (the speed the divisor takes, smoothed over 0.4 s: the bus's own speed
             // trembles by fractions of a km/h from frame to frame on its springs and

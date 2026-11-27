@@ -18,6 +18,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
   ([#2945](https://github.com/openOMSI-org/openOMSI/issues/2945)).
+- **Mouse steering works the pedals again after it is switched off and on**: a cursor report
+  queued before the steering point was centred stays stale until the echo of that move arrives,
+  while the first deliberate move after it is counted - and a refused cursor move no longer
+  pretends the physical cursor reached the middle
+  ([#4346](https://github.com/openOMSI-org/openOMSI/issues/4346)).
 - **Android: buses and maps with HTML displays no longer crash the game**: the displays' scripts
   now run on phones that tag their memory pointers, where the game stopped with "this platform
   is not compatible with a nan-boxed `JsValueInner`"
