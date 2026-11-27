@@ -852,7 +852,10 @@ impl RigidBody {
         let kappa = steer.clamp(-1.0, 1.0) * self.inv_min_turn_radius;
         self.kappa = kappa;
         let front = self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max);
-        let tag_multipliers: Vec<f32> = (0..self.wheels.len()).map(|i| self.tag_steering_multiplier(i)).collect();
+        let tag_override = self.tag_axle_steering.map(|profile| {
+            (profile.axle, profile.multiplier_at(self.forward_speed() * 3.6))
+        });
+        let wheel_axle = &self.wheel_axle;
         for (i, w) in self.wheels.iter_mut().enumerate() {
             // each tyre square to the line from the centre of the turn to itself - the inner
             // one turned further than the outer (Ackermann). With both at the axle's angle the
@@ -860,7 +863,11 @@ impl RigidBody {
             // scrub ate the drive, 60 % steering left a twentieth of the push and full lock
             // none ("the engine revs but the bus gets slower the more I steer")
             // The explicitly selected axle can countersteer independently.
-            let wheel_kappa = kappa * tag_multipliers[i];
+            let multiplier = match tag_override {
+                Some((axle, multiplier)) if wheel_axle.get(i).copied() == Some(axle) => multiplier,
+                _ => 1.0,
+            };
+            let wheel_kappa = kappa * multiplier;
             let across = (1.0 - w.attach.x * wheel_kappa).max(0.2);
             w.steer = ((w.attach.y - self.rot_pnt_long) * wheel_kappa / across).atan().clamp(-1.05, 1.05);
             w.steered = w.steer != 0.0;
