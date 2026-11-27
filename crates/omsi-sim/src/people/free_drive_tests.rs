@@ -297,7 +297,10 @@ fn a_duty_with_no_trips_due_still_fills_its_stops() {
 
     let world = FlatWorld::default();
     h.stops_tick(0.1, &world);
-    assert_eq!(h.stops[&42].want, 3, "no trip is due, so the stop fills by its own number");
+    assert_eq!(
+        h.stops[&42].want, 3,
+        "no trip is due, so the stop fills by its own number"
+    );
     let waiting: Vec<usize> = h
         .people
         .iter()
@@ -305,7 +308,10 @@ fn a_duty_with_no_trips_due_still_fills_its_stops() {
         .filter(|(_, p)| matches!(&p.state, State::Pax(x) if x.stop == Some(42)))
         .map(|(i, _)| i)
         .collect();
-    assert!(!waiting.is_empty(), "a worked duty must have waiting people");
+    assert!(
+        !waiting.is_empty(),
+        "a worked duty must have waiting people"
+    );
     for i in waiting {
         assert_eq!(h.pax(i).unwrap().dest.as_deref(), Some("43"));
     }
