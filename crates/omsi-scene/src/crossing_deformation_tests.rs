@@ -778,3 +778,37 @@ fn invisible_surface_object_drives_on_its_collision_mesh() {
         "the collision mesh becomes the ground the wheels stand on"
     );
 }
+
+#[test]
+fn editor_only_surface_with_a_render_mesh_stays_hidden() {
+    let fixture = Fixture::new();
+    fixture.write(
+        "global.cfg",
+        "[name]\nEditor-only road damage\n[map]\n0\n0\ntile_0_0.map\n",
+    );
+    // This one has a render mesh as well as a collision mesh, so it is not a drive-only
+    // plate: `[onlyeditor]` must keep it out of the game even though it is a `[surface]`.
+    fixture.write(
+        "damage.sco",
+        "[onlyeditor]\n[surface]\n[mesh]\ndamage.x\n[collision_mesh]\ndamage.x\n",
+    );
+    fixture.write(
+        "damage.x",
+        &strip_with_surface(&[(0.0, 0.1), (2.0, 0.1)], "kopfstein.bmp"),
+    );
+    std::fs::create_dir_all(fixture.0.join("texture")).unwrap();
+    let cobblestone = solid_bmp(255);
+    std::fs::write(fixture.0.join("texture/kopfstein.bmp"), &cobblestone).unwrap();
+    std::fs::write(fixture.0.join("texture/kopfstein.bmp.surf"), &cobblestone).unwrap();
+    fixture.write(
+        "tile_0_0.map",
+        "[version]\n14\n[object]\n0\ndamage.sco\n1\n100\n100\n0\n0\n0\n0\n0\n\n",
+    );
+    let world = World::open(&fixture.0, &fixture.0.join("global.cfg"), 20261001).unwrap();
+    let (prepared, _) = world.prepare_tiles(&[(0, 0, fixture.0.join("tile_0_0.map"))]);
+    assert_eq!(prepared.len(), 1);
+    assert!(
+        prepared[0].objects.is_empty(),
+        "an editor-only surface with a render mesh must not be placed"
+    );
+}

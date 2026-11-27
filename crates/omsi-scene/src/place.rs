@@ -375,9 +375,10 @@ impl World {
             // arrows are on - see `World::show_help_arrows`)
             // A meshless `[surface]` object with a `[collision_mesh]` still gives the wheels
             // a road even though there is nothing to draw: X10's `StrSchaden3.sco` is such
-            // a road-damage plate. Keep it in the placed set so the terrain cut can raster
-            // its collision mesh; it contributes no obstacle or render instance of its own.
-            let drive_only = ot.sco.surface && ot.collision.is_some();
+            // a road-damage plate. Keep only those meshless surfaces in the placed set so the
+            // terrain cut can raster their collision mesh; an editor-only object that still
+            // has a render mesh must stay hidden, as it was before.
+            let drive_only = ot.sco.surface && ot.collision.is_some() && ot.meshes.is_empty();
             if (ot.sco.only_editor || ot.meshes.is_empty()) && !drive_only {
                 // invisible sound sources (ambient sound objects) and children of a
                 // crossing naming one of its lights still run their script
