@@ -17,6 +17,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   while the first deliberate move after it is counted - and a refused cursor move no longer
   pretends the physical cursor reached the middle
   ([#4346](https://github.com/openOMSI-org/openOMSI/issues/4346)).
+- **Android: buses and maps with HTML displays no longer crash the game**: the displays' scripts
+  now run on phones that tag their memory pointers, where the game stopped with "this platform
+  is not compatible with a nan-boxed `JsValueInner`"
+  ([#4382](https://github.com/openOMSI-org/openOMSI/issues/4382)).
 
 ## 0.3.59 - 2026-11-26
 
