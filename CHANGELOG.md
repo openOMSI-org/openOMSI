@@ -8,6 +8,12 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Mirror refresh settings cap every mirror picture again**: a mirror shown in another mirror is
+  drawn with the mirror that shows it, instead of also taking its own redraw turn. The pictures
+  drawn for another mirror now count against the Economical, Full and VR redraw budgets, so
+  mirrors no longer refresh faster than the setting allows, and the driver's view keeps its frame
+  rate with mirrors enabled
+  ([#4341](https://github.com/openOMSI-org/openOMSI/issues/4341)).
 - **Articulated buses' third axle now springs with the rest of the rear section**: a two-axle
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
