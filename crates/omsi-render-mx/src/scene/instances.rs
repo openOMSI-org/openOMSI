@@ -675,3 +675,26 @@ impl Renderer {
         }
     }
 }
+
+impl Scene {
+    pub(crate) fn has_film(&self) -> bool {
+        !self.active_film_instances.is_empty()
+    }
+
+    pub(crate) fn update_active_film(&mut self, instance: usize) {
+        let i = &self.instances[instance];
+        let active = i.visible
+            && i.materials.iter().zip(&i.slot_alpha).any(|(&id, &a)| {
+                a > 0.0
+                    && self
+                        .materials
+                        .get(id)
+                        .is_some_and(|m| m.uniform.emissive[3] > 1.5)
+            });
+        if active {
+            self.active_film_instances.insert(instance);
+        } else {
+            self.active_film_instances.remove(&instance);
+        }
+    }
+}

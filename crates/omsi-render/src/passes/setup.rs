@@ -206,11 +206,7 @@ impl Renderer {
         let enhanced_view = lighting.enhanced && self.hdr_pass.is_some() && !env.no_enhanced;
         let glass_on = with_overlays
             && scene.glass_slot.is_some()
-            && glass_picture_needed(
-                lighting.rain,
-                lighting.wetness,
-                !scene.active_film_instances.is_empty(),
-            )
+            && glass_picture_needed(lighting.rain, lighting.wetness, scene.has_film())
             && !env.no_glass_picture;
         let scaled = (width, height) != (full_w, full_h)
             || vanilla_fxaa
