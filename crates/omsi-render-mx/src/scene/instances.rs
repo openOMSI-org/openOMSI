@@ -11,6 +11,7 @@ impl Renderer {
             meshes: Vec::new(),
             textures: Vec::new(),
             glass_slot: None,
+            active_film_instances: Default::default(),
             materials: Vec::new(),
             trolley_wire_drawn: Vec::new(),
             instances: Vec::new(),

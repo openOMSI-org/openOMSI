@@ -214,6 +214,19 @@ impl Renderer {
         }
         i.visible = visible;
         if changed {
+            let active_film = i.visible
+                && i.materials.iter().zip(&i.slot_alpha).any(|(&id, &a)| {
+                    a > 0.0
+                        && scene
+                            .materials
+                            .get(id)
+                            .is_some_and(|m| m.uniform.emissive[3] > 1.5)
+                });
+            if active_film {
+                scene.active_film_instances.insert(instance);
+            } else {
+                scene.active_film_instances.remove(&instance);
+            }
             Self::mark_changed(scene, instance);
         }
     }

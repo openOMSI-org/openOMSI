@@ -10,13 +10,51 @@ mod freetex_reload;
 /// irradiance and showed a pale rectangle (#4222).
 #[test]
 fn a_washed_pane_gets_a_glass_picture_without_rain() {
-    assert!(!glass_picture_needed(0.0, 0.0, []));
-    assert!(glass_picture_needed(0.002, 0.0, []));
-    assert!(glass_picture_needed(0.0, 0.03, []));
-    assert!(!glass_picture_needed(0.0, 0.0, [(false, 1.0, 2.0)]));
-    assert!(!glass_picture_needed(0.0, 0.0, [(true, 0.0, 2.0)]));
-    assert!(!glass_picture_needed(0.0, 0.0, [(true, 1.0, 1.0)]));
-    assert!(glass_picture_needed(0.0, 0.0, [(true, 1.0, 2.0)]));
+    assert!(!glass_picture_needed(0.0, 0.0, false));
+    assert!(glass_picture_needed(0.002, 0.0, false));
+    assert!(glass_picture_needed(0.0, 0.03, false));
+    assert!(glass_picture_needed(0.0, 0.0, true));
+
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+    desc.backends = wgpu::Backends::NOOP;
+    desc.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+    let renderer = pollster::block_on(Renderer::new_with(
+        &wgpu::Instance::new(desc),
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            render_scale: 1.0,
+            ..Default::default()
+        },
+    ))
+    .expect("noop renderer");
+    let mut scene = renderer.new_scene();
+    let mesh = renderer.add_mesh(
+        &mut scene,
+        &MeshData {
+            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            normals: vec![[0.0, 0.0, 1.0]; 3],
+            uvs: vec![[0.0, 0.0]; 3],
+            indices: vec![0, 1, 2],
+            slots: vec![Slot {
+                start: 0,
+                count: 3,
+                material: 0,
+            }],
+        },
+    );
+    let mut film_mat = MaterialDesc::default();
+    film_mat.alpha = AlphaMode::Blend;
+    film_mat.emissive = [0.0, 0.0, 0.0, 2.0];
+    let mat = renderer.add_material(&mut scene, &film_mat);
+    let inst = renderer.add_instance(&mut scene, mesh, Mat4::IDENTITY, &[mat]);
+    renderer.set_params(&mut scene, inst, &[0.0], true, &[]);
+    assert!(scene.active_film_instances.is_empty());
+    renderer.set_params(&mut scene, inst, &[0.5], true, &[]);
+    assert!(!scene.active_film_instances.is_empty());
+    renderer.set_params(&mut scene, inst, &[0.5], false, &[]);
+    assert!(scene.active_film_instances.is_empty());
 }
 
 /// The night meter takes the street the picture shows: from 30 m over a lot lit by a
