@@ -98,29 +98,46 @@ fn listed_modes(surface: &mx::Surface<'_>, renderer: &Renderer) -> Option<Vec<mx
         .map(|a| surface.get_capabilities(a).present_modes)
 }
 
+/// Run a surface configuration, turning mX's refusal into the `Err` the window setup
+/// already handles. mX has no wgpu error scopes: its backends panic on an unusable
+/// surface, so that panic is caught here instead of ending the game (#4256).
 fn configure_surface(
     surface: &mx::Surface<'_>,
     device: &mx::Device,
     config: &mx::SurfaceConfiguration,
 ) -> Result<()> {
-    let internal = device.push_error_scope(mx::ErrorFilter::Internal);
-    let memory = device.push_error_scope(mx::ErrorFilter::OutOfMemory);
-    let validation = device.push_error_scope(mx::ErrorFilter::Validation);
-    surface.configure(device, config);
-    let errors = pollster::block_on(async {
-        [
-            validation.pop().await,
-            memory.pop().await,
-            internal.pop().await,
-        ]
-    });
-    if let Some(err) = errors.into_iter().flatten().next() {
-        return Err(anyhow!(
-            "surface configure: {}",
-            crate::gpu::gpu_error_text(&err)
-        ));
+    attempt_configure(|| surface.configure(device, config))
+}
+
+fn attempt_configure(make: impl FnOnce()) -> Result<()> {
+    match omsi_cfg::panic_guard::catch_unwind(make) {
+        Ok(()) => Ok(()),
+        Err(panic) => {
+            let text = panic
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| panic.downcast_ref::<&str>().copied())
+                .unwrap_or("an unknown error")
+                .to_string();
+            Err(anyhow!("surface configure: {text}"))
+        }
     }
-    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_refused_surface_configuration_is_an_error_not_a_panic() {
+        let err = attempt_configure(|| panic!("mX: invalid surface")).unwrap_err();
+        assert!(err.to_string().contains("invalid surface"));
+    }
+
+    #[test]
+    fn an_accepted_surface_configuration_succeeds() {
+        assert!(attempt_configure(|| {}).is_ok());
+    }
 }
 
 impl<'w> SurfaceState<'w> {
