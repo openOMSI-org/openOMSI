@@ -2871,6 +2871,10 @@ _version: 2
   en: "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still"
 "Built-up snow on roads and roofs":
   en: "Built-up snow on roads and roofs"
+"Road dirt on the vehicles":
+  en: "Road dirt on the vehicles"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2":
+  en: "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2"
 "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2":
   en: "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2"
 "How much the view sways on its own when nothing is done to it - a head at rest is never quite still, most of it seen while the bus waits at a stop":
@@ -6759,6 +6763,10 @@ _version: 2
   en: "FSR sharpness"
 "RCAS sharpening strength":
   en: "RCAS sharpening strength"
+"DLSS sharpness":
+  en: "DLSS sharpness"
+"How much the picture is sharpened after DLSS; 25 % as before":
+  en: "How much the picture is sharpened after DLSS; 25 % as before"
 "Ultra Quality (77%)":
   en: "Ultra Quality (77%)"
 "Quality (67%)":
@@ -8457,6 +8465,14 @@ _version: 2
   en: "Optional visual hailing; only effective with supported natural animations"
 "Passengers signal approaching buses":
   en: "Passengers signal approaching buses"
+"Passengers add weight to the bus":
+  en: "Passengers add weight to the bus"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says":
+  en: "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says"
+"Passenger weight":
+  en: "Passenger weight"
+"For passengers whose file gives no weight; default 75 kg":
+  en: "For passengers whose file gives no weight; default 75 kg"
 "Multiplayer...":
   en: "Multiplayer..."
 "Connection code or server address":
@@ -8835,3 +8851,21 @@ _version: 2
   en: "No saved situation of this map yet"
 "Saved as \"{}\"":
   en: "Saved as \"{}\""
+"sent to the plugins":
+  en: "sent to the plugins"
+"no plugin is listening for commands":
+  en: "no plugin is listening for commands"
+"plugin command queue is full":
+  en: "plugin command queue is full"
+"Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for.":
+  en: "Automatic announcements: this route's HOF keeps one recording per stop, so there is nothing to press for."
+"Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS \"next stop\" key, so its announcements stay its own."
+"Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own.":
+  en: "Automatic announcements: this bus has no IBIS stop counter, so its announcements stay its own."
+"Automatic announcements are off.":
+  en: "Automatic announcements are off."
+"Draw other players' buses in less detail when far away":
+  en: "Draw other players' buses in less detail when far away"
+"Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps":
+  en: "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps"

@@ -12,6 +12,16 @@ pub(crate) struct Args {
     /// settings, no paths, names or log text) to this file and end, without starting the game.
     #[arg(long)]
     pub(crate) export_diagnostics: Option<PathBuf>,
+    /// Write what the mods in the content folder's `Mods/` override - the files a pack
+    /// replaces and the ones two packs both ship, with which of them is used - as a text
+    /// report, and end (#3606: what a mod changes before it is switched off again).
+    #[arg(long = "export-mod-report")]
+    pub(crate) export_mod_report: Option<PathBuf>,
+    /// Write the stop labels of the map's timetable - each stop's name, the lines calling at
+    /// it and where they go from here, from `TTData` - as a CSV, and end, without starting
+    /// the game (#2462: what a `Haltestellenschild` says, for a map's signs).
+    #[arg(long = "export-stop-labels")]
+    pub(crate) export_stop_labels: Option<PathBuf>,
     /// OMSI 2 installation root (the folder that contains `maps`, `Vehicles`, …).
     /// Found by itself when left out: $OMSI_ROOT, the folder remembered from last time,
     /// a folder next to this program, or the usual Steam locations.

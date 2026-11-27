@@ -438,6 +438,7 @@ impl Offscreen<'_> {
                 rail,
             );
             steps::traffic_boxes(t, player.as_mut(), settings.collision_vehicles);
+            steps::blind_spot(t, player.as_mut());
         }
         Ok(())
     }
@@ -453,7 +454,8 @@ impl Offscreen<'_> {
     /// The player's duty and the personnel file.
     pub(super) fn duty_step(&mut self) {
         let (args, dt) = (self.args, self.dt);
-        let announce = self.settings.auto_announce;
+        let weight = self.settings.passenger_weight();
+        let announce = self.settings.announce_policy();
         let Self {
             ref mut player,
             ref mut duty,
@@ -491,6 +493,7 @@ impl Offscreen<'_> {
             }
         }
         let riders = humans_off.as_ref().map(|h| h.riding()).unwrap_or(0);
+        steps::passenger_load_step(player, humans_off.as_ref().map(|h| &h.sim), weight);
         let crash = steps::career_step(career, player, riders, duty.is_some(), dt, true);
         if crash > 0.0 {
             log::warn!("crash: {:.0} kJ", crash / 1000.0);
@@ -1195,6 +1198,9 @@ impl Offscreen<'_> {
                     s.set_lan_tours(tours);
                 }
             }
+            if let (Some(h), Some(s)) = (humans_off.as_mut(), schedule.as_mut()) {
+                crate::app_impl::lan_duties::lan_tour_progress(l, &mut h.sim, &mut s.sim);
+            }
             // the other games run in real time (see `RealTime`)
             std::thread::sleep(real_time.wait(Instant::now(), dt));
         }
@@ -1216,6 +1222,7 @@ impl Offscreen<'_> {
             ref world,
             ref weather,
             ref humans_off,
+            ref settings,
             ..
         } = *self;
         if let Some(p) = player.as_ref() {
@@ -1293,6 +1300,7 @@ impl Offscreen<'_> {
             traffic.as_ref().map(|t| &t.net),
             &v,
         );
+        omsi_scene::road_dirt::frame(renderer, settings.procedural_dirt, camera.position, &v);
     }
 
     /// A snapshot due at `t_s` (`--snapshots`).

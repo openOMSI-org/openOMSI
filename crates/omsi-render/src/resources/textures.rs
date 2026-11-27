@@ -173,6 +173,7 @@ fn create_texture_checked(
     let out_of_memory = pollster::block_on(memory.pop());
     if out_of_memory.is_some() {
         TEXTURE_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
+        crate::pipelines::errors::note_out_of_memory();
     }
     let reason = if out_of_memory.is_some() {
         TextureCreationError::OutOfMemory
@@ -1133,6 +1134,49 @@ impl Renderer {
         self.queue.submit([]);
         texture.destroy();
         (data.len() * rounds) as f64 / 1e6 / secs
+    }
+
+    /// Checked render target allocation for displays that can safely skip one frame.
+    /// A failed GPU allocation must not leave a permanent invalid texture in the scene:
+    /// callers can retry after the next memory-budget cleanup instead.
+    pub fn try_add_render_texture(
+        &self,
+        scene: &mut Scene,
+        width: u32,
+        height: u32,
+    ) -> Option<TextureId> {
+        let (width, height) = fit_size(
+            width.max(1),
+            height.max(1),
+            self.device.limits().max_texture_dimension_2d,
+        );
+        let texture = try_create_texture(
+            &self.device,
+            &wgpu::TextureDescriptor {
+                label: Some("render target"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+        )?;
+        let view = texture.create_view(&Default::default());
+        scene.textures.push(GpuTexture {
+            texture,
+            view,
+            size: (width, height),
+            bytes: texture_bytes(self.format, width, height, 1),
+            generation: next_gen(),
+        });
+        Some(scene.textures.len() - 1)
     }
 
     /// A texture the scene can be rendered into (`render_to_texture`), e.g. a rear-view mirror.

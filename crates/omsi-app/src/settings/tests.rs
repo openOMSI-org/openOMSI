@@ -1141,3 +1141,46 @@ fn the_note_kinds_go_round_the_file() {
         (false, true, false, true)
     );
 }
+
+/// DLSS's sharpening: 25 % unless set (the fixed amount it had before), kept through the
+/// launcher's file and handed to the renderer.
+#[test]
+fn dlss_sharpness_round_trips_into_renderer() {
+    let default = Settings::from_text("");
+    assert!((default.dlss_sharpness - omsi_render::DLSS_SHARPEN).abs() < 1e-6);
+    assert!((default.render_options().dlss_sharpness - 0.25).abs() < 1e-6);
+    let mut ui = omsi_launcher_lib::settings_from_text(None);
+    assert!((ui["dlss_sharpness"].as_f64().unwrap() - 0.25).abs() < 1e-6);
+    ui["upscaler"] = serde_json::json!("dlss");
+    ui["dlss_sharpness"] = serde_json::json!(0.6);
+    let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None));
+    assert!((game.dlss_sharpness - 0.6).abs() < 1e-6);
+    assert!((game.render_options().dlss_sharpness - 0.6).abs() < 1e-6);
+    assert_eq!(Settings::from_text(&game.to_text()), game);
+    assert!((Settings::from_text("dlss_sharpness=7\n").dlss_sharpness - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn audio_surround_is_written_on_its_own_line_by_both_writers() {
+    let mut s = Settings::desktop();
+    assert!(!s.audio_surround);
+    s.audio_surround = true;
+    let native = s.to_text();
+    assert!(
+        native.contains("doppler=1\naudio_surround=1\ndriver=1\n"),
+        "{native:?}"
+    );
+    assert!(Settings::from_text(&native).audio_surround);
+
+    let mut ui = omsi_launcher_lib::settings_from_text(None);
+    ui["audio_surround"] = serde_json::json!(true);
+    let saved = omsi_launcher_lib::settings_to_text(&ui, None);
+    assert!(
+        saved.contains("doppler=1\naudio_surround=1\ndriver=1\n"),
+        "{saved:?}"
+    );
+    assert!(Settings::from_text(&saved).audio_surround);
+
+    let legacy = omsi_launcher_lib::settings_to_text(&serde_json::json!({}), None);
+    assert!(legacy.contains("audio_surround=0\n"), "{legacy:?}");
+}

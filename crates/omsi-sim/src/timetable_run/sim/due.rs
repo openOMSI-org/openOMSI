@@ -125,7 +125,40 @@ impl ScheduleSim {
         if let Some(duty) = duty {
             self.duty_bus(duty, &mut out);
         }
+        for (&tour, &(departure, next)) in &self.lan_progress.0 {
+            out.insert(tour, departure, next);
+        }
         out
+    }
+
+    /// LAN play (host): the bus of the player driving tour `tour` of line `line` has stood at
+    /// stop `stop` and left it. Its trip - of the calls of that tour at the stop about now,
+    /// the one due nearest - asks for nobody there or before any more, as an AI bus's does
+    /// ([`TourBuses`]). Without this the host knew nothing of how far a player had got, and
+    /// the stops they had served filled again for [`PAX_LATE_WAIT`].
+    pub fn lan_bus_left(&mut self, line: &str, tour: &str, stop: i64) {
+        let tod = self.last_tod;
+        let mut best: Option<(f64, usize, usize)> = None;
+        for (i, d) in self.departures.iter().enumerate() {
+            if !d.line.eq_ignore_ascii_case(line)
+                || !d.tour.eq_ignore_ascii_case(tour)
+                || !self.runs(i)
+            {
+                continue;
+            }
+            let tt = self.times_of(i);
+            for (k, sid) in trip_stations(&self.data.trips[d.trip]).iter().enumerate() {
+                let due = d.time + tt.stations.get(k).map(|s| s.0).unwrap_or(0.0);
+                let off = (due - tod).abs();
+                if *sid == stop && pax_turn_up_for(due, tod) && best.is_none_or(|b| off < b.0) {
+                    best = Some((off, i, k));
+                }
+            }
+        }
+        if let Some((_, i, k)) = best {
+            let key = self.bus_key(i);
+            self.lan_progress.insert(key, i, k + 1);
+        }
     }
 
     /// Which bus drives departure `i` ([`DueVisit::tour`]): its tour's (`tour_key`), the
@@ -277,6 +310,34 @@ mod tests {
         assert_eq!(sim.station_left_at(0, Some(start + 600.0)), 1);
         assert_eq!(sim.station_left_at(0, Some(start + 1200.0)), 2);
         assert_eq!(sim.station_left_at(0, None), 3);
+    }
+
+    /// A LAN player's bus tells the host nothing of its duty's next stop: having stood at a
+    /// stop and left it, its trip asks for nobody there any more.
+    #[test]
+    fn a_lan_players_bus_passes_the_stops_it_leaves() {
+        let mut sim = schedule();
+        three(&mut sim);
+        sim.set_lan_tours([("1".to_string(), "1".to_string())].into_iter().collect());
+        // 10:12, two minutes after the 10:00 was due at 43
+        sim.last_tod = 36_720.0;
+        let call = DueVisit {
+            tour: sim.bus_key(0),
+            departure: 0,
+            station: 1,
+            share: 1.0,
+        };
+        assert!(!sim.tour_buses(None, None).passed(&call));
+        sim.lan_bus_left("1", "1", 43);
+        let buses = sim.tour_buses(None, None);
+        assert!(buses.passed(&call));
+        assert!(
+            !buses.passed(&DueVisit { station: 2, ..call }),
+            "the stop ahead still asks"
+        );
+        // given up: nothing is kept of it
+        sim.set_lan_tours(Default::default());
+        assert!(sim.tour_buses(None, None).0.is_empty());
     }
 
     /// The player's bus is where its duty is: its trip's departure, its next stop.

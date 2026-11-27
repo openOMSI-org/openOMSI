@@ -31,8 +31,6 @@ export async function boot() {
     loadContent();
     readAhead();
     loadDepot();
-    // (the bus preview's helper and renderer get ready while the page is read)
-    call('preview_warm').catch(() => {});
   }
   startPolling();
   on('vehicles-progress', (p) => set({ vehiclesProgress: p }));

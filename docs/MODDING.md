@@ -56,6 +56,9 @@ Each keyword is described in a section below or on its own page.
 | `[matl_glow]` | A material that is its own light source | [Glowing materials](#glowing-materials) |
 | `[light_emitter_interior]` | A light-mapped mesh lights the saloon | [Light-emitting meshes](#light-emitting-meshes) |
 | `[led_glow_effect]` | How strongly an LED panel's dots glow | [Glowing materials](#glowing-materials) |
+| `[matl_emissive]`, `[matl_emissive_nits]`, `[matl_emissive_kelvin]`, `[matl_emissive_texture]`, `[matl_emissive_fade]` | A material's own light: colour, HDR strength or cd/m², temperature, script control and fading | [Emissive materials](PBR.md#emissive-materials) |
+| `[matl_basecolor]`, `[matl_metallic]`, `[matl_roughness]`, `[matl_normal_strength]`, `[matl_occlusion_strength]` | PBR values of a material without texture maps | [PBR materials](PBR.md#factors-without-textures) |
+| `[matl_nodirt]` | A material that takes no road dirt | [Road dirt](#road-dirt) |
 | `[htmltexture]`, `[useHtmlTexture]` | A display drawn from an HTML page | [HTML textures](HTMLTEXTURE.md) |
 | `[navigatortexture]`, `[useNavigatorTexture]` | A GPS screen showing the navigator | [Navigator textures](NAVIGATORTEXTURE.md) |
 | More than four numbers in `[illumination_interior]` | More interior lamps per mesh | [Interior lamps](#interior-lamps) |
@@ -67,6 +70,7 @@ Each keyword is described in a section below or on its own page.
 | `[add_camera_reflexion_static]` | A fixed camera for a CCTV or reversing screen | [Camera screens](#camera-screens) |
 | `[suspension]` | Leaf, air or progressive springs per axle | [Suspension](SUSPENSION.md) |
 | `[vehicle_script]` | A Lua or `.oop` script that belongs to the vehicle | [Plugins](PLUGINS.md) |
+| `[procedural_dirt_off]`, `[procedural_dirt_rate]`, `[procedural_dirt_box]` | The vehicle's road dirt: off, how fast, its layout | [Road dirt](#road-dirt) |
 | `[trolley_pole]`, `[trolley_rheostat]`, `[trolley_async]` | Trolley poles and electric drive | [Trolleybuses](TROLLEYBUS.md) |
 | `[rail_class]`, `[rail_power]`, `[rail_traction]`, `[rail_brake]`, `[rail_coupler]`, `[rail_body_osc]`, `[pantograph_var]`, `[pantograph_trigger]` | Rail vehicle behaviour | [Rail](RAIL.md) |
 
@@ -256,6 +260,30 @@ LED panel.
 
 Both keywords are described in full in [File formats](FORMATS.md).
 
+## Road dirt
+
+With **Road dirt on the vehicles** on (the default, Enhanced and Enhanced+), every vehicle
+gathers road dirt where it lands, laid out by its `.bus` file's `[boundingbox]` and axles (see
+[Graphics](GRAPHICS.md#road-dirt)). It takes the place of the vehicle's own dirt overlay: a
+material with `[alphascale] Dirt_Norm` is hidden while the road dirt is drawn, so the two
+never show together. Off, or in Vanilla and Vanilla+, the vehicle's own dirt shows as in
+OMSI 2. The windscreen's `Dirt_Wiped` layer, which the wipers clear, stays as it is.
+
+A vehicle works without any of the following. They let a modder tune or refuse it; OMSI 2 skips
+them.
+
+| Keyword | File | What it does |
+|---|---|---|
+| `[procedural_dirt_off]` | `.bus`, `.ovh` | No road dirt on this vehicle: it keeps its own dirt overlay whatever the setting. For a bus whose dirt textures are made for it. |
+| `[procedural_dirt_rate]` + a number | `.bus`, `.ovh` | How fast it gathers dirt: `1` as any vehicle, `0.5` half as fast, `0` never. The rain washes it off as fast as any. |
+| `[procedural_dirt_box]` + six numbers | `.bus`, `.ovh` | The box the dirt is laid out on, as `[boundingbox]` (width, length, height, then the middle's x, y, z). For a body the `[boundingbox]` does not fit, such as one with a long overhang or a roof box. |
+| `[matl_nodirt]` | model `.cfg`, after a `[matl]` | This material takes no road dirt: a destination display, a chrome strip, a logo, glass that should stay clear. |
+
+A rear section of an articulated bus is laid out by its own file and carries the dirt of the
+front section. To look at the dirt without driving for an hour, start the game with
+`OMSI_ROAD_DIRT=spray,film,dust,wet[,slush,mud]` (each 0..1, see
+[Debug flags](DEBUG_FLAGS.md)).
+
 ## Lights
 
 ### Extra spotlights
@@ -418,6 +446,49 @@ seat_12_taken
 - Both are ordinary variables from the bus's varlists.
 - A place without the lines, or naming a variable the scripts do not have, is always available.
 - A blank line or the next block ends the list. OMSI 2 skips the lines.
+
+## Blind spot sensors: what the traffic sees
+
+OMSI 2 scripts cannot ask the game what is around the vehicle, so a blind spot monitor in an
+add-on could only be faked (a timer, a fixed route trigger). openOMSI measures it: the AI
+traffic looks at the cars around the player's bus each frame and puts the result into six
+variables of the bus's varlists.
+
+| Variable | What it holds |
+| --- | --- |
+| `BSM_Left`, `BSM_Right`, `BSM_Rear` | 1 while a car is in that zone, 0 while it is clear |
+| `BSM_Left_Dist`, `BSM_Right_Dist`, `BSM_Rear_Dist` | the gap to it in metres (0 while clear) |
+
+The zones are the bus's own: 3.5 m out from each side along the body (plus 2 m past the
+front so a car just pulling alongside counts), and 20 m behind the rear body line, all
+within 3.5 m of the centre line. The gap is measured between the two bodies, not between
+their centres. `BSM_Left`/`BSM_Right` are from the driver's seat, so they turn with the bus.
+
+Declare only the variables the bus uses; a name the varlist does not have is not written at
+all, and a bus that declares none of them is not touched - OMSI 2 add-ons need no change:
+
+```
+[varlist]
+BSM_Left
+BSM_Left_Dist
+```
+
+Then light a mirror lamp or play a sound as usual:
+
+```
+(L.L.BSM_Right) 1 =
+{if}
+  (L.L.BSM_Right_Dist) 3 <
+  {if}
+    (S.L.bsm_beep) 1 (S.L.mirror_lamp_right) 1
+  {endif}
+{endif}
+```
+
+What it does not do yet: no per-vehicle zone sizes (they are the same for every bus), no
+front zone, no object type (a car, a cyclist or a pedestrian reads the same) and no relative
+speed - the traffic's cars are all there is to see. Pedestrians and cyclists on foot are not
+in the zones.
 
 ### Ticket validators
 

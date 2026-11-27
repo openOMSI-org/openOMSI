@@ -9,12 +9,14 @@ pub(crate) use omsi_weather::season_phase::*;
 /// the time of day stay the player's (see [`phase_date`]); a saved situation keeps its own
 /// date. The season is written back as [`SeasonChoice::word`] (what LAN players are told).
 pub fn apply_season_date(args: &mut Args) {
-    let Some(choice) = args.season.as_deref().and_then(SeasonChoice::parse) else { return };
+    let Some(choice) = args.season.as_deref().and_then(SeasonChoice::parse) else {
+        return;
+    };
     args.season = Some(choice.word());
     if args.situation.is_some() {
         return;
     }
-    let lat = map_latitude(&args.root, &args.map);
+    let lat = map_lat_deg(&args.root, &args.map);
     let c = start_clock(args);
     let code = c.date_code();
     let now = (code / 10000, (code / 100 % 100) as u32, (code % 100) as u32);
@@ -31,4 +33,3 @@ pub fn apply_season_date(args: &mut Args) {
         choice.mix().map(|m| (m.from, m.to, m.share))
     );
 }
-

@@ -281,6 +281,8 @@ impl VehicleInstance {
             crashes: 0,
             last_impact: 0.0,
             dirt: 0.0,
+            road_dirt: RoadDirt::default(),
+            road_dirt_drawn: Default::default(),
             rigid: None,
             wheel_seats: None,
             ai_odometer: 0.0,
@@ -337,6 +339,8 @@ impl VehicleInstance {
             numeric += usize::from(self.set_var(name, *value));
             if name.eq_ignore_ascii_case("Dirt_Norm") {
                 self.dirt = value.clamp(0.0, 1.0);
+                // (and the road dirt by it: a bus saved dirty comes back dirty)
+                self.road_dirt = RoadDirt::from_dirt_norm(self.dirt);
             }
         }
         for (name, value) in strings {

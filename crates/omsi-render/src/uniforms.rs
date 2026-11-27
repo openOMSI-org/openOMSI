@@ -179,6 +179,10 @@ pub(crate) struct EnhancedUniform {
     pub(crate) pbr_ext: [f32; 4],
     /// the ray tracing
     pub(crate) rt_ext: [f32; 4],
+    /// The vehicles' road dirt (`vehicle_dirt::pack_all`): x how many, then their rows.
+    pub(crate) dirt_n: [f32; 4],
+    pub(crate) dirt:
+        [[f32; 4]; crate::vehicle_dirt::DIRT_VEHICLES * crate::vehicle_dirt::DIRT_ROWS],
 }
 
 #[repr(C)]

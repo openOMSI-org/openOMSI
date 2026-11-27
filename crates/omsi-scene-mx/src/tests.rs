@@ -459,6 +459,7 @@ fn a_lamps_lenses_follow_its_alphascale_and_light_map_variables() {
             (3, "NoSuchVar".into()),
         ],
         uv: vec![],
+        ..Default::default()
     };
     let state = |v: &str| standard_traffic_lamp(v, true, false, false, false);
     let (alpha, light) = slots.values(&state);
@@ -475,8 +476,37 @@ fn a_lamps_lenses_follow_its_alphascale_and_light_map_variables() {
         alpha: vec![],
         light: vec![(0, String::new())],
         uv: vec![],
+        ..Default::default()
     };
     assert_eq!(plain.values(&|_| Some(0.0)).1, vec![1.0]);
+}
+
+#[test]
+fn a_scenery_objects_script_drives_its_emissive_slot_with_a_fade() {
+    // slot 1 shines by `lamp_on`, fading in over 0.5 s; slot 0 is not driven
+    let slots = LampSlots {
+        count: 2,
+        emit: vec![EmitSlot {
+            slot: 1,
+            level: Some("lamp_on".into()),
+            fade: [0.5, 0.0],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let off = |_: &str| Some(0.0);
+    let on = |_: &str| Some(1.0);
+    let e = &slots.emit[0];
+    assert_eq!(e.target(&off), 0.0);
+    let half = e.step(0.0, 0.5, &on);
+    assert!((half - (1.0 - (-1.0f32).exp())).abs() < 1e-5, "{half}");
+    assert_eq!(e.step(half, 0.1, &off), 0.0, "no fade down: off at once");
+    assert_eq!(
+        slots.emit_values(&[1.0], &on),
+        vec![1.0, omsi_model::slot_value(1.0, None)]
+    );
+    // a variable the object does not have leaves it at full
+    assert_eq!(e.target(&|_| None), 1.0);
 }
 
 #[test]
@@ -1638,6 +1668,14 @@ fn a_light_enh_has_its_bitmap_z_offset_factor_and_effects() {
     );
     assert!((glow.z_offset - 0.05).abs() < 1e-6 && glow.rotating == 2);
     assert!((glow.size - 0.025).abs() < 1e-6 && (glow.brightness - 1.0).abs() < 1e-6);
+    // the authored sRGB colour is linear light: 150/255 is 0.305, not 0.588 (#3802)
+    assert!(
+        (glow.color[0] - 1.0).abs() < 1e-6
+            && (glow.color[1] - 0.3049873).abs() < 1e-6
+            && glow.color[2] == 0.0,
+        "the stop-request lamp must stay orange: {:?}",
+        glow.color
+    );
     assert!(star.flags & 8 != 0 && (star.size - 0.0625).abs() < 1e-6);
     // the factor scales the lamp (OMSI: variable times factor), effect 0 has the halo
     let model = Model::parse(&omsi_cfg::CfgFile::from_str(&path, &lamp("0.5", "0")));

@@ -80,6 +80,8 @@ Values for looking at and comparing pictures. The defaults are what the game use
 | `OMSI_TONE_CONTRAST` | `day[,night]`; default `1` | Tone mapping contrast. |
 | `OMSI_TONEMAP` | `natural`, `agx` or `neutral`; default `agx` | Enhanced's tone curve: the old natural curve, AgX, Khronos PBR Neutral. |
 | `OMSI_GRADE` | `0` | Enhanced without its colour grade (white balance, saturation and the shadows' lift by the sun's height and the weather). |
+| `OMSI_ROAD_DIRT_RATE` | number; default `1` | How many times faster the vehicles gather road dirt: `60` lays an hour's dirt in a minute of driving. |
+| `OMSI_ROAD_DIRT` | `spray,film,dust,wet[,slush,mud]` | The procedural road dirt (`procedural_dirt`) every vehicle carries, 0..1 each, whatever it gathered. |
 | `OMSI_WIDE_AO` | `reach,strength,gain,max` | The street-scale occlusion of sky light and bounced light (metres, 0..1, 0..1, radiance). |
 | `OMSI_PUDDLE_F0` | number; default `0.08` | Puddle reflectance at normal incidence (0.02 to 0.2). |
 | `OMSI_PUDDLE_THICKNESS` | number; default `0.12` | Puddle water film thickness. |
@@ -167,6 +169,7 @@ LAN play and the services the game talks to. See [Playing together](MULTIPLAYER.
 | --- | --- | --- |
 | `OMSI_LAN_IP` | `a.b.c.d[,e.f.g.h]` | LAN addresses to offer first, when the detection gets them wrong. |
 | `OMSI_LAN_JOIN_TIMEOUT` | seconds; default: built-in | How long to wait when joining a LAN game. |
+| `OMSI_MOD_UPLOAD_KIB_PER_SEC` | KiB/s; default `1024`; `0` disables the limit | Aggregate encrypted mod-upload rate shared by all workers. Positive values are clamped to `64`–`1048576`; invalid values use the default. Read when the first mod frame is sent; restart to change it. Gameplay UDP uses a separate transport. |
 | `OMSI_NO_BRIDGE` | flag | LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties). |
 | `OMSI_NO_TUNNEL` | flag | LAN: no tunnel. |
 | `OMSI_CLOUDFLARED` | path | The `cloudflared` program for the LAN tunnel. Searched after the game's folder and before the `PATH`. |
@@ -324,7 +327,7 @@ frame by frame.
 
 | Variable | Values / default | What it does |
 | --- | --- | --- |
-| `OMSI_DEBUG_ENHANCED` | number; default `0` | Enhanced main pass shows one of its terms alone (n selects it: 1 sun shadow, 2 occlusion, ...). |
+| `OMSI_DEBUG_ENHANCED` | number; default `0` | Enhanced main pass shows one of its terms alone (n selects it: 1 sun shadow, 2 occlusion, ..., 18 traced bounced light, 19 traced share of the sky light). |
 | `OMSI_DEBUG_SHADOW` | number; unset: off | Shadow debug overlay (with a number: its radius, default 3). |
 | `OMSI_DEBUG_PUDDLES` | number; default `0` | Puddle debug view (a number selects it). |
 | `OMSI_DEBUG_RT` | number; unset: off | Log the ray tracing structures every 30 frames (with a number: a debug view). |

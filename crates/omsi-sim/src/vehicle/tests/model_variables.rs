@@ -66,6 +66,7 @@ fn diagnostic_type(reverse: bool) -> VehicleType {
             def_index,
             data: MeshData::default(),
             file: PathBuf::new(),
+            stamp: 0,
             materials: vec![omsi_o3d::Material {
                 texture: "lamp.png".into(),
                 ..Default::default()
@@ -591,6 +592,7 @@ fn animation_only_variable_binds_and_animates_without_script_declaration() {
         def_index: 0,
         data: Default::default(),
         file: "timetable.o3d".into(),
+        stamp: 0,
         materials: vec![],
         overrides: vec![],
         pivot: glam::Mat4::IDENTITY,
@@ -631,6 +633,7 @@ fn multiple_animation_only_variables_bind_and_animate_together() {
             def_index: i,
             data: Default::default(),
             file: (*name).into(),
+            stamp: 0,
             materials: vec![],
             overrides: vec![],
             pivot: glam::Mat4::IDENTITY,

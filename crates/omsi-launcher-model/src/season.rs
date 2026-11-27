@@ -1,6 +1,6 @@
 //! The Drive page's season and its phase: what the choice does to the date.
 use super::state::State;
-use omsi_weather::season_phase::{SeasonChoice, map_latitude, phase_date};
+use omsi_weather::season_phase::{SeasonChoice, map_lat_deg, phase_date};
 
 impl State {
     /// The season choice changed to `season` ("auto" = by date): a season moves the date
@@ -49,7 +49,7 @@ pub(crate) fn launcher_date(
 ) -> Option<String> {
     let choice = launcher_choice(season, phase)?;
     let num = |r: std::ops::Range<usize>| date.get(r).and_then(|x| x.parse::<u32>().ok());
-    let lat = map_latitude(
+    let lat = map_lat_deg(
         std::path::Path::new(&omsi_launcher_lib::load_config().root),
         map,
     );

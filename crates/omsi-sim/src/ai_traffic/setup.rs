@@ -70,9 +70,36 @@ impl TrafficSim {
             .clone()
     }
 
+    /// The random traffic's paint for `ty`, drawn by `pick`: never the paint the player's own
+    /// bus of that file shows (#3477) - the next one the traffic draws, or the draw itself
+    /// when every paint it draws is the player's.
     pub fn ai_scheme(&self, ty: &VehicleType, pick: u64) -> Option<usize> {
         let set = self.ai_schemes(ty);
-        (!set.is_empty()).then(|| set[(pick % set.len() as u64) as usize])
+        if set.is_empty() {
+            return None;
+        }
+        let at = (pick % set.len() as u64) as usize;
+        if let Some(mine) = self.player_livery.as_ref().filter(|p| p.is_bus_of(ty)) {
+            for step in 0..set.len() {
+                let i = set[(at + step) % set.len()];
+                let name = ty
+                    .paint_schemes
+                    .get(i)
+                    .map(|s| s.name.as_str())
+                    .unwrap_or("");
+                if !mine.is_paint(name) {
+                    return Some(i);
+                }
+            }
+        }
+        Some(set[at])
+    }
+
+    /// Tell the traffic what the bus the player drives shows (`omsi_sim::livery`); None when
+    /// there is none (on foot, or no traffic). The AI's random buses of that file take another
+    /// paint, number and plate from then on (#3477).
+    pub fn set_player_livery(&mut self, livery: Option<crate::livery::PlayerLivery>) {
+        self.player_livery = livery;
     }
 
     /// The traffic made of its parts: the linked network, the random traffic's types,
@@ -130,6 +157,7 @@ impl TrafficSim {
                 .unwrap_or(0x9E37_79B9_7F4A_7C15),
             scheme_salt: omsi_script::session_seed().unwrap_or(0),
             scheme_sets: Default::default(),
+            player_livery: None,
             target,
             lights_only: false,
             spawn_radius: 400.0,

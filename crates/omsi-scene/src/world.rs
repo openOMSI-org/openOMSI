@@ -47,8 +47,9 @@ pub struct World {
     pub(super) vehicle_textures: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
     pub(super) player_textures: Arc<Mutex<hashbrown::HashSet<PathBuf>>>,
     pub(super) freetex_reloads: Arc<FreeTextureReloads>,
-    /// GPU meshes of vehicles by (bus file, mesh index), shared across paint schemes.
-    pub(super) vehicle_meshes: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,
+    /// GPU meshes of vehicles by (bus file, mesh index, the mesh file's stamp), shared across
+    /// paint schemes (see `MeshKey`: a mesh rebuilt on disk is a new key, #2618).
+    pub(super) vehicle_meshes: Arc<Mutex<HashMap<MeshKey, (MeshId, usize)>>>,
     /// Vehicle meshes and textures made on a worker, until their set is uploaded.
     pub(super) vehicle_ready: Arc<Mutex<PreparedVehicles>>,
     /// Textures uploaded as RGBA to spare a frame, being compressed on the workers, and the
@@ -403,6 +404,13 @@ pub(super) fn push_lamp_sprites(
     }
 }
 
+/// A lamp's colour from the model file (0..255, as a colour picker shows it) as linear
+/// light, the way the slot colours are taken: passing the encoded bytes through made the
+/// SD202's `255 150 0` stop-request lamp yellow instead of orange (#3802).
+fn lamp_color(color: [f32; 3]) -> [f32; 3] {
+    color.map(|c| crate::vehicle_materials::srgb_to_linear(c / 255.0))
+}
+
 /// [`model_lights_faded`], each sprite with the light it belongs to (the n-th light of the
 /// model, `[light_enh]` and `[light_enh_2]` in file order - the order `value_of` is asked
 /// in): one light gives several sprites (its glow, star, fog halo and cone).
@@ -527,7 +535,7 @@ fn model_lights_into(
             let glow = omsi_render::Corona {
                 position: p,
                 size: (l.size * 0.5).max(0.0),
-                color: [l.color[0] / 255.0, l.color[1] / 255.0, l.color[2] / 255.0],
+                color: lamp_color(l.color),
                 brightness: b,
                 vehicle_lamp: exterior_mesh && is_exterior_lamp_channel(&l.variable),
                 direction: glam::Vec3::ZERO,
@@ -594,7 +602,7 @@ fn model_lights_into(
                 .map(|v| omsi_cfg::parse_f32(v) as i32)
                 .unwrap_or(0)
                 .clamp(0, 7) as u8;
-            let color = [l.color[0] / 255.0, l.color[1] / 255.0, l.color[2] / 255.0];
+            let color = lamp_color(l.color);
             // the original: the glow, the light's own bitmap (else licht.bmp) as wide as its
             // size, with its star and its halo in fog (`push_lamp_sprites`)
             let glow = omsi_render::Corona {
@@ -654,7 +662,7 @@ fn model_lights_into(
                 out.push(omsi_render::Corona {
                     position: p,
                     size: l.size,
-                    color: [l.color[0] / 255.0, l.color[1] / 255.0, l.color[2] / 255.0],
+                    color: lamp_color(l.color),
                     brightness: b,
                     direction: dir,
                     cone_cos: (l.cone_outer * 0.5).to_radians(),
@@ -862,6 +870,11 @@ impl World {
     /// Ground height (road surface where present, else terrain) at world x, y.
     pub fn ground_height(&self, x: f64, y: f64) -> Option<f64> {
         self.data.peek().ground_height(x, y)
+    }
+
+    /// Whether the rain is kept off the road at world (x, y, z) (see `WorldData::roofed_at`).
+    pub fn roofed_at(&self, x: f64, y: f64, z: f64) -> bool {
+        self.data.peek().roofed_at(x, y, z)
     }
 
     /// The wetness a puddle would use at world (x, y) (see `WorldData::wet_road_at`).

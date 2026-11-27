@@ -25,6 +25,7 @@ mod tests;
 #[cfg(windows)]
 mod vulkan;
 
+pub use frame::DLSS_SHARPEN;
 pub(crate) use frame::*;
 #[cfg(target_os = "macos")]
 pub use metalfx_frames::{FrameGeneration, GenerationWindow};

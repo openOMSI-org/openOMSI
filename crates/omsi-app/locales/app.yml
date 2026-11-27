@@ -575,6 +575,22 @@ _version: 2
   en: "Arrival announcements at the stop"
 "On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS's next stop key, pressed as the driver would":
   en: "On depot files that keep two recordings per stop (the Chinese maps), the arrival one is played as the bus reaches the stop: the IBIS's next stop key, pressed as the driver would"
+"…the arrival recording at the stop":
+  en: "…the arrival recording at the stop"
+"The \"… arrived\" half of each stop, pressed as the bus stands at it; off leaves the stops to their scripts":
+  en: "The \"… arrived\" half of each stop, pressed as the bus stands at it; off leaves the stops to their scripts"
+"…the departure recording when pulling out":
+  en: "…the departure recording when pulling out"
+"The \"next stop is …\" half, which the bus's own scripts play; off stops the game making up for a script that does not step its counter":
+  en: "The \"next stop is …\" half, which the bus's own scripts play; off stops the game making up for a script that does not step its counter"
+"…the next stop on the way in":
+  en: "…the next stop on the way in"
+"A city that announces before the stop rather than when pulling out: the next stop's recording is played a distance before it, once a stop":
+  en: "A city that announces before the stop rather than when pulling out: the next stop's recording is played a distance before it, once a stop"
+"Approach distance":
+  en: "Approach distance"
+"How far before the stop the approach announcement plays; two stops closer together than twice this announce halfway between them":
+  en: "How far before the stop the approach announcement plays; two stops closer together than twice this announce halfway between them"
 "Passenger voices":
   en: "Passenger voices"
 "Greetings and tickets":
@@ -603,6 +619,10 @@ _version: 2
   en: "Volume"
 "Doppler effect":
   en: "Doppler effect"
+"5.1 sound (five speakers)":
+  en: "5.1 sound (five speakers)"
+"On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off":
+  en: "On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off"
 "Traffic":
   en: "Traffic"
 "Surroundings":
@@ -2877,6 +2897,10 @@ _version: 2
   en: "The trees' leaves bend and sway in the wind and its gusts; with no wind they stand still"
 "Built-up snow on roads and roofs":
   en: "Built-up snow on roads and roofs"
+"Road dirt on the vehicles":
+  en: "Road dirt on the vehicles"
+"Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2":
+  en: "Enhanced: the vehicles gather road dirt where it lands - spray behind the wheels and on the lower sides on wet roads, film on the back, dust when dry, slush in winter - and the rain washes it; off: the bus's own dirt, as in OMSI 2"
 "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2":
   en: "While it snows, snow builds up on the roads and on the vehicles' roofs, with ruts and tyre tracks, and thaws again; off: the weather's own snow on road, as in OMSI 2"
 "How much the view sways on its own when nothing is done to it - a head at rest is never quite still, most of it seen while the bus waits at a stop":
@@ -6765,6 +6789,10 @@ _version: 2
   en: "FSR sharpness"
 "RCAS sharpening strength":
   en: "RCAS sharpening strength"
+"DLSS sharpness":
+  en: "DLSS sharpness"
+"How much the picture is sharpened after DLSS; 25 % as before":
+  en: "How much the picture is sharpened after DLSS; 25 % as before"
 "Ultra Quality (77%)":
   en: "Ultra Quality (77%)"
 "Quality (67%)":
@@ -8463,6 +8491,14 @@ _version: 2
   en: "Optional visual hailing; only effective with supported natural animations"
 "Passengers signal approaching buses":
   en: "Passengers signal approaching buses"
+"Passengers add weight to the bus":
+  en: "Passengers add weight to the bus"
+"Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says":
+  en: "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says"
+"Passenger weight":
+  en: "Passenger weight"
+"For passengers whose file gives no weight; default 75 kg":
+  en: "For passengers whose file gives no weight; default 75 kg"
 "Multiplayer...":
   en: "Multiplayer..."
 "Connection code or server address":
@@ -9006,3 +9042,38 @@ _version: 2
   en: "no plugin is listening for commands"
 "plugin command queue is full":
   en: "plugin command queue is full"
+
+"the conductor of my bus":
+  en: "the conductor of my bus"
+"the conductor of #{owner}'s bus":
+  en: "the conductor of #{owner}'s bus"
+"No longer the conductor of my bus":
+  en: "No longer the conductor of my bus"
+"Make them the conductor of my bus":
+  en: "Make them the conductor of my bus"
+"Draw the mouse cursor in the game":
+  en: "Draw the mouse cursor in the game"
+"For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor":
+  en: "For a G-SYNC screen that stutters when the mouse moves: the game draws its own arrow and Windows is never asked to move the hardware cursor"
+"Entry doors":
+  en: "Entry doors"
+"As the bus says":
+  en: "As the bus says"
+"Front door only":
+  en: "Front door only"
+"First two doors":
+  en: "First two doors"
+"Rear door only":
+  en: "Rear door only"
+"Pay without a ticket":
+  en: "Pay without a ticket"
+"Accepted lateness":
+  en: "Accepted lateness"
+"Stops fill up in free drive":
+  en: "Stops fill up in free drive"
+"Only for due trips":
+  en: "Only for due trips"
+"Passengers wait for open doors":
+  en: "Passengers wait for open doors"
+"IBIS stop follows the duty":
+  en: "IBIS stop follows the duty"

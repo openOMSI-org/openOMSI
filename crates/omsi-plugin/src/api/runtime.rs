@@ -213,6 +213,8 @@ pub struct PluginState {
     pub perms: Option<HashSet<Perm>>,
     pub(crate) process_allowed: bool,
     pub(crate) process_entry: Option<PathBuf>,
+    /// The read-only WebSocket feeds it listens to (`omsi.ws`, #3098).
+    pub feeds: crate::ws::Feeds,
     /// Where its own files are (`plugin.read`, images, sounds): None for none.
     pub folder: Option<PathBuf>,
     /// Its data folder (`storage`, `files`), made when first written.
@@ -265,6 +267,7 @@ impl PluginState {
             perms: None,
             process_allowed: false,
             process_entry: None,
+            feeds: Default::default(),
             folder,
             data_dir,
             hub,

@@ -31,6 +31,10 @@ pub struct GpuMesh {
     /// lying on another of its object (`scene::overlay`).
     pub(crate) flats: Vec<crate::scene::overlay::Flat>,
     pub(crate) depth_normals: Vec<Vec3>,
+    /// A vehicle's part (an instance of it has a roof, `Instance::roof`): on a wet frame
+    /// it is drawn with the full enhanced pipelines, which carry the rain's drops on its
+    /// paint and mirrors (`main_key`).
+    pub(crate) vehicle: bool,
 }
 
 /// A buffer holding `contents` - what `create_buffer_init` makes, but written through the
@@ -162,6 +166,7 @@ pub(crate) fn try_create_buffer(
     };
     if matches!(e, mx::Error::OutOfMemory(_)) {
         MESH_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
+        crate::pipelines::errors::note_out_of_memory();
     }
     static FAILED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = FAILED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -324,6 +329,7 @@ impl MeshPage {
             source: None,
             flats,
             depth_normals,
+            vehicle: false,
         }
     }
 }
@@ -348,6 +354,7 @@ impl GpuMesh {
             source: None,
             flats: Vec::new(),
             depth_normals: Vec::new(),
+            vehicle: false,
         }
     }
 }

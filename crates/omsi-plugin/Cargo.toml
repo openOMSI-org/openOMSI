@@ -15,6 +15,8 @@ serde_json.workspace = true
 mlua = { version = "0.10", features = ["lua54", "vendored"] }
 wasmi = "2"
 oop-format = { git = "https://github.com/openOMSI-org/openOMSI-Development-Tools", rev = "496d9bd" }
+# (the plugin WebSocket feeds: a read-only wss client, #3098)
+tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
 
 [[bin]]
 name = "omsi-plugin-host"

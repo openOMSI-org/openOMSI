@@ -12,7 +12,7 @@ file 2102 crates/omsi-app-mx/src/on_foot.rs
 file 1695 crates/omsi-app-mx/src/photo/panel.rs
 file 1779 crates/omsi-app-mx/src/player.rs
 file 1722 crates/omsi-app-mx/src/plugins.rs
-file 1549 crates/omsi-app-mx/src/settings.rs
+file 1628 crates/omsi-app-mx/src/settings.rs
 file 2016 crates/omsi-app-mx/src/touch.rs
 file 2276 crates/omsi-app-mx/src/ui.rs
 file 2122 crates/omsi-app-mx/src/ui/menu.rs
@@ -40,9 +40,9 @@ file 2096 crates/omsi-render-mx/src/tests.rs
 file 2634 crates/omsi-render-mx/src/tests/more.rs
 file 2776 crates/omsi-render/src/tests/more.rs
 file 1734 crates/omsi-scene-mx/src/driver.rs
-file 2021 crates/omsi-scene-mx/src/lights.rs
+file 2153 crates/omsi-scene-mx/src/lights.rs
 file 2106 crates/omsi-scene-mx/src/mapgen.rs
-file 1884 crates/omsi-scene-mx/src/place.rs
+file 1994 crates/omsi-scene-mx/src/place.rs
 file 1635 crates/omsi-scene-mx/src/place_step.rs
 file 1876 crates/omsi-scene-mx/src/props.rs
 file 1540 crates/omsi-scene-mx/src/road_snow.rs
@@ -52,7 +52,7 @@ file 2067 crates/omsi-scene-mx/src/vehicles.rs
 file 1534 crates/omsi-scene-mx/src/window_wipers.rs
 file 1715 crates/omsi-scene/src/driver.rs
 file 2179 crates/omsi-scene/src/mapgen.rs
-file 1921 crates/omsi-scene/src/place.rs
+file 2044 crates/omsi-scene/src/place.rs
 file 1637 crates/omsi-scene/src/place_step.rs
 file 1566 crates/omsi-scene/src/stage.rs
 file 2067 crates/omsi-scene/src/vehicles.rs
@@ -77,7 +77,7 @@ file 1625 crates/omsi-sim/src/ai_traffic/junctions.rs
 file 1514 crates/omsi-sim/src/ai_traffic/planning.rs
 file 1951 crates/omsi-sim/src/ai_traffic/tick.rs
 file 1926 crates/omsi-sim/src/rigid/tests.rs
-file 2208 crates/omsi-sim/src/traffic/tests.rs
+file 2392 crates/omsi-sim/src/traffic/tests.rs
 file 1899 crates/omsi-sim/src/vehicle/types.rs
 file 2243 crates/omsi-trolley/src/pole.rs
 fn 354 crates/omsi-app-mx::act crates/omsi-app-mx/src/apple_bridge.rs
@@ -94,6 +94,7 @@ fn 338 crates/omsi-app-mx::host crates/omsi-app-mx/src/lan_world.rs
 fn 476 crates/omsi-app-mx::info crates/omsi-app-mx/src/app_events/frame/stages.rs
 fn 510 crates/omsi-app-mx::items crates/omsi-app-mx/src/game_lists.rs
 fn 361 crates/omsi-app-mx::left_now crates/omsi-app-mx/src/app_impl/mouse.rs
+fn 301 crates/omsi-app-mx::from_text crates/omsi-app-mx/src/settings.rs
 fn 342 crates/omsi-app-mx::lights crates/omsi-app-mx/src/app_events/frame/surroundings.rs
 fn 371 crates/omsi-app-mx::option_set crates/omsi-app-mx/src/game_lists/options.rs
 fn 341 crates/omsi-app-mx::options_pages crates/omsi-app-mx/src/game_lists/menu_pages.rs

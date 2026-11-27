@@ -39,8 +39,10 @@ impl Renderer {
             frame_heap: FrameHeap::default(),
             frame_views: Vec::new(),
             precip_heap: FrameHeap::default(),
+            dry_heap: FrameHeap::default(),
             camera_heaps: None,
             sky_bind_group: None,
+            sky_textures: None,
             overlays: Vec::new(),
             premultiplied: Default::default(),
             transposed: Default::default(),
@@ -376,6 +378,12 @@ impl Renderer {
         if let Some(i) = scene.instances.get_mut(instance) {
             if i.roof != roof {
                 i.roof = roof;
+                let mesh = i.mesh;
+                if roof.is_some() {
+                    if let Some(m) = scene.meshes.get_mut(mesh) {
+                        m.vehicle = true;
+                    }
+                }
                 Self::mark_changed(scene, instance);
             }
         }

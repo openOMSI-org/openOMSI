@@ -299,8 +299,8 @@ pub(crate) fn array_layout_entry_on(
 }
 
 /// The camera group's textures only the enhanced path reads: the reflection probe, the sky
-/// table and the window's clouds.
-pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
+/// table, the window's clouds and the traced global illumination.
+pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 4] = [12, 14, 17, 22];
 
 /// wgpu's OpenGL backend has sixteen texture units for a pipeline - for all its groups and
 /// both its shaders together (wgpu-hal's `MAX_TEXTURE_SLOTS`, whatever the chip has) - while
@@ -489,6 +489,20 @@ pub(crate) fn camera_layout_entries(
             false,
         ));
     }
+    // the traced global illumination (experimental, `rt_gi`; 02_bindings.wgsl `t_gi`): a
+    // seventeenth texture, only where the device takes it (`gi_binding`)
+    if crate::gi_binding() {
+        camera_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 22,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        });
+    }
     if omit_enhanced {
         camera_entries.retain(|e| !ENHANCED_CAMERA_TEXTURES.contains(&e.binding));
     }
@@ -667,6 +681,15 @@ impl Renderer {
         self.env_heading.set(heading);
     }
 
+    /// Send the uploads written so far (textures, buffers) to the GPU and let go of their
+    /// staging copies once it has them: wgpu keeps every `write_texture` in a staging buffer
+    /// until the next submission, and a loading stage that uploads without drawing (the
+    /// timetable's preloading) held all of it until the first frame.
+    pub fn flush_uploads(&self) {
+        self.queue.submit([]);
+        let _ = self.device.poll(wgpu::PollType::Poll);
+    }
+
     /// Whether the card ran out of memory since the last call (the game then keeps fewer
     /// textures, before the driver gives up the device).
     pub fn take_out_of_memory(&self) -> bool {
@@ -711,4 +734,8 @@ pub(crate) struct GpuErrors {
     pub(crate) out_of_memory: Arc<std::sync::atomic::AtomicBool>,
     /// Why the graphics device was lost (a driver reset, the card removed), once it was.
     pub(crate) device_lost: Arc<std::sync::Mutex<Option<String>>>,
+    /// Errors from `Queue::submit` since the last frame: its work was refused.
+    pub(crate) refused_submits: Arc<std::sync::atomic::AtomicU64>,
+    /// The frames refused in a row (kept through a rebuild, see `Renderer::rebuild_in_place`).
+    pub(crate) rejected: std::cell::Cell<crate::pipelines::errors::RejectedRun>,
 }

@@ -245,6 +245,9 @@ pub type DepotVehicle = (
 
 pub struct ScheduleSim {
     pub data: TimetableData,
+    /// The bus the player drives, while they drive one: a depot bus of the same vehicle file
+    /// never takes its fleet number, plate or paint (#3477, see [`player_entry`]).
+    pub player_bus: Option<crate::livery::PlayerLivery>,
     departures: Vec<Departure>,
     /// Depot vehicles per AI group: (type, its fleet from the ailists, depot file).
     depots: HashMap<String, Vec<DepotVehicle>>,
@@ -296,6 +299,9 @@ pub struct ScheduleSim {
     player_twins: HashSet<usize>,
     /// A player tour was just taken over: its buses already on the road go at the next tick.
     purge_player_tour: bool,
+    /// LAN play (host): how far the other players' buses have got on their tours
+    /// ([`ScheduleSim::lan_bus_left`]).
+    lan_progress: TourBuses,
     /// LAN play (host): the tours the other players drive (line, tour; lower case), left to
     /// them like our own.
     lan_tours: HashSet<(String, String)>,

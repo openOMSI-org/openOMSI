@@ -135,10 +135,19 @@ pub fn chat_line(text: &str) -> ChatLine {
     if t.eq_ignore_ascii_case("/reconnect") {
         return ChatLine::Reconnect;
     }
-    if t.len() > 1 && t.starts_with('/') {
+    if is_command(text) {
         return ChatLine::Command(t.to_string());
     }
     ChatLine::Say(t.to_string())
+}
+
+/// Whether `text` is a command: the line itself starts with `/` and a letter or digit right
+/// after it (`/vote 2`); a line with a space before the slash, `/ ...`, `//` or a smiley such
+/// as `/)` is said to everybody.
+fn is_command(text: &str) -> bool {
+    text.strip_prefix('/')
+        .and_then(|rest| rest.chars().next())
+        .is_some_and(char::is_alphanumeric)
 }
 
 fn admin_request(lan: &mut LanSession, game: &mut LanGame, password: &str) {

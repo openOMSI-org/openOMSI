@@ -57,10 +57,13 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "traffic" => app.session.traffic.as_ref()?.target as f32,
         "pax" => s.pax_density,
         "passenger_transfer_percent" => s.passenger_transfer_percent,
+        "passenger_weight_kg" => s.passenger_weight_kg,
+        "announce_approach_m" => s.announce_approach_m,
         "volume" => s.volume,
         "led_glow" => s.led_glow as f32,
         "night_brightness" => s.night_brightness,
         "fsr_sharpness" => s.fsr_sharpness,
+        "dlss_sharpness" => s.dlss_sharpness,
         "reflections" => s.reflections,
         "road_glare" => s.road_glare,
         "traffic_headlights" => s.traffic_headlights,
@@ -213,6 +216,21 @@ pub(super) fn option_set(
             Some(("pax_density", v.to_string()))
         }
         "passenger_transfer_percent" => set_connection_percent(app, v),
+        "passenger_weight_kg" => {
+            app.settings.passenger_weight_kg = v.clamp(20.0, 200.0);
+            Some((
+                "passenger_weight_kg",
+                app.settings.passenger_weight_kg.to_string(),
+            ))
+        }
+        "announce_approach_m" => {
+            // (#4033: how far before the stop the approach announcement plays)
+            app.settings.announce_approach_m = v.clamp(0.0, 1000.0);
+            Some((
+                "announce_approach_m",
+                app.settings.announce_approach_m.to_string(),
+            ))
+        }
         "volume" => {
             app.settings.volume = v;
             Some(("volume", v.to_string()))
@@ -231,6 +249,10 @@ pub(super) fn option_set(
         "fsr_sharpness" => {
             app.settings.fsr_sharpness = v.clamp(0.0, 1.0);
             Some(("fsr_sharpness", app.settings.fsr_sharpness.to_string()))
+        }
+        "dlss_sharpness" => {
+            app.settings.dlss_sharpness = v.clamp(0.0, 1.0);
+            Some(("dlss_sharpness", app.settings.dlss_sharpness.to_string()))
         }
         "reflections" => {
             app.settings.reflections = v.clamp(0.0, 1.0);
@@ -257,14 +279,7 @@ pub(super) fn option_set(
             Some(("look_sens", app.settings.look_sens.to_string()))
         }
         "head_tracking_smoothing" | "head_tracking_dead_zone" => {
-            let s = &mut app.settings;
-            let (key, to) = if verb == "head_tracking_smoothing" {
-                ("head_tracking_smoothing", &mut s.head_tracking_smoothing)
-            } else {
-                ("head_tracking_dead_zone", &mut s.head_tracking_dead_zone)
-            };
-            *to = omsi_launcher_lib::head_tracking_value(key, Some(v as f64)) as f32;
-            Some((key, to.to_string()))
+            set_head_tracking_option(app, verb, v)
         }
         "pad_steer_smooth" => {
             app.settings.pad_steer_smooth = v.clamp(0.0, 300.0).round();
@@ -569,6 +584,54 @@ fn option_set_environment(
     }
 }
 
+fn set_head_tracking_option(app: &mut App, verb: &str, v: f32) -> Option<(&'static str, String)> {
+    let s = &mut app.settings;
+    let (key, to) = if verb == "head_tracking_smoothing" {
+        ("head_tracking_smoothing", &mut s.head_tracking_smoothing)
+    } else {
+        ("head_tracking_dead_zone", &mut s.head_tracking_dead_zone)
+    };
+    *to = omsi_launcher_lib::head_tracking_value(key, Some(v as f64)) as f32;
+    Some((key, to.to_string()))
+}
+
+fn toggle_head_tracking_invert(
+    app: &mut App,
+    id: &str,
+    on: bool,
+    bit: String,
+) -> Option<(&'static str, String)> {
+    let (key, field) = match id {
+        "head_tracking_invert_yaw" => (
+            "head_tracking_invert_yaw",
+            &mut app.settings.head_tracking_invert_yaw,
+        ),
+        "head_tracking_invert_pitch" => (
+            "head_tracking_invert_pitch",
+            &mut app.settings.head_tracking_invert_pitch,
+        ),
+        "head_tracking_invert_roll" => (
+            "head_tracking_invert_roll",
+            &mut app.settings.head_tracking_invert_roll,
+        ),
+        "head_tracking_invert_x" => (
+            "head_tracking_invert_x",
+            &mut app.settings.head_tracking_invert_x,
+        ),
+        "head_tracking_invert_y" => (
+            "head_tracking_invert_y",
+            &mut app.settings.head_tracking_invert_y,
+        ),
+        "head_tracking_invert_z" => (
+            "head_tracking_invert_z",
+            &mut app.settings.head_tracking_invert_z,
+        ),
+        _ => return None,
+    };
+    *field = on;
+    Some((key, bit))
+}
+
 /// The two new graphics sliders, kept separate to avoid growing the already-long
 /// general settings handler past the size budget.
 fn set_graphics_brightness(app: &mut App, verb: &str, v: f32) -> Option<(&'static str, String)> {
@@ -613,6 +676,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
     Some(match id {
         "passenger_connections" => s.passenger_connections,
         "passenger_hailing" => s.passenger_hailing,
+        "passenger_mass" => s.passenger_mass,
         "passenger_full_bus_reaction" => s.passenger_full_bus_reaction,
         "pax_short_rides_stand" => s.pax_short_rides_stand,
         "navigator" => {
@@ -689,11 +753,15 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "pax_bad_driving" => s.pax_bad_driving,
         "pax_stop_numbers_exact" => s.pax_stop_numbers_exact,
         "auto_announce" => s.auto_announce,
+        "announce_arrival" => s.announce_arrival,
+        "announce_departure" => s.announce_departure,
+        "announce_approach" => s.announce_approach,
         "collision_pedestrians" => s.collision_pedestrians,
         "ssao" => s.ssao,
         "detail_textures" => s.detail_textures,
         "clouds" => s.clouds,
         "ray_tracing" => s.ray_tracing_on,
+        "rt_gi" => s.rt_gi,
         "cloud_shadows" => s.cloud_shadows,
         "light_glow" => s.light_glow,
         "volumetric_fog" => s.volumetric_fog,
@@ -701,6 +769,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "rain_lights" => s.rain_lights,
         "detailed_trees" => s.detailed_trees,
         "road_snow" => s.road_snow,
+        "procedural_dirt" => s.procedural_dirt,
         "mirror_hud_every_frame" => s.mirror_hud_every_frame,
         "mirror_shadows" => s.mirror_shadows,
         "mirror_particles" => s.mirror_particles,
@@ -714,12 +783,14 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "zoom_hold_latch" => s.zoom_hold_latch,
         "others_detail" => s.others_detail,
         "flashlight_cursor" => s.flashlight_cursor,
+        "software_cursor" => s.software_cursor,
         "triple_screen" => s.triple.enabled,
         "triple_hud_center" => s.triple_hud_center,
         "triple_span" => s.triple_span,
         "vr" => s.vr,
         "vr_desktop_mirror" => s.vr_desktop_mirror,
         "doppler" => s.doppler,
+        "audio_surround" => s.audio_surround,
         "steering_linear" => s.steering_linear,
         "pad_steer_linear" => s.pad_steer_linear,
         "pad_buttons" => s.pad_buttons,
@@ -789,6 +860,10 @@ fn toggle_set_gameplay(
                 };
             }
             Some(("passenger_connections", bit))
+        }
+        "passenger_mass" => {
+            app.settings.passenger_mass = on;
+            Some(("passenger_mass", bit))
         }
         "passenger_hailing" => {
             app.settings.passenger_hailing = on;
@@ -1015,29 +1090,8 @@ fn toggle_set_environment_and_graphics(
             app.settings.tobii_edges = on;
             Some(("tobii_edges", bit))
         }
-        "head_tracking_invert_yaw" => {
-            app.settings.head_tracking_invert_yaw = on;
-            Some(("head_tracking_invert_yaw", bit))
-        }
-        "head_tracking_invert_pitch" => {
-            app.settings.head_tracking_invert_pitch = on;
-            Some(("head_tracking_invert_pitch", bit))
-        }
-        "head_tracking_invert_roll" => {
-            app.settings.head_tracking_invert_roll = on;
-            Some(("head_tracking_invert_roll", bit))
-        }
-        "head_tracking_invert_x" => {
-            app.settings.head_tracking_invert_x = on;
-            Some(("head_tracking_invert_x", bit))
-        }
-        "head_tracking_invert_y" => {
-            app.settings.head_tracking_invert_y = on;
-            Some(("head_tracking_invert_y", bit))
-        }
-        "head_tracking_invert_z" => {
-            app.settings.head_tracking_invert_z = on;
-            Some(("head_tracking_invert_z", bit))
+        k if k.starts_with("head_tracking_invert_") => {
+            toggle_head_tracking_invert(app, id, on, bit)
         }
         "camcoll" => {
             app.settings.camera_collision = on;
@@ -1104,6 +1158,18 @@ fn toggle_set_environment_and_graphics(
             app.settings.auto_announce = on;
             Some(("auto_announce", bit))
         }
+        "announce_arrival" => {
+            app.settings.announce_arrival = on;
+            Some(("announce_arrival", bit))
+        }
+        "announce_departure" => {
+            app.settings.announce_departure = on;
+            Some(("announce_departure", bit))
+        }
+        "announce_approach" => {
+            app.settings.announce_approach = on;
+            Some(("announce_approach", bit))
+        }
         "collision_pedestrians" => {
             app.settings.collision_pedestrians = on;
             Some(("collision_pedestrians", bit))
@@ -1132,6 +1198,10 @@ fn toggle_set_graphics_and_controls(
         "clouds" => {
             app.settings.clouds = on;
             Some(("clouds", bit))
+        }
+        "rt_gi" => {
+            app.settings.rt_gi = on;
+            Some(("rt_gi", bit))
         }
         "ray_tracing" => {
             app.settings.ray_tracing_on = on;
@@ -1166,6 +1236,10 @@ fn toggle_set_graphics_and_controls(
             Some(("detailed_trees", bit))
         }
         // (the next picture tells the road snow, see `picture_lighting`)
+        "procedural_dirt" => {
+            app.settings.procedural_dirt = on;
+            Some(("procedural_dirt", bit))
+        }
         "road_snow" => {
             app.settings.road_snow = on;
             Some(("road_snow", bit))
@@ -1230,6 +1304,10 @@ fn toggle_set_graphics_and_controls(
             app.settings.others_detail = on;
             Some(("others_detail", bit))
         }
+        "software_cursor" => {
+            app.settings.software_cursor = on;
+            Some(("software_cursor", bit))
+        }
         "flashlight_cursor" => {
             app.settings.flashlight_cursor = on;
             Some(("flashlight_cursor", bit))
@@ -1261,6 +1339,10 @@ fn toggle_set_graphics_and_controls(
         "doppler" => {
             app.settings.doppler = on;
             Some(("doppler", bit))
+        }
+        "audio_surround" => {
+            app.settings.audio_surround = on;
+            Some(("audio_surround", bit))
         }
         "steering_linear" => {
             app.settings.steering_linear = on;

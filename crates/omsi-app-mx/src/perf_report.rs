@@ -340,3 +340,44 @@ mod tests {
         );
     }
 }
+
+/// The graphics memory after a stage of the loading, by kind, and the allocator's
+/// allocations by name where the backend reports them: where the card's memory goes
+/// before the first frame (the driver's budget was spent by the end of the timetable's
+/// preloading on an 8 GB card, with the render targets, the shadow maps and the upscaler
+/// still to come).
+pub(crate) fn log_load_memory(
+    stage: &str,
+    renderer: &omsi_render::Renderer,
+    scene: &omsi_render::Scene,
+) {
+    let m = renderer.gpu_memory(scene);
+    let mb = |b: u64| b as f64 / 1e6;
+    log::info!(
+        "load memory after {stage}: textures {:.0} MB, meshes {:.0} MB, other {:.0} MB ({}), driver's budget {}",
+        mb(m.textures),
+        mb(m.meshes),
+        mb(m.other),
+        if m.measured {
+            "the driver's count"
+        } else {
+            "targets worked out"
+        },
+        m.budget
+            .map_or("not told".to_string(), |b| format!("{:.0} MB", mb(b)))
+    );
+    if let Some(a) = renderer.allocator_summary() {
+        log::info!("load memory after {stage}, allocations: {a}");
+    }
+    let c = omsi_texture::disk_cache::DiskCache::stats();
+    log::info!(
+        "texture disk cache after {stage}: {} hits, {} misses, {} stored ({:.0} MB), {} not stored (full), {} of earlier starts removed ({:.0} MB)",
+        c.hits,
+        c.misses,
+        c.stored,
+        mb(c.stored_bytes),
+        c.refused,
+        c.evicted,
+        mb(c.evicted_bytes)
+    );
+}

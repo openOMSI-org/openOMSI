@@ -513,6 +513,7 @@ pub(crate) fn spawn_player_prepared(
     // a situation remembers how dirty the bus was; --dirt sets it for a test run
     if let Some(d) = args.dirt {
         p.vehicle.dirt = d.clamp(0.0, 1.0);
+        p.vehicle.road_dirt = omsi_sim::vehicle::RoadDirt::from_dirt_norm(p.vehicle.dirt);
     }
     if args.is_resuming() {
         let (numeric, textual) = p
@@ -791,6 +792,9 @@ fn new_player(
         blind_pick: None,
         ibis_typist: None,
         duty_typed: false,
+        duty_trip_pending: false,
+        ibis_shown: None,
+        ibis_auto_stop: crate::settings::Settings::load().ibis_auto_stop,
         ibis_holds: Default::default(),
         html_next_stop: None,
         ibis_background: false,

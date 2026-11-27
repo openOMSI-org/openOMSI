@@ -212,6 +212,10 @@ impl LanView {
                     v.pixels.slots.clear();
                     v.pixels.generation = 0;
                 }
+                for id in std::mem::take(&mut v.pixels.textures).into_values() {
+                    r.free_texture(scene, id);
+                }
+                v.pixels.bytes.clear();
                 v.pixels.schema = None;
                 continue;
             }

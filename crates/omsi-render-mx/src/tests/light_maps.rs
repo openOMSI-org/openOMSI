@@ -4,7 +4,12 @@ use super::*;
 /// light on - seen face on in the shade of a day (ambient light only), and by night, in the
 /// classic, the Vanilla+ and the Enhanced picture.
 fn display_pixel(night: f32, classic: bool, enhanced: bool) -> [u8; 3] {
-    lit_pixel(night, classic, enhanced, false, None)
+    lit_pixel(night, classic, enhanced, false, None, true)
+}
+
+/// The same white light map on a surface that is not a display (a roller blind's lamp).
+fn surface_pixel(night: f32, classic: bool, enhanced: bool) -> [u8; 3] {
+    lit_pixel(night, classic, enhanced, false, None, false)
 }
 
 fn lit_pixel(
@@ -13,6 +18,7 @@ fn lit_pixel(
     enhanced: bool,
     switched_night_map: bool,
     inside: Option<(DVec3, f64, [f32; 6])>,
+    display: bool,
 ) -> [u8; 3] {
     let adapter = mx::Instance::new();
     let mut renderer = pollster::block_on(Renderer::new_with(
@@ -63,7 +69,7 @@ fn lit_pixel(
             },
         )
     } else {
-        renderer.add_material_lit(
+        renderer.add_material_extra(
             &mut scene,
             Some(face),
             AlphaMode::Opaque,
@@ -72,6 +78,12 @@ fn lit_pixel(
             None,
             None,
             Some(white),
+            None,
+            [0.0; 3],
+            MaterialExtra {
+                display,
+                ..Default::default()
+            },
         )
     };
     let half = 2.0;
@@ -143,6 +155,25 @@ fn a_white_light_map_shows_the_display_by_day_as_by_night() {
     }
 }
 
+/// A light map on a roller blind's lamp is a surface's light, not a display: lifting it to
+/// the texture's own brightness made the stationary MAN SL200's destination band white
+/// (#3472), while a real display keeps the full lift of #2051.
+#[test]
+#[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
+fn a_light_mapped_surface_keeps_its_lighting_by_day() {
+    let surface = surface_pixel(0.0, false, true);
+    let display = display_pixel(0.0, false, true);
+    let sum = |c: [u8; 3]| c.iter().map(|&v| v as i32).sum::<i32>();
+    assert!(
+        sum(surface) + 60 < sum(display),
+        "surface {surface:?} against display {display:?}"
+    );
+    assert!(
+        surface.iter().all(|&c| c < 235),
+        "the surface must not glow white: {surface:?}"
+    );
+}
+
 /// A switched night map (a lit switch, a gauge) is held down only in the player's own cab
 /// seen from the driver's place: another vehicle's, and the cab seen from outside, keep
 /// their full glow.
@@ -150,7 +181,7 @@ fn a_white_light_map_shows_the_display_by_day_as_by_night() {
 #[ignore = "requires a graphics adapter; run with --ignored on a GPU host"]
 fn only_the_own_cab_dims_a_switched_night_map() {
     let sum = |inside| {
-        lit_pixel(1.0, false, true, true, inside)
+        lit_pixel(1.0, false, true, true, inside, false)
             .iter()
             .map(|&v| v as i32)
             .sum::<i32>()

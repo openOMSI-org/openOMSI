@@ -68,6 +68,32 @@ fn snow_track_at(world: vec2<f32>) -> vec2<f32> {
     return mix(mix(a00, a10, f.x), mix(a01, a11, f.x), f.y) * fade;
 }
 
+// The lanes' wheel tracks at a point of the render frame (0..1, the field's r: how worn the
+// road is there by the traffic), for the wet road - whatever the snow: where the wheels run,
+// the water stands in the ruts while it rains and the road dries first after it. 0 beyond
+// the field's sight (as `snow_track_at`, faded from 75 m) or without the field.
+fn lane_ruts(world: vec2<f32>) -> f32 {
+    // (without an early return: see `roof_dry`; the field wraps, so a point far off reads a
+    // texel of its own, which the fade then takes away)
+    let fade = (1.0 - smoothstep(75.0, 90.0, distance(world, camera.cam_pos.xy))) * select(0.0, 1.0, snow_track.place.w >= 0.5);
+    let q = (world + snow_track.place.xy) * (f32(TRACK_TEXELS) / snow_track.place.z) - 0.5;
+    let b = floor(q);
+    let f = q - b;
+    let i = vec2<i32>(b);
+    let a00 = lane_rut_texel(i);
+    let a10 = lane_rut_texel(i + vec2<i32>(1, 0));
+    let a01 = lane_rut_texel(i + vec2<i32>(0, 1));
+    let a11 = lane_rut_texel(i + vec2<i32>(1, 1));
+    return mix(mix(a00, a10, f.x), mix(a01, a11, f.x), f.y) * fade;
+}
+
+fn lane_rut_texel(p: vec2<i32>) -> f32 {
+    let q = ((p % TRACK_TEXELS) + TRACK_TEXELS) % TRACK_TEXELS;
+    let tile = (q.y / TRACK_TILE) * (TRACK_TEXELS / TRACK_TILE) + q.x / TRACK_TILE;
+    let i = (tile * TRACK_TILE + q.y % TRACK_TILE) * TRACK_TILE + q.x % TRACK_TILE;
+    return unpack4x8unorm(snow_track_px[i]).r;
+}
+
 // Whether a part's surface code carries its roof's own snow (`vehicle_snow`) rather than
 // leaving it to the weather's (a roof the roads' snow does not keep: another player's bus).
 fn vehicle_snow_kept(code: f32) -> bool {

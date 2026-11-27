@@ -369,11 +369,12 @@ pub(crate) fn glsl_through_mx(
 /// (`FrameHeap`). The last step of the scene shader's forms: the others match the bound names.
 pub(crate) fn frame_from_heap(src: &str) -> String {
     // (the variable, the immediates' field it is read at)
-    const FIELDS: [(&str, &str); 29] = [
+    const FIELDS: [(&str, &str); 31] = [
         ("vehicle_reflection", "ground"),
         ("t_shadow", "shadow"),
         ("t_shadow_far", "shadow_far"),
         ("t_ao", "ao"),
+        ("t_gi", "gi"),
         ("t_probe", "probe"),
         ("t_sky_lut", "sky_lut"),
         ("t_lmap", "lmap_tex"),
@@ -395,6 +396,7 @@ pub(crate) fn frame_from_heap(src: &str) -> String {
         ("lmap", "lmap"),
         ("snow_track_px", "snow_px"),
         ("snow_track", "snow"),
+        ("t_dry", "dry"),
         ("material", "row"),
         // (the motion pipelines', temporal/motion.wgsl: they read no lights)
         ("motion", "lights"),
@@ -473,7 +475,7 @@ pub(crate) fn frame_from_heap(src: &str) -> String {
     assert!(out.contains(head), "scene shader: the immediates' struct");
     out = out.replacen(
         head,
-        "tile_sampler: u32, ground: u32, shadow: u32, shadow_far: u32, ao: u32, probe: u32, sky_lut: u32, lmap_tex: u32, s_shadow: u32, s_ao: u32, s_lin: u32, camera: u32, models: u32, inst_params: u32, draw_list: u32, lights: u32, grid: u32, enh: u32, lmap: u32, snow_px: u32, snow: u32 }",
+        "tile_sampler: u32, ground: u32, shadow: u32, shadow_far: u32, ao: u32, probe: u32, sky_lut: u32, lmap_tex: u32, s_shadow: u32, s_ao: u32, s_lin: u32, camera: u32, models: u32, inst_params: u32, draw_list: u32, lights: u32, grid: u32, enh: u32, lmap: u32, snow_px: u32, snow: u32, gi: u32, dry: u32 }",
         1,
     );
     format!("{decls}{out}")
@@ -584,10 +586,17 @@ fn scene_shader_bound_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bo
         .replace(
             "rt_at(in.clip.xy, in.world)",
             "vec4<f32>(1.0, 0.0, -1.0, 0.0)",
+        )
+        .replace(
+            "gi_at(in.clip.xy, in.world)",
+            "vec4<f32>(0.0, 0.0, 0.0, -1.0)",
         );
     debug_assert!(!out.contains("s_tile, uv)") && !out.contains("s_tile, uv, "));
     debug_assert!(
-        !out.contains("ao_at(in.") && !out.contains("ao_gi_at(in.") && !out.contains("rt_at(in.")
+        !out.contains("ao_at(in.")
+            && !out.contains("ao_gi_at(in.")
+            && !out.contains("rt_at(in.")
+            && !out.contains("gi_at(in.")
     );
     out
 }

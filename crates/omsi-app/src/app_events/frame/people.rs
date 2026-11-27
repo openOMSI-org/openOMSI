@@ -18,7 +18,7 @@ impl App {
         if self.session.duty.is_none() {
             self.session.career.no_trip();
         }
-        let announce = self.settings.auto_announce;
+        let announce = self.settings.announce_policy();
         if let (Some(d), Some(p), Some(w), false) = (
             self.session.duty.as_mut(),
             self.player.as_mut(),
@@ -61,6 +61,11 @@ impl App {
                 .unwrap_or(0);
             // (a frame after the session was written must not start another one)
             let tick = !self.exiting && !self.paused;
+            steps::passenger_load_step(
+                p,
+                self.session.humans.as_ref().map(|h| &h.sim),
+                self.settings.passenger_weight(),
+            );
             let crash = steps::career_step(
                 &mut self.session.career,
                 p,

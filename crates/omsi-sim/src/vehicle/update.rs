@@ -69,6 +69,27 @@ impl VehicleInstance {
             * (2.5e-3 + 6.0e-3 * rain.max(self.host.street_cond.clamp(0.0, 1.0)));
         self.dirt = (self.dirt + dt * speed * (8.0e-5 + 1.2e-3 * rain + off)).clamp(0.0, 1.0);
         self.set_engine_ev(Ev::DirtNorm, self.dirt);
+        // (and the dirt by where it lands, for the enhanced picture: `RoadDirt`)
+        let rate = if self.ty.def.procedural_dirt_off {
+            0.0
+        } else {
+            self.ty.def.procedural_dirt_rate.unwrap_or(1.0)
+        } * omsi_cfg::flags::OMSI_ROAD_DIRT_RATE
+            .var()
+            .and_then(|v| v.trim().parse::<f32>().ok())
+            .filter(|x| x.is_finite() && *x > 0.0)
+            .unwrap_or(1.0);
+        self.road_dirt.step_at(
+            dt,
+            DirtWeather {
+                kmh: self.physics.velocity_kmh(),
+                street: self.host.street_cond,
+                precip: rain,
+                snow: self.host.precip_type as i32 == 2,
+                offroad: self.host.offroad,
+            },
+            rate,
+        );
         // spray off a wet road, dust off a dry one
         self.set_engine_ev(Ev::DirtRate, speed * (1.5e-4 + 6.0e-3 * rain));
         // rain soaks the glass in a few seconds; without it the film dries in twenty seconds.

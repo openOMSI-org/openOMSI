@@ -20,6 +20,7 @@ pub(crate) mod storage;
 pub(crate) mod traffic;
 pub(crate) mod util;
 pub(crate) mod world;
+pub(crate) mod ws;
 
 /// Every group's functions.
 pub static GROUPS: &[&[ApiFn]] = &[
@@ -39,6 +40,7 @@ pub static GROUPS: &[&[ApiFn]] = &[
     process::FNS,
     storage::FNS,
     util::FNS,
+    ws::FNS,
 ];
 
 /// What a function body may give back: a value, something that becomes one, or an error.

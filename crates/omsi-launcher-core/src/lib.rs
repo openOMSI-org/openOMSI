@@ -64,6 +64,10 @@ fn home() -> PathBuf {
         .unwrap_or_default()
 }
 
+/// DLSS's sharpening after it as the game has it by default (`omsi_render::DLSS_SHARPEN`,
+/// which this crate does not depend on).
+pub const DLSS_SHARPNESS: f64 = 0.25;
+
 pub fn data_dir() -> PathBuf {
     // (made once: asked for dozens of times a second - the launcher's frames, its polls - and
     // made each time, two system calls for a folder that was there)
@@ -858,19 +862,27 @@ fn watch_inbox(content: &Path) -> Vec<String> {
     let seen = guard.get_or_insert_with(Default::default);
     let waiting_dir = content.join("Mods").join(install::WAITING);
     let items = inbox_entries(content);
-    seen.retain(|p, _| items.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
+    // On installs with many packages, linear contains() made this a quadratic
+    // scan on every launcher poll. Keep the membership test O(1).
+    let present: std::collections::HashSet<&PathBuf> = items.iter().collect();
+    seen.retain(|p, _| present.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
     for p in items {
         if install::is_busy(&p) {
             continue;
         }
         let now = std::time::Instant::now();
-        if seen
-            .get(&p)
-            .map(|s| {
-                s.started && now.duration_since(s.checked) < std::time::Duration::from_secs(30)
-            })
-            .unwrap_or(false)
-        {
+        // Reading every file in a large mod tree for *every* UI poll consumed CPU
+        // and storage bandwidth while the package was still being copied. Check a
+        // growing package at most once per second; completed installs retain their
+        // existing 30-second recheck. The two-second stable-size requirement stays.
+        if seen.get(&p).is_some_and(|s| {
+            now.duration_since(s.checked)
+                < if s.started {
+                    std::time::Duration::from_secs(30)
+                } else {
+                    std::time::Duration::from_secs(1)
+                }
+        }) {
             continue;
         }
         let sig = tree_signature(&p);
@@ -3464,6 +3476,11 @@ fn passenger_defaults(v: &mut Value) {
     v["passenger_hailing"] = json!(false);
     v["passenger_full_bus_reaction"] = json!(false);
     v["pax_short_rides_stand"] = json!(false);
+    // (#4014: the riders' weight on the bus's physics, off by default)
+    v["passenger_mass"] = json!(false);
+    v["passenger_weight_kg"] = json!(75.0);
+    v["passenger_weight_fixed"] = json!(false);
+    v["passenger_weight_spread"] = json!(0.0);
 }
 
 /// Initial values shared by desktop and phone, kept outside the long settings parser.
@@ -3473,8 +3490,10 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["frame_generation"] = json!("off");
     v["fsr_quality"] = json!("quality");
     v["fsr_sharpness"] = json!(0.8);
+    v["dlss_sharpness"] = json!(DLSS_SHARPNESS);
     v["street_light"] = json!("off");
     v["ray_tracing"] = json!(false);
+    v["rt_gi"] = json!(false);
     v["light_shadows"] = json!("off");
     v["cloud_shadows"] = json!(false);
     v["light_glow"] = json!(false);
@@ -3489,33 +3508,21 @@ fn graphics_and_interface_defaults(v: &mut Value) {
     v["vehicle_smoke"] = json!("all");
 }
 
+/// `passenger_weight_kg` or `passenger_weight_spread` as the settings text has it.
+fn weight_value(key: &str, val: &str) -> Value {
+    let (def, lo, hi) = if key == "passenger_weight_kg" {
+        (75.0, 20.0, 200.0)
+    } else {
+        (0.0, 0.0, 50.0)
+    };
+    let n = val.parse::<f64>().ok().filter(|x| x.is_finite());
+    json!(n.unwrap_or(def).clamp(lo, hi))
+}
+
 // (one setting a line, as the settings file has them: rustfmt would triple it)
-pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
-    let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
-    v["rear_door_boarding"] = json!(false);
-    graphics_and_interface_defaults(&mut v);
-    if phone {
-        for (k, d) in [
-            ("msaa", json!(2)),
-            ("anisotropy", json!(4)),
-            ("ssao", json!(false)),
-            ("shadow_size", json!(1024)),
-            ("mirror_size", json!(128)),
-            ("max_fps", json!(60)),
-            ("max_obj_dist", json!("900")),
-            ("pax_density", json!(0.7)),
-            ("navigator_corner", json!("top-center")),
-        ] {
-            v[k] = d;
-        }
-    }
-    v["touch_door_mode"] = json!("standard");
-    v["touch_pedal_length"] = json!(1.0);
-    v["touch_pedal_deadzone"] = json!(0.15);
-    // (the game's menus switch these: saved through this page's writer, unknown they were dropped)
-    for k in ["full_tank", "trip_summary"] {
-        v[k] = json!(true);
-    }
+/// The screens' defaults: three screens, the headset, the mirrors, and what the Discord
+/// status shows.
+fn display_defaults(v: &mut Value) {
     v["triple_screen"] = json!(false);
     v["triple_span"] = json!(true);
     v["triple_hud_center"] = json!(true);
@@ -3544,6 +3551,38 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     ] {
         v[k] = json!(true);
     }
+}
+
+pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
+    let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
+    v["rear_door_boarding"] = json!(false);
+    // (#2037: five speakers for the [3d] sounds - set apart, the `json!` above is already as
+    // deep as the macro may go)
+    v["audio_surround"] = json!(false);
+    graphics_and_interface_defaults(&mut v);
+    if phone {
+        for (k, d) in [
+            ("msaa", json!(2)),
+            ("anisotropy", json!(4)),
+            ("ssao", json!(false)),
+            ("shadow_size", json!(1024)),
+            ("mirror_size", json!(128)),
+            ("max_fps", json!(60)),
+            ("max_obj_dist", json!("900")),
+            ("pax_density", json!(0.7)),
+            ("navigator_corner", json!("top-center")),
+        ] {
+            v[k] = d;
+        }
+    }
+    v["touch_door_mode"] = json!("standard");
+    v["touch_pedal_length"] = json!(1.0);
+    v["touch_pedal_deadzone"] = json!(0.15);
+    // (the game's menus switch these: saved through this page's writer, unknown they were dropped)
+    for k in ["full_tank", "trip_summary"] {
+        v[k] = json!(true);
+    }
+    display_defaults(&mut v);
     // Only fresh installs opt in; existing settings files retain enabled plugins.
     v["disable_plugins"] = json!(text.is_none());
     // a Tobii eye tracker read natively, beside opentrack (the game's menu switches these)
@@ -3582,6 +3621,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     v["windy_trees"] = json!(true);
     v["detailed_trees"] = json!(true);
     v["road_snow"] = json!(false); // opt-in; off preserves the weather's classic snow on roads
+    v["procedural_dirt"] = json!(true); // Enhanced: road dirt where it lands, in place of the buses' own (#1386)
     v["sim_thread"] = json!(false); // (switched in the game's Display menu, saved through this writer)
     v["mx_graphics"] = json!(false);
     v["mirror_hud_every_frame"] = json!(false);
@@ -3599,6 +3639,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     passenger_defaults(&mut v);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
+    announce_defaults(&mut v);
     // OMSI's own options
     for (k, d) in [
         ("maintenance", json!(0)),
@@ -3718,6 +3759,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // (#3154: OMSI 2's own rounding of a stop's passenger numbers until the player asks)
     v["pax_stop_numbers_exact"] = json!(false);
     v["others_detail"] = json!(false);
+    // (#1247: the game draws the cursor itself, so the system's is never moved)
+    v["software_cursor"] = json!(false);
     v["pad_steer_smooth"] = json!(120.0);
     v["pad_steer_linear"] = json!(false);
     v["ctrl_background"] = json!(false);
@@ -3877,6 +3920,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "cloud_quality" => v[&k] = json!(cloud_quality(val)),
             "street_light" => v[&k] = json!(street_light(val)),
             "ray_tracing" | "rt" => v["ray_tracing"] = json!(b(val)),
+            "rt_gi" => v[&k] = json!(b(val)),
             "light_shadows" => v[&k] = json!(light_shadows(val)),
             "cloud_shadows" | "light_glow" | "volumetric_fog" => v[&k] = json!(b(val)),
             "rain_quality" => v[&k] = json!(rain_quality(val)),
@@ -3897,12 +3941,17 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     _ => "quality",
                 })
             }
-            "fsr_sharpness" => {
+            "fsr_sharpness" | "dlss_sharpness" => {
+                let default = if k == "fsr_sharpness" {
+                    0.8
+                } else {
+                    DLSS_SHARPNESS
+                };
                 v[&k] = json!(
                     val.parse::<f64>()
                         .ok()
                         .filter(|x| x.is_finite())
-                        .unwrap_or(0.8)
+                        .unwrap_or(default)
                         .clamp(0.0, 1.0)
                 )
             }
@@ -3947,6 +3996,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "show_fps"
             | "clouds"
             | "doppler"
+            | "audio_surround"
             | "driver"
             | "use_real_time"
             | "use_real_date"
@@ -4004,6 +4054,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                     "simple"
                 })
             }
+            "passenger_weight_kg" | "passenger_weight_spread" => v[&k] = weight_value(&k, val),
             "passenger_transfer_percent" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4300,9 +4351,10 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 )
             }
             "zoom_hold_latch" => v[&k] = json!(b(val)),
-            "flashlight_cursor" | "others_detail" | "pax_stop_numbers_exact" => {
-                v[&k] = json!(b(val))
-            }
+            "flashlight_cursor"
+            | "others_detail"
+            | "pax_stop_numbers_exact"
+            | "software_cursor" => v[&k] = json!(b(val)),
             "pad_steer_smooth" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4451,6 +4503,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "rain_lights"
             | "detailed_trees"
             | "road_snow"
+            | "procedural_dirt"
             | "mirror_hud_every_frame"
             | "mirror_shadows"
             | "mirror_particles"
@@ -4462,10 +4515,13 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "passenger_connections"
             | "passenger_hailing"
             | "passenger_full_bus_reaction"
+            | "passenger_mass"
+            | "passenger_weight_fixed"
             | "pax_short_rides_stand"
             | "auto_announce"
             | "rear_door_boarding"
             | "ambient" => v[&k] = json!(b(val)),
+            k if k.starts_with("announce_") => set_announce_setting(&mut v, &k, val),
             "pax_late_tolerance_min" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4538,6 +4594,48 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         v["passenger_animation"] = json!("original");
     }
     v
+}
+
+fn announce_defaults(v: &mut Value) {
+    v["announce_arrival"] = json!(true);
+    v["announce_departure"] = json!(true);
+    v["announce_approach"] = json!(false);
+    v["announce_approach_m"] = json!(120);
+}
+
+fn set_announce_setting(v: &mut Value, key: &str, val: &str) {
+    let b = |s: &str| {
+        matches!(
+            s.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on" | "yes"
+        )
+    };
+    match key {
+        "announce_arrival" | "announce_departure" | "announce_approach" => v[key] = json!(b(val)),
+        "announce_approach_m" => {
+            v[key] = json!(
+                val.trim()
+                    .parse::<f64>()
+                    .map(|x| x.clamp(0.0, 1000.0))
+                    .unwrap_or(120.0)
+            )
+        }
+        _ => {}
+    }
+}
+
+fn push_announce_settings(
+    text: &mut String,
+    b: impl Fn(&str, bool) -> u8,
+    f: impl Fn(&str, f64) -> f64,
+) {
+    text.push_str(&format!(
+        "announce_arrival={}\nannounce_departure={}\nannounce_approach={}\nannounce_approach_m={}\n",
+        b("announce_arrival", true),
+        b("announce_departure", true),
+        b("announce_approach", false),
+        f("announce_approach_m", 120.0).clamp(0.0, 1000.0)
+    ));
 }
 
 /// OMSI's tutorials (`Tutorials/menu_<n>_<LANG>.html`): per lesson its title and what
@@ -4693,8 +4791,13 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let legacy_arrows = b("nav_arrows", false) != 0;
     let dynamic_arrows = b("nav_dynamic_arrows", legacy_arrows);
     let map_arrows = b("nav_map_arrows", legacy_arrows);
+    let graphics = graphics_mode(
+        v.get("graphics")
+            .and_then(|x| x.as_str())
+            .unwrap_or("vanilla_plus"),
+    );
     let text = format!(
-        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\naudio_surround={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -4708,19 +4811,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         v.get("boarding").and_then(|x| x.as_str()).unwrap_or("auto"),
         b("detail_textures", true),
         b("exact_fare", true),
-        matches!(
-            graphics_mode(
-                v.get("graphics")
-                    .and_then(|x| x.as_str())
-                    .unwrap_or("vanilla_plus")
-            ),
-            "enhanced" | "enhanced_plus"
-        ) as u8,
-        match graphics_mode(
-            v.get("graphics")
-                .and_then(|x| x.as_str())
-                .unwrap_or("vanilla_plus")
-        ) {
+        matches!(graphics, "enhanced" | "enhanced_plus") as u8,
+        match graphics {
             "enhanced_plus" => "enhanced",
             g => g,
         },
@@ -4759,6 +4851,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             x => x.clamp(64, 2048),
         },
         b("doppler", true),
+        b("audio_surround", false),
         b("driver", true),
         n("max_fps", 0).max(0),
         f("min_obj_size", 0.013),
@@ -5101,6 +5194,8 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
                 .unwrap_or("off")
         )
     ));
+    // (experimental: the traced global illumination, with the ray tracing)
+    text.push_str(&format!("rt_gi={}\n", b("rt_gi", false)));
     text.push_str(&format!(
         "ray_tracing={}\nlight_shadows={}\ncloud_shadows={}\nlight_glow={}\nvolumetric_fog={}\n",
         b("ray_tracing", false)
@@ -5146,8 +5241,9 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("zoom_hold_latch", false)
     ));
     text.push_str(&format!(
-        "flashlight_cursor={}\n",
-        b("flashlight_cursor", false)
+        "flashlight_cursor={}\nsoftware_cursor={}\n",
+        b("flashlight_cursor", false),
+        b("software_cursor", false)
     ));
     text.push_str(&format!(
         "pax_stop_numbers_exact={}\n",
@@ -5199,6 +5295,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     text.push_str(&format!("rain_lights={}\n", b("rain_lights", true)));
     text.push_str(&format!("detailed_trees={}\n", b("detailed_trees", true)));
     text.push_str(&format!("road_snow={}\n", b("road_snow", false)));
+    text.push_str(&format!("procedural_dirt={}\n", b("procedural_dirt", true)));
     text.push_str(&format!("sim_thread={}\n", b("sim_thread", false)));
     text.push_str(&format!("mx_graphics={}\n", b("mx_graphics", false)));
     text.push_str(&format!(
@@ -5280,6 +5377,13 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("passenger_full_bus_reaction", false)
     ));
     text.push_str(&format!(
+        "passenger_mass={}\npassenger_weight_kg={}\npassenger_weight_fixed={}\npassenger_weight_spread={}\n",
+        b("passenger_mass", false),
+        f("passenger_weight_kg", 75.0).clamp(20.0, 200.0),
+        b("passenger_weight_fixed", false),
+        f("passenger_weight_spread", 0.0).clamp(0.0, 50.0)
+    ));
+    text.push_str(&format!(
         "pax_short_rides_stand={}\n",
         b("pax_short_rides_stand", false)
     ));
@@ -5289,6 +5393,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("auto_announce", false),
         b("pax_no_ticket", false)
     ));
+    push_announce_settings(&mut text, &b, &f);
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),
@@ -5331,7 +5436,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         head_tracking_value("head_tracking_dead_zone", v.get("head_tracking_dead_zone").and_then(|x| x.as_f64())),
     ));
     text.push_str(&format!(
-        "upscaler={}\nupscale_quality={}\nframe_generation={}\nfsr_quality={}\nfsr_sharpness={}\n",
+        "upscaler={}\nupscale_quality={}\nframe_generation={}\nfsr_quality={}\nfsr_sharpness={}\ndlss_sharpness={}\n",
         upscaler_word(v.get("upscaler").and_then(|x| x.as_str()).unwrap_or("")),
         omsi_cfg::upscaler_files::quality_word(
             v.get("upscale_quality")
@@ -5356,6 +5461,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             _ => "quality",
         },
         f("fsr_sharpness", 0.8).clamp(0.0, 1.0),
+        f("dlss_sharpness", DLSS_SHARPNESS).clamp(0.0, 1.0),
     ));
     let written: Vec<String> = text
         .lines()

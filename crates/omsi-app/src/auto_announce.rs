@@ -19,10 +19,17 @@
 //! before the first "next stop is …" one, so that the scripts' own step on leaving plays the
 //! first stop's recording. A start recording the scripts start late is not waited for: the
 //! departure recording takes over, as it would in service.
+//!
+//! Which of the three a map's city makes is the options' business (#4033): the arrival
+//! recording at the stop, the "next stop is …" one as a script that failed to step is made
+//! up for, and the same recording played once more on the way in, a distance before the stop
+//! - the last of them for the cities that announce on approach instead of on leaving. A
+//! distance two stops closer together than twice would reach announces halfway between them
+//! (`announce::approach_metres`).
 
 use omsi_sim::VehicleInstance;
 use omsi_sim::timetable_run::PlayerDuty;
-use omsi_sim::timetable_run::announce::{self, LayoutStatus, TwoRecordings};
+use omsi_sim::timetable_run::announce::{self, LayoutStatus, Policy, TwoRecordings};
 
 /// The least time between two presses of a key (s): one press a frame at most, and the
 /// scripts a moment to run their own step in between.
@@ -33,8 +40,9 @@ const MIN_GAP: f64 = 0.2;
 /// to cover the stop.
 const RETRY_GAP: f64 = 1.0;
 /// How long the scripts have to step the IBIS on by themselves when a stop is left before the
-/// game does it (s): a stock IBIS does it in the frame the stop index changes.
-const SCRIPT_GRACE: f64 = 4.0;
+/// game does it (s): a stock IBIS does it in the frame the stop index changes. The press comes
+/// earlier - as the bus pulls out - where the bus reaches `departure`'s metres and speed first.
+const SCRIPT_GRACE: f64 = omsi_sim::timetable_run::departure::GRACE;
 /// How long an arrival recording is worth pressing for (s): the bus may stand at the stop with
 /// its electrics off, or another IBIS mode up, for a few seconds, and the press is tried again
 /// every [`RETRY_GAP`] until then.
@@ -69,15 +77,18 @@ pub(crate) struct AutoAnnounce {
     at_stop: Option<bool>,
     /// The stop of the trip whose arrival recording was pressed for last.
     announced: Option<usize>,
+    /// The stop of the trip whose approach announcement was played on the way in.
+    approached: Option<usize>,
     /// The route whose start recording was played at the trip's first stop: once a route, as
     /// the driver presses it once (another route typed in at the stop gets its own).
     parked: Option<usize>,
     /// The press still to come (one at a time: the IBIS is a counter, and only one step can
     /// be taken at a time).
     want: Option<Want>,
-    /// A stop was left: when, and the entry the IBIS stood at then - after [`SCRIPT_GRACE`]
-    /// the scripts must have stepped it on.
-    watch: Option<(f64, f32)>,
+    /// A stop was left: when, the entry the IBIS stood at then and where the bus left it. The
+    /// scripts must step the counter on by themselves - as the bus pulls out of the stop
+    /// (`departure::due`), or within [`SCRIPT_GRACE`] where it does not.
+    watch: Option<(f64, f32, glam::DVec3)>,
     /// When a key was pressed last, and the entry the IBIS stood at then: a press that leaves
     /// the counter there is one the script did not take, and is given a second.
     pressed: Option<(f64, f32)>,
@@ -95,6 +106,9 @@ pub(crate) struct AutoAnnounce {
     note: Option<announce::QuietReason>,
     /// This trip's silence was already accounted for.
     noted: bool,
+    /// The last line the player was given: the same reason again on the next trip (a map
+    /// whose every depot file keeps one recording per stop) is not shown again.
+    told: Option<announce::QuietReason>,
     /// The vehicle has no `IBIS_vor_stumm`: the counter can only be pressed on, not stepped
     /// over silently, so a press is only made where it lands on the recording wanted.
     no_skip: bool,
@@ -113,6 +127,7 @@ impl AutoAnnounce {
         self.trip = Some(trip_index);
         self.at_stop = Some(at_stop);
         self.announced = None;
+        self.approached = None;
         self.parked = None;
         self.want = None;
         self.watch = None;
@@ -121,12 +136,18 @@ impl AutoAnnounce {
 
     /// One frame of the player's duty, after it was updated: `now` is the seconds of play
     /// (`SimClock::run_time`, which never wraps - a night line runs past midnight).
-    pub(crate) fn step(&mut self, d: &PlayerDuty, bus: &mut VehicleInstance, now: f64) {
+    pub(crate) fn step(
+        &mut self,
+        d: &PlayerDuty,
+        bus: &mut VehicleInstance,
+        now: f64,
+        policy: Policy,
+    ) {
+        if self.off || !policy.any() {
+            return;
+        }
         if self.trip != Some(d.trip_index) {
             self.new_trip(d.trip_index, d.at_stop());
-        }
-        if self.off {
-            return;
         }
         let at = d.at_stop();
         let left = self.at_stop.replace(at) == Some(true) && !at;
@@ -143,9 +164,20 @@ impl AutoAnnounce {
         }
         if at {
             self.park(bus, d.next_stop, layout, now);
-            self.arrive(bus, d, layout, now);
+            if policy.arrival {
+                self.arrive(bus, d, layout, now);
+            }
         } else if left {
-            self.left(bus, layout, now);
+            // (off: a script that does not step its counter on is left to its silence, as in
+            // the cities that announce nothing on leaving)
+            if policy.departure {
+                self.left(bus, layout, now);
+            } else {
+                self.watch = None;
+            }
+        }
+        if policy.approach && !at {
+            self.approach(bus, d, policy, now);
         }
         self.press_step(bus, now);
         self.watch_step(bus, now);
@@ -274,6 +306,36 @@ impl AutoAnnounce {
         );
     }
 
+    /// The bus is on its way to the stop it is due at and near enough for the city's approach
+    /// announcement (#4033): that stop's own "next stop is …" recording, pressed as the
+    /// arrival one is at the stop. The distance is the city's option, or half the way from the
+    /// stop before where the two stand closer together than twice it.
+    fn approach(&mut self, bus: &VehicleInstance, d: &PlayerDuty, policy: Policy, now: f64) {
+        if d.next_stop == 0 || self.approached == Some(d.next_stop) {
+            return;
+        }
+        let Some((left, gap)) = d.leg_distances() else { return };
+        if left > announce::approach_metres(policy.approach_m, gap) {
+            return;
+        }
+        let Some(stop) = d.trips.get(d.trip_index).and_then(|t| t.stops.get(d.next_stop)) else { return };
+        if !stop.stops {
+            self.approached = Some(d.next_stop);
+            return;
+        }
+        let (Some(hof), Some(route)) = (bus.host.hof.clone(), route(bus)) else { return };
+        let Some(entry) = announce::preview_entry(&hof, route, &stop.name, d.next_stop) else {
+            // (a depot file that keeps one recording per stop has no "next stop is …" half to
+            // play on the way in: the scripts announce there as they always did)
+            self.approached = Some(d.next_stop);
+            return;
+        };
+        self.approached = Some(d.next_stop);
+        // (the bus is driving, so the press is not tied to standing at the stop)
+        self.want = Some(Want { entry, until: now + ARRIVAL_WAIT, at_stop: false, start: false, recordings: None });
+        log::info!("auto-announce: approaching '{}', entry {entry} of route {route}", stop.name.trim());
+    }
+
     /// The bus left the stop: a stock script steps the counter on by itself here, and plays
     /// the next stop's "next stop is …" recording. Where it does not, the watchdog presses
     /// the key instead. A depot file of one recording per stop is left alone: the scripts
@@ -282,7 +344,8 @@ impl AutoAnnounce {
         if !layout.is_some_and(|l| l.pairs > 0) {
             return;
         }
-        self.watch = bus.var("IBIS_busstop").map(|entry| (now, entry));
+        // (where the bus left it: how far it has pulled out is what the press waits for, #1289)
+        self.watch = bus.var("IBIS_busstop").map(|entry| (now, entry, bus.position));
     }
 
     /// One step a frame towards the entry to play: silently while entries stand in between,
@@ -373,14 +436,17 @@ impl AutoAnnounce {
     /// index the scripts read did not change, the electrics are off, another IBIS mode - would
     /// stay silent for the rest of the duty, so the game presses the key once.
     fn watch_step(&mut self, bus: &mut impl Ibis, now: f64) {
-        let Some((since, entry)) = self.watch else {
+        let Some((since, entry, left_at)) = self.watch else {
             return;
         };
         if bus.var("IBIS_busstop") != Some(entry) {
             self.watch = None;
             return;
         }
-        if now - since < SCRIPT_GRACE {
+        // (the bus pulling out of the stop announces then, not four seconds later; a bus that
+        // creeps waits for the grace, #1289)
+        let (past_m, kmh) = bus.past_stop(left_at);
+        if !omsi_sim::timetable_run::departure::due(now - since, past_m, kmh) {
             return;
         }
         self.watch = None;
@@ -402,7 +468,12 @@ impl AutoAnnounce {
     /// announcing, where it cannot (a bus with no IBIS key, a depot file of one recording per
     /// stop). None where it is announcing as asked.
     pub(crate) fn take_note(&mut self) -> Option<announce::QuietReason> {
-        self.note.take()
+        let note = self.note.take()?;
+        if self.told == Some(note) {
+            return None;
+        }
+        self.told = Some(note);
+        Some(note)
     }
 
     fn played(&mut self, bus: &impl Ibis, want: Want) {
@@ -443,6 +514,12 @@ trait Ibis {
     fn trigger(&mut self, name: &str) -> bool;
     /// The recordings (`(T.F.…)` triggers) the scripts played so far.
     fn recordings(&self) -> u64;
+    /// How far the bus has moved from `from` (m) and how fast it goes (km/h): what the
+    /// departure announcement is timed by (#1289). None where the bus has no body to measure
+    /// (an ibox, a bus without a model): the grace decides then.
+    fn past_stop(&self, _from: glam::DVec3) -> (Option<f32>, f32) {
+        (None, 0.0)
+    }
 }
 
 impl Ibis for VehicleInstance {
@@ -456,6 +533,14 @@ impl Ibis for VehicleInstance {
 
     fn recordings(&self) -> u64 {
         self.host.file_triggers_fired
+    }
+
+    fn past_stop(&self, from: glam::DVec3) -> (Option<f32>, f32) {
+        let past = (self.position - from).truncate().length();
+        (
+            past.is_finite().then_some(past as f32),
+            self.physics.velocity_kmh().abs(),
+        )
     }
 }
 

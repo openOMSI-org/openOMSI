@@ -609,6 +609,14 @@ pub struct FarMesh {
     pub(super) casts: bool,
 }
 
+/// What an uploaded vehicle mesh is known by: the bus file, the place of the mesh in the
+/// model, and the stamp of the `.o3d` it was built from (`omsi_sim::vehicle::source_stamp`).
+/// A mesh rebuilt on disk is another key, so "Reload this vehicle" uploads the new one and
+/// gives the bus that - where the key was the bus file and the index alone, the GPU handed
+/// back the copy it made the first time round (#2618). Files that did not change keep their
+/// stamp, so twenty buses of one type still upload their meshes once.
+pub type MeshKey = (PathBuf, usize, u64);
+
 #[derive(Clone)]
 pub struct VehicleSet {
     pub(super) meshes: Vec<(MeshId, Vec<MaterialId>)>,
@@ -617,7 +625,7 @@ pub struct VehicleSet {
     pub(super) dyn_slots: Vec<DynSlot>,
     pub(super) variants: Vec<VariantSlot>,
     pub(super) textures: Vec<PathBuf>,
-    pub(super) mesh_keys: Vec<(PathBuf, usize)>,
+    pub(super) mesh_keys: Vec<MeshKey>,
     pub(super) materials: Vec<MaterialId>,
     /// Vehicles drawn with it now, and since when nobody is.
     pub(super) users: usize,
@@ -634,7 +642,7 @@ pub struct VehiclePrefetch {
     pub(super) textures: Arc<TextureCache>,
     pub(super) alpha_masks: Arc<crate::vehicle_materials::AlphaMasks>,
     pub(super) on_gpu: Arc<Mutex<HashMap<PathBuf, (TextureId, usize)>>>,
-    pub(super) meshes_on_gpu: Arc<Mutex<HashMap<(PathBuf, usize), (MeshId, usize)>>>,
+    pub(super) meshes_on_gpu: Arc<Mutex<HashMap<MeshKey, (MeshId, usize)>>>,
     pub(super) ready: Arc<Mutex<PreparedVehicles>>,
     pub(super) gpu: (wgpu::Device, wgpu::Queue),
     pub(super) mesh_pages: bool,
@@ -643,7 +651,7 @@ pub struct VehiclePrefetch {
 /// Vehicle meshes and textures made on a worker, by (bus file, mesh) and by file.
 #[derive(Default)]
 pub(super) struct PreparedVehicles {
-    pub(super) meshes: HashMap<(PathBuf, usize), omsi_render::PreparedMesh>,
+    pub(super) meshes: HashMap<MeshKey, omsi_render::PreparedMesh>,
     pub(super) textures:
         HashMap<PathBuf, (omsi_render::PreparedTexture, omsi_texture::PixelFormat)>,
 }
@@ -733,7 +741,7 @@ impl VehiclePrefetch {
         }
         let mut todo = Vec::new();
         for i in 0..vt.meshes.len() {
-            let key = (vt.def.path.clone(), i);
+            let key = (vt.def.path.clone(), i, vt.meshes[i].stamp);
             if self.meshes_on_gpu.lock().contains_key(&key)
                 || self.ready.lock().meshes.contains_key(&key)
             {
@@ -904,7 +912,7 @@ pub(super) fn free_set(
     scene: &mut Scene,
     s: VehicleSet,
     tex_ids: &mut HashMap<PathBuf, (TextureId, usize)>,
-    mesh_ids: &mut HashMap<(PathBuf, usize), (MeshId, usize)>,
+    mesh_ids: &mut HashMap<MeshKey, (MeshId, usize)>,
     gpu: &mut GpuCache,
 ) -> (usize, usize) {
     let (mut textures, mut meshes) = (0, 0);

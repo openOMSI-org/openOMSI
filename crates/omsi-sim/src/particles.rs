@@ -38,9 +38,9 @@ fn eye() -> Option<DVec3> {
     *EYE.read().unwrap_or_else(|e| e.into_inner())
 }
 
-/// How much of its spray the road gives a tyre at world (x, y): 0 on dry or damp road, 1 deep
-/// in a puddle.
-pub type RoadWater = std::sync::Arc<dyn Fn(f64, f64) -> f32 + Send + Sync>;
+/// How much of its spray the road gives a tyre at world (x, y, z): 0 on dry or damp road, or
+/// under a bridge, 1 deep in a puddle.
+pub type RoadWater = std::sync::Arc<dyn Fn(f64, f64, f64) -> f32 + Send + Sync>;
 
 /// The water on the roads, as `set_road_water` has it.
 static ROAD_WATER: RwLock<Option<RoadWater>> = RwLock::new(None);
@@ -235,7 +235,7 @@ impl ParticleSet {
                 .as_ref()
                 .filter(|_| freq > 0.0 && is_tyre_spray(&def))
             {
-                let k = water(own.x, own.y);
+                let k = water(own.x, own.y, own.z);
                 freq *= if k.is_finite() {
                     k.clamp(0.0, 1.0)
                 } else {
@@ -543,9 +543,9 @@ mod tests {
             is_tyre_spray(&wheel("Tire_Wet_Freq").emitters[0].def)
                 && !is_tyre_spray(&wheel("auspuff_freq").emitters[0].def)
         );
-        set_road_water(Some(std::sync::Arc::new(|_, _| 1.0)));
+        set_road_water(Some(std::sync::Arc::new(|_, _, _| 1.0)));
         let puddle = count(wheel("tire_wet_freq"));
-        set_road_water(Some(std::sync::Arc::new(|_, _| 0.0)));
+        set_road_water(Some(std::sync::Arc::new(|_, _, _| 0.0)));
         let (dry, exhaust) = (count(wheel("tire_wet_freq")), count(wheel("auspuff_freq")));
         set_road_water(None);
         assert!(puddle >= 18, "{puddle} puffs in a puddle");

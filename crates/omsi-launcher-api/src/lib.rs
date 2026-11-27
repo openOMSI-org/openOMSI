@@ -270,13 +270,13 @@ fn rename_situation(map: String, file: String, name: String) -> Answer {
 /// A season and its phase chosen: the date the game will have (none: by date), and the word
 /// the game's `--season` takes.
 fn season_date(season: String, phase: String, date: String, map: String, keep: bool) -> Answer {
-    use omsi_weather::season_phase::{SeasonChoice, map_latitude, phase_date};
+    use omsi_weather::season_phase::{SeasonChoice, map_lat_deg, phase_date};
     let Some(choice) = SeasonChoice::parse(&format!("{season}-{phase}")) else {
         return Ok(json!({ "date": null, "word": null }));
     };
     let num = |r: std::ops::Range<usize>| date.get(r).and_then(|x| x.parse::<u32>().ok());
     let root = core::root_dir().unwrap_or_default();
-    let lat = map_latitude(&root, &map);
+    let lat = map_lat_deg(&root, &map);
     let year = num(0..4).unwrap_or(1989) as i32;
     let (y, m, d) = match (num(5..7), num(8..10)) {
         (Some(m), Some(d)) if keep => phase_date(choice, (year, m, d), lat),

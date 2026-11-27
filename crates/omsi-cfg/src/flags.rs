@@ -368,6 +368,7 @@ flags! {
     OMSI_MIRROR_ENHANCED: Bool, Switch, Frame, "off", "Draw the mirrors with the enhanced shading again.";
     OMSI_MIRROR_HUD: Num, Tuning, Use, "settings", "Mirror HUD mode (number).";
     OMSI_MOBILE: Bool, Test, Use, "off", "The phone layout on a computer (screen cut-outs).";
+    OMSI_MOD_UPLOAD_KIB_PER_SEC: Num, Tuning, Once, "1024", "Aggregate encrypted mod upload rate in KiB/s across all workers; 0 is unlimited, positive values clamp to 64-1048576. Read at first upload; gameplay UDP is separate.";
     OMSI_MUTE: Bool, Test, Use, "off", "Mix everything as usual but play nothing.";
     OMSI_MX: Text, Switch, Once, "settings", "mX Graphics for this run, over the mx_graphics setting: on (1, true) starts the game on mX, off (0, false) on wgpu.";
     OMSI_MX_SOFTWARE: Bool, Test, Once, "off", "Let mX Graphics draw on a software renderer (WARP, llvmpipe) on a computer; without it a computer where only one opens starts again on wgpu.";
@@ -485,6 +486,8 @@ flags! {
     OMSI_RENDER_OCCLUDED: Bool, Test, Use, "off", "Draw frames into a texture while the window is hidden (macOS gives none).";
     OMSI_REPAIR_BODY_DEPTH: Bool, Switch, Use, "off", "The old guess for [matl_alpha] 2 vehicle bodies (A/B).";
     OMSI_ROAD_CUT: Bool, Switch, Once, "off", "Take the ground away under every road surface (Omsi.exe does not).";
+    OMSI_ROAD_DIRT: Text, Test, Use, "-", "spray,film,dust,wet[,slush,mud]: the road dirt every vehicle carries (0..1 each), whatever it gathered - pictures of the procedural dirt without driving for an hour first.";
+    OMSI_ROAD_DIRT_RATE: Num, Test, Use, "1", "How many times faster the vehicles gather road dirt (procedural_dirt): 60 lays an hour's dirt in a minute of driving, for trying it out.";
     OMSI_ROAD_PHOTO: Bool, Test, Use, "off", "Map check: photograph the road network from above and report grass where a carriageway should be.";
     OMSI_ROAD_PHOTO_N: Num, Test, Use, "400", "With OMSI_ROAD_PHOTO: number of sample points.";
     OMSI_ROAD_PHOTO_SIDE: Num, Test, Use, "0", "With OMSI_ROAD_PHOTO: metres to either side of the carriageway.";

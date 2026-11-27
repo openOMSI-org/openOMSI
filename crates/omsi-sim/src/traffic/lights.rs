@@ -42,6 +42,87 @@ const HOLD_MARGIN: f64 = 1e-5;
 /// shared dummy variable in .bss (0x8619a4), which reads 0: red, not "no light".
 pub const UNLINKED_PHASE: i32 = 0;
 
+/// A whole light program: the lights, the cycle, their request distances and the stop and
+/// jump points. Held apart from the clock so that a crossing can keep more than one of them
+/// and change over at a time of day.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LightProgram {
+    pub lights: Vec<Vec<(i32, f32)>>,
+    pub cycle: f32,
+    pub approach: Vec<Option<f32>>,
+    pub stops: Vec<LightStop>,
+}
+
+impl LightProgram {
+    /// From the `[traffic_light]` program of a crossing object: (per light: phases as
+    /// (state, seconds), `[approachdist]`), the `[traffic_lights_group]` cycle, the stop and
+    /// jump points.
+    pub fn from_parts(
+        lights: Vec<(Vec<(i32, f32)>, Option<f32>)>,
+        cycle: Option<f32>,
+        stops: &[[f32; 3]],
+        jumps: &[[f32; 4]],
+    ) -> LightProgram {
+        let approach = lights.iter().map(|l| l.1).collect();
+        let mut p = LightProgram {
+            lights: lights.into_iter().map(|l| l.0).collect(),
+            cycle: cycle.unwrap_or(0.0),
+            approach,
+            stops: Vec::new(),
+        };
+        // A point names its light by number. Omsi.exe (0x687ffc, building the crossing's
+        // program) takes light 0 for a number below 0 or past the last light: a point on a
+        // light the crossing does not have waits for that light's requests, which never came,
+        // and a stop "until somebody asks" held its crossing for good.
+        let count = p.lights.len();
+        let light = |n: f32| {
+            let i = n.max(0.0) as usize;
+            if i < count { i } else { 0 }
+        };
+        for s in stops {
+            p.stops.push(LightStop {
+                light: light(s[0]),
+                time: s[1],
+                if_request: s[2] > 0.5,
+                jump_to: None,
+            });
+        }
+        for j in jumps {
+            p.stops.push(LightStop {
+                light: light(j[0]),
+                time: j[1],
+                if_request: j[2] > 0.5,
+                jump_to: Some(j[3]),
+            });
+        }
+        p
+    }
+}
+
+/// A `[traffic_light_time]` program of a crossing (openOMSI's own line in the .sco): the
+/// program run from `from` to `to`, seconds of the day. Covers the rush hour with the
+/// longer greens of one program and the night with another (a flashing yellow is a program
+/// whose phases are 9), and - unlike a `[traffic_light_jump]` - needs no stop for it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TimedProgram {
+    pub from: f64,
+    pub to: f64,
+    pub program: LightProgram,
+}
+
+impl TimedProgram {
+    /// Whether the time of day `day` (s) falls in this window; a `to` below `from` runs
+    /// across midnight (22:00 until 05:00).
+    pub fn holds(&self, day: f64) -> bool {
+        let day = day.rem_euclid(86_400.0);
+        if self.from <= self.to {
+            day >= self.from && day < self.to
+        } else {
+            day >= self.from || day < self.to
+        }
+    }
+}
+
 /// Traffic light program of a crossing object instance (`TAmpelGroup`): its lights'
 /// phases and one cycle clock that runs on game time. The clock is state, not a function
 /// of the time of day, because the program may wait at a stop point or jump.
@@ -68,11 +149,23 @@ pub struct TrafficLightController {
     /// the clock has moved past its source time.
     rewound: Option<usize>,
     started: bool,
+    /// The file's own program: run at every time of day no window below holds.
+    pub base: LightProgram,
+    /// `[traffic_light_time]` windows, in file order; the first one that holds is run.
+    pub times: Vec<TimedProgram>,
+    /// The window the clock currently runs (`None`: the file's own program).
+    pub running: Option<usize>,
 }
 
 impl TrafficLightController {
     pub fn new(lights: Vec<Vec<(i32, f32)>>, cycle: f32) -> TrafficLightController {
         let n = lights.len();
+        let base = LightProgram {
+            lights: lights.clone(),
+            cycle,
+            approach: vec![None; n],
+            stops: Vec::new(),
+        };
         TrafficLightController {
             lights,
             cycle,
@@ -85,6 +178,9 @@ impl TrafficLightController {
             passed: Vec::new(),
             rewound: None,
             started: false,
+            base,
+            times: Vec::new(),
+            running: None,
         }
     }
 
@@ -96,38 +192,57 @@ impl TrafficLightController {
         stops: &[[f32; 3]],
         jumps: &[[f32; 4]],
     ) -> TrafficLightController {
-        let approach = lights.iter().map(|l| l.1).collect();
-        let mut c = TrafficLightController::new(
-            lights.into_iter().map(|l| l.0).collect(),
-            cycle.unwrap_or(0.0),
-        );
-        c.approach = approach;
-        // A point names its light by number. Omsi.exe (0x687ffc, building the crossing's
-        // program) takes light 0 for a number below 0 or past the last light: a point on a
-        // light the crossing does not have waits for that light's requests, which never came,
-        // and a stop "until somebody asks" held its crossing for good.
-        let count = c.lights.len();
-        let light = |n: f32| {
-            let i = n.max(0.0) as usize;
-            if i < count { i } else { 0 }
-        };
-        for s in stops {
-            c.stops.push(LightStop {
-                light: light(s[0]),
-                time: s[1],
-                if_request: s[2] > 0.5,
-                jump_to: None,
-            });
-        }
-        for j in jumps {
-            c.stops.push(LightStop {
-                light: light(j[0]),
-                time: j[1],
-                if_request: j[2] > 0.5,
-                jump_to: Some(j[3]),
-            });
-        }
+        let program = LightProgram::from_parts(lights, cycle, stops, jumps);
+        let mut c = TrafficLightController::new(program.lights.clone(), program.cycle);
+        c.base = program;
+        c.take_program();
         c
+    }
+
+    /// Take the program `self.base` holds as the one to run now.
+    fn take_program(&mut self) {
+        let p = self.base.clone();
+        self.lights = p.lights;
+        self.cycle = p.cycle;
+        self.approach = p.approach;
+        self.stops = p.stops;
+        self.request = vec![false; self.lights.len()];
+        self.passed.clear();
+        self.rewound = None;
+        self.held = false;
+    }
+
+    /// Give the crossing the `[traffic_light_time]` programs of its file (in file order).
+    pub fn set_time_programs(&mut self, times: Vec<TimedProgram>) {
+        self.times = times;
+        self.running = None;
+    }
+
+    /// Run the program the time of day `day` (s) calls for: `true` when the crossing changed
+    /// over. The clock is seeded from the time of day, as `start` does, so two crossings with
+    /// the same cycle length keep in step through the change; a file with no window never
+    /// changes over and behaves as before.
+    pub fn select_time_program(&mut self, day: f64) -> bool {
+        let want = self.times.iter().position(|t| t.holds(day));
+        if want == self.running {
+            return false;
+        }
+        self.running = want;
+        let program = match want {
+            Some(i) => self.times[i].program.clone(),
+            None => self.base.clone(),
+        };
+        self.lights = program.lights;
+        self.cycle = program.cycle;
+        self.approach = program.approach;
+        self.stops = program.stops;
+        self.request = vec![false; self.lights.len()];
+        self.passed.clear();
+        self.rewound = None;
+        self.held = false;
+        self.time = (day + self.offset as f64).rem_euclid(self.cycle_len());
+        self.started = true;
+        true
     }
 
     /// Length of the cycle in seconds.

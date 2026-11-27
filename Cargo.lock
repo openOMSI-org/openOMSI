@@ -4630,6 +4630,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tungstenite",
  "wasmi",
  "windows-sys 0.61.2",
 ]
@@ -4898,6 +4899,7 @@ dependencies = [
  "omsi-world",
  "parking_lot 0.13.0",
  "rayon",
+ "zip",
 ]
 
 [[package]]

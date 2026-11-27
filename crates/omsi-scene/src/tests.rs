@@ -278,6 +278,43 @@ fn traffic_light_program_requires_a_placed_signal() {
 }
 
 #[test]
+fn a_crossing_reads_the_programs_of_the_other_times_of_day() {
+    let sco = SceneryObject::parse(&omsi_cfg::CfgFile::from_str(
+        "junction.sco",
+        concat!(
+            "[traffic_lights_group]\n72\n[traffic_light]\nMain\n[phase]\n0\n10\n[phase]\n6\n62\n",
+            "[traffic_light_time]\n730 900\n[traffic_lights_group]\n90\n[traffic_light]\nMain\n",
+            "[phase]\n0\n20\n[phase]\n6\n70\n",
+            "[traffic_light_time]\n2200 500\n[traffic_light]\nMain\n[phase]\n9\n0\n",
+        ),
+    ));
+    // the object's own program, run at every other time of day, is untouched
+    assert_eq!(sco.traffic_lights_group, Some(72.0));
+    assert_eq!(sco.traffic_lights.len(), 1);
+    assert_eq!(sco.traffic_lights[0].phases.len(), 2);
+    // the windows, with their own group, lights and phases
+    assert_eq!(sco.traffic_light_times.len(), 2);
+    let rush = &sco.traffic_light_times[0];
+    assert_eq!((rush.from, rush.to), (7.0 * 3600.0 + 1800.0, 9.0 * 3600.0));
+    assert_eq!(rush.group, Some(90.0));
+    assert_eq!(rush.lights.len(), 1);
+    assert_eq!(rush.lights[0].phases.len(), 2);
+    let night = &sco.traffic_light_times[1];
+    assert_eq!((night.from, night.to), (22.0 * 3600.0, 5.0 * 3600.0));
+    assert_eq!(
+        night.group, None,
+        "a window may keep the object's own cycle"
+    );
+    assert_eq!(night.lights[0].phases.len(), 1);
+    // a file with no such line loads as it always did
+    let plain = SceneryObject::parse(&omsi_cfg::CfgFile::from_str(
+        "j2.sco",
+        "[traffic_lights_group]\n72\n[traffic_light]\nMain\n[phase]\n0\n10\n",
+    ));
+    assert!(plain.traffic_light_times.is_empty());
+}
+
+#[test]
 fn freetex_without_item_uses_current_base_when_powered() {
     let model = omsi_model::Model::parse(&omsi_cfg::CfgFile::from_str(
         "model.cfg",
@@ -459,6 +496,7 @@ fn a_lamps_lenses_follow_its_alphascale_and_light_map_variables() {
             (3, "NoSuchVar".into()),
         ],
         uv: vec![],
+        ..Default::default()
     };
     let state = |v: &str| standard_traffic_lamp(v, true, false, false, false);
     let (alpha, light) = slots.values(&state);
@@ -475,8 +513,37 @@ fn a_lamps_lenses_follow_its_alphascale_and_light_map_variables() {
         alpha: vec![],
         light: vec![(0, String::new())],
         uv: vec![],
+        ..Default::default()
     };
     assert_eq!(plain.values(&|_| Some(0.0)).1, vec![1.0]);
+}
+
+#[test]
+fn a_scenery_objects_script_drives_its_emissive_slot_with_a_fade() {
+    // slot 1 shines by `lamp_on`, fading in over 0.5 s; slot 0 is not driven
+    let slots = LampSlots {
+        count: 2,
+        emit: vec![EmitSlot {
+            slot: 1,
+            level: Some("lamp_on".into()),
+            fade: [0.5, 0.0],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let off = |_: &str| Some(0.0);
+    let on = |_: &str| Some(1.0);
+    let e = &slots.emit[0];
+    assert_eq!(e.target(&off), 0.0);
+    let half = e.step(0.0, 0.5, &on);
+    assert!((half - (1.0 - (-1.0f32).exp())).abs() < 1e-5, "{half}");
+    assert_eq!(e.step(half, 0.1, &off), 0.0, "no fade down: off at once");
+    assert_eq!(
+        slots.emit_values(&[1.0], &on),
+        vec![1.0, omsi_model::slot_value(1.0, None)]
+    );
+    // a variable the object does not have leaves it at full
+    assert_eq!(e.target(&|_| None), 1.0);
 }
 
 #[test]
@@ -1638,6 +1705,14 @@ fn a_light_enh_has_its_bitmap_z_offset_factor_and_effects() {
     );
     assert!((glow.z_offset - 0.05).abs() < 1e-6 && glow.rotating == 2);
     assert!((glow.size - 0.025).abs() < 1e-6 && (glow.brightness - 1.0).abs() < 1e-6);
+    // the authored sRGB colour is linear light: 150/255 is 0.305, not 0.588 (#3802)
+    assert!(
+        (glow.color[0] - 1.0).abs() < 1e-6
+            && (glow.color[1] - 0.3049873).abs() < 1e-6
+            && glow.color[2] == 0.0,
+        "the stop-request lamp must stay orange: {:?}",
+        glow.color
+    );
     assert!(star.flags & 8 != 0 && (star.size - 0.0625).abs() < 1e-6);
     // the factor scales the lamp (OMSI: variable times factor), effect 0 has the halo
     let model = Model::parse(&omsi_cfg::CfgFile::from_str(&path, &lamp("0.5", "0")));

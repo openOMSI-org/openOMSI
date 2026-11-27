@@ -567,9 +567,9 @@ pub(crate) fn day_air(lighting: &Lighting) -> DayAir {
         (x & 0xFF_FFFF) as f32 / 16_777_216.0
     };
     // 0 in midwinter, 1 in high summer (half a year later south of the equator)
-    let doy = lighting.day_of_year + if lighting.latitude < 0.0 { 182.0 } else { 0.0 };
+    let doy = lighting.day_of_year + if lighting.lat_deg < 0.0 { 182.0 } else { 0.0 };
     let summer = 0.5 - 0.5 * (2.0 * std::f32::consts::PI * (doy - 20.0) / 365.0).cos();
-    let north = 1.0 - 0.3 * atmosphere::smoothstep(55.0, 70.0, lighting.latitude.abs());
+    let north = 1.0 - 0.3 * atmosphere::smoothstep(55.0, 70.0, lighting.lat_deg.abs());
     let snow = lighting.snow.clamp(0.0, 1.0);
     let base = (0.72 + 0.6 * summer) * north * (1.0 - 0.25 * snow);
     let mut haze = (base * ((hash(1) - 0.5) * 1.1).exp()).clamp(0.35, 3.0);
@@ -930,6 +930,7 @@ impl Renderer {
             dt,
             self.options.cloud_shadows,
         );
+        let dirt = crate::vehicle_dirt::pack_all(&self.vehicle_dirt.borrow(), ro);
         let u = EnhancedUniform {
             // (self-lit surfaces at their own brightness after the metering, see ExposureLog)
             exposure: [
@@ -1028,8 +1029,8 @@ impl Renderer {
             vol_fog,
             vol_fog2,
             precip_ext: crate::precip::precip_ext(lighting),
-            // (free)
-            glass_ext: [0.0; 4],
+            // the dry map (`PrecipMap::dry_slot`, enhanced/03_surface.wgsl `roof_dry`)
+            glass_ext: self.shadows.precip.dry_slot(ro),
             // x the share of the sun's light through the clouds that still comes as a beam and
             // casts a shadow (enhanced/01_brdf_shadow.wgsl `sun_scattered` takes the rest as a
             // shadowless light from the sky): a thickening stratus deck and a veil of high cloud
@@ -1042,6 +1043,8 @@ impl Renderer {
                 [beam.clamp(0.0, 1.0), 1.0, 0.0, 0.0]
             },
             rt_ext: [0.0; 4],
+            dirt_n: dirt.0,
+            dirt: dirt.1,
             moon_light: st
                 .moon_light
                 .extend(if lighting.casts_moon_shadows() {

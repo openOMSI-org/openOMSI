@@ -73,7 +73,7 @@ pub struct WebCfg {
     /// The origins (`https://admin.example.org`) a page may act from besides the server's own.
     pub origins: Vec<String>,
     /// The proxies whose word about a request's source and scheme is believed.
-    pub trusted_proxies: Vec<IpAddr>,
+    pub forwarding_proxies: Vec<IpAddr>,
     /// Where they say it.
     pub proxy_header: ProxyHeader,
     /// The highest traffic density (for the operations' checks).
@@ -85,7 +85,7 @@ impl Default for WebCfg {
         WebCfg {
             mode: WebMode::Local,
             origins: Vec::new(),
-            trusted_proxies: vec![
+            forwarding_proxies: vec![
                 IpAddr::from([127, 0, 0, 1]),
                 IpAddr::from(std::net::Ipv6Addr::LOCALHOST),
             ],
@@ -231,7 +231,7 @@ fn admitted(req: &Request, cfg: &WebCfg) -> Result<(IpAddr, bool), Response> {
             "the administration is reached from the server's own machine only (admin_web = local), not through a tunnel or a proxy",
         )),
         WebMode::Remote => {
-            if !cfg.trusted_proxies.contains(&peer.ip()) {
+            if !cfg.forwarding_proxies.contains(&peer.ip()) {
                 return Err(error(
                     "403 Forbidden",
                     "only through the HTTPS proxy the server trusts (admin_trusted_proxies)",
@@ -859,7 +859,7 @@ mod tests {
         let h = hub();
         let cfg = WebCfg {
             mode: WebMode::Remote,
-            trusted_proxies: vec!["10.0.0.1".parse().unwrap()],
+            forwarding_proxies: vec!["10.0.0.1".parse().unwrap()],
             ..WebCfg::default()
         };
         let pw = json!({ "password": "admin secret" });
@@ -976,7 +976,7 @@ mod tests {
         let h = hub();
         let cfg = WebCfg {
             mode: WebMode::Remote,
-            trusted_proxies: vec!["10.0.0.1".parse().unwrap()],
+            forwarding_proxies: vec!["10.0.0.1".parse().unwrap()],
             ..WebCfg::default()
         };
         let wrong = |n: u8| {

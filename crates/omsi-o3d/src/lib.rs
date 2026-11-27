@@ -39,6 +39,10 @@ pub struct Material {
     pub specular_power: f32,
     /// Texture file name, relative to the model's texture directory. Empty = untextured.
     pub texture: String,
+    /// A glTF material's metallic and roughness factors (0..1), where it has no
+    /// metallic-roughness texture: the enhanced picture takes them as `[matl_metallic]` and
+    /// `[matl_roughness]` (see docs/PBR.md). None for the other formats.
+    pub metallic_roughness: Option<[f32; 2]>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,6 +101,7 @@ impl Default for Material {
             emissive: [0.0; 3],
             specular_power: 1.0,
             texture: String::new(),
+            metallic_roughness: None,
         }
     }
 }
@@ -267,6 +272,7 @@ pub fn parse_o3d(bytes: &[u8]) -> Result<Mesh, O3dError> {
                         emissive,
                         specular_power,
                         texture,
+                        metallic_roughness: None,
                     });
                 }
             }

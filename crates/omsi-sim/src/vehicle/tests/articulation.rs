@@ -896,6 +896,7 @@ fn a_skin_plan_moves_the_vertices_as_the_weighted_bones_do() {
             ..Default::default()
         },
         file: PathBuf::new(),
+        stamp: 0,
         materials: Vec::new(),
         overrides: Vec::new(),
         pivot: Mat4::IDENTITY,
@@ -1054,5 +1055,71 @@ fn a_turned_round_parts_wheels_roll_backwards_in_angle_and_speed() {
         rpm.signum(),
         turned.signum(),
         "the wheel turns one way and its rpm says the other: rpm {rpm}, turned {turned}"
+    );
+}
+
+/// #2945: a rear section with two axles and no declared turning line rests on both of them,
+/// so a rise under its front axle moves the body just as one under its back axle does. Sampling
+/// only at the back axle left the front axle's spring rigid over the same stretch of road.
+#[test]
+fn a_two_axle_rear_section_springs_on_both_axles() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let base = crate::timetable_run::tests::script_test_vehicle(
+        "{frame}\n{end}\n",
+        "Axle_Suspension_2_L\nAxle_Suspension_2_R\nAxle_Suspension_3_L\nAxle_Suspension_3_R\n",
+        "",
+    );
+    let mut front = (*base.ty).clone();
+    front.def.coupling_back = Some(omsi_vehicle::vehicle::Coupling {
+        pos: [0.0, -5.0, 0.3],
+    });
+    front.def.axles = [-3.0, 3.0]
+        .map(|long| omsi_vehicle::Axle {
+            long,
+            ..Default::default()
+        })
+        .to_vec();
+    let mut rear = front.clone();
+    rear.def.coupling_front = Some(omsi_vehicle::vehicle::Coupling {
+        pos: [0.0, 5.0, 0.3],
+    });
+    // The section's coupling is at local y = +5 and its axles at -2 and -5, so their arms
+    // from the joint are 7 and 10 m; no `[rot_pnt_long]` names a turning line. The joint is
+    // at world y = -5, so its axles stand at y = -12 and y = -15.
+    rear.def.axles = [-2.0, -5.0]
+        .map(|long| omsi_vehicle::Axle {
+            long,
+            ..Default::default()
+        })
+        .to_vec();
+    rear.suspension_axles = vec![2, 3];
+    let mut v = VehicleInstance::new(Arc::new(front), VehicleHost::new(Default::default()));
+    v.attach_trailer_ex(Arc::new(rear), false);
+    for _ in 0..20 {
+        v.update_visuals(0.02);
+    }
+    let flat = v.trailers[0].position.z;
+    let raised = Arc::new(AtomicBool::new(true));
+    let bump = raised.clone();
+    v.contact = Some(Arc::new(move |_x, y: f64, _top| {
+        crate::rigid::GroundProbe {
+            // a rise spanning the front axle and the middle of the pair, but not the back axle
+            below: Some(
+                if bump.load(Ordering::Relaxed) && (-14.0..-11.0).contains(&y) {
+                    0.1
+                } else {
+                    0.0
+                },
+            ),
+            above: None,
+        }
+    }));
+    for _ in 0..40 {
+        v.update_visuals(0.02);
+    }
+    let lifted = v.trailers[0].position.z - flat;
+    assert!(
+        lifted > 0.02,
+        "the rear section ignored the rise under its front axle: {lifted:.3} m"
     );
 }

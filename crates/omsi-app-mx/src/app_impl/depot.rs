@@ -32,6 +32,7 @@ impl App {
             }
             if kind == "wash" {
                 p.vehicle.dirt = 0.0;
+                p.vehicle.road_dirt = omsi_sim::vehicle::RoadDirt::default();
                 p.vehicle.set_engine_var("Dirt_Norm", 0.0);
             }
             let from = p.vehicle.var("engine_tank_content").unwrap_or(0.0);
