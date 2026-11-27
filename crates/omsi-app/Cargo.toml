@@ -60,6 +60,7 @@ omsi-net = { path = "../omsi-net" }
 omsi-platform = { path = "../omsi-platform" }
 omsi-guard = { path = "../omsi-guard" }
 omsi-admin = { path = "../omsi-admin" }
+omsi-server = { path = "../omsi-server" }
 omsi-lan = { path = "../omsi-lan" }
 omsi-remote = { path = "../omsi-remote" }
 omsi-input = { path = "../omsi-input" }

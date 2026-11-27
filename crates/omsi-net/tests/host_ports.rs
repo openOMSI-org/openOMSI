@@ -117,6 +117,11 @@ fn host_fails_when_the_candidate_range_is_occupied() {
                 host(port, true).is_err(),
                 "do not announce a partially usable session"
             );
+            // The full candidate range is reserved by our TCP listeners.
+            // A UDP rebind here would race with unrelated parallel tests
+            // (and services on the CI runner), even though this host never
+            // acquired the initial TCP port. Transport cleanup is covered
+            // by host_releases_udp_when_tcp_cannot_be_reserved.
             return;
         }
     }

@@ -58,6 +58,15 @@ pub(crate) struct NetState {
     pub(crate) remote_walkers: Vec<(u32, u64)>,
     /// The player on foot is in this other player's bus (see `lan`: drawn from inside).
     pub(crate) inside_remote: Option<u32>,
+    /// The owner has explicitly delegated non-driving cabin switches to riders.
+    pub(crate) coop_cab_assistant: Option<u32>,
+    /// A remote cabin switch held by this client, with its owner and pointer origin.
+    pub(crate) coop_cab_press: Option<(u32, String, (f32, f32))>,
+    /// The walking assistant routes keyboard.cfg vehicle keys instead of walking.
+    /// Enabled locally with Ctrl+Alt+J; never grants remote permissions.
+    pub(crate) coop_keyboard_mode: bool,
+    /// Cooldown for the authorized conductor's departure chime on the owner's client.
+    pub(crate) coop_departure_last: Option<std::time::Instant>,
     /// A dedicated server said we administer it (`admin`).
     pub(crate) is_admin: bool,
     /// What that server told its menu (`admin_panel`).

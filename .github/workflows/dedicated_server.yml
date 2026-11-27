@@ -1,0 +1,59 @@
+name: Dedicated server core — headless regressions
+
+on:
+  pull_request:
+    paths:
+      - "crates/omsi-server/**"
+      - "crates/omsi-sim/**"
+      - "crates/omsi-map/**"
+      - "crates/omsi-world/**"
+      - "crates/omsi-net/**"
+      - "crates/omsi-lan/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/server-headless/**"
+      - ".github/workflows/dedicated_server.yml"
+  push:
+    branches:
+      - refactor/dedicated-server-tick-20261117
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Forbid graphical and audio dependencies in server runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo tree --locked -p omsi-server --edges normal > /tmp/omsi-server-dependencies.txt
+          if grep -E '(omsi-render|omsi-scene|omsi-audio|wgpu|winit) v[0-9]' /tmp/omsi-server-dependencies.txt; then
+            echo "::error::Headless server must not pull in the graphical or audio runtime"
+            exit 1
+          fi
+
+      - name: Native timing report parser tests
+        run: python3 -m unittest discover -s scripts/server-headless/tests -p 'test_*.py'
+
+      - name: Headless transport, clock, CPU tiles, lanes and profiler regressions
+        run: cargo test --locked -p omsi-server --all-targets -- --test-threads=2
+
+      # Only the expanded legacy tests need ALSA development headers;
+      # the dedicated server runtime remains audio-free.
+      - name: Test-only ALSA headers for omsi-sim dev dependency
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+
+      - name: Shared simulation, LAN policy and wire protocol regressions
+        run: cargo test --locked -p omsi-sim -p omsi-lan -p omsi-net --lib -- --test-threads=2
+
+      - name: Build GPU-free map and offline simulation diagnostics
+        run: cargo build --locked -p omsi-server --bin worldcheck --bin simcheck

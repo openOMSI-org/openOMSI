@@ -2,10 +2,170 @@
 //! as they came (`Track`), the moment they are drawn at (`PlayClock`), the files named
 //! relative to the content roots, and the activities on the wire and in the simulation.
 
-use omsi_net::world::Activity as NetActivity;
+use glam::{DVec2, DVec3, Vec3};
+use omsi_net::traffic_table::Kind;
+use omsi_net::world::{self as nw, Activity as NetActivity, PersonPlace, PersonState};
 use omsi_sim::human::Activity;
+use omsi_sim::people::MirrorPose;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
+/// Serialize the authoritative vehicle script context from a CPU-only or
+/// graphical LAN host. Keeping this in omsi-lan makes scheduled AI buses
+/// display the same stop list and system variables in both host modes.
+pub fn ai_context(host: &omsi_sim::VehicleHost) -> omsi_net::ai_context::Context {
+    omsi_net::ai_context::Context {
+        active: host.schedule_active,
+        line: host.tt_line.clone(),
+        terminus: host.tt_terminus_index,
+        stops: host
+            .tt_stops
+            .iter()
+            .enumerate()
+            .map(|(i, stop)| {
+                (
+                    host.tt_stop_ids.get(i).copied().unwrap_or(0),
+                    stop.0.clone(),
+                    stop.1,
+                    stop.2,
+                )
+            })
+            .collect(),
+        index: host.tt_busstop_index,
+        delay: host.tt_delay,
+        system: host.system_values(),
+    }
+}
+
+/// The host owns road height. Network traffic interpolation can extrapolate
+/// X/Y when a frame is late, but extrapolating its vertical velocity without
+/// road contact information may push cars through asphalt or above bridges.
+/// Hold the latest host Z only in that short extrapolation window; ordinary
+/// between-packet interpolation, rail motion and horizontal movement stay intact.
+pub fn vehicle_position(
+    pose: &omsi_net::traffic_table::Pose,
+    latest: Option<(Kind, f64)>,
+) -> [f64; 3] {
+    let mut position = pose.pos;
+    if pose.extrapolated {
+        if let Some((kind, z)) = latest {
+            let road = matches!(kind, Kind::Car | Kind::Bus | Kind::Truck | Kind::Motorcycle);
+            if road && z.is_finite() {
+                position[2] = z;
+            }
+        }
+    }
+    position
+}
+
+/// What decides whether a person's pose is sent again (see `quant`).
+pub fn person_q(p: &PersonState) -> [i64; 4] {
+    let q = match p.place {
+        PersonPlace::Foot {
+            x, y, z, heading, ..
+        } => quant(x, y, z, heading as f64),
+        PersonPlace::Aboard {
+            bus,
+            x,
+            y,
+            z,
+            heading,
+            ..
+        } => quant(
+            x as f64,
+            y as f64,
+            z as f64,
+            heading as f64 + (bus & 0xFFFF) as f64 * 1000.0,
+        ),
+    };
+    let act = match p.activity {
+        NetActivity::Stand => 0,
+        NetActivity::Walk => 1,
+        NetActivity::Sit => 2,
+        NetActivity::Run => 3,
+    };
+    [q[0], q[1], q[2], q[3] ^ (act << 40)]
+}
+
+/// Where a person is at `k` between two of the host's poses.
+pub fn person_pose(a: &PersonState, b: &PersonState, k: f64) -> MirrorPose {
+    match (a.place, b.place) {
+        (
+            PersonPlace::Foot {
+                x: ax,
+                y: ay,
+                z: az,
+                heading: ah,
+                ..
+            },
+            PersonPlace::Foot {
+                x,
+                y,
+                z,
+                heading,
+                speed,
+                waiting,
+            },
+        ) => {
+            let jump = DVec2::new(x - ax, y - ay).length() > 8.0;
+            let k = if jump {
+                1.0
+            } else if speed < 0.05 {
+                k.min(1.0)
+            } else {
+                k
+            };
+            let pos = DVec3::new(
+                ax + (x - ax) * k,
+                ay + (y - ay) * k,
+                az + (z - az) * k.min(1.0),
+            );
+            let h = lerp_angle(ah as f64, heading as f64, k.min(1.0));
+            let dir = DVec2::new(x - ax, y - ay);
+            let vel = if speed > 0.05 && dir.length() > 1.0e-3 {
+                dir.normalize() * speed as f64
+            } else {
+                DVec2::ZERO
+            };
+            MirrorPose {
+                pos,
+                heading: h,
+                vel,
+                activity: sim_activity(b.activity),
+                aboard: None,
+                waiting: waiting.map(|(s, k)| (s, k as usize)),
+            }
+        }
+        (
+            _,
+            PersonPlace::Aboard {
+                bus,
+                x,
+                y,
+                z,
+                heading,
+                seat,
+            },
+        ) => MirrorPose {
+            pos: DVec3::ZERO,
+            heading: 0.0,
+            vel: DVec2::ZERO,
+            activity: sim_activity(b.activity),
+            aboard: Some((
+                if bus & nw::PLAYER_BUS != 0 {
+                    omsi_sim::people::remote_bus_id(bus & nw::MAX_ID)
+                } else {
+                    bus as u64
+                },
+                Vec3::new(x, y, z),
+                heading as f64,
+                seat.map(|s| s as usize),
+            )),
+            waiting: None,
+        },
+        (_, PersonPlace::Foot { .. }) => person_pose(b, b, 1.0),
+    }
+}
 
 /// How long a client guesses on past the last frame of something moving (ms).
 pub const MAX_EXTRAPOLATE: f64 = 300.0;
@@ -23,6 +183,13 @@ pub struct Track<T> {
 }
 
 impl<T: Copy> Track<T> {
+    /// An older UDP GONE must not erase a person restored by a newer snapshot.
+    pub fn remove_is_current(&self, host_ms: f64) -> bool {
+        self.samples
+            .last()
+            .is_none_or(|sample| sample.ms <= host_ms)
+    }
+
     pub fn push(&mut self, ms: f64, v: T) {
         if self.samples.last().map(|s| ms <= s.ms).unwrap_or(false) {
             return;
@@ -174,6 +341,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn graphical_and_native_hosts_share_the_same_ai_context_wire_contract() {
+        let mut host = omsi_sim::VehicleHost::new(omsi_sim::SimClock::default());
+        host.schedule_active = 1.0;
+        host.tt_line = "76".into();
+        host.tt_terminus_index = 3;
+        host.tt_stops.push(("Terminal".into(), 600.0, 610.0));
+        host.tt_stop_ids.push(102);
+        host.tt_busstop_index = 0;
+        host.tt_delay = 12.0;
+        let context = ai_context(&host);
+        assert_eq!(context.line, "76");
+        assert_eq!(context.stops, vec![(102, "Terminal".into(), 600.0, 610.0)]);
+        let packet = context
+            .packet(omsi_net::PROTOCOL as u8, 123, 900, 0)
+            .expect("encode real host context");
+        let mut receiver = omsi_net::ai_context::Receiver::default();
+        let (id, decoded) = receiver
+            .receive(&packet, omsi_net::PROTOCOL as u8)
+            .expect("client decodes native host context");
+        assert_eq!(id, 123);
+        assert_eq!(decoded, context);
+    }
+
+    #[test]
     fn a_file_is_named_relative_to_the_deepest_root_holding_it() {
         // the content folder first, the OMSI 2 folder inside it after (a server's layout)
         let roots = [
@@ -195,6 +386,59 @@ mod tests {
             relative_to_roots(Path::new("/elsewhere/x.bus"), &roots),
             None
         );
+    }
+
+    #[test]
+    fn mirrored_road_cars_keep_server_z_when_packets_are_late() {
+        use omsi_net::traffic_table::{Kind, Pose};
+        let pose = Pose {
+            pos: [30.0, 40.0, 7.6],
+            heading: 90.0,
+            pitch: 0.0,
+            bank: 0.0,
+            speed: 18.0,
+            steer: 0.0,
+            blinker: 0,
+            brake: false,
+            lights: false,
+            at_station: 0,
+            extrapolated: true,
+            teleported: false,
+        };
+        for kind in [Kind::Car, Kind::Bus, Kind::Truck, Kind::Motorcycle] {
+            assert_eq!(
+                vehicle_position(&pose, Some((kind, 10.0))),
+                [30.0, 40.0, 10.0]
+            );
+        }
+        let high = Pose {
+            pos: [30.0, 40.0, 12.4],
+            ..pose
+        };
+        assert_eq!(vehicle_position(&high, Some((Kind::Car, 10.0)))[2], 10.0);
+        let between = Pose {
+            extrapolated: false,
+            ..pose
+        };
+        assert_eq!(vehicle_position(&between, Some((Kind::Car, 10.0)))[2], 7.6);
+        assert_eq!(vehicle_position(&pose, Some((Kind::Rail, 10.0)))[2], 7.6);
+        assert_eq!(vehicle_position(&pose, Some((Kind::Other, 10.0)))[2], 7.6);
+        assert_eq!(vehicle_position(&pose, None)[2], 7.6);
+    }
+
+    #[test]
+    fn stale_udp_gone_does_not_erase_a_newer_pedestrian() {
+        let mut track = Track {
+            samples: Vec::new(),
+            heard: Instant::now(),
+        };
+        track.push(1_000.0, 5u32);
+        track.push(1_200.0, 6);
+        assert!(!track.remove_is_current(1_100.0));
+        assert!(track.remove_is_current(1_200.0));
+        assert!(track.remove_is_current(1_300.0));
+        track.push(1_100.0, 9);
+        assert_eq!(track.samples.last().unwrap().v, 6);
     }
 
     #[test]

@@ -402,7 +402,7 @@ impl crate::people::PeopleSim {
                     interior: p.interior,
                     puppet: p.puppet.is_some(),
                     hidden: self.avatar_hidden.get(&p.id).copied(),
-                    facts: p.pose_facts(),
+                    facts: p.pose_facts_with_buses(self.last_buses.as_ref().as_slice()),
                     state: p.state.name(),
                     hail_target: hail.map(|(_, pos, _, _)| pos),
                     hail_moving: hail.is_some_and(|(_, _, moving, _)| moving),

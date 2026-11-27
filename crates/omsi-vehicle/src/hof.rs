@@ -517,6 +517,14 @@ fn place_words(s: &str) -> Vec<String> {
 /// when none is called exactly as the map wants put a bus on Hamburg's Linie 20 with the
 /// Grundorf depot of its folder - no line and no destination its IBIS knew (#896).
 pub fn closest_name(names: &[&str], hints: &[&str]) -> Option<usize> {
+    // Exact depot names beat higher-scoring partial word matches.
+    if let Some(index) = names.iter().position(|name| {
+        hints
+            .iter()
+            .any(|hint| !hint.trim().is_empty() && name.trim().eq_ignore_ascii_case(hint.trim()))
+    }) {
+        return Some(index);
+    }
     let wanted: Vec<String> = hints.iter().flat_map(|h| place_words(h)).collect();
     let mut best: Option<(usize, usize)> = None;
     for (i, n) in names.iter().enumerate() {
@@ -552,8 +560,29 @@ pub fn depot_like(dir: &Path, hints: &[&str]) -> Option<Hof> {
             }
         })
         .collect();
+    // Exact file stems and [name] declarations beat fuzzy word overlap. A map
+    // can share "Berlin"/"Hamburg" with a number of otherwise unrelated HOFs.
+    let exact = files
+        .iter()
+        .position(|f| {
+            let stem = f.file_stem().unwrap_or_default().to_string_lossy();
+            hints
+                .iter()
+                .any(|hint| !hint.trim().is_empty() && stem.eq_ignore_ascii_case(hint.trim()))
+        })
+        .or_else(|| {
+            files.iter().position(|f| {
+                Hof::read_name(f).is_some_and(|name| {
+                    hints.iter().any(|hint| {
+                        !hint.trim().is_empty() && name.trim().eq_ignore_ascii_case(hint.trim())
+                    })
+                })
+            })
+        });
     let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
-    closest_name(&refs, hints).and_then(|i| Hof::load(&files[i]).ok())
+    exact
+        .or_else(|| closest_name(&refs, hints))
+        .and_then(|i| Hof::load(&files[i]).ok())
 }
 
 /// The depot file called `name` in the shared `HOFs/` folder, any map folder (`maps/*/`) or any vehicle folder (`Vehicles/*/`) of any content root.
@@ -608,6 +637,18 @@ pub fn depot_anywhere(name: &str) -> Option<Hof> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fuzzy_hof_matching_keeps_unrelated_depots_out() {
+        assert_eq!(
+            closest_name(&["Grundorf default", "Berlin Spandau"], &["Berlin Spandau"]),
+            Some(1)
+        );
+        assert_eq!(
+            closest_name(&["Grundorf default", "Hamburg addon"], &["Ahlheim"]),
+            None
+        );
+    }
+
     #[test]
     fn free_text_is_a_destination_of_its_own() {
         let hof = Hof {
@@ -730,6 +771,16 @@ mod tests {
             Some(1)
         );
         assert_eq!(closest_name(&["Linie 20"], &["Linie 7"]), None);
+    }
+
+    #[test]
+    fn exact_depot_names_beat_fuzzy_matches_across_all_hints() {
+        let names = ["Berlin Spandau 2019 Special", "Spandau", "Hamburg Linie 20"];
+        assert_eq!(closest_name(&names, &["Spandau"]), Some(1));
+        assert_eq!(closest_name(&names, &[" spandau "]), Some(1));
+        assert_eq!(closest_name(&names, &["Hamburg Linie 20"]), Some(2));
+        assert_eq!(closest_name(&names, &["Berlin-Spandau"]), Some(0));
+        assert_eq!(closest_name(&names, &["Unknown"]), None);
     }
 
     #[test]

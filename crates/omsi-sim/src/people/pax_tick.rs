@@ -5,12 +5,20 @@ use super::*;
 
 /// A standing place's floor, lifted onto a pavement up to a step above it; never lowered: the road beside a kerb sank them.
 fn raised_by_ground(world: &dyn World, floor: f64, x: f64, y: f64) -> f64 {
-    world.walk_height_near(x, y, floor).filter(|g| *g > floor).unwrap_or(floor)
+    world
+        .walk_height_near(x, y, floor)
+        .filter(|g| *g > floor)
+        .unwrap_or(floor)
 }
 
 impl PeopleSim {
     /// The world position and heading of a passenger.
-    pub fn pax_world(&self, p: &Pax, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) -> Option<(DVec3, f64)> {
+    pub fn pax_world(
+        &self,
+        p: &Pax,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+    ) -> Option<(DVec3, f64)> {
         match p.inside {
             None => Some((p.pos, p.yaw.to_degrees())),
             Some(b) => {
@@ -65,7 +73,17 @@ impl PeopleSim {
                 continue;
             }
             let was = self.people[i].position;
-            self.pax_tick(i, dt, world, buses, bus_ix, at_stops, player_bus, taken_ticket, remove);
+            self.pax_tick(
+                i,
+                dt,
+                world,
+                buses,
+                bus_ix,
+                at_stops,
+                player_bus,
+                taken_ticket,
+                remove,
+            );
             if let Some(p) = self.people.get(i) {
                 let now = p.position;
                 self.scratch.refile_blocker(i, was, now);
@@ -78,19 +96,34 @@ impl PeopleSim {
         // walking the pavement, among them a rider who has just stepped off, still on the
         // step until they are clear of the door. Not those who stand where they got off
         // with no pavement to go on along: they would hold the door open for good.)
-        self.scratch.file_doorways(self.people.iter().filter_map(|p| match &p.state {
-            State::Pax(x) => Some((x.inside, x.pos)),
-            State::Strolling(_) | State::Leaving { .. } => Some((None, p.position)),
-            _ => None,
-        }));
-        let busy: HashMap<BusId, (Vec<bool>, Vec<bool>)> = buses.iter().map(|bn| (bn.id, self.scratch.doorways(bn))).collect();
+        self.scratch
+            .file_doorways(self.people.iter().filter_map(|p| match &p.state {
+                State::Pax(x) => Some((x.inside, x.pos)),
+                State::Strolling(_) | State::Leaving { .. } => Some((None, p.position)),
+                _ => None,
+            }));
+        let busy: HashMap<BusId, (Vec<bool>, Vec<bool>)> = buses
+            .iter()
+            .map(|bn| (bn.id, self.scratch.doorways(bn)))
+            .collect();
         if debug_pax() {
             for (b, (e, x)) in &busy {
                 let before = self.pax_busy.get(b);
-                for (kind, now, was) in [("entry", e, before.map(|o| &o.0)), ("exit", x, before.map(|o| &o.1))] {
+                for (kind, now, was) in [
+                    ("entry", e, before.map(|o| &o.0)),
+                    ("exit", x, before.map(|o| &o.1)),
+                ] {
                     for (k, on) in now.iter().enumerate() {
                         if was.and_then(|w| w.get(k)).copied().unwrap_or(false) != *on {
-                            log::info!("t={:.1} bus {b:?} {kind} {k}: {}", self.time, if *on { "somebody in the doorway" } else { "the doorway is free" });
+                            log::info!(
+                                "t={:.1} bus {b:?} {kind} {k}: {}",
+                                self.time,
+                                if *on {
+                                    "somebody in the doorway"
+                                } else {
+                                    "the doorway is free"
+                                }
+                            );
                         }
                     }
                 }
@@ -108,7 +141,10 @@ impl PeopleSim {
             })
             .chain(self.avatar_cmds.values().filter_map(|c| c.seat))
             .collect();
-        self.pax_places = buses.iter().map(|bn| (bn.id, places_taken_in(bn, &sitting))).collect();
+        self.pax_places = buses
+            .iter()
+            .map(|bn| (bn.id, places_taken_in(bn, &sitting)))
+            .collect();
         // the player's bus reads its requests from `entry_req` / `exit_req`
         if let Some((e, x)) = self.pax_req.get(&BusId::Player) {
             self.entry_req = e.clone();
@@ -123,7 +159,16 @@ impl PeopleSim {
             if let BusId::Ai(id) = b {
                 let (entry_busy, exit_busy) = self.pax_busy.get(b).cloned().unwrap_or_default();
                 let places = self.pax_places.get(b).cloned().unwrap_or_default();
-                self.ai_requests.push((*id, DoorWants { entry_req: e.clone(), exit_req: x.clone(), entry_busy, exit_busy, places }));
+                self.ai_requests.push((
+                    *id,
+                    DoorWants {
+                        entry_req: e.clone(),
+                        exit_req: x.clone(),
+                        entry_busy,
+                        exit_busy,
+                        places,
+                    },
+                ));
             }
         }
         // timetable buses wait while people still get on or off (0x7d9e8b - 0x7d9f5e):
@@ -161,6 +206,7 @@ impl PeopleSim {
                 }
             }
         }
+        self.tick_ambient_talk();
     }
 
     /// One person's tick (sub_62a6a0 without the street walk).
@@ -205,7 +251,12 @@ impl PeopleSim {
         }
         // the toll of a bad ride eases off as the bus goes on (0x62d86c: 0.2 a kilometre)
         {
-            let speed = self.pax(i).unwrap().inside.and_then(|b| bus_ix.get(&b)).map(|k| buses[*k].speed.abs() as f32);
+            let speed = self
+                .pax(i)
+                .unwrap()
+                .inside
+                .and_then(|b| bus_ix.get(&b))
+                .map(|k| buses[*k].speed.abs() as f32);
             let p = self.pax_mut(i).unwrap();
             match speed {
                 Some(v) => p.discomfort = (p.discomfort - v * dt / 5000.0).max(0.0),
@@ -214,11 +265,26 @@ impl PeopleSim {
         }
         self.runner_step(i, dt, world, buses, bus_ix);
         self.pax_move(i, dt, dt_ms, world, buses, bus_ix);
-        self.pax_task(i, dt, world, buses, bus_ix, at_stops, player_bus, taken_ticket, remove);
+        self.pax_task(
+            i,
+            dt,
+            world,
+            buses,
+            bus_ix,
+            at_stops,
+            player_bus,
+            taken_ticket,
+            remove,
+        );
         // (got off: a pedestrian now)
-        let Some(p) = self.pax(i).cloned() else { return };
+        let Some(p) = self.pax(i).cloned() else {
+            return;
+        };
         // (0x62d75b) the stop they boarded at is forgotten once the bus has left it
-        if matches!(p.task, Task::InBusToPlace | Task::InBusToExit | Task::SittingInBus) {
+        if matches!(
+            p.task,
+            Task::InBusToPlace | Task::InBusToExit | Task::SittingInBus
+        ) {
             if let (Some(stop), Some(b)) = (p.stop, p.bus) {
                 if !at_stops.get(&b).is_some_and(|r| r.near.contains(&stop)) {
                     let p = self.pax_mut(i).unwrap();
@@ -255,7 +321,15 @@ impl PeopleSim {
     }
 
     /// The movement part of the tick (sub_62a6a0, 0x62ad0b - 0x62b966).
-    pub fn pax_move(&mut self, i: usize, dt: f32, dt_ms: f32, world: &dyn World, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) {
+    pub fn pax_move(
+        &mut self,
+        i: usize,
+        dt: f32,
+        dt_ms: f32,
+        world: &dyn World,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+    ) {
         let p0 = self.pax(i).unwrap().clone();
         let bn_in = p0.inside.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k]));
         let bn_t = p0.bus.and_then(|b| bus_ix.get(&b).map(|k| &buses[*k]));
@@ -361,10 +435,20 @@ impl PeopleSim {
             _ => {}
         }
         // the people in the way (sub_626860)
-        let (mut block, free_r, free_l) = if st == 1 || st == 5 { self.pax_blockers(i, buses, bus_ix) } else { (0, true, true) };
+        let (mut block, free_r, free_l) = if st == 1 || st == 5 {
+            self.pax_blockers(i, buses, bus_ix)
+        } else {
+            (0, true, true)
+        };
         let waiting_height = self.waiting_height(i);
         let lift = !self.waits_seated(i);
-        let floor_at = |f: f64, x: f64, y: f64| if lift { raised_by_ground(world, f, x, y) } else { f };
+        let floor_at = |f: f64, x: f64, y: f64| {
+            if lift {
+                raised_by_ground(world, f, x, y)
+            } else {
+                f
+            }
+        };
         let p = self.pax_mut(i).unwrap();
         // Inside a bus, people going opposite ways along the aisle or the stairs stood face to
         // face for good (the whole upper deck of a double-decker on its way out, the people
@@ -459,10 +543,17 @@ impl PeopleSim {
         }
         p.moved = moved;
         if p.inside.is_some() || p.pax_state == 2.0 {
-            step.z = if slope.is_finite() { moved as f64 * slope } else { d.z };
+            step.z = if slope.is_finite() {
+                moved as f64 * slope
+            } else {
+                d.z
+            };
         } else {
             let at = p.pos + step;
-            step.z = match waiting_height.map(|f| floor_at(f, at.x, at.y)).or_else(|| world.walk_height_near(at.x, at.y, p.pos.z)) {
+            step.z = match waiting_height
+                .map(|f| floor_at(f, at.x, at.y))
+                .or_else(|| world.walk_height_near(at.x, at.y, p.pos.z))
+            {
                 Some(g) => g - p.pos.z,
                 None => 0.0,
             };
@@ -484,22 +575,44 @@ impl PeopleSim {
     /// frame only the people filed near the passenger are looked at (`Scratch::
     /// file_blockers`); the answer is the same as of a look at everybody, which the debug
     /// builds check.
-    pub fn pax_blockers(&self, i: usize, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) -> (u8, bool, bool) {
+    pub fn pax_blockers(
+        &self,
+        i: usize,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+    ) -> (u8, bool, bool) {
         let me = self.pax(i).unwrap();
-        let Some((my_pos, _)) = self.pax_world(me, buses, bus_ix) else { return (0, true, true) };
+        let Some((my_pos, _)) = self.pax_world(me, buses, bus_ix) else {
+            return (0, true, true);
+        };
         let mut near = Vec::new();
-        if !self.scratch.blockers_near(my_pos, self.people.len(), &mut near) {
+        if !self
+            .scratch
+            .blockers_near(my_pos, self.people.len(), &mut near)
+        {
             return self.pax_blockers_among(i, buses, bus_ix, 0..self.people.len());
         }
         let found = self.pax_blockers_among(i, buses, bus_ix, near.iter().map(|&j| j as usize));
-        debug_assert_eq!(found, self.pax_blockers_among(i, buses, bus_ix, 0..self.people.len()), "pax_blockers: the grid missed somebody");
+        debug_assert_eq!(
+            found,
+            self.pax_blockers_among(i, buses, bus_ix, 0..self.people.len()),
+            "pax_blockers: the grid missed somebody"
+        );
         found
     }
 
     /// `pax_blockers` over the people `among` (somebody listed twice counts once).
-    fn pax_blockers_among(&self, i: usize, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>, among: impl Iterator<Item = usize>) -> (u8, bool, bool) {
+    fn pax_blockers_among(
+        &self,
+        i: usize,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+        among: impl Iterator<Item = usize>,
+    ) -> (u8, bool, bool) {
         let me = self.pax(i).unwrap();
-        let Some((my_pos, my_head)) = self.pax_world(me, buses, bus_ix) else { return (0, true, true) };
+        let Some((my_pos, my_head)) = self.pax_world(me, buses, bus_ix) else {
+            return (0, true, true);
+        };
         let fs = {
             let h = my_head.to_radians();
             DVec2::new(h.sin(), h.cos())

@@ -38,6 +38,7 @@ pub(super) fn boarding(ty: &Arc<HumanType>, id: u32, task: Task) -> Person {
         why: "",
         puppet: None,
         remote: false,
+        remote_seat: None,
     }
 }
 

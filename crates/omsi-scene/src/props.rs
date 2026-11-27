@@ -1193,11 +1193,13 @@ impl World {
         memo.checked = Some(t0);
         if usage <= limit && !any_dropped {
             memo.resume = false;
+            memo.near_retry_at = None;
             return 0;
         }
         if pass != BudgetPass::Now
             && !memo.resume
             && !retry_due
+            && !memo.near_retry_at.is_some_and(|at| at <= t0)
             && memo.unchanged(
                 generation,
                 usage,
@@ -1229,7 +1231,10 @@ impl World {
             card_near_room(video_limit, card).saturating_sub(reserved),
             texture_room(limit, texture_usage).saturating_sub(reserved),
         );
-        restoring += queue_near_restores(&mut gpu, &pending, &entries, NEAR, rooms, t0);
+        let (near_restores, blocked) =
+            queue_near_restores(&mut gpu, &pending, &entries, NEAR, rooms, t0);
+        restoring += near_restores;
+        memo.near_retry_at = blocked.then(|| t0 + std::time::Duration::from_secs(2));
         if usage > limit {
             entries.sort_by(|a, b| b.0.total_cmp(&a.0));
             let mut over = usage - limit;
@@ -1718,6 +1723,7 @@ pub(super) struct BudgetMemo {
     room: u64,
     centers: Vec<DVec3>,
     pub(super) in_use: u64,
+    pub(super) near_retry_at: Option<std::time::Instant>,
 }
 
 impl BudgetMemo {

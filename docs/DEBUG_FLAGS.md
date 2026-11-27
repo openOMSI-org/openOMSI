@@ -105,6 +105,7 @@ Values for looking at and comparing pictures. The defaults are what the game use
 | `OMSI_BASIC_PIPELINES` | flag | Use the reduced (basic) render pipelines, as after a driver failed to build the full ones. |
 | `OMSI_NO_PIPELINE_CACHE` | flag | Compile every pipeline at each start, without the cache in `~/.openomsi/cache/pipelines-*.bin`. |
 | `OMSI_NO_TEXTURE_CACHE` | flag | Compress every texture at each start, without the cache in `~/.openomsi/cache/textures`. |
+| `OMSI_TEXTURE_RAM_CACHE_MB` | MiB; default 128 on desktop, 0 on Android/iOS; maximum 512 | Retain compressed static texture sources in system RAM for reuse after texture restoration. `0` disables the cache. Read once on first use, so restart the game after changing it. |
 | `OMSI_KEEP_ALLOCATOR` | flag | Skip the restart that swaps in the faster allocator at start. |
 | `OMSI_NO_BC` | flag | Upload every texture as RGBA, also DXT files (no BC compression on the GPU). |
 | `OMSI_NO_TEXCOMPRESS` | flag | No runtime texture compression: DXT files stay compressed blocks, everything else is RGBA. |

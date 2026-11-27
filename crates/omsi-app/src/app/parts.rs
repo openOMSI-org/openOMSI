@@ -165,42 +165,15 @@ pub(crate) struct Parts<'p> {
     pub(crate) perf: PerfPart<'p>,
 }
 
+#[rustfmt::skip]
 impl App {
     /// The `App` taken apart by group (see the module's notes).
     pub(crate) fn parts(&mut self) -> Parts<'_> {
         let App {
-            args,
-            gfx,
-            window,
-            renderer,
-            xr,
-            scene,
-            camera,
-            player,
-            session,
-            menus,
-            world,
-            cam,
-            ui,
-            perf,
-            sound,
-            clock,
-            started,
-            view,
-            input,
-            last,
-            paused,
-            integrations,
-            net,
-            service_msg,
-            settings,
-            exiting,
-            shell,
-            photo,
-            photo_settings,
-            devtools,
-            pipeline,
-            fixed_tick,
+            args, gfx, window, renderer, xr, scene, camera, player, session, menus, world, cam, ui,
+            perf, sound, clock, started, view, input, last, paused, integrations, net, service_msg,
+            settings, exiting, shell, photo, photo_settings, devtools, pipeline, fixed_tick,
+            ..
         } = self;
         let SessionState {
             placed,
@@ -451,49 +424,7 @@ macro_rules! narrow {
 pub(crate) use {narrow, part_group, part_ty, stage_ctx};
 
 /// Every group has its part (a group without one could not be handed to a stage).
+
 #[cfg(test)]
-#[test]
-fn every_group_has_a_part() {
-    use crate::frame_stages::Group::*;
-    let all = [
-        Input,
-        Menus,
-        Clock,
-        Weather,
-        World,
-        Traffic,
-        Player,
-        People,
-        Duty,
-        Net,
-        Integrations,
-        Sound,
-        View,
-        Ui,
-        Gfx,
-        Perf,
-    ];
-    stage_ctx!(Everything {
-        reads: [],
-        writes: [
-            input,
-            menus,
-            clock,
-            weather,
-            world,
-            traffic,
-            player,
-            people,
-            duty,
-            net,
-            integrations,
-            sound,
-            view,
-            ui,
-            gfx,
-            perf
-        ]
-    });
-    assert_eq!(Everything::WRITES, all);
-    assert!(Everything::READS.is_empty());
-}
+#[path = "parts_tests.rs"]
+mod parts_tests;

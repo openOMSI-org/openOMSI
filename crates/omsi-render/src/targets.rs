@@ -417,6 +417,14 @@ impl Renderer {
         self.evict_targets_unused_for(std::time::Duration::from_millis(250));
     }
 
+    /// Sweep stale size-keyed targets even when a steady Enhanced/scale picture does not
+    /// request another MSAA or HDR allocation. This is once a second, never per frame.
+    pub(crate) fn evict_idle_targets(&mut self) {
+        if self.targets.evicted_at.elapsed() >= std::time::Duration::from_secs(1) {
+            self.evict_targets_unused_for(std::time::Duration::from_secs(5));
+        }
+    }
+
     fn evict_targets_unused_for(&mut self, stale: std::time::Duration) {
         const KEEP: usize = 10;
         let now = std::time::Instant::now();

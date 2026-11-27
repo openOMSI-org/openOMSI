@@ -59,6 +59,38 @@ fn picture(width: u32, height: u32) -> omsi_texture::TextureData {
 }
 
 #[test]
+fn stale_render_targets_are_released_without_a_new_resolution() {
+    use std::time::{Duration, Instant};
+
+    let mut renderer = renderer(true);
+    renderer.scale_target(32, 32);
+    renderer.scale_target(64, 64);
+    assert_eq!(renderer.targets.scale_targets.len(), 2);
+
+    // No new target is requested after a resize: a steady view still reclaims the old one.
+    renderer
+        .targets
+        .target_use
+        .insert((32, 32), Instant::now() - Duration::from_secs(6));
+    renderer.targets.evicted_at = Instant::now() - Duration::from_secs(2);
+    renderer.evict_idle_targets();
+    assert!(!renderer.targets.scale_targets.contains_key(&(32, 32)));
+    assert!(renderer.targets.scale_targets.contains_key(&(64, 64)));
+
+    // Don't scan again on every view (window, mirrors, VR eyes) of the same frame.
+    renderer
+        .targets
+        .target_use
+        .insert((64, 64), Instant::now() - Duration::from_secs(6));
+    renderer.evict_idle_targets();
+    assert!(renderer.targets.scale_targets.contains_key(&(64, 64)));
+
+    renderer.targets.evicted_at = Instant::now() - Duration::from_secs(2);
+    renderer.evict_idle_targets();
+    assert!(!renderer.targets.scale_targets.contains_key(&(64, 64)));
+}
+
+#[test]
 fn memory_pressure_retries_rgba_and_preserves_a_working_texture() {
     let renderer = renderer(true);
     let mut scene = renderer.new_scene();

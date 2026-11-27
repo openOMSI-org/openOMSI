@@ -3412,3 +3412,8 @@
 "Only for due trips": "予定の便のみ"
 "Passengers wait for open doors": "乗客はドアが開くのを待つ"
 "IBIS stop follows the duty": "IBISの停留所を勤務に合わせる"
+
+"Riders may leave after rough driving": "乱暴な運転の後、乗客が途中下車する"
+"Off: passengers complain but stay aboard": "オフ：乗客は苦情を言いますが、降車しません"
+"Conversations between seated passengers": "着席した乗客同士の会話"
+"Rare optional conversations using installed voice packs": "インストール済みの音声パックを使用する任意の短い会話"

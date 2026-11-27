@@ -340,6 +340,8 @@ fn fresh_challenge() -> String {
 
 /// Who the commands of the web gateway's `POST /admin` come from: no player has this id.
 pub const LOCAL_ADMIN: u32 = u32::MAX;
+/// Reserved local operator id for the dedicated server's stdin console.
+pub const CONSOLE_ADMIN: u32 = u32::MAX - 1;
 
 /// Dedicated-server policy. By default only authenticated admins/moderators may relocate
 /// their own bus; a server operator can opt ordinary players in with server.cfg.

@@ -73,6 +73,8 @@ impl Humans {
         self.visual_hailing = s.passenger_hailing && enhanced;
         self.visual_full_bus_reaction = s.passenger_full_bus_reaction && enhanced;
         self.bad_driving = s.pax_bad_driving;
+        self.bad_driving_alight = s.pax_bad_driving_alight;
+        self.ambient_talk = s.passenger_ambient_talk;
         self.entry_doors = EntryDoors::from_setting(&s.pax_entry_doors);
         self.no_ticket = s.pax_no_ticket;
         self.late_tolerance = (s.pax_late_tolerance_min as f64 * 60.0).max(0.0);

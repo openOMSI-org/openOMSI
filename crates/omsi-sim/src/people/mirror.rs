@@ -18,6 +18,16 @@ pub struct MirrorPose {
     pub waiting: Option<(i64, usize)>,
 }
 
+/// A server-owned waiting person held until the player's physical boarding
+/// confirmation. Keeping the original person avoids inventing a new human
+/// model, passenger ID, route or destination when a claim is cancelled.
+pub struct HandedPerson {
+    pub owner: u32,
+    pub person: Person,
+    pub stop: Option<i64>,
+    pub spot: Option<usize>,
+}
+
 /// The bus id (`BusId::Ai`) another LAN player's bus has among the buses here: far above
 /// the traffic's car ids.
 pub fn remote_bus_id(player: u32) -> u64 {
@@ -97,13 +107,29 @@ impl PeopleSim {
         self.anchors().all(|c| (p - c).length() > r)
     }
 
+    /// Density used when filling pedestrian places. Never inflate a normal
+    /// graphical session, only the population owned by a headless host.
+    pub fn focused_density(&self) -> f32 {
+        let bonus = if self.players_only {
+            self.lan_population_boost.clamp(1.0, 3.0)
+        } else {
+            1.0
+        };
+        (self.density.max(0.0) * bonus).clamp(0.0, 3.0)
+    }
+
     /// The stops and pavements around the other players of a LAN session (host).
     pub fn populate_lan_centers(&mut self, world: &dyn World, net: &Network) {
         if self.lan_centers.is_empty() {
             return;
         }
         let mine = self.center;
-        for c in self.lan_centers.clone() {
+        // Round-robin the starting player each second so the first peer in
+        // the LAN table cannot monopolize the bounded population pool.
+        let mut centers = self.lan_centers.clone();
+        let offset = (self.time.max(0.0) as usize) % centers.len();
+        centers.rotate_left(offset);
+        for c in centers {
             // (near us they are there already - unless nobody plays here)
             if !self.players_only && (c - mine).length() < 150.0 {
                 continue;
@@ -118,9 +144,25 @@ impl PeopleSim {
     /// a stop, or aboard a timetable bus - not the riders of our own bus, which the others
     /// see from outside only.
     pub fn lan_people(&self, near: DVec3, radius: f64) -> Vec<LanPerson> {
+        self.lan_people_selected(near, radius, 0..self.people.len())
+    }
+
+    /// A caller with an XY spatial broad-phase can pass candidate indices.
+    /// The same exact 3D check, identity and original list order apply.
+    /// Legacy graphical LAN still calls lan_people without a spatial index.
+    pub fn lan_people_subset(&self, near: DVec3, radius: f64, indices: &[usize]) -> Vec<LanPerson> {
+        self.lan_people_selected(near, radius, indices.iter().copied())
+    }
+
+    fn lan_people_selected(
+        &self,
+        near: DVec3,
+        radius: f64,
+        indices: impl Iterator<Item = usize>,
+    ) -> Vec<LanPerson> {
         let r2 = radius * radius;
-        self.people
-            .iter()
+        indices
+            .filter_map(|i| self.people.get(i))
             .filter(|p| p.puppet.is_none() && !p.remote)
             .filter(|p| (p.position - near).length_squared() < r2)
             .filter_map(|p| {
@@ -161,10 +203,11 @@ impl PeopleSim {
             .collect()
     }
 
-    /// A client's bus takes these waiting people (host): those still waiting leave our
-    /// world (they are the client's now); returns them. Somebody who has meanwhile walked
-    /// up to another bus stays ours.
-    pub fn hand_over(&mut self, player: u32, ids: &[u32]) -> Vec<u32> {
+    /// Hand over waiting people while retaining their complete identity and
+    /// original stop in a native host escrow until BOARD or RETURN arrives.
+    /// Only the headless host retains these snapshots; graphical hosts may
+    /// continue using the legacy hand_over function below.
+    pub fn hand_over_saved(&mut self, player: u32, ids: &[u32]) -> Vec<HandedPerson> {
         let mut out = Vec::new();
         for id in ids {
             let Some(i) = self.people.iter().position(|p| p.id == *id) else {
@@ -175,15 +218,22 @@ impl PeopleSim {
             {
                 continue;
             }
-            // (still counted at their stop while that bus stands there, as the people
-            // boarding a bus of ours are: see `handed`)
-            if let Some(stop) = self.pax(i).and_then(|x| x.stop) {
-                self.handed.push((stop, remote_bus_id(player)));
-            }
+            let (stop, spot) = self.pax(i).map_or((None, None), |p| (p.stop, p.spot));
+            let Some(known_stop) = stop.filter(|stop| self.stops.contains_key(stop)) else {
+                // No safe location to restore this person if the client
+                // later abandons its bus. Refuse a non-restorable GRANT.
+                continue;
+            };
+            self.handed.push((known_stop, remote_bus_id(player)));
             self.release(i);
-            let p = self.people.swap_remove(i);
-            self.retire(&p);
-            out.push(*id);
+            let person = self.people.swap_remove(i);
+            self.retire(&person);
+            out.push(HandedPerson {
+                owner: player,
+                person,
+                stop,
+                spot,
+            });
         }
         out
     }
@@ -208,6 +258,78 @@ impl PeopleSim {
         }
         left.sort_unstable();
         left
+    }
+
+    /// The original graphical host does not hold a native escrow.
+    pub fn hand_over(&mut self, player: u32, ids: &[u32]) -> Vec<u32> {
+        self.hand_over_saved(player, ids)
+            .into_iter()
+            .map(|saved| saved.person.id)
+            .collect()
+    }
+
+    /// Restore a cancelled but never boarded person at the original platform.
+    /// Do not reuse the occupied waiting spot if another person took it while
+    /// the claimant was away. ID and human type remain unchanged.
+    pub fn restore_unboarded(&mut self, mut saved: HandedPerson) -> bool {
+        if self.people.iter().any(|p| p.id == saved.person.id) {
+            return false;
+        }
+        let Some(stop) = saved.stop.filter(|stop| self.stops.contains_key(stop)) else {
+            // A streamed-out stop cannot safely receive a pedestrian; a
+            // future full streaming unload must retain a suspended queue.
+            return false;
+        };
+        let original_available = saved.spot.filter(|&spot| {
+            self.stops
+                .get(&stop)
+                .and_then(|s| s.taken.get(spot))
+                .is_some_and(|taken| !*taken)
+        });
+        let spot = if let Some(index) = original_available {
+            if let Some(taken) = self
+                .stops
+                .get_mut(&stop)
+                .and_then(|s| s.taken.get_mut(index))
+            {
+                *taken = true;
+            }
+            Some(index)
+        } else {
+            self.take_spot(stop)
+        };
+        if let Some(pax) = match &mut saved.person.state {
+            State::Pax(pax) => Some(pax),
+            _ => None,
+        } {
+            pax.task = Task::WaitingForBus;
+            pax.stop = Some(stop);
+            pax.spot = spot;
+            pax.bus = None;
+            pax.inside = None;
+            if let Some(place) = spot.and_then(|index| self.stops[&stop].spots.get(index)) {
+                pax.pos = place.pos;
+                pax.yaw = place.face.to_radians();
+                saved.person.position = place.pos;
+                saved.person.heading = place.face;
+            }
+        }
+        saved.person.place = Place::Ground;
+        if let Some(index) = self
+            .handed
+            .iter()
+            .rposition(|(s, bus)| *s == stop && *bus == remote_bus_id(saved.owner))
+        {
+            self.handed.swap_remove(index);
+        }
+        self.bodies.ops.push(BodyOp::Spawn {
+            id: saved.person.id,
+            ty: saved.person.ty.clone(),
+            variant: saved.person.variant,
+            position: saved.person.position,
+        });
+        self.people.push(saved.person);
+        true
     }
 
     /// Draw the host's people from now on (`on`), or simulate our own again. Everybody who
@@ -311,12 +433,20 @@ impl PeopleSim {
             }
         }
         match pose.aboard {
-            Some((bus, local, lheading, _)) => {
+            Some((bus, local, lheading, seat)) => {
                 p.place = Place::Bus(BusId::Ai(bus), local);
                 p.lheading = lheading;
                 p.vel = DVec2::ZERO;
+                p.remote_seat = if pose.activity == Activity::Sit {
+                    seat
+                } else {
+                    None
+                };
             }
-            None => p.place = Place::Ground,
+            None => {
+                p.place = Place::Ground;
+                p.remote_seat = None;
+            }
         }
     }
 
@@ -427,5 +557,37 @@ impl PeopleSim {
                 self.claims_out.push(*id);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod native_focus_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn headless_population_has_no_phantom_host_player() {
+        let mut people = PeopleSim::new(Path::new("."), 16);
+        people.center = DVec3::ZERO;
+        people.players_only = true;
+        people.lan_centers = vec![DVec3::new(5_000.0, 0.0, 0.0)];
+        let centers: Vec<_> = people.anchors().collect();
+        assert_eq!(centers, people.lan_centers);
+        assert!(people.far_from_players(DVec3::ZERO, 450.0));
+        assert!(!people.far_from_players(centers[0], 450.0));
+    }
+
+    #[test]
+    fn headless_focus_only_boosts_remote_player_population() {
+        let mut people = PeopleSim::new(Path::new("."), 16);
+        people.density = 1.0;
+        people.lan_population_boost = 1.75;
+        assert_eq!(people.focused_density(), 1.0);
+        people.players_only = true;
+        assert_eq!(people.focused_density(), 1.75);
+        people.density = 2.5;
+        assert_eq!(people.focused_density(), 3.0);
+        people.density = 0.0;
+        assert_eq!(people.focused_density(), 0.0);
     }
 }

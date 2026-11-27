@@ -349,7 +349,7 @@ impl PeopleSim {
                     Some(d) if self.stop_targets.is_some() && !free => d.share_of(id),
                     _ => 1.0,
                 };
-                let w = (self.density.max(0.0) * mean * s.factor * served * share)
+                let w = (self.focused_density() * mean * s.factor * served * share)
                     .round()
                     .max(0.0) as usize;
                 forced.unwrap_or(w).min(s.spots.len())
@@ -499,8 +499,7 @@ impl PeopleSim {
             })
             .collect();
         let crowd = (lanes.len() as f32 / 120.0).clamp(0.6, 3.0);
-        let target =
-            (self.pedestrians as f32 * crowd * self.density.clamp(0.0, 3.0)).round() as usize;
+        let target = (self.pedestrians as f32 * crowd * self.focused_density()).round() as usize;
         // (0x62463c: walking the pavements only while fewer than half the pool do, and never
         // past the pool)
         let target = target.min(self.max_people / 2).min(

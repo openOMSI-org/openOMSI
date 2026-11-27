@@ -813,7 +813,6 @@ impl App {
                 if let Some(d) = self.args.driver.as_deref() {
                     self.session.career = career::Career::load(&self.args.root, d);
                 }
-                // (and a player who joins another's game sees the host's people)
                 if self.args.passengers || self.args.lan_join.is_some() {
                     let mut h = humans::Humans::new(&self.args.root, &mut self.gfx.sim_view.people);
                     if let Some(lan) = self.net.lan.as_ref() {

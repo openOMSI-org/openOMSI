@@ -519,12 +519,11 @@ impl PeopleSim {
                     }
                     self.pax_mut(i).unwrap().shunned = None;
                 }
-                // (#2757) with the setting on they hold where they are until the bus stands
-                // still with a door open: nobody walks into a bus still rolling in, nor
-                // anywhere near it that means crossing in front of it
+                // When enabled, wait until the bus is stationary and an entry door is open.
+                // Do not alter the legacy boarding path when the option is disabled.
                 if self.board_when_stopped
                     && (bn.speed.abs() > super::model::BOARD_STOPPED_SPEED
-                        || !bn.entry_open.iter().any(|o| *o))
+                        || !bn.entry_open.iter().any(|open| *open))
                 {
                     return;
                 }
@@ -904,7 +903,8 @@ impl PeopleSim {
             .door
             .map(|d| bn.exit_open.get(d).copied().unwrap_or(false))
             .unwrap_or(false);
-        let may_leave = door_open && (reg.next.is_some() || p.complaint == 3);
+        let may_leave =
+            door_open && (reg.next.is_some() || (p.complaint == 3 && self.bad_driving_alight));
         self.pax_mut(i).unwrap().short = !may_leave;
         let out = p.st == 7 && bn.speed.abs() < 1.0 && may_leave;
         if !out {

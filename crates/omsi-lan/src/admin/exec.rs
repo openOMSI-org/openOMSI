@@ -189,6 +189,13 @@ pub fn publish(
 
 /// How the records name a player's game.
 pub(super) fn actor_of(lan: &LanSession, from: u32, role: Role) -> Actor {
+    if from == super::CONSOLE_ADMIN {
+        return Actor {
+            label: "server console".into(),
+            role,
+            origin: Origin::Local,
+        };
+    }
     if from == LOCAL_ADMIN {
         return Actor {
             label: "local tool (POST /admin)".into(),
@@ -214,6 +221,9 @@ pub fn report(lan: &mut LanSession, hub: Option<&Hub>, actor: &Actor, record: u6
             out.status.name(),
             out.message
         ),
+    }
+    if actor.label == "server console" {
+        log::info!("server console: {}: {}", out.status.name(), out.message);
     }
     if let Origin::Game(pid) = actor.origin {
         lan.command(

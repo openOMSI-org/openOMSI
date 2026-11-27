@@ -50,9 +50,10 @@ use omsi_vehicle::PassengerCabin;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-// The simulation: the people and what they do. It does not draw: what the renderer has to
-// follow it writes down (`bodies`), and omsi-app's `humans` view replays that at the end
-// of the public calls that make people (`tick`, `populate`, `avatar`, ...).
+// The simulation: the people and what they do. The legacy files retain
+// upstream's established formatting; new behavior is tested separately.
+#[rustfmt::skip]
+pub mod ambient_talk;
 #[rustfmt::skip]
 pub mod model;
 #[rustfmt::skip]
@@ -101,7 +102,7 @@ pub mod pax_driver;
 pub mod runners;
 #[rustfmt::skip]
 pub mod ticket_hook;
-// What the renderer has to follow, the money on the desk and what the people need of the map.
+// What the renderer follows, the money and the world.
 #[rustfmt::skip]
 pub mod bodies;
 #[rustfmt::skip]
@@ -164,7 +165,9 @@ use runners::*;
 pub use avatar::{AvatarCmd, SeatSpot};
 pub use bodies::{BodyOp, BodyOps};
 pub use door_requests::DoorRequest;
-pub use mirror::{LanPerson, MirrorPose, placed_bus_id, remote_bus_id, remote_bus_player};
+pub use mirror::{
+    HandedPerson, LanPerson, MirrorPose, placed_bus_id, remote_bus_id, remote_bus_player,
+};
 pub use model::{BusId, DoorWants, Eye, Footfall, PeopleSim, Person, Place, State, VoiceLine};
 pub use money::Money;
 pub use pax::DutyTrip;

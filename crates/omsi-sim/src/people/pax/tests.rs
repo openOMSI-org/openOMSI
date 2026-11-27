@@ -1018,6 +1018,7 @@ fn the_people_waiting_keep_the_floor_of_their_place() {
             why: "",
             puppet: None,
             remote: false,
+            remote_seat: None,
         }
     };
     let floor = |h: &mut PeopleSim, task, spot| {

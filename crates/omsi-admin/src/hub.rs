@@ -153,6 +153,12 @@ pub struct ServerState {
     pub version: String,
     pub players: usize,
     pub max_players: usize,
+    /// Completed simulation ticks per wall-clock second; None while warming up.
+    pub tps: Option<f64>,
+    /// Configured simulation tick frequency (not the number measured).
+    pub target_tps: f64,
+    /// Opt-in CPU-stage timing report; never includes player or network identifiers.
+    pub profiler: Option<crate::profiler::ProfileReport>,
     /// `HH:MM` and seconds of the day.
     pub time: String,
     pub clock: f64,
@@ -201,7 +207,40 @@ pub struct Snapshot {
     pub at: Option<Instant>,
 }
 
+/// A bounded request from the authenticated admin panel; consumed by the server loop.
+#[derive(Debug, Clone, Copy)]
+pub enum ProfileAction {
+    Start,
+    Stop,
+    Reset,
+}
+
+impl ProfileAction {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "start" => Some(Self::Start),
+            "stop" => Some(Self::Stop),
+            "reset" => Some(Self::Reset),
+            _ => None,
+        }
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Stop => "stop",
+            Self::Reset => "reset",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ProfileRequest {
+    pub actor: Actor,
+    pub action: ProfileAction,
+}
+
 pub struct Hub {
+    profile_queue: Mutex<VecDeque<ProfileRequest>>,
     auth: Mutex<Auth>,
     audit: Mutex<Audit>,
     snapshot: Mutex<Arc<Snapshot>>,
@@ -217,6 +256,7 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 impl Hub {
     pub fn new(auth: Auth, audit: Audit) -> Hub {
         Hub {
+            profile_queue: Mutex::new(VecDeque::new()),
             auth: Mutex::new(auth),
             audit: Mutex::new(audit),
             snapshot: Mutex::new(Arc::new(Snapshot::default())),
@@ -224,6 +264,42 @@ impl Hub {
             records: Mutex::new(VecDeque::new()),
             next: AtomicU64::new(1),
         }
+    }
+
+    /// Queue a command without allowing HTTP threads to mutate simulation state.
+    /// Only the server owner/admin may profile a live instance.
+    pub fn submit_profile(&self, actor: Actor, action: ProfileAction) -> Result<(), String> {
+        if actor.role != Role::Admin {
+            self.note(
+                &actor.label,
+                Some(actor.role),
+                "profiler",
+                "refused",
+                "admin only",
+            );
+            return Err("only an administrator may control profiling".into());
+        }
+        let mut queue = lock(&self.profile_queue);
+        if queue.len() >= 16 {
+            return Err("profiler command queue is full".into());
+        }
+        queue.push_back(ProfileRequest {
+            actor: actor.clone(),
+            action,
+        });
+        drop(queue);
+        self.note(
+            &actor.label,
+            Some(actor.role),
+            "profiler",
+            "queued",
+            action.name(),
+        );
+        Ok(())
+    }
+
+    pub fn take_profiles(&self) -> Vec<ProfileRequest> {
+        lock(&self.profile_queue).drain(..).collect()
     }
 
     pub fn auth(&self) -> MutexGuard<'_, Auth> {
@@ -434,6 +510,24 @@ mod tests {
             ),
             Audit::new(None, 0),
         )
+    }
+
+    #[test]
+    fn profiler_commands_require_admin_and_are_bounded() {
+        let hub = hub();
+        assert!(
+            hub.submit_profile(actor(Role::Moderator), ProfileAction::Start)
+                .is_err()
+        );
+        assert!(hub.take_profiles().is_empty());
+        assert!(
+            hub.submit_profile(actor(Role::Admin), ProfileAction::Start)
+                .is_ok()
+        );
+        let pending = hub.take_profiles();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].action.name(), "start");
+        assert!(hub.take_profiles().is_empty());
     }
 
     fn actor(role: Role) -> Actor {

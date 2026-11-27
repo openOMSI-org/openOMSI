@@ -101,6 +101,142 @@ On the same machine, use `127.0.0.1:27015`.
 
 On a server on the internet, open all three. With the tunnel, players can also come in through it with no ports open.
 
+
+## Interactive server console and TPS
+
+When launched from a terminal with stdin attached, the dedicated server accepts
+one command per line. A leading slash is optional (as in Minecraft). Commands
+run on the **server simulation thread**, not the stdin reader; admin actions use
+the existing LAN authorization, moderation and audit path. The server does not
+open a remote command socket and **the web panel cannot execute arbitrary shell
+commands**. Running as a Docker service without interactive stdin is supported:
+the console reader simply exits while the server continues.
+
+| Command | Effect |
+|---|---|
+| `help` | Show commands |
+| `list` / `players` | Show connected players and IDs (no IP addresses) |
+| `status` | Report whether the server is running, player count and measured TPS |
+| `tps` | Report completed simulation ticks per wall-clock second against the target |
+| `say <message>` | Send a server-wide chat announcement |
+| `kick <id> [reason]`, `ban <id> [reason]` | Moderate a connected player |
+| `traffic <count|clear>`, `passengers <density>` | Change host-world density |
+| `clock <seconds>`, `speed <factor>`, `weather next` | Change the host-world clock or weather if allowed |
+| `stop` | Request the same graceful server exit used for signal shutdown |
+
+### Optional timings / Spark-like profiling
+
+By default, the per-stage profiler is **off**: only the lightweight TPS
+counter runs. On the server terminal, use `timings on`, `timings report`,
+`timings off`, or `timings reset`. The aliases `spark start`,
+`spark report`, `spark stop` and `spark reset` work too.
+
+The authenticated **Server timings** panel offers Start, Stop and Reset to
+admins only. The same-origin JSON endpoint `POST /api/admin/profiler` accepts
+exactly `{"action":"start"}`, `{"action":"stop"}` or
+`{"action":"reset"}` with the existing Bearer token, and queues the change
+for the server's simulation thread. Moderators get HTTP 403. There is no
+new public profiler endpoint, remote command shell or RCON.
+
+A report contains the last 1,024 completed tick durations (average, p95,
+p99 and maximum), total tick count, and the fixed server stages sorted by
+total time with mean/max per-stage duration. A report is retained after
+`timings off`. The stage percentages indicate **wall-clock time spent in
+those stages**, not overall CPU utilization or a full sampling flamegraph.
+Intentional tick waiting is excluded from the stage timings.
+
+Other existing administration commands (e.g. `tell`, `hwban`, `unban`,
+`vmute`, `vunmute`, `unstick` and `service`) remain available through the
+same parser. Passwords do not need to be typed into local stdin.
+
+The authenticated panel at `http://127.0.0.1:<web_port>/admin/` displays
+**TPS** prominently above its server facts. This is an actual measurement of
+completed simulation/network ticks divided by elapsed *wall time*, sampled
+about once per second. The target is the engine's fixed simulation rate
+(currently **60 TPS**, independent of display FPS). The meter starts with
+"Measuring TPS" until the first sample; overload shows a lower reading.
+The panel checks for new state every few seconds when visible. These
+diagnostics do not require enabling public player positions or the remote admin
+panel, and no new unauthenticated endpoint is added.
+
+Players reach it two ways:
+
+* UDP at `host:port` (a server with a public address, or on the LAN);
+* over a **WebSocket** at its web port (`omsi-net::ws`): every datagram is one binary
+  message, the server's gateway gives each WebSocket a UDP socket of its own on 127.0.0.1.
+  The session sees such a player there (`joined from 127.0.0.1:<port>`); the log says who
+  that is (`gateway: player WebSocket from <address> on 127.0.0.1:<port>`), with the
+  address a reverse proxy or tunnel on the machine forwards: the last `X-Forwarded-For`,
+  else `CF-Connecting-IP`. With Cloudflare's proxy (the orange cloud) in front of a proxy of
+  this machine, the last `X-Forwarded-For` is a Cloudflare edge, and the players would share a
+  few addresses (16 connections each at most): `gateway_proxy_header = cf-connecting-ip`
+  then believes Cloudflare's `CF-Connecting-IP` first - only with Cloudflare in front, which
+  writes it over a client's own.
+  That is what a free Cloudflare quick tunnel carries (`tunnel = 1` starts `cloudflared
+  tunnel --url http://127.0.0.1:<web_port>` and prints the `https://….trycloudflare.com`
+  address). The same port answers `GET /status` (JSON: name, motd, map, players,
+  max_players, time, weather, version, protocol, vehicles, and on a dedicated server `world`:
+  its AI cars, buses, cars asleep, parked cars, people walking, waiting and aboard, the
+  traffic density, whether it has passengers and the passenger density it applies now) and `GET /icon.png`, which the launcher's Multiplayer → Servers list
+  shows. `vehicles` is the server's `vehicles` list (else every bus it has): a joining
+  player's launcher offers only those, and so do the game menu's *Place a vehicle* and *Swap*
+  once the game has joined. With an `admin_password` it also takes `POST /admin`
+  from the machine itself: one admin command a line (`clock 30600`, `weather set
+  Weather/#CAVOK.owt`, `say …`, `kick 3`, as the Administration menu sends them), the
+  password in `X-Admin-Password`; five wrong ones in two minutes close it for a while. A
+  tool beside the server (a dispatch page, a script) administers it that way without
+  joining. A reverse proxy on the same machine connects from 127.0.0.1 as well: do not let
+  it pass `/admin` on. With `share_positions = 1` it also answers
+  `GET /players`: a JSON array of the players (`id`, `name`, `bus`, `line`, `destination`,
+  `tour`, `x`/`y` in world metres east/north, `heading` in degrees clockwise from north,
+  `speed_kmh`, `on_foot` and `aboard` - a player on foot is where it walks (even with its
+  own bus parked nearby), one sitting in another player's bus is with that bus (its id) - and `lat`/`lon` on a `[worldcoordinates]`
+  map such as Berlin-Spandau, `null` elsewhere), refreshed every second - what a live map of
+  the server on a website needs.
+  It is off by default: the players' names and positions are then nobody's business.
+
+**Passengers.** `passengers = 1/0` switches the people at the stops and on the pavements on
+or off for the whole run (a number there is not a count: `passengers = 50` reads as off).
+How many there are is `passenger_density`, a factor on the map's own demand: the hourly
+`[trafficdensity_passenger]` of its `global.cfg` and each stop's own numbers, so the map's
+busy and quiet hours and stops stay as they are. `1` is what the map says, `0.5` half, `2`
+twice, from `0` to `3`; it is the same factor as the game's own passengers setting
+(`pax_density` in `settings.cfg`), which a server without the key goes on using as before.
+It is not a cap on how many people there are (that is `ai_max_humans` of `settings.cfg`), and
+it changes neither `traffic` nor the timetable's buses. `0` brings no new people while the
+passengers stay on; whoever already waits, walks or rides stays. A value that is not a number
+from 0 to 3 (negative, `NaN`, `10`) is refused with the reason in the log, and the server
+runs as if the key were not there. An admin changes it while the server runs with
+`passengers <factor>` (the Administration menu's command, also through `POST /admin`): the
+stops get that many people from then on - nobody already there is taken away, the boarded
+passengers' trips go on, and the players' games only mirror the server's people, so nobody
+appears twice. `GET /status` shows the density applied and the people waiting, walking and
+aboard. On a server with `passengers = 0` the command is refused (the log says so).
+
+The players can **talk** to each other (see [VOICE.md](VOICE.md)): holding a talk key sends
+the player's voice, as small Opus frames, to the server, which passes it on to the players it
+concerns without decoding it - on the *nearby* channel to those within `voice_range` metres
+of the speaker (75 by default; the listeners make it quieter with the distance), on the
+*radio* channel to everybody. The server needs no audio device and stores nothing.
+
+| key | default | |
+|---|---|---|
+| `voice` | 1 | Voice chat at all. A player must also switch it on in their own settings (off by default), so a server that does not want the traffic says 0. |
+| `voice_radio` | 1 | The session-wide radio channel; 0 leaves the nearby channel only. |
+| `voice_range` | 75 | How far the nearby channel carries (5 to 1000 m). |
+
+Each player is limited to 60 frames a second (a talking player sends 50), a frame to 400
+bytes; a player over it is dropped, as with every other kind of traffic. An administrator or
+moderator silences a player's voice with `vmute <id>` (and `vunmute <id>`), from the player's
+page in the game's Administration menu or the Player list; the silence ends when the player
+leaves. A `server.cfg` from before (with `voice_server_uid`, `voice_channel`,
+`voice_channel_password`) loads as it did: those keys are ignored and the log says so, while
+`voice_range` and `voice_radio` mean the above (a range under 5 m is raised to 5).
+
+The same gateway and tunnel open for a player hosting by **code** (Connect by Code): its
+address goes to the rendezvous topic, and a joining game that gets no answer from the
+addresses in the code (routers that cannot be punched through) joins through the tunnel.
+
 ## Configuration reference
 
 `server.cfg` is `key = value`, one per line. Lines starting with `#` are comments. Flags take `1`/`0` (also `true`, `yes`, `on`).

@@ -160,6 +160,7 @@ impl Navigator {
                 pal.card_dim,
             );
         }
+        draw_signal_countdown(self, ui, f, map, s);
         let bottom_h = 52.0 * s;
         let card = Rect::new(
             map.x + pad,
@@ -549,5 +550,40 @@ fn strike(ui: &mut Painter, x: f32, w: f32, r: Rect, s: f32, c: Color) {
             (1.5 * s).max(1.0),
         ),
         c,
+    );
+}
+
+fn draw_signal_countdown(
+    nav: &mut Navigator,
+    ui: &mut Painter,
+    f: &NavFrame<'_>,
+    map: Rect,
+    s: f32,
+) {
+    let Some(secs) = f
+        .traffic
+        .and_then(|t| crate::signal_countdown::green_in(t, f.bus, f.heading))
+    else {
+        return;
+    };
+    let label = format!("Green in {secs}s");
+    let px = 13.0 * s;
+    let w = nav.fonts.width(&label, px, Weight::Bold) + 24.0 * s;
+    let badge = Rect::new(
+        map.x + (map.w - w) * 0.5,
+        map.bottom() - 86.0 * s,
+        w,
+        26.0 * s,
+    );
+    ui.rounded(badge, 12.0 * s, BANNER);
+    ui.text_in(
+        &mut nav.atlas,
+        &nav.fonts,
+        &label,
+        px,
+        Weight::Bold,
+        badge,
+        Align::Center,
+        BANNER_TEXT,
     );
 }

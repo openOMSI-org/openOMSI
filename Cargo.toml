@@ -18,6 +18,7 @@ members = [
     "crates/omsi-texture",
     "crates/omsi-geometry",
     "crates/omsi-render",
+    "crates/omsi-server",
     "crates/omsi-sim",
     "crates/omsi-htmlengine",
     "crates/omsi-htmlpage",
