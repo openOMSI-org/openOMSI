@@ -252,8 +252,9 @@ pub(crate) fn encode_batches_in<'a, E: mx::RenderEncoder>(
 ) {
     let (mut pipe, mut mesh, mut material) = (u16::MAX, u32::MAX, u32::MAX);
     // (the frame's textures, samplers and buffers: their places in the heap, after the
-    // material's in the immediates; no bind group)
+    // material's in the immediates; the material's values stay a uniform at a dynamic offset)
     pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(heap));
+    pass.set_bind_group(1, &scene.material_table.group);
     let mut page: Option<(&mx::Buffer, &mx::Buffer)> = None;
     let (mut base_vertex, mut first_index) = (0i32, 0u32);
     for b in batches {
@@ -276,8 +277,9 @@ pub(crate) fn encode_batches_in<'a, E: mx::RenderEncoder>(
             mesh = b.mesh;
         }
         if b.material != material {
-            // (the material by its table row's and textures' places in the heap)
+            // (the material's row in the table, and its textures' places in the heap)
             let binding = &scene.materials[b.material as usize].binding;
+            pass.set_buffer_offset(1, 2, MaterialTable::offset(binding.row.index));
             let slots = scene.material_table.immediates(binding);
             pass.set_immediates(0, bytemuck::cast_slice(&slots));
             material = b.material;

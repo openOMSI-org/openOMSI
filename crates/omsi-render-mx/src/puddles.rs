@@ -736,6 +736,8 @@ impl Renderer {
                 if let Some(first) = vehicle_batches.first() {
                     let binding = &scene.materials[first.material as usize].binding;
                     let slots = scene.material_table.immediates(binding);
+                    pass.set_bind_group(1, &scene.material_table.group);
+                    pass.set_buffer_offset(1, 2, MaterialTable::offset(binding.row.index));
                     pass.set_immediates(0, bytemuck::cast_slice(&slots));
                     pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(&heap));
                     pass.set_pipeline(&pipelines.chassis);

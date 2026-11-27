@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **mX no longer runs out of buffer slots while loading vehicles**: the material table is read
+  through one uniform bind group at a dynamic offset, not through a buffer view for every row,
+  so a large map with many AI vehicles keeps rendering
+  ([#4379](https://github.com/openOMSI-org/openOMSI/issues/4379)).
 - **Articulated buses' third axle now springs with the rest of the rear section**: a two-axle
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
