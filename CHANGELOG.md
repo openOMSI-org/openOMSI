@@ -12,6 +12,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
   ([#2945](https://github.com/openOMSI-org/openOMSI/issues/2945)).
+- **Android: buses and maps with HTML displays no longer crash the game**: the displays' scripts
+  now run on phones that tag their memory pointers, where the game stopped with "this platform
+  is not compatible with a nan-boxed `JsValueInner`"
+  ([#4382](https://github.com/openOMSI-org/openOMSI/issues/4382)).
 
 ## 0.3.59 - 2026-11-26
 
