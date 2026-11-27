@@ -172,7 +172,7 @@ fn full_cell_eviction_keeps_classic_road_lights_ahead_of_map_lamps() {
     let side = grid[3] as usize;
     let cell = 10 * side + 10;
     let base = cell * LIGHT_CELL_CAP;
-    assert_eq!(scene.grid_counts[cell], VANILLA_CELL_CAP as u32);
+    assert_eq!(scene.grid_counts[cell], VANILLA_CELL_CAP as u8);
     let stride = std::mem::size_of::<GpuPointLight>();
     let color_at = std::mem::offset_of!(GpuPointLight, color);
     let red = |idx: usize| {
