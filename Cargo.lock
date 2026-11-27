@@ -4017,6 +4017,7 @@ dependencies = [
  "omsi-navigator",
  "omsi-net",
  "omsi-o3d",
+ "omsi-pause-ui",
  "omsi-photo",
  "omsi-platform",
  "omsi-plugin",
@@ -4102,6 +4103,7 @@ dependencies = [
  "omsi-navigator-mx",
  "omsi-net",
  "omsi-o3d",
+ "omsi-pause-ui-mx",
  "omsi-photo-mx",
  "omsi-platform",
  "omsi-plugin",
@@ -4581,6 +4583,35 @@ dependencies = [
  "unicode-normalization",
  "windows 0.62.2",
  "zeroize",
+]
+
+[[package]]
+name = "omsi-pause-ui"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "omsi-admin",
+ "omsi-multiplayer-ui",
+ "omsi-plugin",
+ "omsi-settings-ui",
+ "omsi-ui",
+ "serde_json",
+ "winit",
+]
+
+[[package]]
+name = "omsi-pause-ui-mx"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "mx",
+ "omsi-admin",
+ "omsi-multiplayer-ui-mx",
+ "omsi-plugin",
+ "omsi-settings-ui-mx",
+ "omsi-ui-mx",
+ "serde_json",
+ "winit",
 ]
 
 [[package]]

@@ -21,6 +21,8 @@ mod menu_lists;
 mod menus;
 mod mouse;
 mod mouse_grab;
+pub(crate) mod pause_online;
+mod pause_search;
 mod quick_actions;
 mod room_world;
 pub(crate) mod rooms;
