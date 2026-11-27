@@ -169,6 +169,7 @@ LAN play and the services the game talks to. See [Playing together](MULTIPLAYER.
 | --- | --- | --- |
 | `OMSI_LAN_IP` | `a.b.c.d[,e.f.g.h]` | LAN addresses to offer first, when the detection gets them wrong. |
 | `OMSI_LAN_JOIN_TIMEOUT` | seconds; default: built-in | How long to wait when joining a LAN game. |
+| `OMSI_MOD_UPLOAD_KIB_PER_SEC` | KiB/s; default `1024`; `0` disables the limit | Aggregate encrypted mod-upload rate shared by all workers. Positive values are clamped to `64`–`1048576`; invalid values use the default. Read when the first mod frame is sent; restart to change it. Gameplay UDP uses a separate transport. |
 | `OMSI_NO_BRIDGE` | flag | LAN: leave the internet alone - no rendezvous bridge, no tunnel (tests, LAN parties). |
 | `OMSI_NO_TUNNEL` | flag | LAN: no tunnel. |
 | `OMSI_CLOUDFLARED` | path | The `cloudflared` program for the LAN tunnel. Searched after the game's folder and before the `PATH`. |

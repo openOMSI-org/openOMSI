@@ -473,10 +473,12 @@ impl AudioEngine {
         let mut freed = 0usize;
         self.clips.lock().retain(|_, (clip, used)| {
             let idle = used.elapsed() >= unused
+                // Failed lookups have no owners; expire those negative cache entries
+                // too, or changing/missing sound paths accumulate for the whole session.
                 && clip
                     .as_ref()
                     .map(|c| Arc::strong_count(c) == 1)
-                    .unwrap_or(false);
+                    .unwrap_or(true);
             if idle {
                 freed += clip.as_ref().map(|c| c.samples.len() * 2).unwrap_or(0);
             }
@@ -930,5 +932,42 @@ mod limiter_tests {
         assert_eq!(soft_clip(0.5), 0.5);
         assert!(soft_clip(3.0) <= 1.0 && soft_clip(-3.0) >= -1.0);
         assert!(soft_clip(0.95) > 0.9 && soft_clip(0.95) < 0.95);
+    }
+}
+
+#[cfg(test)]
+mod clip_cache_eviction_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn expired_missing_sound_files_leave_the_cache() {
+        let engine = AudioEngine::capture(48_000);
+        let missing = PathBuf::from("nonexistent-audio-for-trim-test.wav");
+        engine.clips.lock().insert(
+            missing.clone(),
+            (None, Instant::now() - Duration::from_secs(90)),
+        );
+        *engine.last_trim.lock() = Instant::now() - Duration::from_secs(11);
+        assert_eq!(engine.trim_clips(Duration::from_secs(60)), 0);
+        assert!(!engine.clips.lock().contains_key(&missing));
+    }
+
+    #[test]
+    fn referenced_sound_remains_in_cache_when_old() {
+        let engine = AudioEngine::capture(48_000);
+        let path = PathBuf::from("sound-with-an-active-owner.wav");
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![0; 48],
+        });
+        engine.clips.lock().insert(
+            path.clone(),
+            (Some(clip.clone()), Instant::now() - Duration::from_secs(90)),
+        );
+        *engine.last_trim.lock() = Instant::now() - Duration::from_secs(11);
+        assert_eq!(engine.trim_clips(Duration::from_secs(60)), 0);
+        assert!(engine.clips.lock().contains_key(&path));
     }
 }

@@ -7,9 +7,9 @@
 //! their blend shapes are posed every frame, and the lips move with what the person says.
 
 use glam::Vec3;
+use omsi_sim::human::HumanType;
 use omsi_sim::human::avatar::AvatarInfo;
 use omsi_sim::human::clips::{Kind, Mix, Motion};
-use omsi_sim::human::HumanType;
 use parking_lot::Mutex;
 use std::sync::{Arc, OnceLock};
 
@@ -19,8 +19,11 @@ pub(super) const FACE_DISTANCE: f64 = 14.0;
 /// Whether this game session draws the avatars (read once per session, as the animation
 /// choice: `OMSI_CHARACTER_MODELS` or the setting).
 pub(super) fn enabled() -> bool {
-    let mode = omsi_cfg::flags::OMSI_CHARACTER_MODELS.live_var().unwrap_or_else(|_| crate::settings::Settings::load().character_models);
-    let on = mode.eq_ignore_ascii_case("improved") || mode.eq_ignore_ascii_case("high") || mode == "1";
+    let mode = omsi_cfg::flags::OMSI_CHARACTER_MODELS
+        .live_var()
+        .unwrap_or_else(|_| crate::settings::Settings::load().character_models);
+    let on =
+        mode.eq_ignore_ascii_case("improved") || mode.eq_ignore_ascii_case("high") || mode == "1";
     if on {
         // (loaded in the background; until then the people are the content's own)
         start_loading();
@@ -55,7 +58,9 @@ fn start_loading() {
         }
     }
     let Some(dir) = omsi_platform::avatars::find_dir() else {
-        log::info!("avatars: the passenger avatars are not here yet; downloading them (the people stay the content's own until they are)");
+        log::info!(
+            "avatars: the passenger avatars are not here yet; downloading them (the people stay the content's own until they are)"
+        );
         omsi_platform::avatars::fetch_if_missing();
         *STATE.lock() = State::Missing;
         return;
@@ -127,11 +132,21 @@ fn load_motions(dir: &std::path::Path) -> [[Vec<Motion>; 3]; 2] {
     for m in loaded {
         out[m.female as usize][m.kind as usize].push(m);
     }
-    log::info!("avatars: {} motion clips in {:.1} s", out.iter().flatten().map(|v| v.len()).sum::<usize>(), started.elapsed().as_secs_f32());
+    log::info!(
+        "avatars: {} motion clips in {:.1} s",
+        out.iter().flatten().map(|v| v.len()).sum::<usize>(),
+        started.elapsed().as_secs_f32()
+    );
     out
 }
 
-pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, seconds: f32, posed: &mut omsi_sim::human::Posed) {
+pub(super) fn clip_pose(
+    id: u32,
+    ty: &HumanType,
+    pose: &omsi_sim::human::Pose,
+    seconds: f32,
+    posed: &mut omsi_sim::human::Posed,
+) {
     if ty.biped.is_none() {
         return;
     }
@@ -142,14 +157,19 @@ pub(super) fn clip_pose(id: u32, ty: &HumanType, pose: &omsi_sim::human::Pose, s
     }
     let h = |salt: u64| ((id as u64 ^ salt).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) as usize;
     let pick = |k: Kind| &set[k as usize][h(k as u64 + 1) % set[k as usize].len()];
-    let mix = Mix { walk: pick(Kind::Walk), stand: pick(Kind::Stand), sit: pick(Kind::Sit) };
+    let mix = Mix {
+        walk: pick(Kind::Walk),
+        stand: pick(Kind::Stand),
+        sit: pick(Kind::Sit),
+    };
     let seconds = seconds + (h(7) % 600) as f32;
     omsi_sim::human::clips::apply(ty, posed, &mix, pose.clip_blend(), seconds);
 }
 
 fn weight(id: &str) -> usize {
     match id {
-        "Female_Adult_06" | "Female_Adult_10" | "Female_Adult_16" | "Female_Child_02" | "Male_Adult_15" | "Male_Adult_19" | "Male_Adult_21" => 1,
+        "Female_Adult_06" | "Female_Adult_10" | "Female_Adult_16" | "Female_Child_02"
+        | "Male_Adult_15" | "Male_Adult_19" | "Male_Adult_21" => 1,
         _ if id.contains("_Adult_") || id.contains("_Child_") => 10,
         _ if id.starts_with("Business_") => 4,
         _ if id.starts_with("Female_Party_") => 2,
@@ -192,8 +212,17 @@ fn is_female(t: &HumanType) -> bool {
     if v.starts_with('M') {
         return false;
     }
-    let name = t.def.path.file_stem().map(|s| s.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
-    ["woman", "women", "frau", "female", "girl", "lady", "madchen", "mädchen", "dame"].iter().any(|w| name.contains(w))
+    let name = t
+        .def
+        .path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    [
+        "woman", "women", "frau", "female", "girl", "lady", "madchen", "mädchen", "dame",
+    ]
+    .iter()
+    .any(|w| name.contains(w))
 }
 
 fn is_child(t: &HumanType) -> bool {
@@ -205,10 +234,14 @@ impl Pool {
     /// kind, the same for the same person.
     pub(super) fn pick(&self, id: u32, ty: &HumanType) -> Option<Arc<HumanType>> {
         let (female, child) = (is_female(ty), is_child(ty));
-        let list = [kind_index(female, child), kind_index(female, false), kind_index(!female, child)]
-            .into_iter()
-            .map(|k| &self.kinds[k])
-            .find(|l| !l.is_empty())?;
+        let list = [
+            kind_index(female, child),
+            kind_index(female, false),
+            kind_index(!female, child),
+        ]
+        .into_iter()
+        .map(|k| &self.kinds[k])
+        .find(|l| !l.is_empty())?;
         // (a hash of the id: neighbours in the id order are not neighbours in the list)
         let h = (id as u64 ^ 0x5bd1_e995).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32;
         Some(list[(h as usize) % list.len()].clone())
@@ -217,7 +250,8 @@ impl Pool {
 
 /// What people are saying: by person id, when the line began and its loudness every
 /// 20 ms (0 … 1).
-static TALK: OnceLock<Mutex<hashbrown::HashMap<u32, (std::time::Instant, Arc<Vec<f32>>)>>> = OnceLock::new();
+static TALK: OnceLock<Mutex<hashbrown::HashMap<u32, (std::time::Instant, Arc<Vec<f32>>)>>> =
+    OnceLock::new();
 
 /// Person `speaker` starts saying `clip`: their lips follow its loudness.
 pub(crate) fn speak(speaker: u32, clip: &omsi_audio::mixer::Clip) {
@@ -235,7 +269,24 @@ pub(crate) fn speak(speaker: u32, clip: &omsi_audio::mixer::Clip) {
     for v in &mut env {
         *v = (*v / peak).sqrt();
     }
-    TALK.get_or_init(Default::default).lock().insert(speaker, (std::time::Instant::now(), Arc::new(env)));
+    TALK.get_or_init(Default::default)
+        .lock()
+        .insert(speaker, (std::time::Instant::now(), Arc::new(env)));
+}
+
+/// A voice can finish outside the camera; lip-sync lookups must not be
+/// responsible for freeing the waveform forever.
+fn voice_expired(start: std::time::Instant, frames: usize, now: std::time::Instant) -> bool {
+    now.saturating_duration_since(start).as_secs_f64() * 50.0 >= frames as f64
+}
+
+/// Run infrequently from the people view, even when nobody has a visible face.
+/// Prevents old voice envelopes accumulating as passengers despawn or walk away.
+pub(super) fn trim_finished_speech() {
+    let Some(talk) = TALK.get() else { return };
+    let now = std::time::Instant::now();
+    talk.lock()
+        .retain(|_, (start, env)| !voice_expired(*start, env.len(), now));
 }
 
 /// How loud person `id` speaks now, if they do.
@@ -257,7 +308,10 @@ pub(super) fn talking(id: u32) -> Option<f32> {
 static HOUR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(12 << 16);
 
 pub(crate) fn set_hour(h: f32) {
-    HOUR.store((h.clamp(0.0, 24.0) * 65536.0) as u32, std::sync::atomic::Ordering::Relaxed);
+    HOUR.store(
+        (h.clamp(0.0, 24.0) * 65536.0) as u32,
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 pub(super) fn hour() -> f32 {
@@ -274,13 +328,22 @@ pub(crate) struct FaceView {
 
 impl FaceView {
     pub(super) fn new(seed: u32) -> FaceView {
-        FaceView { face: omsi_sim::human::face::Face::new(seed as u64), rest: (Vec::new(), Vec::new()), live: false }
+        FaceView {
+            face: omsi_sim::human::face::Face::new(seed as u64),
+            rest: (Vec::new(), Vec::new()),
+            live: false,
+        }
     }
 }
 
 /// The file a body material's texture is read from: the clothing variant's own folder
 /// first, else the type's folders (as `PeopleView::make_meshes` looks it up).
-pub(super) fn material_texture(ty: &HumanType, dirs: &[std::path::PathBuf], texture: &str, variant: usize) -> Option<std::path::PathBuf> {
+pub(super) fn material_texture(
+    ty: &HumanType,
+    dirs: &[std::path::PathBuf],
+    texture: &str,
+    variant: usize,
+) -> Option<std::path::PathBuf> {
     let (name, first) = ty.variant_texture(texture, variant);
     let mut look: Vec<&std::path::Path> = first.into_iter().collect();
     look.extend(dirs.iter().map(|p| p.as_path()));
@@ -289,7 +352,10 @@ pub(super) fn material_texture(ty: &HumanType, dirs: &[std::path::PathBuf], text
 
 /// A texture of an avatar read ahead on a worker: the picture for the GPU and the PBR maps
 /// beside it.
-pub(super) type Prepared = (Option<Arc<omsi_texture::TextureData>>, Option<omsi_texture::pbr::PbrImages>);
+pub(super) type Prepared = (
+    Option<Arc<omsi_texture::TextureData>>,
+    Option<omsi_texture::pbr::PbrImages>,
+);
 
 /// The avatars whose textures are read on the workers before anybody is drawn with them.
 /// Read on the frame, an avatar that came into view for the first time cost 25-70 ms
@@ -356,12 +422,20 @@ impl Warm {
                 let mut seen = hashbrown::HashSet::new();
                 let mut list = Vec::new();
                 for m in a.meshes.iter().flat_map(|hm| hm.materials.iter()) {
-                    let Some(path) = material_texture(&a, &dirs, &m.texture, 0) else { continue };
+                    let Some(path) = material_texture(&a, &dirs, &m.texture, 0) else {
+                        continue;
+                    };
                     if !seen.insert(path.clone()) {
                         continue;
                     }
-                    let data = omsi_texture::gpu::load_gpu(&path).ok().map(|(t, _)| Arc::new(t));
-                    let pbr = if a.face.is_some() { omsi_texture::pbr::load_set(&omsi_texture::pbr::find(&path)) } else { None };
+                    let data = omsi_texture::gpu::load_gpu(&path)
+                        .ok()
+                        .map(|(t, _)| Arc::new(t));
+                    let pbr = if a.face.is_some() {
+                        omsi_texture::pbr::load_set(&omsi_texture::pbr::find(&path))
+                    } else {
+                        None
+                    };
                     list.push((path, (data, pbr)));
                 }
                 done.lock().push((key, list));
@@ -379,7 +453,10 @@ impl Warm {
     pub(super) fn map_figures(&mut self, types: &[Arc<HumanType>], root: &std::path::Path) {
         // (the same figures, or the same with more at the end - the player's own figure joins
         // the list later: the read goes on, and the new ones get a thread of their own)
-        let grown = |f: &FigureRead| f.figures.len() <= types.len() && f.figures.iter().zip(types).all(|(p, t)| *p == t.def.path);
+        let grown = |f: &FigureRead| {
+            f.figures.len() <= types.len()
+                && f.figures.iter().zip(types).all(|(p, t)| *p == t.def.path)
+        };
         if self.figures.as_ref().is_some_and(|f| !grown(f)) {
             if let Some(old) = self.figures.take() {
                 for p in &old.given {
@@ -403,7 +480,9 @@ impl Warm {
             f.figures.extend(fresh.iter().map(|t| t.def.path.clone()));
             read_figures_ahead(fresh, root, f);
         }
-        let Some(f) = self.figures.as_mut() else { return };
+        let Some(f) = self.figures.as_mut() else {
+            return;
+        };
         for (path, pictures) in f.out.lock().drain(..) {
             if let hashbrown::hash_map::Entry::Vacant(entry) = self.prepared.entry(path.clone()) {
                 f.given.push(path);
@@ -413,30 +492,53 @@ impl Warm {
     }
 }
 
+/// Multiple read-ahead workers may be active while the figures list is growing.
+/// Reserve atomically, without exceeding the configured decoded-image budget.
+fn reserve_figure_bytes(decoded: &std::sync::atomic::AtomicUsize, bytes: usize) -> bool {
+    use std::sync::atomic::Ordering;
+    decoded
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+            used.checked_add(bytes)
+                .filter(|&next| next <= FIGURES_AHEAD_BYTES)
+        })
+        .is_ok()
+}
+
 /// Read `types`' default pictures on a thread of their own, into `read`'s output and budget
 /// (see `FigureRead`).
 fn read_figures_ahead(types: &[Arc<HumanType>], root: &std::path::Path, read: &FigureRead) {
     use std::sync::atomic::Ordering;
     let (list, root) = (types.to_vec(), root.to_path_buf());
     let (halt, sink, decoded) = (read.stop.clone(), read.out.clone(), read.decoded.clone());
-    let spawned = std::thread::Builder::new().name("figure pictures".into()).spawn(move || {
-        let mut seen = hashbrown::HashSet::new();
-        for t in &list {
-            let dirs = t.texture_dirs(&root);
-            for m in t.meshes.iter().flat_map(|hm| hm.materials.iter()) {
-                if halt.load(Ordering::Relaxed) || decoded.load(Ordering::Relaxed) >= FIGURES_AHEAD_BYTES {
-                    return;
+    let spawned = std::thread::Builder::new()
+        .name("figure pictures".into())
+        .spawn(move || {
+            let mut seen = hashbrown::HashSet::new();
+            for t in &list {
+                let dirs = t.texture_dirs(&root);
+                for m in t.meshes.iter().flat_map(|hm| hm.materials.iter()) {
+                    if halt.load(Ordering::Relaxed)
+                        || decoded.load(Ordering::Relaxed) >= FIGURES_AHEAD_BYTES
+                    {
+                        return;
+                    }
+                    let Some(path) = material_texture(t, &dirs, &m.texture, 0) else {
+                        continue;
+                    };
+                    if !seen.insert(path.clone()) {
+                        continue;
+                    }
+                    let Ok((data, _)) = omsi_texture::gpu::load_gpu(&path) else {
+                        continue;
+                    };
+                    let bytes = data.levels.iter().map(Vec::len).sum::<usize>();
+                    if !reserve_figure_bytes(&decoded, bytes) {
+                        return;
+                    }
+                    sink.lock().push((path, (Some(Arc::new(data)), None)));
                 }
-                let Some(path) = material_texture(t, &dirs, &m.texture, 0) else { continue };
-                if !seen.insert(path.clone()) {
-                    continue;
-                }
-                let Ok((data, _)) = omsi_texture::gpu::load_gpu(&path) else { continue };
-                decoded.fetch_add(data.levels.iter().map(Vec::len).sum::<usize>(), Ordering::Relaxed);
-                sink.lock().push((path, (Some(Arc::new(data)), None)));
             }
-        }
-    });
+        });
     if let Err(e) = spawned {
         log::warn!("people: no thread to read the figures' pictures ahead: {e}");
     }
@@ -453,5 +555,38 @@ mod tests {
         assert_eq!(super::weight("Pilot_Male_01"), 1);
         assert_eq!(super::weight("Construction_Male_03"), 1);
         assert_eq!(super::weight("Business_Female_02"), 4);
+    }
+}
+
+#[cfg(test)]
+mod speech_cache_tests {
+    use super::voice_expired;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn finished_voice_expires_without_another_visible_face_lookup() {
+        let start = Instant::now();
+        assert!(!voice_expired(
+            start,
+            50,
+            start + Duration::from_millis(999)
+        ));
+        assert!(voice_expired(start, 50, start + Duration::from_secs(1)));
+        assert!(voice_expired(start, 0, start));
+    }
+}
+
+#[cfg(test)]
+mod figure_budget_tests {
+    use super::{FIGURES_AHEAD_BYTES, reserve_figure_bytes};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn figure_read_ahead_never_exceeds_its_budget() {
+        let used = AtomicUsize::new(FIGURES_AHEAD_BYTES - 32);
+        assert!(!reserve_figure_bytes(&used, 33));
+        assert!(reserve_figure_bytes(&used, 32));
+        assert_eq!(used.load(Ordering::Relaxed), FIGURES_AHEAD_BYTES);
+        assert!(!reserve_figure_bytes(&used, 1));
     }
 }

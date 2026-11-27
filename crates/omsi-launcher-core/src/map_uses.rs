@@ -98,7 +98,20 @@ fn stamp(files: &[PathBuf]) -> u64 {
     h.finish()
 }
 
-static SEEN: Mutex<Vec<(String, u64, Vec<String>)>> = Mutex::new(Vec::new());
+/// Keep a useful working set for repeated mod-removal previews without retaining the
+/// dependency lists of every archive and map examined during the whole launcher session.
+const MAX_SEEN_SCANS: usize = 512;
+type ScanRecord = (String, u64, Vec<String>);
+static SEEN: Mutex<Vec<ScanRecord>> = Mutex::new(Vec::new());
+
+fn remember_scan(seen: &mut Vec<ScanRecord>, key: String, stamp: u64, used: Vec<String>) {
+    seen.retain(|(d, _, _)| *d != key);
+    seen.push((key, stamp, used));
+    let overflow = seen.len().saturating_sub(MAX_SEEN_SCANS);
+    if overflow > 0 {
+        seen.drain(..overflow);
+    }
+}
 
 pub fn forget() {
     SEEN.lock().unwrap().clear();
@@ -126,8 +139,7 @@ fn scan(dir: &Path, exts: &[&str], pick: fn(&str) -> Vec<String>) -> Option<Vec<
     }
     let u: Vec<String> = set.into_iter().collect();
     let mut seen = SEEN.lock().unwrap();
-    seen.retain(|(d, _, _)| *d != k);
-    seen.push((k, s, u.clone()));
+    remember_scan(&mut seen, k, s, u.clone());
     Some(u)
 }
 
@@ -285,5 +297,29 @@ pub fn plan(content: &Path, roots: &[PathBuf], s: &Scope, full: bool) -> Plan {
         kept,
         freed,
         bytes: 0,
+    }
+}
+
+#[cfg(test)]
+mod scan_cache_tests {
+    use super::*;
+
+    #[test]
+    fn scanned_mod_references_are_bounded_and_most_recent_survive() {
+        let mut seen = Vec::new();
+        for n in 0..=MAX_SEEN_SCANS {
+            remember_scan(
+                &mut seen,
+                format!("map-{n}"),
+                n as u64,
+                vec!["splines/a".into()],
+            );
+        }
+        assert_eq!(seen.len(), MAX_SEEN_SCANS);
+        assert!(!seen.iter().any(|(key, _, _)| key == "map-0"));
+        assert!(seen.iter().any(|(key, _, _)| key == "map-512"));
+        remember_scan(&mut seen, "map-512".into(), 99, vec![]);
+        assert_eq!(seen.len(), MAX_SEEN_SCANS);
+        assert_eq!(seen.last().unwrap().1, 99);
     }
 }
