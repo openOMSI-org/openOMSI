@@ -479,9 +479,13 @@ fn fs_enhanced(in: CoronaOut) -> @location(0) vec4<f32> {
         // (the core never narrower than a pixel and a half: a far lamp stays a point of
         // light, as the sprite's distance floor keeps it on the screen)
         let lit = textureSampleLevel(t_corona, s_corona, vec2<f32>(0.5, 0.5), 0.0).rgb;
+        // The centre sample is a brightness, not a picture to paste over the sprite: taking
+        // `max(lit, shape)` filled the Gaussian core with the centre's colour even where the
+        // bitmap drew nothing, so a shaped corona collapsed to a dot. Multiplying the bitmap
+        // keeps its outline and hue (#3802).
         let w = max(0.1, px * 1.5);
         let core = exp(-r * r / (w * w)) * 3.0 + exp(-r * 9.0) * 0.35;
-        shape = mix(core * max(lit, shape) + shape * 0.22, shape, wet);
+        shape = mix(shape * (core + 0.22), shape, wet);
         // (round, inside the circle the sprite holds: a far lamp's sprite is a few pixels,
         // the core spans it, and brighter than white even in its corners it showed the
         // whole quad - a square blot of light for every distant headlamp)

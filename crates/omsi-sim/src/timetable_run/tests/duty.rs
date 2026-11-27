@@ -1322,3 +1322,85 @@ fn the_ibis_stop_is_typed_again_only_when_asked_and_out_of_step() {
         "sent back a stop, the IBIS goes back with it"
     );
 }
+
+/// A duty of three stops 300 m apart along +x, with the bus where the test puts it.
+fn straight_duty(bus_x: f64) -> PlayerDuty {
+    let stops: Vec<PlannedStop> = ["Anfang", "Mitte", "Ende"]
+        .iter()
+        .enumerate()
+        .map(|(i, name)| PlannedStop {
+            object_id: i as i64,
+            name: (*name).into(),
+            arr: i as f64 * 60.0,
+            dep: i as f64 * 60.0,
+            position: Some(glam::DVec3::new(i as f64 * 300.0, 0.0, 0.0)),
+            dir: StopDir::default(),
+            stops: true,
+            closed: None,
+        })
+        .collect();
+    PlayerDuty {
+        line: "5".into(),
+        tour: "1".into(),
+        trips: vec![PlannedTrip {
+            name: "5_1".into(),
+            line: "5".into(),
+            terminus: "Ende".into(),
+            departure: 0.0,
+            end: 120.0,
+            stops,
+        }],
+        trip_index: 0,
+        first_trip: 0,
+        next_stop: 1,
+        at_stop: false,
+        arrived_late: None,
+        done: false,
+        served_terminus: None,
+        left_late: Some(0.0),
+        held_back: false,
+        placed: true,
+        trip_changed: false,
+        skipped: None,
+        run: 0,
+        finished: None,
+        reopened: None,
+        picked: true,
+        first_update: None,
+        heading: 90.0,
+        position: Some(glam::DVec3::new(bus_x, 0.0, 0.0)),
+        unnumbered_public: Vec::new(),
+        passed: Default::default(),
+    }
+}
+
+/// #4033: an approach announcement is measured from the bus to the stop ahead, and the stop
+/// ahead from the one before it (two stops close together are announced halfway).
+#[test]
+fn the_distances_an_approach_announcement_is_measured_by() {
+    // (300 m from the stop before, 100 m still to go)
+    let duty = straight_duty(200.0);
+    let (left, gap) = duty
+        .leg_distances()
+        .expect("a place for the bus and the stop");
+    assert!((left - 100.0).abs() < 0.01, "{left}");
+    assert!((gap.expect("a stop before this one") - 300.0).abs() < 0.01);
+    // (a stop 60 m from the last one: the gap the halfway rule clamps the approach to)
+    let mut duty = straight_duty(200.0);
+    duty.trips[0].stops[1].position = Some(glam::DVec3::new(260.0, 0.0, 0.0));
+    let (left, gap) = duty.leg_distances().unwrap();
+    assert!((left - 60.0).abs() < 0.01);
+    assert!((gap.unwrap() - 260.0).abs() < 0.01);
+    // (nothing to measure against: no place for the bus, or the stop ahead)
+    let mut duty = straight_duty(200.0);
+    duty.position = None;
+    assert_eq!(duty.leg_distances(), None);
+    let mut duty = straight_duty(200.0);
+    duty.trips[0].stops[1].position = None;
+    assert_eq!(duty.leg_distances(), None);
+    // (the trip's first stop has no stop before it)
+    let mut duty = straight_duty(200.0);
+    duty.next_stop = 0;
+    let (_, gap) = duty.leg_distances().unwrap();
+    assert_eq!(gap, None);
+}

@@ -13,6 +13,8 @@ use ring::agreement::{EphemeralPrivateKey, UnparsedPublicKey, X25519, agree_ephe
 use ring::hkdf::{HKDF_SHA256, Salt};
 use ring::rand::SystemRandom;
 use std::io::{self, BufRead, Read, Write};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 /// The protocol a game speaks now.
 pub(crate) const MAGIC: &str = "OMSIMODS/3";
@@ -50,6 +52,59 @@ pub(crate) const OLD_PEER: &str = "ERR the host's openOMSI sends its mods encryp
 /// The most plain bytes one frame carries.
 const FRAME: usize = 64 * 1024;
 const TAG: usize = 16;
+
+// All mod-transfer workers share one outbound budget, including concurrent
+// piece uploads and downloads served by this process. Gameplay uses a separate
+// transport and never waits here. Dedicated hosts can opt into a higher rate.
+const DEFAULT_UPLOAD_KIB_PER_SEC: u64 = 1024;
+
+struct UploadPacer {
+    next: Instant,
+    bytes_per_second: u64,
+}
+
+impl UploadPacer {
+    fn reserve(&mut self, now: Instant, bytes: usize) -> Duration {
+        let start = self.next.max(now);
+        let duration = Duration::from_secs_f64(bytes as f64 / self.bytes_per_second as f64);
+        self.next = start + duration;
+        start.duration_since(now)
+    }
+}
+
+fn upload_limit(value: Option<&str>) -> u64 {
+    match value.and_then(|v| v.parse::<u64>().ok()) {
+        Some(0) => 0,
+        Some(rate) => rate.clamp(64, 1024 * 1024),
+        None => DEFAULT_UPLOAD_KIB_PER_SEC,
+    }
+}
+
+fn pace_upload(bytes: usize) {
+    static PACER: OnceLock<Option<Mutex<UploadPacer>>> = OnceLock::new();
+    let pacer = PACER.get_or_init(|| {
+        let configured = omsi_cfg::flags::OMSI_MOD_UPLOAD_KIB_PER_SEC.live_var().ok();
+        let rate = upload_limit(configured.as_deref());
+        if rate == 0 {
+            return None;
+        }
+        log::info!("LAN: aggregate mod upload limit: {rate} KiB/s");
+        Some(Mutex::new(UploadPacer {
+            next: Instant::now(),
+            bytes_per_second: rate * 1024,
+        }))
+    });
+    if let Some(pacer) = pacer {
+        let wait = {
+            let mut pacer = pacer.lock().unwrap_or_else(|e| e.into_inner());
+            pacer.reserve(Instant::now(), bytes)
+        };
+        // Never hold the global lock while sleeping or writing to a socket.
+        if !wait.is_zero() {
+            std::thread::sleep(wait);
+        }
+    }
+}
 
 /// This side of a key agreement: its key pair, until the other side's public key is known.
 pub(crate) struct Handshake {
@@ -168,6 +223,7 @@ impl<W: Write> SecureWriter<W> {
             .seal_in_place_append_tag(nonce(self.seq), Aad::empty(), &mut self.buf)
             .map_err(|_| io::Error::other("cannot seal a frame"))?;
         self.seq += 1;
+        pace_upload(self.buf.len() + 4);
         self.inner
             .write_all(&(self.buf.len() as u32).to_be_bytes())?;
         self.inner.write_all(&self.buf)?;
@@ -279,6 +335,30 @@ mod tests {
             c.finish(42, true, &sp).unwrap(),
             s.finish(42, false, &cp).unwrap(),
         )
+    }
+
+    #[test]
+    fn upload_budget_is_shared_and_does_not_bank_idle_credit() {
+        let now = Instant::now();
+        let mut pacer = UploadPacer {
+            next: now,
+            bytes_per_second: 1024,
+        };
+        assert_eq!(pacer.reserve(now, 512), Duration::ZERO);
+        assert_eq!(pacer.reserve(now, 512), Duration::from_millis(500));
+        assert_eq!(pacer.reserve(now, 512), Duration::from_secs(1));
+        let later = now + Duration::from_secs(10);
+        assert_eq!(pacer.reserve(later, 512), Duration::ZERO);
+        assert_eq!(pacer.reserve(later, 512), Duration::from_millis(500));
+    }
+
+    #[test]
+    fn upload_limit_has_safe_defaults_and_an_explicit_unlimited_mode() {
+        assert_eq!(upload_limit(None), 1024);
+        assert_eq!(upload_limit(Some("invalid")), 1024);
+        assert_eq!(upload_limit(Some("0")), 0);
+        assert_eq!(upload_limit(Some("1")), 64);
+        assert_eq!(upload_limit(Some("256")), 256);
     }
 
     #[test]

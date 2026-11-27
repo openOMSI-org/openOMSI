@@ -138,6 +138,7 @@ pub(super) fn player_step(cx: PlayerStepCx, dt: f32) {
             cx.sound.audio.as_ref(),
             cx.view.cam.in_cab,
             !matches!(cx.view.view.as_str(), "free" | "foot"),
+            cx.common.settings.vol_traction,
         );
         crate::devtools::apply_holds(cx.ui.devtools.as_deref(), &mut p.vehicle);
         if let Some(n) = p.cruise_note.take() {
@@ -401,6 +402,7 @@ pub(super) fn audio(cx: AudioCx, dt: f32) {
             },
             reverb_time,
             reverb_mix,
+            surround: cx.common.settings.audio_surround,
         });
     }
     // on foot without a bus of one's own: the vehicles one placed still stand, run

@@ -34,6 +34,7 @@ mod keywords;
 pub mod lang;
 mod mods;
 pub mod number;
+pub mod overrides;
 pub mod panic_guard;
 pub mod par;
 pub mod profile_keys;

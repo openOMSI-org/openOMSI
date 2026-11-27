@@ -862,19 +862,27 @@ fn watch_inbox(content: &Path) -> Vec<String> {
     let seen = guard.get_or_insert_with(Default::default);
     let waiting_dir = content.join("Mods").join(install::WAITING);
     let items = inbox_entries(content);
-    seen.retain(|p, _| items.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
+    // On installs with many packages, linear contains() made this a quadratic
+    // scan on every launcher poll. Keep the membership test O(1).
+    let present: std::collections::HashSet<&PathBuf> = items.iter().collect();
+    seen.retain(|p, _| present.contains(p) || (p.starts_with(&waiting_dir) && p.exists()));
     for p in items {
         if install::is_busy(&p) {
             continue;
         }
         let now = std::time::Instant::now();
-        if seen
-            .get(&p)
-            .map(|s| {
-                s.started && now.duration_since(s.checked) < std::time::Duration::from_secs(30)
-            })
-            .unwrap_or(false)
-        {
+        // Reading every file in a large mod tree for *every* UI poll consumed CPU
+        // and storage bandwidth while the package was still being copied. Check a
+        // growing package at most once per second; completed installs retain their
+        // existing 30-second recheck. The two-second stable-size requirement stays.
+        if seen.get(&p).is_some_and(|s| {
+            now.duration_since(s.checked)
+                < if s.started {
+                    std::time::Duration::from_secs(30)
+                } else {
+                    std::time::Duration::from_secs(1)
+                }
+        }) {
             continue;
         }
         let sig = tree_signature(&p);
@@ -3548,6 +3556,9 @@ fn display_defaults(v: &mut Value) {
 pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     let mut v = json!({ "msaa": 4, "anisotropy": 8, "ssao": true, "shadows": true, "shadow_size": 2048, "navigator": true, "ui_opacity": 0.85, "navigator_corner": "bottom-left", "boarding": "auto", "detail_textures": true, "exact_fare": true, "enhanced": false, "graphics": "vanilla_plus", "fullscreen": false, "vsync": true, "volume": 0.6, "drive_keys": "simple", "render_scale": "auto", "view_distance": "auto", "language": "ENG", "video_memory": 0, "texture_compression": true, "gpu_texture_compression": true, "chat": true, "tooltips": true, "name_tags": true, "show_fps": false, "clouds": true, "cloud_quality": "high", "rain_quality": "high", "pax_density": 1.0, "vol_ai": 1.0, "vol_scenery": 1.0, "ambient": true, "vol_ambient": 0.8, "mirror_size": 256, "doppler": true, "driver": true, "max_fps": 0, "min_obj_size": 0.013, "max_obj_dist": "auto" });
     v["rear_door_boarding"] = json!(false);
+    // (#2037: five speakers for the [3d] sounds - set apart, the `json!` above is already as
+    // deep as the macro may go)
+    v["audio_surround"] = json!(false);
     graphics_and_interface_defaults(&mut v);
     if phone {
         for (k, d) in [
@@ -3628,6 +3639,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     passenger_defaults(&mut v);
     // the arrival half of the stops of a depot file that keeps two recordings per stop
     v["auto_announce"] = json!(false);
+    announce_defaults(&mut v);
     // OMSI's own options
     for (k, d) in [
         ("maintenance", json!(0)),
@@ -3984,6 +3996,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "show_fps"
             | "clouds"
             | "doppler"
+            | "audio_surround"
             | "driver"
             | "use_real_time"
             | "use_real_date"
@@ -4508,6 +4521,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             | "auto_announce"
             | "rear_door_boarding"
             | "ambient" => v[&k] = json!(b(val)),
+            k if k.starts_with("announce_") => set_announce_setting(&mut v, &k, val),
             "pax_late_tolerance_min" => {
                 v[&k] = json!(
                     val.parse::<f64>()
@@ -4580,6 +4594,48 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
         v["passenger_animation"] = json!("original");
     }
     v
+}
+
+fn announce_defaults(v: &mut Value) {
+    v["announce_arrival"] = json!(true);
+    v["announce_departure"] = json!(true);
+    v["announce_approach"] = json!(false);
+    v["announce_approach_m"] = json!(120);
+}
+
+fn set_announce_setting(v: &mut Value, key: &str, val: &str) {
+    let b = |s: &str| {
+        matches!(
+            s.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on" | "yes"
+        )
+    };
+    match key {
+        "announce_arrival" | "announce_departure" | "announce_approach" => v[key] = json!(b(val)),
+        "announce_approach_m" => {
+            v[key] = json!(
+                val.trim()
+                    .parse::<f64>()
+                    .map(|x| x.clamp(0.0, 1000.0))
+                    .unwrap_or(120.0)
+            )
+        }
+        _ => {}
+    }
+}
+
+fn push_announce_settings(
+    text: &mut String,
+    b: impl Fn(&str, bool) -> u8,
+    f: impl Fn(&str, f64) -> f64,
+) {
+    text.push_str(&format!(
+        "announce_arrival={}\nannounce_departure={}\nannounce_approach={}\nannounce_approach_m={}\n",
+        b("announce_arrival", true),
+        b("announce_departure", true),
+        b("announce_approach", false),
+        f("announce_approach_m", 120.0).clamp(0.0, 1000.0)
+    ));
 }
 
 /// OMSI's tutorials (`Tutorials/menu_<n>_<LANG>.html`): per lesson its title and what
@@ -4741,7 +4797,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             .unwrap_or("vanilla_plus"),
     );
     let text = format!(
-        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nvol_traction={}\nmirror_size={}\ndoppler={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nvol_traction={}\nmirror_size={}\ndoppler={}\naudio_surround={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -4796,6 +4852,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             x => x.clamp(64, 2048),
         },
         b("doppler", true),
+        b("audio_surround", false),
         b("driver", true),
         n("max_fps", 0).max(0),
         f("min_obj_size", 0.013),
@@ -5337,6 +5394,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         b("auto_announce", false),
         b("pax_no_ticket", false)
     ));
+    push_announce_settings(&mut text, &b, &f);
     text.push_str(&format!(
         "triple_left_angle_deg={}\ntriple_right_angle_deg={}\ntriple_eye_height_mm={}\n",
         f("triple_left_angle_deg", 45.0).clamp(0.0, 90.0),

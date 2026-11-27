@@ -4,16 +4,38 @@
 //! first request, and again if it ended; requests carry a number and the answers find their
 //! request by it, so a map being read does not hold up the pictures.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 type Pending = Arc<Mutex<HashMap<u64, Sender<(Value, Vec<u8>)>>>>;
+
+/// The helper sends JPEG previews and map data. Leave room for large maps, but
+/// reject malformed multi-gigabyte replies before allocating their buffers.
+const MAX_REPLY_BYTES: u64 = 256 << 20;
+
+fn receive(
+    pending: &Pending,
+    id: u64,
+    rx: Receiver<(Value, Vec<u8>)>,
+    wait: Duration,
+) -> Result<(Value, Vec<u8>), String> {
+    let result = rx.recv_timeout(wait);
+    if result.is_err() {
+        // The helper may still be decoding a bus after the UI has moved on.
+        // Never retain an unanswered sender for the remainder of its lifetime.
+        pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&id);
+    }
+    result.map_err(|_| "the preview helper did not answer".to_string())
+}
 
 struct Running {
     child: Child,
@@ -29,7 +51,8 @@ static RELEASED: Mutex<Option<Instant>> = Mutex::new(None);
 
 fn start() -> Result<Running, String> {
     let game = omsi_launcher_lib::game_binary().ok_or("the game program was not found")?;
-    let log = std::fs::File::create(omsi_launcher_lib::data_dir().join("launcher-service.log")).map_err(|e| e.to_string())?;
+    let log = std::fs::File::create(omsi_launcher_lib::data_dir().join("launcher-service.log"))
+        .map_err(|e| e.to_string())?;
     let mut child = Command::new(&game)
         .arg("--launcher-service")
         .env("RUST_LOG", "info")
@@ -53,11 +76,23 @@ fn start() -> Result<Running, String> {
                     break;
                 }
                 let Ok(head) = serde_json::from_str::<Value>(line.trim()) else { continue };
-                let mut body = vec![0u8; head.get("len").and_then(Value::as_u64).unwrap_or(0) as usize];
+                let len = head.get("len").and_then(Value::as_u64).unwrap_or(0);
+                let id = head.get("id").and_then(Value::as_u64).unwrap_or(0);
+                if len > MAX_REPLY_BYTES {
+                    // Keep stream framing without holding a gigantic allocation.
+                    let copied = std::io::copy(&mut (&mut r).take(len), &mut std::io::sink());
+                    if copied.ok() != Some(len) {
+                        break;
+                    }
+                    if let Some(tx) = p.lock().unwrap_or_else(|e| e.into_inner()).remove(&id) {
+                        let _ = tx.send((json!({"ok": false, "error": "preview response exceeded the size limit"}), Vec::new()));
+                    }
+                    continue;
+                }
+                let mut body = vec![0u8; len as usize];
                 if r.read_exact(&mut body).is_err() {
                     break;
                 }
-                let id = head.get("id").and_then(Value::as_u64).unwrap_or(0);
                 if let Some(tx) = p.lock().unwrap_or_else(|e| e.into_inner()).remove(&id) {
                     let _ = tx.send((head, body));
                 }
@@ -67,25 +102,37 @@ fn start() -> Result<Running, String> {
         })
         .map_err(|e| e.to_string())?;
     omsi_launcher_lib::log_to_file(&format!("launcher service started: {}", game.display()));
-    Ok(Running { child, stdin, pending })
+    Ok(Running {
+        child,
+        stdin,
+        pending,
+    })
 }
 
 /// Ask the service; its answer and the bytes after it.
 pub fn ask(mut req: Value, wait: Duration) -> Result<(Value, Vec<u8>), String> {
     let look = req.get("cmd").and_then(Value::as_str) == Some("look");
-    let drawing = matches!(req.get("cmd").and_then(Value::as_str), Some("look" | "warm" | "frame"));
+    let drawing = matches!(
+        req.get("cmd").and_then(Value::as_str),
+        Some("look" | "warm" | "frame")
+    );
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
     req["id"] = json!(id);
     let (tx, rx) = channel();
-    {
+    let pending = {
         let mut s = SERVICE.lock().unwrap_or_else(|e| e.into_inner());
         if drawing && PLAYING.load(Ordering::Relaxed) {
             if look {
                 *LOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some(req);
             }
-            return Ok((json!({ "ok": true, "busy": false, "failed": false, "moving": false, "picture": true }), Vec::new()));
+            return Ok((
+                json!({ "ok": true, "busy": false, "failed": false, "moving": false, "picture": true }),
+                Vec::new(),
+            ));
         }
-        if s.as_mut().is_some_and(|r| r.child.try_wait().ok().flatten().is_some()) {
+        if s.as_mut()
+            .is_some_and(|r| r.child.try_wait().ok().flatten().is_some())
+        {
             *s = None;
         }
         if s.is_none() {
@@ -99,15 +146,30 @@ pub fn ask(mut req: Value, wait: Duration) -> Result<(Value, Vec<u8>), String> {
             *LOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some(req.clone());
         }
         let r = s.as_mut().unwrap();
-        r.pending.lock().unwrap_or_else(|e| e.into_inner()).insert(id, tx);
-        if writeln!(r.stdin, "{req}").and_then(|_| r.stdin.flush()).is_err() {
+        r.pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, tx);
+        if writeln!(r.stdin, "{req}")
+            .and_then(|_| r.stdin.flush())
+            .is_err()
+        {
+            r.pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
             *s = None;
             return Err("the preview helper ended".into());
         }
-    }
-    let (head, body) = rx.recv_timeout(wait).map_err(|_| "the preview helper did not answer".to_string())?;
+        r.pending.clone()
+    };
+    let (head, body) = receive(&pending, id, rx, wait)?;
     if head.get("ok").and_then(Value::as_bool) == Some(false) {
-        return Err(head.get("error").and_then(Value::as_str).unwrap_or("the preview helper failed").to_string());
+        return Err(head
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("the preview helper failed")
+            .to_string());
     }
     Ok((head, body))
 }
@@ -134,13 +196,20 @@ fn end(child: &mut Child) {
     if matches!(child.try_wait(), Ok(None)) {
         let _ = child.kill();
         let _ = child.wait();
-        let _ = std::fs::remove_file(omsi_launcher_lib::data_dir().join(format!("showroom-placing-{}.txt", omsi_platform::VERSION)));
+        let _ = std::fs::remove_file(
+            omsi_launcher_lib::data_dir()
+                .join(format!("showroom-placing-{}.txt", omsi_platform::VERSION)),
+        );
     }
 }
 
 pub fn no_game_since(asked: Instant) {
     let _s = SERVICE.lock().unwrap_or_else(|e| e.into_inner());
-    if RELEASED.lock().unwrap_or_else(|e| e.into_inner()).is_none_or(|t| t < asked) {
+    if RELEASED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_none_or(|t| t < asked)
+    {
         PLAYING.store(false, Ordering::Relaxed);
     }
 }
@@ -153,7 +222,13 @@ pub fn release() {
     drop(s);
     std::thread::spawn(move || {
         let t = Instant::now();
-        while t.elapsed() < Duration::from_secs(10) && !r.pending.lock().unwrap_or_else(|e| e.into_inner()).is_empty() {
+        while t.elapsed() < Duration::from_secs(10)
+            && !r
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty()
+        {
             std::thread::sleep(Duration::from_millis(50));
         }
         let _ = writeln!(r.stdin, "{}", json!({ "cmd": "quit" }));
@@ -163,4 +238,28 @@ pub fn release() {
         }
         end(&mut r.child);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expired_preview_request_does_not_keep_pending_sender() {
+        let pending: Pending = Arc::default();
+        let (tx, rx) = channel();
+        pending.lock().unwrap().insert(7, tx);
+        assert!(receive(&pending, 7, rx, Duration::ZERO).is_err());
+        assert!(pending.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn reply_can_arrive_before_timeout() {
+        let pending: Pending = Arc::default();
+        let (tx, rx) = channel();
+        tx.send((json!({"ok": true}), vec![1, 2, 3])).unwrap();
+        let (head, bytes) = receive(&pending, 7, rx, Duration::ZERO).unwrap();
+        assert_eq!(head["ok"], true);
+        assert_eq!(bytes, vec![1, 2, 3]);
+    }
 }

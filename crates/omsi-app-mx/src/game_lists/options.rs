@@ -48,6 +48,7 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "voice_volume" => s.voice_volume,
         "voice_mic_gain" => s.voice_mic_gain,
         "vol_scenery" => s.vol_scenery,
+        "vol_traction" => s.vol_traction,
         "vol_ambient" => s.vol_ambient,
         "radio_speaker" | "radio_hiss" | "radio_dropouts" => {
             *crate::radio::fx_setting(&mut s.radio_fx.clone(), verb).1
@@ -265,6 +266,15 @@ pub(super) fn option_set(
         "vol_scenery" => {
             app.settings.vol_scenery = (v * 100.0).round() / 100.0;
             Some(("vol_scenery", app.settings.vol_scenery.to_string()))
+        }
+        "vol_traction" => {
+            app.settings.vol_traction = (v * 100.0).round() / 100.0;
+            if let Some(p) = app.player.as_mut() {
+                if let Some(ss) = p.sounds.as_mut() {
+                    ss.set_traction_gain(app.settings.vol_traction);
+                }
+            }
+            Some(("vol_traction", app.settings.vol_traction.to_string()))
         }
         "vol_ambient" => {
             app.settings.vol_ambient = (v * 100.0).round() / 100.0;
@@ -634,6 +644,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "vr" => s.vr,
         "vr_desktop_mirror" => s.vr_desktop_mirror,
         "doppler" => s.doppler,
+        "audio_surround" => s.audio_surround,
         "steering_linear" => s.steering_linear,
         "pad_steer_linear" => s.pad_steer_linear,
         "pad_buttons" => s.pad_buttons,
@@ -1149,6 +1160,10 @@ fn toggle_set_graphics_and_controls(
         "doppler" => {
             app.settings.doppler = on;
             Some(("doppler", bit))
+        }
+        "audio_surround" => {
+            app.settings.audio_surround = on;
+            Some(("audio_surround", bit))
         }
         "steering_linear" => {
             app.settings.steering_linear = on;

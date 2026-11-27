@@ -345,16 +345,21 @@ impl TrailerPart {
         } else {
             (coupling_front.y - axle_long).abs()
         };
-        let ground_arm = match turning_line {
-            Some(_) => {
-                ty.def
-                    .axles
-                    .iter()
-                    .map(|a| (coupling_front.y - a.long).abs())
-                    .sum::<f32>()
-                    / ty.def.axles.len() as f32
-            }
-            None => length,
+        let ground_arm = if ty.def.is_rail() {
+            length
+        } else if ty.def.axles.is_empty() {
+            length
+        } else {
+            // The body rests on every road axle, not just the one farthest from the joint
+            // (`length`): with a two-axle rear section that has no `[rot_pnt_long]`, sampling
+            // only at the last axle left the front one's spring unmoved by the road under it
+            // (#2945). Use the mean arm for the body's height and pitch in both cases.
+            ty.def
+                .axles
+                .iter()
+                .map(|a| (coupling_front.y - a.long).abs())
+                .sum::<f32>()
+                / ty.def.axles.len() as f32
         };
         let wheel_radius = ty
             .def
@@ -839,8 +844,9 @@ impl TrailerPart {
         // the height of the part's origin over its axle (where the ground has none: level
         // with the coupling, as before)
         let level = c.z - self.coupling_front.z as f64;
-        // the ground under its axle: what the wheels stand on where the world says, else the
-        // plain height sampler
+        // the ground under its axles: what the wheels stand on where the world says, else the
+        // plain height sampler. Every axle contributes, so a bump under the front one of a
+        // two-axle rear section moves the body as one under the back one does (#2945).
         let ground_z = match (on_track, &main.contact, &main.ground) {
             (Some(_), _, _) => None,
             (None, Some(g), _) => {
@@ -850,9 +856,39 @@ impl TrailerPart {
                 // ever found the ground beneath and hung there under the bridge while the
                 // front section drove on above (#135).
                 let top = self.position.z.max(level) + 1.5;
-                g.probe(axle_at.x, axle_at.y, top).below
+                let mut sum = 0.0;
+                let mut found = 0;
+                for axle in &self.ty.def.axles {
+                    let arm = (self.coupling_front.y - axle.long).abs() as f64;
+                    let at = c - DVec3::new(dir.x, dir.y, 0.0) * arm;
+                    if let Some(z) = g.probe(at.x, at.y, top).below {
+                        sum += z;
+                        found += 1;
+                    }
+                }
+                if found == 0 {
+                    g.probe(axle_at.x, axle_at.y, top).below
+                } else {
+                    Some(sum / found as f64)
+                }
             }
-            (None, None, Some(g)) => g(axle_at.x, axle_at.y),
+            (None, None, Some(g)) => {
+                let mut sum = 0.0;
+                let mut found = 0;
+                for axle in &self.ty.def.axles {
+                    let arm = (self.coupling_front.y - axle.long).abs() as f64;
+                    let at = c - DVec3::new(dir.x, dir.y, 0.0) * arm;
+                    if let Some(z) = g(at.x, at.y) {
+                        sum += z;
+                        found += 1;
+                    }
+                }
+                if found == 0 {
+                    g(axle_at.x, axle_at.y)
+                } else {
+                    Some(sum / found as f64)
+                }
+            }
             _ => None,
         };
         // A height far from where the coupling holds the part is another level's: the AI's

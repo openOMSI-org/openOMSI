@@ -1147,3 +1147,16 @@ fn dlss_sharpness_round_trips_into_renderer() {
     assert_eq!(Settings::from_text(&game.to_text()), game);
     assert!((Settings::from_text("dlss_sharpness=7\n").dlss_sharpness - 1.0).abs() < 1e-6);
 }
+
+#[test]
+fn vol_traction_round_trips_through_launcher_and_settings() {
+    let default = Settings::from_text("");
+    assert!((default.vol_traction - 1.0).abs() < 1e-6);
+    let mut ui = omsi_launcher_lib::settings_from_text(None);
+    assert!((ui["vol_traction"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+    ui["vol_traction"] = serde_json::json!(0.35);
+    let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None));
+    assert!((game.vol_traction - 0.35).abs() < 1e-6);
+    assert_eq!(Settings::from_text(&game.to_text()), game);
+    assert!((Settings::from_text("vol_traction=2.5\n").vol_traction - 1.0).abs() < 1e-6);
+}

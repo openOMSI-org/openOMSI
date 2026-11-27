@@ -386,6 +386,8 @@ pub struct Navigator {
     fonts: Fonts,
     atlas: Atlas,
     target: Option<(TextureId, u32, u32)>,
+    /// Do not retry a failed target allocation on every frame while VRAM is exhausted.
+    target_retry_after: Option<std::time::Instant>,
     /// The map's own lanes when there is no traffic system.
     own_net: Option<std::sync::Arc<Network>>,
     /// The whole map's road network and object places (read in the background at the
@@ -638,6 +640,7 @@ impl Navigator {
             fonts: Fonts::new(),
             atlas: Atlas::new(1024),
             target: None,
+            target_retry_after: None,
             own_net: None,
             global: None,
             stop_pos: Default::default(),
@@ -1221,17 +1224,28 @@ impl Navigator {
             }
         }
 
-        self.ensure_gpu(renderer);
         let resized = self.target.map(|t| (t.1, t.2) != (w, h)).unwrap_or(true);
         if resized {
+            // Drop the previous target first so its allocation can be reused.
             if let Some((t, _, _)) = self.target.take() {
                 renderer.free_texture(scene, t);
                 scene.premultiplied.remove(&t);
             }
-            let t = renderer.add_render_texture(scene, w, h);
+            let now = std::time::Instant::now();
+            if self.target_retry_after.is_some_and(|until| now < until) {
+                return;
+            }
+            let Some(t) = renderer.try_add_render_texture(scene, w, h) else {
+                // Keep the slot empty, not an invalid GPU resource permanently cached
+                // under the current size. Retry when the memory budget has settled.
+                self.target_retry_after = Some(now + std::time::Duration::from_millis(500));
+                return;
+            };
+            self.target_retry_after = None;
             scene.premultiplied.insert(t);
             self.target = Some((t, w, h));
         }
+        self.ensure_gpu(renderer);
         let (tex, _, _) = self.target.unwrap();
         let Some(view) = renderer.texture_view(scene, tex) else {
             return;

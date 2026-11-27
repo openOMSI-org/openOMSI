@@ -167,7 +167,10 @@ pub struct Gpu {
     sampler: wgpu::Sampler,
     /// The vertex buffers and their capacity (None: making it failed; tried again next upload).
     buffers: Vec<(Option<wgpu::Buffer>, u64)>,
+    /// Consecutive small uploads: shrink only after sustained low usage.
+    small_uploads: Vec<u16>,
     packed: Vec<Packed>,
+    packed_small_uploads: u16,
     textures: Vec<Option<Tex>>,
     msaa: Option<(wgpu::TextureView, u32, u32)>,
     failed_target: Option<(u32, u32)>,
@@ -367,7 +370,9 @@ impl Gpu {
             uniform_group,
             sampler,
             buffers: Vec::new(),
+            small_uploads: Vec::new(),
             packed: Vec::new(),
+            packed_small_uploads: 0,
             textures: Vec::new(),
             msaa: None,
             failed_target: None,
@@ -604,13 +609,44 @@ impl Gpu {
         let bytes = std::mem::size_of_val(self.packed.as_slice()) as u64;
         while self.buffers.len() <= id {
             self.buffers.push((None, 0));
+            self.small_uploads.push(0);
         }
-        if bytes > self.buffers[id].1 || self.buffers[id].0.is_none() {
-            let cap = bytes.next_power_of_two().max(4096);
-            self.buffers[id] = (Self::vertex_buffer(device, cap, false), cap);
+        let cap = self.buffers[id].1;
+        if bytes > cap || self.buffers[id].0.is_none() {
+            let grown = bytes.next_power_of_two().max(4096);
+            self.buffers[id] = (Self::vertex_buffer(device, grown, false), grown);
+            self.small_uploads[id] = 0;
+        } else if cap >= (1 << 20) && bytes < cap / 4 {
+            // A short UI spike can need tens of MB; only reclaim the oversized buffer
+            // after 180 smaller uploads to avoid thrashing on menus and city-map pans.
+            self.small_uploads[id] = self.small_uploads[id].saturating_add(1);
+            if self.small_uploads[id] >= 180 {
+                let smaller = bytes.next_power_of_two().max(4096);
+                if let Some(new_buffer) = Self::vertex_buffer(device, smaller, false) {
+                    self.buffers[id] = (Some(new_buffer), smaller);
+                    self.small_uploads[id] = 0;
+                }
+            }
+        } else {
+            self.small_uploads[id] = 0;
         }
         if let (Some(buf), true) = (&self.buffers[id].0, bytes > 0) {
             queue.write_buffer(buf, 0, bytemuck::cast_slice(&self.packed));
+        }
+        // The CPU staging Vec also kept the largest UI upload forever. Reclaim only
+        // after sustained lower use, so a momentary UI spike does not cause churn.
+        let held_bytes = self
+            .packed
+            .capacity()
+            .saturating_mul(std::mem::size_of::<Packed>());
+        if held_bytes >= (1 << 20) && self.packed.len().saturating_mul(4) < self.packed.capacity() {
+            self.packed_small_uploads = self.packed_small_uploads.saturating_add(1);
+            if self.packed_small_uploads >= 180 {
+                self.packed.shrink_to(self.packed.len().max(1024));
+                self.packed_small_uploads = 0;
+            }
+        } else {
+            self.packed_small_uploads = 0;
         }
     }
 
@@ -641,6 +677,9 @@ impl Gpu {
         if let Some(b) = self.buffers.get_mut(id) {
             *b = (None, 0);
         }
+        if let Some(small) = self.small_uploads.get_mut(id) {
+            *small = 0;
+        }
     }
 
     pub fn drop_targets(&mut self) {
@@ -651,8 +690,10 @@ impl Gpu {
     pub fn put(&mut self, id: usize, v: Vertices) {
         while self.buffers.len() <= id {
             self.buffers.push((None, 0));
+            self.small_uploads.push(0);
         }
         self.buffers[id] = (v.0, v.1);
+        self.small_uploads[id] = 0;
     }
 
     /// A vertex buffer of `size` bytes, made where its failure can be seen: a card out of

@@ -117,6 +117,8 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "pax" => PAX.to_vec(),
         "passenger_transfer_percent" => (0..=100).map(|n| n as f32).collect(),
         "passenger_weight_kg" => (8..=24).map(|n| n as f32 * 5.0).collect(),
+        // (#4033: how far before the stop the approach announcement plays: 20 m .. 500 m)
+        "announce_approach_m" => (2..=50).map(|n| n as f32 * 10.0).collect(),
         "volume" => VOLUME.to_vec(),
         "led_glow" => (0..16).map(|v| v as f32).collect(),
         "night_brightness" => (0..=12).map(|v| v as f32 * 0.25).collect(),

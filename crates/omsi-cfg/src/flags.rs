@@ -368,6 +368,7 @@ flags! {
     OMSI_MIRROR_ENHANCED: Bool, Switch, Frame, "off", "Draw the mirrors with the enhanced shading again.";
     OMSI_MIRROR_HUD: Num, Tuning, Use, "settings", "Mirror HUD mode (number).";
     OMSI_MOBILE: Bool, Test, Use, "off", "The phone layout on a computer (screen cut-outs).";
+    OMSI_MOD_UPLOAD_KIB_PER_SEC: Num, Tuning, Once, "1024", "Aggregate encrypted mod upload rate in KiB/s across all workers; 0 is unlimited, positive values clamp to 64-1048576. Read at first upload; gameplay UDP is separate.";
     OMSI_MUTE: Bool, Test, Use, "off", "Mix everything as usual but play nothing.";
     OMSI_MX: Text, Switch, Once, "settings", "mX Graphics for this run, over the mx_graphics setting: on (1, true) starts the game on mX, off (0, false) on wgpu.";
     OMSI_MX_SOFTWARE: Bool, Test, Once, "off", "Let mX Graphics draw on a software renderer (WARP, llvmpipe) on a computer; without it a computer where only one opens starts again on wgpu.";

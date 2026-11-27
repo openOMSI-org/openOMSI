@@ -19,10 +19,17 @@
 //! before the first "next stop is …" one, so that the scripts' own step on leaving plays the
 //! first stop's recording. A start recording the scripts start late is not waited for: the
 //! departure recording takes over, as it would in service.
+//!
+//! Which of the three a map's city makes is the options' business (#4033): the arrival
+//! recording at the stop, the "next stop is …" one as a script that failed to step is made
+//! up for, and the same recording played once more on the way in, a distance before the stop
+//! - the last of them for the cities that announce on approach instead of on leaving. A
+//! distance two stops closer together than twice would reach announces halfway between them
+//! (`announce::approach_metres`).
 
 use omsi_sim::VehicleInstance;
 use omsi_sim::timetable_run::PlayerDuty;
-use omsi_sim::timetable_run::announce::{self, LayoutStatus, TwoRecordings};
+use omsi_sim::timetable_run::announce::{self, LayoutStatus, Policy, TwoRecordings};
 
 /// The least time between two presses of a key (s): one press a frame at most, and the
 /// scripts a moment to run their own step in between.
@@ -70,6 +77,8 @@ pub(crate) struct AutoAnnounce {
     at_stop: Option<bool>,
     /// The stop of the trip whose arrival recording was pressed for last.
     announced: Option<usize>,
+    /// The stop of the trip whose approach announcement was played on the way in.
+    approached: Option<usize>,
     /// The route whose start recording was played at the trip's first stop: once a route, as
     /// the driver presses it once (another route typed in at the stop gets its own).
     parked: Option<usize>,
@@ -118,6 +127,7 @@ impl AutoAnnounce {
         self.trip = Some(trip_index);
         self.at_stop = Some(at_stop);
         self.announced = None;
+        self.approached = None;
         self.parked = None;
         self.want = None;
         self.watch = None;
@@ -126,12 +136,18 @@ impl AutoAnnounce {
 
     /// One frame of the player's duty, after it was updated: `now` is the seconds of play
     /// (`SimClock::run_time`, which never wraps - a night line runs past midnight).
-    pub(crate) fn step(&mut self, d: &PlayerDuty, bus: &mut VehicleInstance, now: f64) {
+    pub(crate) fn step(
+        &mut self,
+        d: &PlayerDuty,
+        bus: &mut VehicleInstance,
+        now: f64,
+        policy: Policy,
+    ) {
+        if self.off || !policy.any() {
+            return;
+        }
         if self.trip != Some(d.trip_index) {
             self.new_trip(d.trip_index, d.at_stop());
-        }
-        if self.off {
-            return;
         }
         let at = d.at_stop();
         let left = self.at_stop.replace(at) == Some(true) && !at;
@@ -148,9 +164,20 @@ impl AutoAnnounce {
         }
         if at {
             self.park(bus, d.next_stop, layout, now);
-            self.arrive(bus, d, layout, now);
+            if policy.arrival {
+                self.arrive(bus, d, layout, now);
+            }
         } else if left {
-            self.left(bus, layout, now);
+            // (off: a script that does not step its counter on is left to its silence, as in
+            // the cities that announce nothing on leaving)
+            if policy.departure {
+                self.left(bus, layout, now);
+            } else {
+                self.watch = None;
+            }
+        }
+        if policy.approach && !at {
+            self.approach(bus, d, policy, now);
         }
         self.press_step(bus, now);
         self.watch_step(bus, now);
@@ -277,6 +304,36 @@ impl AutoAnnounce {
             "auto-announce: arrival at '{}', entry {entry} of route {route}",
             stop.name.trim()
         );
+    }
+
+    /// The bus is on its way to the stop it is due at and near enough for the city's approach
+    /// announcement (#4033): that stop's own "next stop is …" recording, pressed as the
+    /// arrival one is at the stop. The distance is the city's option, or half the way from the
+    /// stop before where the two stand closer together than twice it.
+    fn approach(&mut self, bus: &VehicleInstance, d: &PlayerDuty, policy: Policy, now: f64) {
+        if d.next_stop == 0 || self.approached == Some(d.next_stop) {
+            return;
+        }
+        let Some((left, gap)) = d.leg_distances() else { return };
+        if left > announce::approach_metres(policy.approach_m, gap) {
+            return;
+        }
+        let Some(stop) = d.trips.get(d.trip_index).and_then(|t| t.stops.get(d.next_stop)) else { return };
+        if !stop.stops {
+            self.approached = Some(d.next_stop);
+            return;
+        }
+        let (Some(hof), Some(route)) = (bus.host.hof.clone(), route(bus)) else { return };
+        let Some(entry) = announce::preview_entry(&hof, route, &stop.name, d.next_stop) else {
+            // (a depot file that keeps one recording per stop has no "next stop is …" half to
+            // play on the way in: the scripts announce there as they always did)
+            self.approached = Some(d.next_stop);
+            return;
+        };
+        self.approached = Some(d.next_stop);
+        // (the bus is driving, so the press is not tied to standing at the stop)
+        self.want = Some(Want { entry, until: now + ARRIVAL_WAIT, at_stop: false, start: false, recordings: None });
+        log::info!("auto-announce: approaching '{}', entry {entry} of route {route}", stop.name.trim());
     }
 
     /// The bus left the stop: a stock script steps the counter on by itself here, and plays

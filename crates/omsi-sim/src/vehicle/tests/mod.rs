@@ -5,6 +5,7 @@ use super::*;
 use std::sync::Arc;
 
 mod articulation;
+mod blind_spot_vars;
 mod fuel;
 mod mesh_identity;
 mod model_variables;
