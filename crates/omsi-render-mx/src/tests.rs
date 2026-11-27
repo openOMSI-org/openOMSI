@@ -31,22 +31,17 @@ fn a_washed_pane_gets_a_glass_picture_without_rain() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
-            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
-            normals: vec![[0.0, 0.0, 1.0]; 3],
-            uvs: vec![[0.0, 0.0]; 3],
+            positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
+            normals: vec![Vec3::Z; 3],
+            uvs: vec![Vec2::ZERO; 3],
             indices: vec![0, 1, 2],
-            slots: vec![Slot {
-                start: 0,
-                count: 3,
-                material: 0,
-            }],
+            ranges: vec![(0, 3, 0)],
+            ..Default::default()
         },
     );
-    let mut film_mat = MaterialDesc::default();
-    film_mat.alpha = AlphaMode::Blend;
-    film_mat.emissive = [0.0, 0.0, 0.0, 2.0];
-    let mat = renderer.add_material(&mut scene, &film_mat);
-    let inst = renderer.add_instance(&mut scene, mesh, Mat4::IDENTITY, &[mat]);
+    let mat = renderer.add_material(&mut scene, None, AlphaMode::Blend, [1.0; 4], true);
+    scene.materials[mat].uniform.emissive[3] = 2.0;
+    let inst = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, &[mat]);
     renderer.set_params(&mut scene, inst, &[0.0], true, &[]);
     assert!(scene.active_film_instances.is_empty());
     renderer.set_params(&mut scene, inst, &[0.5], true, &[]);
