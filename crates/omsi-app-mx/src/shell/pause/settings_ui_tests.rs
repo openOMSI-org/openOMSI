@@ -1,6 +1,17 @@
 use super::*;
 use crate::app_impl::MenuLine;
 
+fn settings_groups(items: &[(&str, &str)], hide_back: bool) -> Vec<Vec<usize>> {
+    let back = hide_back
+        .then(|| {
+            items.iter().position(|&(id, label)| {
+                id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref()
+            })
+        })
+        .flatten();
+    omsi_settings_ui::settings_groups(items, crate::game_lists::HEADING, back)
+}
+
 fn fixture(world: bool) -> Vec<(&'static str, String)> {
     let row = |name: &str, kind: char, value: &str, desc: &str| {
         format!("{name}\u{1f}{kind}\u{1f}{value}\u{1f}{desc}\u{1f}0.5")
@@ -237,6 +248,81 @@ fn pause_nested_rows_keep_original_mouse_action_indices() {
 }
 
 #[test]
+fn pause_settings_sections_filter_without_changing_action_indices() {
+    let rows = fixture(false);
+    let rail = Vec::new();
+    let v = nested_view(&rail, &rows, false);
+    let list = v.list.as_ref().unwrap();
+    let mut sh = Shell::new();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    settings_rows(
+        &mut sh,
+        &v,
+        list,
+        Rect::new(300.0, 180.0, 800.0, 600.0),
+        &mut None,
+    );
+    let tab = sh.ui.drawn[&id_of("pause-settings-section-1")];
+    sh.finish();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    sh.ui.input.mouse = tab.center();
+    sh.ui.input.pressed = true;
+    sh.ui.input.released = true;
+    settings_rows(
+        &mut sh,
+        &v,
+        list,
+        Rect::new(300.0, 180.0, 800.0, 600.0),
+        &mut None,
+    );
+    assert!(sh.ui.drawn.contains_key(&id_of("pause-row-4-Fleet number")));
+    assert!(
+        !sh.ui
+            .drawn
+            .contains_key(&id_of("pause-row-1-Destination display"))
+    );
+    assert!(
+        sh.actions.is_empty(),
+        "section navigation must not execute a setting"
+    );
+    sh.finish();
+    sh.settings_search.query = "Destination".into();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    settings_rows(
+        &mut sh,
+        &v,
+        list,
+        Rect::new(300.0, 180.0, 800.0, 600.0),
+        &mut None,
+    );
+    assert!(
+        sh.ui
+            .drawn
+            .contains_key(&id_of("pause-row-1-Destination display"))
+    );
+    assert!(!sh.ui.drawn.contains_key(&id_of("pause-row-4-Fleet number")));
+}
+
+#[test]
+fn pause_settings_keyboard_selection_switches_to_its_section() {
+    let rows = fixture(false);
+    let rail = Vec::new();
+    let mut v = nested_view(&rail, &rows, false);
+    v.list.as_mut().unwrap().sel = 4;
+    let list = v.list.as_ref().unwrap();
+    let mut sh = Shell::new();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    settings_rows(
+        &mut sh,
+        &v,
+        list,
+        Rect::new(300.0, 180.0, 800.0, 600.0),
+        &mut None,
+    );
+    assert_eq!(sh.settings_sections.get("Vehicle0"), Some(&1));
+}
+
+#[test]
 fn pause_nested_controls_draw_on_narrow_windows() {
     let label = "Refuel\u{1f}a\u{1f}Refuel\u{1f}Fills the tank of the current vehicle";
     for width in [120.0, 200.0, 440.0] {
@@ -342,6 +428,52 @@ fn pause_settings_keep_main_row_density() {
 }
 
 #[test]
+fn pause_visible_edge_uses_pixel_aligned_width() {
+    assert_eq!(EDGE_WIDTH.fract(), 0.0);
+}
+
+#[test]
+fn settings_rows_do_not_draw_separators_between_options() {
+    let rows = fixture(false);
+    let rail = Vec::new();
+    let v = nested_view(&rail, &rows, false);
+    let mut sh = Shell::new();
+    sh.begin(1366.0, 768.0, 1.0, 1.0 / 60.0);
+    settings_rows(
+        &mut sh,
+        &v,
+        v.list.as_ref().unwrap(),
+        Rect::new(300.0, 180.0, 800.0, 500.0),
+        &mut None,
+    );
+    let separator = th().edge.alpha(0.45).0;
+    assert!(
+        !sh.ui
+            .p()
+            .verts
+            .iter()
+            .any(|vertex| vertex.color == separator)
+    );
+}
+
+#[test]
+fn pause_select_control_draws_the_shared_visible_edge() {
+    let mut sh = Shell::new();
+    sh.begin(800.0, 600.0, 1.0, 1.0 / 60.0);
+    settings_row(
+        &mut sh.ui,
+        1,
+        "Boarding\u{1f}o\u{1f}Pay driver\u{1f}How passengers pay",
+        Rect::new(40.0, 80.0, 700.0, 52.0),
+        false,
+        false,
+        &mut None,
+    );
+    let edge = omsi_ui::Color::WHITE.alpha(0.08).0;
+    assert!(sh.ui.p().verts.iter().any(|vertex| vertex.color == edge));
+}
+
+#[test]
 fn pause_settings_mouse_hover_suppresses_keyboard_highlight() {
     let render = |kbd, mouse| {
         let rows = fixture(false);
@@ -373,7 +505,7 @@ fn pause_settings_mouse_hover_suppresses_keyboard_highlight() {
 }
 
 #[test]
-fn pause_settings_headings_draw_accent_markers_without_actions() {
+fn pause_settings_headings_become_navigable_sections_without_actions() {
     for scale in [1.0, 1.5] {
         let rows = vec![
             ("#", "Clock and time".to_owned()),
@@ -399,25 +531,12 @@ fn pause_settings_headings_draw_accent_markers_without_actions() {
             sh.actions.is_empty(),
             "section headings must not dispatch actions"
         );
-        let verts = &sh.drawn.as_ref().unwrap().verts;
         for n in 0..3 {
-            let top = 201.0 + n as f32 * 74.0;
-            let marker: Vec<_> = verts
-                .iter()
-                .filter(|v| {
-                    v.color == th().accent.0
-                        && (318.0..=321.0).contains(&v.pos[0])
-                        && (top..=top + 20.0).contains(&v.pos[1])
-                })
-                .collect();
             assert!(
-                !marker.is_empty(),
-                "heading {n} must have an accent marker at scale {scale}"
+                sh.ui
+                    .drawn
+                    .contains_key(&id_of(&format!("pause-settings-section-{n}")))
             );
-            assert!(marker.iter().any(|v| v.pos[0] == 318.0));
-            assert!(marker.iter().any(|v| v.pos[0] == 321.0));
-            assert!(marker.iter().any(|v| v.pos[1] == top));
-            assert!(marker.iter().any(|v| v.pos[1] == top + 20.0));
         }
     }
 }
@@ -895,27 +1014,35 @@ fn settings_search_filtered_click_keeps_original_action_index() {
 fn settings_search_toolbar_types_and_resets_when_page_changes() {
     let rows = fixture(false);
     let rail = Vec::new();
-    let v = nested_view(&rail, &rows, false);
-    let list = v.list.as_ref().unwrap();
+    let mut v = nested_view(&rail, &rows, false);
+    let mut list = v.list.take().unwrap();
     let mut sh = Shell::new();
-    sh.settings_search.page = list.key.clone();
+    sh.settings_search.page = "Options".into();
     sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
     sh.ui.focus = Some(id_of("pause-settings-search"));
     sh.ui.input.text = "Fleet".into();
     let mut body = Rect::new(300.0, 180.0, 800.0, 600.0);
     search::toolbar(
         &mut sh,
-        list,
+        &list,
         Rect::new(300.0, 100.0, 700.0, 650.0),
         &mut body,
     );
     assert_eq!(sh.settings_search.query, "Fleet");
     assert_eq!(body.y, 228.0);
     sh.ui.input.text.clear();
+    list.key = "Options1".into();
+    search::toolbar(
+        &mut sh,
+        &list,
+        Rect::new(300.0, 100.0, 700.0, 650.0),
+        &mut body,
+    );
+    assert_eq!(sh.settings_search.query, "Fleet");
     sh.settings_search.page = "Other".into();
     search::toolbar(
         &mut sh,
-        list,
+        &list,
         Rect::new(300.0, 100.0, 700.0, 650.0),
         &mut body,
     );

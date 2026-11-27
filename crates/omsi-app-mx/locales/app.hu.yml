@@ -3273,3 +3273,6 @@
 "Automatic announcements are off.": "Az automatikus bemondások ki vannak kapcsolva."
 "Draw other players' buses in less detail when far away": "Más játékosok buszainak kevésbé részletes megjelenítése távolról"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Többjátékos: 120 m felett és 20 FPS alatt a többi busz megtartja karosszériáját, de elrejti a sofőrt és a kijelzőket; 26 FPS felett újra teljes részletességgel jelennek meg"
+
+"Preferences": "Beállítások"
+"Community": "Közösség"

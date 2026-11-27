@@ -2980,3 +2980,6 @@
 "Automatic announcements are off.": "Pengumuman otomatis nonaktif."
 "Draw other players' buses in less detail when far away": "Gambar bus pemain lain dengan detail lebih rendah saat jauh"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Multiplayer: di atas 120 m dan di bawah 20 FPS, bus pemain lain tetap mempertahankan bodinya tetapi tanpa pengemudi dan layar tujuan; kembali utuh di atas 26 FPS"
+
+"Preferences": "Preferensi"
+"Community": "Komunitas"

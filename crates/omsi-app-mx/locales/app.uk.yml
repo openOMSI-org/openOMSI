@@ -3379,3 +3379,6 @@
 "Automatic announcements are off.": "Автоматичні оголошення вимкнено."
 "Draw other players' buses in less detail when far away": "Менше деталей в автобусах інших гравців здалеку"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Мережева гра: далі 120 м та при FPS нижче 20 автобуси інших гравців зберігають кузов, але приховують водіїв і покажчики маршруту; при понад 26 кадр/с деталі повертаються"
+
+"Preferences": "Налаштування"
+"Community": "Спільнота"

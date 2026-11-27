@@ -3664,3 +3664,6 @@
 "Automatic announcements are off.": "自动报站已关闭。"
 "Draw other players' buses in less detail when far away": "在远距离以较低细节绘制其他玩家的巴士"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "多人游戏：距离超过120米或帧率低于20时，其他玩家的巴士保留车身但隐藏司机和目的地显示屏；帧率高于26时恢复完整细节"
+
+"Preferences": "偏好设置"
+"Community": "社区"

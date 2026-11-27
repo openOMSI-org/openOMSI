@@ -4,7 +4,6 @@
 use super::*;
 use crate::game_lists::ListKind;
 use crate::shell::Action;
-use crate::shell::pause::{ListView, PauseView};
 
 fn pause_kind(
     kind: Option<&ListKind>,
@@ -18,6 +17,99 @@ fn pause_kind(
         Some(ListKind::AdminClassic) => crate::ui::MenuKind::Sections,
         Some(ListKind::Admin) if !remote_admin => crate::ui::MenuKind::Sections,
         _ => original,
+    }
+}
+
+fn pause_ui_kind(kind: ui::MenuKind) -> omsi_pause_ui::MenuKind {
+    match kind {
+        ui::MenuKind::Game => omsi_pause_ui::MenuKind::Game,
+        ui::MenuKind::Options => omsi_pause_ui::MenuKind::Options,
+        ui::MenuKind::Sections => omsi_pause_ui::MenuKind::Sections,
+        ui::MenuKind::Lines => omsi_pause_ui::MenuKind::Lines,
+        ui::MenuKind::Tours => omsi_pause_ui::MenuKind::Tours,
+        ui::MenuKind::Vehicles => omsi_pause_ui::MenuKind::Vehicles,
+        ui::MenuKind::List => omsi_pause_ui::MenuKind::List,
+    }
+}
+
+fn pause_ui_category(
+    category: crate::shell::pause::navigation::Category,
+) -> omsi_pause_ui::pause::navigation::Category {
+    use crate::shell::pause::navigation::Category as AppCategory;
+    use omsi_pause_ui::pause::navigation::Category as UiCategory;
+    match category {
+        AppCategory::Home => UiCategory::Home,
+        AppCategory::Driving => UiCategory::Driving,
+        AppCategory::World => UiCategory::World,
+        AppCategory::Saves => UiCategory::Saves,
+        AppCategory::Capture => UiCategory::Capture,
+        AppCategory::Settings => UiCategory::Settings,
+        AppCategory::Online => UiCategory::Online,
+        AppCategory::Plugins => UiCategory::Plugins,
+    }
+}
+
+fn app_pause_category(
+    category: omsi_pause_ui::pause::navigation::Category,
+) -> crate::shell::pause::navigation::Category {
+    use crate::shell::pause::navigation::Category as AppCategory;
+    use omsi_pause_ui::pause::navigation::Category as UiCategory;
+    match category {
+        UiCategory::Home => AppCategory::Home,
+        UiCategory::Driving => AppCategory::Driving,
+        UiCategory::World => AppCategory::World,
+        UiCategory::Saves => AppCategory::Saves,
+        UiCategory::Capture => AppCategory::Capture,
+        UiCategory::Settings => AppCategory::Settings,
+        UiCategory::Online => AppCategory::Online,
+        UiCategory::Plugins => AppCategory::Plugins,
+    }
+}
+
+fn pause_action(action: omsi_pause_ui::Action) -> crate::shell::Action {
+    use crate::shell::Action as AppAction;
+    use omsi_pause_ui::Action as UiAction;
+    match action {
+        UiAction::Choose(i) => AppAction::Choose(i),
+        UiAction::BusSelect(i) => AppAction::BusSelect(i),
+        UiAction::PauseCategory(category) => AppAction::PauseCategory(app_pause_category(category)),
+        UiAction::QuickActions(edit) => AppAction::QuickActions(match edit {
+            omsi_pause_ui::pause::quick_actions::Edit::Toggle(id) => {
+                crate::shell::pause::quick_actions::Edit::Toggle(id)
+            }
+            omsi_pause_ui::pause::quick_actions::Edit::Move(id, down) => {
+                crate::shell::pause::quick_actions::Edit::Move(id, down)
+            }
+            omsi_pause_ui::pause::quick_actions::Edit::Reset => {
+                crate::shell::pause::quick_actions::Edit::Reset
+            }
+        }),
+        UiAction::OnlineAction(tab, action) => AppAction::OnlineAction(tab, action),
+        UiAction::Rail(i) => AppAction::Rail(i),
+        UiAction::Control(i, value) => AppAction::Control(i, value),
+        UiAction::Date(date) => AppAction::Date(date),
+        UiAction::Side(i) => AppAction::Side(i),
+        UiAction::Pane(i) => AppAction::Pane(i),
+        UiAction::Dropdown(i) => AppAction::Dropdown(i),
+        UiAction::CloseDropdown => AppAction::CloseDropdown,
+    }
+}
+
+fn pause_ui_preview_view(
+    view: crate::launcher::showroom::PreviewView,
+) -> omsi_pause_ui::PreviewView {
+    match view {
+        crate::launcher::showroom::PreviewView::Outside => omsi_pause_ui::PreviewView::Outside,
+        crate::launcher::showroom::PreviewView::Passenger => omsi_pause_ui::PreviewView::Passenger,
+        crate::launcher::showroom::PreviewView::Driver => omsi_pause_ui::PreviewView::Driver,
+    }
+}
+
+fn app_preview_view(view: omsi_pause_ui::PreviewView) -> crate::launcher::showroom::PreviewView {
+    match view {
+        omsi_pause_ui::PreviewView::Outside => crate::launcher::showroom::PreviewView::Outside,
+        omsi_pause_ui::PreviewView::Passenger => crate::launcher::showroom::PreviewView::Passenger,
+        omsi_pause_ui::PreviewView::Driver => crate::launcher::showroom::PreviewView::Driver,
     }
 }
 
@@ -132,8 +224,16 @@ impl App {
             Some(ListKind::AdminPlayers) if remote_admin => Some(self.net.admin_panel.total),
             _ => None,
         };
-        let list = self.menus.chooser.map(|sel| ListView {
-            kind,
+        let preview = preview.map(|p| omsi_pause_ui::Preview {
+            title: p.title,
+            meta: p.meta,
+            rows: p.rows,
+            chosen: p.chosen,
+            button: p.button,
+            time: p.time,
+        });
+        let list = self.menus.chooser.map(|sel| omsi_pause_ui::ListView {
+            kind: pause_ui_kind(kind),
             head,
             badge,
             tabs: tabs.clone(),
@@ -148,34 +248,104 @@ impl App {
                 .pane_scroll
                 .filter(|p| Some(p.0) == self.menus.chooser)
                 .map(|p| p.1),
-            dropdown: self.menus.dropdown.as_ref().map(|d| ui::DropdownView {
-                row: d.row,
-                items: d.items.iter().map(|x| x.0.as_str()).collect(),
-                sel: d.sel,
-                top: d.top,
-                current: d.current,
-            }),
+            dropdown: self
+                .menus
+                .dropdown
+                .as_ref()
+                .map(|d| omsi_pause_ui::DropdownView {
+                    row: d.row,
+                    items: d.items.iter().map(|x| x.0.as_str()).collect(),
+                    sel: d.sel,
+                    top: d.top,
+                    current: d.current,
+                }),
             key: format!("{:?}", self.menus.list_kind)
                 .chars()
                 .filter(|c| c.is_alphanumeric())
                 .collect(),
         });
-        let view = PauseView {
+        let selectable: Vec<_> = list
+            .as_ref()
+            .into_iter()
+            .flat_map(|list| list.items.iter().map(|row| row.0))
+            .filter(|id| crate::game_lists::bus_preview::selectable(id))
+            .collect();
+        let disabled = self.menu_disabled_ids();
+        let view = omsi_pause_ui::PauseView {
             paused: self.paused,
             quick_actions: &self.settings.pause_quick_actions,
             rail: &rail,
             rail_sel: self.menus.game_menu,
-            disabled: self.menu_disabled_ids(),
+            disabled: &disabled,
             list,
             kbd: self.menus.menu_kbd,
             keys: !crate::platform::touch_controls(),
-            summary: self.pause_summary(),
+            summary: {
+                let summary = self.pause_summary();
+                omsi_pause_ui::Summary {
+                    bus: summary.bus,
+                    driver: summary.driver,
+                }
+            },
             online: crate::shell::pause::online_ui::from_app(self),
+            version: env!("CARGO_PKG_VERSION"),
+            catalog: &crate::app_impl::GAME_MENU,
+            selectable: &selectable,
         };
         crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
         self.shell.begin(w, h, scale, dt);
         let search_focused = crate::shell::pause::search::focused(&self.shell);
-        crate::shell::pause::draw(&mut self.shell, &view);
+        let mut pause_state = omsi_pause_ui::State {
+            pause_category: pause_ui_category(self.shell.pause_category),
+            settings_search: std::mem::take(&mut self.shell.settings_search),
+            settings_sections: std::mem::take(&mut self.shell.settings_sections),
+            pause_online: std::mem::take(&mut self.shell.pause_online),
+            quick_edit: self.shell.quick_edit,
+            pause_hidden: self.shell.pause_hidden,
+            quick_focus: self.shell.quick_focus,
+            last_sel: self.shell.last_sel,
+            dd_anchor: self.shell.dd_anchor,
+        };
+        let mut bus_preview = omsi_pause_ui::BusPreview {
+            busy: self.shell.bus_preview.busy,
+            error: self.shell.bus_preview.error.clone(),
+            title: self.shell.bus_preview.title.clone(),
+            meta: self.shell.bus_preview.meta.clone(),
+            views: self.shell.bus_preview.views.clone(),
+            view: pause_ui_preview_view(self.shell.bus_preview.view),
+            texture: self.shell.bus_preview.texture,
+            ready: self.shell.bus_preview.ready,
+            drag: self.shell.bus_preview.drag,
+            orbit: self.shell.bus_preview.orbit,
+            zoom: self.shell.bus_preview.zoom,
+        };
+        let mut context = omsi_pause_ui::Context::new(
+            &mut self.shell.ui,
+            &mut pause_state,
+            &mut bus_preview,
+            self.shell.logo_tex,
+            self.shell.logo_title.clone(),
+            self.shell.logo_wide,
+        );
+        omsi_pause_ui::pause::draw(&mut context, &view);
+        let actions = std::mem::take(&mut context.actions);
+        self.shell
+            .actions
+            .extend(actions.into_iter().map(pause_action));
+        drop(context);
+        self.shell.settings_search = pause_state.settings_search;
+        self.shell.settings_sections = pause_state.settings_sections;
+        self.shell.pause_online = pause_state.pause_online;
+        self.shell.pause_category = app_pause_category(pause_state.pause_category);
+        self.shell.quick_edit = pause_state.quick_edit;
+        self.shell.pause_hidden = pause_state.pause_hidden;
+        self.shell.quick_focus = pause_state.quick_focus;
+        self.shell.last_sel = pause_state.last_sel;
+        self.shell.dd_anchor = pause_state.dd_anchor;
+        self.shell.bus_preview.view = app_preview_view(bus_preview.view);
+        self.shell.bus_preview.drag = bus_preview.drag;
+        self.shell.bus_preview.orbit = bus_preview.orbit;
+        self.shell.bus_preview.zoom = bus_preview.zoom;
         self.shell.finish();
         let focused_now = crate::shell::pause::search::focused(&self.shell);
         if search_focused != focused_now {

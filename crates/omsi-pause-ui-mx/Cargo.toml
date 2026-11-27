@@ -1,0 +1,17 @@
+[package]
+name = "omsi-pause-ui-mx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The pause menu and in-session settings interface on mX"
+
+[dependencies]
+glam.workspace = true
+winit.workspace = true
+mx.workspace = true
+omsi-ui = { package = "omsi-ui-mx", path = "../omsi-ui-mx" }
+omsi-settings-ui = { package = "omsi-settings-ui-mx", path = "../omsi-settings-ui-mx" }
+omsi-multiplayer-ui = { package = "omsi-multiplayer-ui-mx", path = "../omsi-multiplayer-ui-mx" }
+omsi-plugin = { path = "../omsi-plugin" }
+omsi-admin = { path = "../omsi-admin" }
+serde_json.workspace = true

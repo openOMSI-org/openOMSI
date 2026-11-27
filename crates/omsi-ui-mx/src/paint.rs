@@ -338,7 +338,7 @@ impl Painter {
         }
     }
 
-    /// The band between two outlines of the same number of points.
+    /// A rounded frame `t` pixels wide inside `r`.
     fn band(&mut self, inner: &[Vec2], outer: &[Vec2], ci: Color, co: Color) {
         let n = inner.len().min(outer.len());
         for k in 0..n {
@@ -348,18 +348,41 @@ impl Painter {
         }
     }
 
-    /// A rounded frame `t` pixels wide inside `r`.
     pub fn rounded_border(&mut self, r: Rect, radius: f32, t: f32, c: Color) {
-        let outer = rounded_outline(r, radius);
-        let inner = rounded_outline(r.inset(t), (radius - t).max(0.0));
-        if outer.len() == inner.len() {
-            self.band(&inner, &outer, c, c);
-        } else {
-            // the inner corners are too small to be round: the outer one's points, pulled in
-            let m = r.center();
-            let inner: Vec<Vec2> = outer.iter().map(|p| *p + (m - *p).signum() * t).collect();
-            self.band(&inner, &outer, c, c);
+        if r.w <= 0.0 || r.h <= 0.0 || t <= 0.0 {
+            return;
         }
+        let aa = 1.0;
+        let half = Vec2::new(r.w, r.h) * 0.5;
+        let rad = radius.min(half.x).min(half.y).max(0.0);
+        let corners = [
+            (
+                Vec2::new(r.x - aa, r.y - aa),
+                Vec2::new(-half.x - aa, -half.y - aa),
+            ),
+            (
+                Vec2::new(r.right() + aa, r.y - aa),
+                Vec2::new(half.x + aa, -half.y - aa),
+            ),
+            (
+                Vec2::new(r.right() + aa, r.bottom() + aa),
+                Vec2::new(half.x + aa, half.y + aa),
+            ),
+            (
+                Vec2::new(r.x - aa, r.bottom() + aa),
+                Vec2::new(-half.x - aa, half.y + aa),
+            ),
+        ];
+        let vertex = |pos: Vec2, local: Vec2| Vertex {
+            pos: [pos.x, pos.y, 0.0],
+            ext: [rad, t],
+            width: half.to_array(),
+            uv: local.to_array(),
+            color: c.0,
+            mode: [4.0, 0.0],
+        };
+        let [a, b, c0, d] = corners.map(|(pos, local)| vertex(pos, local));
+        self.verts.extend([a, b, c0, a, c0, d]);
     }
 
     /// A soft shadow under a rounded box: `c` inside, fading out over `blur` pixels.
@@ -902,5 +925,13 @@ mod tests {
         let (l, rest) = r.cut_left(30.0);
         assert_eq!((l.w, rest.x, rest.w), (30.0, 40.0, 70.0));
         assert!(r.contains(Vec2::new(50.0, 30.0)) && !r.contains(Vec2::new(5.0, 30.0)));
+    }
+
+    #[test]
+    fn rounded_border_uses_analytic_coverage_geometry() {
+        let mut p = Painter::new();
+        p.rounded_border(Rect::new(10.0, 20.0, 180.0, 64.0), 10.0, 1.0, Color::WHITE);
+        assert_eq!(p.verts.len(), 6);
+        assert!(p.verts.iter().all(|vertex| vertex.mode[0] == 4.0));
     }
 }

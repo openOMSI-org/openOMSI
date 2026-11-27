@@ -4431,3 +4431,6 @@
 "Automatic announcements are off.": "ავტომატური განცხადებები გამორთულია."
 "Draw other players' buses in less detail when far away": "სხვა მოთამაშეების ავტობუსების ნაკლები დეტალებით ჩვენება შორ მანძილზე"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "მულტიფლეიერი: 120 მ-ის მიღმა და 20 FPS-ზე დაბლა, სხვა ავტობუსები ინარჩუნებენ კორპუსს, მაგრამ იმალება მძღოლი და მარშრუტის ტაბლო; 26 FPS-ზე ზემოთ სრულად ბრუნდება"
+
+"Preferences": "პარამეტრები"
+"Community": "საზოგადოება"

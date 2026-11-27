@@ -4432,3 +4432,6 @@
 "Automatic announcements are off.": "Automatische Ansagen sind ausgeschaltet."
 "Draw other players' buses in less detail when far away": "Busse anderer Spieler in der Ferne weniger detailliert darstellen"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Mehrspieler: Ab 120 m und bei unter 20 FPS behalten andere Busse ihre Karosserie, verlieren jedoch Fahrerfiguren und Zielanzeigen, die aus der Ferne ohnehin nicht lesbar sind; ab 26 FPS kehren sie vollständig zurück"
+
+"Preferences": "Einstellungen"
+"Community": "Gemeinschaft"

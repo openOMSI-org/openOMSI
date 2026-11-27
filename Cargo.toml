@@ -49,6 +49,8 @@ members = [
     "crates/omsi-photo",
     "crates/omsi-mt",
     "crates/omsi-app",
+    "crates/omsi-pause-ui",
+    "crates/omsi-pause-ui-mx",
     "crates/omsi-srcscan",
     "tools/omsi-check",
     "crates/omsi-app-mx",

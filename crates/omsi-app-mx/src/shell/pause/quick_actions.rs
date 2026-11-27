@@ -24,15 +24,24 @@ pub(crate) fn selected(text: &str) -> Vec<String> {
 
 pub(crate) fn indices(category: Category, menu: &[MenuLine], text: &str) -> Vec<usize> {
     if category != Category::Home {
-        return category.indices(&menu.iter().map(|line| line.0).collect::<Vec<_>>());
+        let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
+        let mut indices = category.indices(&ids);
+        if category == Category::World && indices.iter().any(|&i| menu[i].0 == "world") {
+            indices.retain(|&i| menu[i].0 != "vehicle");
+        }
+        return indices;
     }
-    selected(text)
+    let mut indices: Vec<_> = selected(text)
         .iter()
         .filter_map(|id| {
             menu.iter()
                 .position(|line| line.0 == id && line.2.is_none())
         })
-        .collect()
+        .collect();
+    if indices.iter().any(|&i| menu[i].0 == "world") {
+        indices.retain(|&i| menu[i].0 != "vehicle");
+    }
+    indices
 }
 
 /// Selected IDs remain editable even when the current session cannot offer them.
@@ -45,6 +54,9 @@ pub(crate) fn entries(menu: &[MenuLine], text: &str) -> Vec<String> {
         {
             out.push(line.0.to_string());
         }
+    }
+    if out.iter().any(|id| id == "world") {
+        out.retain(|id| id != "vehicle");
     }
     out
 }
@@ -83,69 +95,5 @@ pub(crate) fn change(text: &str, edit: &Edit) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn quick_actions_defaults_and_explicit_empty_are_distinct() {
-        assert_eq!(
-            selected("default"),
-            ["tobus", "camera", "map", "duty", "save", "players"]
-        );
-        assert!(selected("[]").is_empty());
-        assert_eq!(selected("broken"), selected("default"));
-    }
-
-    #[test]
-    fn quick_actions_keep_unavailable_ids_but_remove_duplicates_and_session_controls() {
-        assert_eq!(
-            selected(r#"["save","future-action","save","resume","quit","plugin"]"#),
-            ["save", "future-action"]
-        );
-    }
-}
-
-#[cfg(test)]
-mod editing_tests {
-    use super::*;
-    fn menu() -> Vec<MenuLine> {
-        ["resume", "camera", "save", "world", "quit"]
-            .into_iter()
-            .map(|id| (id, id.into(), None))
-            .collect()
-    }
-    #[test]
-    fn quick_actions_first_edit_keeps_other_defaults() {
-        let text = change("default", &Edit::Toggle("camera".into()));
-        assert_eq!(selected(&text), ["tobus", "map", "duty", "save", "players"]);
-    }
-    #[test]
-    fn quick_actions_custom_order_resolves_only_original_available_indices() {
-        assert_eq!(
-            indices(Category::Home, &menu(), r#"["world","admin","save"]"#),
-            [3, 2]
-        );
-        assert_eq!(indices(Category::Settings, &menu(), "[]"), [1]);
-    }
-    #[test]
-    fn quick_actions_reorder_does_not_wrap_and_reset_restores_defaults() {
-        let text = r#"["save","camera"]"#;
-        assert_eq!(
-            selected(&change(text, &Edit::Move("save".into(), false))),
-            ["save", "camera"]
-        );
-        assert_eq!(
-            selected(&change(text, &Edit::Move("save".into(), true))),
-            ["camera", "save"]
-        );
-        assert_eq!(
-            selected(&change(text, &Edit::Move("camera".into(), true))),
-            ["save", "camera"]
-        );
-        assert_eq!(change(text, &Edit::Reset), "default");
-        assert_eq!(
-            entries(&menu(), r#"["admin","save"]"#),
-            ["admin", "save", "camera", "world"]
-        );
-    }
-}
+#[path = "quick_actions_tests.rs"]
+mod tests;

@@ -65,6 +65,7 @@ omsi-scene = { package = "omsi-scene-mx", path = "../omsi-scene-mx" }
 omsi-ui = { package = "omsi-ui-mx", path = "../omsi-ui-mx" }
 omsi-settings-ui = { package = "omsi-settings-ui-mx", path = "../omsi-settings-ui-mx" }
 omsi-multiplayer-ui = { package = "omsi-multiplayer-ui-mx", path = "../omsi-multiplayer-ui-mx" }
+omsi-pause-ui = { package = "omsi-pause-ui-mx", path = "../omsi-pause-ui-mx" }
 omsi-launcher-core = { path = "../omsi-launcher-core" }
 omsi-launcher-api = { path = "../omsi-launcher-api" }
 omsi-launcher-model = { path = "../omsi-launcher-model" }

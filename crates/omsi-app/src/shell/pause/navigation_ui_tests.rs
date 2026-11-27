@@ -46,13 +46,116 @@ fn click(sh: &mut Shell, v: &PauseView, at: Vec2) {
     sh.finish();
 }
 
+fn click_drawn(sh: &mut Shell, v: &PauseView, id: &str) {
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    draw(sh, v);
+    let at = sh
+        .ui
+        .drawn
+        .get(&id_of(id))
+        .unwrap_or_else(|| panic!("missing clickable {id}"))
+        .center();
+    sh.finish();
+    click(sh, v, at);
+}
+
+fn click_drawn_control(sh: &mut Shell, v: &PauseView, id: &str) {
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    draw(sh, v);
+    let at = sh
+        .ui
+        .drawn
+        .get(&id_of(id))
+        .unwrap_or_else(|| panic!("missing control {id}"))
+        .center();
+    sh.finish();
+    click(sh, v, at);
+}
+
 #[test]
 fn pause_navigation_card_keeps_the_original_action_index() {
     let rail = menu();
     let mut sh = Shell::new();
     sh.pause_hidden = false;
-    click(&mut sh, &view(&rail), Vec2::new(400.0, 225.0));
+    click_drawn(&mut sh, &view(&rail), "pause-card-2-camera");
     assert_eq!(sh.actions, [Action::Choose(2)]);
+}
+
+#[test]
+fn quick_actions_use_separate_two_column_pill_cards_on_wide_pages() {
+    let rail = menu();
+    let mut sh = Shell::new();
+    sh.pause_hidden = false;
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    draw(&mut sh, &view(&rail));
+    let camera = sh.ui.drawn[&id_of("pause-card-2-camera")];
+    let map = sh.ui.drawn[&id_of("pause-card-3-map")];
+    assert_eq!(camera.h, 120.0);
+    assert_eq!(camera.y, map.y);
+    assert!(map.x > camera.x);
+}
+
+#[test]
+fn pause_draws_a_full_height_divider_between_rail_and_page() {
+    let rail = menu();
+    let mut sh = Shell::new();
+    sh.pause_hidden = false;
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    draw(&mut sh, &view(&rail));
+    let panel = super::frame_rect(sh.ui.size);
+    let divider_x = panel.x + RAIL_W - 0.5;
+    let divider_color = omsi_ui::theme::th().edge.alpha(2.0).0;
+    sh.finish();
+    let vertices = &sh.drawn.as_ref().unwrap().verts;
+    assert!(vertices.iter().any(|vertex| {
+        vertex.color == divider_color && vertex.pos[0] == divider_x && vertex.pos[1] == panel.y
+    }));
+    assert!(vertices.iter().any(|vertex| {
+        vertex.color == divider_color
+            && vertex.pos[0] == divider_x
+            && vertex.pos[1] == panel.bottom()
+    }));
+}
+
+#[test]
+fn pause_outer_frame_is_drawn_after_the_sidebar_fill() {
+    let rail = menu();
+    let mut sh = Shell::new();
+    sh.pause_hidden = false;
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    draw(&mut sh, &view(&rail));
+    let color = crate::shell::pause::visible_edge().0;
+    sh.finish();
+    let vertices = &sh.drawn.as_ref().unwrap().verts;
+    assert!(vertices.len() >= 6);
+    assert!(
+        vertices[vertices.len() - 6..]
+            .iter()
+            .all(|vertex| { vertex.mode[0] == 4.0 && vertex.color == color })
+    );
+}
+
+#[test]
+fn quick_action_pill_cards_have_a_visible_outline() {
+    let rail = menu();
+    let v = view(&rail);
+    let mut sh = Shell::new();
+    sh.begin(1440.0, 900.0, 1.0, 1.0 / 60.0);
+    action_card(
+        &mut sh.ui,
+        &v,
+        2,
+        Rect::new(300.0, 200.0, 320.0, 120.0),
+        false,
+        true,
+    );
+    assert!(
+        sh.ui
+            .p()
+            .verts
+            .iter()
+            .any(|v| { v.color == omsi_ui::Color::WHITE.alpha(0.08).0 })
+    );
 }
 
 #[test]
@@ -60,17 +163,89 @@ fn pause_navigation_category_click_is_not_a_game_action() {
     let rail = menu();
     let mut sh = Shell::new();
     sh.pause_hidden = false;
-    let categories = Category::available(&ids(&view(&rail)));
-    let row = categories
-        .iter()
-        .position(|c| *c == Category::Saves)
-        .unwrap();
-    click(
-        &mut sh,
-        &view(&rail),
-        Vec2::new(60.0, 202.0 + row as f32 * 60.0),
-    );
+    click_drawn(&mut sh, &view(&rail), "pause-category-Saves");
     assert_eq!(sh.actions, [Action::PauseCategory(Category::Saves)]);
+}
+
+#[test]
+fn pause_navigation_places_categories_under_their_left_rail_groups() {
+    let ids = [
+        "resume",
+        "options",
+        "controls",
+        "camera",
+        "vehicle",
+        "world",
+        "map",
+        "duty",
+        "save",
+        "shot",
+        "players",
+        "multiplayer",
+        "plugin",
+        "quit",
+    ];
+    assert_eq!(
+        super::rail_entries(&Category::available(&ids)),
+        [
+            super::RailEntry::Category(Category::Home),
+            super::RailEntry::Group("Simulation"),
+            super::RailEntry::Category(Category::Driving),
+            super::RailEntry::Category(Category::World),
+            super::RailEntry::Category(Category::Saves),
+            super::RailEntry::Group("Tools"),
+            super::RailEntry::Category(Category::Capture),
+            super::RailEntry::Group("Preferences"),
+            super::RailEntry::Category(Category::Settings),
+            super::RailEntry::Group("Community"),
+            super::RailEntry::Category(Category::Online),
+            super::RailEntry::Category(Category::Plugins),
+        ]
+    );
+}
+
+#[test]
+fn pause_navigation_rail_does_not_add_a_second_frame() {
+    let rail = menu();
+    let v = view(&rail);
+    let mut sh = Shell::new();
+    sh.begin(800.0, 720.0, 1.0, 1.0 / 60.0);
+    super::rail(&mut sh, &v, Rect::new(24.0, 20.0, RAIL_W, 680.0));
+    let frame_color = omsi_ui::theme::th().edge.alpha(2.0).0;
+    sh.finish();
+    assert!(
+        !sh.drawn
+            .as_ref()
+            .unwrap()
+            .verts
+            .iter()
+            .any(|vertex| vertex.color == frame_color)
+    );
+}
+
+#[test]
+fn pause_quit_action_has_no_idle_outline() {
+    let rail = menu();
+    let v = view(&rail);
+    let mut sh = Shell::new();
+    sh.begin(800.0, 720.0, 1.0, 1.0 / 60.0);
+    super::session_action(
+        &mut sh,
+        &v,
+        "quit",
+        Rect::new(20.0, 640.0, 220.0, 44.0),
+        ButtonKind::Danger,
+    );
+    let edge = super::super::visible_edge().0;
+    sh.finish();
+    assert!(
+        !sh.drawn
+            .as_ref()
+            .unwrap()
+            .verts
+            .iter()
+            .any(|vertex| vertex.color == edge)
+    );
 }
 
 #[test]
@@ -102,13 +277,45 @@ fn pause_navigation_online_page_uses_tabs_instead_of_category_cards() {
 }
 
 #[test]
+fn pause_options_side_navigation_keeps_the_existing_side_action() {
+    let rail = menu();
+    let rows = vec![
+        ("first", "One\u{1f}s\u{1f}off"),
+        ("second", "Two\u{1f}s\u{1f}off"),
+        ("third", "Three\u{1f}s\u{1f}off"),
+    ];
+    let titles = vec![
+        "Display and driver".into(),
+        "Vehicles".into(),
+        "Service".into(),
+    ];
+    let mut v = view(&rail);
+    v.list = Some(ListView {
+        kind: MenuKind::Options,
+        head: Some(("Vehicle options...".into(), String::new())),
+        badge: None,
+        tabs: Some((titles, 0)),
+        items: rows,
+        sel: 0,
+        preview: None,
+        pane_first: None,
+        dropdown: None,
+        key: "Vehicle0".into(),
+    });
+    let mut sh = Shell::new();
+    sh.pause_hidden = false;
+    click_drawn_control(&mut sh, &v, "pause-tab-1");
+    assert_eq!(sh.actions, [Action::Side(1)]);
+}
+
+#[test]
 fn pause_navigation_disabled_card_does_not_dispatch() {
     let rail = menu();
     let mut v = view(&rail);
     v.disabled = &["camera"];
     let mut sh = Shell::new();
     sh.pause_hidden = false;
-    click(&mut sh, &v, Vec2::new(400.0, 225.0));
+    click_drawn(&mut sh, &v, "pause-card-2-camera");
     assert!(sh.actions.is_empty());
 }
 
@@ -131,6 +338,24 @@ fn pause_navigation_draws_each_category_at_small_and_large_sizes() {
             assert!(sh.showing());
         }
     }
+}
+
+#[test]
+fn pause_frame_is_centered_and_capped_on_large_screens() {
+    assert_eq!(
+        frame_rect(Vec2::new(1440.0, 900.0)),
+        Rect::new(120.0, 40.0, 1200.0, 820.0),
+    );
+}
+
+#[test]
+fn pause_frame_fills_small_screens_with_equal_margins() {
+    let size = Vec2::new(400.0, 640.0);
+    let frame = frame_rect(size);
+    assert_eq!(frame.x, 12.0);
+    assert_eq!(frame.y, 12.0);
+    assert_eq!(frame.right(), size.x - 12.0);
+    assert_eq!(frame.bottom(), size.y - 12.0);
 }
 
 #[test]
@@ -244,7 +469,7 @@ fn pause_navigation_short_window_keeps_cards_clickable() {
     let mut sh = Shell::new();
     sh.pause_hidden = false;
     sh.begin(400.0, 320.0, 1.0, 1.0 / 60.0);
-    sh.ui.input.mouse = Vec2::new(100.0, 190.0);
+    sh.ui.input.mouse = Vec2::new(100.0, 230.0);
     sh.ui.input.pressed = true;
     sh.ui.input.released = true;
     draw(&mut sh, &view(&rail));
@@ -313,7 +538,7 @@ fn pause_navigation_enlarged_quit_dispatches_original_action() {
     let rail = menu();
     let mut sh = Shell::new();
     sh.pause_hidden = false;
-    click(&mut sh, &view(&rail), Vec2::new(110.0, 815.0));
+    click_drawn(&mut sh, &view(&rail), "pause-session-quit");
     assert_eq!(sh.actions, [Action::Choose(rail.len() - 1)]);
 }
 
@@ -355,7 +580,7 @@ fn quick_actions_custom_card_keeps_original_index() {
     v.quick_actions = r#"["save","camera"]"#;
     let mut sh = Shell::new();
     sh.pause_hidden = false;
-    click(&mut sh, &v, Vec2::new(400.0, 225.0));
+    click_drawn(&mut sh, &v, "pause-card-5-save");
     assert_eq!(sh.actions, [Action::Choose(5)]);
 }
 
@@ -365,7 +590,7 @@ fn quick_actions_editor_toggle_never_executes_action() {
     let mut sh = Shell::new();
     sh.pause_hidden = false;
     sh.quick_edit = true;
-    click(&mut sh, &view(&rail), Vec2::new(400.0, 265.0));
+    click_drawn(&mut sh, &view(&rail), "pause-quick-toggle-map");
     assert!(
         sh.actions
             .iter()
@@ -415,17 +640,12 @@ fn quick_actions_editor_draws_checkbox_and_footer_at_all_sizes() {
         sh.quick_edit = true;
         sh.begin(w, h, scale, 0.016);
         draw(&mut sh, &view(&rail));
-        let sidebar = sh.ui.size.x >= 700.0;
-        let left = if sidebar { RAIL_W } else { 0.0 };
-        let page_w = sh.ui.size.x - left;
-        let pad = if page_w < 420.0 { 18.0 } else { 36.0 };
-        let width = (page_w - pad * 2.0).min(980.0);
-        let x = left + (page_w - width) * 0.5;
-        let button_w = (width - 24.0) * 0.5;
-        let done = Vec2::new(
-            x + width - 8.0 - button_w * 0.5,
-            sh.ui.size.y - if sidebar { 48.0 } else { 94.0 } - 27.0,
-        );
+        let done = sh
+            .ui
+            .drawn
+            .get(&id_of("pause-quick-done"))
+            .expect("Done button should be drawn")
+            .center();
         assert!(done.x >= 0.0 && done.x <= sh.ui.size.x && done.y > 0.0);
         sh.finish();
         sh.begin(w, h, scale, 0.016);

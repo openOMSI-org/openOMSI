@@ -199,6 +199,27 @@ impl App {
         if !crate::shell::pause::navigation::Category::available(&ids).contains(&category) {
             return;
         }
+        if category == crate::shell::pause::navigation::Category::Settings {
+            self.shell.pause_category = category;
+            self.shell.pause_hidden = false;
+            self.shell.quick_edit = false;
+            self.menus.game_menu = menu.iter().position(|line| line.0 == "options");
+            self.open_list(crate::game_lists::ListKind::Options(0));
+            self.shell.last_sel = None;
+            return;
+        }
+        if category == crate::shell::pause::navigation::Category::World {
+            self.shell.pause_category = category;
+            self.shell.pause_hidden = false;
+            self.shell.quick_edit = false;
+            self.menus.game_menu = menu
+                .iter()
+                .position(|line| line.0 == "world")
+                .or_else(|| menu.iter().position(|line| line.0 == "vehicle"));
+            self.open_list(crate::game_lists::ListKind::World(0));
+            self.shell.last_sel = None;
+            return;
+        }
         self.close_list();
         self.shell.pause_category = category;
         self.shell.pause_hidden = false;
@@ -409,18 +430,14 @@ impl App {
         }
         match id {
             "resume" => self.close_game_menu(),
-            "options" => self.open_list(crate::game_lists::ListKind::Options(0)),
-            "controls" => self.open_list(crate::game_lists::ListKind::Controls),
-            "camera" => {
-                let tab = crate::game_lists::tab_of(
-                    self,
-                    crate::game_lists::ListKind::Options(0),
-                    "Camera",
-                );
-                self.open_list(crate::game_lists::ListKind::Options(tab));
+            "options" | "camera" => {
+                self.switch_pause_category(crate::shell::pause::navigation::Category::Settings)
             }
-            "vehicle" => self.open_list(crate::game_lists::ListKind::Vehicle(0)),
-            "world" => self.open_list(crate::game_lists::ListKind::World(0)),
+            "controls" => {
+                self.switch_pause_category(crate::shell::pause::navigation::Category::Settings);
+                self.open_list(crate::game_lists::ListKind::Controls);
+            }
+            "vehicle" | "world" => self.open_list(crate::game_lists::ListKind::World(0)),
             "multiplayer"
                 if self.net.lan.is_some()
                     && self.shell.pause_category
@@ -901,41 +918,5 @@ pub(crate) const GAME_MENU: [(&str, &str); 17] = [
 ];
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use clap::Parser;
-
-    #[test]
-    fn websocket_server_menu_offers_the_players_tour_controls() {
-        for target in [
-            "https://localhost",
-            "http://localhost",
-            "wss://localhost/ws",
-            "ws://localhost/ws",
-        ] {
-            let args = Args::parse_from(["openomsi", "--lan-join", target]);
-            let menu = game_menu_for(&args);
-            assert!(menu.contains(&("duty", "Line and tour...")), "{target}");
-            assert!(menu.contains(&("endduty", "End the tour")), "{target}");
-            assert!(menu.contains(&("quit", "Leave the server")), "{target}");
-            for local_only in ["save", "saveslot", "load", "skipstop"] {
-                assert!(
-                    !menu.iter().any(|(id, _)| *id == local_only),
-                    "{target}: {local_only}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn solo_and_udp_menus_keep_their_existing_actions() {
-        for extra in [vec![], vec!["--lan-join", "127.0.0.1:27015"]] {
-            let args = Args::parse_from(std::iter::once("openomsi").chain(extra));
-            let menu = game_menu_for(&args);
-            assert_eq!(menu, &GAME_MENU);
-            assert!(menu.contains(&("duty", "Line and tour...")));
-            assert!(menu.contains(&("endduty", "End the tour")));
-            assert!(menu.contains(&("quit", "End the session")));
-        }
-    }
-}
+#[path = "menus_tests.rs"]
+mod tests;

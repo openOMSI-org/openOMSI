@@ -1,0 +1,16 @@
+[package]
+name = "omsi-pause-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The pause menu and in-session settings interface"
+
+[dependencies]
+glam.workspace = true
+winit.workspace = true
+omsi-ui = { path = "../omsi-ui" }
+omsi-settings-ui = { path = "../omsi-settings-ui" }
+omsi-multiplayer-ui = { path = "../omsi-multiplayer-ui" }
+omsi-plugin = { path = "../omsi-plugin" }
+omsi-admin = { path = "../omsi-admin" }
+serde_json.workspace = true
