@@ -49,6 +49,37 @@ pub(super) fn terrain_height(world: &World, x: f64, y: f64) -> Option<f64> {
 /// or an underpass a few metres down.
 const BURIED: f64 = 6.0;
 
+/// Fleet number and plate of a random-traffic vehicle. The caller must put these into
+/// `VehicleHost::initial_number` and `initial_ident` before making the instance: vehicle
+/// scripts may copy `ident` into the string variable their plate texture reads in `{init}`,
+/// and writing the strings after the instance was made left that texture blank (#3607).
+fn ai_identity(
+    ty: &omsi_sim::VehicleType,
+    seed: u64,
+    free_registration: Option<String>,
+) -> (Option<String>, Option<String>) {
+    let (mut number, mut ident) = (None, None);
+    // A vehicle with a `[number]` list takes a number of it at random and the plate beside it,
+    // else the plate its mode makes of the number (TRoadVehicleInst.virtual_11 at 0x7e7b51).
+    let numbers = ty.def.numbers_with_plates();
+    if !numbers.is_empty() {
+        let (n, plate) = &numbers[(seed.rotate_left(29) % numbers.len() as u64) as usize];
+        number = Some(n.clone());
+        if ty.def.registration_mode != 1 {
+            ident = Some(if plate.is_empty() {
+                ty.def.plate_of_number(n)
+            } else {
+                plate.clone()
+            });
+        }
+    }
+    // A free plate is one of the map's registrations.txt, whether or not there is a number.
+    if ty.def.registration_mode == 1 {
+        ident = free_registration;
+    }
+    (number, ident)
+}
+
 impl Traffic {
     /// Is a vehicle of radius `r` at `p` hidden from the viewer by buildings (or a hill)?
     /// Every line of sight to it must be: to its middle, to both ends whichever way it
@@ -794,44 +825,21 @@ impl Traffic {
             None => self.sim.ai_scheme(&ty, seed >> 8),
         };
         host.paint_scheme = Some(scheme);
+        // The number and plate must be there before the script VM runs `{init}` (#3607): many
+        // packs copy `ident` into the string variable their number-plate texture reads there.
+        let (number, ident) = match bus.as_ref().and_then(|b| b.number.clone()) {
+            Some((num, reg)) => (Some(num), Some(reg)),
+            None => ai_identity(
+                &ty,
+                seed,
+                (ty.def.registration_mode == 1)
+                    .then(|| world.free_registration(seed.rotate_left(17)))
+                    .flatten(),
+            ),
+        };
+        host.initial_number = number;
+        host.initial_ident = ident;
         let mut vehicle = VehicleInstance::new(ty.clone(), host);
-        if let Some((num, reg)) = bus.as_ref().and_then(|b| b.number.clone()) {
-            if let Some(i) = ty.program.str_var("number") {
-                vehicle.state.str_vars[i as usize] = num;
-            }
-            if let Some(i) = ty.program.str_var("ident") {
-                vehicle.state.str_vars[i as usize] = reg;
-            }
-        } else {
-            // A vehicle of the random traffic with a `[number]` list takes a number of it at
-            // random and the plate beside it, else the plate its mode makes of the number
-            // (TRoadVehicleInst.virtual_11 at 0x7e7b51); a free plate is one of the map's
-            // registrations.txt.
-            let numbers = ty.def.numbers_with_plates();
-            if !numbers.is_empty() {
-                let (n, plate) = &numbers[(seed.rotate_left(29) % numbers.len() as u64) as usize];
-                if let Some(i) = ty.program.str_var("number") {
-                    vehicle.state.str_vars[i as usize] = n.clone();
-                }
-                if ty.def.registration_mode != 1 {
-                    if let Some(i) = ty.program.str_var("ident") {
-                        vehicle.state.str_vars[i as usize] = if plate.is_empty() {
-                            ty.def.plate_of_number(n)
-                        } else {
-                            plate.clone()
-                        };
-                    }
-                }
-            }
-            if ty.def.registration_mode == 1 {
-                if let (Some(i), Some(reg)) = (
-                    ty.program.str_var("ident"),
-                    world.free_registration(seed.rotate_left(17)),
-                ) {
-                    vehicle.state.str_vars[i as usize] = reg;
-                }
-            }
-        }
         // aircraft keep the height of their flight path: a ground sampler would pull
         // them down onto the streets
         vehicle.ground = if kind == LaneKind::Air {
@@ -1097,5 +1105,57 @@ mod missing_tile_tests {
         ));
         // no tile of its own known
         assert!(!ground_missing_for_good(None, (4, 9), map_has, |_| true));
+    }
+}
+
+#[cfg(test)]
+mod ai_plate_tests {
+    use super::ai_identity;
+    use std::sync::Arc;
+
+    /// A car whose `[registration_free]` plate is copied to its plate texture in `{init}`
+    /// shows it: the plate has to reach the host before the instance is made (#3607).
+    #[test]
+    fn a_free_plate_is_there_for_the_init_script() {
+        let dir = std::env::temp_dir().join(format!("omsi_ai_plate_mx_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("plate.osc");
+        std::fs::write(&script, "{init}\n(L.$.ident) (S.$.plate_shown)\n{end}\n").unwrap();
+        let strings = dir.join("strings.txt");
+        std::fs::write(&strings, "plate_shown\n").unwrap();
+        let program = omsi_script::compile(&omsi_script::CompileInput {
+            scripts: vec![script],
+            builtin_str_vars: vec!["ident".into()],
+            stringvarlists: vec![strings],
+            ..Default::default()
+        });
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(program.errors.is_empty(), "{:?}", program.errors);
+        let mut def = omsi_vehicle::Vehicle::default();
+        def.registration_mode = 1;
+        def.registration_free = true;
+        let ty = Arc::new(omsi_sim::VehicleType {
+            def,
+            model: Default::default(),
+            model_dir: Default::default(),
+            program: Arc::new(program),
+            meshes: Vec::new(),
+            lod_meshes: Vec::new(),
+            paint_schemes: Vec::new(),
+            texchanges: Vec::new(),
+            wheel_meshes: Vec::new(),
+            suspension_axles: Vec::new(),
+            missing_packs: Vec::new(),
+            mesh_bounds: Vec::new(),
+            mesh_boxes: Vec::new(),
+        });
+        let (number, ident) = ai_identity(&ty, 7, Some("GRZ LI 14".into()));
+        assert_eq!(number, None);
+        assert_eq!(ident.as_deref(), Some("GRZ LI 14"));
+        let mut host = omsi_sim::VehicleHost::new(Default::default());
+        host.initial_number = number;
+        host.initial_ident = ident;
+        let v = omsi_sim::VehicleInstance::new(ty, host);
+        assert_eq!(v.str_var("plate_shown"), "GRZ LI 14");
     }
 }

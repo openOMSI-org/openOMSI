@@ -659,8 +659,11 @@ impl Renderer {
                 map_lamps.push(i);
             }
         }
+        let road_light_inputs = order.len();
         order.extend(map_lamps);
-        for &i in &order {
+        let mut road_light_end = 0u32;
+        let mut replaced_cells: Vec<usize> = Vec::new();
+        for (pos, &i) in order.iter().enumerate() {
             let l = &scene.lights[i];
             // Every light the grid reaches is in the list, the other path's too (a headlight
             // is three points for the plain shader and one spot for the enhanced): only the
@@ -680,6 +683,9 @@ impl Renderer {
             }
             let idx = gpu_lights.len() as u32;
             gpu_lights.push(gpu_light(l, p));
+            if pos < road_light_inputs {
+                road_light_end = gpu_lights.len() as u32;
+            }
             if !drawn_by(l, enhanced) {
                 continue;
             }
@@ -760,6 +766,7 @@ impl Renderer {
                         // a full cell keeps the lights that light it most, not the first ones
                         grid[base + weakest] = idx;
                         strength[base + weakest] = s;
+                        replaced_cells.push(cell);
                     } else if omsi_cfg::flags::OMSI_DEBUG_LIGHT_GRID.is_set() {
                         log::info!(
                             "light grid: cell ({x}, {y}) full, light at ({:.1}, {:.1}) radius {:.0} {} left out",
@@ -775,6 +782,15 @@ impl Renderer {
                     }
                 }
             }
+        }
+        replaced_cells.sort_unstable();
+        replaced_cells.dedup();
+        for cell in replaced_cells {
+            let base = cell * LIGHT_CELL_CAP;
+            let n = counts[cell] as usize;
+            // Re-partition surviving entries so classic_road_lights (< road_light_end) stay
+            // ahead of map lamps even after an in-place eviction.
+            grid[base..base + n].sort_by_key(|&g| g >= road_light_end);
         }
         let tiles = if lamp_shadows && enhanced {
             wants.tiles(scene, eye, own, &mut gpu_lights)

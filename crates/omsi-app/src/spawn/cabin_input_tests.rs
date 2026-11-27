@@ -345,3 +345,62 @@ fn stop_brake_interlock_releases_held_brake_only_when_disengaging() {
     assert_eq!(p.vehicle.var("bremse_halte_sw"), Some(0.0));
     assert_eq!(p.axes.brake, 0.0);
 }
+
+#[test]
+fn a_plain_switch_click_does_not_run_an_extra_frame_with_zero_timegap() {
+    // The battery lamp of the O305-derived buses is worked out in the {frame}. Running that
+    // frame a second time with Timegap 0 for a mouse click made it light for one frame; a
+    // keyboard press never did (#3800). Only an ibox-style momentary flag needs the extra
+    // frame before its `_drag` clears it (#744).
+    let mut vehicle = crate::schedule::tests::script_test_vehicle(
+        "{trigger:cp_gear_N}\n1 (S.L.clicked)\n{end}\n\
+         {trigger:ibox_taste_A1}\n1 (S.L.ibox_flag)\n{end}\n\
+         {trigger:ibox_taste_A1_drag}\n0 (S.L.ibox_flag)\n{end}\n\
+         {frame}\n(L.S.Timegap) (S.L.gap_seen)\n{end}\n",
+        "clicked\nibox_flag\ngap_seen\n",
+        "",
+    );
+    vehicle.host.clock.timegap = 1.0 / 60.0;
+    vehicle.set_var("gap_seen", 1.0 / 60.0);
+    let ty = vehicle.ty.clone();
+    let render = scene::VehicleRender {
+        window_wipers: None,
+        instances: vec![],
+        far: vec![],
+        own_materials: vec![],
+        set: None,
+        variants: vec![],
+        text_textures: vec![],
+        script_textures: vec![],
+        shared_script: false,
+        displays_far: false,
+        display_tick: 0,
+        skinned: vec![],
+        damaged: vec![],
+        glass_cracks: vec![],
+        hidden: false,
+        interior_lamps: Default::default(),
+        interior_blocks: Default::default(),
+        own_set: None,
+    };
+    let mut p = new_player(vehicle, render, vec![], vec![], false, &ty);
+
+    p.trigger_cab_control("cp_gear_N");
+    assert_eq!(p.vehicle.var("clicked"), Some(1.0));
+    assert!(
+        (p.vehicle.var("gap_seen").unwrap() - 1.0 / 60.0).abs() < 1e-6,
+        "an ordinary switch must not run a zero-Timegap frame"
+    );
+
+    p.trigger_cab_control("ibox_taste_A1");
+    assert_eq!(
+        p.vehicle.var("gap_seen"),
+        Some(0.0),
+        "the ibox flag still needs its frame"
+    );
+    assert_eq!(
+        p.vehicle.var("ibox_flag"),
+        Some(0.0),
+        "and is cleared right after it"
+    );
+}

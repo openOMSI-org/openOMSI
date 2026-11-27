@@ -168,6 +168,44 @@ mod tests {
         }
     }
 
+    /// A display's light map lifts it to its own colour (#2051); a roller blind's lamp is
+    /// only a surface's light and keeps ADDSMOOTH's day/night factor (#3472). The GPU test
+    /// in `light_maps` measures the two; this one runs without an adapter.
+    #[test]
+    fn a_light_mapped_surface_keeps_addsmooths_day_night_factor() {
+        let shader = super::ENHANCED.replace("\r\n", "\n");
+        let lightmap = shader
+            .split_once("if (material.params2.x > 0.5 && !terrain && !glass) {")
+            .expect("the enhanced shader must have a light-map branch")
+            .1
+            .split_once("    if (material.emissive.w < -1.5) {")
+            .expect("the LED panel's light map must keep its own branch")
+            .1
+            .split("material.glow.x > 0.0")
+            .next()
+            .unwrap();
+        let display = lightmap
+            .split_once("} else if (material.emissive.w < -0.5) {")
+            .expect("the display's light map must keep its own branch")
+            .1
+            .split("} else {")
+            .next()
+            .unwrap();
+        let surface = lightmap.split("} else {").last().unwrap();
+        assert!(
+            display.contains("display_level(tex.rgb) * enh.exposure.y"),
+            "a display must keep the full lift: {display}"
+        );
+        assert!(
+            surface.contains("(0.12 + 0.88 * night)"),
+            "a surface must keep ADDSMOOTH's factor: {surface}"
+        );
+        assert!(
+            !surface.contains("display_level("),
+            "a surface must not get the display's lift: {surface}"
+        );
+    }
+
     /// FNV-1a, 64 bits: enough to tell one text from another, and no dependency for it.
     fn fnv1a(text: &str) -> u64 {
         text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
@@ -242,6 +280,8 @@ mod tests {
     /// And the road dirt for 64 bodies, each in the first box that holds it on its outside.
     /// And #3723: spots and headlight stand-ins come before the lamps a light-mapped road
     /// ignores, so the classic shader can stop at the first of them.
+    /// And #3472: a light-mapped surface keeps ADDSMOOTH's night factor, only a display
+    /// takes the display's lift.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
@@ -253,7 +293,7 @@ mod tests {
         assert_eq!((scene.len(), fnv1a(&scene)), (162801, 3523401875155055001));
         assert_eq!(
             (enhanced.len(), fnv1a(&enhanced)),
-            (147424, 13338708499427164872)
+            (147200, 11551089295268822042)
         );
     }
 }

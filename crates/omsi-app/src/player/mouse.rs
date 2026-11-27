@@ -345,7 +345,9 @@ impl Player {
     pub(crate) fn trigger_cab_control(&mut self, ev: &str) -> bool {
         let was_interlocked = omsi_sim::input::is_stop_brake_interlocked(&self.vehicle);
         let plain = self.vehicle.trigger(ev);
-        self.vehicle.update_scripts_only(0.0);
+        if needs_momentary_mouse_frame(&self.vehicle, ev) {
+            self.vehicle.update_scripts_only(0.0);
+        }
         self.clear_momentary_mouse_flag(ev);
         omsi_sim::input::maybe_release_held_brake(&self.vehicle, &mut self.axes, was_interlocked);
         plain
@@ -376,7 +378,9 @@ impl Player {
         if !self.vehicle.trigger_part(ti, &ev) {
             self.vehicle.trigger(&ev);
         }
-        self.vehicle.update_scripts_only(0.0);
+        if needs_momentary_mouse_frame(&self.vehicle, &ev) {
+            self.vehicle.update_scripts_only(0.0);
+        }
         self.clear_momentary_mouse_flag(&ev);
         omsi_sim::input::maybe_release_held_brake(&self.vehicle, &mut self.axes, was_interlocked);
         self.pressed_trailer_mesh = Some((ti, i));
@@ -385,23 +389,10 @@ impl Player {
 
     /// Aachen ibox / ticket-printer style: press sets a flag, `_drag` / `_off` clear it.
     fn clear_momentary_mouse_flag(&mut self, ev: &str) {
+        if !needs_momentary_mouse_frame(&self.vehicle, ev) {
+            return;
+        }
         let drag = format!("{ev}_drag");
-        if self.vehicle.ty.program.trigger(&drag).is_none()
-            && self
-                .vehicle
-                .trailers
-                .iter()
-                .all(|t| t.ty.program.trigger(&drag).is_none())
-        {
-            return;
-        }
-        let low = ev.to_ascii_lowercase();
-        // Only flag-style momentary keys (ibox `*_taste_*`, ticket printer). Rotary knobs
-        // also have `_drag` but use mouse deltas; a zero `_drag` right after press would
-        // disturb them.
-        if !(low.contains("taste") || low.contains("ibox") || low.contains("ticket")) {
-            return;
-        }
         self.vehicle.host.mouse = (0.0, 0.0);
         self.vehicle.trigger(&drag);
         self.vehicle.host.mouse = (0.0, 0.0);
@@ -605,6 +596,31 @@ impl Player {
             }
         }
     }
+}
+
+/// Whether a click needs the `{frame}` run before the flag it set is cleared.
+///
+/// Aachen ibox / ticket-printer buttons (#744) set a flag in the press trigger and clear it
+/// in `_drag` / `_off`; the frame script is what acts on the flag, and the engine fires the
+/// `_drag` before the next frame, so that frame has to run here. Other switches take effect
+/// on the next regular frame just as a keyboard press does. Running that frame here too
+/// made the scripts see a second frame with `Timegap == 0`, which lit the battery warning
+/// lamp of the O305-derived buses for one frame on every mouse click (#3800).
+fn needs_momentary_mouse_frame(vehicle: &omsi_sim::VehicleInstance, ev: &str) -> bool {
+    let drag = format!("{ev}_drag");
+    if vehicle.ty.program.trigger(&drag).is_none()
+        && vehicle
+            .trailers
+            .iter()
+            .all(|t| t.ty.program.trigger(&drag).is_none())
+    {
+        return false;
+    }
+    let low = ev.to_ascii_lowercase();
+    // Only flag-style momentary keys (ibox `*_taste_*`, ticket printer). Rotary knobs
+    // also have `_drag` but use mouse deltas; a zero `_drag` right after press would
+    // disturb them.
+    low.contains("taste") || low.contains("ibox") || low.contains("ticket")
 }
 
 /// A sun blind can be left at any position, including after a very short drag. Treating
@@ -821,5 +837,25 @@ impl Player {
         if exists {
             self.auto_drag = Some(a);
         }
+    }
+}
+
+#[cfg(test)]
+mod momentary_frame_tests {
+    use super::needs_momentary_mouse_frame;
+
+    /// Only flags that a `_drag` clears before the next frame need the immediate frame; a
+    /// plain switch does not, so a mouse click does not differ from a keyboard press (#3800).
+    #[test]
+    fn only_momentary_flags_need_the_immediate_frame() {
+        let vehicle = crate::schedule::tests::script_test_vehicle(
+            "{trigger:cp_gear_N}\n{end}\n\
+             {trigger:ibox_taste_A1}\n{end}\n\
+             {trigger:ibox_taste_A1_drag}\n{end}\n",
+            "",
+            "",
+        );
+        assert!(!needs_momentary_mouse_frame(&vehicle, "cp_gear_N"));
+        assert!(needs_momentary_mouse_frame(&vehicle, "ibox_taste_A1"));
     }
 }
