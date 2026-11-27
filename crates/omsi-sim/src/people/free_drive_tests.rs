@@ -247,3 +247,66 @@ fn a_worked_timetable_fills_a_stop_to_the_share_its_trips_ask_for() {
     h.stops_tick(0.1, &world);
     assert_eq!(h.stops[&42].want, 0);
 }
+
+/// #3841: a player on a duty finds people at the stops even when no trip of the map's
+/// timetable is due anywhere (an early hour, or a tour that does not run today). The reporter
+/// saw the whole map empty on stock and modded maps alike.
+#[test]
+fn a_duty_with_no_trips_due_still_fills_its_stops() {
+    let (mut h, _) = pax_stops::brt_tests::setup("issue-3841-duty", None);
+    h.types = vec![h.people[0].ty.clone()];
+    h.pool_types = 1;
+    h.people.clear();
+    h.map_humans_done = true;
+    h.free_drive_fill = FreeDriveFill::Auto;
+    h.density = 1.0;
+    h.duty = Some((
+        Arc::new(DutyTrip {
+            name: "T".into(),
+            departure: 36_000.0,
+            terminus: "43".into(),
+            public: true,
+            stops: vec![(42, "42".into(), true), (43, "43".into(), true)],
+        }),
+        0,
+        false,
+    ));
+    let mut targets = HashMap::new();
+    targets.insert(42, vec![("43".into(), HashSet::from(["43".into()]))]);
+    h.stop_targets = Some(targets);
+    // The timetable is loaded, but no trip of it is due anywhere now (the reporter's
+    // "any map, any bus" case). The stops must still carry their own people.
+    h.due_dests = Some(crate::timetable_run::DueTrips::default());
+    let stop = h.stops.get_mut(&42).unwrap();
+    h.center = stop.pos;
+    stop.spots = (0..6)
+        .map(|k| WaitSpot {
+            pos: stop.pos + DVec3::X * k as f64,
+            face: 0.0,
+            height: 0.0,
+        })
+        .collect();
+    stop.taken = vec![false; 6];
+    stop.enter_max = 3.0;
+    stop.enter_min = 3.0;
+    stop.factor = 1.0;
+    stop.near = true;
+    stop.clock_ms = 15_001.0;
+    stop.dests = vec![("43".into(), 1.0)];
+    stop.lines = vec![("43".into(), HashSet::from(["43".into()]))];
+
+    let world = FlatWorld::default();
+    h.stops_tick(0.1, &world);
+    assert_eq!(h.stops[&42].want, 3, "no trip is due, so the stop fills by its own number");
+    let waiting: Vec<usize> = h
+        .people
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| matches!(&p.state, State::Pax(x) if x.stop == Some(42)))
+        .map(|(i, _)| i)
+        .collect();
+    assert!(!waiting.is_empty(), "a worked duty must have waiting people");
+    for i in waiting {
+        assert_eq!(h.pax(i).unwrap().dest.as_deref(), Some("43"));
+    }
+}

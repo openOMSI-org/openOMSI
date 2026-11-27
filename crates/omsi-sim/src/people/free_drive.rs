@@ -4,9 +4,9 @@
 //! found the whole map empty.
 
 /// What the settings say about it (`pax_free_drive`): `auto` - fill the stops by their own
-/// numbers when the player has no duty (free drive), and by the timetable's trips when they
-/// have one; `on` - fill them by their own numbers always; `off` - never mind free drive,
-/// keep to the timetable's trips.
+/// numbers when the player has no duty (free drive), or when their duty's timetable has no
+/// trip due anywhere (#3841), and by the timetable's trips otherwise; `on` - fill them by
+/// their own numbers always; `off` - never mind free drive, keep to the timetable's trips.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum FreeDriveFill {
     #[default]
