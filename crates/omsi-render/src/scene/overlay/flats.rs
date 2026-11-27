@@ -3,7 +3,7 @@ use crate::MeshData;
 use glam::Vec3;
 
 /// Large planes retained even when they are not the local representative.
-const FLATS_PER_SLOT: usize = 32;
+pub(super) const FLATS_PER_SLOT: usize = 32;
 /// Local planes retained per normal-and-position cell before the slot-wide bound.
 const FLATS_PER_CELL: usize = 16;
 const LOCAL_FLATS_PER_SLOT: usize = 256;

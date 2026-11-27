@@ -1170,39 +1170,16 @@ impl World {
         let states = self.tile_state.lock();
         let mut gpu = self.gpu.lock();
         let last = memo.checked;
-        let (scenery_bytes, any_dropped, retry_due) =
-            gpu.textures
-                .values()
-                .fold((0u64, false, false), |(b, d, r), e| {
-                    let due = e
-                        .retry_after
-                        .is_some_and(|t| t <= t0 && last.is_none_or(|c| t > c));
-                    (b + e.bytes, d || e.dropped > 0, r || due)
-                });
-        // Every texture of the scene counts against the card as well (the people, the
-        // script and text textures, the sky's and the terrain's): past half of the card's own
-        // memory, what they hold beyond it is taken from the scenery and the vehicles. The
-        // budget counted the scenery and the vehicles alone, and on an 8 GB card with a
-        // 4000 MB budget the textures grew to 5.4 GB over a drive; with the picture's targets
-        // the card paged to the system's memory and the frame rate fell from 140 to 25 (#2295).
+        let (scenery_bytes, any_dropped, retry_due) = texture_budget_snapshot(&gpu, t0, last);
+        // Count all scene textures, not just pictures belonging to tiles or vehicles.
         let texture_usage =
             scenery_bytes + vehicle_bytes + texture_overdraft(renderer.texture_bytes(scene));
-        // And everything the game holds on the card - the meshes, the render targets and
-        // shadow maps, the driver's own - stays within the video memory setting and the
-        // driver's budget: the textures counted against their budget alone, the game took
-        // gigabytes more than it was set to, and an 8 GB card paged to the system's memory
-        // past its budget. What is over goes from the textures, the only part that can give.
+        // Use the driver's measured total usage to enforce the video memory budget.
         let card = renderer.gpu_memory(scene);
         let card_cap = card.cap(video_limit);
-        // (in steps of 32 MiB: the driver's count wanders by a few MB from second to second,
-        // and every step up failed the idle look's check - the whole scan and its sort every
-        // second while over)
+        // Ignore tiny budget variations when deciding whether to shrink again.
         const STEP: u64 = 32 << 20;
-        let card_over = if card_cap > 0 {
-            card.total().saturating_sub(card_cap) / STEP * STEP
-        } else {
-            0
-        };
+        let card_over = card_soft_over(video_limit, card, STEP);
         let usage = if card_over > 0 {
             texture_usage.max(limit.saturating_add(card_over))
         } else {
@@ -1231,100 +1208,17 @@ impl World {
         {
             return 0;
         }
-        let ts = tile_size();
-        let tile_distance = |k: &(i32, i32)| -> f64 {
-            centers
-                .iter()
-                .map(|c| {
-                    let (x0, y0) = (k.0 as f64 * ts, k.1 as f64 * ts);
-                    let dx = (x0 - c.x).max(c.x - (x0 + ts)).max(0.0);
-                    let dy = (y0 - c.y).max(c.y - (y0 + ts)).max(0.0);
-                    (dx * dx + dy * dy).sqrt()
-                })
-                .fold(f64::MAX, f64::min)
-        };
-        // how near each scenery texture is: the nearest tile that uses it
-        let mut near: hashbrown::HashMap<TextureId, f64> = hashbrown::HashMap::new();
-        let mut spline_textures = hashbrown::HashSet::new();
-        let (mut types, mut splines): (
-            hashbrown::HashMap<usize, f64>,
-            hashbrown::HashMap<usize, f64>,
-        ) = Default::default();
-        let (mut trees, mut shared): (
-            hashbrown::HashMap<&str, f64>,
-            hashbrown::HashMap<&PathBuf, f64>,
-        ) = Default::default();
-        for (key, st) in states.iter() {
-            let d = tile_distance(key);
-            let nearer = |e: &mut f64| *e = e.min(d);
-            st.gpu
-                .types
-                .iter()
-                .for_each(|t| nearer(types.entry(*t).or_insert(f64::MAX)));
-            st.gpu
-                .spline_types
-                .iter()
-                .for_each(|t| nearer(splines.entry(*t).or_insert(f64::MAX)));
-            st.gpu
-                .trees
-                .iter()
-                .for_each(|t| nearer(trees.entry(t.as_str()).or_insert(f64::MAX)));
-            st.gpu
-                .shared_textures
-                .iter()
-                .for_each(|p| nearer(shared.entry(p).or_insert(f64::MAX)));
-        }
-        {
-            let g = &*gpu;
-            let mut see = |p: &PathBuf, d: f64| {
-                if let Some(e) = g.textures.get(p) {
-                    let n = near.entry(e.id).or_insert(f64::MAX);
-                    *n = n.min(d);
-                }
-            };
-            for (t, d) in &types {
-                g.types
-                    .get(t)
-                    .into_iter()
-                    .flat_map(|t| t.textures.iter())
-                    .for_each(|p| see(p, *d));
-            }
-            for (t, d) in &splines {
-                for p in g.splines.get(t).into_iter().flat_map(|s| s.textures.iter()) {
-                    see(p, *d);
-                    spline_textures.insert(p.clone());
-                }
-            }
-            for (t, d) in &trees {
-                g.trees
-                    .get(*t)
-                    .and_then(|t| t.texture.as_ref())
-                    .into_iter()
-                    .for_each(|p| see(p, *d));
-            }
-            for (p, d) in &shared {
-                see(p, *d);
-            }
-        }
-        ground_is_near(&gpu, &mut near);
-        drop((trees, shared));
+        let (mut entries, spline_textures) = texture_budget_entries(&states, &gpu, centers);
         drop(states);
-        let mut entries: Vec<(f64, PathBuf)> = gpu
-            .textures
-            .iter()
-            .map(|(p, e)| (near.get(&e.id).copied().unwrap_or(f64::MAX), p.clone()))
-            .collect();
         let mut shrunk: Vec<TextureId> = Vec::new();
         let mut restoring = 0usize;
         let mut cut_short = false;
         // (2 ms of shrinking a frame, the scan's own time not counted; a picture takes
         // what it takes)
-        let budget_end = std::time::Instant::now()
-            + if pass == BudgetPass::Now {
-                std::time::Duration::from_secs(3600)
-            } else {
-                std::time::Duration::from_millis(2)
-            };
+        let urgent = card_cap > 0 && card.total() >= card_cap.saturating_sub(128 << 20);
+        let max_shrinks = if urgent { 192 } else { 96 };
+        let budget_end =
+            std::time::Instant::now() + budget_pass_duration(pass == BudgetPass::Now, urgent);
         let pending = self.upgrades_pending.lock();
         let reserved = if card_cap == 0 && usage > limit {
             0
@@ -1347,9 +1241,9 @@ impl World {
             ));
             let mut drops = renderer.begin_level_drops();
             for (d, p) in &entries {
-                // (96 a second: at 16 a map's first tiles stayed over a small card's budget
+                // (96 ordinarily, 192 near OOM: at 16 a map's first tiles stayed over budget
                 // for a minute and a half)
-                if over == 0 || shrunk.len() >= 96 || *d < NEAR {
+                if over == 0 || shrunk.len() >= max_shrinks || *d < NEAR {
                     break;
                 }
                 if std::time::Instant::now() >= budget_end {
@@ -1377,10 +1271,7 @@ impl World {
                     shrunk.push(e.id);
                 }
             }
-            // Still over: the vehicles' pictures give way as well, the biggest first, down
-            // to 1024 pixels a side. Counted but never made smaller, the timetable's fleet
-            // filled 5 GB of textures on a graphics chip with 0.5 GB of its own until the
-            // device was lost (#1463).
+            // Distant vehicles' textures can shrink after scenery textures.
             if over > 0 && shrunk.len() < 96 && !cut_short {
                 let mut own: Vec<(TextureId, u64)> = self
                     .vehicle_textures
@@ -1391,7 +1282,7 @@ impl World {
                     .collect();
                 own.sort_by(|a, b| b.1.cmp(&a.1));
                 for (id, before) in own {
-                    if over == 0 || shrunk.len() >= 96 {
+                    if over == 0 || shrunk.len() >= max_shrinks {
                         break;
                     }
                     if std::time::Instant::now() >= budget_end {
@@ -1424,7 +1315,7 @@ impl World {
                         .map(|(_, (id, _))| (*id, None)),
                 );
                 for (id, path) in emergency {
-                    if over <= card_part || shrunk.len() >= 96 {
+                    if over <= card_part || shrunk.len() >= max_shrinks {
                         break;
                     }
                     if std::time::Instant::now() >= budget_end {
@@ -1451,10 +1342,7 @@ impl World {
             }
             renderer.finish_level_drops(drops);
         } else {
-            // Room for the near ones to come back, with 15 % kept free: a texture
-            // restored only into the room under 85 % of the budget is not shrunk again
-            // before the textures have grown by that much (with a tenth, textures at
-            // 150-400 m went back and forth as the tiles around came and went).
+            // Restore nearby pictures only with enough headroom to avoid thrashing.
             entries.sort_by(|a, b| a.0.total_cmp(&b.0));
             let mut room =
                 texture_restore_room(limit, usage, video_limit, card).saturating_sub(reserved);

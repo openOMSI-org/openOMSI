@@ -1192,6 +1192,7 @@ mod tests {
             material,
             instances: 0..1,
             lean: Lean::No,
+            vehicle: false,
         };
         // opaque culled (pipe 2) and not culled (pipe 0) of two looks, then a blended one
         let batches = [b(0, 1), b(0, 2), b(2, 1), b(2, 2), b(8, 1)];

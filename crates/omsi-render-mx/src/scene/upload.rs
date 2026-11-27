@@ -508,8 +508,10 @@ impl Renderer {
                 .and_then(|r| r.gi_view())
                 .unwrap_or(&self.black_texture.view)
                 .index(),
+            dry: self.shadows.precip.dry_view.index(),
         };
         let precip_camera = view(&self.shadows.precip.camera_buf);
+        let dry_camera = view(&self.shadows.precip.dry_camera_buf);
         let mut heap = FrameHeap {
             models: model_buf.heap_index(&mut views),
             inst_params: params_buf.heap_index(&mut views),
@@ -528,6 +530,10 @@ impl Renderer {
         };
         scene.precip_heap = FrameHeap {
             camera: precip_camera,
+            ..heap
+        };
+        scene.dry_heap = FrameHeap {
+            camera: dry_camera,
             ..heap
         };
         std::mem::swap(&mut scene.frame_heap, &mut heap);

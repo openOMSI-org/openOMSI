@@ -447,6 +447,49 @@ seat_12_taken
 - A place without the lines, or naming a variable the scripts do not have, is always available.
 - A blank line or the next block ends the list. OMSI 2 skips the lines.
 
+## Blind spot sensors: what the traffic sees
+
+OMSI 2 scripts cannot ask the game what is around the vehicle, so a blind spot monitor in an
+add-on could only be faked (a timer, a fixed route trigger). openOMSI measures it: the AI
+traffic looks at the cars around the player's bus each frame and puts the result into six
+variables of the bus's varlists.
+
+| Variable | What it holds |
+| --- | --- |
+| `BSM_Left`, `BSM_Right`, `BSM_Rear` | 1 while a car is in that zone, 0 while it is clear |
+| `BSM_Left_Dist`, `BSM_Right_Dist`, `BSM_Rear_Dist` | the gap to it in metres (0 while clear) |
+
+The zones are the bus's own: 3.5 m out from each side along the body (plus 2 m past the
+front so a car just pulling alongside counts), and 20 m behind the rear body line, all
+within 3.5 m of the centre line. The gap is measured between the two bodies, not between
+their centres. `BSM_Left`/`BSM_Right` are from the driver's seat, so they turn with the bus.
+
+Declare only the variables the bus uses; a name the varlist does not have is not written at
+all, and a bus that declares none of them is not touched - OMSI 2 add-ons need no change:
+
+```
+[varlist]
+BSM_Left
+BSM_Left_Dist
+```
+
+Then light a mirror lamp or play a sound as usual:
+
+```
+(L.L.BSM_Right) 1 =
+{if}
+  (L.L.BSM_Right_Dist) 3 <
+  {if}
+    (S.L.bsm_beep) 1 (S.L.mirror_lamp_right) 1
+  {endif}
+{endif}
+```
+
+What it does not do yet: no per-vehicle zone sizes (they are the same for every bus), no
+front zone, no object type (a car, a cyclist or a pedestrian reads the same) and no relative
+speed - the traffic's cars are all there is to see. Pedestrians and cyclists on foot are not
+in the zones.
+
 ### Ticket validators
 
 OMSI 2 uses only the last `[stamper]` of a `passengercabin.cfg`. openOMSI keeps every

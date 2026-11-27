@@ -6,15 +6,256 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ## Unreleased
 
+### Fixes
+
+- **Articulated buses' third axle now springs with the rest of the rear section**: a two-axle
+  rear section samples the road under both axles, instead of only the axle farthest from the
+  joint, so a bump under the third axle moves the body instead of leaving that spring rigid
+  ([#2945](https://github.com/openOMSI-org/openOMSI/issues/2945)).
+- **Android: buses and maps with HTML displays no longer crash the game**: the displays' scripts
+  now run on phones that tag their memory pointers, where the game stopped with "this platform
+  is not compatible with a nan-boxed `JsValueInner`"
+  ([#4382](https://github.com/openOMSI-org/openOMSI/issues/4382)).
+
+## 0.3.59 - 2026-11-26
+
 ### New and improved
 
+- **Settings in the launcher by topic**: each category has short topic pages, a search over all
+  settings (by name or by the English key), favourite settings with a star, and a Help button
+  beside each setting. Graphics profiles have their own page
+  ([#3856](https://github.com/openOMSI-org/openOMSI/pull/3856)).
+- **Cruise control on Num0**: it holds the speed the bus has when it is switched on, by working
+  the pedals the bus's scripts read; the brake pedal or key switches it off
+  ([#4043](https://github.com/openOMSI-org/openOMSI/pull/4043)).
+- **Passengers add their weight to the bus** (Gameplay > Passengers, off by default): a full bus
+  pulls away, brakes and climbs more slowly and sits lower on its springs, and a crowd at the
+  back loads the rear axle. `omsi.bus.mass()` follows it
+  ([#4296](https://github.com/openOMSI-org/openOMSI/pull/4296)).
+- **Rear door boarding** (off by default): passengers get in at the rear and middle doors too,
+  each at the nearest door on their side of the bus
+  ([#4076](https://github.com/openOMSI-org/openOMSI/pull/4076)).
+- **Which doors passengers get in through**: as the bus says, the front door only, the first
+  two, or the rear door only ([#4112](https://github.com/openOMSI-org/openOMSI/pull/4112)).
+- **The IBIS's stop follows the duty** (off by default), for the buses whose IBIS the game types
+  itself (Shift+U, autostart): no "next stop" key to press at every stop
+  ([#4113](https://github.com/openOMSI-org/openOMSI/pull/4113)).
+- **Automatic announcements say why they are quiet** (a depot file with one recording per stop,
+  a bus without an IBIS key or stop counter), and the departure announcement comes as the bus
+  pulls out instead of a fixed four seconds after the doors close
+  ([#4115](https://github.com/openOMSI-org/openOMSI/pull/4115),
+  [#4288](https://github.com/openOMSI-org/openOMSI/pull/4288)).
+- **HOF templates**: a depot file's `*.tchof.xml` template beside it (HOF Suite) is read, so its
+  display strings are known by name ([#4290](https://github.com/openOMSI-org/openOMSI/pull/4290)).
+- **"Reload this vehicle" shows a rebuilt mesh**: a modder who rebuilds an `.o3d` and reloads the
+  bus sees the new mesh, not the copy already on the graphics card
+  ([#4282](https://github.com/openOMSI-org/openOMSI/pull/4282)).
+- **The game can draw the mouse cursor itself** (an option): with G-SYNC on Windows the picture no
+  longer stutters while the mouse moves ([#4289](https://github.com/openOMSI-org/openOMSI/pull/4289)).
+- **Stop labels from the timetable**: `--export-stop-labels <file>` writes a CSV of every stop's
+  name with the lines that serve it and where they go
+  ([#4283](https://github.com/openOMSI-org/openOMSI/pull/4283)).
+- **Plugins**: the `key` event carries the key combination (`"Ctrl+KeyH"`), as
+  `omsi.input.hotkey` takes it, and a chat line starting with `/` and a letter or digit goes to
+  the plugins that listen for `chat_command` instead of the chat
+  ([#4096](https://github.com/openOMSI-org/openOMSI/pull/4096)).
+- **The launcher's add-on list** is read from the add-ons-list repository each time the page
+  opens, so a new add-on shows up without a new release
+  ([#4260](https://github.com/openOMSI-org/openOMSI/pull/4260)).
+- **Android**: "Copy server code" puts the code on the clipboard, and the keyboard opens for the
+  join code and the chat ([#4204](https://github.com/openOMSI-org/openOMSI/pull/4204)).
+
+### Graphics
+
 - **Ray-traced global illumination (experimental)**: with Real-Time Ray Tracing on, the new
-  `rt_gi` option traces the light surfaces send to each other. Where a ray meets something the
-  last frame showed, it takes the light the picture had there (lamps with their shadows, lit
-  windows, the light already bounced), so the light bounces on from frame to frame. The sky light
-  and the sky's reflection on rough surfaces are dimmed by how much of the sky each point sees,
-  and the saloon is lit by what comes in through its windows and off its seats. Off by default;
-  see [Graphics](docs/GRAPHICS.md#ray-traced-global-illumination-experimental).
+  `rt_gi` option traces the light surfaces send to each other, frame after frame. The sky's
+  light and reflection are dimmed by how much of the sky each point sees, and the saloon is lit
+  by what comes in through its windows. Off by default; see
+  [Graphics](docs/GRAPHICS.md#ray-traced-global-illumination-experimental)
+  ([#4301](https://github.com/openOMSI-org/openOMSI/pull/4301)).
+- **Road dirt on the vehicles** (Enhanced, `procedural_dirt`): spray behind the wheels and on the
+  lower sides on wet roads, film on the back, dust when dry, slush in winter; the rain washes it
+  off. It lies on up to 64 bodies near the camera; the vehicles past them keep their own dirt
+  ([#4297](https://github.com/openOMSI-org/openOMSI/pull/4297),
+  [#4318](https://github.com/openOMSI-org/openOMSI/pull/4318)).
+- **Materials without textures**: `[matl_basecolor]`, `[matl_metallic]`, `[matl_roughness]` and
+  the normal and occlusion strengths set PBR values directly or scale the maps, as glTF does
+  ([#4294](https://github.com/openOMSI-org/openOMSI/pull/4294)).
+- **Emissive materials**: `[matl_emissive]` and its companions give a slot a light of its own, in
+  HDR, with a colour, a temperature (a filament warms up as it comes on) and a fade, switched by
+  the scripts of a vehicle or of a scenery object; see [PBR](docs/PBR.md#emissive-materials)
+  ([#4295](https://github.com/openOMSI-org/openOMSI/pull/4295),
+  [#4318](https://github.com/openOMSI-org/openOMSI/pull/4318)).
+- **Enhanced lighting and colour grade**: curved clouds in Vanilla, `[light_emitter_interior]`
+  (a lamp mesh's light map lights the saloon), height maps for PBR materials, and inverted normal
+  maps drawn the right way round ([#4241](https://github.com/openOMSI-org/openOMSI/pull/4241)).
+- **The real moon in the night sky**, with its phases and without glare, in Enhanced, Vanilla and
+  Vanilla+ ([#4272](https://github.com/openOMSI-org/openOMSI/pull/4272),
+  [#4291](https://github.com/openOMSI-org/openOMSI/pull/4291)).
+- **Snow on the bus's glass**: soft flakes and an even layer on every pane, without seams, instead
+  of rain drops on the doors in a snowfall
+  ([#4310](https://github.com/openOMSI-org/openOMSI/pull/4310),
+  [#4311](https://github.com/openOMSI-org/openOMSI/pull/4311)).
+- **Altocumulus** in fields of soft cloudlets instead of flat flecks
+  ([#4312](https://github.com/openOMSI-org/openOMSI/pull/4312)).
+- **DLSS sharpness** is a setting (25 % as before)
+  ([#4307](https://github.com/openOMSI-org/openOMSI/pull/4307)).
+- **Mirrors show the other mirrors**: a door mirror seen in the interior mirror is drawn, and
+  before it, instead of standing still ([#4279](https://github.com/openOMSI-org/openOMSI/pull/4279)).
+- **Cleaner pictures**: puddle reflections no longer shimmer on the move, the clouds' shaded parts
+  have no grid of diamonds, far lamps are round points of light instead of torn squares, rain on
+  the windscreen in Original+ has no blocks or black drops, fences and railings are lit by the
+  sun on their facing side only, and bus windows in Enhanced are no longer grey
+  ([#4261](https://github.com/openOMSI-org/openOMSI/pull/4261),
+  [#4262](https://github.com/openOMSI-org/openOMSI/pull/4262),
+  [#4259](https://github.com/openOMSI-org/openOMSI/pull/4259),
+  [#4269](https://github.com/openOMSI-org/openOMSI/pull/4269),
+  [#4205](https://github.com/openOMSI-org/openOMSI/pull/4205),
+  [#4224](https://github.com/openOMSI-org/openOMSI/pull/4224)).
+- **Reflective AI car bodies** are no longer drawn as see-through glass
+  ([#3965](https://github.com/openOMSI-org/openOMSI/pull/3965)).
+- **Ground textures in the map's own folder** are found, with their surface sound
+  ([#3966](https://github.com/openOMSI-org/openOMSI/pull/3966)).
+- **Clouds under an upscaler** are traced at the window's size, not at the smaller picture DLSS or
+  FSR is given, and are sharp again ([#4306](https://github.com/openOMSI-org/openOMSI/pull/4306)).
+
+### Multiplayer
+
+- **A conductor for a friend's bus**: the driver gives another player the conductor's role; the
+  conductor sees what ticket a passenger asks for, sells it at the cash desk and gives the change
+  ([#4280](https://github.com/openOMSI-org/openOMSI/pull/4280)).
+- **Other players' buses in less detail far away** (an option): beyond 120 m, or with the frame
+  rate under 20, their driver figures and destination displays are left out
+  ([#4095](https://github.com/openOMSI-org/openOMSI/pull/4095)).
+- **The host knows what the others have served**: a stop another player's bus has stood at and
+  left no longer fills up again for that trip, and the timetable's buses near the other players
+  are loaded ahead as near the host
+  ([#4309](https://github.com/openOMSI-org/openOMSI/pull/4309)).
+- **Emissive materials, rail points and taking over a bus online**: the `[matl_emissive]`
+  variables reach the other games, the host sets points thrown only by a player whose vehicle is
+  near them, and a host cannot take over an AI bus its session does not allow
+  ([#4309](https://github.com/openOMSI-org/openOMSI/pull/4309)).
+- **The public server list keeps its listings** when Cloudflare moves or restarts the list
+  between two heartbeats ([#4206](https://github.com/openOMSI-org/openOMSI/pull/4206)).
+
+### As in OMSI 2
+
+What Omsi.exe does, read from the game itself, where openOMSI did something of its own:
+
+- **Weather**: `.owt` files are read with Omsi.exe's defaults and its short `[precip]` block;
+  the wind blows from its direction at Omsi.exe's angle; `PrecipRate` is the strength whatever
+  falls; the windscreen wets at Omsi.exe's rate in rain and dries in twenty seconds after it;
+  the sun stands where Omsi.exe puts it
+  ([#4218](https://github.com/openOMSI-org/openOMSI/pull/4218),
+  [#4231](https://github.com/openOMSI-org/openOMSI/pull/4231),
+  [#4232](https://github.com/openOMSI-org/openOMSI/pull/4232),
+  [#4233](https://github.com/openOMSI-org/openOMSI/pull/4233),
+  [#4220](https://github.com/openOMSI-org/openOMSI/pull/4220),
+  [#4217](https://github.com/openOMSI-org/openOMSI/pull/4217)).
+- **Street lamps, the AI's lights and `Envir_Brightness`** follow Omsi.exe's daylight sum under
+  the weather: under an overcast deck, in fog, rain or snow the lamps come on by day
+  ([#4219](https://github.com/openOMSI-org/openOMSI/pull/4219)).
+- **Traffic lights**: AI cars stop for red, red-and-yellow and yellow alike and go on only once
+  their front is over the line; a light without `[approachdist]` is asked from 10 m; lights on
+  rails are asked as far ahead as the path search runs; a program point on a light number the
+  crossing does not have waits on light 0; `if_request` is set by any line but "0"
+  ([#4235](https://github.com/openOMSI-org/openOMSI/pull/4235),
+  [#4209](https://github.com/openOMSI-org/openOMSI/pull/4209),
+  [#4246](https://github.com/openOMSI-org/openOMSI/pull/4246),
+  [#4210](https://github.com/openOMSI-org/openOMSI/pull/4210),
+  [#4234](https://github.com/openOMSI-org/openOMSI/pull/4234)).
+- **AI traffic**: cars spawn on the lanes that run past the player, not only on those that start
+  near, and spread over the ways on at a fork by the map's densities, the emptiest first
+  ([#4200](https://github.com/openOMSI-org/openOMSI/pull/4200),
+  [#4243](https://github.com/openOMSI-org/openOMSI/pull/4243)).
+- **Physics**: `[mass]` is tonnes however large; the body has no air drag of its own and no
+  rolling resistance unless the file gives `[rollwiderstand]` (the scripts add both, as in
+  OMSI 2); `n_Wheel` is the mean of the driven wheels, an AI vehicle's its speed over the first
+  wheel; `Velocity` is 0 without a driven axle; AI vehicles' and coupled parts' wheels turn at
+  their own speed over their own size; a pusher articulated bus's driven rear wheels can spin on
+  ice ([#4238](https://github.com/openOMSI-org/openOMSI/pull/4238),
+  [#4207](https://github.com/openOMSI-org/openOMSI/pull/4207),
+  [#4208](https://github.com/openOMSI-org/openOMSI/pull/4208),
+  [#4237](https://github.com/openOMSI-org/openOMSI/pull/4237),
+  [#4236](https://github.com/openOMSI-org/openOMSI/pull/4236),
+  [#4247](https://github.com/openOMSI-org/openOMSI/pull/4247),
+  [#4244](https://github.com/openOMSI-org/openOMSI/pull/4244)).
+- **Scripts**: a block without `{end}` runs on into the next; a macro call finds only a macro
+  defined below it; only the first `{init}`, `{frame}` and `{frame_ai}` run; `(T.F.x)` leaves the
+  file name on the string stack, an empty name plays the entry's own file again and a blank one
+  stops the entry
+  ([#4215](https://github.com/openOMSI-org/openOMSI/pull/4215),
+  [#4214](https://github.com/openOMSI-org/openOMSI/pull/4214),
+  [#4242](https://github.com/openOMSI-org/openOMSI/pull/4242),
+  [#4216](https://github.com/openOMSI-org/openOMSI/pull/4216),
+  [#4240](https://github.com/openOMSI-org/openOMSI/pull/4240),
+  [#4248](https://github.com/openOMSI-org/openOMSI/pull/4248)).
+- **Sound**: `[onlyone]` sounds play once, from the nearest object; `[sound_maxcount]` (from
+  OMSI's options.cfg, 200 by default) silences whole sound packs, the farthest first, and far
+  sounds no longer restart over and over under it
+  ([#4213](https://github.com/openOMSI-org/openOMSI/pull/4213),
+  [#4239](https://github.com/openOMSI-org/openOMSI/pull/4239),
+  [#4265](https://github.com/openOMSI-org/openOMSI/pull/4265)).
+- **Passengers**: stops fill bit by bit as a scheduled bus draws near and stop filling for a bus
+  that has passed; passengers choose their entry door, pay with coins and notes drawn as
+  Omsi.exe draws them, and count the change to half the currency's unit; the cash desk's change
+  keys give the coin the script names
+  ([#4211](https://github.com/openOMSI-org/openOMSI/pull/4211),
+  [#4230](https://github.com/openOMSI-org/openOMSI/pull/4230),
+  [#4249](https://github.com/openOMSI-org/openOMSI/pull/4249),
+  [#4245](https://github.com/openOMSI-org/openOMSI/pull/4245),
+  [#4212](https://github.com/openOMSI-org/openOMSI/pull/4212),
+  [#4198](https://github.com/openOMSI-org/openOMSI/pull/4198)).
+- **Rail switches with more paths than `[switchdir]`s** (the NF6D's map): the tram takes the
+  path that goes on from where it is, instead of jumping
+  ([#4225](https://github.com/openOMSI-org/openOMSI/pull/4225)).
+- **Full Tank charges an electric bus's battery too**
+  ([#4199](https://github.com/openOMSI-org/openOMSI/pull/4199)).
+
+### Fixes
+
+- **Loading large maps on 8 GB cards**: the timetable's vehicles are preloaded only near the
+  player and within the texture budget, the first textures stay in the disk cache from start to
+  start, and after the card runs out of memory the renderer is rebuilt whole, with its shadow
+  maps, sky and clouds, instead of drawing without them for the rest of the session
+  ([#4304](https://github.com/openOMSI-org/openOMSI/pull/4304),
+  [#4305](https://github.com/openOMSI-org/openOMSI/pull/4305),
+  [#4302](https://github.com/openOMSI-org/openOMSI/pull/4302),
+  [#4318](https://github.com/openOMSI-org/openOMSI/pull/4318)).
+- **A Direct3D 12 device lost to ray tracing** no longer ends the game, and the Vulkan device the
+  game goes on with keeps its full pipelines ([#4226](https://github.com/openOMSI-org/openOMSI/pull/4226)).
+- **The launcher's settings page opens again**: a quote in one help text stopped the whole page
+  ([#4314](https://github.com/openOMSI-org/openOMSI/pull/4314)).
+- **Passenger settings work everywhere**: which doors passengers use, paying without a ticket,
+  how late the bus may be, free-drive passengers and waiting for the doors to open worked only
+  in online rooms; now also in single player, LAN and when changed in the game, with their rows
+  in the launcher. A ticket buyer whose chosen doors sell no tickets boards there instead of
+  standing at the stop for good ([#4314](https://github.com/openOMSI-org/openOMSI/pull/4314)).
+- **The IBIS** keeps its line letter when a destination is picked by hand, and is not typed twice
+  after Shift+U on a trip change
+  ([#4253](https://github.com/openOMSI-org/openOMSI/pull/4253),
+  [#4314](https://github.com/openOMSI-org/openOMSI/pull/4314)).
+- **A duty started on today's date keeps its year**
+  ([#4251](https://github.com/openOMSI-org/openOMSI/pull/4251)).
+- **Binding one controller button** no longer removes the default buttons of the others
+  ([#4162](https://github.com/openOMSI-org/openOMSI/pull/4162)).
+- **A latching switch flipped in the pause menu** takes effect when the menu closes
+  ([#4202](https://github.com/openOMSI-org/openOMSI/pull/4202)).
+- **Bus Company Simulator's `--paint`** is kept for a situation in the default paint
+  ([#4203](https://github.com/openOMSI-org/openOMSI/pull/4203)).
+- **The upscaler (DLSS, FSR) is not switched back on** after the player turned it off while it
+  waited to be tried again after running out of memory ([#4314](https://github.com/openOMSI-org/openOMSI/pull/4314)).
+- **mX Graphics have everything the standard graphics got** in this release: cruise control,
+  named saves, taking over an AI bus, the passenger and IBIS settings, plugin commands in the
+  chat, the announcements, mirrors in mirrors, other players' buses in less detail and more
+  ([#4267](https://github.com/openOMSI-org/openOMSI/pull/4267),
+  [#4314](https://github.com/openOMSI-org/openOMSI/pull/4314),
+  [#4318](https://github.com/openOMSI-org/openOMSI/pull/4318)).
+
+## 0.3.58 - 2026-11-24
+
+### New and improved
+
 - **mX Graphics twice as fast on the GPU**: in Enhanced the main pass draws most surfaces with a
   lean pipeline that leaves out the shading they do not use (films, water, LEDs, bump maps, wet or
   snowy roads in dry weather), compiled in the background, and the ground's albedo pass works
@@ -39,22 +280,11 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   ([#3593](https://github.com/openOMSI-org/openOMSI/pull/3593)).
 - **Scripts read the track**: `omsi.bus.track()`, a first step towards a rail simulation
   ([#4051](https://github.com/openOMSI-org/openOMSI/pull/4051)).
-- **Cruise control on Num0**: it holds the speed the bus has when it is switched on, by
-  working the pedals the bus's scripts read; the brake pedal or key switches it off
-  ([#4043](https://github.com/openOMSI-org/openOMSI/pull/4043)).
-- **Enhanced lighting and colour grade**: curved clouds in Vanilla, `[light_emitter_interior]`,
-  height maps for PBR materials, and inverted normal maps drawn the right way round
-  ([#4241](https://github.com/openOMSI-org/openOMSI/pull/4241)).
-- **The launcher's add-on list is read from the add-ons-list repository** each time the page
-  opens, so a new add-on shows up without a new release ([#4260](https://github.com/openOMSI-org/openOMSI/pull/4260)).
 
 ### Multiplayer
 
 - **A hosted LAN session sets the buses its players drive**
   ([#4100](https://github.com/openOMSI-org/openOMSI/pull/4100)).
-
-- **The public server list keeps its listings** when Cloudflare moves or restarts the list
-  between two heartbeats ([#4206](https://github.com/openOMSI-org/openOMSI/pull/4206)).
 
 - **Rail points lie the same way for every player**: the hosting game's points go to each
   player's game with the traffic lights (those within 600 m of its vehicle, once a second), and
@@ -68,114 +298,8 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   bogies stood off the rails or across the track in the other players' games. A game of the
   previous release still draws the first three.
 
-### As in OMSI 2
-
-What Omsi.exe does, read from the game itself, where openOMSI did something of its own:
-
-- **Weather**: `.owt` files are read with Omsi.exe's defaults and its short `[precip]` block;
-  the wind blows from its direction at Omsi.exe's angle; `PrecipRate` is the strength whatever
-  falls; the windscreen wets at Omsi.exe's rate in rain and dries in twenty seconds after it;
-  the sun stands where Omsi.exe puts it ([#4218](https://github.com/openOMSI-org/openOMSI/pull/4218), [#4231](https://github.com/openOMSI-org/openOMSI/pull/4231), [#4232](https://github.com/openOMSI-org/openOMSI/pull/4232), [#4233](https://github.com/openOMSI-org/openOMSI/pull/4233), [#4220](https://github.com/openOMSI-org/openOMSI/pull/4220), [#4217](https://github.com/openOMSI-org/openOMSI/pull/4217)).
-- **Street lamps, the AI's lights and `Envir_Brightness`** follow Omsi.exe's daylight sum
-  under the weather: under an overcast deck, in fog, rain or snow the lamps come on by day
-  ([#4219](https://github.com/openOMSI-org/openOMSI/pull/4219)).
-- **Traffic lights**: AI cars stop for red, red-and-yellow and yellow alike and go on only
-  once their front is over the line; a light without `[approachdist]` is asked from 10 m;
-  lights on rails are asked as far ahead as the path search runs; a program point on a light
-  number the crossing does not have waits on light 0; `if_request` is set by any line but
-  "0" ([#4235](https://github.com/openOMSI-org/openOMSI/pull/4235), [#4209](https://github.com/openOMSI-org/openOMSI/pull/4209), [#4246](https://github.com/openOMSI-org/openOMSI/pull/4246), [#4210](https://github.com/openOMSI-org/openOMSI/pull/4210), [#4234](https://github.com/openOMSI-org/openOMSI/pull/4234)).
-- **AI cars spawn on the lanes that run past the player**, not only on those that start near
-  ([#4200](https://github.com/openOMSI-org/openOMSI/pull/4200)).
-- **Physics**: `[mass]` is tonnes however large; the body has no air drag of its own and no
-  rolling resistance unless the file gives `[rollwiderstand]` (the scripts add both, as in
-  OMSI 2); `n_Wheel` is the mean of the driven wheels, an AI vehicle's its speed over the
-  first wheel; `Velocity` is 0 without a driven axle; AI vehicles' and coupled parts' wheels
-  turn at their own speed over their own size ([#4238](https://github.com/openOMSI-org/openOMSI/pull/4238), [#4207](https://github.com/openOMSI-org/openOMSI/pull/4207), [#4208](https://github.com/openOMSI-org/openOMSI/pull/4208), [#4237](https://github.com/openOMSI-org/openOMSI/pull/4237), [#4236](https://github.com/openOMSI-org/openOMSI/pull/4236), [#4247](https://github.com/openOMSI-org/openOMSI/pull/4247)).
-- **Scripts**: a block without `{end}` runs on into the next; a macro call finds only a
-  macro defined below it; only the first `{init}`, `{frame}` and `{frame_ai}` run;
-  `(T.F.x)` leaves the file name on the string stack, an empty name plays the entry's own
-  file again and a blank one stops the entry ([#4215](https://github.com/openOMSI-org/openOMSI/pull/4215), [#4214](https://github.com/openOMSI-org/openOMSI/pull/4214), [#4242](https://github.com/openOMSI-org/openOMSI/pull/4242), [#4216](https://github.com/openOMSI-org/openOMSI/pull/4216), [#4240](https://github.com/openOMSI-org/openOMSI/pull/4240), [#4248](https://github.com/openOMSI-org/openOMSI/pull/4248)).
-- **Sound**: `[onlyone]` sounds play once, from the nearest object; `[sound_maxcount]` (from
-  OMSI's options.cfg, 200 by default) silences whole sound packs, the farthest first
-  ([#4213](https://github.com/openOMSI-org/openOMSI/pull/4213), [#4239](https://github.com/openOMSI-org/openOMSI/pull/4239)).
-- **Passengers**: stops fill bit by bit as a scheduled bus draws near and stop filling for a
-  bus that has passed; passengers choose their entry door, pay with coins and notes drawn as
-  Omsi.exe draws them, and count the change to half the currency's unit; the cash desk's change
-  keys give the coin the script names ([#4211](https://github.com/openOMSI-org/openOMSI/pull/4211), [#4230](https://github.com/openOMSI-org/openOMSI/pull/4230), [#4249](https://github.com/openOMSI-org/openOMSI/pull/4249), [#4245](https://github.com/openOMSI-org/openOMSI/pull/4245), [#4212](https://github.com/openOMSI-org/openOMSI/pull/4212), [#4198](https://github.com/openOMSI-org/openOMSI/pull/4198)).
-- **Full Tank charges an electric bus's battery too** ([#4199](https://github.com/openOMSI-org/openOMSI/pull/4199)).
-
 ### Fixes
 
-- **Road dirt on every vehicle in sight**: the Enhanced picture lays it on 64 bodies instead
-  of the nearest 6, whole vehicles first, and a vehicle hides its own dirt overlay only while
-  the road dirt is on it: past the limit it keeps its own dirt instead of standing there
-  washed clean. An articulated bus's joint takes the dirt of both sections.
-- **`[matl_emissive]` on scenery objects**: the object's script switches, dims and tints the
-  slot, with its fade, as on a vehicle; it shone at full level whatever the variable said.
-- **mX Graphics after the card ran out of memory**: the rebuild lets go of the shadow maps,
-  the ray tracing, the sky cube and the fog first and builds once more if the shadow maps came
-  out smaller, as the standard graphics do. Other players' buses in less detail far away,
-  `--export-stop-labels` and the loading's memory log are in mX Graphics too.
-- **Standard graphics**: puddle reflections no longer shimmer on the move, no grid of diamonds
-  over the shaded parts of the clouds, and far lamps are round points of light, as in mX
-  Graphics.
-- **Chat commands**: only a line that starts with `/` and a letter or digit is a command for
-  the plugins; ` /...`, `/ ...` or `/)` are said to everybody.
-- **The launcher's graphics profiles build again** (the DLSS sharpness key made 52 of them).
-
-- **Passenger settings work outside online rooms**: which doors passengers get in through, paying
-  without a ticket, how late the bus may be, free-drive passengers and waiting for the doors to
-  open reached the passengers of an online room only; in single player, in a LAN game and after
-  changing them in the game they did nothing. They now have rows in the launcher, with the IBIS
-  stop following the duty.
-- **A ticket buyer no longer stands at the stop for good** when the chosen doors sell no tickets
-  (the rear door only on most German buses): they board at that door.
-- **The IBIS is not typed twice** after Shift+U on a trip change.
-- **The automatic announcements say why they are quiet once**, not at the start of every trip.
-- **`[light_emitter_interior]` takes the light map of the right material slot**: with a
-  `[matl]` for some slots only, the lamps came out in the wrong place or not at all.
-- **Stop labels (`--export-stop-labels`)** read trips written with the old `[station]` blocks,
-  and no longer list a line at the stop where it ends.
-- **A ground texture found in the map's folder** has its own surface sound.
-- **The upscaler is not switched back on** after the player turned it off while it was waiting
-  to be tried again after running out of graphics memory; and a renderer rebuilt once after
-  refused frames is rebuilt again an hour later instead of the device being taken for lost.
-- **mX Graphics get the changes merged for the standard graphics only**: the passenger and IBIS
-  settings, plugin commands typed in the chat (they were always answered "no plugin is
-  listening"), the automatic announcements' notes and departure timing, mirrors drawn in
-  mirrors, reflective AI bodies not drawn as glass, ground textures in the map's folder and
-  the clouds traced at the window's size under an upscaler.
-- **Other players' buses drawn in less detail** give back the graphics memory of their
-  destination displays.
-- **CI size budget passes again** (`window_wipers.rs` tests moved to their own file).
-
-- **Online play: the host knows what the others have served**: a stop another player's bus
-  has stood at and left no longer fills again for that player's trip, and the timetable's buses
-  near the other players are read ahead as the host's own are.
-- **Online play: emissive materials, rail points and taking over a bus**: the variables of
-  `[matl_emissive]` reach the other games, the host takes a thrown point only from a player
-  whose vehicle is near it, and a host can no longer take over an AI bus its session does not
-  allow (it was removed at once).
-- **Road dirt**: the vehicles you placed and left keep their dirt.
-- **mX Graphics have cruise control, named saves, taking over an AI bus and
-  `omsi.bus.track()` too**: they came only to the standard graphics
-  ([#4043](https://github.com/openOMSI-org/openOMSI/pull/4043), [#4045](https://github.com/openOMSI-org/openOMSI/pull/4045), [#4047](https://github.com/openOMSI-org/openOMSI/pull/4047), [#4051](https://github.com/openOMSI-org/openOMSI/pull/4051)).
-- **Enhanced graphics**: far lamps are round points of light instead of torn squares, the
-  shaded parts of the clouds have no grid of diamonds, bus windows are no longer grey, fences
-  and railings are lit by the sun on their facing side only, wet road reflections have no grid,
-  and rain, sky and night lighting are cleaned up ([#4259](https://github.com/openOMSI-org/openOMSI/pull/4259), [#4262](https://github.com/openOMSI-org/openOMSI/pull/4262), [#4224](https://github.com/openOMSI-org/openOMSI/pull/4224), [#4205](https://github.com/openOMSI-org/openOMSI/pull/4205), [#4192](https://github.com/openOMSI-org/openOMSI/pull/4192), [#4193](https://github.com/openOMSI-org/openOMSI/pull/4193)).
-- **A Direct3D 12 device lost to ray tracing** no longer ends the game, and the Vulkan device
-  the game goes on with keeps its full pipelines ([#4226](https://github.com/openOMSI-org/openOMSI/pull/4226)).
-- **The IBIS keeps its line letter** when a destination is picked by hand ([#4253](https://github.com/openOMSI-org/openOMSI/pull/4253)).
-- **A duty started on today's date keeps its year** ([#4251](https://github.com/openOMSI-org/openOMSI/pull/4251)).
-- **Bus Company Simulator's `--paint`** is kept for a situation in the default paint
-  ([#4203](https://github.com/openOMSI-org/openOMSI/pull/4203)).
-- **A latching switch flipped in the pause menu** takes effect when the menu closes
-  ([#4202](https://github.com/openOMSI-org/openOMSI/pull/4202)).
-- **Android**: "Copy server code" puts the code on the clipboard, and the keyboard opens for the
-  join code and the chat ([#4204](https://github.com/openOMSI-org/openOMSI/pull/4204)).
-- **Far sounds no longer stutter**: with more sounds around than `[sound_maxcount]` allows,
-  distant cars started their loops over several times a second, a mush of repeats.
 - **mX Graphics on OpenGL (ANGLE on macOS)**: blending works again - the interface's text and
   icons drew as transparent boxes, smoke and LED layers were wrong - and textures with mip maps
   made on the GPU are no longer black at a distance.

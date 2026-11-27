@@ -123,14 +123,29 @@ impl InProcess {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(id, tx);
-        self.tx
+        if self
+            .tx
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .send(req)
-            .map_err(|_| "the preview service ended".to_string())?;
-        let (head, body) = rx
-            .recv_timeout(wait)
-            .map_err(|_| "the preview service did not answer".to_string())?;
+            .is_err()
+        {
+            self.waiting
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+            return Err("the preview service ended".to_string());
+        }
+        let answer = rx.recv_timeout(wait);
+        if answer.is_err() {
+            // A request can expire while the shared renderer is still loading a bus.
+            // Its result will be discarded when it arrives, not retained in the table.
+            self.waiting
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
+        }
+        let (head, body) = answer.map_err(|_| "the preview service did not answer".to_string())?;
         if head.get("ok").and_then(Value::as_bool) == Some(false) {
             return Err(head
                 .get("error")
@@ -378,6 +393,30 @@ fn serve(rx: std::sync::mpsc::Receiver<Value>, reply: Reply) {
 /// in 1/4096, width in metres and in pixels in 1/256, all `i16`, then the colour). The page
 /// widens each by its extrusion times the larger of the two widths, as the game's shader does.
 /// A flat triangle smaller than half a pixel is left out: the picture is the same.
+/// Walk complete triangles over the three map layers without allocating a second
+/// vector of vertex references and a third vector of retained triangles.
+/// The iterator deliberately crosses layer boundaries, just as the previous chain did.
+fn for_map_triangles<'a>(
+    mut vertices: impl Iterator<Item = &'a omsi_ui::Vertex>,
+    mpp: f64,
+    mut visit: impl FnMut(bool, [&'a omsi_ui::Vertex; 3]),
+) {
+    while let Some(a) = vertices.next() {
+        let (Some(b), Some(c)) = (vertices.next(), vertices.next()) else {
+            break;
+        };
+        let tri = [a, b, c];
+        let wide = tri.iter().any(|v| v.ext != [0.0, 0.0]);
+        let span = |i: usize| {
+            tri.iter().map(|v| v.pos[i]).fold(f32::MIN, f32::max)
+                - tri.iter().map(|v| v.pos[i]).fold(f32::MAX, f32::min)
+        };
+        if wide || span(0).max(span(1)) as f64 >= mpp * 0.5 {
+            visit(wide, tri);
+        }
+    }
+}
+
 fn map_ground(
     map: &str,
     global: &std::path::Path,
@@ -421,22 +460,15 @@ fn map_ground(
     };
     // (the houses' standing walls and roofs, then the flat roofs; their shadows only fall
     // where the map is tilted, which this one never is)
-    let verts: Vec<&omsi_ui::Vertex> = ground_v.iter().chain(solid).chain(flat).collect();
-    let tris: Vec<(bool, &[&omsi_ui::Vertex])> = verts
-        .chunks_exact(3)
-        .filter_map(|t| {
-            let wide = t.iter().any(|v| v.ext != [0.0, 0.0]);
-            let span = |i: usize| {
-                t.iter().map(|v| v.pos[i]).fold(f32::MIN, f32::max)
-                    - t.iter().map(|v| v.pos[i]).fold(f32::MAX, f32::min)
-            };
-            (wide || span(0).max(span(1)) as f64 >= mpp * 0.5).then_some((wide, t))
-        })
-        .collect();
-    let far = tris
-        .iter()
-        .flat_map(|(_, t)| t.iter())
-        .fold(1.0f32, |m, v| m.max(v.pos[0].abs()).max(v.pos[1].abs()));
+    // The city-map preview can contain millions of vertices. Avoid temporarily
+    // retaining every vertex reference and every triangle on top of its real mesh.
+    // Two bounded passes preserve the original filtering and vertex order.
+    let mut far = 1.0f32;
+    for_map_triangles(ground_v.iter().chain(solid).chain(flat), mpp, |_, t| {
+        for v in t {
+            far = far.max(v.pos[0].abs()).max(v.pos[1].abs());
+        }
+    });
     let step = far / 32000.0;
     let mut runs: Vec<(bool, usize)> = Vec::new();
     let (mut flats, mut wides) = (Vec::new(), Vec::new());
@@ -445,21 +477,21 @@ fn map_ground(
             out.extend_from_slice(&(x.round().clamp(-32767.0, 32767.0) as i16).to_le_bytes())
         })
     };
-    for (wide, t) in &tris {
+    for_map_triangles(ground_v.iter().chain(solid).chain(flat), mpp, |wide, t| {
         match runs.last_mut() {
-            Some((w, n)) if w == wide => *n += 3,
-            _ => runs.push((*wide, 3)),
+            Some((w, n)) if *w == wide => *n += 3,
+            _ => runs.push((wide, 3)),
         }
-        for v in t.iter() {
-            let out = if *wide { &mut wides } else { &mut flats };
+        for v in t {
+            let out = if wide { &mut wides } else { &mut flats };
             i16s(out, [v.pos[0] / step, v.pos[1] / step]);
-            if *wide {
+            if wide {
                 i16s(out, [v.ext[0] * 4096.0, v.ext[1] * 4096.0]);
                 i16s(out, [v.width[0] * 256.0, v.width[1] * 256.0]);
             }
             out.extend(v.color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8));
         }
-    }
+    });
     let head = json!({
         "anchor": [b.anchor.x - origin.x, b.anchor.y - origin.y],
         "step": step,

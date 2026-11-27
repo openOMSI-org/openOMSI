@@ -39,6 +39,9 @@ export function BusPreview({ look, class: cls = '' }) {
   };
 
   useEffect(() => {
+    // Defer the heavy GPU helper until the preview is actually mounted.
+    // Browsing maps, add-ons or settings must not reserve its renderer upfront.
+    call('preview_warm').catch(() => {});
     const st = r.current;
     st.alive = true;
     let lastFrame = 0;

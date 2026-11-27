@@ -453,6 +453,7 @@ impl TrafficSim {
 
 pub fn mirror_light_tick(ctl: &mut TrafficLightController, dt: f32, day_time: f64) {
     ctl.request.fill(false);
+    ctl.select_time_program(day_time);
     ctl.start(day_time);
     if !ctl.held {
         ctl.time = (ctl.time + dt.max(0.0) as f64).rem_euclid(ctl.cycle_len());
@@ -475,6 +476,11 @@ pub fn reset_light_runtime(ctl: &mut TrafficLightController, day_time: f64) {
     fresh.offset = ctl.offset;
     fresh.approach = ctl.approach.clone();
     fresh.stops = ctl.stops.clone();
+    // The other programs of the day and the one it was running stay; the clock is seeded
+    // from the time of day again, as `start` does.
+    fresh.base = ctl.base.clone();
+    fresh.times = ctl.times.clone();
+    fresh.running = ctl.running;
     fresh.start(ctl.time - ctl.offset as f64);
     *ctl = fresh;
 }

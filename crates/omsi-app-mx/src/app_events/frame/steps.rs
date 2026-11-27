@@ -603,7 +603,11 @@ pub(crate) fn throw_spray(
                 .map(|(id, r)| (puddles::REMOTE_KEY | *id as u64, r.vehicle())),
         );
     }
-    spray.frame(dt, &vehicles, eye, wind, &|x, y| {
+    spray.frame(dt, &vehicles, eye, wind, &|x, y, z| {
+        // (none under a bridge or a canopy: Enhanced draws the road dry there)
+        if world.roofed_at(x, y, z) {
+            return puddles::Water::default();
+        }
         puddles::water_at(x, y, world.wet_road_at(x, y, wetness))
     });
 }

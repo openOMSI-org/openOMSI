@@ -3,6 +3,8 @@
 
 use crate::*;
 
+mod transient;
+
 /// One single-sampled full-screen pass.
 pub(crate) fn post_pass(
     encoder: &mut wgpu::CommandEncoder,
@@ -1305,20 +1307,22 @@ impl Renderer {
         lighting: &Lighting,
         rig: Option<&TripleScreen>,
     ) -> Result<Vec<u8>> {
-        let tex = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("offscreen"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
+        let tex = self
+            .try_create_transient_texture(&wgpu::TextureDescriptor {
+                label: Some("offscreen"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+            .context("offscreen image target could not be allocated on the GPU")?;
         let view = tex.create_view(&Default::default());
         // a picture on its own: the enhanced exposure is where the light puts it at once
         self.instant_exposure = true;
@@ -1355,12 +1359,14 @@ impl Renderer {
                 .block_copy_size(Some(aspect))
                 .context("unsupported readback format")?;
         let bpr = row_bytes.div_ceil(256) * 256;
-        let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback"),
-            size: (bpr * height) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let buf = self
+            .try_create_transient_buffer(&wgpu::BufferDescriptor {
+                label: Some("readback"),
+                size: (bpr * height) as u64,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            })
+            .context("image readback buffer could not be allocated on the GPU")?;
         let mut enc = self.device.create_command_encoder(&Default::default());
         enc.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {

@@ -43,9 +43,10 @@ pub(crate) const CUBE_FACES: [Vec3; 6] = [
 ];
 /// The shadow casters' lists of a frame: the near, far and close cascades, then one per
 /// tile (each lamp's own: an embedded source leaves its own fixture out), and last the
-/// precipitation's roof map (`passes::precip_map`).
-pub(crate) const SHADOW_LISTS: usize = 4 + LAMP_SHADOWS;
+/// precipitation's roof map (`passes::precip_map`) and Enhanced's dry map.
+pub(crate) const SHADOW_LISTS: usize = 5 + LAMP_SHADOWS;
 pub(crate) const PRECIP_LIST: usize = 3 + LAMP_SHADOWS;
+pub(crate) const DRY_LIST: usize = 4 + LAMP_SHADOWS;
 /// How a lamp tile's draw list names an entry: the entry's number in the low `LAMP_ENTRY_BITS`
 /// bits, the tile above them (the one vertex shader of the lamps' maps, `vs_shadow_lamp`,
 /// reads which matrix to draw by from there).

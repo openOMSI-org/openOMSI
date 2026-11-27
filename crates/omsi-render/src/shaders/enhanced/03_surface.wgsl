@@ -30,6 +30,27 @@ const GI_CAB_SHARE: f32 = 0.15;
 // How far the puddle threshold drops with the wetness: see the puddle mask in `shade_enhanced`.
 const PUDDLE_SPREAD: f32 = 0.37;
 
+// The water in the lanes' wheel tracks (`lane_ruts`: 0..1, how worn the road is there),
+// on a road `wet` (0..1): x the cover of the water standing in the ruts, y how far the
+// tyres have dried the wheel paths. A road soaked through holds a broken line of water in
+// each rut (the traffic has worn them a few millimetres deep), which the tyres run through
+// and throw up; as it dries, the wheels' paths dry first, lighter strips down each lane
+// before the rest of the road. The same as `rut_water` in omsi-scene's puddles.rs (the
+// spray), which keeps the numbers in step.
+fn rut_water(world: vec3<f32>, ruts: f32, wet: f32) -> vec2<f32> {
+    let breaks = vnoise_f(world_pattern_xy(world), 0.9, vec2<f32>(5.3, -2.2));
+    let level = ruts * smoothstep(0.75, 0.95, wet) * (0.7 + 0.6 * breaks);
+    return vec2<f32>(smoothstep(0.45, 0.55, level), ruts * (1.0 - smoothstep(0.6, 0.85, wet)));
+}
+
+// How far the rain is kept off the ground at `world` (0 open sky .. 1 under a roof). The
+// mX renderer reads its dry map here (omsi-render-mx enhanced/03_surface.wgsl); this one has
+// no texture unit left for it in the camera group (sixteen with the materials', see
+// `camera_layout_entries`), so the ground is out in the weather as before.
+fn roof_dry(world: vec3<f32>) -> f32 {
+    return 0.0;
+}
+
 /// The mip level a pixel's footprint asks for, in levels of the texture whose size is
 /// `texels` (the usual `log2` of the larger derivative, held at 0 and up). An LED panel is
 /// sampled with this, held at `enh.led.y` (`Lighting::led_mips`): 0 point-samples it, which

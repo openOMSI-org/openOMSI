@@ -70,12 +70,20 @@ struct PaneBase {
 };
 
 fn pane_base(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, outside_in: bool) -> PaneBase {
+    return pane_base_d(world, local, n, outside_in, dpdx(world), dpdy(world), dpdx(local), dpdy(local));
+}
+
+// `pane_base` with the positions' screen derivatives taken by the caller (`dwx`, `dwy` of the
+// world position, `dlx`, `dly` of the vehicle's own), where the pixel may be in a branch of
+// its own: there a derivative has no meaning, and taken there it brought Apple's M4 shader
+// compiler service down (`body_water`).
+fn pane_base_d(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, outside_in: bool, dwx: vec3<f32>, dwy: vec3<f32>, dlx: vec3<f32>, dly: vec3<f32>) -> PaneBase {
     var b: PaneBase;
     b.l = local;
-    b.dlx = dpdx(local);
-    b.dly = dpdy(local);
-    b.dwx = dpdx(world);
-    b.dwy = dpdy(world);
+    b.dlx = dlx;
+    b.dly = dly;
+    b.dwx = dwx;
+    b.dwy = dwy;
     // the film faces the eye unless the eye is in the bus behind it (the triangle's own
     // normal: a film mesh's vertex normals are not to be relied on, many have none, and
     // the drops' size followed their noise)
@@ -673,3 +681,67 @@ fn pane_rain_compose(g: GlassWater, rgb: vec3<f32>, a: f32, vn: vec3<f32>, refl:
     return vec4<f32>(c, a2);
 }
 
+
+// The rain on a vehicle (Enhanced, `shade_enhanced`): the drops a waxed paint beads the
+// water into - the glass's own (`glass_bead`), laid out the same way on the body
+// (`pane_proj`), with fewer layers than a pane's: the paint's film is smooth already, the
+// drops only break its mirror into points of light. (No runners: with `glass_runners` as
+// well the lean pipelines' code brought Apple's M4 shader compiler service down.) On an outside mirror the
+// same drops bend the picture it shows (`mirror_bend`). `wet` 0..1; `dw` and `dl` the
+// world's and the vehicle's positions' screen derivatives in x and y, taken where every
+// pixel of the draw takes them (in a branch of the pixel's own they brought Apple's M4
+// shader compiler service down, as did a second copy of this code in the same pipeline).
+struct VehicleDrops {
+    // the water's normal (world) and the surface's, on the eye's side
+    n: vec3<f32>,
+    out: vec3<f32>,
+    // how much of the pixel a drop covers, and how far out on it the pixel lies
+    cover: f32,
+    rim: f32,
+};
+
+fn vehicle_drops(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, wet: f32, t: f32, dw: mat2x3<f32>, dl: mat2x3<f32>) -> VehicleDrops {
+    let b = pane_base_d(world, local, n, false, dw[0], dw[1], dl[0], dl[1]);
+    var out = VehicleDrops(b.out, b.out, 0.0, 0.0);
+    if (!b.ok || wet <= 0.01) {
+        return out;
+    }
+    let an = abs(b.nl);
+    let roof = an.z > max(an.x, an.y) * 2.0;
+    let axis = select(select(1, 0, an.y > an.x), 2, roof);
+    let p = pane_proj(b, axis);
+    var acc: DropAcc;
+    acc.cover = 0.0;
+    acc.slope = vec2<f32>(0.0);
+    acc.rim = 0.0;
+    acc.size_px = 0.0;
+    acc.track = 0.0;
+    acc.avg = 0.0;
+    // (the paint holds bigger beads than glass, fewer of them: a polished body's water
+    // contracts into round drops)
+    let room = 1.0;
+    glass_bead(&acc, p, 1.0, 0.0125, 0.55 * smoothstep(0.03, 0.35, wet) * room, 0.0018, 1.0, t, b.px_area);
+    glass_bead(&acc, p, 3.0, 0.026, 0.4 * smoothstep(0.25, 0.85, wet) * room, 0.0036, 1.0, t, b.px_area);
+    let slope = acc.slope;
+    let nz = sqrt(max(1.0 - dot(slope, slope), 0.02));
+    out.n = normalize(b.out * nz + p.side_w * slope.x + p.down_w * slope.y);
+    out.cover = clamp(acc.cover + acc.avg * 0.5, 0.0, 1.0);
+    out.rim = acc.rim;
+    return out;
+}
+
+// Where an outside mirror's picture is read under its drops (`vehicle_drops`): a drop's
+// dome tilts the view through it, some 3 cm across the glass for a slope of one against the
+// mirror's 20 cm or so - the picture inside it is the street turned over and drawn small.
+// `duv` the picture's coordinates' screen derivatives in x and y, `dw` the world position's.
+fn mirror_bend(uv: vec2<f32>, duv: mat2x2<f32>, dw: mat2x3<f32>, d: VehicleDrops) -> vec2<f32> {
+    let det = duv[0].x * duv[1].y - duv[0].y * duv[1].x;
+    if (d.cover <= 0.0 || abs(det) < 1e-14) {
+        return uv;
+    }
+    let dw_du = (dw[0] * duv[1].y - dw[1] * duv[0].y) / det;
+    let dw_dv = (dw[1] * duv[0].x - dw[0] * duv[1].x) / det;
+    let tilt = (d.n - d.out) * 0.03;
+    let shift = vec2<f32>(dot(tilt, dw_du) / max(dot(dw_du, dw_du), 1e-12), dot(tilt, dw_dv) / max(dot(dw_dv, dw_dv), 1e-12));
+    return uv - shift * d.cover;
+}

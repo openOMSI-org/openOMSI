@@ -784,6 +784,9 @@ impl Renderer {
         if let Some(m) = sh.precip {
             self.write_precip_camera(&cu, m);
         }
+        if let Some((m, mid)) = sh.dry {
+            self.write_dry_camera(&cu, m, mid);
+        }
         if rt_frame {
             let proj = Mat4::perspective_rh(
                 camera.fov_deg.to_radians(),

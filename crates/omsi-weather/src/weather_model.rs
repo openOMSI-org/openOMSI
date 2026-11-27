@@ -58,7 +58,7 @@ pub struct WeatherModel {
     year_seed: u32,
     /// Leapness of the year
     is_leap: bool,
-    latitude: f32,
+    lat_deg: f32,
     /// Air temperature at 2 m (°C).
     pub temp: f32,
     /// Specific humidity at 2 m (g/kg).
@@ -128,8 +128,8 @@ pub struct ModelSky {
 pub struct ModelRun {
     model: WeatherModel,
     year: i32,
-    latitude: f64,
-    longitude: f64,
+    lat_deg: f64,
+    lon_deg: f64,
     climate_stats: Option<ClimateStats>,
     /// The clock time (s of the day, day of the year) the model stands at.
     at: (i32, f64),
@@ -166,8 +166,8 @@ impl ModelRun {
             ModelRun {
                 model,
                 year: clock.year,
-                latitude: place.latitude,
-                longitude: place.longitude,
+                lat_deg: place.lat_deg,
+                lon_deg: place.lon_deg,
                 at: (clock.day_of_year, clock.time),
                 climate_stats: climate_stats.clone(),
             },
@@ -182,13 +182,13 @@ impl ModelRun {
         let s = self;
         let place = omsi_sim::daylight::place();
         let elapsed = (clock.day_of_year - s.at.0) as f64 * 86_400.0 + (clock.time - s.at.1);
-        let moved = (place.latitude - s.latitude).abs() > 0.01
-            || (place.longitude - s.longitude).abs() > 0.01;
+        let moved =
+            (place.lat_deg - s.lat_deg).abs() > 0.01 || (place.lon_deg - s.lon_deg).abs() > 0.01;
         if moved || clock.year != s.year || !(0.0..=86_400.0).contains(&elapsed) {
             s.model = WeatherModel::new(clock, &place, &s.climate_stats);
             s.year = clock.year;
-            s.latitude = place.latitude;
-            s.longitude = place.longitude;
+            s.lat_deg = place.lat_deg;
+            s.lon_deg = place.lon_deg;
         } else if elapsed > 0.0 {
             s.model.step(clock.year, &place, (elapsed / 3600.0) as f32);
         }
@@ -234,8 +234,8 @@ fn dew_point(q: f32) -> f32 {
 }
 
 /// The season: 0 in midwinter, 1 in high summer (half a year later south of the equator).
-fn summer(day_of_year: f32, latitude: f32) -> f32 {
-    let doy = day_of_year + if latitude < 0.0 { 182.0 } else { 0.0 };
+fn summer(day_of_year: f32, lat_deg: f32) -> f32 {
+    let doy = day_of_year + if lat_deg < 0.0 { 182.0 } else { 0.0 };
     0.5 - 0.5 * (2.0 * std::f32::consts::PI * (doy - 20.0) / 365.0).cos()
 }
 
@@ -249,7 +249,7 @@ fn sun_at(year: i32, hours: f64, place: &omsi_sim::daylight::SunPlace) -> (f32, 
     // displayed sun follows OMSI compatibility rules, including a seasonal shift in noon.
     let decl = 23.44_f64.to_radians() * (std::f64::consts::TAU * (284.0 + doy) / 365.0).sin();
     let hour_angle = (15.0 * (solar - 12.0)).to_radians();
-    let lat = place.latitude.to_radians();
+    let lat = place.lat_deg.to_radians();
     let sin_alt = lat.sin() * decl.sin() + lat.cos() * decl.cos() * hour_angle.cos();
     (
         doy as f32,
@@ -334,10 +334,10 @@ impl WeatherModel {
     fn default_climate_temp(&self, doy: f32) -> f32 {
         // (27 °C at the equator, 10 at Berlin's 52.5°, -3 at 70°; the seasons' swing grows
         // towards the poles)
-        let lat = self.latitude.abs();
+        let lat = self.lat_deg.abs();
         let mean = 27.0 - 0.0062 * lat * lat;
         let amp = (0.18 * lat).clamp(1.0, 14.0);
-        mean + amp * (summer(doy, self.latitude) * 2.0 - 1.0)
+        mean + amp * (summer(doy, self.lat_deg) * 2.0 - 1.0)
     }
 
     /// A model for the clock at `place`, spun up over the three weeks before it so that what
@@ -355,7 +355,7 @@ impl WeatherModel {
         let mut m = WeatherModel {
             hours: hours - SPIN_UP_HOURS,
             year_seed,
-            latitude: place.latitude as f32,
+            lat_deg: place.lat_deg as f32,
             is_leap,
             temp: 10.0,
             q: 6.0,
@@ -398,7 +398,7 @@ impl WeatherModel {
 
     fn step_once(&mut self, year: i32, place: &omsi_sim::daylight::SunPlace, dt: f32) {
         let (doy, alt) = sun_at(year, self.hours, place);
-        let s = summer(doy, self.latitude);
+        let s = summer(doy, self.lat_deg);
         let (p, dp) = self.synoptic(self.hours, s);
         let lift = self.lift(self.hours, s);
         let wind = 2.0 + 0.55 * dp.abs() + 0.12 * p.abs();
@@ -877,8 +877,8 @@ mod run_tests {
             self.session = Some((
                 model,
                 clock.year,
-                place.latitude,
-                place.longitude,
+                place.lat_deg,
+                place.lon_deg,
                 (clock.day_of_year, clock.time),
             ));
             w
@@ -893,12 +893,12 @@ mod run_tests {
             let s = self.session.as_mut()?;
             let place = place();
             let elapsed = (clock.day_of_year - s.4.0) as f64 * 86_400.0 + (clock.time - s.4.1);
-            let moved = (place.latitude - s.2).abs() > 0.01 || (place.longitude - s.3).abs() > 0.01;
+            let moved = (place.lat_deg - s.2).abs() > 0.01 || (place.lon_deg - s.3).abs() > 0.01;
             if moved || clock.year != s.1 || !(0.0..=86_400.0).contains(&elapsed) {
                 s.0 = WeatherModel::new(clock, &place, &None);
                 s.1 = clock.year;
-                s.2 = place.latitude;
-                s.3 = place.longitude;
+                s.2 = place.lat_deg;
+                s.3 = place.lon_deg;
             } else if elapsed > 0.0 {
                 s.0.step(clock.year, &place, (elapsed / 3600.0) as f32);
             }
@@ -915,8 +915,8 @@ mod run_tests {
     fn a_run_steps_as_the_session_statics_did() {
         let berlin = SunPlace::default();
         let elsewhere = SunPlace {
-            latitude: 50.7,
-            longitude: -3.5,
+            lat_deg: 50.7,
+            lon_deg: -3.5,
             ..SunPlace::default()
         };
         set_place(berlin.clone());

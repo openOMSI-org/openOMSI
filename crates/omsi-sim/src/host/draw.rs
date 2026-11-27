@@ -3,31 +3,64 @@
 
 use super::*;
 
-/// `STLoadTex`: a destination display loads its bitmap every time it changes, in every bus
-/// of the fleet - read from the disk (or an archive) in the frame each time. The pictures
-/// are kept (up to 64 MB of them), the misses too.
-fn st_load(path: &std::path::Path) -> Result<Arc<crate::image_decode::DecodedImage>, String> {
-    type Cache = Mutex<(
-        std::collections::HashMap<
-            std::path::PathBuf,
-            Result<Arc<crate::image_decode::DecodedImage>, String>,
-        >,
-        usize,
-    )>;
-    static CACHE: std::sync::OnceLock<Cache> = std::sync::OnceLock::new();
+/// `STLoadTex`: retain the most recently used destination bitmaps rather than
+/// clearing every cached image when a bus changes its display.
+type STImage = Result<Arc<crate::image_decode::DecodedImage>, String>;
+const ST_CACHE_BYTES: usize = 64 << 20;
+const ST_CACHE_ENTRIES: usize = 512;
+
+#[derive(Default)]
+struct STCache {
+    map: std::collections::HashMap<std::path::PathBuf, (STImage, u64)>,
+    bytes: usize,
+    clock: u64,
+}
+
+impl STCache {
+    fn get(&mut self, path: &std::path::Path) -> Option<STImage> {
+        self.clock = self.clock.wrapping_add(1);
+        let (image, used) = self.map.get_mut(path)?;
+        *used = self.clock;
+        Some(image.clone())
+    }
+
+    fn insert(&mut self, path: std::path::PathBuf, image: STImage) {
+        let bytes = image.as_ref().map_or(0, |i| i.rgba.len());
+        // A single oversized image may be drawn but must not displace the cache.
+        if bytes > ST_CACHE_BYTES {
+            return;
+        }
+        self.clock = self.clock.wrapping_add(1);
+        if let Some((previous, _)) = self.map.insert(path, (image, self.clock)) {
+            self.bytes = self
+                .bytes
+                .saturating_sub(previous.as_ref().map_or(0, |i| i.rgba.len()));
+        }
+        self.bytes = self.bytes.saturating_add(bytes);
+        while self.bytes > ST_CACHE_BYTES || self.map.len() > ST_CACHE_ENTRIES {
+            let oldest = self
+                .map
+                .iter()
+                .min_by_key(|(_, (_, used))| *used)
+                .map(|(path, _)| path.clone());
+            let Some(oldest) = oldest else { break };
+            if let Some((previous, _)) = self.map.remove(&oldest) {
+                self.bytes = self
+                    .bytes
+                    .saturating_sub(previous.as_ref().map_or(0, |i| i.rgba.len()));
+            }
+        }
+    }
+}
+
+fn st_load(path: &std::path::Path) -> STImage {
+    static CACHE: std::sync::OnceLock<Mutex<STCache>> = std::sync::OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
-    if let Some(hit) = cache.lock().0.get(path) {
-        return hit.clone();
+    if let Some(hit) = cache.lock().get(path) {
+        return hit;
     }
     let got = crate::image_decode::decode(path).map(Arc::new);
-    let mut c = cache.lock();
-    let bytes = got.as_ref().map(|i| i.rgba.len()).unwrap_or(0);
-    if c.1 + bytes > 64 << 20 {
-        c.0.clear();
-        c.1 = 0;
-    }
-    c.1 += bytes;
-    c.0.insert(path.to_path_buf(), got.clone());
+    cache.lock().insert(path.to_path_buf(), got.clone());
     got
 }
 
@@ -286,5 +319,28 @@ impl VehicleHost {
             }
             _ => unreachable!("not a drawing callback: {cb:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod script_texture_cache_tests {
+    use super::*;
+
+    #[test]
+    fn missing_script_pictures_have_bounded_lru_cache() {
+        let mut cache = STCache::default();
+        for n in 0..ST_CACHE_ENTRIES {
+            cache.insert(
+                std::path::PathBuf::from(format!("missing-{n}")),
+                Err("missing".into()),
+            );
+        }
+        let first = std::path::Path::new("missing-0");
+        assert!(cache.get(first).is_some());
+        cache.insert("new-entry".into(), Err("missing".into()));
+        assert!(cache.get(first).is_some());
+        assert!(cache.get(std::path::Path::new("missing-1")).is_none());
+        assert_eq!(cache.map.len(), ST_CACHE_ENTRIES);
+        assert_eq!(cache.bytes, 0);
     }
 }

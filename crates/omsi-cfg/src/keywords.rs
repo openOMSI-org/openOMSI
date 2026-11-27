@@ -409,6 +409,7 @@ pub(crate) const LOWER_CASE: &[&str] = &[
     "traffic_light",
     "traffic_light_jump",
     "traffic_light_stop",
+    "traffic_light_time",
     "traffic_lights_group",
     "trafficdensity",
     "trafficdensity_passenger",

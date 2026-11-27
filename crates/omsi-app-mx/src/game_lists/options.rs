@@ -634,6 +634,7 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
         "vr" => s.vr,
         "vr_desktop_mirror" => s.vr_desktop_mirror,
         "doppler" => s.doppler,
+        "audio_surround" => s.audio_surround,
         "steering_linear" => s.steering_linear,
         "pad_steer_linear" => s.pad_steer_linear,
         "pad_buttons" => s.pad_buttons,
@@ -1149,6 +1150,10 @@ fn toggle_set_graphics_and_controls(
         "doppler" => {
             app.settings.doppler = on;
             Some(("doppler", bit))
+        }
+        "audio_surround" => {
+            app.settings.audio_surround = on;
+            Some(("audio_surround", bit))
         }
         "steering_linear" => {
             app.settings.steering_linear = on;

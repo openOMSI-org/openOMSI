@@ -395,7 +395,7 @@ fn start_administration(cfg: &ServerCfg, path: &Path) {
     let web = omsi_admin::WebCfg {
         mode: cfg.admin_web,
         origins: cfg.admin_web_origins.clone(),
-        trusted_proxies: cfg.admin_trusted_proxies.clone(),
+        forwarding_proxies: cfg.admin_forwarding_proxies.clone(),
         proxy_header: cfg.admin_proxy_header,
         traffic_max: crate::game_lists::TRAFFIC_MAX,
     };
@@ -412,7 +412,7 @@ fn start_administration(cfg: &ServerCfg, path: &Path) {
         (omsi_admin::WebMode::Remote, true) => log::warn!(
             "server: web administration at http://127.0.0.1:{}/admin/ and over HTTPS through {:?}{}",
             cfg.web_port,
-            web.trusted_proxies,
+            web.forwarding_proxies,
             if cfg.tunnel {
                 " - with the public tunnel too: only the passwords guard it"
             } else {

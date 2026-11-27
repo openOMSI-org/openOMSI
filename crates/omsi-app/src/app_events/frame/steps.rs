@@ -80,6 +80,17 @@ pub(crate) fn traffic_tick(
     0.0
 }
 
+/// The blind spot the traffic sees around the player's bus, written into the bus's scripts
+/// (#2090): `BSM_Left`, `BSM_Right` and `BSM_Rear` turn 1 while there is a car beside or
+/// behind, and their `_Dist` give the gap in metres. Measured from the AI traffic's own
+/// bodies (`omsi_sim::ai_traffic::blind_spot`), so it costs one pass over the cars near the
+/// bus. A vehicle whose `[varlist]` declares none of the six is left exactly as it was.
+pub(crate) fn blind_spot(t: &traffic::Traffic, player: Option<&mut Player>) {
+    let Some(p) = player else { return };
+    let spot = t.sim.blind_spot(player_outline(p));
+    p.vehicle.apply_blind_spot(spot);
+}
+
 /// The AI vehicles round the player's bus that it collides with (none with `collide` off:
 /// the options' [no_collision_vehToVeh], the bus drives through the traffic).
 pub(crate) fn traffic_boxes(t: &traffic::Traffic, player: Option<&mut Player>, collide: bool) {
@@ -447,7 +458,7 @@ pub(crate) fn duty_step(
     game_clock: Option<&omsi_sim::SimClock>,
     learn_loaded: bool,
     plugin_events: Option<&mut Vec<omsi_plugin::GameEvent>>,
-    announce: bool,
+    announce: omsi_sim::timetable_run::announce::Policy,
 ) -> Option<String> {
     if let Some(stop) = p.html_next_stop.take() {
         if d.skip_to(stop) {
@@ -461,13 +472,14 @@ pub(crate) fn duty_step(
     let due = (d.trip_index, d.next_stop);
     let served = d.update(&mut p.vehicle, time);
     // (the depot file's second recording of each stop, for the maps that keep two: a stock
-    // IBIS steps on by itself only when a stop is left - see `auto_announce`)
+    // IBIS steps on by itself only when a stop is left - see `auto_announce`; which of the
+    // three a city announces is the options' (#4033))
     let mut note = None;
-    if announce {
+    if announce.any() {
         // (seconds of play, not the time of day: a night line runs past midnight, and a
         // clock that wraps would hold every press back until the same time the next day)
         let run = game_clock.unwrap_or(&p.vehicle.host.clock).run_time;
-        p.announce.step(d, &mut p.vehicle, run);
+        p.announce.step(d, &mut p.vehicle, run, announce);
         // (#3281) where the game cannot announce, it says so once a trip rather than leaving the
         // player to guess
         if let Some(reason) = p.announce.take_note() {
@@ -603,7 +615,11 @@ pub(crate) fn throw_spray(
                 .map(|(id, r)| (puddles::REMOTE_KEY | *id as u64, r.vehicle())),
         );
     }
-    spray.frame(dt, &vehicles, eye, wind, &|x, y| {
+    spray.frame(dt, &vehicles, eye, wind, &|x, y, z| {
+        // (none under a bridge or a canopy: Enhanced draws the road dry there)
+        if world.roofed_at(x, y, z) {
+            return puddles::Water::default();
+        }
         puddles::water_at(x, y, world.wet_road_at(x, y, wetness))
     });
 }

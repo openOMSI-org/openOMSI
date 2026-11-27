@@ -13,6 +13,51 @@ pub(crate) use vehicle::CookieFades;
 pub use vehicle::vehicle_lights;
 use vehicle::{cars_with_beams, push_classic_spot, push_enhanced_spot};
 
+/// How near the eye must be to a lamp before its glare is kept outside the authored
+/// visibility cone (m). A signal faces along the road; driving up beneath it puts the eye
+/// well below that cone although the lit lens is plainly in sight (#3795). Past this
+/// distance the cone is left exactly as the model declares it.
+const NEAR_GLOW_DIST: f32 = 15.0;
+/// The share of a nearby lamp's brightness kept at the edge of its authored cone, falling
+/// linearly to none at [`NEAR_GLOW_DIST`]. Enough to see the lens glow, not enough to turn a
+/// signal into a point light lighting the road behind it.
+const NEAR_GLOW_FLOOR: f32 = 0.35;
+/// Never keep a lamp's glow from more than this far round the side of its face (degrees).
+/// The glare of a lens can be seen from an awkward angle close to; the back of a housing
+/// cannot.
+const NEAR_GLOW_MAX_ANGLE: f32 = 100.0;
+
+/// Widen a directed lamp's visibility cone just enough that its own glare stays visible
+/// when the eye is near but outside the angle its model declares. The shader takes the
+/// cone's brightness as `(outer - angle) / (outer - inner)`; solving that for the wanted
+/// floor gives the outer angle written back here. Fog cones and halos keep their own
+/// angles, as do omnidirectional lamps and every lamp beyond the near range.
+pub(crate) fn keep_near_glow_visible(c: &mut Corona, eye: DVec3) {
+    if c.beam || c.halo || c.direction.length_squared() < 0.5 || !(c.cone_cos > -1.0) {
+        return;
+    }
+    let to_eye = eye - c.position;
+    let dist = to_eye.length();
+    if !(dist > 0.0 && dist < NEAR_GLOW_DIST as f64) {
+        return;
+    }
+    let dir = c.direction.normalize_or_zero();
+    let cos = (dir.as_dvec3().dot(to_eye) / dist).clamp(-1.0, 1.0) as f32;
+    let angle = cos.acos();
+    let max = NEAR_GLOW_MAX_ANGLE.to_radians();
+    if !(angle > c.cone_cos.clamp(-1.0, 1.0).acos() && angle < max) {
+        return;
+    }
+    let inner = if c.inner_cos >= -1.0 {
+        c.inner_cos.clamp(-1.0, 1.0).acos()
+    } else {
+        0.0
+    };
+    let floor = NEAR_GLOW_FLOOR * (1.0 - dist as f32 / NEAR_GLOW_DIST);
+    let outer = ((angle - floor * inner) / (1.0 - floor)).min(max);
+    c.cone_cos = outer.cos();
+}
+
 /// Lighting parameters for the renderer from the daylight model.
 pub fn lighting_from(d: &Daylight, fog_range: f32) -> Lighting {
     // fog density from the weather's visibility range (an object at `range` is ~90% fogged)
@@ -38,7 +83,7 @@ pub fn lighting_from(d: &Daylight, fog_range: f32) -> Lighting {
         moon_dir: d.moon_dir,
         moon_illum: d.moon_illum,
         day_of_year: d.day_of_year,
-        latitude: d.latitude,
+        lat_deg: d.lat_deg,
         day_seed: d.day_seed,
         ..Default::default()
     }
@@ -436,6 +481,12 @@ pub fn collect(
         }
     }
     crate::puddles::keep_out_of_cab(vehicles, camera_pos, &mut scene.smoke, vehicle_smoke);
+    // A signal approached from below is outside its authored cone; keep enough of its
+    // glare to see the lit lens while it is close (#3795). Fog cones and halos are left
+    // to the weather below.
+    for c in &mut scene.coronas {
+        keep_near_glow_visible(c, camera_pos);
+    }
     // the lamps' cones in fog: drawn only while the visibility is
     // under 2 km, the fan's radius 2 m times 3 sqrt(100 / visibility) times the glow's
     // strength ((1 - ambient)^2 + 0.8) 0.6 brightness and the light's size; its colour the
@@ -1119,5 +1170,79 @@ mod scoped_corona_cache_tests {
         assert!(cache.scoped_ids.len() <= MAX_SCOPED_CORONA_PATHS);
         assert_eq!(cache.bytes_ids.len(), 1);
         assert_eq!(cache.listed.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod near_glow_tests {
+    use super::*;
+
+    /// A signal's narrow, road-facing cone, as the stock ones declare it.
+    fn signal() -> Corona {
+        Corona {
+            direction: Vec3::Y,
+            cone_cos: 25f32.to_radians().cos(),
+            inner_cos: 10f32.to_radians().cos(),
+            ..Default::default()
+        }
+    }
+
+    /// The shader fades the glow as `(outer - angle) / (outer - inner)`.
+    fn cone_brightness(c: &Corona, angle: f32) -> f32 {
+        let outer = c.cone_cos.acos();
+        let inner = c.inner_cos.acos();
+        ((outer - angle) / (outer - inner)).clamp(0.0, 1.0)
+    }
+
+    /// Driving up beneath a signal puts the eye 45 degrees off its face, outside the
+    /// declared 25-degree cone. Its lens is still plainly visible, so its glare must be
+    /// too (#3795).
+    #[test]
+    fn a_near_signal_keeps_a_share_of_its_glow_outside_the_authored_cone() {
+        let mut c = signal();
+        keep_near_glow_visible(&mut c, DVec3::new(0.0, 3.0, -3.0));
+        let k = cone_brightness(&c, 45f32.to_radians());
+        assert!(k > 0.23 && k < 0.36, "near glare kept: {k}");
+        assert!(c.cone_cos < signal().cone_cos, "the cone was widened");
+    }
+
+    /// Away from the lamp the model's cone is drawn exactly as authored.
+    #[test]
+    fn a_far_signal_keeps_its_authored_cone() {
+        let mut c = signal();
+        let before = c.cone_cos;
+        keep_near_glow_visible(&mut c, DVec3::new(0.0, 40.0, -40.0));
+        assert_eq!(c.cone_cos, before);
+    }
+
+    /// A lamp is not made to shine out of the back of its housing.
+    #[test]
+    fn a_lamp_is_not_lit_from_behind() {
+        let mut c = signal();
+        let before = c.cone_cos;
+        keep_near_glow_visible(&mut c, DVec3::new(0.0, -3.0, -1.0));
+        assert_eq!(c.cone_cos, before);
+    }
+
+    /// The fog cone and the halo are lit fog, not the lens's glare: their angles are the
+    /// weather's, and an omni light has no cone to widen.
+    #[test]
+    fn fog_and_omnidirectional_lamps_keep_their_angles() {
+        for (beam, halo, omni) in [
+            (true, false, false),
+            (false, true, false),
+            (false, false, true),
+        ] {
+            let mut c = signal();
+            c.beam = beam;
+            c.halo = halo;
+            if omni {
+                c.direction = Vec3::ZERO;
+                c.cone_cos = -1.0;
+            }
+            let before = c.cone_cos;
+            keep_near_glow_visible(&mut c, DVec3::new(0.0, 3.0, -3.0));
+            assert_eq!(c.cone_cos, before);
+        }
     }
 }

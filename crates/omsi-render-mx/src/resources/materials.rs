@@ -230,6 +230,8 @@ pub(crate) struct FrameHeap {
     /// the traced global illumination at the picture's size (rt/gi.rs; the black texture
     /// without it)
     pub(crate) gi: u32,
+    /// Enhanced's dry map (`passes::precip_map::DRY_RANGE`)
+    pub(crate) dry: u32,
 }
 
 impl FrameHeap {

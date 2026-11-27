@@ -14,7 +14,10 @@ const MAX_BLOB: usize = MAX_BYTES * 2 + 64;
 const MAX_TEXTURES: usize = 64;
 const MAX_RETAINED: usize = 64 * 1024 * 1024;
 const WINDOW: usize = 16;
+// Leave room for poses, voice and other applications sharing the uplink.
+const DEFAULT_PACKET_BUDGET: usize = 8;
 const RETRY: f32 = 0.25;
+const MAX_RETRY: f32 = 2.0;
 const SUBSCRIBE: u8 = 0;
 const DATA: u8 = 1;
 const PART_ACK: u8 = 2;
@@ -40,7 +43,7 @@ fn image_len(w: u32, h: u32) -> Option<usize> {
     (w > 0 && h > 0 && n <= MAX_BYTES).then_some(n)
 }
 
-/// A complete, committed image ready for the renderer. The wire carried only its delta.
+/// A complete, committed image ready for the renderer.
 #[derive(Clone, Debug)]
 pub struct Incoming {
     pub owner: u32,
@@ -65,17 +68,28 @@ fn encode_image(image: &Image, previous: Option<&Image>) -> Option<Vec<u8>> {
     raw.extend(image.height.to_le_bytes());
     raw.push(u8::from(image.mipmaps));
     if let Some(p) = previous {
+        let pixels = image.rgba.len() / 4;
+        let changed = |pixel: usize| {
+            let start = pixel * 4;
+            image.rgba[start..start + 4] != p.rgba[start..start + 4]
+        };
         let mut pixel = 0;
-        while pixel < image.rgba.len() / 4 {
-            if image.rgba[pixel * 4..pixel * 4 + 4] == p.rgba[pixel * 4..pixel * 4 + 4] {
+        while pixel < pixels {
+            if !changed(pixel) {
                 pixel += 1;
                 continue;
             }
             let first = pixel;
-            while pixel < image.rgba.len() / 4
-                && image.rgba[pixel * 4..pixel * 4 + 4] != p.rgba[pixel * 4..pixel * 4 + 4]
-            {
+            while pixel < pixels && changed(pixel) {
                 pixel += 1;
+            }
+            // A run header costs eight bytes; including one unchanged RGBA pixel
+            // costs only four. Coalesce those gaps before compression.
+            while pixel + 1 < pixels && changed(pixel + 1) {
+                pixel += 2;
+                while pixel < pixels && changed(pixel) {
+                    pixel += 1;
+                }
             }
             raw.extend((first as u32).to_le_bytes());
             raw.extend(((pixel - first) as u32).to_le_bytes());
@@ -84,10 +98,26 @@ fn encode_image(image: &Image, previous: Option<&Image>) -> Option<Vec<u8>> {
     } else {
         raw.extend(image.rgba.as_slice());
     }
-    let mut compressor = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
-    compressor.write_all(&raw).ok()?;
-    let compressed = compressor.finish().ok()?;
+    let mut compressed = compress_image_bytes(&raw)?;
+    // Dense/fragmented deltas may cost more than an independently compressed full
+    // image. Both representations already exist in the wire format. Avoid a second
+    // compression pass for sparse updates and keep whichever is smaller otherwise.
+    if previous.is_some() && raw.len() >= (10 + image.rgba.len()) / 2 {
+        raw[0] = 1;
+        raw.truncate(10);
+        raw.extend(image.rgba.as_slice());
+        match compress_image_bytes(&raw) {
+            Some(full) if full.len() < compressed.len() => compressed = full,
+            _ => {}
+        }
+    }
     (compressed.len() <= MAX_BLOB).then_some(compressed)
+}
+
+fn compress_image_bytes(raw: &[u8]) -> Option<Vec<u8>> {
+    let mut compressor = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+    compressor.write_all(raw).ok()?;
+    compressor.finish().ok()
 }
 
 fn encode_reference(image: &Image, key: [u8; 32]) -> Option<Vec<u8>> {
@@ -212,9 +242,10 @@ struct Transfer {
     seq: u32,
     index: u16,
     image: Image,
-    blob: Vec<u8>,
+    blob: Arc<Vec<u8>>,
     acked: Vec<bool>,
-    sent: Vec<f32>,
+    retry_at: Vec<f32>,
+    retry_delay: Vec<f32>,
     reference: bool,
 }
 struct Sender {
@@ -267,7 +298,7 @@ impl Default for Sync {
         Self {
             references: Vec::new(),
             reusable: BTreeMap::new(),
-            packet_budget: 32,
+            packet_budget: DEFAULT_PACKET_BUDGET,
             local: None,
             senders: BTreeMap::new(),
             receivers: BTreeMap::new(),
@@ -403,6 +434,9 @@ impl Sync {
         };
         let peers: Vec<u32> = self.senders.keys().copied().collect();
         let mut budget = self.packet_budget;
+        // New subscribers often need the same full image. Compress it once per
+        // tick and share immutable bytes; keep the existing conservative limits.
+        let mut initial_images: BTreeMap<usize, Arc<Vec<u8>>> = BTreeMap::new();
         let mut retained = self
             .senders
             .values()
@@ -426,16 +460,28 @@ impl Sync {
                         continue;
                     }
                     let reference = self.references.get(index).copied().flatten();
-                    let Some(blob) = reference
-                        .and_then(|key| encode_reference(image, key))
-                        .or_else(|| encode_image(image, tx.baseline[index].as_ref()))
-                    else {
+                    let initial = reference.is_none() && tx.baseline[index].is_none();
+                    let blob = if initial {
+                        initial_images
+                            .get(&index)
+                            .cloned()
+                            .or_else(|| encode_image(image, None).map(Arc::new))
+                    } else {
+                        reference
+                            .and_then(|key| encode_reference(image, key))
+                            .or_else(|| encode_image(image, tx.baseline[index].as_ref()))
+                            .map(Arc::new)
+                    };
+                    let Some(blob) = blob else {
                         continue;
                     };
                     if retained + blob.len() > MAX_RETAINED {
                         continue;
                     }
                     retained += blob.len();
+                    if initial {
+                        initial_images.insert(index, Arc::clone(&blob));
+                    }
                     let Some(seq) = tx.seq.checked_add(1) else {
                         break;
                     };
@@ -447,7 +493,8 @@ impl Sync {
                         image: image.clone(),
                         blob,
                         acked: vec![false; chunks],
-                        sent: vec![f32::NEG_INFINITY; chunks],
+                        retry_at: vec![f32::NEG_INFINITY; chunks],
+                        retry_delay: vec![RETRY; chunks],
                         reference: reference.is_some(),
                     });
                     break;
@@ -455,10 +502,10 @@ impl Sync {
             }
             let Some(p) = &mut tx.pending else { continue };
             let mut in_flight = p
-                .sent
+                .retry_at
                 .iter()
                 .zip(&p.acked)
-                .filter(|(at, ack)| !**ack && self.clock - **at < RETRY)
+                .filter(|(at, ack)| !**ack && self.clock < **at)
                 .count();
             let committed = p.acked.iter().all(|x| *x);
             for part in 0..p.acked.len() {
@@ -467,7 +514,7 @@ impl Sync {
                 }
                 // If the final commit ACK was lost, retransmit one fragment to elicit it.
                 if (p.acked[part] && !(committed && part == p.acked.len() - 1))
-                    || self.clock - p.sent[part] < RETRY
+                    || self.clock < p.retry_at[part]
                 {
                     continue;
                 }
@@ -493,7 +540,8 @@ impl Sync {
                     },
                     &payload,
                 ));
-                p.sent[part] = self.clock;
+                p.retry_at[part] = self.clock + p.retry_delay[part];
+                p.retry_delay[part] = (p.retry_delay[part] * 2.0).min(MAX_RETRY);
                 in_flight += 1;
                 budget -= 1;
             }
@@ -579,13 +627,15 @@ impl Sync {
                             return Vec::new();
                         }
                         let chunks = blob.len().div_ceil(CHUNK);
-                        p.blob = blob;
+                        p.blob = Arc::new(blob);
                         p.acked = vec![false; chunks];
-                        p.sent = vec![f32::NEG_INFINITY; chunks];
+                        p.retry_at = vec![f32::NEG_INFINITY; chunks];
+                        p.retry_delay = vec![RETRY; chunks];
                         p.reference = false;
                     }
                     p.acked.fill(false);
-                    p.sent.fill(f32::NEG_INFINITY);
+                    p.retry_at.fill(f32::NEG_INFINITY);
+                    p.retry_delay.fill(RETRY);
                 } else if data[2] == COMMIT && data.len() == HEADER {
                     tx.baseline[p.index as usize] = Some(p.image.clone());
                     tx.pending = None;
@@ -802,7 +852,7 @@ mod tests {
         flate2::read::ZlibDecoder::new(delta.as_slice())
             .read_to_end(&mut raw)
             .unwrap();
-        assert_eq!(raw[0], 0, "an update is never a full-image packet");
+        assert_eq!(raw[0], 0, "a sparse update remains a delta");
         assert_eq!(raw.len(), 10 + 2 * (8 + 4), "only two changed RGBA pixels");
         owner.set_local(77, vec![Some(changed.clone())]);
         exchange(&mut owner, &mut reader, 100, true);
@@ -819,9 +869,97 @@ mod tests {
     }
 
     #[test]
+    fn repeated_loss_backs_off_without_slowing_the_initial_send() {
+        let mut owner = Sync::default();
+        let mut reader = Sync::default();
+        owner.set_local(7, vec![Some(image(4, 4))]);
+        reader.subscribe(1, 7);
+        for request in reader.tick(5, 2, 0.05) {
+            owner.receive(5, 1, &request);
+        }
+        assert_eq!(owner.tick(5, 1, 0.05).len(), 1);
+        let mut sends = 1;
+        for _ in 0..80 {
+            for request in reader.tick(5, 2, 0.05) {
+                owner.receive(5, 1, &request);
+            }
+            sends += owner.tick(5, 1, 0.05).len();
+        }
+        assert!((4..=6).contains(&sends), "{sends} sends in four seconds");
+        exchange(&mut owner, &mut reader, 100, false);
+        assert_eq!(reader.take_incoming().len(), 1);
+    }
+
+    #[test]
+    fn adjacent_changes_share_a_run_and_preserve_unchanged_pixels() {
+        let original = image(64, 64);
+        let mut changed = original.clone();
+        let pixels = Arc::make_mut(&mut changed.rgba);
+        pixels[0] ^= 255;
+        pixels[8] ^= 255;
+        let blob = encode_image(&changed, Some(&original)).unwrap();
+        let mut raw = Vec::new();
+        flate2::read::ZlibDecoder::new(blob.as_slice())
+            .read_to_end(&mut raw)
+            .unwrap();
+        assert_eq!(raw[0], 0);
+        assert_eq!(raw.len(), 10 + 8 + 12);
+        assert_eq!(decode_image(&blob, Some(&original)), Some(changed));
+    }
+
+    #[test]
+    fn dense_updates_can_use_a_smaller_full_image_without_a_protocol_change() {
+        let original = Image {
+            width: 128,
+            height: 64,
+            mipmaps: false,
+            rgba: Arc::new(vec![0; 128 * 64 * 4]),
+        };
+        let mut changed = original.clone();
+        for pixel in Arc::make_mut(&mut changed.rgba)
+            .chunks_exact_mut(4)
+            .step_by(3)
+        {
+            pixel.copy_from_slice(&[1, 2, 3, 4]);
+        }
+        let blob = encode_image(&changed, Some(&original)).unwrap();
+        let full = encode_image(&changed, None).unwrap();
+        assert!(blob.len() <= full.len());
+        assert_eq!(decode_image(&blob, Some(&original)), Some(changed));
+    }
+
+    #[test]
+    fn default_texture_pacing_shares_a_bounded_burst_between_subscribers() {
+        let original = image(128, 64);
+        let mut owner = Sync::default();
+        owner.set_local(7, vec![Some(original)]);
+        for id in 2..=5 {
+            let mut reader = Sync::default();
+            reader.subscribe(1, 7);
+            for request in reader.tick(5, id, 0.05) {
+                owner.receive(5, 1, &request);
+            }
+        }
+        let mut recipients = std::collections::BTreeSet::new();
+        for _ in 0..4 {
+            let packets = owner.tick(5, 1, 0.05);
+            assert_eq!(packets.len(), DEFAULT_PACKET_BUDGET);
+            for packet in packets {
+                recipients.insert(address(&packet, 5).unwrap().to);
+            }
+        }
+        assert_eq!(recipients.len(), 4);
+        let first = &owner.senders[&2].pending.as_ref().unwrap().blob;
+        for id in 3..=5 {
+            let other = &owner.senders[&id].pending.as_ref().unwrap().blob;
+            assert!(Arc::ptr_eq(first, other));
+        }
+    }
+
+    #[test]
     fn fragments_are_atomic_and_a_lost_commit_ack_is_retried() {
         let original = image(64, 64);
-        let mut owner = Sync::default();
+        let mut owner = Sync::with_packet_budget(32);
         let mut reader = Sync::default();
         owner.set_local(7, vec![Some(original.clone())]);
         reader.subscribe(1, 7);

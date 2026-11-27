@@ -272,6 +272,78 @@ pub fn quiet(keys: Keys, pairs: usize) -> Option<QuietReason> {
     })
 }
 
+/// Which announcements a map's city makes, as the options' boxes ask (#4033): the arrival
+/// recording when the bus stops, the "next stop is …" one as it pulls out, and the same
+/// recording once more on the way in, `approach_m` metres before the stop.
+///
+/// The departure one is the scripts' own step; the game only makes it up where a script does
+/// not take it (see `omsi_app::auto_announce`), and turning it off leaves those scripts to
+/// their silence.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Policy {
+    pub departure: bool,
+    pub arrival: bool,
+    /// Announce before the stop instead of on leaving it.
+    pub approach: bool,
+    /// How far before the stop the approach announcement plays (m).
+    pub approach_m: f32,
+}
+
+impl Policy {
+    /// What OMSI 2 does, and what the game did before the options existed: the arrival
+    /// recording at the stop, the departure one as the scripts play it.
+    pub const DEFAULT: Policy = Policy {
+        departure: true,
+        arrival: true,
+        approach: false,
+        approach_m: 120.0,
+    };
+
+    /// Whether the game is to press anything at all (all three boxes off: it leaves the bus's
+    /// announcements to its scripts, as with the switch off).
+    pub fn any(&self) -> bool {
+        self.departure || self.arrival || self.approach
+    }
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Policy::DEFAULT
+    }
+}
+
+/// The entry that holds the `k`th stop's own "next stop is …" recording - the one an approach
+/// announcement plays, while the arrival half ([`arrival_entry`]) is pressed at the stop.
+///
+/// A depot file keeps the two recordings of a stop next to each other; which of the pair is
+/// which is decided by [`is_pair`], so a list that spells a stop otherwise still finds it.
+pub fn preview_entry(hof: &Hof, route: usize, name: &str, k: usize) -> Option<usize> {
+    let list = hof.info_busstop_lists.get(route)?;
+    let entry = arrival_entry(hof, route, name, k)?;
+    if entry > 0 && is_pair(&list[entry - 1], &list[entry]) {
+        return Some(entry - 1);
+    }
+    // (the name found the "next stop is …" half itself, where that is the one that pairs
+    // with the entry after it)
+    (entry + 1 < list.len() && is_pair(&list[entry], &list[entry + 1])).then_some(entry)
+}
+
+/// How near the bus has to be to a stop for its approach announcement: the metres the option
+/// asks for, or half the way from the stop before where the two stand closer than twice that.
+/// Two stops 60 m apart with a 120 m approach would otherwise announce the second one as the
+/// bus pulls out of the first (#4033: "default distance can be halfway between the stops").
+pub fn approach_metres(asked: f32, previous_gap: Option<f32>) -> f32 {
+    let asked = if asked.is_finite() {
+        asked.max(0.0)
+    } else {
+        Policy::DEFAULT.approach_m
+    };
+    match previous_gap {
+        Some(gap) if gap.is_finite() && gap > 0.0 => asked.min(gap * 0.5),
+        _ => asked,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,6 +462,67 @@ mod tests {
         assert_eq!(arrival_entry(&hof, 0, "fcchegaunsuo", 3), Some(7));
         // (the first stop is the one the bus pulls out of: no arrival half for it)
         assert_eq!(arrival_entry(&hof, 0, "terminus", 0), None);
+    }
+
+    #[test]
+    fn the_next_stop_half_stands_before_the_arrival_half() {
+        let mut hof = Hof::default();
+        hof.info_busstop_lists = vec![list(&[
+            "terminus",
+            "welcome99600",
+            "shuixiuluzhong",
+            "shuixiuluzhong1",
+            "zengnanlu",
+            "zengnanlu1",
+        ])];
+        // (the first stop's own recording, then the second one's)
+        assert_eq!(preview_entry(&hof, 0, "shuixiuluzhong", 1), Some(2));
+        assert_eq!(preview_entry(&hof, 0, "zengnanlu", 2), Some(4));
+        // (the first stop is the one the bus pulls out of)
+        assert_eq!(preview_entry(&hof, 0, "terminus", 0), None);
+        // (a depot file of one recording per stop, and a route it has no list for)
+        hof.info_busstop_lists
+            .push(list(&["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]));
+        assert_eq!(preview_entry(&hof, 1, "Beta", 1), None);
+        assert_eq!(preview_entry(&hof, 2, "Beta", 1), None);
+    }
+
+    #[test]
+    fn the_approach_distance_halves_where_the_stops_are_close() {
+        // (a stop every 300 m: the option's own metres)
+        assert_eq!(approach_metres(120.0, Some(300.0)), 120.0);
+        // (two stops 60 m apart: announced halfway, not as the bus pulls out of the last one)
+        assert_eq!(approach_metres(120.0, Some(60.0)), 30.0);
+        // (the first stop of a trip has no stop before it, and a stop without a place none)
+        assert_eq!(approach_metres(120.0, None), 120.0);
+        // (nonsense from a hand-edited options file: the default, and never negative)
+        assert_eq!(approach_metres(-5.0, None), 0.0);
+        assert_eq!(
+            approach_metres(f32::NAN, Some(0.0)),
+            Policy::DEFAULT.approach_m
+        );
+    }
+
+    #[test]
+    fn the_default_policy_is_what_omsi_2_does() {
+        assert_eq!(Policy::default(), Policy::DEFAULT);
+        assert!(Policy::DEFAULT.departure && Policy::DEFAULT.arrival);
+        assert!(
+            !Policy::DEFAULT.approach,
+            "an approach announcement is a city's own custom"
+        );
+        assert_eq!(Policy::DEFAULT.approach_m, 120.0);
+        assert!(Policy::DEFAULT.any());
+        // (every box off: nothing is pressed)
+        assert!(
+            !Policy {
+                departure: false,
+                arrival: false,
+                approach: false,
+                approach_m: 120.0
+            }
+            .any()
+        );
     }
 
     #[test]

@@ -389,7 +389,7 @@ fn a_single_recording_hof_is_reported_without_pretending_a_two_recording_layout(
     }));
 
     let mut a = AutoAnnounce::new();
-    a.step(&duty, &mut bus, 0.0);
+    a.step(&duty, &mut bus, 0.0, Policy::default());
 
     assert_eq!(a.layout, Some((0, Some(LayoutStatus::Single))));
     assert_eq!(a.pairs, 0);
@@ -438,7 +438,7 @@ fn unsupported_and_unavailable_hof_layouts_are_not_reported_as_single_recording(
         ..Default::default()
     }));
     let mut a = AutoAnnounce::new();
-    a.step(&duty, &mut unsupported, 0.0);
+    a.step(&duty, &mut unsupported, 0.0, Policy::default());
     assert_eq!(a.layout, Some((0, Some(LayoutStatus::Unsupported))));
     assert_eq!(a.pairs, 0);
     assert_eq!(a.take_note(), None);
@@ -447,7 +447,7 @@ fn unsupported_and_unavailable_hof_layouts_are_not_reported_as_single_recording(
         crate::schedule::tests::script_test_vehicle("", "IBIS_RouteIndex\nIBIS_busstop\n", "");
     unavailable.set_var("IBIS_RouteIndex", 0.0);
     let mut a = AutoAnnounce::new();
-    a.step(&duty, &mut unavailable, 0.0);
+    a.step(&duty, &mut unavailable, 0.0, Policy::default());
     assert_eq!(a.layout, Some((0, None)));
     assert_eq!(a.pairs, 0);
     assert_eq!(a.take_note(), None);
