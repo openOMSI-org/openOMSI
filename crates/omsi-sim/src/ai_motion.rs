@@ -15,6 +15,8 @@ use glam::{DVec2, DVec3, Vec3};
 use omsi_vehicle::Vehicle;
 use std::f32::consts::FRAC_PI_2;
 
+mod loose;
+
 /// What kind of way the vehicle follows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MotionKind {
@@ -226,6 +228,10 @@ pub struct AiBody {
     pub position: DVec3,
     impact_offset: DVec2,
     impact_velocity: DVec2,
+    /// Knocked off its route by the player (OMSI 2's accident); yaw in deg and deg/s.
+    loose: bool,
+    impact_yaw: f64,
+    impact_yaw_rate: f64,
     pub pitch_deg: f32,
     pub bank_deg: f32,
     /// Per axle (left, right): how far the wheel hangs below its rest position against
@@ -374,6 +380,9 @@ impl AiBody {
             position: DVec3::ZERO,
             impact_offset: DVec2::ZERO,
             impact_velocity: DVec2::ZERO,
+            loose: false,
+            impact_yaw: 0.0,
+            impact_yaw_rate: 0.0,
             pitch_deg: 0.0,
             bank_deg: 0.0,
             suspension: vec![[0.0; 2]; axle_count],
@@ -406,6 +415,8 @@ impl AiBody {
         self.contact_z.clear();
         self.impact_offset = DVec2::ZERO;
         self.impact_velocity = DVec2::ZERO;
+        self.impact_yaw = 0.0;
+        self.impact_yaw_rate = 0.0;
         self.last_speed = speed;
         self.step(0.0, speed, way, ground, contact);
     }
@@ -449,7 +460,7 @@ impl AiBody {
         closing_speed: f32,
         striker: f32,
         mass: f32,
-    ) {
+    ) -> f32 {
         if self.kind != MotionKind::Road
             || !direction.is_finite()
             || !closing_speed.is_finite()
@@ -459,7 +470,7 @@ impl AiBody {
             || striker <= 0.0
             || mass <= 0.0
         {
-            return;
+            return 0.0;
         }
         let e = if closing_speed > 1.0 {
             crate::rigid::RESTITUTION
@@ -468,7 +479,10 @@ impl AiBody {
         };
         let recoil_speed = (1.0 + e) * striker / (striker + mass) * closing_speed;
         self.impact_velocity += direction.normalize_or_zero() * recoil_speed as f64;
-        self.impact_velocity = self.impact_velocity.clamp_length_max(12.0);
+        self.impact_velocity = self
+            .impact_velocity
+            .clamp_length_max(self.max_impact_speed());
+        recoil_speed
     }
 
     fn settle_collision(&mut self, dt: f32) {
@@ -477,6 +491,10 @@ impl AiBody {
         }
         let steps = (dt / 0.015).ceil().clamp(1.0, 20.0) as usize;
         let step = (dt / steps as f32).min(0.25) as f64;
+        if self.loose {
+            self.settle_loose(steps, step);
+            return;
+        }
         for _ in 0..steps {
             // A damped suspension-like response returns the displaced car to its planned
             // path without cancelling its initial backwards or sideways impulse.
@@ -937,6 +955,11 @@ impl AiBody {
         self.steer_cmd = steer_cmd;
         self.look_scale = look_scale;
         self.moved = 0.0;
+        // (pushed back out, it would slide into it again every step)
+        if self.loose {
+            self.impact_velocity = DVec2::ZERO;
+            self.impact_yaw_rate = 0.0;
+        }
     }
 
     /// Hand the pose to the vehicle: position and attitude, the accelerations its scripts
@@ -952,7 +975,7 @@ impl AiBody {
             (0.0, 0.0)
         };
         v.position = self.position + DVec3::new(0.0, 0.0, lift as f64);
-        v.heading = self.heading;
+        v.heading = (self.heading + self.impact_yaw).rem_euclid(360.0);
         v.pitch = self.pitch_deg;
         v.bank = self.bank_deg;
         v.physics.accel = Vec3::new(self.a_lat, self.a_long, 0.0);
@@ -1082,7 +1105,7 @@ mod tests {
         }
     }
 
-    fn golf() -> Vehicle {
+    pub(super) fn golf() -> Vehicle {
         let mut v = Vehicle {
             mass: 1.0,
             moment_of_inertia: [1.49, 0.40, 1.56],
