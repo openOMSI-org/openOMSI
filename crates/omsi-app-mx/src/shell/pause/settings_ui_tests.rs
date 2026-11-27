@@ -1,6 +1,17 @@
 use super::*;
 use crate::app_impl::MenuLine;
 
+fn settings_groups(items: &[(&str, &str)], hide_back: bool) -> Vec<Vec<usize>> {
+    let back = hide_back
+        .then(|| {
+            items.iter().position(|&(id, label)| {
+                id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref()
+            })
+        })
+        .flatten();
+    omsi_settings_ui::settings_groups(items, crate::game_lists::HEADING, back)
+}
+
 fn fixture(world: bool) -> Vec<(&'static str, String)> {
     let row = |name: &str, kind: char, value: &str, desc: &str| {
         format!("{name}\u{1f}{kind}\u{1f}{value}\u{1f}{desc}\u{1f}0.5")
