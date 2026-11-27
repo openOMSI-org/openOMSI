@@ -16,6 +16,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   ([#3144](https://github.com/openOMSI-org/openOMSI/issues/3144)): a ray meeting another traced
   surface now restores the probe reflection the picture had there, so a headlamp's concave
   reflector no longer wears black or grey patches that move with the camera.
+- **Android: buses and maps with HTML displays no longer crash the game**: the displays' scripts
+  now run on phones that tag their memory pointers, where the game stopped with "this platform
+  is not compatible with a nan-boxed `JsValueInner`"
+  ([#4382](https://github.com/openOMSI-org/openOMSI/issues/4382)).
 
 ## 0.3.59 - 2026-11-26
 

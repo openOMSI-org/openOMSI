@@ -155,9 +155,11 @@ fn missing_reflection(sc: vec3<f32>, d: vec3<f32>, nh: vec3<f32>) -> vec3<f32> {
     // (the same fade as the main pass's `trace_k`: a smooth surface is wholly traced)
     let share = 1.0 - smoothstep(0.35, 0.75, rough);
     // The main pass removed the probe using the camera-to-hit view direction, not the
-    // reflected ray that arrived here. Reconstruct that view vector from the screen pixel
-    // so both passes subtract and restore the same environment sample.
-    let v = normalize(p.eye.xyz - sc);
+    // reflected ray that arrived here. Reconstruct that world-space hit position from the
+    // sampled depth at `q` so both passes subtract and restore the same environment sample.
+    let dq = textureLoad(t_depth, q, 0);
+    let hit_pos = world_pos((vec2<f32>(q) + vec2<f32>(0.5)) * p.size.zw, dq);
+    let v = normalize(p.eye.xyz - hit_pos);
     return finite(sky_probe(reflect(-v, nf), rough)) * w * share;
 }
 
