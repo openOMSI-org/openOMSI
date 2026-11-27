@@ -267,15 +267,7 @@ pub(super) fn option_set(
             app.settings.vol_scenery = (v * 100.0).round() / 100.0;
             Some(("vol_scenery", app.settings.vol_scenery.to_string()))
         }
-        "vol_traction" => {
-            app.settings.vol_traction = (v * 100.0).round() / 100.0;
-            if let Some(p) = app.player.as_mut() {
-                if let Some(ss) = p.sounds.as_mut() {
-                    ss.set_traction_gain(app.settings.vol_traction);
-                }
-            }
-            Some(("vol_traction", app.settings.vol_traction.to_string()))
-        }
+        "vol_traction" => set_vol_traction(app, v),
         "vol_ambient" => {
             app.settings.vol_ambient = (v * 100.0).round() / 100.0;
             Some(("vol_ambient", app.settings.vol_ambient.to_string()))
@@ -494,6 +486,14 @@ pub(super) fn option_set(
         }
         _ => set_graphics_brightness(app, verb, v),
     }
+}
+
+fn set_vol_traction(app: &mut App, v: f32) -> Option<(&'static str, String)> {
+    app.settings.vol_traction = (v * 100.0).round() / 100.0;
+    if let Some(ss) = app.player.as_mut().and_then(|p| p.sounds.as_mut()) {
+        ss.set_traction_gain(app.settings.vol_traction);
+    }
+    Some(("vol_traction", app.settings.vol_traction.to_string()))
 }
 
 /// The two new graphics sliders, kept separate to avoid growing the already-long
