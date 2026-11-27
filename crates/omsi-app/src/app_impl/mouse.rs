@@ -47,8 +47,12 @@ impl App {
     /// Looking round with the mouse goes by the cursor's way in the window (a view of the
     /// bus); on foot and with the free camera it keeps the raw mouse movement.
     pub(crate) fn cursor_looks(&self) -> bool {
-        self.input.mouse_look
-            && self.player.is_some()
+        held_mouse_look_allowed(
+            self.input.mouse_look,
+            self.paused,
+            self.menus.game_menu.is_some(),
+        ) && self.player.is_some()
+            && self.menus.game_menu.is_none()
             && !matches!(self.view.as_str(), "foot" | "free")
     }
 
@@ -1091,6 +1095,10 @@ fn look_deg_per_px(fov_deg: f32) -> f32 {
     fov_deg / 78.75
 }
 
+pub(crate) fn held_mouse_look_allowed(held: bool, paused: bool, menu_open: bool) -> bool {
+    held && !paused && !menu_open
+}
+
 fn drag_heading(
     press: [f32; 2],
     release: [f32; 2],
@@ -1149,6 +1157,14 @@ mod drag_tests {
 
 #[cfg(test)]
 mod look_tests {
+    #[test]
+    fn held_mouse_look_is_disabled_while_paused_or_in_a_menu() {
+        assert!(super::held_mouse_look_allowed(true, false, false));
+        assert!(!super::held_mouse_look_allowed(true, true, false));
+        assert!(!super::held_mouse_look_allowed(true, false, true));
+        assert!(!super::held_mouse_look_allowed(false, false, false));
+    }
+
     #[test]
     fn a_cursor_way_of_78_75_px_turns_by_the_field_of_view() {
         assert!((78.75 * super::look_deg_per_px(60.0) - 60.0).abs() < 1e-4);

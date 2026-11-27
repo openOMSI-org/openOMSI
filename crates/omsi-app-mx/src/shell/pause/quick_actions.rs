@@ -24,15 +24,24 @@ pub(crate) fn selected(text: &str) -> Vec<String> {
 
 pub(crate) fn indices(category: Category, menu: &[MenuLine], text: &str) -> Vec<usize> {
     if category != Category::Home {
-        return category.indices(&menu.iter().map(|line| line.0).collect::<Vec<_>>());
+        let ids: Vec<_> = menu.iter().map(|line| line.0).collect();
+        let mut indices = category.indices(&ids);
+        if category == Category::World && indices.iter().any(|&i| menu[i].0 == "world") {
+            indices.retain(|&i| menu[i].0 != "vehicle");
+        }
+        return indices;
     }
-    selected(text)
+    let mut indices: Vec<_> = selected(text)
         .iter()
         .filter_map(|id| {
             menu.iter()
                 .position(|line| line.0 == id && line.2.is_none())
         })
-        .collect()
+        .collect();
+    if indices.iter().any(|&i| menu[i].0 == "world") {
+        indices.retain(|&i| menu[i].0 != "vehicle");
+    }
+    indices
 }
 
 /// Selected IDs remain editable even when the current session cannot offer them.
@@ -45,6 +54,9 @@ pub(crate) fn entries(menu: &[MenuLine], text: &str) -> Vec<String> {
         {
             out.push(line.0.to_string());
         }
+    }
+    if out.iter().any(|id| id == "world") {
+        out.retain(|id| id != "vehicle");
     }
     out
 }

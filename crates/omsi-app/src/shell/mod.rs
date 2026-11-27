@@ -16,8 +16,8 @@ use omsi_ui::{Draw, Gpu, Layer, Vertex};
 
 use omsi_ui::kit::Ui;
 
-pub(crate) mod pause;
 pub(crate) mod bus_preview;
+pub(crate) mod pause;
 
 /// What a click on one of the screens asks of the game.
 #[derive(Clone, Debug, PartialEq)]
@@ -57,6 +57,7 @@ pub(crate) enum Action {
 pub(crate) struct Shell {
     pub(crate) bus_preview: bus_preview::State,
     pub(crate) settings_search: pause::search::State,
+    pub(crate) settings_sections: std::collections::HashMap<String, usize>,
     pub(crate) process_prompt: Option<u64>,
     pub(crate) process_dialog: crate::process_permissions::DialogState,
     pub(crate) ui: Ui,
@@ -129,7 +130,37 @@ impl Shell {
         // (the desktop launcher's calm look: graphite surfaces, no edges)
         let mut ui = Ui::new();
         ui.flat = true;
-        Shell { bus_preview: Default::default(), settings_search: Default::default(), process_prompt: None, process_dialog: Default::default(), ui, pause_category: Default::default(), pause_online: Default::default(), quick_edit: false, pause_hidden: true, quick_focus: 0, gpu: None, shot_gpu: None, drawn: None, actions: Vec::new(), picture: None, picture_tex: None, logo_tex: None, shot_logo: None, logo_of: None, logo_title: None, logo_wide: None, glass: None, glass_taken: None, scale: 1.0, over_ui: false, last_sel: None, dd_anchor: None, opaque: false }
+        Shell {
+            bus_preview: Default::default(),
+            settings_search: Default::default(),
+            settings_sections: Default::default(),
+            process_prompt: None,
+            process_dialog: Default::default(),
+            ui,
+            pause_category: Default::default(),
+            pause_online: Default::default(),
+            quick_edit: false,
+            pause_hidden: true,
+            quick_focus: 0,
+            gpu: None,
+            shot_gpu: None,
+            drawn: None,
+            actions: Vec::new(),
+            picture: None,
+            picture_tex: None,
+            logo_tex: None,
+            shot_logo: None,
+            logo_of: None,
+            logo_title: None,
+            logo_wide: None,
+            glass: None,
+            glass_taken: None,
+            scale: 1.0,
+            over_ui: false,
+            last_sel: None,
+            dd_anchor: None,
+            opaque: false,
+        }
     }
 
     /// A frame of the screens begins: the window's size in physical pixels and how many of
@@ -137,24 +168,44 @@ impl Shell {
     pub(crate) fn begin(&mut self, width: f32, height: f32, scale: f32, dt: f32) {
         // Keep pointer capture in the same coordinate space until its release is handled.
         let captured = self.ui.active.is_some() && (self.ui.input.down || self.ui.input.released);
-        let next_scale = if captured { self.scale } else { scale.max(0.25) };
+        let next_scale = if captured {
+            self.scale
+        } else {
+            scale.max(0.25)
+        };
         if next_scale != self.scale {
             self.ui.input.mouse = self.ui.input.mouse * self.scale / next_scale;
         }
         self.scale = next_scale;
         self.ui.input.touch = crate::platform::touch_controls();
-        self.ui.begin(Vec2::new(width / self.scale, height / self.scale), self.scale, dt);
-        self.ui.backdrop = self.glass.as_ref().and_then(|g| g.passes.last()).map(|p| p.1);
+        self.ui.begin(
+            Vec2::new(width / self.scale, height / self.scale),
+            self.scale,
+            dt,
+        );
+        self.ui.backdrop = self
+            .glass
+            .as_ref()
+            .and_then(|g| g.passes.last())
+            .map(|p| p.1);
         let theme = crate::themes::current();
         self.logo_title = theme.as_ref().and_then(|t| t.title.clone());
-        self.logo_wide = theme.as_ref().and_then(|t| t.logo.as_ref()).map(|l| l.aspect()).filter(|a| *a >= WIDE);
+        self.logo_wide = theme
+            .as_ref()
+            .and_then(|t| t.logo.as_ref())
+            .map(|l| l.aspect())
+            .filter(|a| *a >= WIDE);
     }
 
     /// The frame of the screens is drawn: its layers kept for `render`.
     pub(crate) fn finish(&mut self) {
         self.over_ui = self.ui.over_ui;
         let (layers, verts, ranges) = self.ui.finish();
-        self.drawn = Some(Drawn { layers, verts, ranges });
+        self.drawn = Some(Drawn {
+            layers,
+            verts,
+            ranges,
+        });
     }
 
     /// Nothing of the screens shows this frame.
@@ -163,7 +214,9 @@ impl Shell {
         self.settings_search = Default::default();
         self.pause_online.confirm = None;
         self.pause_online.management = None;
-        if pause::search::focused(self) { self.ui.focus = None; }
+        if pause::search::focused(self) {
+            self.ui.focus = None;
+        }
         self.drawn = None;
         self.over_ui = false;
         self.ui.discard_input();
@@ -193,7 +246,10 @@ impl Shell {
     }
 
     pub(crate) fn onto_slider(&self, start: Vec2, p: Vec2) -> Option<Vec2> {
-        self.ui.onto_slider(start / self.scale, p / self.scale).filter(|_| self.showing() && self.dd_anchor.is_none()).map(|q| q * self.scale)
+        self.ui
+            .onto_slider(start / self.scale, p / self.scale)
+            .filter(|_| self.showing() && self.dd_anchor.is_none())
+            .map(|q| q * self.scale)
     }
 
     pub(crate) fn button(&mut self, pressed: bool) {
@@ -224,6 +280,7 @@ impl Shell {
     fn ensure_gpu(&mut self, r: &Renderer) {
         let format = r.format();
         if self.gpu.as_ref().map(|g| g.1 != format).unwrap_or(true) {
+            // An MSAA resolve would replace the scene outside this transparent overlay.
             self.gpu = Some((Gpu::new(&r.device, format, 1, self.ui.atlas.size), format));
             self.ui.atlas.mark_all_dirty();
             self.picture_tex = None;
@@ -257,12 +314,21 @@ impl Shell {
     pub(crate) fn capture_backdrop(&mut self, r: &Renderer, src: &wgpu::Texture, blur: f32) {
         self.glass_taken = Some(std::time::Instant::now());
         self.ensure_gpu(r);
-        let Some((gpu, format)) = self.gpu.as_mut() else { return };
+        let Some((gpu, format)) = self.gpu.as_mut() else {
+            return;
+        };
         let format = *format;
-        let size = wgpu::Extent3d { depth_or_array_layers: 1, ..src.size() };
+        let size = wgpu::Extent3d {
+            depth_or_array_layers: 1,
+            ..src.size()
+        };
         let (w, h) = (size.width.max(1), size.height.max(1));
-        let factor = ((blur * 0.5).round().max(1.0) as u32).next_power_of_two().clamp(8, 32);
-        let stale = self.glass.as_ref().is_none_or(|g| g.copy.0.size() != size || g.copy.0.format() != src.format() || g.factor != factor);
+        let factor = ((blur * 0.5).round().max(1.0) as u32)
+            .next_power_of_two()
+            .clamp(8, 32);
+        let stale = self.glass.as_ref().is_none_or(|g| {
+            g.copy.0.size() != size || g.copy.0.format() != src.format() || g.factor != factor
+        });
         if stale {
             if let Some(old) = self.glass.take() {
                 gpu.free(old.copy.1);
@@ -270,24 +336,59 @@ impl Shell {
                     gpu.free(p.1);
                 }
             }
-            let make = |label: &str, (tw, th): (u32, u32), format: wgpu::TextureFormat, usage: wgpu::TextureUsages| {
-                r.device.create_texture(&wgpu::TextureDescriptor { label: Some(label), size: wgpu::Extent3d { width: tw.max(1), height: th.max(1), depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage, view_formats: &[] })
+            let make = |label: &str,
+                        (tw, th): (u32, u32),
+                        format: wgpu::TextureFormat,
+                        usage: wgpu::TextureUsages| {
+                r.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: wgpu::Extent3d {
+                        width: tw.max(1),
+                        height: th.max(1),
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage,
+                    view_formats: &[],
+                })
             };
-            let copy = make("glass: the picture", (w, h), src.format(), wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING);
+            let copy = make(
+                "glass: the picture",
+                (w, h),
+                src.format(),
+                wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            );
             let copy_id = gpu.add_view(&r.device, &copy.create_view(&Default::default()), (w, h));
             let passes = [4, factor, factor / 2]
                 .into_iter()
                 .map(|k| {
                     let s = ((w / k).max(1), (h / k).max(1));
-                    let t = make("glass: a pass", s, format, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING);
+                    let t = make(
+                        "glass: a pass",
+                        s,
+                        format,
+                        wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                    );
                     let id = gpu.add_view(&r.device, &t.create_view(&Default::default()), s);
                     (t, id)
                 })
                 .collect();
-            self.glass = Some(GlassPicture { copy: (copy, copy_id), passes, factor });
+            self.glass = Some(GlassPicture {
+                copy: (copy, copy_id),
+                passes,
+                factor,
+            });
         }
         let Some(g) = self.glass.as_ref() else { return };
-        let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("glass: copy") });
+        let mut enc = r
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("glass: copy"),
+            });
         enc.copy_texture_to_texture(src.as_image_copy(), g.copy.0.as_image_copy(), size);
         r.queue.submit([enc.finish()]);
         let mut from = (g.copy.1, w, h);
@@ -297,16 +398,47 @@ impl Shell {
             let mut p = omsi_ui::Painter::new();
             let (du, dv) = (apart / from.1 as f32, apart / from.2 as f32);
             // (each tap over the ones before at 1/n of its weight: their mean)
-            for (n, (ox, oy)) in [(-1.0f32, -1.0f32), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)].into_iter().enumerate() {
-                let s = omsi_ui::Sprite { uv: [ox * du, oy * dv, 1.0 + ox * du, 1.0 + oy * dv], w: pw as f32, h: ph as f32, ascent: 0.0 };
-                p.sprite(s, Vec2::ZERO, Vec2::new(pw as f32, ph as f32), omsi_ui::Color([1.0, 1.0, 1.0, 1.0 / (n as f32 + 1.0)]));
+            for (n, (ox, oy)) in [(-1.0f32, -1.0f32), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+                .into_iter()
+                .enumerate()
+            {
+                let s = omsi_ui::Sprite {
+                    uv: [ox * du, oy * dv, 1.0 + ox * du, 1.0 + oy * dv],
+                    w: pw as f32,
+                    h: ph as f32,
+                    ascent: 0.0,
+                };
+                p.sprite(
+                    s,
+                    Vec2::ZERO,
+                    Vec2::new(pw as f32, ph as f32),
+                    omsi_ui::Color([1.0, 1.0, 1.0, 1.0 / (n as f32 + 1.0)]),
+                );
             }
             // (one pass a submission: the layers' uniforms and the vertices are written for it)
             gpu.upload(&r.device, &r.queue, GLASS_BUFFER, &p.verts);
             let layer = Layer::flat([0.0, 0.0, pw as f32, ph as f32], 0.0, 1.0);
             let view = t.create_view(&Default::default());
-            let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("glass: a pass") });
-            gpu.render(&r.device, &r.queue, &mut enc, &view, (pw, ph), Some(wgpu::Color::TRANSPARENT), &[layer], &[Draw { buffer: GLASS_BUFFER, range: 0..p.len(), layer: 0, texture: from.0 }]);
+            let mut enc = r
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("glass: a pass"),
+                });
+            gpu.render(
+                &r.device,
+                &r.queue,
+                &mut enc,
+                &view,
+                (pw, ph),
+                Some(wgpu::Color::TRANSPARENT),
+                &[layer],
+                &[Draw {
+                    buffer: GLASS_BUFFER,
+                    range: 0..p.len(),
+                    layer: 0,
+                    texture: from.0,
+                }],
+            );
             r.queue.submit([enc.finish()]);
             from = (*id, pw, ph);
         }
@@ -319,7 +451,9 @@ impl Shell {
         }
         self.ensure_gpu(r);
         let Some(d) = self.drawn.as_ref() else { return };
-        let Some((gpu, _)) = self.gpu.as_mut() else { return };
+        let Some((gpu, _)) = self.gpu.as_mut() else {
+            return;
+        };
         // the logo: the interface theme's, when it has one
         let theme = crate::themes::current().filter(|t| t.logo.is_some());
         let logo_of = theme.as_ref().map(|t| t.id.clone());
@@ -334,7 +468,11 @@ impl Shell {
             let (px, w, h) = match theme.as_ref().and_then(|t| t.logo.as_ref()) {
                 Some(logo) if logo.aspect() >= WIDE => {
                     let h = (LOGO_WIDE_PX as f32 / logo.aspect()).round().max(1.0) as u32;
-                    (logo.pixels(LOGO_WIDE_PX, h, None, &|_| omsi_ui::icons::Stage::Shown), LOGO_WIDE_PX, h)
+                    (
+                        logo.pixels(LOGO_WIDE_PX, h, None, &|_| omsi_ui::icons::Stage::Shown),
+                        LOGO_WIDE_PX,
+                        h,
+                    )
                 }
                 Some(logo) => (logo.square_pixels(LOGO_PX), LOGO_PX, LOGO_PX),
                 None => (logo_pixels(), LOGO_PX, LOGO_PX),
@@ -348,9 +486,32 @@ impl Shell {
             }
         }
         Self::upload(gpu, r, &mut self.ui, d);
-        let draws: Vec<Draw> = d.ranges.iter().enumerate().map(|(k, (range, tex))| Draw { buffer: 0, range: range.clone(), layer: k, texture: *tex }).collect();
-        let mut enc = r.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("game screens") });
-        gpu.render(&r.device, &r.queue, &mut enc, view, (w, h), self.opaque.then_some(wgpu::Color::BLACK), &d.layers, &draws);
+        let draws: Vec<Draw> = d
+            .ranges
+            .iter()
+            .enumerate()
+            .map(|(k, (range, tex))| Draw {
+                buffer: 0,
+                range: range.clone(),
+                layer: k,
+                texture: *tex,
+            })
+            .collect();
+        let mut enc = r
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("game screens"),
+            });
+        gpu.render(
+            &r.device,
+            &r.queue,
+            &mut enc,
+            view,
+            (w, h),
+            self.opaque.then_some(wgpu::Color::BLACK),
+            &d.layers,
+            &draws,
+        );
         r.queue.submit([enc.finish()]);
     }
 
@@ -362,7 +523,8 @@ impl Shell {
         let size = self.ui.atlas.size;
         if self.shot_gpu.is_none() {
             let mut g = Gpu::new(&r.device, format, 1, size);
-            self.shot_logo = logo_pixels().map(|px| g.add_image(&r.device, &r.queue, LOGO_PX, LOGO_PX, &px));
+            self.shot_logo =
+                logo_pixels().map(|px| g.add_image(&r.device, &r.queue, LOGO_PX, LOGO_PX, &px));
             self.shot_gpu = Some(g);
         }
         let gpu = self.shot_gpu.as_mut().unwrap();
@@ -371,14 +533,52 @@ impl Shell {
         self.ui.atlas.mark_all_dirty();
         // (the logo as well, from the shot's own copy of it)
         let (logo, shot_logo) = (self.logo_tex, self.shot_logo);
-        let draws: Vec<Draw> = d.ranges.iter().enumerate().filter_map(|(k, (range, tex))| {
-            let texture = if *tex == 0 { 0 } else if Some(*tex) == logo { shot_logo? } else { return None };
-            Some(Draw { buffer: 0, range: range.clone(), layer: k, texture })
-        }).collect();
-        let tex = r.device.create_texture(&wgpu::TextureDescriptor { label: Some("screens shot"), size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }, mip_level_count: 1, sample_count: 1, dimension: wgpu::TextureDimension::D2, format, usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC, view_formats: &[] });
+        let draws: Vec<Draw> = d
+            .ranges
+            .iter()
+            .enumerate()
+            .filter_map(|(k, (range, tex))| {
+                let texture = if *tex == 0 {
+                    0
+                } else if Some(*tex) == logo {
+                    shot_logo?
+                } else {
+                    return None;
+                };
+                Some(Draw {
+                    buffer: 0,
+                    range: range.clone(),
+                    layer: k,
+                    texture,
+                })
+            })
+            .collect();
+        let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("screens shot"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
         let view = tex.create_view(&Default::default());
         let mut enc = r.device.create_command_encoder(&Default::default());
-        gpu.render(&r.device, &r.queue, &mut enc, &view, (w, h), Some(wgpu::Color::TRANSPARENT), &d.layers, &draws);
+        gpu.render(
+            &r.device,
+            &r.queue,
+            &mut enc,
+            &view,
+            (w, h),
+            Some(wgpu::Color::TRANSPARENT),
+            &d.layers,
+            &draws,
+        );
         Some(read_back(r, enc, &tex, w, h))
     }
 }
@@ -398,10 +598,36 @@ fn logo_pixels() -> Option<Vec<u8>> {
 }
 
 /// `tex` (RGBA8, `w` x `h`) copied out after the commands of `enc`.
-pub(crate) fn read_back(r: &Renderer, mut enc: wgpu::CommandEncoder, tex: &wgpu::Texture, w: u32, h: u32) -> Vec<u8> {
+pub(crate) fn read_back(
+    r: &Renderer,
+    mut enc: wgpu::CommandEncoder,
+    tex: &wgpu::Texture,
+    w: u32,
+    h: u32,
+) -> Vec<u8> {
     let stride = (w * 4).div_ceil(256) * 256;
-    let buf = r.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (stride * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
-    enc.copy_texture_to_buffer(tex.as_image_copy(), wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(stride), rows_per_image: None } }, wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 });
+    let buf = r.device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: (stride * h) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    enc.copy_texture_to_buffer(
+        tex.as_image_copy(),
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buf,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(stride),
+                rows_per_image: None,
+            },
+        },
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+    );
     r.queue.submit([enc.finish()]);
     buf.slice(..).map_async(wgpu::MapMode::Read, |_| {});
     omsi_render::wait_gpu(&r.device, None).ok();

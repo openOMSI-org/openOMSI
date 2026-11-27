@@ -3271,3 +3271,6 @@
 "Automatic announcements are off.": "Автоматты хабарландырулар өшірулі."
 "Draw other players' buses in less detail when far away": "Басқа ойыншылардың автобустарын алыстан азырақ бөлшекпен көрсету"
 "Multiplayer: beyond 120 m, and whenever the frame rate is under 20, other players' buses keep their body but lose the driver figures and destination displays nobody reads from there; they come back in full over 26 fps": "Көп ойыншы режимі: 120 метрден ары және 20 FPS-тен төмен болғанда, басқа автобустар шанағын сақтайды, бірақ жүргізуші мен бағыт таблосын жасырады; 26 FPS-тен асқанда толық оралады"
+
+"Preferences": "Баптаулар"
+"Community": "Қауымдастық"

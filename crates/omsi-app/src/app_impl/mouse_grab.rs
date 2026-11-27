@@ -183,7 +183,12 @@ impl App {
     /// cannot lock it (Windows, X11) the cursor's way turns the view as before.
     pub(crate) fn sync_look_hold(&mut self) {
         let photo_look = self.photo.as_ref().is_some_and(|p| p.looking);
-        let want = (photo_look || (self.input.mouse_look && self.input.both_drag.is_none()))
+        let want = (photo_look
+            || (super::mouse::held_mouse_look_allowed(
+                self.input.mouse_look,
+                self.paused,
+                self.menus.game_menu.is_some(),
+            ) && self.input.both_drag.is_none()))
             && self.input.window_focused
             && !self.input.input_away
             && !self.input.touch.enabled

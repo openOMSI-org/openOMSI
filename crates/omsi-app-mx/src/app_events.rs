@@ -389,8 +389,13 @@ impl ApplicationHandler for App {
                 {
                     return;
                 }
-                self.input.mouse_look = state == ElementState::Pressed;
-                self.input.mmb_held = state == ElementState::Pressed;
+                let held = state == ElementState::Pressed;
+                self.input.mouse_look = crate::app_impl::held_mouse_look_allowed(
+                    held,
+                    self.paused,
+                    self.menus.game_menu.is_some(),
+                );
+                self.input.mmb_held = held;
                 self.sync_look_hold();
                 self.sync_mouse_grab();
                 self.update_hover();
@@ -518,11 +523,24 @@ impl ApplicationHandler for App {
             }
             // (the cursor locked for looking round: the mouse's own movement turns the view
             // of the bus and the photo camera, in points on macOS - logical pixels)
-            if self.input.window_focused && self.look_raw(delta.0 as f32, delta.1 as f32) {
+            let mouse_look_allowed = self.photo.as_ref().is_some_and(|photo| photo.looking)
+                || crate::app_impl::held_mouse_look_allowed(
+                    self.input.mouse_look,
+                    self.paused,
+                    self.menus.game_menu.is_some(),
+                );
+            if self.input.window_focused
+                && mouse_look_allowed
+                && self.look_raw(delta.0 as f32, delta.1 as f32)
+            {
                 return;
             }
             // (in a view of the bus the cursor's own way turns it: move_cursor)
-            if self.input.mouse_look {
+            if crate::app_impl::held_mouse_look_allowed(
+                self.input.mouse_look,
+                self.paused,
+                self.menus.game_menu.is_some(),
+            ) {
                 if !self.cursor_looks() {
                     if self.view == "outside" {
                         // F3 chase orbits at its own gain, not the head's.

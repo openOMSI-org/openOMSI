@@ -14,7 +14,22 @@ pub(crate) enum Category {
 }
 
 impl Category {
-    pub const ALL: [Self; 8] = [Self::Home, Self::Driving, Self::World, Self::Saves, Self::Capture, Self::Settings, Self::Online, Self::Plugins];
+    pub const ALL: [Self; 8] = [
+        Self::Home,
+        Self::Driving,
+        Self::World,
+        Self::Saves,
+        Self::Capture,
+        Self::Settings,
+        Self::Online,
+        Self::Plugins,
+    ];
+    pub const GROUPS: [(&'static str, &'static [Self]); 4] = [
+        ("Simulation", &[Self::Driving, Self::World, Self::Saves]),
+        ("Tools", &[Self::Capture]),
+        ("Preferences", &[Self::Settings]),
+        ("Community", &[Self::Online, Self::Plugins]),
+    ];
 
     pub fn of(id: &str) -> Option<Self> {
         Some(match id {
@@ -72,20 +87,33 @@ impl Category {
         ids.iter()
             .enumerate()
             .filter_map(|(i, id)| {
-                let included =
-                    if self == Self::Home { matches!(*id, "tobus" | "camera" | "map" | "save" | "duty" | "players") } else { Self::of(id) == Some(self) };
+                let included = if self == Self::Home {
+                    matches!(
+                        *id,
+                        "tobus" | "camera" | "map" | "save" | "duty" | "players"
+                    )
+                } else {
+                    Self::of(id) == Some(self)
+                };
                 included.then_some(i)
             })
             .collect()
     }
 
     pub fn available(ids: &[&str]) -> Vec<Self> {
-        Self::ALL.into_iter().filter(|c| *c == Self::Home || !c.indices(ids).is_empty()).collect()
+        Self::ALL
+            .into_iter()
+            .filter(|c| *c == Self::Home || !c.indices(ids).is_empty())
+            .collect()
     }
 
     #[cfg(test)]
     pub fn focus_indices(self, ids: &[&str]) -> Vec<usize> {
-        let mut indices: Vec<usize> = ids.iter().position(|id| *id == "resume").into_iter().collect();
+        let mut indices: Vec<usize> = ids
+            .iter()
+            .position(|id| *id == "resume")
+            .into_iter()
+            .collect();
         indices.extend(self.indices(ids));
         indices.extend(ids.iter().position(|id| *id == "quit"));
         indices

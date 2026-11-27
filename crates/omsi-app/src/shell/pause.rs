@@ -9,35 +9,48 @@
 //! the game as an [`Action`].
 
 pub(crate) mod navigation;
-pub(crate) mod search;
 mod navigation_ui;
-mod vehicles;
 pub(crate) mod online_ui;
-mod quick_actions_ui;
 pub(crate) mod quick_actions;
+mod quick_actions_ui;
+pub(crate) mod search;
+mod vehicles;
 
-use omsi_settings_ui::parse_row;
-use std::borrow::Cow;
 use glam::Vec2;
+use omsi_settings_ui::parse_row;
 use omsi_ui::paint::Align;
 use omsi_ui::{Color, Rect, Weight};
+use std::borrow::Cow;
 
 use super::{Action, Shell};
-use omsi_ui::theme::*;
-use omsi_ui::kit::{id_of, ButtonKind, Ui};
 use crate::ui::{DropdownView, MenuKind, Preview};
+use omsi_ui::kit::{ButtonKind, Ui, id_of};
+use omsi_ui::theme::*;
 
 /// The paused game, dimmed, behind a category page; a list or a settings window has the
 /// background solid behind it. In a glass theme the picture is dimmed only a little behind the
 /// rail alone, and blurred under some of the background behind a page.
 const PAGE_VEIL: f32 = 0.72;
-const HOME_VEIL: f32 = 0.85;
 const GLASS_HOME_VEIL: f32 = 0.3;
 const GLASS_PAGE_VEIL: f32 = 0.5;
 /// Compact margins for the existing settings and list pages.
 const NARROW: f32 = 560.0;
 /// A list's row.
 const LIST_ROW: f32 = 40.0;
+pub(super) const EDGE_WIDTH: f32 = 1.0;
+
+pub(super) fn visible_edge() -> Color {
+    let edge = th().edge;
+    if edge.0[3] <= 0.001 {
+        let brightness = (edge.0[0] + edge.0[1] + edge.0[2]) / 3.0;
+        return if brightness > 0.5 {
+            Color::WHITE.alpha(0.08)
+        } else {
+            Color::BLACK.alpha(0.08)
+        };
+    }
+    edge.alpha(0.08 / edge.0[3])
+}
 
 /// An open list or settings window, as the game has it.
 pub(crate) struct ListView<'a> {
@@ -118,7 +131,13 @@ fn plain(label: &str) -> (&str, bool) {
     }
 }
 
-fn count_badge_rect(title_width: f32, badge_width: f32, title_x: f32, right: f32, y: f32) -> Option<Rect> {
+fn count_badge_rect(
+    title_width: f32,
+    badge_width: f32,
+    title_x: f32,
+    right: f32,
+    y: f32,
+) -> Option<Rect> {
     let x = title_x + title_width + 12.0;
     (x + badge_width <= right).then(|| Rect::new(x, y + 9.0, badge_width, 22.0))
 }
@@ -131,41 +150,69 @@ pub(crate) fn draw(sh: &mut Shell, v: &PauseView) {
     let saved_click = (sh.ui.input.pressed, sh.ui.input.released);
     let management_open = sh.pause_online.management.is_some();
     let saved_wheel = sh.ui.input.wheel;
-    if management_open { sh.ui.input.wheel = Vec2::ZERO; }
+    if management_open {
+        sh.ui.input.wheel = Vec2::ZERO;
+    }
     if sh.pause_online.confirm.is_some() || management_open {
         sh.ui.input.pressed = false;
         sh.ui.input.released = false;
     }
 
-    if !v.list.as_ref().is_some_and(|list| list.kind == MenuKind::Options) {
-        if sh.ui.focus == Some(id_of("pause-settings-search")) { sh.ui.focus = None; }
+    if !v
+        .list
+        .as_ref()
+        .is_some_and(|list| list.kind == MenuKind::Options)
+    {
+        if sh.ui.focus == Some(id_of("pause-settings-search")) {
+            sh.ui.focus = None;
+        }
         sh.settings_search = Default::default();
     }
     let size = sh.ui.size;
-    // Drawing a submenu must not change the category that opened it.
-    let sidebar = size.x >= if v.list.is_some() { NARROW } else { 700.0 };
-    let left = if sidebar { RAIL_W } else { 0.0 };
-    let page = Rect::new(left, 0.0, (size.x - left).max(0.0), size.y);
-    sh.ui.solid(page);
+    let full = Rect::new(0.0, 0.0, size.x, size.y);
+    let panel = navigation_ui::frame_rect(size);
     let bg = th().bg;
     let solid = !(sh.pause_hidden && v.list.is_none());
+    sh.ui.solid(full);
     match (th().glass, sh.ui.backdrop) {
         (Some(_), Some(tex)) if solid => {
-            let all = Rect::new(0.0, 0.0, size.x, size.y);
-            sh.ui.image(all, tex, 0.0);
-            sh.ui.p().rect(all, bg.alpha(GLASS_PAGE_VEIL));
+            sh.ui.image(full, tex, 0.0);
+            sh.ui.p().rect(full, bg.alpha(GLASS_PAGE_VEIL));
         }
-        // (the blurred picture not there yet: as good as solid)
-        (Some(_), _) => sh.ui.p().rect(page, bg.alpha(if solid { HOME_VEIL } else { GLASS_HOME_VEIL })),
-        (None, _) => sh.ui.p().rect(page, if v.list.is_some() { bg } else { bg.alpha(PAGE_VEIL) }),
+        (Some(_), _) => sh.ui.p().rect(
+            full,
+            bg.alpha(if solid { PAGE_VEIL } else { GLASS_HOME_VEIL }),
+        ),
+        (None, _) => sh.ui.p().rect(full, bg.alpha(PAGE_VEIL)),
     }
+    sh.ui.surface(panel, corner(18.0), th().panel);
+    sh.ui.push_clip(panel, corner(18.0));
+    // Drawing a submenu must not change the category that opened it.
+    let sidebar = panel.w
+        >= if v.list.is_some() {
+            RAIL_W + NARROW
+        } else {
+            700.0
+        };
+    let left = if sidebar { RAIL_W } else { 0.0 };
+    let page = Rect::new(panel.x + left, panel.y, (panel.w - left).max(0.0), panel.h);
     if let Some(list) = v.list.as_ref() {
         list_page(sh, v, list, page);
     } else {
         navigation_ui::page(sh, v, page, !sidebar);
     }
     if sidebar {
-        navigation_ui::rail(sh, v);
+        navigation_ui::rail(sh, v, Rect::new(panel.x, panel.y, RAIL_W, panel.h));
+        sh.ui.p().rect(
+            Rect::new(page.x - 0.5, panel.y, 1.0, panel.h),
+            th().edge.alpha(2.0),
+        );
+    }
+    sh.ui.pop_clip();
+    if sh.ui.flat && th().glass.is_none() {
+        sh.ui
+            .p()
+            .rounded_border(panel, corner(18.0), EDGE_WIDTH, visible_edge());
     }
     (sh.ui.input.pressed, sh.ui.input.released) = saved_click;
     if management_open {
@@ -178,7 +225,14 @@ pub(crate) fn draw(sh: &mut Shell, v: &PauseView) {
 /// The launcher's tabs: the titles in a row, the chosen one in the text colour over an amber
 /// line, the others muted. Returns the one clicked, and how many rows they took (a narrow
 /// screen has them on a second row: the last ones were cut off and could not be reached).
-fn tabs(ui: &mut Ui, at: Vec2, titles: &[String], chosen: usize, max_w: f32) -> (Option<usize>, usize) {
+fn tabs(
+    ui: &mut Ui,
+    at: Vec2,
+    titles: &[String],
+    chosen: usize,
+    max_w: f32,
+    prefix: &str,
+) -> (Option<usize>, usize) {
     let mut x = at.x;
     let mut row = 0;
     let mut out = None;
@@ -189,11 +243,19 @@ fn tabs(ui: &mut Ui, at: Vec2, titles: &[String], chosen: usize, max_w: f32) -> 
             row += 1;
         }
         let r = Rect::new(x, at.y + row as f32 * 38.0, w, 38.0);
-        let (h, _, clicked) = ui.interact(id_of(&format!("pause-tab-{i}")), r);
+        let (h, _, clicked) = ui.interact(id_of(&format!("{prefix}-{i}")), r);
         let on = i == chosen;
-        ui.text_in(t, r, 14.0, Weight::Medium, if on || h { th().ink } else { th().ink_muted }, Align::Center);
+        ui.text_in(
+            t,
+            r,
+            14.0,
+            Weight::Medium,
+            if on || h { th().ink } else { th().ink_muted },
+            Align::Center,
+        );
         if on {
-            ui.p().rect(Rect::new(r.x, r.bottom() - 2.0, r.w, 2.0), th().accent);
+            ui.p()
+                .rect(Rect::new(r.x, r.bottom() - 2.0, r.w, 2.0), th().accent);
         }
         if clicked && !on {
             out = Some(i);
@@ -203,55 +265,216 @@ fn tabs(ui: &mut Ui, at: Vec2, titles: &[String], chosen: usize, max_w: f32) -> 
     (out, row + 1)
 }
 
-/// An open list or settings window as a launcher page right of the rail.
+/// The settings categories on the left of an options page, with the search above them.
+fn settings_categories(sh: &mut Shell, list: &ListView, area: Rect) {
+    sh.ui.panel(area);
+    if sh.ui.flat && th().glass.is_none() {
+        sh.ui
+            .p()
+            .rounded_border(area, corner(8.0), EDGE_WIDTH, visible_edge());
+    }
+    let inner = area.inset(10.0);
+    search::field(sh, list, Rect::new(inner.x, inner.y, inner.w, 36.0));
+    let list_area = Rect::new(inner.x, inner.y + 46.0, inner.w, (inner.h - 46.0).max(0.0));
+    let Some((titles, selected)) = list.tabs.as_ref() else {
+        return;
+    };
+    let mut picked = None;
+    sh.ui
+        .scroll_area("pause-settings-categories", list_area, &mut |ui, view| {
+            for (index, title) in titles.iter().enumerate() {
+                let rect = Rect::new(view.x, view.y + index as f32 * 40.0, view.w, 36.0);
+                let (hovered, _, clicked) = ui.interact(id_of(&format!("pause-tab-{index}")), rect);
+                if index == *selected {
+                    ui.p().rounded(rect, corner(10.0), th().selected);
+                } else if hovered {
+                    ui.p().rounded(rect, corner(10.0), th().hover);
+                }
+                if index == *selected || hovered {
+                    ui.p()
+                        .rounded_border(rect, corner(10.0), EDGE_WIDTH, th().accent);
+                }
+                let color = if index == *selected {
+                    th().ink
+                } else {
+                    th().ink_2
+                };
+                ui.text_in(
+                    title,
+                    rect.inset(10.0),
+                    13.0,
+                    Weight::Medium,
+                    color,
+                    Align::Left,
+                );
+                if clicked && index != *selected {
+                    picked = Some(index);
+                }
+            }
+            titles.len() as f32 * 40.0
+        });
+    if let Some(index) = picked {
+        sh.actions.push(Action::Side(index));
+    }
+}
+
+/// An open list or settings window as a page inside the pause panel.
 fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
-    let margin = if page.w < NARROW { 14.0 } else { 32.0 };
+    let margin = if page.w < NARROW { 14.0 } else { 24.0 };
     let w = (page.w - margin * 2.0).min(1400.0);
-    let area = Rect::new(page.x + margin + ((page.w - margin * 2.0) - w).max(0.0) * 0.5, 28.0, w, page.h - 28.0 - 24.0);
+    let area = Rect::new(
+        page.x + margin + ((page.w - margin * 2.0) - w).max(0.0) * 0.5,
+        page.y + 20.0,
+        w,
+        page.h - 40.0,
+    );
     // the title, with the way back before it
-    let (title, sub) = list.head.clone().unwrap_or_else(|| (omsi_ui::tr("Options").into_owned(), String::new()));
-    let back_k = list.items.iter().position(|(id, label)| *id == "back" && plain(label).0 == omsi_ui::tr("Back").as_ref());
+    let (mut title, sub) = list
+        .head
+        .clone()
+        .unwrap_or_else(|| (omsi_ui::tr("Options").into_owned(), String::new()));
+    if list.kind == MenuKind::Options {
+        if let Some((titles, selected)) = list.tabs.as_ref().filter(|(titles, _)| titles.len() > 1)
+        {
+            title = titles.get(*selected).cloned().unwrap_or(title);
+        }
+    }
+    let back_k = list
+        .items
+        .iter()
+        .position(|(id, label)| *id == "back" && plain(label).0 == omsi_ui::tr("Back").as_ref());
     let back = Rect::new(area.x, area.y, 36.0, 36.0);
-    if sh.ui.icon_button("pause-back", back.center(), 18.0, "arrow_back", "Back") {
+    let back_clicked = sh
+        .ui
+        .icon_button("pause-back", back.center(), 18.0, "arrow_back", "Back");
+    sh.ui
+        .p()
+        .rounded_border(back, corner(18.0), EDGE_WIDTH, visible_edge());
+    if back_clicked {
         sh.actions.push(match (&list.tabs, back_k) {
             (Some((t, _)), _) => Action::Side(t.len()),
             (None, Some(k)) => Action::Choose(k),
             (None, None) => Action::Rail(usize::MAX),
         });
     }
-    let tx = area.x + 46.0;
-    let title_width = if list.kind == MenuKind::Options && area.w >= 760.0 {
-        (area.w - 46.0 - (area.w * 0.34).clamp(220.0, 360.0) - 58.0).max(100.0)
-    } else {
-        area.w - 46.0
-    };
-    sh.ui.text_in(&title, Rect::new(tx, area.y + 4.0, title_width, 34.0), 26.0, Weight::Bold, th().ink, Align::Left);
+    let (title_rect, subtitle_rect, body_top) = list_header_layout(area);
+    let tx = title_rect.x;
+    let title_width = title_rect.w;
+    sh.ui.text_in(
+        &omsi_ui::tr("Pause menu"),
+        Rect::new(tx, area.y, title_width, 14.0),
+        9.0,
+        Weight::Medium,
+        th().ink_muted,
+        Align::Left,
+    );
+    sh.ui.text_in(
+        &title,
+        title_rect,
+        22.0,
+        Weight::Bold,
+        th().ink,
+        Align::Left,
+    );
     if let Some(count) = list.badge {
         let text = count.to_string();
         let badge_width = (sh.ui.width(&text, 12.0, Weight::Medium) + 16.0).max(24.0);
-        let title_width = sh.ui.width(&title, 26.0, Weight::Bold);
-        if let Some(badge) = count_badge_rect(title_width, badge_width, tx, area.right(), area.y) {
-            sh.ui.p().rounded(badge, 6.0, th().accent.alpha(0.16));
-            sh.ui.text_in(&text, badge, 12.0, Weight::Medium, th().accent, Align::Center);
+        let text_width = sh.ui.width(&title, 23.0, Weight::Bold);
+        if let Some(badge) = count_badge_rect(text_width, badge_width, tx, area.right(), area.y) {
+            sh.ui
+                .p()
+                .rounded(badge, corner(8.0), th().accent.alpha(0.16));
+            sh.ui.text_in(
+                &text,
+                badge,
+                12.0,
+                Weight::Medium,
+                th().accent,
+                Align::Center,
+            );
         }
     }
-    let sub = if sub.is_empty() { list_hint(list.kind) } else { sub };
+    let sub = if sub.is_empty() {
+        list_hint(list.kind)
+    } else {
+        sub
+    };
     if !sub.is_empty() {
-        sh.ui.text_in(&sub, Rect::new(tx, area.y + 36.0, title_width, 20.0), 13.0, Weight::Regular, th().ink_muted, Align::Left);
+        sh.ui.text_in(
+            &sub,
+            subtitle_rect,
+            12.0,
+            Weight::Regular,
+            th().ink_muted,
+            Align::Left,
+        );
     }
-    let mut body = Rect::new(area.x, area.y + 70.0, area.w, (area.h - 70.0).max(40.0));
-    if list.kind == MenuKind::Options { search::toolbar(sh, list, area, &mut body); }
-    // the pages of a settings window: the launcher's tabs
-    if let Some((titles, at)) = list.tabs.as_ref().filter(|(t, _)| t.len() > 1) {
-        let (picked, rows) = tabs(&mut sh.ui, Vec2::new(body.x, body.y - 6.0), titles, *at, body.w);
-        if let Some(tab) = picked {
-            sh.actions.push(Action::Side(tab));
+    let nav_w = (area.w * 0.30).clamp(176.0, 205.0);
+    let gap = 12.0;
+    let body_h = (area.bottom() - body_top).max(40.0);
+    let settings_nav = list.kind == MenuKind::Options
+        && list
+            .tabs
+            .as_ref()
+            .is_some_and(|(titles, _)| !titles.is_empty())
+        && area.w >= 340.0;
+    let mut body = Rect::new(area.x, body_top, area.w, body_h);
+    if settings_nav {
+        let nav_w = if area.w < 560.0 {
+            (area.w * 0.30).clamp(100.0, 150.0)
+        } else {
+            nav_w
+        };
+        let side = Rect::new(area.x, body_top, nav_w, body_h);
+        let pane = Rect::new(
+            side.right() + gap,
+            body_top,
+            area.right() - side.right() - gap,
+            body_h,
+        );
+        settings_categories(sh, list, side);
+        sh.ui.panel(pane);
+        if sh.ui.flat && th().glass.is_none() {
+            sh.ui
+                .p()
+                .rounded_border(pane, corner(8.0), EDGE_WIDTH, visible_edge());
         }
-        let below = body.y - 6.0 + 38.0 * rows as f32 + 20.0;
-        body = Rect::new(body.x, below, body.w, (body.bottom() - below).max(40.0));
+        sh.ui.p().rect(
+            Rect::new(
+                side.right() + gap * 0.5,
+                body_top + 4.0,
+                1.0,
+                (body_h - 8.0).max(0.0),
+            ),
+            th().edge,
+        );
+        body = pane.inset(12.0);
+    } else {
+        if list.kind == MenuKind::Options {
+            search::toolbar(sh, list, area, &mut body);
+        }
+        // Lists without a settings category sidebar retain the segmented tabs.
+        if let Some((titles, at)) = list.tabs.as_ref().filter(|(t, _)| t.len() > 1) {
+            let (picked, rows) = tabs(
+                &mut sh.ui,
+                Vec2::new(body.x, body.y - 6.0),
+                titles,
+                *at,
+                body.w,
+                "pause-tab",
+            );
+            if let Some(tab) = picked {
+                sh.actions.push(Action::Side(tab));
+            }
+            let below = body.y - 6.0 + 38.0 * rows as f32 + 16.0;
+            body = Rect::new(body.x, below, body.w, (body.bottom() - below).max(40.0));
+        }
     }
     // an open drop-down takes the mouse where it lies (the rows under it do not answer)
-    let dd_rect = list.dropdown.as_ref().and_then(|d| sh.dd_anchor.map(|a| dropdown_rect(a, d.items.len(), sh.ui.size)));
+    let dd_rect = list.dropdown.as_ref().and_then(|d| {
+        sh.dd_anchor
+            .map(|a| dropdown_rect(a, d.items.len(), sh.ui.size))
+    });
     let mouse = sh.ui.input.mouse;
     let saved = (sh.ui.input.pressed, sh.ui.input.released);
     // Reserve the wheel for the popup before drawing controls underneath it.
@@ -283,6 +506,12 @@ fn list_page(sh: &mut Shell, v: &PauseView, list: &ListView, page: Rect) {
 }
 
 /// What a list is for, under its title, when the game gives no line of its own.
+fn list_header_layout(area: Rect) -> (Rect, Rect, f32) {
+    let title = Rect::new(area.x + 46.0, area.y + 20.0, area.w - 46.0, 32.0);
+    let subtitle = Rect::new(title.x, area.y + 54.0, title.w, 18.0);
+    (title, subtitle, area.y + 76.0)
+}
+
 fn list_hint(kind: MenuKind) -> String {
     let t = match kind {
         MenuKind::Options => "Every change takes effect at once.",
@@ -307,54 +536,166 @@ fn row_h(id: &str, label: &str) -> f32 {
 
 /// The rows of a settings window in the launcher's panels: two columns side by side where
 /// the page is wide enough, the headings of the list as the panels' section titles.
-fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anchor: &mut Option<Rect>) {
+fn settings_rows(
+    sh: &mut Shell,
+    v: &PauseView,
+    list: &ListView,
+    body: Rect,
+    anchor: &mut Option<Rect>,
+) {
     let items = &list.items;
     let hide_back = list.tabs.is_none();
-    let back = hide_back.then(|| items.iter().position(|&(id, label)| id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref())).flatten();
-    let groups = omsi_settings_ui::filter_groups(items, crate::game_lists::HEADING, back, &sh.settings_search.query);
-    sh.settings_search.visible = groups.iter().flatten().copied().filter(|&k| items[k].0 != crate::game_lists::HEADING).collect();
+    let back = hide_back
+        .then(|| {
+            items.iter().position(|&(id, label)| {
+                id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref()
+            })
+        })
+        .flatten();
+    let all_groups = omsi_settings_ui::settings_groups(items, crate::game_lists::HEADING, back);
+    let mut groups = omsi_settings_ui::filter_groups(
+        items,
+        crate::game_lists::HEADING,
+        back,
+        &sh.settings_search.query,
+    );
+    sh.settings_search.visible = groups
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|&k| items[k].0 != crate::game_lists::HEADING)
+        .collect();
+    let key = format!("pause-list-{}", list.key);
+    let query_empty = sh.settings_search.query.trim().is_empty();
+    let mut body = body;
+    if query_empty && all_groups.len() > 1 {
+        let titles: Vec<String> = all_groups
+            .iter()
+            .enumerate()
+            .map(|(i, group)| {
+                group
+                    .iter()
+                    .find(|&&k| items[k].0 == crate::game_lists::HEADING)
+                    .map(|&k| omsi_ui::tr(parse_row(items[k].1).name).into_owned())
+                    .unwrap_or_else(|| format!("Section {}", i + 1))
+            })
+            .collect();
+        let selected_before = sh
+            .settings_sections
+            .get(&list.key)
+            .copied()
+            .unwrap_or_else(|| {
+                all_groups
+                    .iter()
+                    .position(|group| group.contains(&list.sel))
+                    .unwrap_or(0)
+            })
+            .min(all_groups.len() - 1);
+        let mut selected = selected_before;
+        if v.kbd && sh.last_sel != Some((id_of(&key), list.sel)) {
+            if let Some(index) = all_groups
+                .iter()
+                .position(|group| group.contains(&list.sel))
+            {
+                selected = index;
+            }
+        }
+        let (picked, rows) = tabs(
+            &mut sh.ui,
+            Vec2::new(body.x, body.y),
+            &titles,
+            selected,
+            body.w,
+            "pause-settings-section",
+        );
+        if let Some(index) = picked {
+            selected = index;
+            let scroll_id = id_of(&key);
+            sh.ui.scroll.insert(scroll_id, 0.0);
+            sh.ui.scroll.insert(scroll_id ^ 0xabc, 0.0);
+            sh.last_sel = None;
+        }
+        sh.settings_sections.insert(list.key.clone(), selected);
+        groups = vec![
+            all_groups[selected]
+                .iter()
+                .copied()
+                .filter(|&k| items[k].0 != crate::game_lists::HEADING)
+                .collect(),
+        ];
+        let offset = rows as f32 * 38.0 + 8.0;
+        body = Rect::new(body.x, body.y + offset, body.w, (body.h - offset).max(40.0));
+    }
     if groups.is_empty() {
-        sh.ui.text_in(&omsi_ui::tr("No matching settings"), body, 14.0, Weight::Regular, th().ink_muted, Align::Center);
+        sh.ui.text_in(
+            &omsi_ui::tr("No matching settings"),
+            body,
+            14.0,
+            Weight::Regular,
+            th().ink_muted,
+            Align::Center,
+        );
     }
     let two = body.w >= 900.0 && groups.iter().flatten().count() > 6;
     let cols = settings_columns(groups, two, items);
     let any_hover = sh.ui.hover(body);
-    let key = format!("pause-list-{}", list.key);
     let mut acts: Vec<Action> = Vec::new();
     let mut sel_y: Option<(f32, f32)> = None;
     let mut dd_anchor: Option<Rect> = None;
     let dd_row = list.dropdown.as_ref().map(|d| d.row);
     sh.ui.scroll_area(&key, body, &mut |ui, view| {
         let gap = GAP * 2.0;
-        let cw = if cols.len() == 2 { (view.w - 8.0 - gap) / 2.0 } else { (view.w - 8.0).min(760.0) };
+        let cw = if cols.len() == 2 {
+            (view.w - 8.0 - gap) / 2.0
+        } else {
+            (view.w - 8.0).min(760.0)
+        };
         let mut tallest = 0.0f32;
         for (c, groups) in cols.iter().enumerate() {
             let x = view.x + c as f32 * (cw + gap);
             let mut y = view.y;
             for rows in groups {
-                let h = rows.iter().map(|&k| row_h(items[k].0, items[k].1)).sum::<f32>() + 28.0;
-                ui.panel(Rect::new(x, y, cw, h.max(60.0)));
-                let inner = Rect::new(x + 18.0, y + 14.0, cw - 36.0, h - 28.0);
+                let h = rows
+                    .iter()
+                    .map(|&k| row_h(items[k].0, items[k].1))
+                    .sum::<f32>()
+                    + 16.0;
+                let inner = Rect::new(x, y, cw, h - 12.0);
                 let mut row_y = inner.y;
-                for (n, &k) in rows.iter().enumerate() {
+                for &k in rows {
                     let (id, label) = items[k];
                     let rh = row_h(id, label);
                     if id == crate::game_lists::HEADING {
                         let t = omsi_ui::tr(parse_row(label).name);
-                        ui.p().rounded(Rect::new(inner.x, row_y + 7.0, 3.0, 20.0), 1.5, th().accent);
-                        ui.text_in(&t, Rect::new(inner.x + 12.0, row_y + 4.0, inner.w - 12.0, 28.0), 15.0, Weight::Bold, th().ink, Align::Left);
+                        ui.p().rounded(
+                            Rect::new(inner.x + 2.0, row_y + 5.0, 3.0, 18.0),
+                            corner(2.0),
+                            th().accent,
+                        );
+                        ui.text_in(
+                            &t,
+                            Rect::new(inner.x + 14.0, row_y + 1.0, inner.w - 18.0, 27.0),
+                            12.0,
+                            Weight::Bold,
+                            th().ink_muted,
+                            Align::Left,
+                        );
+                        ui.p().rect(
+                            Rect::new(inner.x + 14.0, row_y + 31.0, inner.w - 24.0, 1.0),
+                            th().edge.alpha(0.7),
+                        );
                         row_y += rh;
                         continue;
                     }
-                    if n > 0 && items.get(rows[n - 1]).is_some_and(|(pid, _)| *pid != crate::game_lists::HEADING) {
-                        ui.p().rect(Rect::new(inner.x, row_y - 2.0, inner.w, 1.0), Color::rgba(255, 255, 255, 0.045));
-                    }
-                    let r = Rect::new(inner.x - 8.0, row_y, inner.w + 16.0, rh - 4.0);
+                    let r = Rect::new(inner.x, row_y + 1.0, inner.w, rh - 7.0);
+                    ui.p().rounded(r, corner(10.0), th().surface_2);
                     let kbd = v.kbd && !any_hover && k == list.sel;
                     if kbd {
                         sel_y = Some((row_y - view.y, rh));
                     }
-                    if let Some(a) = settings_row(ui, k, label, r, kbd, dd_row == Some(k), &mut dd_anchor) {
+                    if let Some(a) =
+                        settings_row(ui, k, label, r, kbd, dd_row == Some(k), &mut dd_anchor)
+                    {
                         acts.push(a);
                     }
                     row_y += rh;
@@ -375,29 +716,59 @@ fn settings_rows(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect, anc
     sh.actions.extend(acts);
 }
 
-fn settings_columns(groups: Vec<Vec<usize>>, two: bool, items: &[(&str, &str)]) -> Vec<Vec<Vec<usize>>> {
+fn settings_columns(
+    groups: Vec<Vec<usize>>,
+    two: bool,
+    items: &[(&str, &str)],
+) -> Vec<Vec<Vec<usize>>> {
     omsi_settings_ui::settings_columns(groups, two, |k| row_h(items[k].0, items[k].1))
 }
 
 #[cfg(test)]
 fn settings_groups(items: &[(&str, &str)], hide_back: bool) -> Vec<Vec<usize>> {
-    let back = hide_back.then(|| items.iter().position(|&(id, label)| id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref())).flatten();
+    let back = hide_back
+        .then(|| {
+            items.iter().position(|&(id, label)| {
+                id == "back" && plain(parse_row(label).name).0 == omsi_ui::tr("Back").as_ref()
+            })
+        })
+        .flatten();
     omsi_settings_ui::settings_groups(items, crate::game_lists::HEADING, back)
 }
 
 /// One row of a settings window: its name (and description) on the left, its control on
 /// the right as the launcher draws that control.
-fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open: bool, dd_anchor: &mut Option<Rect>) -> Option<Action> {
+fn settings_row(
+    ui: &mut Ui,
+    k: usize,
+    label: &str,
+    r: Rect,
+    kbd: bool,
+    dd_open: bool,
+    dd_anchor: &mut Option<Rect>,
+) -> Option<Action> {
     let row = parse_row(label);
     let id = id_of(&format!("pause-row-{k}-{}", row.name));
     let hov = ui.hover(r);
     let t = ui.anim(id ^ 0x51, if hov || kbd { 1.0 } else { 0.0 }, 0.06);
     if t > 0.01 {
         // (half a step lighter than the panel: the fields in the row stay apart from it)
-        ui.p().rounded(r, 6.0, th().surface.mix(th().surface_2, 0.5).alpha(t));
+        ui.p()
+            .rounded(r, 6.0, th().surface.mix(th().surface_2, 0.5).alpha(t));
     }
+    ui.p().rounded_border(
+        r,
+        corner(10.0),
+        EDGE_WIDTH,
+        if hov || kbd {
+            th().accent
+        } else {
+            visible_edge()
+        },
+    );
     if kbd {
-        ui.p().rounded(Rect::new(r.x, r.y + 8.0, 2.0, r.h - 16.0), 1.0, th().accent);
+        ui.p()
+            .rounded(Rect::new(r.x, r.y + 8.0, 2.0, r.h - 16.0), 1.0, th().accent);
     }
     let lx = r.x + 8.0;
     let ctl_w = (r.w * 0.5).min(300.0);
@@ -410,10 +781,31 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
     let desc: Cow<'_, str> = omsi_ui::tr(row.desc);
     let ink = th().text_soft.mix(th().text, t);
     if row.desc.is_empty() {
-        ui.text_in(name.as_ref(), Rect::new(lx, r.y, name_w, r.h), 13.0, Weight::Regular, ink, Align::Left);
+        ui.text_in(
+            name.as_ref(),
+            Rect::new(lx, r.y, name_w, r.h),
+            13.0,
+            Weight::Regular,
+            ink,
+            Align::Left,
+        );
     } else {
-        ui.text_in(name.as_ref(), Rect::new(lx, r.y + 6.0, name_w, 20.0), 13.0, Weight::Medium, ink, Align::Left);
-        ui.text_in(desc.as_ref(), Rect::new(lx, r.y + 25.0, name_w, 17.0), 11.5, Weight::Regular, th().text_dim, Align::Left);
+        ui.text_in(
+            name.as_ref(),
+            Rect::new(lx, r.y + 6.0, name_w, 20.0),
+            13.0,
+            Weight::Medium,
+            ink,
+            Align::Left,
+        );
+        ui.text_in(
+            desc.as_ref(),
+            Rect::new(lx, r.y + 25.0, name_w, 17.0),
+            11.5,
+            Weight::Regular,
+            th().text_dim,
+            Align::Left,
+        );
         // (cut short by a narrow column: the whole of it under the mouse)
         if ui.width(desc.as_ref(), 11.5, Weight::Regular) > name_w {
             ui.tooltip(Rect::new(lx, r.y, name_w, r.h), desc.as_ref());
@@ -432,18 +824,41 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
         "v" => {
             let mut f = row.frac.unwrap_or(0.0).clamp(0.0, 1.0);
             let value = row.value.to_string();
-            let changed = ui.slider_without_wheel(&format!("pause-sl-{k}-{}", row.name), ctl, &mut f, 0.0, 1.0, 0.0, "", &|_| value.clone());
+            let changed = ui.slider_without_wheel(
+                &format!("pause-sl-{k}-{}", row.name),
+                ctl,
+                &mut f,
+                0.0,
+                1.0,
+                0.0,
+                "",
+                &|_| value.clone(),
+            );
             changed.then_some(Action::Control(k, f))
         }
         // A calendar field commits only after a day is selected.
         "d" => {
             let mut date = row.value.to_string();
-            ui.date_field(&format!("pause-date-{k}-{}", row.name), ctl, &mut date).then_some(Action::Date(date))
+            let changed = ui.date_field(&format!("pause-date-{k}-{}", row.name), ctl, &mut date);
+            if ui.flat {
+                ui.p()
+                    .rounded_border(ctl, corner(6.0), EDGE_WIDTH, visible_edge());
+            }
+            changed.then_some(Action::Date(date))
         }
         // a stepper: the value between the two arrows of a field
         "c" => {
             ui.p().rounded(ctl, 6.0, th().surface_2);
-            ui.text_in(row.value, ctl.pad(36.0, 0.0), 13.0, Weight::Regular, th().ink, Align::Center);
+            ui.p()
+                .rounded_border(ctl, corner(6.0), EDGE_WIDTH, visible_edge());
+            ui.text_in(
+                row.value,
+                ctl.pad(36.0, 0.0),
+                13.0,
+                Weight::Regular,
+                th().ink,
+                Align::Center,
+            );
             let left = Rect::new(ctl.x, ctl.y, 34.0, ctl.h);
             let right = Rect::new(ctl.right() - 34.0, ctl.y, 34.0, ctl.h);
             let mut out = None;
@@ -452,7 +867,12 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
                 if h {
                     ui.p().rounded(half.inset(3.0), 5.0, th().surface_3);
                 }
-                ui.icon(icon, half.center(), 18.0, if h { th().accent } else { th().text_dim });
+                ui.icon(
+                    icon,
+                    half.center(),
+                    18.0,
+                    if h { th().accent } else { th().text_dim },
+                );
                 if clicked {
                     out = Some(Action::Control(k, fx));
                 }
@@ -464,16 +884,43 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
             let (h, _, clicked) = ui.interact(id, r);
             let a = ui.anim(id ^ 0x77, if h || dd_open { 1.0 } else { 0.0 }, 0.08);
             // (open: a step lighter, as under the mouse; no ring round it)
-            ui.p().rounded(ctl, 6.0, th().surface_2.mix(th().surface_3, a));
+            ui.p()
+                .rounded(ctl, 6.0, th().surface_2.mix(th().surface_3, a));
+            ui.p()
+                .rounded_border(ctl, corner(6.0), EDGE_WIDTH, visible_edge());
             // (without a value it opens a list of its own: a way on, not a drop-down)
-            let text = if row.value.is_empty() { omsi_ui::tr("Change").into_owned() } else { row.value.to_string() };
-            ui.text_in(&text, Rect::new(ctl.x + 12.0, ctl.y, ctl.w - 40.0, ctl.h), 13.0, Weight::Regular, if row.value.is_empty() { th().text_soft.mix(th().text, a) } else { th().text }, Align::Left);
+            let text = if row.value.is_empty() {
+                omsi_ui::tr("Change").into_owned()
+            } else {
+                row.value.to_string()
+            };
+            ui.text_in(
+                &text,
+                Rect::new(ctl.x + 12.0, ctl.y, ctl.w - 40.0, ctl.h),
+                13.0,
+                Weight::Regular,
+                if row.value.is_empty() {
+                    th().text_soft.mix(th().text, a)
+                } else {
+                    th().text
+                },
+                Align::Left,
+            );
             let icon = match (row.value.is_empty(), dd_open) {
                 (true, _) => "chevron_right",
                 (false, true) => "expand_less",
                 (false, false) => "expand_more",
             };
-            ui.icon(icon, Vec2::new(ctl.right() - 18.0, ctl.center().y), 18.0, if row.value.is_empty() { th().text_dim.mix(th().accent, a) } else { th().text_dim });
+            ui.icon(
+                icon,
+                Vec2::new(ctl.right() - 18.0, ctl.center().y),
+                18.0,
+                if row.value.is_empty() {
+                    th().text_dim.mix(th().accent, a)
+                } else {
+                    th().text_dim
+                },
+            );
             if dd_open {
                 *dd_anchor = Some(ctl);
             }
@@ -481,22 +928,58 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
         }
         // information only
         "i" => {
-            ui.text_in(row.value, Rect::new(r.x + r.w * 0.4, r.y, r.w * 0.6 - 8.0, r.h), 13.0, Weight::Medium, th().text, Align::Right);
+            ui.text_in(
+                row.value,
+                Rect::new(r.x + r.w * 0.4, r.y, r.w * 0.6 - 8.0, r.h),
+                13.0,
+                Weight::Medium,
+                th().text,
+                Align::Right,
+            );
             None
         }
         // a value being typed
         "E" => {
             ui.p().rounded(ctl, 6.0, th().surface_3);
-            let caret = if (ui.time * 2.0) as i64 % 2 == 0 { "|" } else { "" };
-            ui.text_in(&format!("{}{caret}", row.value), Rect::new(ctl.x + 12.0, ctl.y, ctl.w - 24.0, ctl.h), 13.0, Weight::Medium, th().text, Align::Left);
+            ui.p()
+                .rounded_border(ctl, corner(6.0), EDGE_WIDTH, visible_edge());
+            let caret = if (ui.time * 2.0) as i64 % 2 == 0 {
+                "|"
+            } else {
+                ""
+            };
+            ui.text_in(
+                &format!("{}{caret}", row.value),
+                Rect::new(ctl.x + 12.0, ctl.y, ctl.w - 24.0, ctl.h),
+                13.0,
+                Weight::Medium,
+                th().text,
+                Align::Left,
+            );
             None
         }
         // a button with its text as the value
         _ => {
-            let text = if row.value.is_empty() { omsi_ui::tr("Open").into_owned() } else { row.value.to_string() };
-            let bw = (ui.width(&text, 13.0, Weight::Medium) + 36.0).max(96.0).min(ctl_w);
+            let text = if row.value.is_empty() {
+                omsi_ui::tr("Open").into_owned()
+            } else {
+                row.value.to_string()
+            };
+            let bw = (ui.width(&text, 13.0, Weight::Medium) + 36.0)
+                .max(96.0)
+                .min(ctl_w);
             let b = Rect::new(r.right() - 8.0 - bw, ctl.y, bw, ctl.h);
-            let pressed = ui.button(&format!("pause-bt-{k}-{}", row.name), b, &text, None, ButtonKind::Normal);
+            let pressed = ui.button(
+                &format!("pause-bt-{k}-{}", row.name),
+                b,
+                &text,
+                None,
+                ButtonKind::Normal,
+            );
+            if ui.flat {
+                ui.p()
+                    .rounded_border(b, corner(6.0), EDGE_WIDTH, visible_edge());
+            }
             let (_, _, clicked) = ui.interact(id, Rect::new(r.x, r.y, b.x - r.x - 6.0, r.h));
             (pressed || clicked).then_some(Action::Choose(k))
         }
@@ -507,7 +990,11 @@ fn settings_row(ui: &mut Ui, k: usize, label: &str, r: Rect, kbd: bool, dd_open:
 fn dropdown_rect(a: Rect, n: usize, size: Vec2) -> Rect {
     let h = (n as f32 * 34.0 + 8.0).min(300.0);
     let below = size.y - a.bottom() - 12.0;
-    let y = if below >= h || below >= a.y - 12.0 { a.bottom() + 4.0 } else { a.y - 4.0 - h };
+    let y = if below >= h || below >= a.y - 12.0 {
+        a.bottom() + 4.0
+    } else {
+        a.y - 4.0 - h
+    };
     Rect::new(a.x, y, a.w, h.min(below.max(a.y - 12.0)))
 }
 
@@ -517,13 +1004,19 @@ fn dropdown(sh: &mut Shell, d: &DropdownView, a: Rect, kbd: bool) {
     let ui = &mut sh.ui;
     // (over the scroll area's clip: a layer of its own over the whole window)
     ui.push_clip(Rect::new(0.0, 0.0, ui.size.x, ui.size.y), 0.0);
-    ui.p().rounded(rr.inset(-2.0), 10.0, Color::rgba(0, 0, 0, 0.35));
+    ui.p()
+        .rounded(rr.inset(-2.0), 10.0, Color::rgba(0, 0, 0, 0.35));
     ui.p().rounded(rr, 8.0, th().surface_2);
     let row = 34.0;
     let id = id_of("pause-dropdown");
     let content = d.items.len() as f32 * row + 8.0;
     let max = (content - rr.h).max(0.0);
-    let mut scroll = ui.scroll.get(&id).copied().unwrap_or(d.top as f32 * row).clamp(0.0, max);
+    let mut scroll = ui
+        .scroll
+        .get(&id)
+        .copied()
+        .unwrap_or(d.top as f32 * row)
+        .clamp(0.0, max);
     if ui.hover(rr) && ui.input.wheel.y.abs() > 0.0 {
         scroll = (scroll - ui.input.wheel.y * 40.0).clamp(0.0, max);
         ui.input.wheel = Vec2::ZERO;
@@ -548,11 +1041,23 @@ fn dropdown(sh: &mut Shell, d: &DropdownView, a: Rect, kbd: bool) {
         let (h, _, clicked) = ui.interact(id_of(&format!("pause-dd-{i}")), cell);
         if d.current == Some(i) {
             ui.p().rounded(cell, 5.0, th().surface_3);
-            ui.icon("check", Vec2::new(cell.right() - 16.0, cell.center().y), 15.0, th().accent);
+            ui.icon(
+                "check",
+                Vec2::new(cell.right() - 16.0, cell.center().y),
+                15.0,
+                th().accent,
+            );
         } else if h || (kbd && d.sel == i) {
             ui.p().rounded(cell, 5.0, th().surface_3.alpha(0.6));
         }
-        ui.text_in(item, Rect::new(cell.x + 10.0, cell.y, cell.w - 36.0, cell.h), 13.0, Weight::Regular, th().text, Align::Left);
+        ui.text_in(
+            item,
+            Rect::new(cell.x + 10.0, cell.y, cell.w - 36.0, cell.h),
+            13.0,
+            Weight::Regular,
+            th().text,
+            Align::Left,
+        );
         if clicked {
             picked = Some(i);
         }
@@ -561,7 +1066,11 @@ fn dropdown(sh: &mut Shell, d: &DropdownView, a: Rect, kbd: bool) {
     if max > 0.0 {
         let bar_h = (rr.h * rr.h / content).max(24.0);
         let y = rr.y + (rr.h - bar_h) * (scroll / max);
-        ui.p().rounded(Rect::new(rr.right() - 5.0, y, 3.0, bar_h), 1.5, Color::WHITE.alpha(0.3));
+        ui.p().rounded(
+            Rect::new(rr.right() - 5.0, y, 3.0, bar_h),
+            1.5,
+            Color::WHITE.alpha(0.3),
+        );
     }
     ui.pop_clip();
     if rr.contains(ui.input.mouse) {
@@ -570,7 +1079,9 @@ fn dropdown(sh: &mut Shell, d: &DropdownView, a: Rect, kbd: bool) {
     match picked {
         Some(i) => sh.actions.push(Action::Dropdown(i)),
         // (a click anywhere else closes it, and does nothing else)
-        None if ui.input.pressed && !rr.contains(ui.input.mouse) && !a.contains(ui.input.mouse) => sh.actions.push(Action::CloseDropdown),
+        None if ui.input.pressed && !rr.contains(ui.input.mouse) && !a.contains(ui.input.mouse) => {
+            sh.actions.push(Action::CloseDropdown)
+        }
         None => {}
     }
 }
@@ -581,7 +1092,12 @@ fn plain_list(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect) {
     let w = body.w.min(720.0);
     let panel = Rect::new(body.x, body.y, w, body.h);
     sh.ui.panel(panel);
-    let inner = Rect::new(panel.x + 10.0, panel.y + 10.0, panel.w - 20.0, panel.h - 20.0);
+    let inner = Rect::new(
+        panel.x + 10.0,
+        panel.y + 10.0,
+        panel.w - 20.0,
+        panel.h - 20.0,
+    );
     list_rows(sh, v, list, inner, false);
 }
 
@@ -589,9 +1105,15 @@ fn plain_list(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect) {
 fn list_rows(sh: &mut Shell, v: &PauseView, list: &ListView, r: Rect, keep_marked: bool) {
     let items = &list.items;
     let back_txt = omsi_ui::tr("Back").into_owned();
-    let shown: Vec<usize> = (0..items.len()).filter(|&k| !(items[k].0 == "back" && plain(items[k].1).0 == back_txt)).collect();
+    let shown: Vec<usize> = (0..items.len())
+        .filter(|&k| !(items[k].0 == "back" && plain(items[k].1).0 == back_txt))
+        .collect();
     // (a list of codes and names - the destinations - in two columns)
-    let code_w = shown.iter().filter_map(|&k| code_and_name(items[k].1)).map(|(c, _)| sh.ui.width(c, 13.0, Weight::Medium)).fold(0.0f32, f32::max);
+    let code_w = shown
+        .iter()
+        .filter_map(|&k| code_and_name(items[k].1))
+        .map(|(c, _)| sh.ui.width(c, 13.0, Weight::Medium))
+        .fold(0.0f32, f32::max);
     let any_hover = sh.ui.hover(r);
     let key = format!("pause-list-{}", list.key);
     let mut acts = Vec::new();
@@ -602,7 +1124,11 @@ fn list_rows(sh: &mut Shell, v: &PauseView, list: &ListView, r: Rect, keep_marke
         for &k in &shown {
             let (id, label) = items[k];
             if id == crate::game_lists::HEADING {
-                ui.heading(Rect::new(view.x + 10.0, y + 6.0, view.w - 20.0, 28.0), label, None);
+                ui.heading(
+                    Rect::new(view.x + 10.0, y + 6.0, view.w - 20.0, 28.0),
+                    label,
+                    None,
+                );
                 y += 34.0;
                 continue;
             }
@@ -613,37 +1139,124 @@ fn list_rows(sh: &mut Shell, v: &PauseView, list: &ListView, r: Rect, keep_marke
             }
             let marked = (keep_marked && k == list.sel) || kbd;
             if ui.row(&format!("pause-lr-{}-{k}", list.key), row, marked) {
-                acts.push(if list.kind == MenuKind::Vehicles && crate::game_lists::bus_preview::selectable(id) { Action::BusSelect(k) } else { Action::Choose(k) });
+                acts.push(
+                    if list.kind == MenuKind::Vehicles
+                        && crate::game_lists::bus_preview::selectable(id)
+                    {
+                        Action::BusSelect(k)
+                    } else {
+                        Action::Choose(k)
+                    },
+                );
             }
             let h = ui.hover(row);
-            let ink = if marked || h { th().text } else { th().text_soft };
+            let ink = if marked || h {
+                th().text
+            } else {
+                th().text_soft
+            };
             let cy = row.center().y;
             if id == "search" {
                 let field = row.inset(2.0);
                 ui.p().rounded(field, 6.0, th().surface_2);
                 ui.icon("search", Vec2::new(field.x + 16.0, cy), 16.0, th().text_dim);
-                ui.text_in(label, Rect::new(field.x + 34.0, field.y, field.w - 44.0, field.h), 13.0, Weight::Regular, th().text_soft, Align::Left);
-            } else if let Some((name, info)) = label.strip_prefix(line_pre.as_str()).and_then(|rest| rest.rsplit_once("  (")).map(|(n, t)| (n, t.trim_end_matches(')'))) {
+                ui.text_in(
+                    label,
+                    Rect::new(field.x + 34.0, field.y, field.w - 44.0, field.h),
+                    13.0,
+                    Weight::Regular,
+                    th().text_soft,
+                    Align::Left,
+                );
+            } else if let Some((name, info)) = label
+                .strip_prefix(line_pre.as_str())
+                .and_then(|rest| rest.rsplit_once("  ("))
+                .map(|(n, t)| (n, t.trim_end_matches(')')))
+            {
                 // a line of the timetable: its number on a sign, as a line sign on a bus
                 let sw = (ui.width(name, 14.0, Weight::Bold) + 22.0).max(48.0);
                 let sign = Rect::new(row.x + 10.0, cy - 13.0, sw, 26.0);
-                ui.p().rounded(sign, 6.0, th().accent.mix(Color::rgba(150, 104, 30, 1.0), if marked || h { 0.0 } else { 0.3 }));
-                ui.text_in(name, sign, 14.0, Weight::Bold, Color::rgba(18, 14, 8, 1.0), Align::Center);
-                ui.text_in(info, Rect::new(sign.right() + 12.0, row.y, row.right() - sign.right() - 40.0, row.h), 13.0, Weight::Regular, ink, Align::Left);
-                ui.icon("chevron_right", Vec2::new(row.right() - 16.0, cy), 16.0, th().text_dim);
+                ui.p().rounded(
+                    sign,
+                    6.0,
+                    th().accent.mix(
+                        Color::rgba(150, 104, 30, 1.0),
+                        if marked || h { 0.0 } else { 0.3 },
+                    ),
+                );
+                ui.text_in(
+                    name,
+                    sign,
+                    14.0,
+                    Weight::Bold,
+                    Color::rgba(18, 14, 8, 1.0),
+                    Align::Center,
+                );
+                ui.text_in(
+                    info,
+                    Rect::new(
+                        sign.right() + 12.0,
+                        row.y,
+                        row.right() - sign.right() - 40.0,
+                        row.h,
+                    ),
+                    13.0,
+                    Weight::Regular,
+                    ink,
+                    Align::Left,
+                );
+                ui.icon(
+                    "chevron_right",
+                    Vec2::new(row.right() - 16.0, cy),
+                    16.0,
+                    th().text_dim,
+                );
             } else if let Some((code, name)) = code_and_name(label).filter(|_| code_w > 0.0) {
-                ui.text_in(code, Rect::new(row.x + 12.0, row.y, code_w, row.h), 13.0, Weight::Medium, th().accent, Align::Right);
-                ui.text_in(name, Rect::new(row.x + 24.0 + code_w, row.y, row.w - code_w - 36.0, row.h), 13.0, Weight::Regular, ink, Align::Left);
+                ui.text_in(
+                    code,
+                    Rect::new(row.x + 12.0, row.y, code_w, row.h),
+                    13.0,
+                    Weight::Medium,
+                    th().accent,
+                    Align::Right,
+                );
+                ui.text_in(
+                    name,
+                    Rect::new(row.x + 24.0 + code_w, row.y, row.w - code_w - 36.0, row.h),
+                    13.0,
+                    Weight::Regular,
+                    ink,
+                    Align::Left,
+                );
             } else {
                 let (text, more) = plain(label);
                 // (a row of a settings list kind without its own window: its value at the right)
                 let row_parts = parse_row(text);
-                ui.text_in(row_parts.name, Rect::new(row.x + 12.0, row.y, row.w - 60.0, row.h), 13.0, Weight::Regular, ink, Align::Left);
+                ui.text_in(
+                    row_parts.name,
+                    Rect::new(row.x + 12.0, row.y, row.w - 60.0, row.h),
+                    13.0,
+                    Weight::Regular,
+                    ink,
+                    Align::Left,
+                );
                 if !row_parts.value.is_empty() && row_parts.kind != "a" {
-                    ui.text_in(row_parts.value, Rect::new(row.x + row.w * 0.5, row.y, row.w * 0.5 - 36.0, row.h), 12.5, Weight::Medium, th().text_dim, Align::Right);
+                    ui.text_in(
+                        row_parts.value,
+                        Rect::new(row.x + row.w * 0.5, row.y, row.w * 0.5 - 36.0, row.h),
+                        12.5,
+                        Weight::Medium,
+                        th().text_dim,
+                        Align::Right,
+                    );
                 }
                 if more {
-                    ui.icon("chevron_right", Vec2::new(row.right() - 16.0, cy), 16.0, th().text_dim);
+                    ui.icon(
+                        "chevron_right",
+                        Vec2::new(row.right() - 16.0, cy),
+                        16.0,
+                        th().text_dim,
+                    );
                 }
             }
             y += LIST_ROW;
@@ -662,7 +1275,8 @@ fn list_rows(sh: &mut Shell, v: &PauseView, list: &ListView, r: Rect, keep_marke
 /// "{code:>3}  {name}": a destination's code and name.
 fn code_and_name(label: &str) -> Option<(&str, &str)> {
     let (c, n) = label.trim_start().split_once("  ")?;
-    (!c.is_empty() && c.len() <= 5 && c.chars().all(|ch| ch.is_ascii_digit())).then_some((c, n.trim_start()))
+    (!c.is_empty() && c.len() <= 5 && c.chars().all(|ch| ch.is_ascii_digit()))
+        .then_some((c, n.trim_start()))
 }
 
 /// The lines or a line's tours, with the timetable of the chosen one beside them.
@@ -673,17 +1287,43 @@ fn timetable_lists(sh: &mut Shell, v: &PauseView, list: &ListView, body: Rect) {
         let lh = (body.h * 0.38).max(120.0);
         let top = Rect::new(body.x, body.y, body.w, lh);
         sh.ui.panel(top);
-        list_rows(sh, v, list, Rect::new(top.x + 10.0, top.y + 10.0, top.w - 20.0, top.h - 20.0), list.kind == MenuKind::Tours);
-        preview(sh, p, list, Rect::new(body.x, top.bottom() + GAP, body.w, body.h - lh - GAP));
+        list_rows(
+            sh,
+            v,
+            list,
+            Rect::new(top.x + 10.0, top.y + 10.0, top.w - 20.0, top.h - 20.0),
+            list.kind == MenuKind::Tours,
+        );
+        preview(
+            sh,
+            p,
+            list,
+            Rect::new(body.x, top.bottom() + GAP, body.w, body.h - lh - GAP),
+        );
         return;
     }
-    let pane_w = if list.preview.is_some() { (body.w * 0.46).min(440.0) } else { 0.0 };
+    let pane_w = if list.preview.is_some() {
+        (body.w * 0.46).min(440.0)
+    } else {
+        0.0
+    };
     let lw = (body.w - pane_w - if pane_w > 0.0 { GAP * 2.0 } else { 0.0 }).min(620.0);
     let left = Rect::new(body.x, body.y, lw, body.h);
     sh.ui.panel(left);
-    list_rows(sh, v, list, Rect::new(left.x + 10.0, left.y + 10.0, left.w - 20.0, left.h - 20.0), list.kind == MenuKind::Tours);
+    list_rows(
+        sh,
+        v,
+        list,
+        Rect::new(left.x + 10.0, left.y + 10.0, left.w - 20.0, left.h - 20.0),
+        list.kind == MenuKind::Tours,
+    );
     if let Some(p) = list.preview {
-        preview(sh, p, list, Rect::new(left.right() + GAP * 2.0, body.y, pane_w, body.h));
+        preview(
+            sh,
+            p,
+            list,
+            Rect::new(left.right() + GAP * 2.0, body.y, pane_w, body.h),
+        );
     }
 }
 
@@ -694,8 +1334,22 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
     let ui = &mut sh.ui;
     ui.panel(r);
     let inner = Rect::new(r.x + 18.0, r.y + 16.0, r.w - 36.0, r.h - 32.0);
-    ui.text_in(&p.title, Rect::new(inner.x, inner.y, inner.w, 24.0), 16.0, Weight::Bold, th().text, Align::Left);
-    ui.text_in(&p.meta, Rect::new(inner.x, inner.y + 26.0, inner.w, 18.0), 12.0, Weight::Regular, th().text_dim, Align::Left);
+    ui.text_in(
+        &p.title,
+        Rect::new(inner.x, inner.y, inner.w, 24.0),
+        16.0,
+        Weight::Bold,
+        th().text,
+        Align::Left,
+    );
+    ui.text_in(
+        &p.meta,
+        Rect::new(inner.x, inner.y + 26.0, inner.w, 18.0),
+        12.0,
+        Weight::Regular,
+        th().text_dim,
+        Align::Left,
+    );
     let mut top = inner.y + 54.0;
     top += 6.0;
     if let Some(time) = p.time.as_ref() {
@@ -703,19 +1357,40 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
         let prev = Rect::new(inner.x, top, 44.0, bh);
         let next = Rect::new(inner.right() - 44.0, top, 44.0, bh);
         // (the trip before: usize::MAX - 1, the next: usize::MAX - 2)
-        for (b, icon, code) in [(prev, "arrow_back", usize::MAX - 1), (next, "arrow_forward", usize::MAX - 2)] {
-            if ui.button(&format!("pause-trip-{icon}"), b, "", Some(icon), ButtonKind::Normal) {
+        for (b, icon, code) in [
+            (prev, "arrow_back", usize::MAX - 1),
+            (next, "arrow_forward", usize::MAX - 2),
+        ] {
+            if ui.button(
+                &format!("pause-trip-{icon}"),
+                b,
+                "",
+                Some(icon),
+                ButtonKind::Normal,
+            ) {
                 acts.push(Action::Pane(code));
             }
         }
-        ui.text_in(time, Rect::new(prev.right() + 8.0, top, next.x - prev.right() - 16.0, bh), 18.0, Weight::Bold, th().accent, Align::Center);
+        ui.text_in(
+            time,
+            Rect::new(prev.right() + 8.0, top, next.x - prev.right() - 16.0, bh),
+            18.0,
+            Weight::Bold,
+            th().accent,
+            Align::Center,
+        );
         top += bh + 10.0;
     }
     let lh = 28.0;
     match (p.chosen, p.button.as_ref()) {
         (Some(chosen), Some(button)) => {
             let go = Rect::new(inner.x, inner.bottom() - 44.0, inner.w, 44.0);
-            let rows_r = Rect::new(inner.x - 8.0, top, inner.w + 16.0, (go.y - 10.0 - top).max(lh));
+            let rows_r = Rect::new(
+                inner.x - 8.0,
+                top,
+                inner.w + 16.0,
+                (go.y - 10.0 - top).max(lh),
+            );
             let key = format!("pause-pane-{}", list.key);
             let mut first_view: Option<f32> = None;
             ui.scroll_area(&key, rows_r, &mut |ui, view| {
@@ -727,8 +1402,26 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
                     if i == chosen {
                         first_view = Some(i as f32 * lh);
                     }
-                    ui.text_in(when, Rect::new(row.right() - 70.0, row.y, 60.0, row.h), 12.5, Weight::Medium, th().accent, Align::Right);
-                    ui.text_in(what, Rect::new(row.x + 10.0, row.y, row.w - 90.0, row.h), 12.5, Weight::Regular, if i == chosen { th().text } else { th().text_soft }, Align::Left);
+                    ui.text_in(
+                        when,
+                        Rect::new(row.right() - 70.0, row.y, 60.0, row.h),
+                        12.5,
+                        Weight::Medium,
+                        th().accent,
+                        Align::Right,
+                    );
+                    ui.text_in(
+                        what,
+                        Rect::new(row.x + 10.0, row.y, row.w - 90.0, row.h),
+                        12.5,
+                        Weight::Regular,
+                        if i == chosen {
+                            th().text
+                        } else {
+                            th().text_soft
+                        },
+                        Align::Left,
+                    );
                 }
                 p.rows.len() as f32 * lh
             });
@@ -737,7 +1430,13 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
                     sh.ui.scroll_to(&key, y, lh, rows_r.h);
                 }
             }
-            if sh.ui.button("pause-go", go, button, Some("play_arrow"), ButtonKind::Primary) {
+            if sh.ui.button(
+                "pause-go",
+                go,
+                button,
+                Some("play_arrow"),
+                ButtonKind::Primary,
+            ) {
                 acts.push(Action::Pane(usize::MAX));
             }
         }
@@ -748,18 +1447,46 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
             ui.scroll_area(&key, rows_r, &mut |ui, view| {
                 for (i, (what, when)) in p.rows.iter().enumerate() {
                     let y = view.y + i as f32 * lh;
-                    ui.text_in(when, Rect::new(view.right() - 78.0, y, 70.0, lh), 12.5, Weight::Medium, th().accent, Align::Right);
+                    ui.text_in(
+                        when,
+                        Rect::new(view.right() - 78.0, y, 70.0, lh),
+                        12.5,
+                        Weight::Medium,
+                        th().accent,
+                        Align::Right,
+                    );
                     match what.strip_prefix(tp.as_str()) {
                         Some(rest) => {
                             let (num, dest) = rest.split_once("  ›  ").unwrap_or((rest, ""));
                             let tw = (ui.width(num.trim(), 12.5, Weight::Bold) + 16.0).max(34.0);
                             let tile = Rect::new(view.x, y + 3.0, tw, lh - 6.0);
                             ui.p().rounded(tile, 5.0, th().accent.alpha(0.16));
-                            ui.text_in(num.trim(), tile, 12.5, Weight::Bold, th().accent, Align::Center);
-                            ui.text_in(dest, Rect::new(tile.right() + 10.0, y, view.w - tw - 100.0, lh), 12.5, Weight::Regular, th().text_soft, Align::Left);
+                            ui.text_in(
+                                num.trim(),
+                                tile,
+                                12.5,
+                                Weight::Bold,
+                                th().accent,
+                                Align::Center,
+                            );
+                            ui.text_in(
+                                dest,
+                                Rect::new(tile.right() + 10.0, y, view.w - tw - 100.0, lh),
+                                12.5,
+                                Weight::Regular,
+                                th().text_soft,
+                                Align::Left,
+                            );
                         }
                         None => {
-                            ui.text_in(what, Rect::new(view.x, y, view.w - 90.0, lh), 12.5, Weight::Regular, th().text_soft, Align::Left);
+                            ui.text_in(
+                                what,
+                                Rect::new(view.x, y, view.w - 90.0, lh),
+                                12.5,
+                                Weight::Regular,
+                                th().text_soft,
+                                Align::Left,
+                            );
                         }
                     }
                 }
@@ -773,6 +1500,15 @@ fn preview(sh: &mut Shell, p: &Preview, list: &ListView, r: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pause_list_title_subtitle_and_body_do_not_overlap() {
+        let area = Rect::new(20.0, 30.0, 420.0, 600.0);
+        let (title, subtitle, body_top) = list_header_layout(area);
+        assert!(title.x >= area.x + 36.0);
+        assert!(title.bottom() <= subtitle.y);
+        assert!(subtitle.bottom() <= body_top);
+    }
 
     #[test]
     fn player_count_badge_follows_the_title_without_overflowing() {
@@ -791,14 +1527,20 @@ mod tests {
     #[test]
     fn a_settings_row_is_taken_apart() {
         let r = parse_row("Clouds\u{1f}s\u{1f}on\u{1f}Draws the clouds\u{1f}0.5");
-        assert_eq!((r.name, r.kind, r.value, r.desc, r.frac), ("Clouds", "s", "on", "Draws the clouds", Some(0.5)));
+        assert_eq!(
+            (r.name, r.kind, r.value, r.desc, r.frac),
+            ("Clouds", "s", "on", "Draws the clouds", Some(0.5))
+        );
         let r = parse_row("Plain");
         assert_eq!((r.name, r.kind, r.value), ("Plain", "a", ""));
     }
 
     #[test]
     fn destinations_are_codes_and_names() {
-        assert_eq!(code_and_name(" 12  Hauptbahnhof"), Some(("12", "Hauptbahnhof")));
+        assert_eq!(
+            code_and_name(" 12  Hauptbahnhof"),
+            Some(("12", "Hauptbahnhof"))
+        );
         assert_eq!(code_and_name("Line 5  (3 tours)"), None);
     }
 

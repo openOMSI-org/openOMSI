@@ -497,7 +497,6 @@ impl App {
                 self.menus.list_kind,
                 Some(
                     ListKind::Options(_)
-                        | ListKind::Vehicle(_)
                         | ListKind::World(_)
                         | ListKind::Controls
                         | ListKind::Keyboard(_)
@@ -548,7 +547,6 @@ impl App {
         use crate::game_lists::ListKind;
         let next = match self.menus.list_kind.as_ref() {
             Some(ListKind::Options(_)) => ListKind::Options(i),
-            Some(ListKind::Vehicle(_)) => ListKind::Vehicle(i),
             Some(ListKind::World(_)) => ListKind::World(i),
             Some(ListKind::Keyboard(_)) => ListKind::Keyboard(i.min(1)),
             Some(ListKind::ControllerDevices(_)) => ListKind::ControllerDevices(

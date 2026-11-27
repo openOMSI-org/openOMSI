@@ -33,6 +33,11 @@ pub(super) fn editor(sh: &mut Shell, v: &PauseView, area: Rect) {
     let row_h = 62.0;
     let scroll_rect = Rect::new(area.x, area.y, area.w, (area.h - 54.0).max(0.0));
     sh.ui.surface(area, corner(10.0), th().surface);
+    if th().glass.is_none() {
+        sh.ui
+            .p()
+            .rounded_border(area, corner(10.0), super::EDGE_WIDTH, super::visible_edge());
+    }
     sh.ui
         .scroll_area("pause-quick-editor", scroll_rect, &mut |ui, view| {
             for (i, id) in entries.iter().enumerate() {
@@ -113,6 +118,12 @@ pub(super) fn editor(sh: &mut Shell, v: &PauseView, area: Rect) {
                             edits.push(Edit::Move(id.clone(), down));
                             picked = Some(i);
                         }
+                        ui.p().rounded_border(
+                            r,
+                            corner(6.0),
+                            super::EDGE_WIDTH,
+                            super::visible_edge(),
+                        );
                         ui.tooltip(r, &omsi_ui::tr(tip));
                     } else {
                         ui.icon(icon, r.center(), 18.0, th().ink_muted.alpha(0.3));
@@ -138,24 +149,32 @@ pub(super) fn editor(sh: &mut Shell, v: &PauseView, area: Rect) {
     }
     let w = ((area.w - 24.0) * 0.5).max(0.0);
     let y = area.bottom() - 46.0;
+    let reset = Rect::new(area.x + 8.0, y, w, 38.0);
     if sh.ui.button(
         "pause-quick-reset",
-        Rect::new(area.x + 8.0, y, w, 38.0),
+        reset,
         &omsi_ui::tr("Reset to defaults"),
         None,
         ButtonKind::Ghost,
     ) {
         edits.push(Edit::Reset);
     }
+    sh.ui
+        .p()
+        .rounded_border(reset, corner(6.0), super::EDGE_WIDTH, super::visible_edge());
+    let done = Rect::new(area.right() - 8.0 - w, y, w, 38.0);
     if sh.ui.button(
         "pause-quick-done",
-        Rect::new(area.right() - 8.0 - w, y, w, 38.0),
+        done,
         &omsi_ui::tr("Done"),
         Some("check"),
         ButtonKind::Primary,
     ) {
         sh.quick_edit = false;
     }
+    sh.ui
+        .p()
+        .rounded_border(done, corner(6.0), super::EDGE_WIDTH, super::visible_edge());
     sh.actions
         .extend(edits.into_iter().map(Action::QuickActions));
 }

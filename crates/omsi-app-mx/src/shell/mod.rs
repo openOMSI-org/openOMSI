@@ -57,6 +57,7 @@ pub(crate) enum Action {
 pub(crate) struct Shell {
     pub(crate) bus_preview: bus_preview::State,
     pub(crate) settings_search: pause::search::State,
+    pub(crate) settings_sections: std::collections::HashMap<String, usize>,
     pub(crate) process_prompt: Option<u64>,
     pub(crate) process_dialog: crate::process_permissions::DialogState,
     pub(crate) ui: Ui,
@@ -132,6 +133,7 @@ impl Shell {
         Shell {
             bus_preview: Default::default(),
             settings_search: Default::default(),
+            settings_sections: Default::default(),
             process_prompt: None,
             process_dialog: Default::default(),
             ui,
@@ -278,6 +280,7 @@ impl Shell {
     fn ensure_gpu(&mut self, r: &Renderer) {
         let format = r.format();
         if self.gpu.as_ref().map(|g| g.1 != format).unwrap_or(true) {
+            // An MSAA resolve would replace the scene outside this transparent overlay.
             self.gpu = Some((Gpu::new(&r.device, format, 1, self.ui.atlas.size), format));
             self.ui.atlas.mark_all_dirty();
             self.picture_tex = None;

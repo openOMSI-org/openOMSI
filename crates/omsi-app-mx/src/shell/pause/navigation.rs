@@ -24,6 +24,12 @@ impl Category {
         Self::Online,
         Self::Plugins,
     ];
+    pub const GROUPS: [(&'static str, &'static [Self]); 4] = [
+        ("Simulation", &[Self::Driving, Self::World, Self::Saves]),
+        ("Tools", &[Self::Capture]),
+        ("Preferences", &[Self::Settings]),
+        ("Community", &[Self::Online, Self::Plugins]),
+    ];
 
     pub fn of(id: &str) -> Option<Self> {
         Some(match id {

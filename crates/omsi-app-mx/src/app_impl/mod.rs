@@ -34,6 +34,7 @@ mod weather;
 pub(crate) use actions::gate_gear_var;
 pub(crate) use menu_lists::dropdown_top_at;
 pub(crate) use menus::{GAME_MENU, MenuLine, on_server};
+pub(crate) use mouse::held_mouse_look_allowed;
 pub(crate) use mouse_grab::{GrabMode, MouseGrab, steer_reach as mouse_grab_reach};
 pub(crate) use view::{
     ZOOM_INTENT, ZOOM_INTENT_F1, ZoomHold, cab_look_yaw, chase_orbit_step, drawn_fov, ease_look,

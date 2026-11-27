@@ -22,7 +22,8 @@ struct VOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) color: vec4<f32>,
-    @location(2) tex: f32,
+    @location(2) @interpolate(flat) tex: f32,
+    @location(3) shape: vec4<f32>,
 };
 
 fn to_linear(c: vec3<f32>) -> vec3<f32> {
@@ -34,9 +35,9 @@ fn to_linear(c: vec3<f32>) -> vec3<f32> {
 @vertex
 fn vs_main(v: VIn) -> VOut {
     var o: VOut;
-    if (v.mode.x < 0.5) {
+    if (v.mode.x < 0.5 || v.mode.x > 3.5) {
         // pixels of the target, whatever the viewport
-        let p = v.pos.xy + v.ext * v.width.x;
+        let p = select(v.pos.xy + v.ext * v.width.x, v.pos.xy, v.mode.x > 3.5);
         let q = (p - u.viewport.xy) / u.viewport.zw;
         o.clip = vec4<f32>(q.x * 2.0 - 1.0, 1.0 - q.y * 2.0, 0.0, 1.0);
     } else {
@@ -63,8 +64,14 @@ fn vs_main(v: VIn) -> VOut {
     }
     o.uv = v.uv;
     o.color = vec4<f32>(to_linear(v.color.rgb), v.color.a);
-    o.tex = v.mode.y;
+    o.tex = select(v.mode.y, v.mode.x, v.mode.x > 3.5);
+    o.shape = vec4<f32>(v.ext, v.width);
     return o;
+}
+
+fn rounded_box_distance(p: vec2<f32>, half_size: vec2<f32>, radius: f32) -> f32 {
+    let q = abs(p) - half_size + vec2<f32>(radius);
+    return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 }
 
 fn rounded_mask(p: vec2<f32>) -> f32 {
@@ -80,6 +87,18 @@ fn rounded_mask(p: vec2<f32>) -> f32 {
 
 @fragment
 fn fs_main(i: VOut) -> @location(0) vec4<f32> {
+    if (i.tex > 3.5) {
+        let outer_d = rounded_box_distance(i.uv, i.shape.zw, i.shape.x);
+        let inner_d = rounded_box_distance(
+            i.uv,
+            max(i.shape.zw - vec2<f32>(i.shape.y), vec2<f32>(0.0)),
+            max(i.shape.x - i.shape.y, 0.0),
+        );
+        let outer = clamp(0.5 - outer_d / max(fwidth(outer_d), 0.001), 0.0, 1.0);
+        let inner = clamp(0.5 - inner_d / max(fwidth(inner_d), 0.001), 0.0, 1.0);
+        let a = i.color.a * outer * (1.0 - inner) * u.params.y;
+        return vec4<f32>(i.color.rgb * a, a);
+    }
     // (sampled for every fragment: a sample in a branch has no derivatives)
     let t = textureSample(t_img, s_img, i.uv);
     var c = i.color;

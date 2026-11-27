@@ -1030,8 +1030,11 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
 pub(super) fn pages_of(app: &App, kind: &ListKind) -> Option<(Vec<Page>, usize)> {
     let (pages, tab) = match kind {
         ListKind::Options(t) => (options_pages(app), *t),
-        ListKind::Vehicle(t) => (vehicle_pages(app), *t),
-        ListKind::World(t) => (world_pages(app), *t),
+        ListKind::World(t) => {
+            let mut pages = world_pages(app);
+            pages.extend(vehicle_pages(app));
+            (pages, *t)
+        }
         ListKind::Controls => (vec![("Controls", items(app, kind))], 0),
         ListKind::Keyboard(tab) => (keyboard_pages(app), *tab),
         ListKind::ControllerDevices(_)
@@ -1069,7 +1072,7 @@ fn shown_in_mode(mode: &str, key: &str) -> bool {
 /// Which tab of a window (`kind`: Options, World ...) is the one titled `title` (the first if none is).
 pub(crate) fn tab_of(app: &App, kind: ListKind, title: &str) -> usize {
     pages_of(app, &kind)
-        .and_then(|(pages, _)| pages.iter().position(|p| p.0 == title))
+        .and_then(|(pages, _)| pages.iter().position(|page| page.0 == title))
         .unwrap_or(0)
 }
 

@@ -30,8 +30,6 @@ pub(crate) enum ListKind {
     Options(usize),
     /// Confirmation of graphical settings in the active session.
     GraphicsConfirm(usize),
-    /// What can be done with the vehicle, on this page.
-    Vehicle(usize),
     /// The clock, the weather and the traffic, on this page.
     World(usize),
     /// Entry points for keyboard and game controller configuration.
@@ -736,7 +734,7 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 ),
             ];
         }
-        ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) => {
+        ListKind::Options(_) | ListKind::World(_) => {
             let Some((mut pages, tab)) = pages_of(app, kind) else {
                 return out;
             };
@@ -1260,8 +1258,7 @@ pub(crate) fn menu_extras(
     match kind {
         ListKind::Options(_) => (MenuKind::Options, head("Options..."), None),
         ListKind::GraphicsConfirm(_) => (MenuKind::List, head("Confirm graphics changes"), None),
-        ListKind::Vehicle(_) => (MenuKind::Options, head("Vehicle options..."), None),
-        ListKind::World(_) => (MenuKind::Options, head("World options..."), None),
+        ListKind::World(_) => (MenuKind::Options, head("Vehicle and world"), None),
         ListKind::Controls => (MenuKind::Options, head("Controls..."), None),
         ListKind::Keyboard(_) => (MenuKind::Options, head("Keyboard"), None),
         ListKind::ControllerDevices(_) => (MenuKind::Options, head("Game controllers"), None),
@@ -1539,9 +1536,18 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             ListKind::Tours(..) => Some(ListKind::Lines),
             ListKind::Events => Some(ListKind::Keyboard(0)),
             ListKind::Keyboard(_) => Some(ListKind::Controls),
-            ListKind::PlaceType(_) | ListKind::PlaceLivery(_) | ListKind::PlaceHof(..) => {
-                Some(ListKind::PlaceMaker)
-            }
+            ListKind::Drivers
+            | ListKind::Numbers
+            | ListKind::Liveries
+            | ListKind::SwitchTo
+            | ListKind::Destinations
+            | ListKind::RouteNumbers
+            | ListKind::Hofs
+            | ListKind::Spots
+            | ListKind::PlaceMaker
+            | ListKind::PlaceType(_)
+            | ListKind::PlaceLivery(_)
+            | ListKind::PlaceHof(..) => Some(ListKind::World(0)),
             ListKind::AdminPlayers | ListKind::AdminClassic => Some(ListKind::Admin),
             ListKind::AdminPlayer(_) => Some(ListKind::AdminPlayers),
             ListKind::AdminConfirm(_, t) => Some(ListKind::AdminPlayer(*t)),
@@ -1587,6 +1593,7 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             // (the arrows and a click on a stepper only change values: no buttons)
             let step = matches!(mv, Move::Next);
             match verb {
+                "controls" if step => return Some(ListKind::Controls),
                 "graphics_apply" if step => {
                     return Some(ListKind::GraphicsConfirm(match kind {
                         ListKind::Options(tab) => *tab,
@@ -1603,6 +1610,20 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                 "vr_nav_reset" if step && app.vr_active() && app.player.is_some() => {
                     app.vr_nav_adjust("reset", 1.0);
                     app.menus.list_dirty = true;
+                }
+                "custom_number_edit" if step => {
+                    if app.menus.menu_edit_number {
+                        app.apply_number_edit();
+                    } else {
+                        app.start_number_edit();
+                    }
+                }
+                "custom_ident_edit" if step => {
+                    if app.menus.menu_edit_ident {
+                        app.apply_ident_edit();
+                    } else {
+                        app.start_ident_edit();
+                    }
                 }
                 // (the preset, the clouds and the precipitation are picked from a drop-down: `App::chooser_pick`)
                 "weather" | "cloudkind" | "precipkind" | "metar_src" | "sel" | "preset"
@@ -1654,31 +1675,6 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
                     return None;
                 }
                 _ => {}
-            }
-            Some(kind.clone())
-        }
-        ListKind::Vehicle(_) => {
-            if matches!(mv, Move::Next) {
-                match verb {
-                    "custom_number_edit" => {
-                        if app.menus.menu_edit_number {
-                            app.apply_number_edit();
-                        } else {
-                            app.start_number_edit();
-                        }
-                    }
-                    "custom_ident_edit" => {
-                        if app.menus.menu_edit_ident {
-                            app.apply_ident_edit();
-                        } else {
-                            app.start_ident_edit();
-                        }
-                    }
-                    _ => {
-                        app.page_action(verb);
-                        return None;
-                    }
-                }
             }
             Some(kind.clone())
         }
