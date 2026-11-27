@@ -126,6 +126,16 @@ impl MouseGrab {
         }
     }
 
+    /// The frame put the steering point and the system cursor at `centre` after mouse
+    /// steering was switched on. Reports from before that move have been seen by now; the
+    /// next one is the hand's, even if it goes straight into the outer pedal band (#4346).
+    pub(crate) fn recentred(&mut self, centre: (f32, f32)) {
+        self.at = Some(centre);
+        self.last = Some(centre);
+        self.warp_pending = false;
+        self.stray = 0;
+    }
+
     /// The steering point within the full lock - `reach` half widths of the window either
     /// side of its middle (`steer_reach`) - and the pedals' range, the window's height: what
     /// the mouse moves on past that turns nothing and is not to be given back first.
@@ -524,6 +534,27 @@ mod tests {
         );
         assert_eq!(reports[60], CursorStep::Absolute);
         assert_eq!(g.at, Some((1500.0, 450.0)));
+    }
+
+    /// Switching mouse steering off and on again leaves the cursor at the pedal it held.
+    /// The frame recentres the steering point; a report from before that move is still stale,
+    /// but the first deliberate move into the pedal band is the hand's (#4346).
+    #[test]
+    fn a_pedal_move_after_reenabling_is_not_a_stale_warp_report() {
+        let centre = (800.0, 450.0);
+        let mut g = MouseGrab::default();
+        // switching on catches the cursor where it was left: a warp's echo is expected
+        g.caught(GrabMode::Warp, Some(centre));
+        g.at = Some((800.0, 150.0));
+        assert_eq!(g.cursor_at(800.0, 150.0, centre, SIZE), CursorStep::Ignore);
+        // the frame puts the steering point and the cursor in the middle
+        g.recentred(centre);
+        // up into the throttle band again: counted at once, with the cursor put back
+        assert_eq!(
+            g.cursor_at(800.0, 150.0, centre, SIZE),
+            CursorStep::Moved { warp: true }
+        );
+        assert_eq!(g.at, Some((800.0, 150.0)));
     }
 
     #[test]

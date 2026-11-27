@@ -245,7 +245,9 @@ impl App {
             let (w, h) = (s.config.width as f32, s.config.height as f32);
             if std::mem::take(&mut self.input.center_cursor) {
                 self.input.cursor = (w * 0.5, h * 0.5);
-                self.input.mouse_grab.at = Some(self.input.cursor);
+                // (the steering point is at the middle now: a cursor report still awaited
+                // from the catch is old, but the next one is the hand's, #4346)
+                self.input.mouse_grab.recentred(self.input.cursor);
                 // (a locked cursor stands in the middle already, and moving it unlocks it)
                 if let (Some(win), false) = (
                     self.window.as_ref(),
