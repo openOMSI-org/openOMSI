@@ -40,7 +40,7 @@ file 2096 crates/omsi-render-mx/src/tests.rs
 file 2634 crates/omsi-render-mx/src/tests/more.rs
 file 2776 crates/omsi-render/src/tests/more.rs
 file 1734 crates/omsi-scene-mx/src/driver.rs
-file 2021 crates/omsi-scene-mx/src/lights.rs
+file 2153 crates/omsi-scene-mx/src/lights.rs
 file 2106 crates/omsi-scene-mx/src/mapgen.rs
 file 1884 crates/omsi-scene-mx/src/place.rs
 file 1635 crates/omsi-scene-mx/src/place_step.rs
