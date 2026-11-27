@@ -49,6 +49,10 @@ pub(super) fn terrain_height(world: &World, x: f64, y: f64) -> Option<f64> {
 /// or an underpass a few metres down.
 const BURIED: f64 = 6.0;
 
+/// How many lines of the map's `registrations.txt` a random vehicle tries for its free plate
+/// before it takes the player's own plate after all (#3477).
+const FREE_PLATE_TRIES: usize = 7;
+
 impl Traffic {
     /// Is a vehicle of radius `r` at `p` hidden from the viewer by buildings (or a hill)?
     /// Every line of sight to it must be: to its middle, to both ends whichever way it
@@ -808,8 +812,14 @@ impl Traffic {
             // (TRoadVehicleInst.virtual_11 at 0x7e7b51); a free plate is one of the map's
             // registrations.txt.
             let numbers = ty.def.numbers_with_plates();
+            // (not the number and plate the player's own bus of this file shows, #3477)
+            let mine = self.sim.player_livery.as_ref().filter(|p| p.is_bus_of(&ty));
             if !numbers.is_empty() {
-                let (n, plate) = &numbers[(seed.rotate_left(29) % numbers.len() as u64) as usize];
+                let at = (seed.rotate_left(29) % numbers.len() as u64) as usize;
+                let (n, plate) = (0..numbers.len())
+                    .map(|k| &numbers[(at + k) % numbers.len()])
+                    .find(|(n, plate)| !mine.is_some_and(|p| p.is_number_or_plate(n, plate)))
+                    .unwrap_or(&numbers[at]);
                 if let Some(i) = ty.program.str_var("number") {
                     vehicle.state.str_vars[i as usize] = n.clone();
                 }
@@ -824,11 +834,24 @@ impl Traffic {
                 }
             }
             if ty.def.registration_mode == 1 {
-                if let (Some(i), Some(reg)) = (
-                    ty.program.str_var("ident"),
-                    world.free_registration(seed.rotate_left(17)),
-                ) {
-                    vehicle.state.str_vars[i as usize] = reg;
+                if let Some(i) = ty.program.str_var("ident") {
+                    // a plate of the map's `registrations.txt`, and not the player's (#3477):
+                    // another line of it, while the free one is the plate of one's own bus
+                    let mut seed = seed.rotate_left(17);
+                    let mut plate = world.free_registration(seed);
+                    for _ in 0..FREE_PLATE_TRIES {
+                        if !plate
+                            .as_deref()
+                            .is_some_and(|r| mine.is_some_and(|p| p.is_number_or_plate("", r)))
+                        {
+                            break;
+                        }
+                        seed = seed.wrapping_add(0x9e37_79b9_7f4a_7c15);
+                        plate = world.free_registration(seed);
+                    }
+                    if let Some(reg) = plate {
+                        vehicle.state.str_vars[i as usize] = reg;
+                    }
                 }
             }
         }

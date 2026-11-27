@@ -4,6 +4,13 @@
 use super::*;
 
 impl ScheduleSim {
+    /// The bus the player drives from now on (None: on foot, or no bus of the drive). A depot
+    /// bus of that file leaves the player's own line of the ailists alone from then on
+    /// (#3477).
+    pub fn set_player_bus(&mut self, livery: Option<crate::livery::PlayerLivery>) {
+        self.player_bus = livery;
+    }
+
     /// The vehicle departure `i` is driven with (see [`Choice`]).
     pub fn choose(&mut self, i: usize, world: &dyn TimetableWorld) -> Option<Choice> {
         let group = self.departures[i].ai_group.to_ascii_lowercase();
@@ -36,8 +43,35 @@ impl ScheduleSim {
                 // depot the same share as the whole SD200 fleet.
                 // A tour's vehicle for the day: the one `car_use` gives it, else one drawn now
                 // and kept (a fleet number no other tour has, while there are any left).
-                let (k, j) = match self.tour_vehicle.get(&key) {
-                    Some(&kj) => kj,
+                let (k, j) = match self.tour_vehicle.get(&key).copied() {
+                    Some((k, j)) => {
+                        let cached_is_mine = vehicles
+                            .get(k)
+                            .and_then(|v| v.1.get(j).map(|e| (v, e)))
+                            .is_some_and(|(v, e)| player_entry(self.player_bus.as_ref(), &v.0, e));
+                        if cached_is_mine {
+                            if let Some(n) = vehicles[k].1.get(j) {
+                                self.used_numbers
+                                    .remove(&(group.clone(), n.number.trim().to_string()));
+                            }
+                            let j = draw_number(
+                                &group,
+                                vehicles,
+                                k,
+                                h,
+                                self.player_bus.as_ref(),
+                                &self.used_numbers,
+                            );
+                            if let Some(n) = vehicles[k].1.get(j) {
+                                self.used_numbers
+                                    .insert((group.clone(), n.number.trim().to_string()));
+                            }
+                            self.tour_vehicle.insert(key, (k, j));
+                            (k, j)
+                        } else {
+                            (k, j)
+                        }
+                    }
                     None => {
                         let weights: Vec<usize> =
                             vehicles.iter().map(|(_, n, _)| n.len().max(1)).collect();
@@ -51,17 +85,15 @@ impl ScheduleSim {
                             }
                             x -= w;
                         }
-                        let nums = &vehicles[k].1;
-                        let start = ((h >> 21) % nums.len().max(1) as u64) as usize;
-                        let free = (0..nums.len())
-                            .map(|o| (start + o) % nums.len())
-                            .find(|&j| {
-                                !self
-                                    .used_numbers
-                                    .contains(&(group.clone(), nums[j].number.trim().to_string()))
-                            });
-                        let j = free.unwrap_or(start);
-                        if let Some(n) = nums.get(j) {
+                        let j = draw_number(
+                            &group,
+                            vehicles,
+                            k,
+                            h,
+                            self.player_bus.as_ref(),
+                            &self.used_numbers,
+                        );
+                        if let Some(n) = vehicles[k].1.get(j) {
                             self.used_numbers
                                 .insert((group.clone(), n.number.trim().to_string()));
                         }
@@ -281,4 +313,226 @@ pub fn depot_file(
     let h = found.map(Arc::new);
     cache.insert(key, h.clone());
     h
+}
+
+/// Is the ailists line `e` of `ty` the one the player's own bus is? The same vehicle file, a
+/// fleet number or plate of the line that is the player's, and the paint of the line that
+/// the player's bus wears (#3477): a depot bus drawn from that very line was the player's
+/// bus a second time on the map, with its repaint and registration both. A line that only
+/// shares the paint is the fleet's own livery and stays in the draw.
+fn player_entry(
+    player: Option<&crate::livery::PlayerLivery>,
+    ty: &VehicleType,
+    e: &omsi_map::DepotEntry,
+) -> bool {
+    let Some(mine) = player.filter(|p| p.is_bus_of(ty)) else {
+        return false;
+    };
+    let paint = if e.paint.trim().is_empty() {
+        ty.def.default_paint.as_str()
+    } else {
+        e.paint.trim()
+    };
+    if !mine.is_paint(paint) {
+        return false;
+    }
+    // the plate the line gives the bus, as `choose` reads it
+    let plate = if !e.registration.trim().is_empty() {
+        e.registration.clone()
+    } else if ty.def.registration_mode != 1 {
+        ty.def.plate_of_number(e.number.trim())
+    } else {
+        String::new()
+    };
+    mine.is_number_or_plate(&e.number, &plate)
+}
+
+fn draw_number(
+    group: &str,
+    vehicles: &[DepotVehicle],
+    k: usize,
+    h: u64,
+    player: Option<&crate::livery::PlayerLivery>,
+    used_numbers: &HashSet<(String, String)>,
+) -> usize {
+    let nums = &vehicles[k].1;
+    let start = ((h >> 21) % nums.len().max(1) as u64) as usize;
+    let free = (0..nums.len())
+        .map(|o| (start + o) % nums.len())
+        .find(|&j| {
+            !used_numbers.contains(&(group.to_string(), nums[j].number.trim().to_string()))
+                && !player_entry(player, &vehicles[k].0, &nums[j])
+        });
+    free.unwrap_or_else(|| {
+        (0..nums.len())
+            .map(|o| (start + o) % nums.len())
+            .find(|&j| !player_entry(player, &vehicles[k].0, &nums[j]))
+            .unwrap_or(start)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Departure;
+    use crate::livery::PlayerLivery;
+    use std::sync::Arc;
+
+    /// A vehicle type of its own file with no model and no scripts.
+    fn vehicle(file: &str, default_paint: &str) -> crate::VehicleType {
+        crate::VehicleType {
+            def: omsi_vehicle::Vehicle {
+                path: std::path::PathBuf::from(file),
+                default_paint: default_paint.into(),
+                ..Default::default()
+            },
+            model: Default::default(),
+            model_dir: Default::default(),
+            program: Default::default(),
+            meshes: Vec::new(),
+            lod_meshes: Vec::new(),
+            paint_schemes: Vec::new(),
+            texchanges: Vec::new(),
+            wheel_meshes: Vec::new(),
+            suspension_axles: Vec::new(),
+            missing_packs: Vec::new(),
+            mesh_bounds: Vec::new(),
+            mesh_boxes: Vec::new(),
+        }
+    }
+
+    fn entry(number: &str, registration: &str, paint: &str) -> omsi_map::DepotEntry {
+        omsi_map::DepotEntry {
+            number: number.into(),
+            registration: registration.into(),
+            paint: paint.into(),
+            from: None,
+            to: None,
+        }
+    }
+
+    fn mine(paint: &str, number: &str, ident: &str) -> PlayerLivery {
+        PlayerLivery {
+            bus: "Vehicles/bus.bus".into(),
+            paint: paint.into(),
+            number: number.into(),
+            ident: ident.into(),
+        }
+    }
+
+    #[test]
+    fn the_ailists_line_the_player_drives_is_not_drawn_again() {
+        let ty = vehicle("Vehicles/bus.bus", "Standard");
+        let player = mine("BVG Gelb", "1234", "B-V 1234");
+        // (the player's own line: its fleet number, its plate and its paint)
+        assert!(super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "B-V 1234", "BVG Gelb")
+        ));
+        // (whichever of the two tells it: the plate of the line alone is enough)
+        assert!(super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "", "BVG Gelb")
+        ));
+        // (its paint on another fleet number is the depot's own livery, and stays)
+        assert!(!super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("5678", "B-V 5678", "BVG Gelb")
+        ));
+        // (the player's plate in another paint is another bus of the depot)
+        assert!(!super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "B-V 1234", "BVG Rot")
+        ));
+        // (and another vehicle file has its own fleet)
+        assert!(!super::player_entry(
+            Some(&player),
+            &vehicle("Vehicles/other.bus", "Standard"),
+            &entry("1234", "B-V 1234", "BVG Gelb")
+        ));
+        // (nobody driving: every line is free)
+        assert!(!super::player_entry(
+            None,
+            &ty,
+            &entry("1234", "B-V 1234", "BVG Gelb")
+        ));
+    }
+
+    #[test]
+    fn a_line_without_a_repaint_is_the_models_own_paint() {
+        let ty = vehicle("Vehicles/bus.bus", "Standard");
+        let player = mine("Standard", "1234", "B-V 1234");
+        assert!(super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "B-V 1234", "")
+        ));
+        assert!(!super::player_entry(
+            Some(&player),
+            &ty,
+            &entry("1234", "B-V 1234", "BVG Gelb")
+        ));
+    }
+
+    #[test]
+    fn a_cached_tour_does_not_keep_the_players_livery_after_boarding() {
+        let mut ty = vehicle("Vehicles/bus.bus", "Standard");
+        ty.paint_schemes = vec![
+            crate::vehicle::PaintScheme {
+                name: "BVG Gelb".into(),
+                ..Default::default()
+            },
+            crate::vehicle::PaintScheme {
+                name: "BVG Rot".into(),
+                ..Default::default()
+            },
+        ];
+        let ty = Arc::new(ty);
+        let world = crate::world_data::WorldData::default();
+        let mut sim = crate::timetable_run::sim::ScheduleSim::new(
+            std::path::Path::new(""),
+            &world,
+            &crate::SimClock::default(),
+        );
+        sim.vehicle_seed = 0;
+        sim.departures.push(Departure {
+            time: 0.0,
+            trip: 0,
+            profile: 0,
+            line: "7".into(),
+            ai_group: "depot".into(),
+            tour: "1".into(),
+            mask: 1023,
+            spawned: false,
+            yesterday: false,
+        });
+        let start = ((sim.tour_key(0) >> 21) % 2) as usize;
+        let mine_line = entry("1234", "B-V 1234", "BVG Gelb");
+        let other_line = entry("5678", "B-V 5678", "BVG Rot");
+        let lines = if start == 0 {
+            vec![mine_line, other_line]
+        } else {
+            vec![other_line, mine_line]
+        };
+        sim.depots.insert("depot".into(), vec![(ty, lines, None)]);
+
+        let before = sim.choose(0, &world).unwrap();
+        assert_eq!(before.number.as_ref().unwrap().0, "1234");
+        assert_eq!(before.scheme, Some(0));
+
+        sim.set_player_bus(Some(mine("BVG Gelb", "1234", "B-V 1234")));
+        let after = sim.choose(0, &world).unwrap();
+        assert_eq!(after.number.as_ref().unwrap().0, "5678");
+        assert_eq!(after.number.as_ref().unwrap().1, "B-V 5678");
+        assert_eq!(after.scheme, Some(1));
+
+        sim.set_player_bus(Some(mine("BVG Rot", "5678", "B-V 5678")));
+        let switched = sim.choose(0, &world).unwrap();
+        assert_eq!(switched.number.as_ref().unwrap().0, "1234");
+        assert_eq!(switched.number.as_ref().unwrap().1, "B-V 1234");
+        assert_eq!(switched.scheme, Some(0));
+    }
 }
