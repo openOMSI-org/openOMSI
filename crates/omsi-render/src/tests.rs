@@ -1,8 +1,23 @@
 use super::*;
+use crate::passes::glass_picture_needed;
 
 mod classic_spot;
 mod depth_metadata;
 mod freetex_reload;
+
+/// The washer can wet a windscreen on a dry day. The film then has to be drawn over a copy
+/// of the clean frame; with no rain or road wetness to ask for one it fell back to the sky's
+/// irradiance and showed a pale rectangle (#4222).
+#[test]
+fn a_washed_pane_gets_a_glass_picture_without_rain() {
+    assert!(!glass_picture_needed(0.0, 0.0, []));
+    assert!(glass_picture_needed(0.002, 0.0, []));
+    assert!(glass_picture_needed(0.0, 0.03, []));
+    assert!(!glass_picture_needed(0.0, 0.0, [(false, 1.0, 2.0)]));
+    assert!(!glass_picture_needed(0.0, 0.0, [(true, 0.0, 2.0)]));
+    assert!(!glass_picture_needed(0.0, 0.0, [(true, 1.0, 1.0)]));
+    assert!(glass_picture_needed(0.0, 0.0, [(true, 1.0, 2.0)]));
+}
 
 /// The night meter takes the street the picture shows: from 30 m over a lot lit by a
 /// grid of street lamps, looking down at it, the eye adapts to the lit lot - not, as

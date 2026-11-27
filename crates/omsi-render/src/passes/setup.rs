@@ -5,6 +5,37 @@ use super::*;
 
 const AO_PREPASS_REACH: f32 = 250.0;
 
+/// The slots that can hold a rain film, as `(visible, slot alpha, film flag)`. A film is
+/// identified the same way as `DrawPlan::split_rain`.
+fn visible_film_slots(scene: &Scene) -> impl Iterator<Item = (bool, f32, f32)> + '_ {
+    scene.instances.iter().flat_map(|inst| {
+        inst.materials
+            .iter()
+            .zip(&inst.slot_alpha)
+            .filter_map(|(&material, &alpha)| {
+                scene
+                    .materials
+                    .get(material)
+                    .map(|m| (inst.visible, alpha, m.uniform.emissive[3]))
+            })
+    })
+}
+
+/// Whether the frame needs the copy of the clean picture the rain films look through. A
+/// film washed on by the wipers is shown even when the weather is dry: without the copy it
+/// has only the sky's irradiance to draw and paints the pane as a pale rectangle (#4222).
+pub(crate) fn glass_picture_needed(
+    rain: f32,
+    wetness: f32,
+    film_slots: impl IntoIterator<Item = (bool, f32, f32)>,
+) -> bool {
+    rain > 0.001
+        || wetness > 0.02
+        || film_slots
+            .into_iter()
+            .any(|(visible, alpha, film)| visible && alpha > 0.0 && film > 1.5)
+}
+
 impl Renderer {
     /// The test hooks and the fallbacks after a GPU error. False: the device is gone and
     /// nothing is drawn.
@@ -199,7 +230,7 @@ impl Renderer {
         let enhanced_view = lighting.enhanced && self.hdr_pass.is_some() && !env.no_enhanced;
         let glass_on = with_overlays
             && scene.glass_slot.is_some()
-            && (lighting.rain > 0.001 || lighting.wetness > 0.02)
+            && glass_picture_needed(lighting.rain, lighting.wetness, visible_film_slots(scene))
             && !env.no_glass_picture;
         let scaled = (width, height) != (full_w, full_h)
             || vanilla_fxaa
