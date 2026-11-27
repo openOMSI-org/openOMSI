@@ -43,36 +43,10 @@ impl App {
             let d = (t - self.clock.time + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
             self.shift_clock(d);
         }
+        self.trim_texture_budget_after_oom();
         // the graphics device is gone (a driver reset, an external card unplugged):
         // nothing can be drawn again - end the session the ordinary way, so that the
         // summary, the personnel file and the LAN goodbye are not lost
-        // the card ran out of memory: fewer textures (the finest levels of the far
-        // ones go), before the driver gives the device up
-        let settling = self
-            .perf
-            .texture_cut_at
-            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2));
-        if self
-            .renderer
-            .as_ref()
-            .is_some_and(|r| r.take_out_of_memory())
-            && !settling
-        {
-            if let Some(w) = self.world.as_ref() {
-                self.perf.texture_cut_at = Some(Instant::now());
-                let now = w.texture_budget_bytes();
-                let less = if now == 0 {
-                    600_000_000
-                } else {
-                    (now * 3 / 5).max(300_000_000)
-                };
-                w.set_texture_budget(less);
-                log::warn!(
-                    "the graphics card ran out of memory: textures kept to {:.0} MB from now on",
-                    less as f64 / 1e6
-                );
-            }
-        }
         if let Some(why) = self.renderer.as_ref().and_then(|r| r.device_lost()) {
             crate::support_bundle::record(self);
             omsi_platform::diagnostics::ended(
@@ -324,6 +298,36 @@ impl App {
         let dt = raw_dt.min(0.1);
         self.last = now;
         Some(FrameTime { now, raw_dt, dt })
+    }
+
+    /// The card ran out of memory: drop the finest levels of the far textures before it
+    /// gives the device up, but only once every couple of seconds.
+    fn trim_texture_budget_after_oom(&mut self) {
+        let settling = self
+            .perf
+            .texture_cut_at
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2));
+        if self
+            .renderer
+            .as_ref()
+            .is_some_and(|r| r.take_out_of_memory())
+            && !settling
+        {
+            if let Some(w) = self.world.as_ref() {
+                self.perf.texture_cut_at = Some(Instant::now());
+                let now = w.texture_budget_bytes();
+                let less = if now == 0 {
+                    600_000_000
+                } else {
+                    (now * 3 / 5).max(300_000_000)
+                };
+                w.set_texture_budget(less);
+                log::warn!(
+                    "the graphics card ran out of memory: textures kept to {:.0} MB from now on",
+                    less as f64 / 1e6
+                );
+            }
+        }
     }
 
     /// The start menu (drawn here, nothing else this frame) and the map's first area still
