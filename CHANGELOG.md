@@ -16,6 +16,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   anywhere at the chosen time or on that day, the stops fill by their own numbers again,
   instead of leaving the whole map empty
   ([#3841](https://github.com/openOMSI-org/openOMSI/issues/3841)).
+- **Android: buses and maps with HTML displays no longer crash the game**: the displays' scripts
+  now run on phones that tag their memory pointers, where the game stopped with "this platform
+  is not compatible with a nan-boxed `JsValueInner`"
+  ([#4382](https://github.com/openOMSI-org/openOMSI/issues/4382)).
 
 ## 0.3.59 - 2026-11-26
 

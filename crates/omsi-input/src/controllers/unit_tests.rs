@@ -684,6 +684,8 @@ mod button_tests {
 
     #[test]
     fn buttons_count_as_directinput_does() {
+        assert_eq!(super::code_button(u32::MAX - 3), Some(super::HAT_BUTTONS));
+        assert_eq!(super::code_button(u32::MAX), Some(super::HAT_BUTTONS + 3));
         if cfg!(target_os = "macos") {
             assert_eq!(super::code_button(0x9_0001), Some(0));
             assert_eq!(super::code_button(0x9_0010), Some(15));
@@ -691,15 +693,244 @@ mod button_tests {
         if cfg!(target_os = "linux") {
             assert_eq!(super::code_button(0x1_0120), Some(0));
             assert_eq!(super::code_button(0x1_02c0), Some(16));
+            assert_eq!(super::code_button(0x1_0150), Some(80));
         }
         if cfg!(windows) {
             assert_eq!(super::code_button(3), Some(3));
             // an analog trigger (WGI axis code) is no numbered button
             assert_eq!(super::code_button(0x1_0004), None);
-            // the D-pad is the first hat, not dropped
-            assert_eq!(super::code_button(u32::MAX - 3), Some(super::HAT_BUTTONS));
-            assert_eq!(super::code_button(u32::MAX), Some(super::HAT_BUTTONS + 3));
         }
+    }
+
+    #[test]
+    fn unmapped_button_codes_remain_stable_across_presses() {
+        let tmp =
+            std::env::temp_dir().join(format!("test_button_slots_{}.cfg", std::process::id()));
+        let _ = std::fs::remove_file(&tmp);
+
+        let first = super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xabc);
+        let second = super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xdef);
+        let collision_candidate = super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xaea);
+        assert_eq!(first, Some(82));
+        assert_eq!(second, Some(83));
+        assert_eq!(collision_candidate, Some(84));
+        assert_ne!(first, second);
+        assert_ne!(first, collision_candidate);
+        assert_ne!(second, collision_candidate);
+
+        let other = super::stable_unknown_button_in(Some(&tmp), "Test Pad B", 0x123);
+        assert_eq!(other, Some(82));
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xabc),
+            first
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xdef),
+            second
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad B", 0x123),
+            other
+        );
+
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xaea),
+            collision_candidate
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xdef),
+            second
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), "Test Pad A", 0xabc),
+            first
+        );
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn fallback_allocation_avoids_ids_used_by_declared_buttons() {
+        let tmp = std::env::temp_dir().join(format!(
+            "test_button_slots_mixed_{}.cfg",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&tmp);
+
+        let dev = "Test Pad Mixed";
+        let usage_83 = (9 << 16) | 83;
+        assert_eq!(super::code_button(usage_83), Some(82));
+
+        super::set_declared_buttons(dev, Some(vec![usage_83]));
+        let unknown_1 = super::stable_unknown_button_in(Some(&tmp), dev, 0xabc);
+        assert_eq!(unknown_1, Some(83));
+        let unknown_2 = super::stable_unknown_button_in(Some(&tmp), dev, 0xdef);
+        assert_eq!(unknown_2, Some(84));
+        assert_ne!(unknown_1, super::code_button(usage_83));
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn macos_mixed_known_and_unknown_buttons_do_not_collide() {
+        let tmp = std::env::temp_dir().join(format!(
+            "test_button_slots_macos_mixed_{}.cfg",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&tmp);
+
+        let dev = "macOS HID Controller";
+        let usage_1 = (9 << 16) | 1;
+        let usage_83 = (9 << 16) | 83;
+        assert_eq!(super::code_button(usage_1), Some(0));
+        assert_eq!(super::code_button(usage_83), Some(82));
+
+        super::set_declared_buttons(dev, Some(vec![usage_1, usage_83]));
+        let reserved = super::declared_button_ids(dev);
+        assert!(reserved.contains(&0));
+        assert!(reserved.contains(&82));
+
+        let unknown_1 = super::stable_unknown_button_in(Some(&tmp), dev, 0x10001);
+        assert_eq!(unknown_1, Some(83));
+        assert_ne!(unknown_1, super::code_button(usage_83));
+        let unknown_2 = super::stable_unknown_button_in(Some(&tmp), dev, 0x10002);
+        assert_eq!(unknown_2, Some(84));
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn unknown_codes_with_same_usage_on_different_pages_do_not_collide() {
+        let tmp = std::env::temp_dir().join(format!(
+            "test_button_slots_pages_{}.cfg",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&tmp);
+
+        let dev = "Test Page Controller";
+        let code_page_c = (0x000C << 16) | 0x0001;
+        let code_page_ff = (0x00FF << 16) | 0x0001;
+
+        let first = super::stable_unknown_button_in(Some(&tmp), dev, code_page_c);
+        let second = super::stable_unknown_button_in(Some(&tmp), dev, code_page_ff);
+        assert_eq!(first, Some(82));
+        assert_eq!(second, Some(83));
+        assert_ne!(first, second);
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn macos_real_hid_enumeration_runs_without_panic() {
+        let _ = super::declared_buttons("Nonexistent HID Controller");
+    }
+
+    #[test]
+    fn restart_after_enumeration_failure_keeps_saved_fallback_ids() {
+        let tmp = std::env::temp_dir().join(format!(
+            "test_button_slots_restart_{}.cfg",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&tmp);
+        let dev = "Restart Enumeration Pad";
+        super::set_declared_buttons(dev, None);
+        let first = super::stable_unknown_button_in(Some(&tmp), dev, 0xabc);
+        let second = super::stable_unknown_button_in(Some(&tmp), dev, 0xdef);
+        assert_eq!(first, Some(82));
+        assert_eq!(second, Some(83));
+        let text = std::fs::read_to_string(&tmp).unwrap();
+        assert!(text.contains("abc|82"));
+        assert!(text.contains("def|83"));
+
+        let usage_83 = (9 << 16) | 83;
+        super::set_declared_buttons(dev, Some(vec![usage_83]));
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), dev, 0xdef),
+            Some(83)
+        );
+        let _ = std::fs::remove_file(&tmp);
+
+        let legacy = std::env::temp_dir().join(format!(
+            "test_button_slots_legacy_{}.cfg",
+            std::process::id()
+        ));
+        std::fs::write(&legacy, "Legacy Pad|abc\nLegacy Pad|def\n").unwrap();
+        super::set_declared_buttons("Legacy Pad", None);
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&legacy), "Legacy Pad", 0xdef),
+            Some(83)
+        );
+        super::set_declared_buttons("Legacy Pad", Some(vec![usage_83]));
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&legacy), "Legacy Pad", 0xdef),
+            Some(83)
+        );
+        let _ = std::fs::remove_file(&legacy);
+    }
+
+    #[test]
+    fn saved_fallback_id_conflicting_with_known_button_is_disabled() {
+        let tmp = std::env::temp_dir().join(format!(
+            "test_button_slots_conflict_{}.cfg",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&tmp);
+        let dev = "Conflict Restart Pad";
+        super::set_declared_buttons(dev, None);
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), dev, 0xabc),
+            Some(82)
+        );
+
+        let usage_83 = (9 << 16) | 83;
+        super::set_declared_buttons(dev, Some(vec![usage_83]));
+        assert_eq!(super::code_button(usage_83), Some(82));
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), dev, 0xabc),
+            None
+        );
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), dev, 0xdef),
+            Some(83)
+        );
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn partially_migrated_legacy_slots_do_not_collide() {
+        let tmp = std::env::temp_dir().join(format!(
+            "test_button_slots_partial_migration_{}.cfg",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&tmp);
+        std::fs::write(
+            &tmp,
+            "Partial Migration Pad|abc\nPartial Migration Pad|def\n",
+        )
+        .unwrap();
+
+        let dev = "Partial Migration Pad";
+        super::set_declared_buttons(dev, None);
+        let second = super::stable_unknown_button_in(Some(&tmp), dev, 0xdef);
+        assert_eq!(second, Some(83));
+
+        let usage_83 = (9 << 16) | 83;
+        super::set_declared_buttons(dev, Some(vec![usage_83]));
+        assert_eq!(super::code_button(usage_83), Some(82));
+        let first = super::stable_unknown_button_in(Some(&tmp), dev, 0xabc);
+        assert_eq!(first, Some(84));
+        assert_eq!(
+            super::stable_unknown_button_in(Some(&tmp), dev, 0xdef),
+            second
+        );
+        assert_ne!(first, second);
+
+        let text = std::fs::read_to_string(&tmp).unwrap();
+        assert!(text.contains("def|83"));
+        assert!(text.contains("abc|84"));
+
+        let _ = std::fs::remove_file(&tmp);
     }
 }
 

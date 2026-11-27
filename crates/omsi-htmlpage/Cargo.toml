@@ -13,6 +13,11 @@ log.workspace = true
 # the page scripts: a complete modern JavaScript (classes, template strings, Promise, Map ...)
 boa_engine = { version = "0.22", default-features = false, features = ["annex-b"] }
 
+# Android tags the top byte of heap pointers, which boa's NaN-boxed values cannot hold: the
+# first page script panicked (#4382)
+[target.'cfg(target_os = "android")'.dependencies]
+boa_engine = { version = "0.22", default-features = false, features = ["annex-b", "jsvalue-enum"] }
+
 [dev-dependencies]
 # (the tests read the pages' pictures with the game's decoder)
 omsi-texture = { path = "../omsi-texture" }
