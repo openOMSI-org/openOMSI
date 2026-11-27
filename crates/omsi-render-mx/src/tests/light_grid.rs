@@ -118,10 +118,7 @@ fn lights_that_shine_on_light_mapped_roads_are_listed_first() {
 
 #[test]
 fn full_cell_eviction_keeps_classic_road_lights_ahead_of_map_lamps() {
-    let mut descriptor = mx::InstanceDescriptor::new_without_display_handle();
-    descriptor.backends = mx::Backends::NOOP;
-    descriptor.backend_options.noop = mx::NoopBackendOptions { enable: true };
-    let instance = mx::Instance::new(descriptor);
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let renderer = pollster::block_on(Renderer::new_with(
         &instance,
         None,
