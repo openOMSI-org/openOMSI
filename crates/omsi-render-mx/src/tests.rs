@@ -15,11 +15,9 @@ fn a_washed_pane_gets_a_glass_picture_without_rain() {
     assert!(glass_picture_needed(0.0, 0.03, false));
     assert!(glass_picture_needed(0.0, 0.0, true));
 
-    let mut desc = mx::InstanceDescriptor::new_without_display_handle();
-    desc.backends = mx::Backends::NOOP;
-    desc.backend_options.noop = mx::NoopBackendOptions { enable: true };
+    let instance = mx::Instance::with_backends(mx::Backends::NOOP);
     let renderer = pollster::block_on(Renderer::new_with(
-        &mx::Instance::new(desc),
+        &instance,
         None,
         Some(mx::TextureFormat::Rgba8UnormSrgb),
         RenderOptions {
