@@ -99,6 +99,31 @@ fn listed_modes(
         .map(|a| surface.get_capabilities(a).present_modes)
 }
 
+fn configure_surface(
+    surface: &wgpu::Surface<'_>,
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+) -> Result<()> {
+    let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
+    let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+    let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
+    surface.configure(device, config);
+    let errors = pollster::block_on(async {
+        [
+            validation.pop().await,
+            memory.pop().await,
+            internal.pop().await,
+        ]
+    });
+    if let Some(err) = errors.into_iter().flatten().next() {
+        return Err(anyhow!(
+            "surface configure: {}",
+            crate::gpu::gpu_error_text(&err)
+        ));
+    }
+    Ok(())
+}
+
 impl<'w> SurfaceState<'w> {
     pub fn new(
         instance: &wgpu::Instance,
@@ -142,7 +167,7 @@ impl<'w> SurfaceState<'w> {
         };
         config.width = width.max(1);
         config.height = height.max(1);
-        surface.configure(&renderer.device, &config);
+        configure_surface(&surface, &renderer.device, &config)?;
         Ok(SurfaceState {
             surface: std::mem::ManuallyDrop::new(surface),
             config,
@@ -178,7 +203,7 @@ impl<'w> SurfaceState<'w> {
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
         };
-        surface.configure(device, &config);
+        configure_surface(&surface, device, &config)?;
         Ok(SurfaceState {
             surface: std::mem::ManuallyDrop::new(surface),
             config,
