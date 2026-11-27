@@ -529,6 +529,15 @@ pub(crate) fn drawn_by(l: &PointLight, enhanced: bool) -> bool {
             }
 }
 
+/// A light that `point_lights` applies even where `map_k` is 0: a spot (`dir.w >= -1.5`,
+/// whose cone factor replaces the map's share), or a non-housed vanilla point, the classic
+/// headlight stand-in (`dir.x = 1`, `dir.w = -2`). A road light-mapped in the classic picture
+/// takes none of the map's lamps, so these go first in every cell and the shader can stop at
+/// the first lamp that does take `map_k` (#3723, `06_lights.wgsl`).
+fn classic_road_light(l: &PointLight) -> bool {
+    l.direction.length_squared() > 1e-6 || (l.mode == LightMode::Vanilla && !l.housed)
+}
+
 /// A light as the shaders read it, at `p` relative to the render origin.
 pub(crate) fn gpu_light(l: &PointLight, p: Vec3) -> GpuPointLight {
     let spot = l.direction.length_squared() > 1e-6;
@@ -637,7 +646,23 @@ impl Renderer {
             VANILLA_CELL_CAP
         };
         let squares = omsi_cfg::flags::OMSI_LIGHT_GRID_SQUARES.is_set();
-        for l in &scene.lights {
+        // The classic shader walks a cell until an empty slot. A light-mapped road takes no
+        // light from the map's lamps, so it can stop at the first one - but spots and the
+        // classic headlight stand-ins still light it. Keep the two groups in their
+        // camera-distance order within themselves (stable partition), and use that order both
+        // for the GPU list and for the grid's indices.
+        let mut order = Vec::with_capacity(scene.lights.len());
+        let mut map_lamps = Vec::new();
+        for (i, l) in scene.lights.iter().enumerate() {
+            if classic_road_light(l) {
+                order.push(i);
+            } else {
+                map_lamps.push(i);
+            }
+        }
+        order.extend(map_lamps);
+        for &i in &order {
+            let l = &scene.lights[i];
             // Every light the grid reaches is in the list, the other path's too (a headlight
             // is three points for the plain shader and one spot for the enhanced): only the
             // grid tells which a path draws. The window's Enhanced picture and its plainly
@@ -708,7 +733,9 @@ impl Renderer {
                     // own light, which Omsi.exe gives a light of its own; past half the cell,
                     // a junction full of traffic would leave its street lamps out)
                     let base = cell * LIGHT_CELL_CAP;
-                    let spot = l.direction.length_squared() > 1e-6;
+                    // A vehicle's light keeps its place ahead of the map's lamps: they cannot
+                    // push it past the point where the classic shader stops for a road.
+                    let spot = l.direction.length_squared() > 1e-6 || classic_road_light(l);
                     let s = if spot
                         && strength[base..base + n]
                             .iter()
