@@ -154,7 +154,11 @@ fn missing_reflection(sc: vec3<f32>, d: vec3<f32>, nh: vec3<f32>) -> vec3<f32> {
     let rough = clamp(aux.g / g.w, 0.0, 1.0);
     // (the same fade as the main pass's `trace_k`: a smooth surface is wholly traced)
     let share = 1.0 - smoothstep(0.35, 0.75, rough);
-    return finite(sky_probe(reflect(d, nf), rough)) * w * share;
+    // The main pass removed the probe using the camera-to-hit view direction, not the
+    // reflected ray that arrived here. Reconstruct that view vector from the screen pixel
+    // so both passes subtract and restore the same environment sample.
+    let v = normalize(p.eye.xyz - sc);
+    return finite(sky_probe(reflect(-v, nf), rough)) * w * share;
 }
 
 // Heitz's visible-normal sampling of the GGX lobe (in Dupuy and Benyoub's spherical-cap

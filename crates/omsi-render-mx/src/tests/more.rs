@@ -2671,6 +2671,10 @@ fn traced_reflections_restore_the_probe_on_a_reflective_hit() {
         "the screen-space hit path does not use the restored reflection"
     );
     assert!(
+        src.contains("reflect(-v, nf)") && src.contains("let v = normalize(p.eye.xyz - sc)"),
+        "the restored probe must use the camera's view direction, not the reflected ray"
+    );
+    assert!(
         src.contains("textureLoad(t_gbuf, q, 0)")
             && src.contains("let share = 1.0 - smoothstep(0.35, 0.75, rough)"),
         "the restored reflection is not scaled by the hit's traced share"
