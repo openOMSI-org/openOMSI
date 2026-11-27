@@ -16,6 +16,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   the night again, so the O560 III's dashboard is not greyish-white in Enhanced+
   ([#3195](https://github.com/openOMSI-org/openOMSI/issues/3195)). Lamps switched by
   `[visible]` and slots drawing a script's text or texture still glow by day ([#497](https://github.com/openOMSI-org/openOMSI/issues/497)).
+- **Android: buses and maps with HTML displays no longer crash the game**: the displays' scripts
+  now run on phones that tag their memory pointers, where the game stopped with "this platform
+  is not compatible with a nan-boxed `JsValueInner`"
+  ([#4382](https://github.com/openOMSI-org/openOMSI/issues/4382)).
 
 ## 0.3.59 - 2026-11-26
 

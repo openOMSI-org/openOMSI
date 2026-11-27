@@ -288,9 +288,9 @@ impl Pose {
             }
             self.gait = false;
         }
-        let turned = angle_diff(self.heading, input.heading) as f32;
+        let turned = angle_diff(self.heading, input.heading);
         if dt > 1e-5 {
-            self.turn += (turned / dt - self.turn) * ease_k(dt, 0.15);
+            self.turn += ((turned / dt as f64) as f32 - self.turn) * ease_k(dt, 0.15);
             let v_now = input.velocity.length() as f32;
             let fwd = {
                 let h = input.heading.to_radians();
@@ -320,6 +320,17 @@ impl Pose {
             self.sit = approach(self.sit, 0.0, dt / 1.1);
         }
         let seated = self.sit > 0.0;
+        // A seat turns with its occupant, but a sitting foot takes no steps to turn with
+        // it: pivot the planted feet (and a swing still on its way) by the body's turn,
+        // or their shoes stay pointed where the passenger boarded (#4057). This includes
+        // the turn into the seat on the first frame of sitting down.
+        if wants_sit || seated {
+            for f in &mut self.feet {
+                f.yaw += turned;
+                f.from_yaw += turned;
+                f.to_yaw += turned;
+            }
+        }
 
         self.ease_hands(input, seated, dt);
 
