@@ -12,6 +12,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
   ([#2945](https://github.com/openOMSI-org/openOMSI/issues/2945)).
+- **Instrument panels no longer wash out by day**: a static vehicle night map fades in with
+  the night again, so the O560 III's dashboard is not greyish-white in Enhanced+
+  ([#3195](https://github.com/openOMSI-org/openOMSI/issues/3195)). Lamps switched by
+  `[visible]` and slots drawing a script's text or texture still glow by day ([#497](https://github.com/openOMSI-org/openOMSI/issues/497)).
 
 ## 0.3.59 - 2026-11-26
 

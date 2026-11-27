@@ -3,7 +3,7 @@ use super::*;
 
 pub(crate) mod lods;
 mod night_coverage;
-use night_coverage::{load_night, night_coverage, static_diffuse};
+use night_coverage::{load_night, night_coverage, night_map_switched, static_diffuse};
 
 impl World {
     /// Upload a vehicle type's meshes and create render instances for one vehicle (the
@@ -2002,12 +2002,11 @@ fn slot_extra(
     let mut extra = material_extra(ov, env_mask, bump, specular);
     extra.pbr = mesh_pbr(extra.pbr, m);
     extra.ambient = Some(ambient);
-    // A vehicle's [matl_nightmap] is added whenever the mesh is drawn, by day
-    // as well, as OMSI 2 does - with or without a [matl_change] around it.
-    // Its lamps and displays are switched by the mesh's [visible] variable or
-    // by what the script draws, not by the time of day: faded in with the
-    // night, a dashboard's warning lamps stayed dark in the daylight (#497).
-    extra.night_switched = night.is_some();
+    // A plain vehicle [matl_nightmap] fades in with the night: an O560's instrument
+    // panel was greyish-white by day when all of them were lit (#3195). A lamp whose
+    // mesh is switched by [visible], or a slot fed by the script's text or texture,
+    // is drawn only while it is on and keeps its lit picture by day (#497).
+    extra.night_switched = night.is_some() && night_map_switched(cx.def, text_base, script_base);
     extra.night_alpha = night_coverage(
         alpha,
         cover,
