@@ -124,6 +124,39 @@ fn finite(c: vec3<f32>) -> vec3<f32> {
     return select(vec3<f32>(0.0), clamp(c, vec3<f32>(0.0), vec3<f32>(6.0e4)), all(e != vec3<u32>(0x7f800000u)));
 }
 
+// The main pass takes the probe's reflection off a surface whose reflection is traced, so
+// that the composite can add the traced one only once. A reflected ray meeting such a
+// surface on the screen therefore reads a picture with that surface's own reflection
+// missing: the concave bowl of a polished headlamp reflecting itself went black or grey,
+// with the patch moving as the camera turned (#3144). Put the removed share back from the
+// probe; the surface's own traced reflection is added later, in the composite.
+fn missing_reflection(sc: vec3<f32>, d: vec3<f32>, nh: vec3<f32>) -> vec3<f32> {
+    // (`sc.x == 2` is a cut-out gap: the picture there belongs to what lies behind the
+    // mesh, not to the mesh's own surface, so its g buffer is not the one to restore)
+    if (sc.x != 1.0) {
+        return vec3<f32>(0.0);
+    }
+    let q = clamp(
+        vec2<i32>(sc.yz * p.size.xy),
+        vec2<i32>(0),
+        vec2<i32>(p.size.xy) - vec2<i32>(1),
+    );
+    let g = textureLoad(t_gbuf, q, 0);
+    let w = length(g.xyz);
+    if (w < 1e-4 || g.w < 1e-4) {
+        return vec3<f32>(0.0);
+    }
+    var nf = -d;
+    if (dot(nh, nh) > 0.5) {
+        nf = select(nh, -nh, dot(nh, d) > 0.0);
+    }
+    let aux = textureLoad(t_aux, q, 0);
+    let rough = clamp(aux.g / g.w, 0.0, 1.0);
+    // (the same fade as the main pass's `trace_k`: a smooth surface is wholly traced)
+    let share = 1.0 - smoothstep(0.35, 0.75, rough);
+    return finite(sky_probe(reflect(d, nf), rough)) * w * share;
+}
+
 // Heitz's visible-normal sampling of the GGX lobe (in Dupuy and Benyoub's spherical-cap
 // form): a microfacet normal round n as the eye at `wo` (towards the eye) sees them, for
 // roughness `rough` (alpha = rough^2) and two uniform numbers. Rays reflected about it follow
@@ -221,7 +254,8 @@ fn hit_light(o: vec3<f32>, d: vec3<f32>, h: Hit, sc: vec3<f32>, texel: vec4<f32>
     // one ray at a time sprinkled the glass with light and dark specks, #1907)
     let cut = (records[h.record].flags & 1u) != 0u;
     if (sc.x == 1.0 || (cut && sc.x == 2.0)) {
-        let seen = finite(textureSampleLevel(t_scene, s_lin, sc.yz, 0.0).rgb);
+        let seen = finite(textureSampleLevel(t_scene, s_lin, sc.yz, 0.0).rgb)
+            + missing_reflection(sc, d, nh);
         // (towards the screen's edge the picture's colour hands over to the mesh's own,
         // which is what the rays beyond the edge get: a hard seam ran across the windows
         // where the reflected street left the screen)

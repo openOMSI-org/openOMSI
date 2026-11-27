@@ -2725,6 +2725,33 @@ fn envmapped_paint_with_normals_off_its_faces_mirrors_no_more_than_with_sound_on
 }
 
 #[test]
+fn traced_reflections_restore_the_probe_on_a_reflective_hit() {
+    // A ray that meets another traced surface reads the picture with that surface's own
+    // reflection taken out. A polished headlamp bowl reflecting itself must not turn black,
+    // so the screen-space hit path puts the removed probe share back (#3144).
+    let src = include_str!("../rt_reflect.wgsl");
+    assert!(
+        src.contains(
+            "fn missing_reflection(sc: vec3<f32>, d: vec3<f32>, nh: vec3<f32>) -> vec3<f32>"
+        ),
+        "the reflection shader no longer restores a hit's removed probe reflection"
+    );
+    assert!(
+        src.contains("missing_reflection(sc, d, nh)"),
+        "the screen-space hit path does not use the restored reflection"
+    );
+    assert!(
+        src.contains("textureLoad(t_gbuf, q, 0)")
+            && src.contains("let share = 1.0 - smoothstep(0.35, 0.75, rough)"),
+        "the restored reflection is not scaled by the hit's traced share"
+    );
+    assert!(
+        src.contains("if (sc.x != 1.0)"),
+        "a cut-out gap could restore another surface's reflection"
+    );
+}
+
+#[test]
 fn the_rain_and_snow_shaders_translate_to_glsl_with_a_float_roof_map() {
     use wgpu::naga;
     use wgpu::naga::back::glsl;
