@@ -377,6 +377,14 @@ pub(super) fn wanted() -> bool {
     session().as_ref().is_some_and(|s| s.window && !s.failed)
 }
 
+/// Frame generation off for good (a failed drain, `FrameGeneration::hold`): DLSS tags no frame
+/// for it again.
+pub(super) fn stop() {
+    if let Some(s) = session().as_mut() {
+        s.failed = true;
+    }
+}
+
 /// Whether frame generation still works (`FrameGeneration::working`).
 pub(super) fn working() -> bool {
     session().as_ref().is_some_and(|s| !s.failed)

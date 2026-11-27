@@ -209,9 +209,32 @@ unsafe impl Send for Shared {}
 pub struct FrameGeneration(Generation, Arc<Mutex<Held>>);
 
 /// Textures the vendor's queues could not be waited for on (`FrameGeneration::hold`).
-#[derive(Default)]
-struct Held {
-    textures: Vec<wgpu::Texture>,
+struct Held<T = wgpu::Texture> {
+    textures: Vec<T>,
+    /// A drain failed and frame generation stopped: later rebuilds' textures were never its.
+    stopped: bool,
+}
+
+impl<T> Default for Held<T> {
+    fn default() -> Self {
+        Held {
+            textures: Vec::new(),
+            stopped: false,
+        }
+    }
+}
+
+impl<T> Held<T> {
+    /// A rebuild's inputs after the drain: kept only the first time it fails, as frame
+    /// generation stops then (true).
+    fn keep(&mut self, drained: bool, textures: Vec<T>) -> bool {
+        if self.stopped || drained {
+            return false;
+        }
+        self.textures.extend(textures);
+        self.stopped = true;
+        true
+    }
 }
 
 #[derive(Clone)]
@@ -475,8 +498,12 @@ impl FrameGeneration {
     }
 
     /// The vendor's own queues, which `wait_gpu` does not cover, may still read `textures`: waited
-    /// for first, or the textures are kept until the window's swap chain is gone.
+    /// for first, or the textures are kept until the window's swap chain is gone and frame
+    /// generation stops then, so no later rebuild keeps another set.
     pub(crate) fn hold(&self, textures: Vec<wgpu::Texture>) {
+        if self.1.lock().unwrap_or_else(|e| e.into_inner()).stopped {
+            return;
+        }
         let drained = match &self.0 {
             Generation::Amd(s) => s
                 .lock()
@@ -484,15 +511,20 @@ impl FrameGeneration {
                 .wait_for_presents(),
             Generation::Dlss => super::dlssg::drain(),
         };
-        if !drained {
+        let stop = self
+            .1
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .keep(drained, textures);
+        if stop {
             log::warn!(
-                "frame generation: the vendor's queues could not be waited for; the textures it read are kept until its swap chain goes"
+                "frame generation: the vendor's queues could not be waited for; the frames are shown without it from now on, and the textures it read are kept until its swap chain goes"
             );
-            self.1
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .textures
-                .extend(textures);
+            // (its context stays: the vendor may still be working with it)
+            match &self.0 {
+                Generation::Amd(s) => s.lock().unwrap_or_else(|e| e.into_inner()).failed = true,
+                Generation::Dlss => super::dlssg::stop(),
+            }
         }
     }
 
@@ -898,5 +930,23 @@ impl Drop for OwnSwapChain {
             .unwrap_or_else(|e| e.into_inner())
             .textures
             .clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Held;
+
+    #[test]
+    fn a_failed_drain_keeps_one_set_of_inputs_however_often_the_renderer_rebuilds() {
+        let mut held = Held::<u32>::default();
+        assert!(!held.keep(true, vec![1, 2, 3]));
+        assert!(held.textures.is_empty());
+        assert!(held.keep(false, vec![4, 5, 6]));
+        for _ in 0..100 {
+            assert!(!held.keep(false, vec![7, 8, 9]));
+            assert!(!held.keep(true, vec![7, 8, 9]));
+        }
+        assert_eq!(held.textures, [4, 5, 6]);
     }
 }
