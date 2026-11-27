@@ -1668,6 +1668,14 @@ fn a_light_enh_has_its_bitmap_z_offset_factor_and_effects() {
     );
     assert!((glow.z_offset - 0.05).abs() < 1e-6 && glow.rotating == 2);
     assert!((glow.size - 0.025).abs() < 1e-6 && (glow.brightness - 1.0).abs() < 1e-6);
+    // the authored sRGB colour is linear light: 150/255 is 0.305, not 0.588 (#3802)
+    assert!(
+        (glow.color[0] - 1.0).abs() < 1e-6
+            && (glow.color[1] - 0.3049873).abs() < 1e-6
+            && glow.color[2] == 0.0,
+        "the stop-request lamp must stay orange: {:?}",
+        glow.color
+    );
     assert!(star.flags & 8 != 0 && (star.size - 0.0625).abs() < 1e-6);
     // the factor scales the lamp (OMSI: variable times factor), effect 0 has the halo
     let model = Model::parse(&omsi_cfg::CfgFile::from_str(&path, &lamp("0.5", "0")));
