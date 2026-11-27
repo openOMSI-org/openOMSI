@@ -124,9 +124,55 @@ fn attempt_configure(make: impl FnOnce()) -> Result<()> {
     }
 }
 
+/// Apply a configuration made after startup (a resize, a vsync change, an early-surface
+/// resize after a phone comes back): the window may not be ready yet, and mX's GL backend
+/// panics in `eglCreateWindowSurface` rather than returning an error. Only commit the new
+/// config when the driver accepted it, so the next frame can try again with the last one
+/// that worked.
+fn configure_change(
+    current: &mut mx::SurfaceConfiguration,
+    wanted: mx::SurfaceConfiguration,
+    configure: impl FnOnce(&mx::SurfaceConfiguration),
+) -> Result<()> {
+    match attempt_configure(|| configure(&wanted)) {
+        Ok(()) => {
+            *current = wanted;
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn a_config(width: u32, height: u32) -> mx::SurfaceConfiguration {
+        mx::SurfaceConfiguration {
+            usage: mx::TextureUsages::RENDER_ATTACHMENT,
+            format: mx::TextureFormat::Rgba8Unorm,
+            width,
+            height,
+            present_mode: mx::PresentMode::Fifo,
+            desired_maximum_frame_latency: 2,
+            alpha_mode: mx::CompositeAlphaMode::Auto,
+            view_formats: vec![],
+        }
+    }
+
+    /// The body of the method with this signature in this file, up to its closing brace at
+    /// the impl's indentation (the nested blocks close deeper than that).
+    fn method_body<'a>(source: &'a str, signature: &str) -> &'a str {
+        // (indented as an impl item: the tests below mention these signatures in strings)
+        let needle = format!("\n    {signature}");
+        let start = source
+            .find(&needle)
+            .unwrap_or_else(|| panic!("no method {signature}"))
+            + 1;
+        let open = start + source[start..].find('{').expect("method body");
+        let close = open + source[open..].find("\n    }").expect("end of method body");
+        &source[open..close]
+    }
 
     #[test]
     fn a_refused_surface_configuration_is_an_error_not_a_panic() {
@@ -137,6 +183,65 @@ mod tests {
     #[test]
     fn an_accepted_surface_configuration_succeeds() {
         assert!(attempt_configure(|| {}).is_ok());
+    }
+
+    #[test]
+    fn a_refused_late_configuration_keeps_the_working_configuration() {
+        let mut current = a_config(640, 480);
+        let err = configure_change(&mut current, a_config(1280, 720), |_| {
+            panic!("mX: invalid surface")
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("invalid surface"));
+        assert_eq!((current.width, current.height), (640, 480));
+    }
+
+    #[test]
+    fn an_accepted_late_configuration_commits_the_new_configuration() {
+        let mut current = a_config(640, 480);
+        let wanted = a_config(1280, 720);
+        assert!(configure_change(&mut current, wanted.clone(), |_| {}).is_ok());
+        assert_eq!(current, wanted);
+    }
+
+    #[test]
+    fn the_early_surface_resize_is_guarded_for_launcher_and_resume() {
+        // `startup::present_clear_on` calls `resize_on` when the early surface reports
+        // Outdated/Lost: that is the launcher-to-game and background/resume change.
+        let body = method_body(include_str!("surface.rs"), "pub fn resize_on(");
+        assert!(body.contains("configure_late("), "{body}");
+        assert!(!body.contains(".configure("), "{body}");
+    }
+
+    #[test]
+    fn the_later_resize_and_vsync_reconfigures_are_guarded() {
+        let source = include_str!("surface.rs");
+        for signature in ["pub fn resize(", "pub fn set_vsync("] {
+            let body = method_body(source, signature);
+            assert!(body.contains("configure_late("), "{signature}: {body}");
+            assert!(!body.contains(".configure("), "{signature}: {body}");
+        }
+    }
+
+    #[test]
+    fn the_other_surface_reconfigures_are_guarded_too() {
+        let source = include_str!("surface.rs");
+        for signature in [
+            "pub fn set_glass(",
+            "pub fn set_frame_generation(",
+            "fn stop_generation(",
+            "pub fn new_with(",
+            "pub fn early(",
+        ] {
+            let body = method_body(source, signature);
+            assert!(
+                body.contains("configure_change(")
+                    || body.contains("configure_surface(")
+                    || body.contains("configure_late("),
+                "{signature}: {body}"
+            );
+            assert!(!body.contains(".configure("), "{signature}: {body}");
+        }
     }
 }
 
@@ -233,6 +338,20 @@ impl<'w> SurfaceState<'w> {
         })
     }
 
+    /// Apply a late configuration through the same guard as startup, so an unready window
+    /// gives a logged warning instead of ending the game. The new config is committed only
+    /// if the driver accepted it.
+    fn configure_late(
+        &mut self,
+        device: &mx::Device,
+        wanted: mx::SurfaceConfiguration,
+    ) -> Result<()> {
+        let surface = &self.surface;
+        configure_change(&mut self.config, wanted, |config| {
+            surface.configure(device, config)
+        })
+    }
+
     /// The renderer built for the device this surface was made on ([`Self::early`]) takes
     /// it over. False when the renderer is on another device (the first was lost while the
     /// pipelines were built): the surface is then made anew for it. (Not for ANGLE, whose
@@ -253,7 +372,6 @@ impl<'w> SurfaceState<'w> {
         if self.glass == on {
             return;
         }
-        self.glass = on;
         let copy = on
             && renderer.adapter.as_ref().is_some_and(|a| {
                 self.surface
@@ -267,8 +385,14 @@ impl<'w> SurfaceState<'w> {
             mx::TextureUsages::RENDER_ATTACHMENT
         };
         if self.config.usage != usage {
-            self.config.usage = usage;
-            self.surface.configure(&renderer.device, &self.config);
+            let mut wanted = self.config.clone();
+            wanted.usage = usage;
+            match self.configure_late(&renderer.device, wanted) {
+                Ok(()) => self.glass = on,
+                Err(e) => log::warn!("surface copy use: {e:#}"),
+            }
+        } else {
+            self.glass = on;
         }
     }
 
@@ -315,10 +439,19 @@ impl<'w> SurfaceState<'w> {
             ) {
                 Ok(g) => {
                     // (the vendor makes the window's swapchain from the next configure on)
-                    if g.owns_swapchain() {
-                        self.surface.configure(&renderer.device, &self.config);
+                    let configured = if g.owns_swapchain() {
+                        configure_surface(&self.surface, &renderer.device, &self.config)
+                    } else {
+                        Ok(())
+                    };
+                    match configured {
+                        Ok(()) => self.generation = Some(g),
+                        Err(e) => {
+                            log::warn!("frame generation is off: {e:#}");
+                            g.stop(&self.surface);
+                            self.generation_refused = true;
+                        }
                     }
-                    self.generation = Some(g)
                 }
                 Err(e) => {
                     log::warn!("frame generation is off: {e:#}");
@@ -333,8 +466,8 @@ impl<'w> SurfaceState<'w> {
     fn stop_generation(&mut self, renderer: &Renderer, g: temporal::GenerationWindow) {
         let owned = g.owns_swapchain();
         g.stop(&self.surface);
-        if owned {
-            self.surface.configure(&renderer.device, &self.config);
+        if owned && let Err(e) = configure_surface(&self.surface, &renderer.device, &self.config) {
+            log::warn!("surface configure after frame generation: {e:#}");
         }
     }
 
@@ -389,20 +522,26 @@ impl<'w> SurfaceState<'w> {
     }
 
     pub fn resize(&mut self, renderer: &Renderer, width: u32, height: u32) {
-        self.config.width = width.max(1);
-        self.config.height = height.max(1);
         // (not after a lost device: see `drop`)
         if renderer.device_lost().is_some() {
             return;
         }
-        self.surface.configure(&renderer.device, &self.config);
+        let mut wanted = self.config.clone();
+        wanted.width = width.max(1);
+        wanted.height = height.max(1);
+        if let Err(e) = self.configure_late(&renderer.device, wanted) {
+            log::warn!("surface resize: {e:#}");
+        }
     }
 
     /// [`Self::resize`] while the renderer is still being built (see [`Self::early`]).
     pub fn resize_on(&mut self, device: &mx::Device, width: u32, height: u32) {
-        self.config.width = width.max(1);
-        self.config.height = height.max(1);
-        self.surface.configure(device, &self.config);
+        let mut wanted = self.config.clone();
+        wanted.width = width.max(1);
+        wanted.height = height.max(1);
+        if let Err(e) = self.configure_late(device, wanted) {
+            log::warn!("early surface resize: {e:#}");
+        }
     }
 
     pub fn set_vsync(&mut self, renderer: &Renderer, enabled: bool, capped: bool) {
@@ -411,10 +550,13 @@ impl<'w> SurfaceState<'w> {
         if self.config.present_mode == mode || renderer.device_lost().is_some() {
             return;
         }
-        self.config.present_mode = mode;
+        let mut wanted = self.config.clone();
+        wanted.present_mode = mode;
         // (two frames in flight: see `new_with`)
-        self.config.desired_maximum_frame_latency = 2;
-        self.surface.configure(&renderer.device, &self.config);
+        wanted.desired_maximum_frame_latency = 2;
+        if let Err(e) = self.configure_late(&renderer.device, wanted) {
+            log::warn!("surface vsync: {e:#}");
+        }
     }
 }
 
