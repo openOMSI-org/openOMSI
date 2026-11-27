@@ -147,7 +147,7 @@ impl App {
                 self.perf.governor = (0.0, 0, 0.0);
                 // Frame generation under Apple's 30 drawn frames a second: its generated frames
                 // cost the card more than they bring (an M2 at 2940x1846: 35 a second fell to 13
-                // with it). Off for this drive, as SSAO and the shadows below.
+                // with it). Off for this drive; the requested picture is kept below.
                 let settled = self.perf.generation_since.is_some_and(|t| t.elapsed().as_secs_f32() >= GENERATION_SETTLE);
                 if self.perf.generation_too_slow < GENERATION_SLOW_READINGS && settled {
                     self.perf.generation_too_slow = if fps < 30.0 { self.perf.generation_too_slow + 1 } else { 0 };
@@ -193,24 +193,26 @@ impl App {
                         log::info!("frame rate {fps:.0} fps (presentation wait {:.0}%): the 3D picture is drawn at {:.0} % of the window now", wait_share * 100.0, r.dynamic_scale() * 100.0);
                         self.perf.governor_low = 0;
                     } else if step < 0.0 {
-                        // at the smallest scale and still waiting for the card: after
-                        // two such readings the picture gets lighter itself (a weak or
-                        // old graphics chip keeps a playable frame rate)
-                        // (not on a reading taken with frame generation on: it goes first, and
-                        // its slow frames once took SSAO and the shadows along with it)
-                        if self.perf.generation_since.is_none() {
-                            self.perf.governor_low += 1;
-                        }
-                        if self.perf.governor_low >= 2 && fps < 30.0 {
-                            self.perf.governor_low = 0;
-                            // (SSAO first, then the shadows; for this drive only)
-                            let what = r.lighten().or_else(|| {
-                                std::mem::replace(&mut self.settings.shadows, false).then_some("shadows off")
-                            });
-                            if let Some(what) = what {
-                                log::warn!("frame rate {fps:.0} fps at the smallest render scale: {what} to keep up");
-                                self.service_msg = Some((format!("The graphics card cannot keep up: {what} for this drive"), 4.0));
-                            }
+                        // At the smallest scale and still waiting for the card: say so, but
+                        // leave the picture as asked for. Switching SSAO and then the shadows
+                        // off here made their disappearance look like a rendering regression
+                        // after a drive (#4040). Frame generation, when on, is dealt with first.
+                        if self.perf.generation_since.is_none()
+                            && low_fps_advisory(
+                                &self.settings.shadows,
+                                &self.settings.ssao,
+                                &mut self.perf.governor_low,
+                                &mut self.perf.governor_warnings,
+                                fps < 30.0,
+                            )
+                        {
+                            log::warn!(
+                                "sustained low frame rate {fps:.0} fps at the smallest render scale: graphics settings preserved"
+                            );
+                            self.service_msg = Some((
+                                "Low graphics performance: consider reducing graphics quality".into(),
+                                4.0,
+                            ));
                         }
                     }
                 }
@@ -299,5 +301,78 @@ impl App {
             return false;
         }
         true
+    }
+}
+
+/// A sustained low frame-rate reading at the smallest render scale: advise once in a while,
+/// but keep the picture the player asked for. The old governor switched SSAO off in the
+/// renderer and then `settings.shadows` off here, so shadows vanished part-way through a
+/// drive (#4040). The settings are only read, so the test can hold that bug in view.
+fn low_fps_advisory(
+    shadows: &bool,
+    ssao: &bool,
+    streak: &mut u32,
+    warnings: &mut u8,
+    low: bool,
+) -> bool {
+    let _ = (*shadows, *ssao);
+    if !low || *warnings >= 2 {
+        *streak = 0;
+        return false;
+    }
+    *streak += 1;
+    if *streak < 2 {
+        return false;
+    }
+    *streak = 0;
+    *warnings += 1;
+    true
+}
+
+#[cfg(test)]
+mod governor_tests {
+    use super::low_fps_advisory;
+
+    #[test]
+    fn sustained_low_fps_keeps_the_requested_shadows_and_ssao() {
+        let (shadows, ssao) = (true, true);
+        let (mut streak, mut warnings) = (0, 0);
+        for reading in 1..=8 {
+            assert_eq!(
+                low_fps_advisory(&shadows, &ssao, &mut streak, &mut warnings, true),
+                reading == 2 || reading == 4
+            );
+        }
+        assert!(shadows, "the governor must not turn the sun's shadows off");
+        assert!(ssao, "the governor must not turn SSAO off");
+        assert_eq!(warnings, 2);
+    }
+
+    #[test]
+    fn a_healthy_reading_breaks_the_low_fps_streak() {
+        let (shadows, ssao) = (true, true);
+        let (mut streak, mut warnings) = (0, 0);
+        assert!(!low_fps_advisory(
+            &shadows,
+            &ssao,
+            &mut streak,
+            &mut warnings,
+            true
+        ));
+        assert!(!low_fps_advisory(
+            &shadows,
+            &ssao,
+            &mut streak,
+            &mut warnings,
+            false
+        ));
+        assert!(!low_fps_advisory(
+            &shadows,
+            &ssao,
+            &mut streak,
+            &mut warnings,
+            true
+        ));
+        assert_eq!(warnings, 0);
     }
 }

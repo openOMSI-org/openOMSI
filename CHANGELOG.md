@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Vegetation and objects keep casting shadows for the whole drive**: the frame-rate governor
+  no longer switches SSAO off in the renderer and then the sun-shadows setting off after
+  sustained low frame rates, which made shadows disappear after a while in enhanced graphics
+  ([#4040](https://github.com/openOMSI-org/openOMSI/issues/4040)).
 - **Articulated buses' third axle now springs with the rest of the rear section**: a two-axle
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
