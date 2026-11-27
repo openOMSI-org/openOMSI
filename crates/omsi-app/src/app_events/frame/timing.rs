@@ -10,21 +10,36 @@ impl App {
             self.finish_vr_nav_edit();
         }
         if (!self.vr_active() || self.player.is_none())
-            && matches!(self.menus.list_kind, Some(crate::game_lists::ListKind::Options(_)))
-            && self.menus.admin_list.as_ref().is_some_and(|rows| rows.iter().any(|(_, action)| action.starts_with("vr_nav_")))
+            && matches!(
+                self.menus.list_kind,
+                Some(crate::game_lists::ListKind::Options(_))
+            )
+            && self
+                .menus
+                .admin_list
+                .as_ref()
+                .is_some_and(|rows| rows.iter().any(|(_, action)| action.starts_with("vr_nav_")))
         {
             self.open_list(crate::game_lists::ListKind::Options(0));
         }
         #[cfg(windows)]
         self.poll_vr_cursor_position();
         // OMSI's autosave of the last situation: every five minutes of play
-        if !self.paused && self.player.is_some() && self.clock.run_time - self.session.autosave_t >= 300.0 {
+        if !self.paused
+            && self.player.is_some()
+            && self.clock.run_time - self.session.autosave_t >= 300.0
+        {
             self.session.autosave_t = self.clock.run_time;
             self.autosave_last_situation();
         }
         // the time of day a script set last frame (the nearer way round the clock)
         // (not with the real-time sync on: the clock stays the device's)
-        if let Some(t) = self.session.pending_time.take().filter(|_| !self.real_time_locked()) {
+        if let Some(t) = self
+            .session
+            .pending_time
+            .take()
+            .filter(|_| !self.real_time_locked())
+        {
             let d = (t - self.clock.time + 43_200.0).rem_euclid(86_400.0) - 43_200.0;
             self.shift_clock(d);
         }
@@ -33,19 +48,37 @@ impl App {
         // summary, the personnel file and the LAN goodbye are not lost
         // the card ran out of memory: fewer textures (the finest levels of the far
         // ones go), before the driver gives the device up
-        let settling = self.perf.texture_cut_at.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2));
-        if self.renderer.as_ref().is_some_and(|r| r.take_out_of_memory()) && !settling {
+        let settling = self
+            .perf
+            .texture_cut_at
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(2));
+        if self
+            .renderer
+            .as_ref()
+            .is_some_and(|r| r.take_out_of_memory())
+            && !settling
+        {
             if let Some(w) = self.world.as_ref() {
                 self.perf.texture_cut_at = Some(Instant::now());
                 let now = w.texture_budget_bytes();
-                let less = if now == 0 { 600_000_000 } else { (now * 3 / 5).max(300_000_000) };
+                let less = if now == 0 {
+                    600_000_000
+                } else {
+                    (now * 3 / 5).max(300_000_000)
+                };
                 w.set_texture_budget(less);
-                log::warn!("the graphics card ran out of memory: textures kept to {:.0} MB from now on", less as f64 / 1e6);
+                log::warn!(
+                    "the graphics card ran out of memory: textures kept to {:.0} MB from now on",
+                    less as f64 / 1e6
+                );
             }
         }
         if let Some(why) = self.renderer.as_ref().and_then(|r| r.device_lost()) {
             crate::support_bundle::record(self);
-            omsi_platform::diagnostics::ended("device_lost", Some(crate::support_bundle::diagnostics(self)));
+            omsi_platform::diagnostics::ended(
+                "device_lost",
+                Some(crate::support_bundle::diagnostics(self)),
+            );
             if self.restart_after_device_loss() {
                 log::warn!("device lost ({why}): the game goes on in a new start");
             } else {
@@ -54,44 +87,78 @@ impl App {
             crate::platform::exit(event_loop);
             return None;
         }
-        let desktop_vsync = self.settings.vsync && !self.vr_active() && !self.optimiser_holds_frame_rate();
-        if let (Some(surface), Some(renderer)) = (self.gfx.surface.as_mut(), self.renderer.as_ref()) {
-            surface.set_vsync(renderer, desktop_vsync, (1..1000).contains(&self.settings.max_fps) && !cfg!(target_os = "android"));
+        let desktop_vsync =
+            self.settings.vsync && !self.vr_active() && !self.optimiser_holds_frame_rate();
+        if let (Some(surface), Some(renderer)) = (self.gfx.surface.as_mut(), self.renderer.as_ref())
+        {
+            surface.set_vsync(
+                renderer,
+                desktop_vsync,
+                (1..1000).contains(&self.settings.max_fps) && !cfg!(target_os = "android"),
+            );
         }
         // in the own bus's cab: at the wheel, a passenger's view, or sitting in a
         // seat of it after getting up (its inside is drawn and heard from inside)
         self.cam.in_cab = matches!(self.view.as_str(), "driver" | "pax")
             || (self.view == "foot" && self.foot_bus() == Some(crate::humans::BusId::Player));
-        self.cam.heard_inside = self.cam.in_cab || (self.view == "foot" && matches!(self.foot_bus(), Some(crate::humans::BusId::Ai(_))));
+        self.cam.heard_inside = self.cam.in_cab
+            || (self.view == "foot"
+                && matches!(self.foot_bus(), Some(crate::humans::BusId::Ai(_))));
         // standing or sitting in another player's bus: that bus is drawn and heard
         // from inside (its interior meshes, not the outside ones over them)
         self.net.inside_remote = match self.foot_bus() {
-            Some(crate::humans::BusId::Ai(x)) if self.view == "foot" => crate::humans::remote_bus_player(x),
+            Some(crate::humans::BusId::Ai(x)) if self.view == "foot" => {
+                crate::humans::remote_bus_player(x)
+            }
             _ => None,
         };
         let now = Instant::now();
         let raw_dt = (now - self.last).as_secs_f32();
         self.log_frame(raw_dt);
-        let draws = self.renderer.as_mut().map_or((0, 0), |r| std::mem::take(&mut r.frame_draws));
+        let draws = self
+            .renderer
+            .as_mut()
+            .map_or((0, 0), |r| std::mem::take(&mut r.frame_draws));
         if self.settings.perf_overlay_on() {
-            self.perf.overlay.sample(raw_dt, self.perf.profile.iter().map(|(key, value)| (key.name(), value)), draws);
+            self.perf.overlay.sample(
+                raw_dt,
+                self.perf
+                    .profile
+                    .iter()
+                    .map(|(key, value)| (key.name(), value)),
+                draws,
+            );
         } else if self.perf.overlay.started() {
             self.perf.overlay.reset();
         }
         let profiling = omsi_cfg::flags::OMSI_PROFILE.is_set();
-        if profiling && self.perf.profile_mark.is_some() && self.perf.frame_times.len() < crate::perf_report::MAX_FRAMES {
+        if profiling
+            && self.perf.profile_mark.is_some()
+            && self.perf.frame_times.len() < crate::perf_report::MAX_FRAMES
+        {
             self.perf.frame_times.push(raw_dt);
             if self.perf.frame_times.len() <= crate::perf_report::STAGE_FRAMES {
                 let keys = crate::profile_keys::ProfKey::ALL;
                 if self.perf.frame_stages.is_empty() {
-                    self.perf.frame_stages.reserve_exact(crate::perf_report::STAGE_FRAMES * keys.len());
+                    self.perf
+                        .frame_stages
+                        .reserve_exact(crate::perf_report::STAGE_FRAMES * keys.len());
                 }
-                self.perf.frame_stages.extend(keys.iter().map(|&k| (self.perf.profile.get(k) - self.perf.profile_prev.get(k)) as f32));
+                self.perf.frame_stages.extend(
+                    keys.iter().map(|&k| {
+                        (self.perf.profile.get(k) - self.perf.profile_prev.get(k)) as f32
+                    }),
+                );
             }
         }
-        let waited: f64 = [crate::profile_keys::ProfKey::Acquire, crate::profile_keys::ProfKey::Present, crate::profile_keys::ProfKey::Gpu].iter()
-            .map(|&k| self.perf.profile.get(k))
-            .sum();
+        let waited: f64 = [
+            crate::profile_keys::ProfKey::Acquire,
+            crate::profile_keys::ProfKey::Present,
+            crate::profile_keys::ProfKey::Gpu,
+        ]
+        .iter()
+        .map(|&k| self.perf.profile.get(k))
+        .sum();
         let wait_this_frame = (waited - self.perf.governor_wait_prev).max(0.0) as f32;
         self.perf.governor_wait_prev = waited;
         self.optimiser_frame(raw_dt, wait_this_frame);
@@ -103,11 +170,10 @@ impl App {
                     // and what no stage accounts for (waiting for the window, the
                     // system, other processes)
                     let mut parts: Vec<(&'static str, f64)> = self
-                        .perf.profile
+                        .perf
+                        .profile
                         .iter()
-                        .map(|(k, v)| {
-                            (k.name(), v - self.perf.profile_prev.get(k))
-                        })
+                        .map(|(k, v)| (k.name(), v - self.perf.profile_prev.get(k)))
                         .collect();
                     let staged: f64 = parts
                         .iter()
@@ -130,91 +196,7 @@ impl App {
                 }
             }
             self.perf.worst_ms = self.perf.worst_ms.max(raw_dt * 1000.0);
-            // Reduce resolution only when slow frames spend substantial time waiting
-            // for presentation or the GPU. Traffic, scripts and tile work can drop
-            // the frame rate too, but fewer pixels cannot make those stages faster.
-            // Keep the player's chosen scale and explicit fixed-scale override.
-            // A fast V-synced frame can wait for the next refresh without being
-            // GPU-bound. Count presentation wait only on slow frames.
-            if raw_dt > 0.02 {
-                self.perf.governor.2 += wait_this_frame;
-            }
-            self.perf.governor.0 += raw_dt;
-            self.perf.governor.1 += 1;
-            if self.perf.governor.0 >= 5.0 {
-                let fps = self.perf.governor.1 as f32 / self.perf.governor.0;
-                let wait_share = self.perf.governor.2 / self.perf.governor.0;
-                self.perf.governor = (0.0, 0, 0.0);
-                // Frame generation under Apple's 30 drawn frames a second: its generated frames
-                // cost the card more than they bring (an M2 at 2940x1846: 35 a second fell to 13
-                // with it). Off for this drive, as SSAO and the shadows below.
-                let settled = self.perf.generation_since.is_some_and(|t| t.elapsed().as_secs_f32() >= GENERATION_SETTLE);
-                if self.perf.generation_too_slow < GENERATION_SLOW_READINGS && settled {
-                    self.perf.generation_too_slow = if fps < 30.0 { self.perf.generation_too_slow + 1 } else { 0 };
-                    if self.perf.generation_too_slow >= GENERATION_SLOW_READINGS {
-                        log::warn!("frame rate {fps:.0} fps with frame generation: frame generation off to keep up");
-                        let what = "frame generation off";
-                        self.service_msg = Some((format!("The graphics card cannot keep up: {what} for this drive"), 4.0));
-                    }
-                }
-                let free = self.settings.scene_render_scale() <= 0.0
-                    && (self.settings.max_fps == 0 || self.settings.max_fps >= 50)
-                    && !omsi_cfg::flags::OMSI_FIXED_SCALE.is_set()
-                    && !self.optimiser_holds_frame_rate();
-                if let Some(r) = self.renderer.as_mut().filter(|r| !free && r.dynamic_scale() < 1.0) {
-                    r.set_dynamic_scale(1.0);
-                    log::info!("the 3D picture is drawn at the full size of the window again (render scale no longer automatic)");
-                }
-                if let (Some(r), true) = (self.renderer.as_mut(), free) {
-                    let s = r.dynamic_scale();
-                    let mut step = render_scale_step(fps, wait_share);
-                    // (up only after two readings in a row ask for it, 10 s: a step down
-                    // takes the wait for the card away, and the next reading alone asked
-                    // to go up again - a step up and down every 10 s, each one new targets
-                    // and a full upload of the instances, a stutter every time)
-                    // A step up that the next reading takes back doubles the readings the next
-                    // step up waits for (up to two minutes); one that holds brings them back to
-                    // two. A card at its limit went 85-100-85 % every 10 s for minutes (#2295).
-                    use std::sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed};
-                    static UP_READINGS: AtomicU8 = AtomicU8::new(0);
-                    static UP_NEEDED: AtomicU8 = AtomicU8::new(2);
-                    static WENT_UP: AtomicBool = AtomicBool::new(false);
-                    if WENT_UP.load(Relaxed) {
-                        UP_NEEDED.store(if step < 0.0 { UP_NEEDED.load(Relaxed).saturating_mul(2).min(24) } else { 2 }, Relaxed);
-                    }
-                    let ups = if step > 0.0 { UP_READINGS.load(Relaxed).saturating_add(1) } else { 0 };
-                    if step > 0.0 && ups < UP_NEEDED.load(Relaxed) {
-                        step = 0.0;
-                    }
-                    UP_READINGS.store(if step > 0.0 { 0 } else { ups }, Relaxed);
-                    r.set_dynamic_scale(s + step);
-                    WENT_UP.store(r.dynamic_scale() > s + 1e-3, Relaxed);
-                    if (r.dynamic_scale() - s).abs() > 1e-3 {
-                        log::info!("frame rate {fps:.0} fps (presentation wait {:.0}%): the 3D picture is drawn at {:.0} % of the window now", wait_share * 100.0, r.dynamic_scale() * 100.0);
-                        self.perf.governor_low = 0;
-                    } else if step < 0.0 {
-                        // at the smallest scale and still waiting for the card: after
-                        // two such readings the picture gets lighter itself (a weak or
-                        // old graphics chip keeps a playable frame rate)
-                        // (not on a reading taken with frame generation on: it goes first, and
-                        // its slow frames once took SSAO and the shadows along with it)
-                        if self.perf.generation_since.is_none() {
-                            self.perf.governor_low += 1;
-                        }
-                        if self.perf.governor_low >= 2 && fps < 30.0 {
-                            self.perf.governor_low = 0;
-                            // (SSAO first, then the shadows; for this drive only)
-                            let what = r.lighten().or_else(|| {
-                                std::mem::replace(&mut self.settings.shadows, false).then_some("shadows off")
-                            });
-                            if let Some(what) = what {
-                                log::warn!("frame rate {fps:.0} fps at the smallest render scale: {what} to keep up");
-                                self.service_msg = Some((format!("The graphics card cannot keep up: {what} for this drive"), 4.0));
-                            }
-                        }
-                    }
-                }
-            }
+            self.update_frame_governor(raw_dt, wait_this_frame);
         }
         if profiling {
             self.perf.profile_prev.clone_from(&self.perf.profile);
@@ -224,9 +206,143 @@ impl App {
         Some(FrameTime { now, raw_dt, dt })
     }
 
+    /// Adjust automatic scale and advise on sustained low performance without disabling effects.
+    fn update_frame_governor(&mut self, raw_dt: f32, wait_this_frame: f32) {
+        // Reduce resolution only when slow frames spend substantial time waiting
+        // for presentation or the GPU. Traffic, scripts and tile work can drop
+        // the frame rate too, but fewer pixels cannot make those stages faster.
+        // Keep the player's chosen scale and explicit fixed-scale override.
+        // A fast V-synced frame can wait for the next refresh without being
+        // GPU-bound. Count presentation wait only on slow frames.
+        if raw_dt > 0.02 {
+            self.perf.governor.2 += wait_this_frame;
+        }
+        self.perf.governor.0 += raw_dt;
+        self.perf.governor.1 += 1;
+        if self.perf.governor.0 >= 5.0 {
+            let fps = self.perf.governor.1 as f32 / self.perf.governor.0;
+            let wait_share = self.perf.governor.2 / self.perf.governor.0;
+            self.perf.governor = (0.0, 0, 0.0);
+            // Frame generation under Apple's 30 drawn frames a second: its generated frames
+            // cost the card more than they bring (an M2 at 2940x1846: 35 a second fell to 13
+            // with it). Off for this drive.
+            let settled = self
+                .perf
+                .generation_since
+                .is_some_and(|t| t.elapsed().as_secs_f32() >= GENERATION_SETTLE);
+            if self.perf.generation_too_slow < GENERATION_SLOW_READINGS && settled {
+                self.perf.generation_too_slow = if fps < 30.0 {
+                    self.perf.generation_too_slow + 1
+                } else {
+                    0
+                };
+                if self.perf.generation_too_slow >= GENERATION_SLOW_READINGS {
+                    log::warn!(
+                        "frame rate {fps:.0} fps with frame generation: frame generation off to keep up"
+                    );
+                    let what = "frame generation off";
+                    self.service_msg = Some((
+                        format!("The graphics card cannot keep up: {what} for this drive"),
+                        4.0,
+                    ));
+                }
+            }
+            let free = self.settings.temporal_upscaling().is_none()
+                && self.settings.scene_render_scale() <= 0.0
+                && (self.settings.max_fps == 0 || self.settings.max_fps >= 50)
+                && !omsi_cfg::flags::OMSI_FIXED_SCALE.is_set()
+                && !self.optimiser_holds_frame_rate();
+            if let Some(r) = self
+                .renderer
+                .as_mut()
+                .filter(|r| !free && r.dynamic_scale() < 1.0)
+            {
+                r.set_dynamic_scale(1.0);
+                log::info!(
+                    "the 3D picture is drawn at the full size of the window again (render scale no longer automatic)"
+                );
+            }
+            if let (Some(r), true) = (self.renderer.as_mut(), free) {
+                let s = r.dynamic_scale();
+                let mut step = render_scale_step(fps, wait_share);
+                // (up only after two readings in a row ask for it, 10 s: a step down
+                // takes the wait for the card away, and the next reading alone asked
+                // to go up again - a step up and down every 10 s, each one new targets
+                // and a full upload of the instances, a stutter every time)
+                // A step up that the next reading takes back doubles the readings the next
+                // step up waits for (up to two minutes); one that holds brings them back to
+                // two. A card at its limit went 85-100-85 % every 10 s for minutes (#2295).
+                use std::sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed};
+                static UP_READINGS: AtomicU8 = AtomicU8::new(0);
+                static UP_NEEDED: AtomicU8 = AtomicU8::new(2);
+                static WENT_UP: AtomicBool = AtomicBool::new(false);
+                if WENT_UP.load(Relaxed) {
+                    UP_NEEDED.store(
+                        if step < 0.0 {
+                            UP_NEEDED.load(Relaxed).saturating_mul(2).min(24)
+                        } else {
+                            2
+                        },
+                        Relaxed,
+                    );
+                }
+                let ups = if step > 0.0 {
+                    UP_READINGS.load(Relaxed).saturating_add(1)
+                } else {
+                    0
+                };
+                if step > 0.0 && ups < UP_NEEDED.load(Relaxed) {
+                    step = 0.0;
+                }
+                UP_READINGS.store(if step > 0.0 { 0 } else { ups }, Relaxed);
+                r.set_dynamic_scale(s + step);
+                WENT_UP.store(r.dynamic_scale() > s + 1e-3, Relaxed);
+                if (r.dynamic_scale() - s).abs() > 1e-3 {
+                    log::info!(
+                        "frame rate {fps:.0} fps (presentation wait {:.0}%): the 3D picture is drawn at {:.0} % of the window now",
+                        wait_share * 100.0,
+                        r.dynamic_scale() * 100.0
+                    );
+                    self.perf.governor_low = 0;
+                }
+            }
+            // Presentation wait is a proxy, not a direct measurement of GPU use.
+            let low = !self.paused
+                && self.player.is_some()
+                && self.world.is_some()
+                && self.menus.menu.is_none()
+                && self.menus.game_menu.is_none()
+                && self.menus.list_kind.is_none()
+                && !self.optimiser_holds_frame_rate()
+                && self.perf.generation_since.is_none()
+                && fps < 30.0
+                && wait_share >= 0.4
+                && (self.settings.max_fps == 0 || self.settings.max_fps >= 30);
+            if low_fps_advisory(
+                &mut self.perf.governor_low,
+                &mut self.perf.governor_warnings,
+                low,
+            ) {
+                log::warn!(
+                    "sustained low frame rate {fps:.0} fps (GPU/presentation wait {:.0}%): graphics settings preserved",
+                    wait_share * 100.0
+                );
+                self.service_msg = Some((
+                    "Low graphics performance: consider reducing graphics quality".into(),
+                    4.0,
+                ));
+            }
+        }
+    }
+
     /// The start menu (drawn here, nothing else this frame) and the map's first area still
     /// loading: false when the frame ends here.
-    pub(super) fn frame_menus(&mut self, event_loop: &ActiveEventLoop, dt: f32, raw_dt: f32) -> bool {
+    pub(super) fn frame_menus(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        dt: f32,
+        raw_dt: f32,
+    ) -> bool {
         self.tick_room_switch(raw_dt);
         // (the cursor over the game menu: a hand over what can be clicked)
         if self.menus.game_menu.is_some() {
@@ -237,11 +353,7 @@ impl App {
         if let Some(m) = self.menus.menu.as_ref() {
             if let Some(limit) = self.args.exit_after {
                 if self.started.elapsed().as_secs_f32() > limit {
-                    log::info!(
-                        "menu: {} maps, {} vehicles",
-                        m.maps.len(),
-                        m.vehicles.len()
-                    );
+                    log::info!("menu: {} maps, {} vehicles", m.maps.len(), m.vehicles.len());
                     crate::platform::exit(event_loop);
                 }
             }
@@ -255,8 +367,7 @@ impl App {
             ) {
                 hud.update(r, scene, &lines);
                 if let wgpu::CurrentSurfaceTexture::Success(frame)
-                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) =
-                    s.acquire()
+                | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = s.acquire()
                 {
                     let view = s.view(&r.device, &frame);
                     let cam = Camera {
@@ -299,5 +410,51 @@ impl App {
             return false;
         }
         true
+    }
+}
+
+/// Six consecutive five-second readings per advisory, at most twice per session.
+fn low_fps_advisory(streak: &mut u32, warnings: &mut u8, low: bool) -> bool {
+    if !low || *warnings >= 2 {
+        *streak = 0;
+        return false;
+    }
+    *streak += 1;
+    if *streak < 6 {
+        return false;
+    }
+    *streak = 0;
+    *warnings += 1;
+    true
+}
+
+#[cfg(test)]
+mod advisory_tests {
+    use super::low_fps_advisory;
+
+    #[test]
+    fn warns_twice_at_thirty_second_intervals() {
+        let (mut streak, mut warnings) = (0, 0);
+        for reading in 1..=24 {
+            assert_eq!(
+                low_fps_advisory(&mut streak, &mut warnings, true),
+                reading == 6 || reading == 12
+            );
+        }
+        assert_eq!(warnings, 2);
+    }
+
+    #[test]
+    fn a_healthy_reading_breaks_the_streak() {
+        let (mut streak, mut warnings) = (0, 0);
+        for _ in 0..5 {
+            assert!(!low_fps_advisory(&mut streak, &mut warnings, true));
+        }
+        assert!(!low_fps_advisory(&mut streak, &mut warnings, false));
+        for _ in 0..5 {
+            assert!(!low_fps_advisory(&mut streak, &mut warnings, true));
+        }
+        assert!(low_fps_advisory(&mut streak, &mut warnings, true));
+        assert_eq!(warnings, 1);
     }
 }

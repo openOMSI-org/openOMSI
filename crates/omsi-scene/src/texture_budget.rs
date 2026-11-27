@@ -23,6 +23,31 @@ pub(super) fn fit_upgrade(data: &Arc<TextureData>, allowed: u64) -> Option<Arc<T
     Some(upload)
 }
 
+/// Avoid allocating another scenery texture unless it adds detail or saves storage.
+/// A compression upgrade at the same resolution is still worthwhile.
+pub(super) fn texture_upgrade_worthwhile(
+    (width, height): (u32, u32),
+    before: u64,
+    upload: &TextureData,
+) -> bool {
+    upload.width >= width
+        && upload.height >= height
+        && (upload.width > width || upload.height > height || upload.gpu_bytes() < before)
+}
+
+impl World {
+    /// A worker can finish after the budget has changed. Keep the resident image and
+    /// retry later rather than repeatedly allocating the same or a smaller image.
+    pub(super) fn defer_texture_restore(&self, path: &Path) {
+        if let Some(e) = self.gpu.lock().textures.get_mut(path) {
+            e.near_restore = false;
+            if e.dropped > 0 {
+                e.retry_after = Some(std::time::Instant::now() + std::time::Duration::from_secs(5));
+            }
+        }
+    }
+}
+
 /// Start trimming low-priority textures before running into the driver's hard budget.
 /// A small reserve lets mip downsizing allocate a replacement before the old mip chain
 /// is freed, and leaves room for mandatory UI targets and the driver's own allocations.
@@ -347,4 +372,69 @@ pub(super) fn texture_budget_snapshot(
                 .is_some_and(|t| t <= t0 && last.is_none_or(|c| t > c));
             (b + e.bytes, d || e.dropped > 0, r || due)
         })
+}
+
+// Includes both workers and completed pictures awaiting the render thread.
+const MAX_PENDING_TEXTURE_UPGRADES: usize = 32;
+
+fn take_front<T>(queue: &mut Vec<T>, count: usize) -> Vec<T> {
+    let count = count.min(queue.len());
+    queue.drain(..count).collect()
+}
+
+/// Reserve part of the batch for restores without starving compression jobs.
+pub(super) fn texture_upgrade_batch(
+    regular: &mut Vec<PathBuf>,
+    freetex: &mut Vec<PathBuf>,
+    restores: &mut Vec<PathBuf>,
+    room: usize,
+) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let mut r = take_front(restores, room.div_ceil(2));
+    let mut w = take_front(regular, room - r.len());
+    w.extend(take_front(freetex, room - r.len() - w.len()));
+    r.extend(take_front(restores, room - r.len() - w.len()));
+    w.extend(r.iter().cloned());
+    (w, r)
+}
+
+impl World {
+    /// Backpressure: never decode an entire map's queued upgrades at once.
+    pub(super) fn take_texture_upgrade_batch(&self) -> (Vec<PathBuf>, Vec<PathBuf>) {
+        let room = MAX_PENDING_TEXTURE_UPGRADES.saturating_sub(self.upgrades_pending.lock().len());
+        if room == 0 {
+            return (Vec::new(), Vec::new());
+        }
+        let mut gpu = self.gpu.lock();
+        let GpuCache {
+            wants_upgrade,
+            wants_restore,
+            ..
+        } = &mut *gpu;
+        texture_upgrade_batch(
+            wants_upgrade,
+            &mut self.freetex_upgrades.lock(),
+            wants_restore,
+            room,
+        )
+    }
+
+    /// Count actual decoded payload bytes, not the estimated GPU footprint.
+    pub(super) fn texture_upgrade_summary(&self) -> String {
+        let pending = self.upgrades_pending.lock().len();
+        let done = self.upgrades_done.lock();
+        let ready = done.len();
+        let bytes: usize = done
+            .iter()
+            .flat_map(|(_, data, _)| data.levels.iter())
+            .map(|level| level.len())
+            .sum();
+        drop(done);
+        let gpu = self.gpu.lock();
+        let queued = gpu.wants_upgrade.len() + gpu.wants_restore.len();
+        let queued = queued + self.freetex_upgrades.lock().len();
+        format!(
+            "texture upgrades: {queued} queued, {pending} pending, {ready} ready ({:.1} MB decoded)",
+            bytes as f64 / 1e6,
+        )
+    }
 }

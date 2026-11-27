@@ -859,8 +859,9 @@ impl World {
             .map(|t| t.heights.capacity() * 4)
             .sum();
         let vehicle_textures = self.vehicle_textures.lock().len();
+        let upgrades = self.texture_upgrade_summary();
         format!(
-            "CPU: {} object types {:.0} MB of meshes, {} staged tiles {:.0} MB, {} surfaces {:.0} MB rasters + {:.0} MB wheel grids ({} faces), terrains {:.0} MB, decoded textures held {:.0} MB; {} vehicle textures, {} vehicle sets on the GPU",
+            "CPU: {} object types {:.0} MB of meshes, {} staged tiles {:.0} MB, {} surfaces {:.0} MB rasters + {:.0} MB wheel grids ({} faces), terrains {:.0} MB, decoded textures held {:.0} MB; {} vehicle textures, {} vehicle sets on the GPU; {upgrades}",
             types.len(),
             mb(type_bytes),
             staged_n,
@@ -885,14 +886,7 @@ impl World {
         scene: &mut Scene,
         deadline: Option<std::time::Instant>,
     ) -> usize {
-        let (wanted, restores) = {
-            let mut gpu = self.gpu.lock();
-            let mut w = std::mem::take(&mut gpu.wants_upgrade);
-            w.append(&mut self.freetex_upgrades.lock());
-            let r = std::mem::take(&mut gpu.wants_restore);
-            w.extend(r.iter().cloned());
-            (w, r)
-        };
+        let (wanted, restores) = self.take_texture_upgrade_batch();
         if !wanted.is_empty() {
             let mut pending = self.upgrades_pending.lock();
             for path in wanted {
@@ -1019,7 +1013,14 @@ impl World {
             let upload = if self.player_textures.lock().contains(&path) {
                 data.clone()
             } else {
-                let Some(upload) = fit_upgrade(&data, allowed) else {
+                let Some(upload) = fit_upgrade(&data, allowed).filter(|upload| {
+                    vid.is_some()
+                        || before == 0
+                        || scene
+                            .texture_size_of(id)
+                            .is_none_or(|size| texture_upgrade_worthwhile(size, before, upload))
+                }) else {
+                    self.defer_texture_restore(&path);
                     continue;
                 };
                 upload
@@ -1051,6 +1052,13 @@ impl World {
         memo.rebind.extend_from_slice(&swapped);
         // (without a deadline - a picture - at once)
         let due = deadline.is_none()
+            || (!memo.rebind.is_empty() && {
+                let card = renderer.gpu_memory(scene);
+                let cap = card.cap(video_limit);
+                let limit = self.texture_budget_bytes();
+                (cap > 0 && card.total() >= cap.saturating_sub(128 << 20))
+                    || (limit > 0 && memo.in_use > limit)
+            })
             || memo.rebind.len() >= 64
             || memo
                 .rebind_since
@@ -1170,15 +1178,7 @@ impl World {
         let states = self.tile_state.lock();
         let mut gpu = self.gpu.lock();
         let last = memo.checked;
-        let (scenery_bytes, any_dropped, retry_due) =
-            gpu.textures
-                .values()
-                .fold((0u64, false, false), |(b, d, r), e| {
-                    let due = e
-                        .retry_after
-                        .is_some_and(|t| t <= t0 && last.is_none_or(|c| t > c));
-                    (b + e.bytes, d || e.dropped > 0, r || due)
-                });
+        let (scenery_bytes, any_dropped, retry_due) = texture_budget_snapshot(&gpu, t0, last);
         // Every texture of the scene counts against the card as well (the people, the
         // script and text textures, the sky's and the terrain's): past half of the card's own
         // memory, what they hold beyond it is taken from the scenery and the vehicles. The
@@ -1216,11 +1216,13 @@ impl World {
         memo.checked = Some(t0);
         if usage <= limit && !any_dropped {
             memo.resume = false;
+            memo.near_retry_at = None;
             return 0;
         }
         if pass != BudgetPass::Now
             && !memo.resume
             && !retry_due
+            && !memo.near_retry_at.is_some_and(|at| at <= t0)
             && memo.unchanged(
                 generation,
                 usage,
@@ -1335,7 +1337,10 @@ impl World {
             card_near_room(video_limit, card).saturating_sub(reserved),
             texture_room(limit, texture_usage).saturating_sub(reserved),
         );
-        restoring += queue_near_restores(&mut gpu, &pending, &entries, NEAR, rooms, t0);
+        let (near_restores, blocked) =
+            queue_near_restores(&mut gpu, &pending, &entries, NEAR, rooms, t0);
+        restoring += near_restores;
+        memo.near_retry_at = blocked.then(|| t0 + std::time::Duration::from_secs(2));
         if usage > limit {
             entries.sort_by(|a, b| b.0.total_cmp(&a.0));
             let mut over = usage - limit;
@@ -1830,6 +1835,7 @@ pub(super) struct BudgetMemo {
     room: u64,
     centers: Vec<DVec3>,
     pub(super) in_use: u64,
+    pub(super) near_retry_at: Option<std::time::Instant>,
 }
 
 impl BudgetMemo {

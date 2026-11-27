@@ -336,7 +336,22 @@ impl Streamer {
         let mut uploaded = 0usize;
         let mut freed_types = false;
         let deadline = t0 + budget;
-        while let Some(mut p) = self.queue.pop_front() {
+        // Under memory pressure, give already expired tiles a frame to release their
+        // resources before uploading a new area. Keep the normal unload radius and
+        // never block initial loading or uploads when there is nothing safe to evict.
+        let defer_upload = !first_area
+            && !self.queue.is_empty()
+            && self.world.textures_over_budget()
+            && self.world.loaded_tiles().iter().any(|k| {
+                !self.requested.contains(k)
+                    && (Self::nearest(centers, k.0, k.1) > self.unload_radius
+                        || self.stale.contains(k))
+            });
+        while let Some(mut p) = if defer_upload {
+            None
+        } else {
+            self.queue.pop_front()
+        } {
             let key = p.key();
             let initial = self
                 .initial

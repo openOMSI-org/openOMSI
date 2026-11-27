@@ -189,6 +189,98 @@ fn texture_budget_recovers_a_placeholder_without_room_for_the_full_source() {
 }
 
 #[test]
+fn near_texture_queues_restore_when_the_full_texture_would_not_fit() {
+    let renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let original = data(1024);
+    let id = renderer.add_texture_data(&mut scene, &original);
+    let mut entry = TexEntry::uploaded(id, &original, &scene);
+    assert!(renderer.drop_top_levels(&mut scene, id, 2));
+    entry.record_upload(&original, &scene);
+    assert_eq!(entry.dropped, 2);
+
+    let bytes = entry.bytes;
+    let room = bytes * 4 + 4096;
+    assert!(room < entry.full_bytes);
+
+    let path = PathBuf::from("near-cached.dds");
+    let entries = vec![(2.0, path.clone())];
+    let pending = hashbrown::HashSet::new();
+    let mut gpu = GpuCache::default();
+    gpu.textures.insert(path.clone(), entry);
+    let now = std::time::Instant::now();
+    assert_eq!(
+        queue_near_restores(
+            &mut gpu,
+            &pending,
+            &entries,
+            150.0,
+            (bytes * 4 + 4095, u64::MAX),
+            now,
+        ),
+        (0, true),
+        "a new allocation must fit before attempting even a partial restore",
+    );
+    assert_eq!(gpu.textures[&path].retry_after, None);
+    assert_eq!(
+        queue_near_restores(&mut gpu, &pending, &entries, 150.0, (room, u64::MAX), now).0,
+        1,
+        "a partial restore may be queued as soon as capacity returns",
+    );
+    assert_eq!(gpu.wants_restore, [path.clone()]);
+    assert!(gpu.textures[&path].near_restore);
+}
+
+#[test]
+fn emergency_squeezed_near_texture_needs_budget_for_an_intermediate_mip() {
+    let path = PathBuf::from("squeezed.dds");
+    let mut gpu = GpuCache::default();
+    gpu.textures.insert(
+        path.clone(),
+        TexEntry {
+            id: 0,
+            alpha: false,
+            users: 1,
+            texels: 1024 * 1024,
+            bytes: 350_000,
+            full_bytes: 5_500_000,
+            format: omsi_texture::PixelFormat::Rgba8,
+            dropped: 2,
+            retry_after: None,
+            squeezed: true,
+            near_restore: false,
+        },
+    );
+    let entries = [(0.0, path.clone())];
+    let pending = hashbrown::HashSet::new();
+    let next = 350_000 * 4 + 4096;
+    assert_eq!(
+        queue_near_restores(
+            &mut gpu,
+            &pending,
+            &entries,
+            150.0,
+            (next, next - 350_000 - 1),
+            std::time::Instant::now(),
+        ),
+        (0, true),
+        "squeezed textures must still obey their own texture budget",
+    );
+    assert_eq!(
+        queue_near_restores(
+            &mut gpu,
+            &pending,
+            &entries,
+            150.0,
+            (next, next - 350_000),
+            std::time::Instant::now(),
+        )
+        .0,
+        1,
+    );
+}
+
+#[test]
 fn texture_restore_headroom_accounts_for_the_rest_of_the_card() {
     let card = omsi_render::GpuMemory {
         textures: 100,
@@ -310,6 +402,46 @@ fn an_idle_look_is_kept_until_something_changes() {
         !m.unchanged(1, 900, limit, 0, &c),
         "a look that did something looks again"
     );
+}
+
+#[test]
+fn blocked_near_restores_recheck_small_changes_in_card_room() {
+    let (_fixture, world) = Fixture::world();
+    let renderer = renderer();
+    let mut scene = renderer.new_scene();
+    let (path, id) = scenery(&world, &renderer, &mut scene, "near.png", (0, 0));
+    assert!(renderer.drop_top_levels(&mut scene, id, 2));
+    let full_bytes = {
+        let mut gpu = world.gpu.lock();
+        let entry = gpu.textures.get_mut(&path).unwrap();
+        entry.record_upload(&data(1024), &scene);
+        entry.full_bytes
+    };
+    let centers = [DVec3::new(150.0, 150.0, 0.0)];
+    let total = renderer.gpu_memory(&scene).total();
+    world.set_texture_budget(400_000);
+    world.set_video_memory_limit(total + 1);
+    let before_scan = std::time::Instant::now();
+    assert_eq!(
+        world.update_texture_budget(&renderer, &mut scene, &centers, true),
+        0
+    );
+    {
+        let mut memo = world.budget_checked.lock();
+        let deadline = memo
+            .near_retry_at
+            .expect("blocked restore must schedule a scan");
+        assert!(deadline >= before_scan + std::time::Duration::from_secs(2));
+        let now = std::time::Instant::now();
+        memo.checked = Some(now - std::time::Duration::from_secs(3));
+        memo.near_retry_at = Some(now);
+    }
+    world.set_video_memory_limit(total + full_bytes);
+    assert_eq!(
+        world.update_texture_budget(&renderer, &mut scene, &centers, false),
+        1
+    );
+    assert_eq!(world.gpu.lock().wants_restore, [path]);
 }
 
 #[test]
@@ -545,4 +677,51 @@ fn a_squeezed_restore_cut_short_by_a_fuller_budget_stays_squeezed() {
     world.apply_texture_upgrades(&renderer, &mut scene, None);
     assert_eq!(scene.texture_size_of(id), Some((512, 512)));
     assert!(world.gpu.lock().textures[&path].squeezed);
+}
+
+#[test]
+fn a_budgeted_upgrade_does_not_allocate_the_same_or_a_smaller_picture() {
+    let old = data(512);
+    assert!(!texture_upgrade_worthwhile(
+        (512, 512),
+        old.gpu_bytes(),
+        &data(256),
+    ));
+    assert!(!texture_upgrade_worthwhile(
+        (512, 512),
+        old.gpu_bytes(),
+        &old,
+    ));
+    assert!(texture_upgrade_worthwhile(
+        (512, 512),
+        old.gpu_bytes(),
+        &data(1024),
+    ));
+    assert!(texture_upgrade_worthwhile(
+        (512, 512),
+        old.gpu_bytes() * 2,
+        &old,
+    ));
+}
+
+#[test]
+fn texture_upgrade_backpressure_preserves_requests_and_serves_both_queues() {
+    let mut regular = (0..40)
+        .map(|i| PathBuf::from(format!("regular-{i}")))
+        .collect::<Vec<_>>();
+    let mut freetex = vec![PathBuf::from("free")];
+    let mut restores = (0..40)
+        .map(|i| PathBuf::from(format!("restore-{i}")))
+        .collect::<Vec<_>>();
+    let (batch, selected_restores) =
+        texture_upgrade_batch(&mut regular, &mut freetex, &mut restores, 0);
+    assert!(batch.is_empty() && selected_restores.is_empty());
+    let (batch, selected_restores) =
+        texture_upgrade_batch(&mut regular, &mut freetex, &mut restores, 32);
+    assert_eq!(batch.len(), 32);
+    assert_eq!(selected_restores.len(), 16);
+    assert_eq!(regular.len() + freetex.len() + restores.len(), 49);
+    let (batch, _) = texture_upgrade_batch(&mut regular, &mut freetex, &mut restores, 64);
+    assert_eq!(batch.len(), 49);
+    assert!(regular.is_empty() && freetex.is_empty() && restores.is_empty());
 }
