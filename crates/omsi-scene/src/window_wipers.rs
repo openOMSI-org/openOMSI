@@ -153,24 +153,24 @@ impl WindowWipers {
             let Some(data) = vehicle.ty.mesh_data(mesh) else {
                 continue;
             };
-            let Some(ends) = blade_ends(&data.positions) else {
-                continue;
-            };
-            let ends = if name.contains("arm") {
-                if vehicle.ty.model.meshes.iter().any(|d| {
+            // A separate blade takes precedence over an arm mesh. Otherwise find the
+            // narrow rubber strip, whatever the mesh is named: a plain principal axis
+            // tilts towards the arm of a combined mesh and clears the glass at that
+            // wrong angle. Keep the axis as a fallback for a mesh made only of rubber.
+            if name.contains("arm")
+                && vehicle.ty.model.meshes.iter().any(|d| {
                     let n = d.file.to_ascii_lowercase();
                     n.contains("wischerblatt")
                         || n.contains("wiperblade")
                         || n.contains("wiper_blade")
-                }) {
-                    continue;
-                }
-                let Some(ends) = combined_blade_ends(&data.positions) else {
-                    continue;
-                };
-                ends
-            } else {
-                ends
+                })
+            {
+                continue;
+            }
+            let Some(ends) =
+                combined_blade_ends(&data.positions).or_else(|| blade_ends(&data.positions))
+            else {
+                continue;
             };
             let previous = ends.map(|p| vehicle.mesh_transforms[mesh].transform_point3(p));
             blades.push(Blade {
