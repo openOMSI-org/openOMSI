@@ -76,6 +76,12 @@ pub struct SoundEntry {
     pub only_one: bool,
     /// `[next_random]`: (count, min, max) applied to this entry.
     pub random: Option<(i32, f32, f32)>,
+    /// `[traction]`: this is a traction sound - the motor's loops of an electric bus, a
+    /// tram's or a trolleybus's (openOMSI's own keyword; OMSI 2 has none and ignores the
+    /// line). The settings' traction slider scales these and only these (#3336). A vehicle
+    /// file that marks none of its entries has its traction sounds guessed by their file
+    /// names (see `omsi_audio::soundset`).
+    pub traction: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -269,6 +275,13 @@ impl SoundCfg {
                         s.only_one = true;
                     }
                 }
+                // (openOMSI's own: the motor of an electric bus, a tram, a trolleybus - the
+                // settings' traction volume scales it, #3336)
+                "traction" => {
+                    if let Some(s) = c.sounds.last_mut() {
+                        s.traction = true;
+                    }
+                }
                 _ => c.unknown_keywords.push((k, r.block_line())),
             }
         }
@@ -306,6 +319,27 @@ mod tests {
         assert!(conds[1].holds(7.0));
         // no tolerance
         assert!(conds[2].holds(0.5) && !conds[2].holds(0.50001));
+    }
+
+    /// `[traction]` marks the entry before it (openOMSI's own keyword, #3336): the motor's
+    /// loops of an electric bus, a tram, a trolleybus - and only that entry.
+    #[test]
+    fn the_traction_keyword_marks_the_entry_before_it() {
+        let text = "[loopsound]\nmotor_loop.wav\n44100\nengine_n\n600\n1\n[traction]\n\n[sound]\ndoor.wav\n1\n\n[loopsound]\nfan.wav\n44100\nfan_n\n600\n1\n";
+        let c = SoundCfg::parse(&CfgFile::from_str("sound.cfg", text));
+        assert_eq!(c.sounds.len(), 3);
+        assert!(c.sounds[0].traction, "the motor");
+        assert!(
+            !c.sounds[1].traction && !c.sounds[2].traction,
+            "and nothing else"
+        );
+        // (a file without the keyword marks nothing: `soundset` guesses by the file names)
+        let plain = SoundCfg::parse(&CfgFile::from_str("sound.cfg", "[sound]\na.wav\n1\n"));
+        assert!(!plain.sounds[0].traction);
+        assert!(
+            !plain.unknown_keywords.iter().any(|(k, _)| k == "traction"),
+            "the keyword is known"
+        );
     }
 
     #[test]

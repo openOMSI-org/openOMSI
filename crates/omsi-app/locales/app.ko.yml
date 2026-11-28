@@ -3124,3 +3124,6 @@
 "Only for due trips": "예정된 운행만"
 "Passengers wait for open doors": "승객이 문이 열릴 때까지 기다림"
 "IBIS stop follows the duty": "IBIS 정류장이 근무를 따름"
+
+"Traction": "견인"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "운전 중인 버스 모터의 소리 크기(전차와 트롤리버스도 포함)"

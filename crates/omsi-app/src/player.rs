@@ -1214,6 +1214,7 @@ impl Player {
         audio: Option<&omsi_audio::AudioEngine>,
         inside: bool,
         listener_follows_bus: bool,
+        traction: f32,
     ) {
         self.tick_startup(dt);
         self.tick_auto_drag(dt);
@@ -1307,7 +1308,7 @@ impl Player {
                 }
             }
         }
-        self.sound_step(audio, inside, listener_follows_bus);
+        self.sound_step(audio, inside, listener_follows_bus, traction);
     }
 
     /// The bus's sounds after its step: the triggers it fired, its volume curves, the
@@ -1317,6 +1318,7 @@ impl Player {
         audio: Option<&omsi_audio::AudioEngine>,
         inside: bool,
         listener_follows_bus: bool,
+        traction: f32,
     ) {
         let fired: Vec<String> = std::mem::take(&mut self.vehicle.host.fired_triggers);
         let fired_vars: Vec<(String, Vec<f32>)> =
@@ -1328,6 +1330,8 @@ impl Player {
         }
         let part_fired: part_sounds::PartFired = self.vehicle.take_part_fired();
         if let (Some(a), Some(ss)) = (audio, self.sounds.as_mut()) {
+            // (the settings' traction volume: the motor's loops of the bus driven, #3336)
+            ss.set_traction_gain(traction);
             let xf = self.vehicle.world_transform();
             let v = &self.vehicle;
             // the camera decides which `[viewpoint]` entries are heard (the exterior engine
