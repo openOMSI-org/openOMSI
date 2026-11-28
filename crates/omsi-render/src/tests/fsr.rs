@@ -997,3 +997,81 @@ fn metalfx_makes_the_frame_between_two() {
     );
     assert_eq!(r.frames_generated(), Some(4));
 }
+
+/// A picture that stands still has no motion (#4221): the w of a part's matrix columns carry
+/// its draw order and depth plane (2.0 for most), and the motion prepass took the last frame's
+/// matrix with them: nearly every part moved, and DLSS and FSR 3 shimmered on a still picture.
+#[test]
+#[ignore = "requires a graphics adapter and AMD's DLLs beside the test binary; run with --ignored on a GPU host"]
+fn a_still_picture_has_no_motion() {
+    let (w, h) = (192, 128);
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let temporal = Some(Temporal {
+        upscaler: UPSCALER,
+        quality: TemporalQuality::Native,
+    });
+    let options = RenderOptions {
+        msaa: 1,
+        ssao: false,
+        shadow_size: 512,
+        fxaa: false,
+        render_scale: 1.0,
+        temporal,
+        ..Default::default()
+    };
+    let mut r = pollster::block_on(Renderer::new_with(
+        &instance,
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        options,
+    ))
+    .expect("test renderer");
+    let mut scene = rails_scene(&mut r);
+    let lighting = Lighting {
+        shadows: false,
+        fog_density: 0.0,
+        ..Default::default()
+    };
+    let tex = r.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = tex.create_view(&Default::default());
+    for _ in 0..3 {
+        r.render_window(&mut scene, &view, w, h, &camera(), &lighting);
+    }
+    let Some(t) = r.temporal.as_ref().and_then(|d| d.targets.as_ref()) else {
+        return;
+    };
+    let motion = r.read_texture(&t.motion, wgpu::TextureAspect::All).unwrap();
+    let most = motion
+        .chunks_exact(4)
+        .map(|p| half(&p[0..]).hypot(half(&p[2..])))
+        .fold(
+            0.0f32,
+            |a, m| if m.is_nan() { f32::INFINITY } else { a.max(m) },
+        );
+    assert!(most < 0.01, "a still picture moved by {most} pixels");
+}
+
+/// A half float (`Rg16Float`'s channels), little-endian.
+fn half(b: &[u8]) -> f32 {
+    let h = u16::from_le_bytes([b[0], b[1]]);
+    let sign = if h & 0x8000 != 0 { -1.0 } else { 1.0 };
+    let (exp, frac) = (((h >> 10) & 0x1f) as i32, (h & 0x3ff) as f32);
+    sign * match exp {
+        0 => frac * 2f32.powi(-24),
+        31 => f32::INFINITY,
+        e => (1.0 + frac / 1024.0) * 2f32.powi(e - 15),
+    }
+}

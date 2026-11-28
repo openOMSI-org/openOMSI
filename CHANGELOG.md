@@ -8,6 +8,9 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **DLSS and AMD FSR 3 no longer shimmer on what stands still**: the motion of the last frame
+  is taken without the depth plane each part carries since 0.3.57, so a still picture has no
+  motion again ([#4221](https://github.com/openOMSI-org/openOMSI/issues/4221)).
 - **Mirror refresh settings cap every mirror picture again**: a mirror shown in another mirror is
   drawn with the mirror that shows it, instead of also taking its own redraw turn. The pictures
   drawn for another mirror now count against the Economical, Full and VR redraw budgets, so
