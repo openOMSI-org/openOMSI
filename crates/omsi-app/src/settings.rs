@@ -1,4 +1,4 @@
-﻿//! The user's settings: graphics and gameplay switches, kept as `key=value` lines in
+//! The user's settings: graphics and gameplay switches, kept as `key=value` lines in
 //! `~/.openomsi/settings.cfg` (the launcher writes the same file). Anything missing
 //! keeps its default, so an old file never breaks a new build.
 

@@ -33,17 +33,31 @@ impl PeopleSim {
     /// choose a task or change which bus anybody actually boards.
     pub fn visual_hail_bus(&self, i: usize, buses: &[BusNow]) -> Option<(BusId, bool, DVec3)> {
         let p = self.pax(i)?;
-        // Only stationary waiting passengers can signal: once they start moving to
-        // a door, turning the whole pose would slide their feet sideways.
-        if p.inside.is_some() || p.task != Task::WaitingForBus {
+        // Passengers waiting at the stop can signal. Once a bus has been chosen they may
+        // wait at the gather point or at a shut door with their feet still; those states
+        // must signal too. Turning a walking pose would slide the feet sideways, so a
+        // passenger on the way there (state 1) is left out (#4356).
+        if p.inside.is_some()
+            || !matches!(
+                p.task,
+                Task::WaitingForBus | Task::ToBus | Task::WalkingToBus
+            )
+            || (p.task != Task::WaitingForBus && !matches!(p.st, 2 | 3))
+        {
             return None;
         }
+        let committed = p.task != Task::WaitingForBus;
         let stop = p.stop?;
         let s = self.stops.get(&stop)?;
         let heading = s.heading.to_radians();
         let forward = DVec2::new(heading.sin(), heading.cos());
-        // Resolve passenger route information once, before scanning candidate buses.
-        let (_, termini) = s.lines.get(p.line?)?;
+        // A passenger still waiting matches by route; one committed to a bus hails that
+        // bus only, as before the foot-sliding fix (#4356).
+        let termini = if committed {
+            None
+        } else {
+            Some(&s.lines.get(p.line?)?.1)
+        };
         buses
             .iter()
             .filter(|b| {
@@ -61,11 +75,14 @@ impl PeopleSim {
                 if b.route.as_ref().is_some_and(|r| r.is_last_stop(s)) {
                     return false;
                 }
-                b.terminus.as_deref().is_some_and(|term| {
-                    fit(stop, s, p.dest.as_deref(), termini, term, &b.takes)
-                        .or_else(|| b.route.as_ref().and_then(|r| r.takes_waiting_for(termini)))
-                        .is_some()
-                })
+                match termini {
+                    Some(termini) => b.terminus.as_deref().is_some_and(|term| {
+                        fit(stop, s, p.dest.as_deref(), termini, term, &b.takes)
+                            .or_else(|| b.route.as_ref().and_then(|r| r.takes_waiting_for(termini)))
+                            .is_some()
+                    }),
+                    None => p.bus == Some(b.id),
+                }
             })
             .min_by(|a, b| {
                 (a.pos - self.people[i].position)
