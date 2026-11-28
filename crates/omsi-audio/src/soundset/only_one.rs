@@ -216,6 +216,7 @@ mod tests {
         SoundSet {
             sounds: vec![RuntimeSound::new(entry.clone(), Some(clip.clone()))],
             master: 1.0,
+            traction: 1.0,
             dir: Default::default(),
             inside: false,
             amount: 0.0,

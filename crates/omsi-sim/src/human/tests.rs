@@ -558,6 +558,42 @@ fn a_sudden_turn_keeps_the_legs_under_the_hips() {
     assert!(worst < 50.0, "a foot {worst:.0} degrees off the hips' way");
 }
 
+/// A passenger who turns to take a seat brings their feet round with them: the feet
+/// follow the heading into the seat instead of staying pointed where they boarded (#4057).
+#[test]
+fn sitting_down_turns_the_feet_into_the_seat() {
+    let r = rig();
+    let mut p = Pose::new(5);
+    for _ in 0..120 {
+        p.advance(&r, &PoseInput::default(), 1.0 / 60.0);
+    }
+    let sit = PoseInput {
+        activity: Activity::Sit,
+        heading: 90.0,
+        seat: Some(Vec3::new(0.0, -r.seat_front(), 0.4)),
+        ..Default::default()
+    };
+    for _ in 0..150 {
+        p.advance(&r, &sit, 1.0 / 60.0);
+    }
+    let posed = p.bones(&r);
+    let hips = posed.bones[HIP]
+        .transform_vector3(Vec3::Y)
+        .truncate()
+        .normalize();
+    for side in 0..2 {
+        let foot = posed.bones[FOOT[side]]
+            .transform_vector3(Vec3::Y)
+            .truncate()
+            .normalize();
+        let off = hips.dot(foot).clamp(-1.0, 1.0).acos().to_degrees();
+        assert!(
+            off < 20.0,
+            "seated foot {side} {off:.0} degrees off the hips"
+        );
+    }
+}
+
 /// Every way of standing gives a finite pose with the hands where that way puts them: in
 /// front for clasped hands, the crossed arms and the phone, behind for the hands behind
 /// the back, out at the side for a hand on the hip - and the feet stay on the floor.

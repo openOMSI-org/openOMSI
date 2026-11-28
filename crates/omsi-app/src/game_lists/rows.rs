@@ -96,6 +96,10 @@ pub(crate) fn slider_row(
 /// The values a slider's setting runs through.
 pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
     Some(match verb {
+        "tag_preset" => (0..=5).map(|n| n as f32).collect(),
+        "tag_axle" => (2..=8).map(|n| n as f32).collect(),
+        "tag_multiplier" => (0..=40).map(|n| n as f32 * 0.05).collect(),
+        "tag_fade_start" | "tag_fade_end" => (0..=80).map(|n| n as f32).collect(),
         "vr_nav_x" | "vr_nav_y" | "vr_nav_z" => (-100..=100).map(|v| v as f32 * 0.02).collect(),
         "triple_width_mm" => (20..=200).map(|v| v as f32 * 10.0).collect(),
         "triple_distance_mm" => (20..=300).map(|v| v as f32 * 10.0).collect(),
@@ -130,8 +134,8 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "chat_size" => (5..=30).map(|v| v as f32 * 0.1).collect(),
         "ui_opacity" => (4..=20).map(|v| v as f32 * 0.05).collect(),
         "voice_volume" | "voice_mic_gain" => (0..=40).map(|v| v as f32 * 0.05).collect(),
-        "vol_ai" | "vol_scenery" | "vol_ambient" | "radio_speaker" | "radio_hiss"
-        | "radio_dropouts" => (0..=20).map(|v| v as f32 * 0.05).collect(),
+        "vol_ai" | "vol_scenery" | "vol_traction" | "vol_ambient" | "radio_speaker"
+        | "radio_hiss" | "radio_dropouts" => (0..=20).map(|v| v as f32 * 0.05).collect(),
         "wheel_range" => (6..=60).map(|v| v as f32 * 30.0).collect(),
         "cab_wheel_rotation" => std::iter::once(0.0)
             .chain((6..=60).map(|v| v as f32 * 30.0))

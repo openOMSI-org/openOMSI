@@ -230,6 +230,8 @@ pub struct Scene {
     pub textures: Vec<GpuTexture>,
     /// Texture slot read by procedural rain films.
     pub(crate) glass_slot: Option<TextureId>,
+    /// Visible instances with at least one rain-film slot whose alpha is > 0 (`set_params`).
+    pub(crate) active_film_instances: std::collections::HashSet<usize>,
     pub materials: Vec<Material>,
     pub instances: Vec<Instance>,
     /// The trolleybus wire networks whose wires this scene already draws (by address: see

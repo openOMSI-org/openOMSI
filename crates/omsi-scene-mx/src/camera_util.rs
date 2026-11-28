@@ -158,6 +158,29 @@ pub fn mirror_draw_plan(
     order.into_iter().map(|k| plan[k]).collect()
 }
 
+/// The mirrors drawn in one turn: the ones of `plan` held by the chosen mirror, then that
+/// mirror. The turn is taken by `seen[k % seen.len()]` - the mirrors in the picture - and not
+/// by the mirrors `mirror_draw_plan` added for them: those are drawn with the mirror that
+/// shows them and must not take a turn of their own as well (#4341).
+pub fn mirror_turn_plan(
+    seen: &[usize],
+    plan: &[usize],
+    k: usize,
+    holds: impl Fn(usize, usize) -> bool,
+) -> Vec<usize> {
+    let mut draw = Vec::new();
+    let Some(&picked) = seen.get(k % seen.len().max(1)) else {
+        return draw;
+    };
+    for &i in plan {
+        if i != picked && holds(picked, i) {
+            draw.push(i);
+        }
+    }
+    draw.push(picked);
+    draw
+}
+
 /// A mirror's camera as Omsi.exe aims it, every frame (0x6f6468 -> 0x7ed0e8): the yaw and
 /// pitch of an `[add_camera_reflexion]` are not where it looks but which way the mirror's
 /// face is turned - (cos p sin y, cos p cos y, sin p) in the vehicle's frame (0x7edfd0); the
@@ -329,5 +352,33 @@ mod tests {
             vec![1, 0, 2]
         );
         assert!(super::mirror_draw_plan(&[], &[], 3, shows).is_empty());
+    }
+
+    /// The door mirrors (1, 2) are drawn with the interior mirror (0) that shows them. They do
+    /// not take turns of their own as well: that drew some mirrors twice per refresh cycle while
+    /// the interior mirror waited for its turn, and cost the frame rate (#4341).
+    #[test]
+    fn a_mirror_drawn_for_another_takes_no_turn_of_its_own() {
+        let seen = [0];
+        let plan = super::mirror_draw_plan(&seen, &[], 3, |j, i| j == 0 && (i == 1 || i == 2));
+        let holds = |j: usize, i: usize| j == 0 && (i == 1 || i == 2);
+        for k in 0..6 {
+            assert_eq!(
+                super::mirror_turn_plan(&seen, &plan, k, holds),
+                vec![1, 2, 0]
+            );
+        }
+        // (two mirrors in the picture: only they take turns; one shows nothing extra)
+        let seen = [0, 3];
+        let plan = super::mirror_draw_plan(&seen, &[], 4, |j, i| j == 0 && (i == 1 || i == 2));
+        assert_eq!(
+            super::mirror_turn_plan(&seen, &plan, 0, holds),
+            vec![1, 2, 0]
+        );
+        assert_eq!(
+            super::mirror_turn_plan(&seen, &plan, 1, |_, _| false),
+            vec![3]
+        );
+        assert!(super::mirror_turn_plan(&[], &[], 0, holds).is_empty());
     }
 }

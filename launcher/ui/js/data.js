@@ -561,13 +561,15 @@ export async function saveSettings(patch, whole = false) {
   return true;
 }
 
-/** The trip of the tour picked to start with (its place), while the time is still its. */
+/** The trip of the tour picked to start with (its place), until another line or tour is picked.
+ *  The start time is free to move: the player can come a few minutes before the bus leaves
+ *  (#4334), and the game still starts the whole tour at this trip. */
 export function pickedTrip() {
   const c = S.choice;
   const st = c.start_trip;
   if (!st || c.free) return null;
-  const [line, tour, index, time] = st;
-  return line === c.line && tour === c.tour && (time === c.time || realTime()) ? index : null;
+  const [line, tour, index] = st;
+  return line === c.line && tour === c.tour ? index : null;
 }
 
 /** What the game is started with. */

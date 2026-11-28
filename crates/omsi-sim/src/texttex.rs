@@ -391,6 +391,15 @@ impl TextTextureState {
 
     /// The picture of `text` in this texture's font, size, colour and placement.
     pub fn image(&self, text: &str) -> Vec<u8> {
+        self.image_with_multiline_alignment(text, omsi_content::font::MultilineAlignment::Automatic)
+    }
+
+    /// The picture of `text` with an explicit layout for lines separated by `@`.
+    pub fn image_with_multiline_alignment(
+        &self,
+        text: &str,
+        multiline: omsi_content::font::MultilineAlignment,
+    ) -> Vec<u8> {
         let (w, h) = (self.def.width.max(1) as u32, self.def.height.max(1) as u32);
         let rgb = [
             self.def.color[0] as u8,
@@ -402,7 +411,15 @@ impl TextTextureState {
             grid: self.def.grid,
         };
         match &self.atlas {
-            Some(a) => a.render_aligned(text, w, h, self.def.full_color, rgb, align),
+            Some(a) => a.render_aligned_with_multiline(
+                text,
+                w,
+                h,
+                self.def.full_color,
+                rgb,
+                align,
+                multiline,
+            ),
             None => vec![0u8; (w * h * 4) as usize],
         }
     }
@@ -427,6 +444,111 @@ mod tests {
             }],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn text_texture_multiline_alignment_distinguishes_menu_rows_from_fixed_fields() {
+        let font = Font {
+            name: "multiline-alignment-test".into(),
+            height: 2,
+            gap: 0,
+            chars: vec![
+                omsi_content::font::FontChar {
+                    ch: 'A',
+                    x0: 0,
+                    x1: 1,
+                    y: 0,
+                },
+                omsi_content::font::FontChar {
+                    ch: 'B',
+                    x0: 1,
+                    x1: 3,
+                    y: 0,
+                },
+                omsi_content::font::FontChar {
+                    ch: 'D',
+                    x0: 0,
+                    x1: 1,
+                    y: 0,
+                },
+                omsi_content::font::FontChar {
+                    ch: 'N',
+                    x0: 1,
+                    x1: 2,
+                    y: 0,
+                },
+            ],
+            ..Default::default()
+        };
+        let pixels = vec![255; 3 * 2 * 4];
+        let atlas = Arc::new(FontAtlas::new(font, 3, 2, pixels.clone(), pixels));
+        let state = TextTextureState::new(
+            omsi_model::TextTexture {
+                width: 20,
+                height: 6,
+                ..Default::default()
+            },
+            Some(atlas),
+        );
+        let left = |image: &[u8], row: usize| {
+            (0..20)
+                .find(|&x| image[(row * 20 + x) * 4 + 3] != 0)
+                .unwrap()
+        };
+
+        let per_line = state.image("AB@A");
+        assert_eq!((left(&per_line, 1), left(&per_line, 3)), (8, 9));
+
+        let padded_single_line = state.image("AB   ");
+        assert_eq!(left(&padded_single_line, 2), 8);
+
+        let single_menu_item = state.image(&format!("  AB{}", " ".repeat(33)));
+        assert_eq!(left(&single_menu_item, 2), 2);
+
+        let gear_letter = state.image("D       @@");
+        assert_eq!(left(&gear_letter, 0), 6);
+
+        let neutral_gear = state.image("N       @@");
+        assert_eq!(left(&neutral_gear, 0), 6);
+
+        let padded_menu = state.image("AB        @ A      ");
+        assert_eq!((left(&padded_menu, 1), left(&padded_menu, 3)), (4, 5));
+
+        let route_list = state.image("AB@AB  @AB ");
+        assert_eq!(
+            (
+                left(&route_list, 0),
+                left(&route_list, 2),
+                left(&route_list, 4)
+            ),
+            (8, 7, 8)
+        );
+
+        let different_fixed_fields =
+            state.image(&format!("  AB{}@A{}", " ".repeat(25), " ".repeat(14)));
+        assert_eq!(
+            (
+                left(&different_fixed_fields, 1),
+                left(&different_fixed_fields, 3)
+            ),
+            (2, 2)
+        );
+
+        let stop_name_after_padded_field = state.image("  AB   @A@AB");
+        assert_eq!(
+            (
+                left(&stop_name_after_padded_field, 1),
+                left(&stop_name_after_padded_field, 3),
+                left(&stop_name_after_padded_field, 5),
+            ),
+            (8, 9, 8)
+        );
+
+        let shared = state.image_with_multiline_alignment(
+            "AB@A",
+            omsi_content::font::MultilineAlignment::SharedOrigin,
+        );
+        assert_eq!(left(&shared, 1), left(&shared, 3));
     }
 
     #[test]
