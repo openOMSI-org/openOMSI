@@ -191,7 +191,10 @@ pub fn vehicle_lights(
                 continue;
             }
             let turn = |name: &Option<String>| name.as_deref().map_or(0.0, |n| value_of(n));
-            for (pos, local, share) in cookie_lamps(c, turn(&c.yaw), turn(&c.pitch)) {
+            for (pos, local, share) in cookie_lamps(c, turn(&c.yaw), turn(&c.pitch))
+                .iter()
+                .copied()
+            {
                 let at = origin + rot.transform_point3(pos).as_dvec3();
                 let d = rot.transform_vector3(local).normalize_or_zero();
                 push_cookie(
@@ -307,28 +310,40 @@ fn cookie_direction(dir: Vec3, yaw_deg: f32, pitch_deg: f32) -> Vec3 {
     glam::Quat::from_axis_angle(right.normalize(), pitch_deg.to_radians()) * d
 }
 
+/// At most one cookie pair, without a `Vec` in this per-vehicle, per-frame path.
+struct CookieLamps {
+    lamps: [(Vec3, Vec3, f32); 2],
+    count: usize,
+}
+
+impl std::ops::Deref for CookieLamps {
+    type Target = [(Vec3, Vec3, f32)];
+
+    fn deref(&self) -> &Self::Target {
+        &self.lamps[..self.count]
+    }
+}
+
 /// A cookie lamp's places and directions in its vehicle's frame (x right, y ahead, z up),
 /// with the offsets already applied and each lamp's share of the light. A Sobol flag of 0 asks
 /// for a twin across the axis; its place and direction are mirrored, but its offsets are not,
 /// so both beams steer the same way.
-fn cookie_lamps(
-    c: &omsi_model::SpotlightCookie,
-    yaw_deg: f32,
-    pitch_deg: f32,
-) -> Vec<(Vec3, Vec3, f32)> {
+fn cookie_lamps(c: &omsi_model::SpotlightCookie, yaw_deg: f32, pitch_deg: f32) -> CookieLamps {
     let sides: &[f32] = if c.mirrored { &[1.0, -1.0] } else { &[1.0] };
-    sides
-        .iter()
-        .map(|side| {
-            let pos = Vec3::new(c.pos[0] * side, c.pos[1], c.pos[2]);
-            let dir = Vec3::new(c.dir[0] * side, c.dir[1], c.dir[2]);
-            (
-                pos,
-                cookie_direction(dir, yaw_deg, pitch_deg),
-                1.0 / sides.len() as f32,
-            )
-        })
-        .collect()
+    let mut lamps = [(Vec3::ZERO, Vec3::Y, 1.0); 2];
+    for (lamp, side) in lamps.iter_mut().zip(sides) {
+        let pos = Vec3::new(c.pos[0] * side, c.pos[1], c.pos[2]);
+        let dir = Vec3::new(c.dir[0] * side, c.dir[1], c.dir[2]);
+        *lamp = (
+            pos,
+            cookie_direction(dir, yaw_deg, pitch_deg),
+            1.0 / sides.len() as f32,
+        );
+    }
+    CookieLamps {
+        lamps,
+        count: sides.len(),
+    }
 }
 
 /// The lights of a `[spotlight_cookie]` at `at` shining along `d`, switched to `on` (0..1),
@@ -813,7 +828,11 @@ mod cookie_tests {
             mirrored: false,
             ..c
         };
-        assert_eq!(cookie_lamps(&one, 10.0, 0.0).len(), 1);
+        let one = cookie_lamps(&one, 10.0, 0.0);
+        assert_eq!(one.len(), 1, "the ordinary single-lamp case");
+        assert_eq!(one[0].2, 1.0, "one lamp keeps the whole brightness");
+        assert_eq!(one[0].0.x, c.pos[0]);
+        assert!(one[0].1.x > 0.0, "its offsets still steer it");
     }
 
     /// A cookie lamp is a classic spot and an enhanced one with its picture; without a

@@ -44,6 +44,12 @@ fn numeric(s: &str) -> bool {
     !s.is_empty() && s.parse::<f32>().is_ok()
 }
 
+/// The switching line of the Sobol layout is a variable name or a literal number (a constant
+/// switch); both are valid and must not send the block to the openOMSI parser.
+fn is_switch(s: &str) -> bool {
+    !s.trim().is_empty()
+}
+
 /// The two layouts share the position and direction. In openOMSI's own layout the next five
 /// lines are red, green, blue, range, width (then height, picture and variable). In Sobol's
 /// buses they are range, variable, mirror flag, picture, fade: its line 3 is a flag of 0 or 1
@@ -51,7 +57,7 @@ fn numeric(s: &str) -> bool {
 fn sobol_layout(ahead: &[String]) -> bool {
     ahead.len() == 5
         && numeric(&ahead[0])
-        && !ahead[1].trim().is_empty()
+        && is_switch(&ahead[1])
         && numeric(&ahead[2])
         && omsi_cfg::parse_f32(&ahead[2]) < 2.0
         && !numeric(&ahead[3])
