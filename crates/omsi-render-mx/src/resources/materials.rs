@@ -754,6 +754,7 @@ impl Renderer {
     ) {
         if let Some(m) = scene.instances[instance].materials.get_mut(slot) {
             *m = material;
+            scene.update_active_film(instance);
         }
     }
 

@@ -477,8 +477,8 @@ impl ObjectRun {
             let mine: Vec<&Flat> = placed.iter().filter(|f| f.slot as usize == slot).collect();
             if depth_normals
                 .is_some_and(|normals| normals.get(slot).is_none_or(|normal| *normal == Vec3::ZERO))
+                && !self.repeats_stepped_planes(&mine, first_flat, alpha.get(slot))
             {
-                // The GPU moves every triangle in a slot together; mixed geometry has no safe shared plane.
                 self.remember_unstepped_flats(&mine, mesh);
                 continue;
             }

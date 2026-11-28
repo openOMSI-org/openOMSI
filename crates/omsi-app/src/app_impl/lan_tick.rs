@@ -143,6 +143,7 @@ impl App {
                 }
             }
         }
+        super::accident::exchange(lan, self.session.traffic.as_mut(), dt);
         let setup_ms = lan_tick_started.elapsed().as_secs_f64() * 1000.0;
         let phase = std::time::Instant::now();
         let sent = {
@@ -394,6 +395,14 @@ impl App {
         }
         // a plugin's message to the same plugin here (`lan.send`)
         if self.plugin_lan_message(from, text) {
+            return;
+        }
+        if super::accident::on_command(
+            self.net.lan.as_mut(),
+            self.session.traffic.as_mut(),
+            from,
+            text,
+        ) {
             return;
         }
         let Some(command) = Command::parse(from, text) else {

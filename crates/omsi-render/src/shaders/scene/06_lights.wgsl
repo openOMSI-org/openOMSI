@@ -24,6 +24,14 @@ fn point_lights(p: vec3<f32>, n: vec3<f32>, map_k: f32) -> vec3<f32> {
                 break;
             }
             let l = lights[li];
+            // A light-mapped road or a `[nomaplighting]` surface takes none of the map's lamps.
+            // The grid lists every spot and classic headlight stand-in ahead of them
+            // (lights.rs `classic_road_light`), so the first lamp that does take `map_k` ends
+            // the walk. Without this, every pixel of a city's roads worked through eight night
+            // lamps it could not use (#3723).
+            if (map_k <= 0.0 && !(l.dir.w >= -1.5 || (l.dir.x > 0.5 && l.dir.w < -1.5))) {
+                break;
+            }
             let d = l.pos.xyz - p;
             let dist = length(d);
             if (dist >= l.pos.w) {

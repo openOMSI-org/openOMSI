@@ -425,9 +425,14 @@ pub fn texture_dirs(root: &Path, content_dir: &Path) -> Vec<PathBuf> {
 }
 
 /// The `.surf` map of a texture: a picture named after the texture as the content asks for
-/// it, plus `.surf` (`str_kopfgr01.bmp.surf`, also beside a `.dds`), in the texture's folder.
-/// Its red channel is the bumpiness of a road drawn with the texture ([`HeightMap`]), which
-/// OMSI 2 lays under the wheels (#886). Loaded once per file.
+/// it, plus `.surf` (`str_kopfgr01.bmp.surf`, also beside a `.dds`). Its red channel is the
+/// bumpiness of a road drawn with the texture ([`HeightMap`]), which OMSI 2 lays under the
+/// wheels (#886). Loaded once per file.
+///
+/// The map need not lie beside the picture: OMSI keeps `str_asphdrk_bad.bmp` in one add-on's
+/// texture folder and its `.surf` in another road pack's. Look beside the picture first, then
+/// in every folder the content asks textures from, or a plain road whose map sits in the
+/// spline's own folder stays smooth because a global copy of the `.bmp` won the lookup (#3502).
 ///
 /// [`HeightMap`]: omsi_geometry::HeightMap
 pub fn surf_map(texture: &str, dirs: &[&Path]) -> Option<Arc<omsi_geometry::HeightMap>> {
@@ -445,10 +450,17 @@ pub fn surf_map(texture: &str, dirs: &[&Path]) -> Option<Arc<omsi_geometry::Heig
     let req = texture.trim().replace('\\', "/");
     let base = req.rsplit('/').next().unwrap_or(&req).to_string();
     let found_name = found.file_name()?.to_string_lossy().into_owned();
-    let path = [base, found_name]
-        .iter()
-        .map(|n| omsi_cfg::resolve_path(dir, &format!("{n}.surf")))
-        // through the VFS: a texture found in a mounted archive has its map in there too
+    let names = [base, found_name];
+    // (beside the picture first, then the content's own texture folders: a map in the
+    // spline's folder is missed if the `.bmp` was found in a pack consulted later)
+    let path = std::iter::once(dir)
+        .chain(dirs.iter().copied())
+        .flat_map(|d| {
+            names.iter().map(move |n| {
+                // through the VFS: a texture found in a mounted archive has its map in there too
+                omsi_cfg::resolve_path(d, &format!("{n}.surf"))
+            })
+        })
         .find(|p| omsi_cfg::vfs::is_file(p))?;
     let memo = MEMO.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(m) = memo.lock().get(&path) {

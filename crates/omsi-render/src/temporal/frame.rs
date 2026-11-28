@@ -58,7 +58,7 @@ pub(crate) struct TemporalTargets {
     pub(crate) color_view: wgpu::TextureView,
     color_raw_view: wgpu::TextureView,
     pub(crate) color_bg: wgpu::BindGroup,
-    motion: wgpu::Texture,
+    pub(crate) motion: wgpu::Texture,
     pub(crate) motion_view: wgpu::TextureView,
     mask: wgpu::Texture,
     pub(crate) mask_view: wgpu::TextureView,
@@ -360,11 +360,17 @@ impl Renderer {
             usage: targets | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[self.format],
         });
+        // (read back by the tests)
+        let readable = if cfg!(test) {
+            wgpu::TextureUsages::COPY_SRC
+        } else {
+            wgpu::TextureUsages::empty()
+        };
         let motion = tex(
             "temporal motion vectors",
             render,
             TEMPORAL_MOTION_FORMAT,
-            targets,
+            targets | readable,
         );
         let mask = tex(
             "temporal transparency mask",
