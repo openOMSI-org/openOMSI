@@ -221,3 +221,24 @@ fn mesh_blas_usage_respects_fallback_and_device_features() {
         }
     });
 }
+
+#[test]
+fn masked_prefill_budget_accounts_for_the_gi_camera_binding() {
+    with_auxiliary_renderer(|| {
+        let textures = |entries: &[wgpu::BindGroupLayoutEntry]| {
+            entries
+                .iter()
+                .filter(|e| matches!(e.ty, wgpu::BindingType::Texture { .. }))
+                .count() as u32
+        };
+        let material = textures(&material_layout_entries());
+        // the masked prefill adds one depth texture to the camera and material groups
+        crate::GI_BINDING.store(false, Relaxed);
+        let plain = textures(&camera_layout_entries(ArrayPath::Storage, false)) + material + 1;
+        assert_eq!(plain, crate::pipelines::scene::pane_mask_textures(false));
+        crate::GI_BINDING.store(true, Relaxed);
+        let traced = textures(&camera_layout_entries(ArrayPath::Storage, false)) + material + 1;
+        assert_eq!(traced, crate::pipelines::scene::pane_mask_textures(true));
+        assert_eq!(traced, plain + 1);
+    });
+}
