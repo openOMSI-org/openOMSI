@@ -408,6 +408,12 @@ pub(super) fn same_value(a: &str, b: &str) -> bool {
 
 pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
     match key {
+        // (the wgpu game's own frame generation: its DLLs beside the game)
+        "frame_generation" => omsi_cfg::upscaler_files::frame_generation_menu(
+            &omsi_cfg::upscaler_files::wgpu_frame_generation_choices(
+                &omsi_cfg::upscaler_files::program_dir(),
+            ),
+        ),
         "ui_theme_pack" => crate::themes::choices()
             .iter()
             .map(|(id, name)| {
@@ -512,7 +518,11 @@ pub(super) fn select_state(
     file: &serde_json::Value,
     key: &str,
 ) -> (Vec<(&'static str, &'static str)>, Option<usize>, String) {
-    let options = select_options(key);
+    let mut options = select_options(key);
+    // (NVIDIA's frame generation takes DLSS's inputs: offered with DLSS, as in the launcher)
+    if key == "frame_generation" && file.get("upscaler").and_then(|u| u.as_str()) != Some("dlss") {
+        options.retain(|o| !o.0.starts_with("dlss"));
+    }
     let cur = value_text(file.get(key).unwrap_or(&serde_json::Value::Null));
     let at = options.iter().position(|o| same_value(o.0, &cur));
     (options, at, cur)

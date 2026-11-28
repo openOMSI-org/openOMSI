@@ -129,6 +129,9 @@ pub struct Machine {
     pub ai: usize,
     pub people: usize,
     pub gpu: String,
+    /// The frames frame generation made for each one drawn, while it runs: the head shows the
+    /// frames on screen beside the drawn ones, as the frame rate's corner does.
+    pub generated_per_drawn: Option<f32>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -294,7 +297,7 @@ impl PerfOverlay {
         let worst = self.frames.iter().map(|s| s.total).fold(0.0f32, f32::max) * 1000.0;
         let mut r = Readout {
             title: crate::tr("Performance").into_owned(),
-            head: format!("{} fps   {:.1} ms", fps.round() as i32, frame_ms),
+            head: head(fps, m.generated_per_drawn, frame_ms),
             ..Default::default()
         };
         r.parts = Part::ALL
@@ -424,8 +427,63 @@ pub fn graph_scale(frames: &VecDeque<Sample>) -> f32 {
         .unwrap_or(0.2)
 }
 
+/// The frame rate's corner: the frames a second drawn, with the ones frame generation made on
+/// top while it makes any, and the upscaler the picture goes through (none: the standard one).
+pub fn corner(drawn: f32, generated: Option<f32>, upscaler: Option<&str>) -> String {
+    let mut text = match generated.filter(|g| *g > 0.0) {
+        Some(g) => format!("{:.0} fps ({drawn:.0} + FG)", drawn + g),
+        None => format!("{drawn:.0} fps"),
+    };
+    if let Some(u) = upscaler {
+        text.push_str(" · ");
+        text.push_str(u);
+    }
+    text
+}
+
+/// The panel's first line: the frames a second on screen, with the drawn ones beside them while
+/// frame generation makes any, and the drawn frame's time.
+fn head(fps: f32, generated_per_drawn: Option<f32>, frame_ms: f32) -> String {
+    match generated_per_drawn.filter(|g| *g > 0.0) {
+        Some(g) => format!(
+            "{} fps ({} + FG)   {:.1} ms",
+            (fps * (1.0 + g)).round() as i32,
+            fps.round() as i32,
+            frame_ms
+        ),
+        None => format!("{} fps   {:.1} ms", fps.round() as i32, frame_ms),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_corner_names_the_upscaler_and_frame_generations_frames() {
+        assert_eq!(super::corner(60.0, None, None), "60 fps");
+        assert_eq!(
+            super::corner(60.0, Some(0.0), Some("FSR 3")),
+            "60 fps · FSR 3"
+        );
+        assert_eq!(
+            super::corner(60.0, Some(59.0), Some("DLSS")),
+            "119 fps (60 + FG) · DLSS"
+        );
+    }
+
+    #[test]
+    fn the_head_counts_the_generated_frames_beside_the_drawn_ones() {
+        assert_eq!(
+            super::head(45.0, Some(1.0), 22.2),
+            "90 fps (45 + FG)   22.2 ms"
+        );
+        assert_eq!(
+            super::head(60.0, Some(3.0), 16.7),
+            "240 fps (60 + FG)   16.7 ms"
+        );
+        assert_eq!(super::head(60.0, Some(0.0), 16.7), "60 fps   16.7 ms");
+        assert_eq!(super::head(60.0, None, 16.7), "60 fps   16.7 ms");
+    }
+
     #[test]
     fn reset_keeps_the_apps_cpu_counters() {
         let mut overlay = super::PerfOverlay::with_cpu_sources(|| Some(1.0), || Some(2.0));

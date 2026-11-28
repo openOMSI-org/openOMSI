@@ -25,7 +25,7 @@ file 2065 crates/omsi-app/src/on_foot.rs
 file 1775 crates/omsi-app/src/player.rs
 file 1740 crates/omsi-app/src/plugins.rs
 file 1585 crates/omsi-app/src/settings.rs
-file 1678 crates/omsi-app/src/ui.rs
+file 2270 crates/omsi-app/src/ui.rs
 file 2707 crates/omsi-input/src/controllers.rs
 file 2758 crates/omsi-lan/src/game.rs
 file 1569 crates/omsi-launcher-api/src/lib.rs
@@ -112,6 +112,9 @@ fn 324 crates/omsi-app-mx::toggle_set crates/omsi-app-mx/src/game_lists/options.
 fn 634 crates/omsi-app-mx::touch_layout_in crates/omsi-app-mx/src/touch.rs
 fn 379 crates/omsi-app-mx::window_event crates/omsi-app-mx/src/app_events.rs
 fn 435 crates/omsi-app-mx::world_pages crates/omsi-app-mx/src/game_lists/menu_pages.rs
+fn 418 crates/omsi-app::draw crates/omsi-app/src/ui.rs
+fn 325 crates/omsi-app::frame_timing crates/omsi-app/src/app_events/frame/timing.rs
+fn 330 crates/omsi-app::frame_ui_draw crates/omsi-app/src/app_events/frame/interface.rs
 fn 322 crates/omsi-app::game_action crates/omsi-app/src/app_impl/actions.rs
 fn 342 crates/omsi-app::host crates/omsi-app/src/lan_world.rs
 fn 510 crates/omsi-app::items crates/omsi-app/src/game_lists.rs
@@ -149,6 +152,7 @@ fn 381 crates/omsi-render-mx::plan_shadow_casters crates/omsi-render-mx/src/pass
 fn 321 crates/omsi-render-mx::prepare_enhanced crates/omsi-render-mx/src/lighting/enhanced.rs
 fn 369 crates/omsi-render-mx::prepare_ray_tracing crates/omsi-render-mx/src/rt.rs
 fn 314 crates/omsi-render::begin_frame crates/omsi-render/src/passes/setup.rs
+fn 312 crates/omsi-render::evaluate crates/omsi-render/src/temporal/streamline.rs
 fn 301 crates/omsi-render::build crates/omsi-render/src/gpu/open.rs
 fn 415 crates/omsi-render::frame_uniforms crates/omsi-render/src/passes/setup.rs
 fn 381 crates/omsi-render::plan_shadow_casters crates/omsi-render/src/passes/shadow_plan.rs

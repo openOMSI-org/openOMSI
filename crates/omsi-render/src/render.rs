@@ -446,11 +446,7 @@ impl Renderer {
         // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
         // without one in the new options it is dropped here, with its context and textures -
         // unless it is to be tried again, see `fall_back_without_upscaler`)
-        // (frame generation reads the depth, the motion and the pictures before the HUD at the
-        // window's present, after wgpu is done with them: its work is waited for before they go)
-        if let Some(g) = &self.frame_generation {
-            g.wait();
-        }
+        self.settle_frame_generation();
         let upscaler = self
             .temporal_runtime()
             .or_else(|| self.temporal_kept.take())
@@ -1202,6 +1198,7 @@ impl Renderer {
         let puddles_on =
             self.encode_scene_reflections(&mut enc.picture, scene, &f, &plan, &cu, &mut timers);
         self.encode_fog_lamps(&mut enc.picture, scene, &f, vp_mat, puddles_on, &mut timers);
+        self.encode_temporal_glass_mask(&mut enc.picture, scene, &f, &plan);
         self.encode_temporal_late_motion(&mut enc.picture, scene, &f, &plan);
         self.encode_temporal_mask(&mut enc.picture, scene, &f, &plan);
         self.encode_rain_film(&mut enc.picture, scene, &f, &plan.rain_batches, puddles_on);

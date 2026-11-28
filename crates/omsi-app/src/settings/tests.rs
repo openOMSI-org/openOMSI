@@ -78,6 +78,16 @@ fn frame_generation_round_trips_and_needs_its_upscaler() {
 }
 
 #[test]
+fn frame_generation_survives_the_menus() {
+    for word in ["off", "fsr3", "dlss2x", "dlss3x", "dlss4x"] {
+        let mut ui = omsi_launcher_lib::settings_from_text(Some("upscaler=dlss\n"));
+        ui["frame_generation"] = serde_json::json!(word);
+        let game = Settings::from_text(&omsi_launcher_lib::settings_to_text(&ui, None));
+        assert_eq!(Settings::from_text(&game.to_text()).frame_generation, word);
+    }
+}
+
+#[test]
 fn fsr1_presets_keep_the_render_scale_caps() {
     let mut s = Settings::from_text("upscaler=fsr1\nfsr_quality=ultra\n");
     assert!((s.scene_render_scale() - 0.77).abs() < 0.0001);

@@ -60,23 +60,28 @@ impl App {
         crate::themes::sync(&self.settings.ui_theme_pack, self.settings.is_light_theme());
         if let (Some(s), Some(r)) = (self.gfx.surface.as_mut(), self.renderer.as_mut()) {
             s.set_glass(r, omsi_ui::theme::th().glass.is_some());
-            // (off for this drive once the frame rate check found it too slow, `frame_time`;
-            // switched off and on in the menu, it is tried again)
-            let asked = self.settings.frame_generation();
-            if !asked {
-                self.perf.generation_too_slow = 0;
+            // A Mac's frame generation (MetalFX), asked every frame: off for this drive once the
+            // frame rate check found it too slow, `frame_time`; switched off and on in the menu,
+            // it is tried again. (Windows' comes with the window's swap chain:
+            // `game_lists::graphics::switch_frame_generation`.)
+            #[cfg(target_os = "macos")]
+            {
+                let asked = self.settings.frame_generation();
+                if !asked {
+                    self.perf.generation_too_slow = 0;
+                }
+                let generation = s.set_frame_generation(
+                    r,
+                    asked && self.perf.generation_too_slow < GENERATION_SLOW_READINGS,
+                );
+                r.set_frame_generation(generation);
+                let making = r.frames_generated().is_some_and(|n| n > 0);
+                self.perf.generation_since = if making {
+                    self.perf.generation_since.or_else(|| Some(Instant::now()))
+                } else {
+                    None
+                };
             }
-            let generation = s.set_frame_generation(
-                r,
-                asked && self.perf.generation_too_slow < GENERATION_SLOW_READINGS,
-            );
-            r.set_frame_generation(generation);
-            let making = r.frames_generated().is_some_and(|n| n > 0);
-            self.perf.generation_since = if making {
-                self.perf.generation_since.or_else(|| Some(Instant::now()))
-            } else {
-                None
-            };
         }
         let shot = self.perf.shot.take();
         // (#1247: with the software cursor the game draws the arrow itself and the system's
@@ -235,7 +240,7 @@ impl App {
         &mut self,
         reconfigure: &mut bool,
     ) -> (
-        Option<wgpu::SurfaceTexture>,
+        Option<omsi_render::WindowFrame>,
         Option<wgpu::TextureView>,
         bool,
     ) {
@@ -258,18 +263,18 @@ impl App {
             .map(|(a, b)| (a..b).contains(&self.started.elapsed().as_secs_f32()))
             .unwrap_or(false);
         let acquired = match s.acquire() {
-            wgpu::CurrentSurfaceTexture::Success(_)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(_)
+            omsi_render::Acquired::Success(_) | omsi_render::Acquired::Suboptimal(_)
                 if hidden_now =>
             {
-                wgpu::CurrentSurfaceTexture::Occluded
+                omsi_render::Acquired::Occluded
             }
             other => other,
         };
         let (frame, stand_in) = match acquired {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (Some(frame), None),
-            wgpu::CurrentSurfaceTexture::Occluded
+            omsi_render::Acquired::Success(frame) | omsi_render::Acquired::Suboptimal(frame) => {
+                (Some(frame), None)
+            }
+            omsi_render::Acquired::Occluded
                 if omsi_cfg::flags::OMSI_RENDER_OCCLUDED.is_set()
                     || omsi_cfg::flags::OMSI_HIDDEN_WINDOW.is_set() =>
             {
@@ -304,7 +309,7 @@ impl App {
                         .map(|t| t.create_view(&Default::default())),
                 )
             }
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+            omsi_render::Acquired::Outdated | omsi_render::Acquired::Lost => {
                 *reconfigure = true;
                 (None, None)
             }
@@ -329,7 +334,7 @@ impl App {
         raw_dt: f32,
         lighting: &omsi_render::Lighting,
         vr_nav_display: Option<crate::vr_navigator::Display>,
-        frame: Option<wgpu::SurfaceTexture>,
+        frame: Option<omsi_render::WindowFrame>,
         view: wgpu::TextureView,
     ) {
         #[cfg(not(windows))]
@@ -927,10 +932,24 @@ impl App {
         }
         self.perf.total_frames += 1;
         if self.perf.fps_t.elapsed().as_secs_f32() >= 1.0 {
+            // (frame generation's count now, and the frames it made in this second)
+            let made = r.frames_generated();
+            self.perf.generated = (
+                made.unwrap_or(0),
+                made.map_or(0.0, |m| m.saturating_sub(self.perf.generated.0) as f32),
+            );
             if omsi_cfg::flags::OMSI_PROFILE.is_set() {
                 let secs = self.perf.fps_t.elapsed().as_secs_f32();
+                let made = made
+                    .map(|_| {
+                        format!(
+                            ", {:.1} more made by frame generation",
+                            self.perf.generated.1 / secs
+                        )
+                    })
+                    .unwrap_or_default();
                 log::info!(
-                    "profile interval: {:.1} fps over {secs:.2} s",
+                    "profile interval: {:.1} fps over {secs:.2} s{made}",
                     self.perf.frames as f32 / secs
                 );
             }
@@ -940,11 +959,6 @@ impl App {
                 .map(|p| format!(" - {:.0} km/h", p.vehicle.physics.velocity_kmh()))
                 .unwrap_or_default();
             self.perf.fps = self.perf.frames as f32;
-            let made = self.renderer.as_ref().and_then(|r| r.frames_generated());
-            self.perf.generated = (
-                made.unwrap_or(0),
-                made.map_or(0.0, |m| m.saturating_sub(self.perf.generated.0) as f32),
-            );
             let title = format!(
                 "openOMSI - {} fps{speed} - {:.0},{:.0},{:.0} yaw {:.0}",
                 self.perf.frames,

@@ -212,8 +212,9 @@ pub struct Settings {
     pub upscaler: String,
     /// How much DLSS, AMD FSR 3 or Apple MetalFX scale up (`temporal::TemporalQuality`).
     pub upscale_quality: String,
-    /// Frame generation (`omsi_cfg::upscaler_files::frame_generation_word`): `metalfx` with
-    /// Apple MetalFX upscaling on, else `off`.
+    /// Frame generation (`omsi_cfg::upscaler_files::frame_generation_word`): on Windows (DirectX
+    /// 12) `fsr3` with DLSS or FSR 3 on, `dlss2x` to `dlss4x` with DLSS on; on a Mac `metalfx`
+    /// with Apple MetalFX upscaling on; else `off`.
     pub frame_generation: String,
     /// FSR1 internal resolution preset, or custom to use render_scale.
     pub fsr_quality: String,
@@ -1379,11 +1380,18 @@ impl Settings {
         files.contains(&upscaler.as_str()).then(|| omsi_render::Temporal { upscaler, quality: omsi_render::TemporalQuality::parse(&self.upscale_quality) })
     }
 
+    /// Windows' frame generation where it can run: read when the window is made and when the
+    /// graphics menu applies.
+    pub fn frame_generation_kind(&self) -> Option<omsi_render::FrameGenerationKind> {
+        omsi_render::FrameGenerationKind::runnable(&self.frame_generation, self.temporal_upscaling(), &self.graphics_api)
+    }
+
     /// Frame generation as asked for, with the upscaler it works with chosen (asked every frame:
     /// no file is looked at; whether the Mac can run it is found when it starts).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn frame_generation(&self) -> bool {
         let upscaler = omsi_render::TemporalUpscaler::parse(&self.upscaler).filter(|_| !self.vr_requested() && !self.triple.enabled);
-        omsi_render::FrameGenerationKind::parse(&self.frame_generation).is_some_and(|k| upscaler == Some(k.upscaler()))
+        omsi_render::FrameGenerationKind::parse(&self.frame_generation).is_some_and(|k| upscaler.is_some_and(|u| k.takes(u)))
     }
 
     pub fn render_options(&self) -> omsi_render::RenderOptions {

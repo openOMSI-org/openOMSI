@@ -66,6 +66,30 @@ pub(crate) fn build(
         ],
         immediate_size: 0,
     });
+    // (the late pass reads the panes of the transparency mask, `t_glass` in `motion.wgsl`)
+    let glass_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("temporal late motion glass"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 1,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        }],
+    });
+    let late_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("temporal late motion"),
+        bind_group_layouts: &[
+            Some(&scene.camera_layout),
+            Some(&scene.material_layout),
+            Some(&glass_layout),
+            Some(&motion_layout),
+        ],
+        immediate_size: 0,
+    });
     let motion_target = [Some(wgpu::ColorTargetState {
         format: TEMPORAL_MOTION_FORMAT,
         blend: None,
@@ -73,20 +97,28 @@ pub(crate) fn build(
     })];
     // (as the ordinary prepass: plain, cut out, a transmap's opaque part; two-sided, culled.
     // write false: the late ones, see `DrawPlan::masked`, only where the main pass left their own
-    // depth, so just the parts that are seen: with GreaterEqual, parts the picture does not show
-    // there put their motion over what lies in front)
+    // depth or a pane's just in front of it (`BEHIND_GLASS` in `motion.wgsl`), so just the parts
+    // that are seen: a plain GreaterEqual would put the motion of parts the picture does not show
+    // there over what lies in front)
     let make = |kind: u8, cull: bool, write: bool| {
-        let fragment = match kind {
-            0 => "fs_motion",
-            1 => "fs_motion_test",
-            2 => "fs_motion_transmap",
+        let fragment = match (kind, write) {
+            (0, true) => "fs_motion",
+            (1, true) => "fs_motion_test",
+            (2, true) => "fs_motion_transmap",
+            (0, false) => "fs_late_motion",
+            (1, false) => "fs_late_motion_test",
+            (2, false) => "fs_late_motion_transmap",
             _ => unreachable!(),
         };
         compile_pipeline(
             device,
             &wgpu::RenderPipelineDescriptor {
-                label: Some("temporal depth prepass"),
-                layout: Some(&pl),
+                label: Some(if write {
+                    "temporal depth prepass"
+                } else {
+                    "temporal late motion"
+                }),
+                layout: Some(if write { &pl } else { &late_pl }),
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: Some("vs_motion"),
@@ -97,11 +129,7 @@ pub(crate) fn build(
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH_FORMAT,
                     depth_write_enabled: Some(write),
-                    depth_compare: Some(if write {
-                        wgpu::CompareFunction::GreaterEqual
-                    } else {
-                        wgpu::CompareFunction::Equal
-                    }),
+                    depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
@@ -206,6 +234,19 @@ pub(crate) fn build(
         )
     };
     let glass = upscaler.glass_mask_entry();
+    // (a device that takes fewer leaves the parts drawn after a cab's first pane the street's
+    // motion, rather than the renderer failing)
+    // (its fragment stage takes what the pane mask's does: the scene's camera and material
+    // groups and the panes' mask)
+    let need = super::scene::pane_mask_textures(gi_binding());
+    let late = device.limits().max_sampled_textures_per_shader_stage >= need;
+    if !late {
+        log::warn!(
+            "temporal upscaling: the late motion takes {} textures in a shader stage, this device {}; drawing without it",
+            need,
+            device.limits().max_sampled_textures_per_shader_stage
+        );
+    }
     Some(TemporalPipelines {
         prepass: [
             make(0, false, true),
@@ -215,16 +256,19 @@ pub(crate) fn build(
             make(2, false, true),
             make(2, true, true),
         ],
-        late_motion: [
-            make(0, false, false),
-            make(0, true, false),
-            make(1, false, false),
-            make(1, true, false),
-            make(2, false, false),
-            make(2, true, false),
-        ],
+        late_motion: late.then(|| {
+            [
+                make(0, false, false),
+                make(0, true, false),
+                make(1, false, false),
+                make(1, true, false),
+                make(2, false, false),
+                make(2, true, false),
+            ]
+        }),
         sky,
         motion_layout,
+        glass_layout,
         glass_mask: [mask(glass, false), mask(glass, true)],
         rain_mask: [mask("fs_rain_mask", false), mask("fs_rain_mask", true)],
         screen_mask: [mask("fs_screen_mask", false), mask("fs_screen_mask", true)],

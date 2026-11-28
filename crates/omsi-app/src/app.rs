@@ -139,6 +139,7 @@ impl App {
                         size.width.max(1),
                         size.height.max(1),
                         vsync,
+                        self.settings.frame_generation_kind(),
                     )
                     .ok();
                     self.last = Instant::now();
@@ -151,6 +152,7 @@ impl App {
                         size.width.max(1),
                         size.height.max(1),
                         self.settings.vsync,
+                        self.settings.frame_generation_kind(),
                     )
                     .ok();
                 }
@@ -337,6 +339,7 @@ impl App {
                     size.width,
                     size.height,
                     self.settings.vsync,
+                    self.settings.frame_generation_kind(),
                 )
                 .ok()
             })
@@ -502,6 +505,7 @@ impl App {
                 size.width,
                 size.height,
                 vsync,
+                self.settings.frame_generation_kind(),
             ) {
                 Ok(s) => self.gfx.surface = Some(s),
                 Err(e) => {
@@ -514,6 +518,7 @@ impl App {
                 }
             }
         }
+        renderer.set_frame_generation(self.gfx.surface.as_ref().and_then(|s| s.frame_generation()));
         if let Some(surface) = self.gfx.surface.as_mut() {
             if surface.config.width != size.width.max(1)
                 || surface.config.height != size.height.max(1)
@@ -1168,10 +1173,10 @@ impl App {
             // the same way and its picture stood still until the map was there (#776)
             reconfigure = matches!(
                 acquired,
-                wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost
+                omsi_render::Acquired::Outdated | omsi_render::Acquired::Lost
             );
-            if let wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) = acquired
+            if let omsi_render::Acquired::Success(frame)
+            | omsi_render::Acquired::Suboptimal(frame) = acquired
             {
                 let view = s.view(&renderer.device, &frame);
                 // the tiles loaded so far stay out of the picture: the camera looks at nothing

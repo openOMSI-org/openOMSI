@@ -1057,8 +1057,9 @@ mod tests {
     }
 }
 
-/// The upscaler's rows of the graphics page (after the render scale's): the upscaler, and
-/// FSR 1's quality and sharpening while it is chosen, and DLSS's sharpening while it is.
+/// The upscaler's rows of the graphics page (after the render scale's): the upscaler, DLSS's
+/// or FSR 3's quality and frame generation while one is chosen, FSR 1's quality and
+/// sharpening while it is, and DLSS's sharpening while it is.
 fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let fsr = app.settings.upscaler == "fsr1";
     let temporal = app.settings.temporal_upscaling().is_some();
@@ -1066,11 +1067,18 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
         .settings
         .temporal_upscaling()
         .is_some_and(|t| t.upscaler == omsi_render::TemporalUpscaler::Dlss);
-    let offered =
-        !omsi_cfg::upscaler_files::available(&omsi_cfg::upscaler_files::program_dir()).is_empty();
-    let generation = app.settings.temporal_upscaling().is_some_and(|t| {
-        omsi_cfg::upscaler_files::frame_generation_choices().contains(&t.upscaler.as_str())
-    });
+    let dir = omsi_cfg::upscaler_files::program_dir();
+    let offered = !omsi_cfg::upscaler_files::available(&dir).is_empty();
+    // (a generator this machine has that runs with the chosen upscaler; Windows' on DirectX 12,
+    // which DLSS and FSR 3 take unless Vulkan is chosen)
+    let vulkan = cfg!(windows) && app.settings.graphics_api.eq_ignore_ascii_case("vulkan");
+    let generation = !vulkan
+        && app.settings.temporal_upscaling().is_some_and(|t| {
+            omsi_cfg::upscaler_files::wgpu_frame_generation_choices(&dir)
+                .into_iter()
+                .filter_map(omsi_render::FrameGenerationKind::parse)
+                .any(|k| k.takes(t.upscaler))
+        });
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [
         select_row(file, "upscaler", "Upscaling", omsi_cfg::upscaler_files::menu_help(offered)),

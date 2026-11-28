@@ -83,6 +83,35 @@ pub(crate) fn apply_graphics_changes(app: &mut App) {
         .into_owned(),
         6.0,
     ));
+    if !switch_frame_generation(app) {
+        app.service_msg = Some((
+            omsi_ui::tr("Frame generation could not start; the log says why").into_owned(),
+            8.0,
+        ));
+    }
+}
+
+/// The window's frame generation follows the setting (`omsi_render::switch_frame_generation`).
+fn switch_frame_generation(app: &mut App) -> bool {
+    let (want, vsync) = (
+        app.settings.frame_generation_kind(),
+        app.settings.vsync && !app.vr_active(),
+    );
+    let capped = (1..1000).contains(&app.settings.max_fps) && !cfg!(target_os = "android");
+    let (Some(window), Some(renderer)) = (app.window.clone(), app.renderer.as_mut()) else {
+        return true;
+    };
+    let size = crate::platform::surface_size(&window);
+    omsi_render::switch_frame_generation(
+        &mut app.gfx.surface,
+        &app.gfx.instance,
+        window,
+        (size.width, size.height),
+        renderer,
+        want,
+        vsync,
+        capped,
+    )
 }
 
 /// Restore graphic keys but preserve unrelated settings saved while the preview was open.

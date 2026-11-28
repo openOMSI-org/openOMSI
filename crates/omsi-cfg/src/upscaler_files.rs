@@ -31,6 +31,18 @@ const DLSS_G: [&str; 4] = [
 const FSR3_FG_DX12: [&str; 1] = ["amd_fidelityfx_framegeneration_dx12.dll"];
 const FSR3_FG_VULKAN: [&str; 1] = ["amd_fidelityfx_framegeneration_vk.dll"];
 const XESS_FG: [&str; 2] = ["libxess_fg.dll", "libxell.dll"];
+/// Our wgpu game's: AMD's loader and FSR 3 frame generation (DirectX 12).
+const FRAME_GENERATION: [&str; 2] = [
+    "amd_fidelityfx_loader_dx12.dll",
+    "amd_fidelityfx_framegeneration_dx12.dll",
+];
+/// What NVIDIA DLSS frame generation needs beside DLSS's own (from the same Streamline SDK).
+pub const DLSS_FRAME_GENERATION: [&str; 4] = [
+    "sl.dlss_g.dll",
+    "nvngx_dlssg.dll",
+    "sl.reflex.dll",
+    "sl.pcl.dll",
+];
 /// Where macOS 13 and newer have MetalFX (the folder is there, its code is in the system's cache).
 const METALFX: &str = "/System/Library/Frameworks/MetalFX.framework";
 /// Where macOS tells its version.
@@ -153,6 +165,25 @@ pub fn label(upscaler: &str) -> &'static str {
     }
 }
 
+/// Whether AMD FSR 3 frame generation can run from `dir` (Windows, DirectX 12).
+pub fn frame_generation_available(dir: &Path) -> bool {
+    cfg!(windows) && FRAME_GENERATION.iter().all(|f| dir.join(f).is_file())
+}
+
+/// Whether NVIDIA DLSS frame generation can run from `dir`: DLSS's DLLs, frame generation's,
+/// and an RTX card (Windows, DirectX 12; NVIDIA's runtime still checks for an RTX 40 or 50).
+pub fn dlss_frame_generation_available(dir: &Path) -> bool {
+    dlss_frame_generation_files(dir) && rtx_present()
+}
+
+fn dlss_frame_generation_files(dir: &Path) -> bool {
+    cfg!(windows)
+        && DLSS
+            .iter()
+            .chain(&DLSS_FRAME_GENERATION)
+            .all(|f| dir.join(f).is_file())
+}
+
 pub fn quality_word(s: &str) -> &'static str {
     match s.trim().to_ascii_lowercase().as_str() {
         "native" => "native",
@@ -230,6 +261,16 @@ pub fn metalfx_frames_present() -> bool {
     })
 }
 
+/// The frame generation the wgpu game can run, as its menus offer it: `fsr3` and `dlss2x`..`dlss4x`
+/// from the vendors' DLLs in `dir` on Windows, `metalfx` on a Mac (part of macOS, no file).
+pub fn wgpu_frame_generation_choices(dir: &Path) -> Vec<&'static str> {
+    choices(
+        frame_generation_available(dir),
+        dlss_frame_generation_available(dir),
+        metalfx_frames_present(),
+    )
+}
+
 /// The frame generation this machine can run, as the menus offer it: `metalfx` on a Mac; on
 /// Windows those whose files are beside the game (each with its upscaler's).
 pub fn frame_generation_choices() -> Vec<&'static str> {
@@ -257,6 +298,20 @@ fn windows_generators(dir: &Path, rtx: bool) -> Vec<&'static str> {
 
 fn generators(metalfx: bool) -> Vec<&'static str> {
     metalfx.then_some("metalfx").into_iter().collect()
+}
+
+fn choices(amd: bool, nvidia: bool, metalfx: bool) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if amd {
+        out.push("fsr3");
+    }
+    if nvidia {
+        out.extend(["dlss2x", "dlss3x", "dlss4x"]);
+    }
+    if metalfx {
+        out.push("metalfx");
+    }
+    out
 }
 
 /// The frame generation choices of a menu, from `frame_generation_choices`.
@@ -396,6 +451,21 @@ mod tests {
     }
 
     #[test]
+    fn dlss_frame_generation_needs_its_files() {
+        let dir = scratch("dlssg");
+        for f in DLSS {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert!(!dlss_frame_generation_files(&dir), "DLSS alone");
+        for f in DLSS_FRAME_GENERATION {
+            std::fs::write(dir.join(f), b"").unwrap();
+        }
+        assert_eq!(dlss_frame_generation_files(&dir), cfg!(windows));
+        assert!(!frame_generation_available(&dir), "no AMD DLL");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn rtx_name_is_not_enough_without_nvidias_vendor() {
         assert!(rtx_candidate(0x10de, "NVIDIA GeForce RTX 4060"));
         assert!(rtx_candidate(0x10de, "NVIDIA GeForce RTX 2080 Ti"));
@@ -424,13 +494,25 @@ mod tests {
         );
         assert_eq!(generators(true), ["metalfx"]);
         assert!(generators(false).is_empty());
+        assert_eq!(
+            choices(true, true, false),
+            ["fsr3", "dlss2x", "dlss3x", "dlss4x"]
+        );
+        assert_eq!(choices(false, false, true), ["metalfx"]);
+        assert!(choices(false, false, false).is_empty());
         assert_eq!(frame_generation_menu(&[]), [("off", "Off")]);
+        assert_eq!(frame_generation_menu(&["fsr3"]).len(), 2);
         assert_eq!(
             frame_generation_menu(&["metalfx"]),
             [("off", "Off"), ("metalfx", "Apple MetalFX (experimental)")]
         );
         // (never where MetalFX itself is not: Windows, Linux, a Mac with an Intel chip)
         assert!(!metalfx_frames_present() || metalfx_present());
+        let none = std::path::Path::new("");
+        assert_eq!(
+            wgpu_frame_generation_choices(none).contains(&"metalfx"),
+            metalfx_frames_present()
+        );
         assert_eq!(
             frame_generation_choices().is_empty(),
             !metalfx_frames_present()

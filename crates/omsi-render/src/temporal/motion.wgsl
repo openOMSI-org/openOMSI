@@ -26,6 +26,8 @@ struct MotionOut {
     @location(5) cur: vec4<f32>,
     @location(6) prev: vec4<f32>,
     @location(7) world: vec3<f32>,
+    // the same point `BEHIND_GLASS` nearer the eye: the late motion's depth test
+    @location(8) lifted: vec4<f32>,
 };
 // (the fragment side of MotionOut, without the invariant: see DepthIn)
 struct MotionIn {
@@ -35,7 +37,33 @@ struct MotionIn {
     @location(5) cur: vec4<f32>,
     @location(6) prev: vec4<f32>,
     @location(7) world: vec3<f32>,
+    @location(8) lifted: vec4<f32>,
 };
+
+// A cab's part this close behind a pane that wrote its depth (a gauge's glass, a display's
+// cover) still lays its motion there in the late pass (m): its pane hid it from the equal-depth
+// test, and the motion under the glass was the street's that the prepass left. A windscreen
+// has the street metres behind it and keeps that. Only where the transparency mask has glass:
+// elsewhere a part hidden just behind an opaque one would lay its motion over that one's.
+const BEHIND_GLASS: f32 = 0.06;
+
+// The transparency mask's panes (the late pass's own group: drawn before it, see
+// `encode_temporal_glass_mask`).
+@group(2) @binding(1) var t_glass: texture_2d<f32>;
+
+struct LateMotionOut {
+    @location(0) motion: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+};
+
+fn late(in: MotionIn) -> LateMotionOut {
+    var out: LateMotionOut;
+    out.motion = motion_pixels(in.cur, in.prev);
+    // (its own depth elsewhere: the depth test then passes only where the main pass left it)
+    let glass = textureLoad(t_glass, vec2<i32>(in.clip.xy), 0).r > 0.0;
+    out.depth = select(in.clip.z, clamp(in.lifted.z / in.lifted.w, 0.0, 1.0), glass);
+    return out;
+}
 
 @vertex
 fn vs_motion(in: VsIn) -> MotionOut {
@@ -51,6 +79,8 @@ fn vs_motion(in: VsIn) -> MotionOut {
     out.uv = in.uv + pr.zw;
     out.params = pr;
     out.cur = motion.vp * wp;
+    let to_eye = camera.cam_pos.xyz - wp.xyz;
+    out.lifted = motion.vp * vec4<f32>(wp.xyz + to_eye * min(BEHIND_GLASS / max(length(to_eye), 1e-4), 0.5), 1.0);
     if (motion.params.z > 0.5 && f32(e) < motion.params.w) {
         let k = e * 4u;
         // (the w of x, y and z carry the slot's draw order and depth plane, not the matrix:
@@ -96,6 +126,23 @@ fn fs_motion_test(in: MotionIn) -> @location(0) vec4<f32> {
 fn fs_motion_transmap(in: MotionIn) -> @location(0) vec4<f32> {
     transmap_coverage(in.uv, in.params, camera.lod.x);
     return motion_pixels(in.cur, in.prev);
+}
+
+@fragment
+fn fs_late_motion(in: MotionIn) -> LateMotionOut {
+    return late(in);
+}
+
+@fragment
+fn fs_late_motion_test(in: MotionIn) -> LateMotionOut {
+    cutout_coverage(in.uv, in.params, camera.lod.x, tree_card_fade(in.world));
+    return late(in);
+}
+
+@fragment
+fn fs_late_motion_transmap(in: MotionIn) -> LateMotionOut {
+    transmap_coverage(in.uv, in.params, camera.lod.x);
+    return late(in);
 }
 
 struct SkyMotionOut {

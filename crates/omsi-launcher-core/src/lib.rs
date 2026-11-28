@@ -3108,6 +3108,12 @@ pub fn get_settings() -> Result<Value> {
         })
     );
     v["frame_generators"] = json!(omsi_cfg::upscaler_files::frame_generation_choices());
+    // (the wgpu game's frame generation, from its DLLs beside the game; a Mac's needs no file)
+    let game_dir =
+        find_game(&load_config_raw().game).and_then(|g| g.parent().map(Path::to_path_buf));
+    v["frame_generation_choices"] = json!(omsi_cfg::upscaler_files::wgpu_frame_generation_choices(
+        game_dir.as_deref().unwrap_or(Path::new(""))
+    ));
     // no settings of our own yet: start from what the player set in OMSI 2
     if text.is_none() {
         if let Some(o) = root().ok().and_then(|r| omsi_options(&r)) {

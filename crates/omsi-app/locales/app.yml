@@ -8771,8 +8771,6 @@ _version: 2
   en: "Streamline MIT license"
 "View official NVIDIA SDK 2.14.1":
   en: "View official NVIDIA SDK 2.14.1"
-"I have read and agree to NVIDIA's applicable Streamline and RTX/NGX license terms. The launcher will download the SDK directly from NVIDIA and install the four verified DLSS DLLs plus notices.":
-  en: "I have read and agree to NVIDIA's applicable Streamline and RTX/NGX license terms. The launcher will download the SDK directly from NVIDIA and install the four verified DLSS DLLs plus notices."
 "Downloading and verifying NVIDIA DLSS…":
   en: "Downloading and verifying NVIDIA DLSS…"
 "Install NVIDIA DLSS":
@@ -8813,6 +8811,12 @@ _version: 2
   en: "Folders of objects and splines that no other map uses go with it: {n}, {size}."
 "Folders of objects and splines that another map still uses stay: {n}.":
   en: "Folders of objects and splines that another map still uses stay: {n}."
+"I have read and agree to NVIDIA's applicable Streamline, RTX/NGX and Reflex license terms. The launcher will download the SDK directly from NVIDIA and install the eight verified DLSS and DLSS frame generation DLLs plus notices.":
+  en: "I have read and agree to NVIDIA's applicable Streamline, RTX/NGX and Reflex license terms. The launcher will download the SDK directly from NVIDIA and install the eight verified DLSS and DLSS frame generation DLLs plus notices."
+"DLSS is installed without frame generation. Install again to add it.":
+  en: "DLSS is installed without frame generation. Install again to add it."
+"NVIDIA Reflex license":
+  en: "NVIDIA Reflex license"
 "Cruise control: {} km/h":
   en: "Cruise control: {} km/h"
 "Cruise control off":

@@ -844,8 +844,13 @@ impl App {
                 } else {
                     &[]
                 },
-                fps: self.settings.show_fps.then_some(self.perf.fps),
-                fps_generated: self.perf.generated.1,
+                fps: self.settings.show_fps.then(|| {
+                    omsi_ui::performance::corner(
+                        self.perf.fps,
+                        Some(self.perf.generated.1),
+                        r.upscaler_in_use(s.config.width, s.config.height),
+                    )
+                }),
                 perf: self
                     .settings
                     .perf_overlay_on()

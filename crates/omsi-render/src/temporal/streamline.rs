@@ -49,23 +49,23 @@ use windows::core::{Interface, PCSTR, PCWSTR};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct StructType {
-    data1: u32,
-    data2: u16,
-    data3: u16,
-    data4: [u8; 8],
+pub(super) struct StructType {
+    pub(super) data1: u32,
+    pub(super) data2: u16,
+    pub(super) data3: u16,
+    pub(super) data4: [u8; 8],
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Base {
+pub(super) struct Base {
     next: *mut c_void,
     struct_type: StructType,
     struct_version: usize,
 }
 
 impl Base {
-    const fn new(struct_type: StructType, struct_version: usize) -> Base {
+    pub(super) const fn new(struct_type: StructType, struct_version: usize) -> Base {
         Base {
             next: std::ptr::null_mut(),
             struct_type,
@@ -92,13 +92,13 @@ const RESOURCE_TAG: StructType = StructType {
     data3: 0x496c,
     data4: [0x87, 0xff, 0x1a, 0xf3, 0x84, 0x5b, 0xe6, 0x53],
 };
-const VIEWPORT_HANDLE: StructType = StructType {
+pub(super) const VIEWPORT_HANDLE: StructType = StructType {
     data1: 0x171b6435,
     data2: 0x9b3c,
     data3: 0x4fc8,
     data4: [0x99, 0x94, 0xfb, 0xe5, 0x25, 0x69, 0xaa, 0xa4],
 };
-const ADAPTER_INFO: StructType = StructType {
+pub(super) const ADAPTER_INFO: StructType = StructType {
     data1: 0x0677315f,
     data2: 0xa746,
     data3: 0x4492,
@@ -136,7 +136,8 @@ const DLSS_OPTIMAL_SETTINGS: StructType = StructType {
 };
 
 const SDK_VERSION: u64 = (2 << 48) | (14 << 32) | (1 << 16) | 0xfedc;
-const FEATURE_DLSS: u32 = 0;
+pub(super) const FEATURE_DLSS: u32 = 0;
+const BUFFER_HUDLESS_COLOR: u32 = 2;
 const BUFFER_DEPTH: u32 = 0;
 const BUFFER_MOTION_VECTORS: u32 = 1;
 // sl::DLSSPreset
@@ -148,6 +149,8 @@ const BUFFER_BIAS_CURRENT_COLOR: u32 = 29;
 const BUFFER_SCALING_INPUT_COLOR: u32 = 3;
 const BUFFER_SCALING_OUTPUT_COLOR: u32 = 4;
 const VALID_UNTIL_EVALUATE: u32 = 2;
+/// `ResourceLifecycle::eValidUntilPresent`: what frame generation reads when the window presents.
+const VALID_UNTIL_PRESENT: u32 = 1;
 const FLAG_DISABLE_CL_STATE_TRACKING: u64 = 1 << 0;
 const FLAG_DISABLE_DEBUG_TEXT: u64 = 1 << 1;
 const FLAG_USE_MANUAL_HOOKING: u64 = 1 << 2;
@@ -217,17 +220,17 @@ struct ResourceTag {
 }
 
 #[repr(C)]
-struct ViewportHandle {
-    base: Base,
-    value: u32,
+pub(super) struct ViewportHandle {
+    pub(super) base: Base,
+    pub(super) value: u32,
 }
 
 #[repr(C)]
-struct AdapterInfo {
-    base: Base,
-    device_luid: *mut u8,
-    device_luid_size_in_bytes: u32,
-    vk_physical_device: *mut c_void,
+pub(super) struct AdapterInfo {
+    pub(super) base: Base,
+    pub(super) device_luid: *mut u8,
+    pub(super) device_luid_size_in_bytes: u32,
+    pub(super) vk_physical_device: *mut c_void,
 }
 
 #[repr(C)]
@@ -385,9 +388,9 @@ const _: () = {
 
 type Fn0 = unsafe extern "C" fn() -> i32;
 type FnInit = unsafe extern "C" fn(*const Preferences, u64) -> i32;
-type FnIsFeatureSupported = unsafe extern "C" fn(u32, *const AdapterInfo) -> i32;
+pub(super) type FnIsFeatureSupported = unsafe extern "C" fn(u32, *const AdapterInfo) -> i32;
 type FnIsFeatureLoaded = unsafe extern "C" fn(u32, *mut bool) -> i32;
-type FnSetD3DDevice = unsafe extern "C" fn(*mut c_void) -> i32;
+pub(super) type FnSetD3DDevice = unsafe extern "C" fn(*mut c_void) -> i32;
 type FnSetVulkanInfo = unsafe extern "C" fn(*const VulkanInfo) -> i32;
 type FnGetFeatureRequirements = unsafe extern "C" fn(u32, *mut FeatureRequirements) -> i32;
 type FnGetFeatureFunction = unsafe extern "C" fn(u32, *const c_char, *mut *mut c_void) -> i32;
@@ -404,7 +407,7 @@ type FnSetConstants =
 type FnEvaluateFeature =
     unsafe extern "C" fn(u32, *const c_void, *const *const Base, u32, *mut c_void) -> i32;
 type FnFreeResources = unsafe extern "C" fn(u32, *const ViewportHandle) -> i32;
-type FnUpgradeInterface = unsafe extern "C" fn(*mut *mut c_void) -> i32;
+pub(super) type FnUpgradeInterface = unsafe extern "C" fn(*mut *mut c_void) -> i32;
 type FnDlssGetOptimalSettings =
     unsafe extern "C" fn(*const DlssOptions, *mut DlssOptimalSettingsS) -> i32;
 type FnDlssSetOptions = unsafe extern "C" fn(*const ViewportHandle, *const DlssOptions) -> i32;
@@ -413,7 +416,7 @@ type FnDlssSetOptions = unsafe extern "C" fn(*const ViewportHandle, *const DlssO
 /// memory budget; treated as a failure it would switch DLSS off on a card that is merely full.
 const WARN_OUT_OF_VRAM: i32 = 39;
 
-fn result_name(r: i32) -> &'static str {
+pub(super) fn result_name(r: i32) -> &'static str {
     const NAMES: [&str; 41] = [
         "eOk",
         "eErrorIO",
@@ -460,7 +463,7 @@ fn result_name(r: i32) -> &'static str {
     NAMES.get(r as usize).copied().unwrap_or("?")
 }
 
-fn check(what: &str, r: i32) -> Result<()> {
+pub(super) fn check(what: &str, r: i32) -> Result<()> {
     static VRAM_WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     match r {
         0 => Ok(()),
@@ -629,7 +632,7 @@ impl IDXGISwapChain_Impl for NullSwapChain_Impl {
     }
 }
 
-fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
+pub(super) fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
     debug_assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<usize>());
     let f = unsafe { GetProcAddress(module, PCSTR(name.as_ptr().cast())) }.ok_or_else(|| {
         anyhow!(
@@ -640,7 +643,7 @@ fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
     Ok(unsafe { std::mem::transmute_copy::<_, T>(&f) })
 }
 
-fn init(
+pub(super) fn init(
     module: HMODULE,
     dir: &std::path::Path,
     features: &'static [u32],
@@ -677,7 +680,7 @@ fn init(
     Ok((plugin_dir, plugin_paths))
 }
 
-fn feature_fn(module: HMODULE, feature: u32, name: &CStr) -> Result<*mut c_void> {
+pub(super) fn feature_fn(module: HMODULE, feature: u32, name: &CStr) -> Result<*mut c_void> {
     let get_feature_function: FnGetFeatureFunction = load_fn(module, c"slGetFeatureFunction")?;
     let mut f: *mut c_void = std::ptr::null_mut();
     check(
@@ -724,8 +727,9 @@ pub struct Runtime {
     free_resources: FnFreeResources,
     get_optimal_settings: FnDlssGetOptimalSettings,
     set_options: FnDlssSetOptions,
-    /// (kept alive: `slInit` was given pointers into them)
-    _paths: (Vec<u16>, Vec<*const u16>),
+    /// (kept alive: `slInit` was given pointers into them; None when this joined frame
+    /// generation's session, which is then not this one's to shut down)
+    _paths: Option<(Vec<u16>, Vec<*const u16>)>,
     viewport: ViewportHandle,
     options_set: Option<(TemporalQuality, (u32, u32))>,
     optimal: Vec<((TemporalQuality, (u32, u32)), (u32, u32))>,
@@ -747,7 +751,7 @@ unsafe impl Send for Prepared {}
 
 static PREPARED: std::sync::Mutex<Option<Prepared>> = std::sync::Mutex::new(None);
 
-fn open_interposer(dir: &std::path::Path) -> Result<HMODULE> {
+pub(super) fn open_interposer(dir: &std::path::Path) -> Result<HMODULE> {
     let missing =
         omsi_cfg::upscaler_files::missing(dir, "dlss", omsi_cfg::upscaler_files::Api::Dx12);
     if !missing.is_empty() {
@@ -877,10 +881,20 @@ impl Runtime {
         self.backend.wait();
     }
 
+    /// DLSS runs on a Streamline session of its own, not frame generation's (`dlssg`).
+    pub(crate) fn own_session(&self) -> bool {
+        self._paths.is_some()
+    }
+
     pub fn load(device: &wgpu::Device) -> Result<Runtime> {
         if let Some(hal) = unsafe { device.as_hal::<wgpu_hal::api::Dx12>() } {
             let raw_device = hal.raw_device().clone();
             drop(hal);
+            // (Streamline already runs for frame generation, started with the window's swap
+            // chain: DLSS joins it)
+            if let Some(module) = super::dlssg::module() {
+                return Self::start(module, &game_dir(), None, Device::Dx12(raw_device));
+            }
             // (the game fell back from Vulkan: `slInit` must not run on a session still open)
             vulkan_abandon();
             let dir = game_dir();
@@ -889,9 +903,11 @@ impl Runtime {
             return (|| {
                 let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
                 let paths = init(module, &dir, &FEATURES, 1)?;
-                Self::start(module, &dir, paths, Device::Dx12(raw_device)).inspect_err(|_| unsafe {
-                    shutdown();
-                })
+                Self::start(module, &dir, Some(paths), Device::Dx12(raw_device)).inspect_err(
+                    |_| unsafe {
+                        shutdown();
+                    },
+                )
             })()
             .inspect_err(|_| unsafe {
                 let _ = FreeLibrary(module);
@@ -903,20 +919,25 @@ impl Runtime {
         let prepared = PREPARED.lock().unwrap_or_else(|e| e.into_inner()).take().ok_or_else(|| anyhow!("on Vulkan DLSS takes its place from the next start of the game, chosen before it (its device extensions are given when the device is made); this run goes on without it"))?;
         let module = prepared.module;
         let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
-        Self::start(module, &game_dir(), prepared.paths, Device::Vulkan(gpu)).inspect_err(
-            |_| unsafe {
-                shutdown();
-                let _ = FreeLibrary(module);
-            },
+        Self::start(
+            module,
+            &game_dir(),
+            Some(prepared.paths),
+            Device::Vulkan(gpu),
         )
+        .inspect_err(|_| unsafe {
+            shutdown();
+            let _ = FreeLibrary(module);
+        })
     }
 
     fn start(
         module: HMODULE,
         dir: &std::path::Path,
-        paths: (Vec<u16>, Vec<*const u16>),
+        paths: Option<(Vec<u16>, Vec<*const u16>)>,
         device: Device,
     ) -> Result<Runtime> {
+        let joined = paths.is_none();
         let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
         let calls = Calls {
             is_supported: load_fn(module, c"slIsFeatureSupported")?,
@@ -931,7 +952,10 @@ impl Runtime {
             Device::Dx12(device) => {
                 let set_device: FnSetD3DDevice = load_fn(module, c"slSetD3DDevice")?;
                 let upgrade_interface: FnUpgradeInterface = load_fn(module, c"slUpgradeInterface")?;
-                check("slSetD3DDevice", unsafe { set_device(device.as_raw()) })?;
+                // (a joined session has the device already)
+                if !joined {
+                    check("slSetD3DDevice", unsafe { set_device(device.as_raw()) })?;
+                }
                 let mut luid = unsafe { device.GetAdapterLuid() };
                 let adapter = AdapterInfo {
                     base: Base::new(ADAPTER_INFO, 1),
@@ -947,8 +971,16 @@ impl Runtime {
                 }
                 .into();
                 let mut raw = pacer.as_raw();
-                let r = unsafe { upgrade_interface(&mut raw) };
-                let pacer = if r == 0 && !raw.is_null() && raw != pacer.as_raw() {
+                // (with frame generation the window's swap chain is Streamline's own and does the
+                // per-frame housekeeping when it presents: no stand-in)
+                let r = if joined {
+                    0
+                } else {
+                    unsafe { upgrade_interface(&mut raw) }
+                };
+                let pacer = if joined {
+                    None
+                } else if r == 0 && !raw.is_null() && raw != pacer.as_raw() {
                     Some(unsafe { IDXGISwapChain::from_raw(raw) })
                 } else {
                     log::warn!(
@@ -1003,6 +1035,11 @@ impl Runtime {
             "DirectX 12"
         } else {
             "Vulkan"
+        };
+        let api = if joined {
+            "DirectX 12, with frame generation"
+        } else {
+            api
         };
         log::info!(
             "DLSS: Streamline {}.{}.{} and its DLSS plugin loaded from {} ({api})",
@@ -1177,6 +1214,17 @@ impl Runtime {
             internal_flags: 0,
             reserved: 0,
         };
+        // (frame generation reads the depth and the motion at the window's present, with the
+        // picture before the HUD; DLSS alone only until its evaluate is done)
+        let generate = self._paths.is_none() && super::dlssg::wanted();
+        let hudless = inputs
+            .hudless
+            .filter(|_| generate && matches!(self.backend, Backend::Dx12 { .. }));
+        let lifecycle = if hudless.is_some() {
+            VALID_UNTIL_PRESENT
+        } else {
+            VALID_UNTIL_EVALUATE
+        };
         let textures = [
             inputs.color,
             inputs.depth,
@@ -1252,6 +1300,22 @@ impl Runtime {
                 out.try_into().map_err(|_| anyhow!("five resources"))?
             }
         };
+        // (drawn last in a render pass, as the picture: `temporal_present`)
+        let mut hud = match hudless {
+            Some(h) => {
+                let r = unsafe { h.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| {
+                    anyhow!("no Direct3D 12 resource under the picture before the HUD")
+                })?;
+                let raw = unsafe { r.raw_resource() }.as_raw();
+                Some(blank(
+                    raw,
+                    D3D12_RESOURCE_STATE_RENDER_TARGET.0 as u32,
+                    dxgi_format(h.format()),
+                    (ow, oh),
+                ))
+            }
+            None => None,
+        };
         let render_extent = Extent {
             top: 0,
             left: 0,
@@ -1265,20 +1329,43 @@ impl Runtime {
             height: oh,
         };
         let [c0, c1, c2, c3, c4] = &mut res;
-        let tag = |r: &mut Resource, kind: u32, extent: Extent| ResourceTag {
+        let tag = |r: &mut Resource, kind: u32, extent: Extent, lifecycle: u32| ResourceTag {
             base: Base::new(RESOURCE_TAG, 1),
             resource: r,
             kind,
-            lifecycle: VALID_UNTIL_EVALUATE,
+            lifecycle,
             extent,
         };
-        let tags = [
-            tag(c0, BUFFER_SCALING_INPUT_COLOR, render_extent),
-            tag(c1, BUFFER_DEPTH, render_extent),
-            tag(c2, BUFFER_MOTION_VECTORS, render_extent),
-            tag(c3, BUFFER_SCALING_OUTPUT_COLOR, output_extent),
-            tag(c4, BUFFER_BIAS_CURRENT_COLOR, render_extent),
+        let mut tags = vec![
+            tag(
+                c0,
+                BUFFER_SCALING_INPUT_COLOR,
+                render_extent,
+                VALID_UNTIL_EVALUATE,
+            ),
+            tag(c1, BUFFER_DEPTH, render_extent, lifecycle),
+            tag(c2, BUFFER_MOTION_VECTORS, render_extent, lifecycle),
+            tag(
+                c3,
+                BUFFER_SCALING_OUTPUT_COLOR,
+                output_extent,
+                VALID_UNTIL_EVALUATE,
+            ),
+            tag(
+                c4,
+                BUFFER_BIAS_CURRENT_COLOR,
+                render_extent,
+                VALID_UNTIL_EVALUATE,
+            ),
         ];
+        if let Some(h) = hud.as_mut() {
+            tags.push(tag(
+                h,
+                BUFFER_HUDLESS_COLOR,
+                output_extent,
+                VALID_UNTIL_PRESENT,
+            ));
+        }
         let mut token: *const c_void = std::ptr::null();
         self.frame = self.frame.wrapping_add(1);
         check("slGetNewFrameToken", unsafe {
@@ -1286,6 +1373,9 @@ impl Runtime {
         })?;
         if token.is_null() {
             bail!("slGetNewFrameToken returned no token");
+        }
+        if hud.is_some() {
+            super::dlssg::frame_begun(token);
         }
         let f2 = |v: [f32; 2]| Float2 { x: v[0], y: v[1] };
         let f3 = |v: [f32; 3]| Float3 {
@@ -1370,6 +1460,9 @@ impl Runtime {
         }
         recorded?;
         self.allocated = true;
+        if hud.is_some() {
+            super::dlssg::frame_submitted(inputs.output_size);
+        }
         if let Backend::Dx12 { pacer: Some(p), .. } = &self.backend {
             let _ = unsafe { p.Present(0, DXGI_PRESENT(0)) };
         }
@@ -1387,14 +1480,19 @@ impl Drop for Runtime {
             if let Backend::Dx12 { pacer, .. } = &mut self.backend {
                 *pacer = None;
             }
-            let r = (self.shutdown)();
-            if r != 0 {
-                log::warn!(
-                    "DLSS: Streamline did not shut down cleanly: {}",
-                    result_name(r)
-                );
+            // (frame generation's session belongs to the window: it stays)
+            if self._paths.is_none() {
+                super::dlssg::leave();
+            } else {
+                let r = (self.shutdown)();
+                if r != 0 {
+                    log::warn!(
+                        "DLSS: Streamline did not shut down cleanly: {}",
+                        result_name(r)
+                    );
+                }
+                let _ = FreeLibrary(self.module);
             }
-            let _ = FreeLibrary(self.module);
         }
     }
 }

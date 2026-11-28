@@ -45,8 +45,9 @@ try {
         } finally { $InStream.Dispose() }
     }
 
-    # No DLSS Frame Generation, Reflex, debug or development variants.
-    foreach ($Dll in @("sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "nvngx_dlss.dll")) {
+    # DLSS, and DLSS Frame Generation with the Reflex and PCL plugins it runs on; no debug or
+    # development variants.
+    foreach ($Dll in @("sl.interposer.dll", "sl.common.dll", "sl.dlss.dll", "nvngx_dlss.dll", "sl.dlss_g.dll", "nvngx_dlssg.dll", "sl.reflex.dll", "sl.pcl.dll")) {
         $Escaped = [regex]::Escape($Dll)
         $Entry = Get-SdkEntry $Dll "(?i)(^|/)bin/x64/$Escaped$"
         Copy-Entry $Entry $Dll
@@ -72,6 +73,10 @@ try {
     } | Select-Object -First 1
     Copy-Entry $NgxLicense "nvngx_dlss.license.txt"
 
+    # Reflex comes under its own licence, beside its DLL in bin/x64.
+    $ReflexLicense = Get-SdkEntry "reflex.license.txt" "(?i)(^|/)bin/x64/reflex\.license\.txt$"
+    Copy-Entry $ReflexLicense "reflex.license.txt"
+
     $LicenseOptions = @($Zip.Entries | Where-Object {
         $_.FullName.Replace("\", "/") -match "(?i)(^|/)license\.txt$" -and
         $_.FullName.Replace("\", "/") -notmatch "(?i)/(external|tools|source|plugins|features|bin)/"
@@ -87,7 +92,8 @@ Original download: https://github.com/NVIDIA-RTX/Streamline/releases/tag/v2.14.1
 Official archive SHA-256: $ExpectedSha256
 
 This optional user-installed component set contains NVIDIA's unmodified, signed binaries:
-  sl.interposer.dll, sl.common.dll, sl.dlss.dll, nvngx_dlss.dll
+  sl.interposer.dll, sl.common.dll, sl.dlss.dll, nvngx_dlss.dll (DLSS Super Resolution / DLAA)
+  sl.dlss_g.dll, nvngx_dlssg.dll, sl.reflex.dll, sl.pcl.dll (DLSS Frame Generation)
 
 These components are installed as unmodified NVIDIA-distributed runtime
 libraries. The source code of openOMSI remains licensed under GNU AGPLv3.
@@ -96,13 +102,14 @@ These separate, unmodified NVIDIA vendor DLLs are NOT relicensed under
 the openOMSI AGPLv3 or its retained historical MIT license.
 Each NVIDIA file retains its original applicable vendor license:
   - NVIDIA-Streamline-LICENSE.txt: MIT-covered Streamline components
-  - nvngx_dlss.license.txt: proprietary NVIDIA DLSS/NGX runtime
+  - nvngx_dlss.license.txt: proprietary NVIDIA DLSS/NGX runtime (nvngx_dlss.dll, nvngx_dlssg.dll)
+  - reflex.license.txt: NVIDIA Reflex (sl.reflex.dll, sl.pcl.dll)
 All NVIDIA license terms and intellectual property rights remain in force.
 This software contains source code provided by NVIDIA Corporation.
 No NVIDIA endorsement of openOMSI is implied. No openOMSI source
 code is removed from AGPLv3 and no linking exception is granted here.
 See docs/NVIDIA_DLL_LICENSE_SCOPE.md in the project source repository.
-Only DLSS Super Resolution / DLAA is included, not DLSS Frame Generation.
+DLSS Super Resolution / DLAA and DLSS Frame Generation are included.
 The game works without DLSS on unsupported hardware; DLSS is opt-in.
 "@
     Set-Content -LiteralPath (Join-Path $OutDir "NVIDIA-Streamline-NOTICE.txt") -Value $Notice -Encoding UTF8
