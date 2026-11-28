@@ -10,8 +10,14 @@ fn hosted_session_enforces_session_buses_on_host_own_bus() {
     crate::with_test_language("ENG", || {
         let mut app = crate::assemble_app(Args::parse_from(["openomsi"]), Default::default());
         omsi_ui::i18n::set_language("en");
-        let session_bus_error =
-            |msg: &str| omsi_ui::i18n::english(msg).contains("only these buses can be driven here");
+        let session_bus_error = |msg: &str| {
+            assert_eq!(
+                omsi_ui::i18n::language(),
+                "",
+                "the shared i18n language must stay English for this assertion"
+            );
+            omsi_ui::i18n::english(msg).contains("only these buses can be driven here")
+        };
         let host = omsi_net::LanSession::host(0, "host", Default::default(), false).unwrap();
         app.net.lan = Some(host);
         app.args.session_buses = Some("Vehicles/MAN_SD200/MAN_SD77.bus".into());
