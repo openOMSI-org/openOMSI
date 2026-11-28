@@ -107,6 +107,7 @@ fn a_spotlight_cookie_reads_its_lines() {
         (c.yaw.as_deref(), c.pitch.as_deref()),
         (Some("cookie_yaw"), Some("cookie_pitch"))
     );
+    assert!(!c.mirrored);
     assert_eq!(m.meshes.len(), 1);
     let short = "[spotlight_cookie]\n0.9\n5.9\n0.7\n0\n1\n0\n255\n255\n255\n40\n60\n20\nbeam.png\n1\n[mesh]\na.o3d\n";
     let m = Model::parse(&CfgFile::from_str("model.cfg", short));
@@ -120,6 +121,66 @@ fn a_spotlight_cookie_reads_its_lines() {
         1,
         "the keyword after it is not taken as its line"
     );
+}
+
+/// Sobol's buses use a shorter `[spotlight_cookie]`: no colour numbers or cone angles, the
+/// picture carries the colour. The flag asks for a twin, and the offsets come pitch first.
+#[test]
+fn a_sobol_spotlight_cookie_reads_its_range_variable_flag_and_picture() {
+    let text = "[spotlight_cookie]\n0.71507\n5.82032\n0.67736\n0\n1\n0\n200\nlights_fern_front_1\n0\ncookie_fern_H4_lens.png\n0.05\nlamp_pitch\nlamp_yaw\n\n[mesh]\na.o3d\n";
+    let m = Model::parse(&CfgFile::from_str("model.cfg", text));
+    let c = &m.spotlight_cookies[0];
+    assert_eq!(
+        (c.pos, c.dir),
+        ([0.71507, 5.82032, 0.67736], [0.0, 1.0, 0.0])
+    );
+    assert_eq!(c.color, [255.0; 3]);
+    assert_eq!((c.range, c.width, c.height), (200.0, 120.0, 96.0));
+    assert_eq!(
+        (c.variable.as_str(), c.picture.as_str(), c.fade),
+        ("lights_fern_front_1", "cookie_fern_H4_lens.png", 0.05)
+    );
+    assert_eq!(
+        (c.pitch.as_deref(), c.yaw.as_deref()),
+        (Some("lamp_pitch"), Some("lamp_yaw"))
+    );
+    assert!(c.mirrored);
+    assert_eq!(m.meshes.len(), 1);
+    let one = text.replace(
+        "lights_fern_front_1\n0\ncookie",
+        "lights_fern_front_1\n1\ncookie",
+    );
+    let m = Model::parse(&CfgFile::from_str("model.cfg", &one));
+    assert!(!m.spotlight_cookies[0].mirrored);
+    let short = "[spotlight_cookie]\n0.71507\n5.82032\n0.67736\n0\n1\n0\n200\nlights_fern\n0\nbeam.png\n\n[mesh]\na.o3d\n";
+    let m = Model::parse(&CfgFile::from_str("model.cfg", short));
+    let c = &m.spotlight_cookies[0];
+    assert_eq!(
+        (c.fade, c.pitch.as_deref(), c.yaw.as_deref()),
+        (0.0, None, None)
+    );
+    assert_eq!(m.meshes.len(), 1, "the next keyword is not read as a fade");
+}
+
+/// The Sobol switch may be a numeric constant: the block is still Sobol's short layout, not
+/// an openOMSI one with a colour of 1 and a picture where its width should be.
+#[test]
+fn a_sobol_spotlight_cookie_accepts_a_numeric_switch() {
+    let text = "[spotlight_cookie]\n0.71507\n5.82032\n0.67736\n0\n1\n0\n200\n1\n0\ncookie_fern_H4_lens.png\n0.05\nlamp_pitch\nlamp_yaw\n\n[mesh]\na.o3d\n";
+    let m = Model::parse(&CfgFile::from_str("model.cfg", text));
+    let c = &m.spotlight_cookies[0];
+    assert_eq!((c.range, c.width, c.height), (200.0, 120.0, 96.0));
+    assert_eq!(
+        (c.variable.as_str(), c.picture.as_str()),
+        ("1", "cookie_fern_H4_lens.png")
+    );
+    assert_eq!(c.color, [255.0; 3]);
+    assert_eq!(
+        (c.pitch.as_deref(), c.yaw.as_deref()),
+        (Some("lamp_pitch"), Some("lamp_yaw"))
+    );
+    assert!(c.mirrored);
+    assert_eq!(m.meshes.len(), 1);
 }
 
 /// `[light_emitter_interior]`'s lines are all optional: a blank line or the next keyword ends

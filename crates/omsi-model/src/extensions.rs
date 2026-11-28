@@ -29,6 +29,40 @@ pub struct SpotlightCookie {
     /// up axis, and up about its own horizontal one.
     pub yaw: Option<String>,
     pub pitch: Option<String>,
+    /// A twin lamp across the vehicle's axis is wanted (the flag of the Sobol layout; the
+    /// openOMSI layout has one lamp per block).
+    pub mirrored: bool,
+}
+
+/// The picture carries the colour and covers the whole beam in the Sobol layout: a 1280x1024
+/// frame, 0.09375 degrees a pixel (-60..60 across, 36..-60 up/down).
+const SOBOL_WIDTH: f32 = 120.0;
+const SOBOL_HEIGHT: f32 = 96.0;
+
+fn numeric(s: &str) -> bool {
+    let s = s.trim();
+    !s.is_empty() && s.parse::<f32>().is_ok()
+}
+
+/// The switching line of the Sobol layout is a variable name or a literal number (a constant
+/// switch); both are valid and must not send the block to the openOMSI parser.
+fn is_switch(s: &str) -> bool {
+    !s.trim().is_empty()
+}
+
+/// The two layouts share the position and direction. In openOMSI's own layout the next five
+/// lines are red, green, blue, range, width (then height, picture and variable). In Sobol's
+/// buses they are range, variable, mirror flag, picture, fade: its line 3 is a flag of 0 or 1
+/// and its line 4 a picture name. That is enough to tell them apart without the bus's name.
+fn sobol_layout(ahead: &[String]) -> bool {
+    ahead.len() == 5
+        && numeric(&ahead[0])
+        && is_switch(&ahead[1])
+        && numeric(&ahead[2])
+        && omsi_cfg::parse_f32(&ahead[2]) < 2.0
+        && !numeric(&ahead[3])
+        && !ahead[3].trim().is_empty()
+        && (ahead[4].trim().is_empty() || numeric(&ahead[4]))
 }
 
 impl SpotlightCookie {
@@ -36,6 +70,19 @@ impl SpotlightCookie {
     pub(crate) fn read(r: &mut CfgReader) -> SpotlightCookie {
         let pos = r.f32s::<3>();
         let dir = r.f32s::<3>();
+        let mut ahead = r.clone();
+        let lines: Vec<String> = (0..5)
+            .map(|_| ahead.param_line().trim().to_string())
+            .collect();
+        if sobol_layout(&lines) {
+            return Self::read_sobol(r, pos, dir);
+        }
+        Self::read_openomsi(r, pos, dir)
+    }
+
+    /// openOMSI's own layout: rgb, range, two angles, picture, variable and optional fade,
+    /// yaw and pitch (in that order).
+    fn read_openomsi(r: &mut CfgReader, pos: [f32; 3], dir: [f32; 3]) -> SpotlightCookie {
         let color = r.f32s::<3>();
         let range = r.f32();
         let width = r.f32();
@@ -70,6 +117,47 @@ impl SpotlightCookie {
             fade,
             yaw: name(1),
             pitch: name(2),
+            mirrored: false,
+        }
+    }
+
+    /// Sobol's layout: range, variable, a mirror flag, picture and fade, then optional pitch
+    /// and yaw (in that order - the opposite of openOMSI's offsets).
+    fn read_sobol(r: &mut CfgReader, pos: [f32; 3], dir: [f32; 3]) -> SpotlightCookie {
+        let range = r.f32();
+        let variable = r.word().to_string();
+        let flag = r.f32();
+        let picture = r.word().to_string();
+        // (the fade and the two offsets are optional - a blank line or the next keyword ends
+        // the block, so the keyword must not be read as a number)
+        let mut more: Vec<String> = Vec::new();
+        while more.len() < 3 {
+            let mut ahead = r.clone();
+            let l = ahead.param_line().trim();
+            if l.is_empty() {
+                break;
+            }
+            more.push(l.to_string());
+            *r = ahead;
+        }
+        let name = |k: usize| more.get(k).filter(|v| !v.is_empty()).cloned();
+        SpotlightCookie {
+            pos,
+            dir,
+            color: [255.0; 3],
+            range,
+            width: SOBOL_WIDTH,
+            height: SOBOL_HEIGHT,
+            picture,
+            variable,
+            fade: more
+                .first()
+                .map_or(0.0, |v| omsi_cfg::parse_f32(v).max(0.0)),
+            // (the picture is the same way round on both lamps; only their places and
+            // directions are mirrored, see MODDING.md)
+            yaw: name(2),
+            pitch: name(1),
+            mirrored: flag < 0.5,
         }
     }
 }

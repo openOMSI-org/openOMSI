@@ -372,6 +372,44 @@ cornering_yaw
 - The Enhanced renderers draw up to eight different pictures at once.
 - The classic renderer, and a lamp whose picture is missing, light a plain cone instead.
 
+Sobol's buses (MAN Enhance V4, Urbino III and others) write a shorter layout with the same
+keyword. The picture carries the colour there, so there are no colour numbers or cone angles:
+
+```text
+[spotlight_cookie]
+0.71507
+5.82032
+0.67736
+0
+1
+0
+200
+lights_fern_front_1
+0
+cookie_fern_H4_lens.png
+0.05
+lamp_pitch
+lamp_yaw
+```
+
+| Lines | Meaning |
+|---|---|
+| 1-3 | Position x, y, z |
+| 4-6 | Direction x, y, z |
+| 7 | Range (m) |
+| 8 | Switching variable (a number is a constant) |
+| 9 | Flag: 0 (or left out) for a twin across the vehicle's axis, 1 for the one lamp |
+| 10 | The picture, in the vehicle's texture folder |
+| 11 | Optional: fade time (s) |
+| 12 | Optional: variable that turns the lamp up (degrees) |
+| 13 | Optional: variable that turns the lamp right (degrees) |
+
+The picture is 1280 x 1024, 0.09375 degrees a pixel (-60 to 60 across, 36 to -60 up/down); the
+lamp covers that whole frame. The twin's place and direction are mirrored, but its offsets are
+not, so both beams steer the same way. The two offsets come in the opposite order from the
+openOMSI layout above. A block with no picture name after the flag is read in the openOMSI
+layout, so both can live in one model.
+
 With shadows on, the player's headlamps also cast shadows in Enhanced. The front lamps that
 light the road share one shadow map.
 
