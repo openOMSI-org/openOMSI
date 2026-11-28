@@ -613,6 +613,10 @@ impl App {
                 self.set_info_bar(!self.menus.info_bar);
                 self.close_game_menu();
             }
+            "police" => {
+                self.close_game_menu();
+                self.call_police();
+            }
             "refuel" | "wash" | "repair" => {
                 self.close_game_menu();
                 self.run_service(id, self.menu_by());
@@ -711,6 +715,10 @@ impl crate::App {
         let mut at = 1;
         if self.session.on_foot.is_some() && self.player.is_some() {
             v.insert(at, ("tobus", "Back to my bus".into(), None));
+            at += 1;
+        }
+        if self.player.is_some() && self.menus.game_panels.accident_open {
+            v.insert(at, ("police", "Call the police".into(), None));
             at += 1;
         }
         // without a bus of one's own: no line to drive

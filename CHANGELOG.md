@@ -8,6 +8,15 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **DLSS and AMD FSR 3 no longer shimmer on what stands still**: the motion of the last frame
+  is taken without the depth plane each part carries since 0.3.57, so a still picture has no
+  motion again ([#4221](https://github.com/openOMSI-org/openOMSI/issues/4221)).
+- **Mirror refresh settings cap every mirror picture again**: a mirror shown in another mirror is
+  drawn with the mirror that shows it, instead of also taking its own redraw turn. The pictures
+  drawn for another mirror now count against the Economical, Full and VR redraw budgets, so
+  mirrors no longer refresh faster than the setting allows, and the driver's view keeps its frame
+  rate with mirrors enabled
+  ([#4341](https://github.com/openOMSI-org/openOMSI/issues/4341)).
 - **Articulated buses' third axle now springs with the rest of the rear section**: a two-axle
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
@@ -16,10 +25,19 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   anywhere at the chosen time or on that day, the stops fill by their own numbers again,
   instead of leaving the whole map empty
   ([#3841](https://github.com/openOMSI-org/openOMSI/issues/3841)).
+- **Mouse steering works the pedals again after it is switched off and on**: a cursor report
+  queued before the steering point was centred stays stale until the echo of that move arrives,
+  while the first deliberate move after it is counted - and a refused cursor move no longer
+  pretends the physical cursor reached the middle
+  ([#4346](https://github.com/openOMSI-org/openOMSI/issues/4346)).
 - **Android: buses and maps with HTML displays no longer crash the game**: the displays' scripts
   now run on phones that tag their memory pointers, where the game stopped with "this platform
   is not compatible with a nan-boxed `JsValueInner`"
   ([#4382](https://github.com/openOMSI-org/openOMSI/issues/4382)).
+- **`[onlyone]` sounds no longer count towards the sound limit**: as in OMSI 2, a vehicle's or
+  object's `[onlyone]` entries are left out when `[sound_maxcount]` adds up the nearest sound
+  packs, so a bus with many of them no longer silences the traffic and the scenery sooner than
+  OMSI does.
 
 ## 0.3.59 - 2026-11-26
 
@@ -381,6 +399,7 @@ What Omsi.exe does, read from the game itself, where openOMSI did something of i
   end to their next branch (the rear end when driving from the rear cab or backing). It is
   openOMSI's own key; OMSI 2 has none for it.
 - **Plugins can lay cards of their own over the navigator's map**: a plugin that fills the navigator's frame (`frame = true`) can put small cards of its own on the map - the next stop, the speed, whatever it shows - with the `map` element's new `overlay` key, at any corner or edge of the map and held inside it (what crosses the map's edge is left out, the card's corners stay rounded); their buttons take clicks as in the rest of the panel (`omsi.ui.version` 8). An example is `docs/examples/plugins/navigator_map.lua`.
+- **Accidents as in OMSI 2**: an AI vehicle your bus runs into is knocked off its route: it slides off with the blow (and turns when hit off its centre), then stands fully braked with its hazard lights on where it came to rest, instead of springing back into its lane and driving on. The screen says *Accident! Stop, switch on the hazard lights and call the police*; the pause menu (Esc) then offers *Call the police* under *Driving and routes*, which works once your bus stands with its hazard lights on, and the vehicles go back onto their route. Drive off without calling the police and, once their tile is unloaded, they are gone and you are told *You left the scene of the accident without calling the police*, which counts in the personnel file (`[crashs]`, its third number) as in OMSI 2 (manual 2.11, #1638).
 - **mX Graphics (Experimental)** on a Mac: Settings → Graphics → Display → *mX Graphics (Experimental)* draws the game on Metal with [mX](https://github.com/openOMSI-org/mX), openOMSI's own graphics library, instead of wgpu, from the next start. The picture is meant to be the same. It is an early step: the game's shaders do not use mX's bindless textures yet, and in the tests so far it spent less processor time on a frame than wgpu and the same time on the graphics chip. Ray tracing and frame generation stay off with it; where mX cannot open the graphics chip, the game draws with wgpu as before. Off by default. mX's Direct3D 12 and Vulkan have not drawn the game on a real graphics card yet, so Windows and Linux do not offer the switch; `OMSI_MX=on` tries them for one run (without DLSS, FSR 3 and VR), and `OMSI_MX=off` turns mX off for a run on a Mac.
 - **Plugins see the AI vehicles' size**: `omsi.traffic.list()`, `get`, `nearest` and `ahead`
   give each vehicle's `bounding_box` (`{width, length, height, cx, cy, cz, heading, default}`,

@@ -541,6 +541,28 @@ impl CoupledPart {
     }
 }
 
+/// Optional per-vehicle rear tag-axle steering override. None keeps the OMSI behavior.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TagAxleSteering {
+    /// Zero-based axle index (0 is the front axle).
+    pub axle: usize,
+    /// Multiplier of the normal geometric steering curvature.
+    pub multiplier: f32,
+    /// Fade begins at this absolute vehicle speed (km/h).
+    pub fade_start_kmh: f32,
+    /// Tag steering reaches zero at this speed (km/h).
+    pub fade_end_kmh: f32,
+}
+
+impl TagAxleSteering {
+    pub fn multiplier_at(self, speed_kmh: f32) -> f32 {
+        let start = self.fade_start_kmh.max(0.0);
+        let end = self.fade_end_kmh.max(start + 1.0);
+        let fade = ((end - speed_kmh.abs()) / (end - start)).clamp(0.0, 1.0);
+        self.multiplier.clamp(0.0, 2.0) * fade
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RigidBody {
     pub mass: f32,
@@ -557,6 +579,8 @@ pub struct RigidBody {
     pub wheels: Vec<RigidWheel>,
     /// Axle index of each wheel (two per axle, left then right).
     pub wheel_axle: Vec<usize>,
+    /// Runtime steering override for one axle; absent by default.
+    pub tag_axle_steering: Option<TagAxleSteering>,
     pub steer_deg: f32,
     /// The curvature the steering asks for this step (1/m, positive to the right).
     pub kappa: f32,
