@@ -14,6 +14,18 @@ const UPSCALER: TemporalUpscaler = if cfg!(target_os = "macos") {
 #[test]
 #[ignore = "requires a graphics adapter and AMD's DLLs beside the test binary; run with --ignored on a GPU host"]
 fn late_motion_lays_through_glass_only() {
+    lays_through_glass_only(false);
+}
+
+/// The same with ray tracing, where the camera group also takes the ray-traced GI's texture:
+/// the late motion's fragment stage takes 18, past the 17 the device was opened with.
+#[test]
+#[ignore = "requires a graphics adapter with ray queries and AMD's DLLs beside the test binary; run with --ignored on a GPU host"]
+fn late_motion_lays_through_glass_only_with_ray_tracing() {
+    lays_through_glass_only(true);
+}
+
+fn lays_through_glass_only(ray_tracing: bool) {
     let (w, h) = (256, 128);
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let temporal = Some(Temporal {
@@ -27,6 +39,7 @@ fn late_motion_lays_through_glass_only() {
         fxaa: false,
         render_scale: 1.0,
         temporal,
+        ray_tracing,
         ..Default::default()
     };
     let mut r = pollster::block_on(Renderer::new_with(

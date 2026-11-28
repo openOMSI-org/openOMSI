@@ -45,7 +45,7 @@ const METALFX_MIP_BIAS: f32 = -1.0;
 
 pub(crate) struct TemporalPipelines {
     pub(crate) prepass: [wgpu::RenderPipeline; 6],
-    pub(crate) late_motion: [wgpu::RenderPipeline; 6],
+    pub(crate) late_motion: Option<[wgpu::RenderPipeline; 6]>,
     pub(crate) sky: wgpu::RenderPipeline,
     pub(crate) motion_layout: wgpu::BindGroupLayout,
     /// The late motion's group 2: the transparency mask's panes.

@@ -10,6 +10,15 @@ use super::common::*;
 use super::scene::SceneBase;
 use crate::*;
 
+/// The most fragment textures the late motion takes: the scene's camera and material groups'
+/// with the ray-traced GI's (`PANE_MASK_TEXTURES`, as the pane mask) and the panes' mask.
+pub(crate) const LATE_MOTION_TEXTURES: u32 = super::scene::PANE_MASK_TEXTURES + 1;
+
+/// The fragment textures the late motion takes on this renderer: one fewer without the GI's.
+fn late_motion_textures() -> u32 {
+    LATE_MOTION_TEXTURES - u32::from(!gi_binding())
+}
+
 pub(crate) fn build(
     device: &wgpu::Device,
     scene: &SceneBase,
@@ -234,6 +243,16 @@ pub(crate) fn build(
         )
     };
     let glass = upscaler.glass_mask_entry();
+    // (a device that takes fewer leaves the parts drawn after a cab's first pane the street's
+    // motion, rather than the renderer failing)
+    let late = device.limits().max_sampled_textures_per_shader_stage >= late_motion_textures();
+    if !late {
+        log::warn!(
+            "temporal upscaling: the late motion takes {} textures in a shader stage, this device {}; drawing without it",
+            late_motion_textures(),
+            device.limits().max_sampled_textures_per_shader_stage
+        );
+    }
     Some(TemporalPipelines {
         prepass: [
             make(0, false, true),
@@ -243,14 +262,16 @@ pub(crate) fn build(
             make(2, false, true),
             make(2, true, true),
         ],
-        late_motion: [
-            make(0, false, false),
-            make(0, true, false),
-            make(1, false, false),
-            make(1, true, false),
-            make(2, false, false),
-            make(2, true, false),
-        ],
+        late_motion: late.then(|| {
+            [
+                make(0, false, false),
+                make(0, true, false),
+                make(1, false, false),
+                make(1, true, false),
+                make(2, false, false),
+                make(2, true, false),
+            ]
+        }),
         sky,
         motion_layout,
         glass_layout,

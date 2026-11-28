@@ -459,7 +459,7 @@ fn device_features(
                 adapter
                     .limits()
                     .max_sampled_textures_per_shader_stage
-                    .min(crate::pipelines::scene::PANE_MASK_TEXTURES),
+                    .min(crate::pipelines::temporal::LATE_MOTION_TEXTURES),
             );
     }
     // an older or smaller graphics chip (an OpenGL one, a GT 530) does not reach the

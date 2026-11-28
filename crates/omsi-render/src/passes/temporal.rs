@@ -30,6 +30,9 @@ impl Renderer {
         ) else {
             return;
         };
+        let Some(late) = p.late_motion.as_ref() else {
+            return;
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("temporal late motion"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -72,7 +75,7 @@ impl Renderer {
             scene,
             cut_batches,
             |b: &Batch| b.pipe < 2,
-            |pipe| &p.late_motion[pipe as usize],
+            |pipe| &late[pipe as usize],
         );
     }
 
