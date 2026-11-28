@@ -224,14 +224,20 @@ impl RigidBody {
     /// wheel of the cab, which turns with `Axle_Steering_0_L`, go further to the left than
     /// to the right (#953, #1073).
     pub fn axle_steer(&self, i: usize) -> f32 {
-        let Some(w) = self.wheels.get(i) else { return 0.0 };
+        let Some(w) = self.wheels.get(i) else {
+            return 0.0;
+        };
         let curvature = self.kappa * self.tag_steering_multiplier(i);
-        ((w.attach.y - self.rot_pnt_long) * curvature).atan().clamp(-1.05, 1.05)
+        ((w.attach.y - self.rot_pnt_long) * curvature)
+            .atan()
+            .clamp(-1.05, 1.05)
     }
 
     /// The selected axle uses independently scaled curvature; all other axles are unchanged.
     fn tag_steering_multiplier(&self, wheel: usize) -> f32 {
-        let Some(profile) = self.tag_axle_steering else { return 1.0 };
+        let Some(profile) = self.tag_axle_steering else {
+            return 1.0;
+        };
         if self.wheel_axle.get(wheel).copied() == Some(profile.axle) {
             profile.multiplier_at(self.forward_speed() * 3.6)
         } else {
@@ -787,8 +793,6 @@ impl RigidBody {
         }
         self.accel_body = accel_sum / substeps as f32;
         self.settle(drive_torque, brake);
-
-
     }
 
     /// What the air does to the body this substep (world force, body-frame torque) and where the
@@ -851,9 +855,16 @@ impl RigidBody {
         // lagged every mouse and controller movement by up to 0.4 s.
         let kappa = steer.clamp(-1.0, 1.0) * self.inv_min_turn_radius;
         self.kappa = kappa;
-        let front = self.wheels.iter().map(|w| w.attach.y).fold(f32::MIN, f32::max);
+        let front = self
+            .wheels
+            .iter()
+            .map(|w| w.attach.y)
+            .fold(f32::MIN, f32::max);
         let tag_override = self.tag_axle_steering.map(|profile| {
-            (profile.axle, profile.multiplier_at(self.forward_speed() * 3.6))
+            (
+                profile.axle,
+                profile.multiplier_at(self.forward_speed() * 3.6),
+            )
         });
         let wheel_axle = &self.wheel_axle;
         for (i, w) in self.wheels.iter_mut().enumerate() {
@@ -869,7 +880,9 @@ impl RigidBody {
             };
             let wheel_kappa = kappa * multiplier;
             let across = (1.0 - w.attach.x * wheel_kappa).max(0.2);
-            w.steer = ((w.attach.y - self.rot_pnt_long) * wheel_kappa / across).atan().clamp(-1.05, 1.05);
+            w.steer = ((w.attach.y - self.rot_pnt_long) * wheel_kappa / across)
+                .atan()
+                .clamp(-1.05, 1.05);
             w.steered = w.steer != 0.0;
         }
         self.steer_deg = ((front - self.rot_pnt_long) * kappa)

@@ -560,7 +560,10 @@ impl App {
         // Leave unavailable tag-axle tabs visible, but do not allow selection.
         if matches!(&next, ListKind::Vehicle(_)) {
             if let Some((titles, _)) = crate::game_lists::page_titles(self, &next) {
-                if titles.get(i).is_some_and(|title| title == "Tag axle (unavailable)") {
+                if titles
+                    .get(i)
+                    .is_some_and(|title| title == "Tag axle (unavailable)")
+                {
                     return;
                 }
             }
@@ -592,8 +595,15 @@ impl App {
         };
         let n = titles.len().max(1);
         for offset in 1..=n {
-            let candidate = if forward { (at + offset) % n } else { (at + n - offset) % n };
-            if titles.get(candidate).is_some_and(|title| title == "Tag axle (unavailable)") {
+            let candidate = if forward {
+                (at + offset) % n
+            } else {
+                (at + n - offset) % n
+            };
+            if titles
+                .get(candidate)
+                .is_some_and(|title| title == "Tag axle (unavailable)")
+            {
                 continue;
             }
             self.settings_tab(candidate);
@@ -625,8 +635,19 @@ impl App {
     /// Change the value of line `k` of the open settings window as `mv` says.
     pub(crate) fn list_adjust(&mut self, k: usize, mv: crate::game_lists::Move) {
         use crate::game_lists::ListKind;
-        let Some(kind) = self.menus.list_kind.clone() else { return };
-        if !matches!(kind, ListKind::Options(_) | ListKind::Vehicle(_) | ListKind::World(_) | ListKind::ControllerDevices(_) | ListKind::Controller(..) | ListKind::ControllerAxis(..) | ListKind::ControllerButtonSettings(..)) {
+        let Some(kind) = self.menus.list_kind.clone() else {
+            return;
+        };
+        if !matches!(
+            kind,
+            ListKind::Options(_)
+                | ListKind::Vehicle(_)
+                | ListKind::World(_)
+                | ListKind::ControllerDevices(_)
+                | ListKind::Controller(..)
+                | ListKind::ControllerAxis(..)
+                | ListKind::ControllerButtonSettings(..)
+        ) {
             return;
         }
         let Some(action) = self
