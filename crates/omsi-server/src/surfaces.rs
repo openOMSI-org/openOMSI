@@ -1,9 +1,4 @@
-//! CPU-only road/crossing *spline* ground surfaces for the dedicated host.
-//!
-//! Use the same production CPU tessellation and wheel-probe raster as the
-//! graphical host. Scenery [surface] objects, authored holes and aligned
-//! terrain deformation are not yet placed here. Those must not be silently
-//! replaced by a flat plane or synthetic road surface.
+//! CPU road splines and static scenery ground surfaces for the dedicated host.
 
 use crate::world::HostWorld;
 use glam::{DVec3, Mat4};
@@ -52,6 +47,22 @@ fn overhead_only(def: &omsi_scenery::Spline) -> bool {
             .profiles
             .iter()
             .all(|p| !p.points.is_empty() && p.points.iter().all(|point| point.z >= 2.0))
+}
+
+fn add_spline_wheels(
+    surface: &mut TileSurface,
+    mesh: &MeshData,
+    origin: DVec3,
+    tile: (i32, i32),
+    height_profile: bool,
+) {
+    if height_profile {
+        surface.add_height_profiles(mesh, origin, tile.0, tile.1);
+    } else {
+        // A visual mesh's ranges index textures. Only a height-profile mesh
+        // uses material 1 to identify wall tops rather than wheel ground.
+        surface.add_drive_mesh(mesh, &Mat4::IDENTITY, origin, tile.0, tile.1);
+    }
 }
 
 /// A source spline can reach into a neighboring tile. Check actual world
@@ -166,11 +177,11 @@ impl HostWorld {
                     report.overhead_only += 1;
                 }
                 let visible = omsi_geometry::build_spline_mesh(&def, &curve, spline.mirror, origin);
-                let wheel = if omsi_cfg::flags::OMSI_HEIGHTPROFILE_GROUND.is_set() {
+                let height_profile = omsi_cfg::flags::OMSI_HEIGHTPROFILE_GROUND.is_set();
+                let profile_mesh = height_profile.then(|| {
                     omsi_geometry::build_height_profile_mesh(&def, &curve, spline.mirror, origin)
-                } else {
-                    visible.clone()
-                };
+                });
+                let wheel = profile_mesh.as_ref().unwrap_or(&visible);
                 if visible.indices.len() / 3 > MAX_MESH_FACES
                     || wheel.indices.len() / 3 > MAX_MESH_FACES
                 {
@@ -189,8 +200,8 @@ impl HostWorld {
                         );
                         report.road_meshes += 1;
                     }
-                    if overlaps_tile(&wheel, origin, target) {
-                        ts.add_spline_drive(&wheel, None, origin, target.0, target.1);
+                    if overlaps_tile(wheel, origin, target) {
+                        add_spline_wheels(ts, wheel, origin, target, height_profile);
                         report.wheel_meshes += 1;
                     }
                 }
@@ -217,6 +228,29 @@ impl HostWorld {
 mod tests {
     use super::*;
     use glam::Vec3;
+
+    #[test]
+    fn rendered_spline_material_one_is_wheel_ground_but_profile_wall_is_not() {
+        let mesh = MeshData {
+            positions: vec![
+                Vec3::new(5.0, 5.0, 2.0),
+                Vec3::new(15.0, 5.0, 2.0),
+                Vec3::new(5.0, 15.0, 2.0),
+            ],
+            indices: vec![0, 1, 2],
+            ranges: vec![(0, 3, 1)],
+            ..Default::default()
+        };
+        let mut rendered = TileSurface::new(64);
+        let mut profile = TileSurface::new(64);
+        add_spline_wheels(&mut rendered, &mesh, DVec3::ZERO, (0, 0), false);
+        add_spline_wheels(&mut profile, &mesh, DVec3::ZERO, (0, 0), true);
+        rendered.finish();
+        profile.finish();
+        assert_eq!(rendered.drive.probe(7.0, 7.0, 5.0).below, Some(2.0));
+        assert_eq!(profile.drive.probe(7.0, 7.0, 5.0).below, None);
+        assert_eq!(profile.drive.probe_walls(7.0, 7.0, 5.0).below, Some(2.0));
+    }
 
     #[test]
     fn neighboring_tile_surface_does_not_stop_at_source_boundary() {

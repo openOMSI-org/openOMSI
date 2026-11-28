@@ -112,6 +112,7 @@ struct Mirror {
     /// The host's rail points that came with its world frames.
     points: Vec<(i64, f32)>,
     on: bool,
+    host_generation: u32,
     people: HashMap<u32, Track<PersonState>>,
     descs: HashMap<Key, Desc>,
     context_receiver: omsi_net::ai_context::Receiver,
@@ -829,6 +830,10 @@ impl LanWorld {
             return;
         };
         let m = &mut self.mirror;
+        if m.host_generation != lan.host_generation() {
+            self.points = Default::default();
+            self.up_view = Default::default();
+        }
         if !m.switch(
             lan,
             world,
@@ -953,20 +958,39 @@ impl Mirror {
     ) -> bool {
         let m = self;
         let want_on = lan.welcome.is_some() && lan.rejected.is_none();
-        if want_on != m.on {
+        let generation = lan.host_generation();
+        let replaced = m.host_generation != generation;
+        if want_on != m.on || replaced {
+            let rejoining = replaced && m.on && want_on;
             m.on = want_on;
+            m.host_generation = generation;
             if let Some(t) = traffic.as_deref_mut() {
+                if rejoining {
+                    for &id in &m.drawn_cars {
+                        t.remove_car(u64::from(id));
+                    }
+                }
                 t.set_mirror(want_on);
                 crate::view_sync::apply_traffic(t, &mut view.traffic, world, renderer, scene);
             }
             if let Some(h) = humans.as_deref_mut() {
+                if rejoining {
+                    h.reset_mirrored_people();
+                }
                 h.set_mirror(want_on);
+                crate::view_sync::apply_people(h, &mut view.people, world, renderer, scene);
             }
             // (the table is cleared when the session is over only: the host's first datagrams may
             // already be in it when the session turns on)
             if !want_on {
                 lan.traffic_client_mut().clear();
             }
+            m.points.clear();
+            m.descs.clear();
+            m.wanted.clear();
+            m.offset = None;
+            m.play = Default::default();
+            m.epoch = None;
             m.people.clear();
             m.drawn_cars.clear();
             m.drawn_people.clear();

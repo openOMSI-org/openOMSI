@@ -413,6 +413,33 @@ pub(super) fn session_bound(data: &[u8]) -> bool {
 }
 
 impl LanSession {
+    pub(super) fn reset_host_sync(&mut self) {
+        self.host_generation = self.host_generation.wrapping_add(1);
+        self.connected = false;
+        self.peers.clear();
+        self.reset_peer_sync(1);
+        self.sounds = sounds::Sync::default();
+        self.var_receiver = vars::VarReceiver::default();
+        self.schema_receiver = vars::VarReceiver::default();
+        self.car_receiver = vars::VarReceiver::default();
+        self.traffic.client.clear();
+        self.world_in.clear();
+        self.ai_context_in.clear();
+        self.descs.clear();
+        self.grants.clear();
+        self.pax_acks.clear();
+        self.voice_in.clear();
+        self.script_textures = scripttex::Sync::default();
+        self.freetex_packets.clear();
+        self.commands.clear();
+        self.parked.hidden.clear();
+        self.near = None;
+        self.last_info.clear();
+        self.last_state.clear();
+        self.info_acc = INFO_EVERY;
+        self.send_acc = self.heartbeat.max(1.0 / RATE_HZ);
+    }
+
     pub(super) fn reset_peer_sync(&mut self, id: u32) {
         let keep: Vec<_> = self.peers.keys().copied().filter(|p| *p != id).collect();
         self.sounds.retain_peers(&keep);

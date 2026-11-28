@@ -998,22 +998,20 @@ fn shade_enhanced(in: FsIn, puddle_weight: ptr<function, vec2<f32>>, capture: bo
             let night = clamp(camera.sun_color.w, 0.0, 1.0);
             let left = (vec3<f32>(1.0) - clamp(cabin_light, vec3<f32>(0.0), vec3<f32>(1.0))) * (0.12 + 0.88 * night);
             emit = emit + tex.rgb * lm * left * max(enh.exposure.z * 2.0, 0.6);
-        } else {
-            // (By day as by night: ADDSMOOTH lifts the surface to its texture's colour by the
-            // map whatever light it has, and what the light already gives - the day's, the
-            // saloon lamps' - is taken off below. Lifted by an eighth of that by day, a
-            // display in the cab's shade was far darker than in Vanilla+, #2051.)
-            // ... and as there it lifts the surface to its texture's own colour at the
-            // most, shown as a display is (see the unlit path): taken as a light of the
-            // night's level on top, a white light map (`weiss.bmp`, laid on a display so
-            // it shows at night) went past the tone curve's knee and bleached its colours -
-            // the Procity's red and blue gauges pink and lavender (#827). (An LED panel's
-            // light map stays as it was: its dots are meant to burn above their colour.)
-            // The map's script variable controls its backlight. Dimming every light-mapped
-            // surface as a cab screen hid instrument backlights even with the lights on.
+        } else if (material.emissive.w < -0.5) {
+            // A display's lamp lifts it to its texture's own colour by day as by night,
+            // taking off what the day's and the saloon lamps' light already give (#2051).
+            // Kept under the tone curve's knee, a white map cannot bleach its colours (#827).
             // (the lift is the saloon lamps' light: where their light does not reach for a
             // handrail or a seat standing in it, the map does not lift the surface either)
             emit = emit + max(display_level(tex.rgb) * enh.exposure.y - rgb, vec3<f32>(0.0)) * lm * cabin_vis;
+        } else {
+            // A light-mapped surface - a roller blind's illumination, a backlit panel - is
+            // not a display: ADDSMOOTH adds only what its own light leaves. Giving it the
+            // display's full lift made the stationary MAN SL200's band glow white (#3472).
+            let night = clamp(camera.sun_color.w, 0.0, 1.0);
+            let left = (vec3<f32>(1.0) - clamp(cabin_light, vec3<f32>(0.0), vec3<f32>(1.0))) * (0.12 + 0.88 * night);
+            emit = emit + tex.rgb * lm * left * max(enh.exposure.z * 2.0, 0.6);
         }
     }
     if (!LEAN && material.emissive.w < -1.5) {

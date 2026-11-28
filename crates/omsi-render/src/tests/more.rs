@@ -1403,6 +1403,26 @@ fn the_corona_shader_translates_to_glsl() {
     }
 }
 
+/// The Enhanced lamp core keeps the sprite's own outline (#3802). Taking the centre
+/// sample with `max(lit, shape)` replaced a shaped picture with a centred dot. Both
+/// renderers must keep the bitmap-shaped core.
+#[test]
+fn the_enhanced_lamp_core_follows_the_sprite() {
+    for (name, src) in [
+        ("wgpu", include_str!("../corona.wgsl")),
+        (
+            "mX",
+            include_str!("../../../omsi-render-mx/src/corona.wgsl"),
+        ),
+    ] {
+        assert!(
+            src.contains("shape = mix(shape * (core + 0.22), shape, wet);")
+                && !src.contains("core * max(lit, shape)"),
+            "{name} corona shader lost the sprite's shape"
+        );
+    }
+}
+
 /// Where the device cannot read storage buffers in a vertex shader, or none at all, the
 /// scene module reads its arrays from textures: it validates and translates to the GLSL
 /// of such chips (GLES 3.1 / GL 4.3 with storage for the lights, GLES 3.0 / GL 3.3

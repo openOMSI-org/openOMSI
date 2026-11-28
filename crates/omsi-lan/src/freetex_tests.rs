@@ -96,7 +96,9 @@ impl Pair {
         std::thread::sleep(Duration::from_millis(5));
     }
     fn wait(&mut self, test: impl Fn(&[Received]) -> bool) {
-        let deadline = Instant::now() + Duration::from_secs(15);
+        // The emulated transfer is driven by the test thread, so a busy Windows
+        // runner can starve it well past 15 seconds even though the protocol works.
+        let deadline = Instant::now() + Duration::from_secs(60);
         while !test(&self.received) && Instant::now() < deadline {
             self.step();
         }

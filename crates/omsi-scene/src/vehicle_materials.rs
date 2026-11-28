@@ -252,7 +252,7 @@ pub(super) fn emission_light(ov: &[&MaterialDef]) -> Option<omsi_render::Emissio
 }
 
 /// An sRGB value (0..1) as linear light.
-fn srgb_to_linear(c: f32) -> f32 {
+pub(super) fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 {
         c / 12.92
     } else {

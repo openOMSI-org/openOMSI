@@ -907,6 +907,23 @@ fn route_arrows_stand_only_where_the_route_has_a_choice() {
     assert_eq!(at, vec![2], "{spots:?}");
 }
 
+/// The map already draws an H at a stop: adding the route's own bus-stop helper on top of it
+/// showed a doubled symbol at the stops of the player's trip (#3739).
+#[test]
+fn route_arrows_leave_the_stops_to_the_map() {
+    let mut nav = Navigator::new(true, 0.85, "bottom-left");
+    nav.arrows = true;
+    nav.global = Some(std::sync::Arc::new(Network::default()));
+    nav.route.on_route = true;
+    nav.bus_at = DVec3::ZERO;
+    nav.stop_spots = vec![
+        (DVec3::new(10.0, 0.0, 0.0), "first".into(), 0.0, 7),
+        (DVec3::new(20.0, 0.0, 0.0), "second".into(), 0.0, 8),
+    ];
+    let spots = nav.arrow_spots(None, 100.0, &|_| Some((DVec3::new(10.0, 0.0, 0.0), 0.0)));
+    assert!(spots.is_empty(), "{spots:?}");
+}
+
 #[test]
 fn a_route_arrow_shows_the_turn_of_a_junction_path_drawn_in_two_parts() {
     let lanes = vec![

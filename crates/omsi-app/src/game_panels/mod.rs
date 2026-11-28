@@ -33,6 +33,9 @@ const GAME: u64 = 1;
 #[derive(Default)]
 pub(crate) struct GamePanels {
     pub(crate) laid_out: Option<([f32; 4], f32)>,
+    pub(crate) hazard_watch: omsi_sim::ai_traffic::accident::HazardWatch,
+    /// (copied in the integrations stage: the stages that draw the menu do not hold the traffic)
+    pub(crate) accident_open: bool,
     ui: UiState,
     draw: crate::plugin_ui::PluginPanels,
     /// A slider the left button holds: its panel, id and track on the window (physical

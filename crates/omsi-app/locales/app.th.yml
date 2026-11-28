@@ -3015,6 +3015,12 @@
 "straight on": "ตรงไป"
 "to the left": "ไปทางซ้าย"
 "to the right": "ไปทางขวา"
+"Call the police": "เรียกตำรวจ"
+"No accident to report": "ไม่มีอุบัติเหตุที่ต้องแจ้ง"
+"Stop and switch on the hazard lights first": "หยุดรถและเปิดไฟฉุกเฉินก่อน"
+"The police have taken up the accident": "ตำรวจบันทึกอุบัติเหตุแล้ว"
+"You left the scene of the accident without calling the police": "คุณออกจากที่เกิดเหตุโดยไม่ได้เรียกตำรวจ"
+"Accident! Stop, switch on the hazard lights and call the police": "อุบัติเหตุ! หยุดรถ เปิดไฟฉุกเฉิน และเรียกตำรวจ"
 "Lights on in a downpour": "ไฟเปิดเมื่อฝนตกหนัก"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "ในเวลากลางวันที่ฝนตกหนัก หน้าต่างบ้านบางหลังจะเปิดไฟ เพราะมืดพอที่จะต้องเปิดไฟ"
 
@@ -3067,6 +3073,9 @@
 "Only for due trips": "เฉพาะเที่ยวตามตาราง"
 "Passengers wait for open doors": "ผู้โดยสารรอประตูเปิด"
 "IBIS stop follows the duty": "ป้าย IBIS ตามกะงาน"
+
+"Traction": "การลากจูง"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "ความดังของเครื่องยนต์ของรถบัสที่คุณขับ (รวมถึงรถรางและรถบัสไฟฟ้าสายส่งด้วย)"
 
 "Riders may leave after rough driving": "ผู้โดยสารอาจลงจากรถหลังจากขับขี่รุนแรง"
 "Off: passengers complain but stay aboard": "ปิด: ผู้โดยสารบ่นแต่ยังคงอยู่บนรถ"

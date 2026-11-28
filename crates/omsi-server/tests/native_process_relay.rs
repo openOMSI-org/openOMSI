@@ -92,9 +92,15 @@ fn start_fixture_with_chrono(
             "name = Native UDP Test\nmap = Maps/Fixture/global.cfg\ndate = 1989-05-30\ntime = {time}\ntime_speed = {time_speed}\ntraffic = 0\ntimetable = 0\npassengers = {passengers}\nport = {port}\nweb_port = {web_port}\nmax_players = {max_players}\ntunnel = 0\npublic_server = 0\npublic_address = off\nreal_time = 0\nmetar_sync = 0\naccept_uploads = 0\nshare_maps = 0\nparked_buses = 0\nvoice = 0\nadmin_web = off\n"
         ),
     );
-    let process = Command::new(env!("CARGO_BIN_EXE_omsi-server"))
-        .arg(&root)
-        .arg(&cfg)
+    let process = spawn_fixture(&root, simulation);
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    (FixtureProcess { root, process }, addr)
+}
+
+fn spawn_fixture(root: &Path, simulation: bool) -> Child {
+    Command::new(env!("CARGO_BIN_EXE_omsi-server"))
+        .arg(root)
+        .arg(root.join("server-test.cfg"))
         .arg(if simulation {
             "--experimental-simulation"
         } else {
@@ -110,9 +116,7 @@ fn start_fixture_with_chrono(
             fs::File::create(root.join("headless.log")).expect("fixture log"),
         ))
         .spawn()
-        .expect("start actual native headless server");
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    (FixtureProcess { root, process }, addr)
+        .expect("start actual native headless server")
 }
 
 fn driver(name: &str, x: f64) -> Pose {
@@ -196,6 +200,74 @@ fn chrono_midnight_rebuild_keeps_two_connected_clients_and_manifest() {
     assert_eq!(report.bytes, 0);
     alpha.leave();
     beta.leave();
+}
+
+#[test]
+fn both_lan_clients_automatically_reconnect_after_a_full_process_restart() {
+    let (mut server, addr) = start_fixture_mode(2, true);
+    let world = WorldInfo {
+        map: "Maps/Fixture/global.cfg".into(),
+        date: "1989-05-30".into(),
+        time: 9.0 * 3600.0,
+        ..Default::default()
+    };
+    let mut alpha = LanSession::join_addr(vec![addr], None, "alpha", world.clone()).unwrap();
+    let mut beta = LanSession::join_addr(vec![addr], None, "beta", world).unwrap();
+    let pa = driver("alpha", 101.0);
+    let pb = driver("beta", 202.0);
+    let mut session = 0;
+    for generation in 0..=1 {
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            assert!(
+                Instant::now() < deadline,
+                "players did not establish generation {generation}"
+            );
+            assert!(
+                server.process.try_wait().unwrap().is_none(),
+                "headless host exited"
+            );
+            alpha.tick(0.05, &pa);
+            beta.tick(0.05, &pb);
+            if alpha.connected
+                && beta.connected
+                && alpha.session == beta.session
+                && alpha.session != session
+                && alpha.peers().any(|p| p.has_pose && p.pose.name == "beta")
+                && beta.peers().any(|p| p.has_pose && p.pose.name == "alpha")
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(alpha.host_generation(), generation);
+        assert_eq!(beta.host_generation(), generation);
+        session = alpha.session;
+        if generation == 0 {
+            server
+                .process
+                .stdin
+                .as_mut()
+                .unwrap()
+                .write_all(b"stop\n")
+                .unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                alpha.tick(0.05, &pa);
+                beta.tick(0.05, &pb);
+                if let Some(status) = server.process.try_wait().unwrap() {
+                    assert!(status.success(), "native server failed to stop: {status}");
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "native server did not handle stop"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            server.process = spawn_fixture(&server.root, true);
+        }
+    }
 }
 
 #[test]

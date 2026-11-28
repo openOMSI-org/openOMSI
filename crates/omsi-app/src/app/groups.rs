@@ -260,6 +260,9 @@ pub(crate) struct GfxState {
     pub(crate) mirror_dt: f32,
     pub(crate) mirrors_seen: usize,
     pub(crate) mirror_turn: usize,
+    /// Pictures still owed after a turn drew the mirrors one of them shows (#4341): they count
+    /// against the next frames' redraw budget, not just the mirror that took the turn.
+    pub(crate) mirror_debt: usize,
     /// The mirrors the panels show, drawn every frame (kept for its room).
     pub(crate) mirror_panel_cams: Vec<usize>,
     /// With no real-time reflections: the bus whose mirrors are frozen (see

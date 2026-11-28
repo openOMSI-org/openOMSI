@@ -168,6 +168,26 @@ fn combined_mesh_contact_follows_the_blade_instead_of_the_arm() {
 }
 
 #[test]
+fn a_combined_mesh_finds_the_blade_even_when_it_is_not_named_an_arm() {
+    let mut points = Vec::new();
+    for i in 0..120 {
+        let t = i as f32 / 119.0;
+        points.push(Vec3::new(t, 0.0, 0.5));
+        points.push(Vec3::new(t, 0.01, 0.5));
+    }
+    // The arm is long enough to pull the whole mesh's principal axis off the rubber.
+    for i in 0..240 {
+        let t = i as f32 / 239.0;
+        points.push(Vec3::new(0.5 + t * 0.4, 0.02, 0.5 - t * 0.6));
+    }
+    let plain = blade_ends(&points).unwrap();
+    assert!((plain[0].z - plain[1].z).abs() > 0.15);
+    let ends = combined_blade_ends(&points).unwrap();
+    assert!(ends[0].distance(ends[1]) > 0.98);
+    assert!(ends.iter().all(|p| (p.z - 0.5).abs() < 0.01));
+}
+
+#[test]
 fn only_the_blades_traversed_strip_is_cleared_in_both_directions() {
     let start = [Vec3::new(0.0, 0.03, 0.0), Vec3::new(0.0, 0.03, 1.0)];
     let end = start.map(|p| p + Vec3::X * 0.4);

@@ -569,10 +569,15 @@ impl World {
                         omsi_cfg::resolve_path(&sco_dir, f)
                     };
                     omsi_o3d::load_mesh(&mp)
-                        .map(|m| mesh_from_o3d(&m))
                         .map_err(|e| log::debug!("collision mesh {}: {e}", mp.display()))
                         .ok()
                 });
+            // Keep the mesh's own materials: an invisible `[surface]` object has no render
+            // mesh to read a texture from, but OMSI still drives over its collision mesh.
+            let (collision, collision_materials) = match collision {
+                Some(m) => (Some(mesh_from_o3d(&m)), m.materials),
+                None => (None, Vec::new()),
+            };
             let paint = paint_at_foot(&sco, &meshes);
             Some(Arc::new(ObjectType {
                 sco,
@@ -594,6 +599,7 @@ impl World {
                 holes,
                 deform,
                 collision,
+                collision_materials,
                 paint,
                 // (worked out on first use)
                 camera: Default::default(),

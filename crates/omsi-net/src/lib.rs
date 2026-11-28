@@ -1392,6 +1392,8 @@ pub struct LanSession {
     /// Counts the welcomes after which the connection was (re)made: the game takes the
     /// host's world again when it changes.
     pub welcomes: u32,
+    /// Changes when an accepted welcome replaces the host's replication state.
+    host_generation: u32,
     /// Differences between the host's world and ours that remain (another map; a weather
     /// the game could not take over).
     pub warnings: Vec<String>,
@@ -1567,6 +1569,7 @@ impl LanSession {
             turned_away: None,
             welcome: None,
             welcomes: 0,
+            host_generation: 0,
             warnings: Vec::new(),
             spawn_settled: role == Role::Host,
             place: None,
@@ -3251,7 +3254,9 @@ impl LanSession {
             ));
             return;
         }
-        if let Some(secret) = admission::parse_secret(field(parts, 11)) {
+        let secret = admission::parse_secret(field(parts, 11));
+        let mut replaced = self.welcome.is_some() && self.session != session;
+        if let Some(secret) = secret {
             if u64::from_str_radix(field(parts, 12), 16).ok() != Some(self.nonce)
                 || self.retired_secrets.contains(&secret)
             {
@@ -3259,17 +3264,11 @@ impl LanSession {
             }
             if self.rebind_secret.is_some_and(|old| old != secret) {
                 self.retired_secrets.push(self.rebind_secret.unwrap());
-                self.peers.clear();
-                self.vars_in.clear();
-                self.schemas_in.clear();
-                self.cars_in.clear();
-                self.sounds = sounds::Sync::default();
-                self.var_receiver = vars::VarReceiver::default();
-                self.schema_receiver = vars::VarReceiver::default();
-                self.car_receiver = vars::VarReceiver::default();
-                self.reset_peer_sync(1);
-                self.connected = false;
+                replaced = true;
             }
+        }
+        if replaced {
+            self.reset_host_sync();
         }
         let host_name = clean_text(field(parts, 4), MAX_NAME);
         let world = WorldInfo::from_fields(parts, 5);
@@ -3288,7 +3287,7 @@ impl LanSession {
             }
         }
         self.my_id = id;
-        if let Some(s) = admission::parse_secret(field(parts, 11)) {
+        if let Some(s) = secret {
             self.rebind_secret = Some(s);
         }
         self.answer = None;
@@ -3335,6 +3334,11 @@ impl LanSession {
                 self.place_acc = 1.0;
             }
         }
+    }
+
+    /// Identity of the host replication state for session-local game mirrors.
+    pub fn host_generation(&self) -> u32 {
+        self.host_generation
     }
 
     /// Tell the others we are leaving.

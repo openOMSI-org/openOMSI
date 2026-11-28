@@ -3015,6 +3015,12 @@
 "straight on": "đi thẳng"
 "to the left": "sang trái"
 "to the right": "sang phải"
+"Call the police": "Gọi cảnh sát"
+"No accident to report": "Không có tai nạn nào cần báo"
+"Stop and switch on the hazard lights first": "Hãy dừng xe và bật đèn cảnh báo nguy hiểm trước"
+"The police have taken up the accident": "Cảnh sát đã lập biên bản vụ tai nạn"
+"You left the scene of the accident without calling the police": "Bạn đã rời khỏi hiện trường tai nạn mà không gọi cảnh sát"
+"Accident! Stop, switch on the hazard lights and call the police": "Tai nạn! Hãy dừng xe, bật đèn cảnh báo nguy hiểm và gọi cảnh sát"
 "Lights on in a downpour": "Đèn bật khi mưa lớn"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Ban ngày khi mưa to, một số cửa sổ nhà sáng đèn vì trời đủ tối để bật đèn"
 
@@ -3067,6 +3073,9 @@
 "Only for due trips": "Chỉ cho chuyến theo lịch"
 "Passengers wait for open doors": "Hành khách chờ cửa mở"
 "IBIS stop follows the duty": "Trạm IBIS theo ca"
+
+"Traction": "Lực kéo"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Mức độ to của động cơ xe buýt bạn đang lái (cả xe điện và xe buýt dùng dây điện)"
 
 "Riders may leave after rough driving": "Hành khách có thể xuống xe sau khi lái xe thô bạo"
 "Off: passengers complain but stay aboard": "Tắt: hành khách phàn nàn nhưng vẫn ở trên xe"

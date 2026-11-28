@@ -3812,8 +3812,8 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
             "pause_quick_actions" | "ui_theme_pack" => v[&k] = json!(val),
             "anisotropy" => v[&k] = json!(val.parse::<i64>().unwrap_or(8).clamp(1, 16)),
             "msaa" | "shadow_size" => v[&k] = json!(val.parse::<i64>().unwrap_or(0)),
-            "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "vol_ambient" | "min_obj_size"
-            | "radio_speaker" | "radio_hiss" | "radio_dropouts" => {
+            "ui_opacity" | "volume" | "vol_ai" | "vol_scenery" | "vol_traction" | "vol_ambient"
+            | "min_obj_size" | "radio_speaker" | "radio_hiss" | "radio_dropouts" => {
                 v[&k] = json!(val.parse::<f64>().unwrap_or(0.0))
             }
             "pax_density" => {
@@ -4831,7 +4831,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             .unwrap_or("vanilla_plus"),
     );
     let text = format!(
-        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nmirror_size={}\ndoppler={}\naudio_surround={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
+        "# openOMSI settings (written by the launcher)\nversion=4\nmsaa={}\nanisotropy={}\nssao={}\nshadows={}\nshadow_size={}\nnavigator={}\nui_opacity={}\nnavigator_corner={}\nboarding={}\ndetail_textures={}\nexact_fare={}\nenhanced={}\ngraphics={}\nfullscreen={}\nvsync={}\nvolume={}\ndrive_keys={}\nrender_scale={}\nview_distance={}\nlanguage={}\nvideo_memory={}\ntexture_compression={}\nchat={}\ntooltips={}\nname_tags={}\nshow_fps={}\nclouds={}\npax_density={}\nvol_ai={}\nvol_scenery={}\nvol_traction={}\nmirror_size={}\ndoppler={}\naudio_surround={}\ndriver={}\nmax_fps={}\nmin_obj_size={}\nmax_obj_dist={}\n",
         n("msaa", 4),
         n("anisotropy", 8),
         b("ssao", true),
@@ -4880,6 +4880,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
         f("pax_density", 1.0),
         f("vol_ai", 1.0),
         f("vol_scenery", 1.0),
+        f("vol_traction", 1.0),
         match n("mirror_size", 256) {
             0 => 0,
             x => x.clamp(64, 2048),

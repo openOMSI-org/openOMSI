@@ -3699,6 +3699,12 @@
 "straight on": "直行"
 "to the left": "向左"
 "to the right": "向右"
+"Call the police": "报警"
+"No accident to report": "没有需要报告的事故"
+"Stop and switch on the hazard lights first": "请先停车并打开危险警告灯"
+"The police have taken up the accident": "警察已处理事故"
+"You left the scene of the accident without calling the police": "您未报警便离开了事故现场"
+"Accident! Stop, switch on the hazard lights and call the police": "发生事故！请停车、打开危险警告灯并报警"
 "Lights on in a downpour": "暴雨时窗户亮灯"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "白天下暴雨时，天色暗到需要开灯，部分房屋的窗户会亮起灯光"
 
@@ -3750,6 +3756,9 @@
 "Only for due trips": "仅限计划班次"
 "Passengers wait for open doors": "乘客等车门打开"
 "IBIS stop follows the duty": "IBIS 站点跟随班务"
+
+"Traction": "牵引"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "您所驾驶公交车的电机音量（电车和无轨电车也适用）"
 
 "Riders may leave after rough driving": "乘客可在粗暴驾驶后下车"
 "Off: passengers complain but stay aboard": "关闭：乘客会抱怨，但仍留在车上"

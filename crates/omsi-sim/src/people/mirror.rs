@@ -374,6 +374,22 @@ impl PeopleSim {
         self.mirror_wait.clear();
     }
 
+    /// Drop the previous host's people and outstanding claims on reconnection.
+    pub fn reset_mirrored_people(&mut self) {
+        let mut i = 0;
+        while i < self.people.len() {
+            if self.people[i].remote {
+                let person = self.people.swap_remove(i);
+                self.retire(&person);
+            } else {
+                i += 1;
+            }
+        }
+        self.claims_out.clear();
+        self.claimed.clear();
+        self.mirror_wait.clear();
+    }
+
     /// The human type of a file relative to a content root (`Humans/…/x.hum`).
     pub fn type_by_file(&self, file: &str) -> Option<usize> {
         let want = file.replace('\\', "/").to_ascii_lowercase();

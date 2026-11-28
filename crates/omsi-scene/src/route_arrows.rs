@@ -1,9 +1,9 @@
-//! OMSI 2's dynamic route arrows (the `nav_dynamic_arrows` setting): OMSI puts the scenery
-//! objects `Sceneryobjects\Generic\routearrow_{L,R,dn}_dyn.sco` over the junctions of the
-//! player's route and `routearrows_busstop.sco` at its stops (the original, called as the
-//! bus comes onto the route's paths), each with a text on it. Here the navigator says where
-//! the route goes (`Navigator::arrow_spots`) and the objects are put into the world
-//! outside the tiles (`World::add_helper_object`), the ones behind the bus taken away.
+//! OMSI 2's dynamic route arrows (the `nav_dynamic_arrows` setting): the scenery objects
+//! `Sceneryobjects\Generic\routearrow_{L,R,dn}_dyn.sco` stand over the junctions of the
+//! player's route, each with a text on it. Here the navigator says where the route goes
+//! (`Navigator::arrow_spots`) and the objects are put into the world outside the tiles
+//! (`World::add_helper_object`), the ones behind the bus taken away. Stops are left to the
+//! map: its single H sign must not get a second one from the route (#3739).
 
 use crate::{TileGpu, World};
 use glam::DVec3;
@@ -21,7 +21,6 @@ fn sco(kind: &str) -> &'static str {
     match kind {
         "L" => "Sceneryobjects\\Generic\\routearrow_L_dyn.sco",
         "R" => "Sceneryobjects\\Generic\\routearrow_R_dyn.sco",
-        "busstop" => "Sceneryobjects\\Generic\\routearrows_busstop.sco",
         _ => "Sceneryobjects\\Generic\\routearrow_dn_dyn.sco",
     }
 }
@@ -61,15 +60,11 @@ impl RouteArrows {
             }
             let (_, pos, heading, kind, text) = s;
             // (on the road surface there, not the lane's own height: a lane may lie a few
-            // centimetres off it; a stop's helper stands where the stop object stands)
-            let z = if *kind == "busstop" {
-                pos.z
-            } else {
-                world
-                    .walk_height(pos.x, pos.y)
-                    .filter(|z| (z - pos.z).abs() < 1.5)
-                    .unwrap_or(pos.z)
-            };
+            // centimetres off it)
+            let z = world
+                .walk_height(pos.x, pos.y)
+                .filter(|z| (z - pos.z).abs() < 1.5)
+                .unwrap_or(pos.z);
             if let Some(tg) = world.add_helper_object(
                 renderer,
                 scene,

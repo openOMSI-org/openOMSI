@@ -3414,6 +3414,12 @@
 "straight on": "прямо"
 "to the left": "ліворуч"
 "to the right": "праворуч"
+"Call the police": "Викликати поліцію"
+"No accident to report": "Немає ДТП, про яку треба повідомити"
+"Stop and switch on the hazard lights first": "Спочатку зупиніться й увімкніть аварійну сигналізацію"
+"The police have taken up the accident": "Поліція оформила ДТП"
+"You left the scene of the accident without calling the police": "Ви залишили місце ДТП, не викликавши поліцію"
+"Accident! Stop, switch on the hazard lights and call the police": "ДТП! Зупиніться, увімкніть аварійну сигналізацію та викличте поліцію"
 "Lights on in a downpour": "Світло у вікнах під час зливи"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Удень у сильний дощ у частині вікон будинків горить світло - стає досить темно, щоб його ввімкнути"
 
@@ -3465,6 +3471,9 @@
 "Only for due trips": "Лише до рейсів за розкладом"
 "Passengers wait for open doors": "Пасажири чекають відкриття дверей"
 "IBIS stop follows the duty": "Зупинка IBIS за нарядом"
+
+"Traction": "Тяга"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Наскільки гучним є двигун автобуса, яким ви керуєте (також для трамваїв і тролейбусів)"
 
 "Riders may leave after rough driving": "Пасажири можуть вийти після різкого водіння"
 "Off: passengers complain but stay aboard": "Вимкнено: пасажири скаржаться, але залишаються в автобусі"

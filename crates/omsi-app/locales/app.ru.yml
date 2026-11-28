@@ -4466,6 +4466,12 @@
 "straight on": "прямо"
 "to the left": "налево"
 "to the right": "направо"
+"Call the police": "Вызвать полицию"
+"No accident to report": "Нет ДТП, о котором нужно сообщить"
+"Stop and switch on the hazard lights first": "Сначала остановитесь и включите аварийную сигнализацию"
+"The police have taken up the accident": "Полиция оформила ДТП"
+"You left the scene of the accident without calling the police": "Вы покинули место ДТП, не вызвав полицию"
+"Accident! Stop, switch on the hazard lights and call the police": "ДТП! Остановитесь, включите аварийную сигнализацию и вызовите полицию"
 "Lights on in a downpour": "Свет в окнах в ливень"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Днём в сильный дождь в части окон домов горит свет - становится достаточно темно, чтобы его включить"
 
@@ -4517,6 +4523,9 @@
 "Only for due trips": "Только к рейсам по расписанию"
 "Passengers wait for open doors": "Пассажиры ждут открытия дверей"
 "IBIS stop follows the duty": "Остановка IBIS по наряду"
+
+"Traction": "Тяга"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Насколько громок двигатель автобуса, за рулём которого вы находитесь (также для трамваев и троллейбусов)"
 
 "Riders may leave after rough driving": "Пассажиры могут выйти после резкой езды"
 "Off: passengers complain but stay aboard": "Выкл.: пассажиры жалуются, но остаются в автобусе"

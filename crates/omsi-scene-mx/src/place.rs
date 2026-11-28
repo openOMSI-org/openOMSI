@@ -373,7 +373,13 @@ impl World {
             let controller = self.object_controller(&ot, o, pos, &index);
             // (a `[helparrow]` object goes on: it is put up hidden, and drawn while the route
             // arrows are on - see `World::show_help_arrows`)
-            if ot.sco.only_editor || ot.meshes.is_empty() {
+            // A meshless `[surface]` object with a `[collision_mesh]` still gives the wheels
+            // a road even though there is nothing to draw: X10's `StrSchaden3.sco` is such
+            // a road-damage plate. Keep only those meshless surfaces in the placed set so the
+            // terrain cut can raster their collision mesh; an editor-only object that still
+            // has a render mesh must stay hidden, as it was before.
+            let drive_only = ot.sco.surface && ot.collision.is_some() && ot.meshes.is_empty();
+            if (ot.sco.only_editor || ot.meshes.is_empty()) && !drive_only {
                 // invisible sound sources (ambient sound objects) and children of a
                 // crossing naming one of its lights still run their script
                 if let (Some(program), Some(light_parent)) = (
@@ -1134,13 +1140,49 @@ fn object_lamp(
     }
 }
 
-/// Legacy pole fixtures can put the virtual `[maplight]` inside the emitting mesh
-/// (Spandau's Ufo Big puts it above the pole cap, inside the head). The source was
-/// authored for an unoccluded light map, not as a bulb hidden behind opaque geometry.
-/// Require a pole. A directional effect must face away from the source, inside an
-/// enclosing emitting mesh; an omnidirectional effect at the source's exact position is
-/// the lamp's own bulb wherever the fixture lies (St-Servan's Eclatec Index has it above
-/// its head). An unrelated effect elsewhere on the same fixture does not qualify the source.
+/// How far a virtual `[maplight]` can sit from its emitting mesh and still belong to it.
+/// Real pole fixtures put the source within a metre of the emitter; a light metres away is
+/// another source that must still see the fixture's shadow.
+const POLE_LAMP_SOURCE_REACH: f32 = 1.5;
+
+/// Whether a ray from a source further away from its emitter meets the fixture. A source
+/// just outside a lamp head looks into open air; one in a cavity inside the fixture meets
+/// the cavity wall on its way out.
+fn outward_ray_is_clear(mesh: &MeshData, from: glam::Vec3, dir: glam::Vec3) -> bool {
+    !mesh.indices.chunks_exact(3).any(|t| {
+        let a = mesh.positions[t[0] as usize];
+        let e1 = mesh.positions[t[1] as usize] - a;
+        let e2 = mesh.positions[t[2] as usize] - a;
+        let p = dir.cross(e2);
+        let det = e1.dot(p);
+        if det.abs() < 1e-6 {
+            return false;
+        }
+        let inv_det = 1.0 / det;
+        let tv = from - a;
+        let u = tv.dot(p) * inv_det;
+        if !(0.0..=1.0).contains(&u) {
+            return false;
+        }
+        let q = tv.cross(e1);
+        let v = dir.dot(q) * inv_det;
+        if v < 0.0 || u + v > 1.0 {
+            return false;
+        }
+        e2.dot(q) * inv_det > 1e-4
+    })
+}
+
+/// Legacy pole fixtures can put the virtual `[maplight]` behind the emitting mesh
+/// (Spandau's Ufo Big puts it above the pole cap, inside the head; Thüringer Wald's
+/// concrete-mast lamps put it just outside a head that encloses its emitter). The source
+/// was authored for an unoccluded light map, not as a bulb hidden behind opaque geometry.
+/// Require a pole. A directional effect must face away from the source, with that mesh
+/// standing between the two: the source may be inside it, or the emitter may be inside
+/// it and within reach of a source in open air behind the head. An omnidirectional effect at
+/// the source's exact position is the lamp's own bulb wherever the fixture lies
+/// (St-Servan's Eclatec Index has it above its head). An unrelated effect elsewhere on
+/// the same fixture does not qualify the source.
 fn embedded_pole_light(ot: &ObjectType, source: glam::Vec3) -> bool {
     ot.sco.crash_mode_pole.is_some()
         && ot
@@ -1153,9 +1195,17 @@ fn embedded_pole_light(ot: &ObjectType, source: glam::Vec3) -> bool {
                     if effect.omni {
                         source == glam::Vec3::from(effect.pos)
                     } else {
-                        (source - glam::Vec3::from(effect.pos)).dot(glam::Vec3::from(effect.dir))
-                            < 0.0
-                            && mesh_encloses_light(&mesh.0, source)
+                        let emitter = glam::Vec3::from(effect.pos);
+                        let to_source = source - emitter;
+                        to_source.dot(glam::Vec3::from(effect.dir)) < 0.0
+                            && (mesh_encloses_light(&mesh.0, source)
+                                || (to_source.length() <= POLE_LAMP_SOURCE_REACH
+                                    && outward_ray_is_clear(
+                                        &mesh.0,
+                                        source,
+                                        to_source.normalize(),
+                                    )
+                                    && mesh_encloses_light(&mesh.0, emitter)))
                     }
                 })
             })
@@ -1424,6 +1474,14 @@ mod embedded_light_tests {
         }
     }
 
+    fn add_cube_at(mesh: &mut MeshData, size: f32, reverse: bool, centre: glam::Vec3) {
+        let first = mesh.positions.len();
+        add_cube(mesh, size, reverse);
+        for p in &mut mesh.positions[first..] {
+            *p += centre;
+        }
+    }
+
     fn pole_fixture() -> ObjectType {
         let mut mesh = MeshData::default();
         add_cube(&mut mesh, 1.0, false);
@@ -1473,6 +1531,7 @@ mod embedded_light_tests {
             holes: Vec::new(),
             deform: None,
             collision: None,
+            collision_materials: Vec::new(),
             paint: false,
             camera: Default::default(),
             collision_shape: Default::default(),
@@ -1540,6 +1599,40 @@ mod embedded_light_tests {
             !embedded_pole_light(&fixture, glam::Vec3::ZERO),
             "a source in enclosed air does not qualify"
         );
+    }
+
+    #[test]
+    fn an_enclosed_emitter_behind_a_near_source_is_a_pole_lamp() {
+        let mut fixture = pole_fixture();
+        // The head holds its emitter, and the maplight is just above it: the head itself
+        // would shadow the street below it (Thüringer Wald's concrete-mast lamps).
+        fixture.model.meshes[1].light_enh_2[0].pos = [0.0, 0.0, 0.25];
+        let source = glam::Vec3::new(0.0, 0.0, 1.5);
+        assert!(embedded_pole_light(&fixture, source));
+        // A mast grows past the source, so the mesh's bounds still contain it: that must
+        // not turn the open air beside the head back into a shadowed cavity.
+        add_cube_at(
+            &mut fixture.meshes[0].0,
+            0.1,
+            false,
+            glam::Vec3::new(2.0, 0.0, 1.75),
+        );
+        assert!(embedded_pole_light(&fixture, source));
+        // A source the head shines towards is not shaded by it.
+        fixture.model.meshes[1].light_enh_2[0].dir = [0.0, 0.0, 1.0];
+        assert!(!embedded_pole_light(&fixture, source));
+        // A separate light metres above the head still casts the fixture's shadow.
+        fixture.model.meshes[1].light_enh_2[0].dir = [0.0, 0.0, -1.0];
+        assert!(!embedded_pole_light(
+            &fixture,
+            glam::Vec3::new(0.0, 0.0, 2.0)
+        ));
+        // An emitter outside the mesh does not make a source behind it the fixture's own.
+        fixture.model.meshes[1].light_enh_2[0].pos = [0.0, 0.0, 2.0];
+        assert!(!embedded_pole_light(
+            &fixture,
+            glam::Vec3::new(0.0, 0.0, 3.0)
+        ));
     }
 
     #[test]
@@ -1708,6 +1801,7 @@ mod hidden_script_tests {
             holes: Vec::new(),
             deform: None,
             collision: None,
+            collision_materials: Vec::new(),
             paint: false,
             camera: Default::default(),
             collision_shape: Default::default(),
@@ -1818,6 +1912,7 @@ mod script_lamp_tests {
             holes: Vec::new(),
             deform: None,
             collision: None,
+            collision_materials: Vec::new(),
             paint: false,
             camera: Default::default(),
             collision_shape: Default::default(),

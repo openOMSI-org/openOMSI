@@ -596,6 +596,65 @@ fn restarting_client_on_the_same_socket_invalidates_host_receive_state() {
 }
 
 #[test]
+fn a_new_host_welcome_clears_reused_ai_ids_and_snapshots() {
+    use crate::traffic_table::{
+        Kind, Row, TrafficId,
+        wire::{Packet, Spawn},
+    };
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 27015));
+    let mut client = LanSession::join_addr(vec![addr], None, "client", world("m")).unwrap();
+    let welcome = |client: &mut LanSession, session, secret| {
+        let msg = format!(
+            "WELCOME|{PROTOCOL}|2|{}|host|{}|2|{secret:032x}|{:016x}",
+            session_hex(session),
+            client.world.fields(),
+            client.nonce,
+        );
+        client.on_welcome(&msg.split('|').collect::<Vec<_>>(), addr);
+    };
+    let id = TrafficId::new(2, 1);
+    let packet = |x| Packet {
+        epoch: 1,
+        seq: 1,
+        snap: 1,
+        host_ms: 100,
+        spawns: vec![Spawn {
+            id,
+            look: 0,
+            kind: Kind::Bus,
+            row: Row::from_state([x, 0.0, 0.0], 0.0, 0.0, 0.0, 0.0, 0.0, 0, false, false, 0),
+        }],
+        ..Default::default()
+    };
+
+    welcome(&mut client, 1, 1);
+    client.traffic_client_mut().apply(packet(10.0), 1.0);
+    welcome(&mut client, 1, 1);
+    assert_eq!(client.host_generation(), 0);
+    assert!(client.traffic_client().get(id).is_some());
+
+    client.on_bye(&["BYE", "1"], addr, "BYE|1", &mut Vec::new());
+    welcome(&mut client, 2, 2);
+    assert!(client.connected);
+    assert_eq!(client.host_generation(), 1);
+    assert!(client.traffic_client().is_empty());
+    client.traffic_client_mut().apply(packet(30.0), 2.0);
+    assert_eq!(client.traffic_client().newest(id).unwrap().pos[0], 30.0);
+
+    // A delayed welcome from the stopped host must not replace the new state.
+    welcome(&mut client, 1, 1);
+    assert_eq!(client.session, 2);
+    assert_eq!(client.host_generation(), 1);
+    assert_eq!(client.traffic_client().newest(id).unwrap().pos[0], 30.0);
+
+    // The same handshake reset also applies when the host issues a new secret.
+    welcome(&mut client, 2, 3);
+    assert_eq!(client.host_generation(), 2);
+    assert!(client.traffic_client().is_empty());
+}
+
+#[test]
 fn each_host_owner_gets_its_own_identifier_of_the_machine() {
     let machine = "0123456789abcdef0123456789abcdef";
     let mut ids = Vec::new();
