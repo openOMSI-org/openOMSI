@@ -867,8 +867,10 @@ variable:
 
 - In a `[matl_item]` it glows at full strength while the variable is on, by day as well
   (warning lamps, dashboard screens).
-- On a vehicle's plain `[matl]` it glows whenever the mesh is drawn, by day as well (dashboard
-  lamps switched by `[visible]`).
+- On a vehicle's plain `[matl]` it fades in with the night, as a scenery object's does. A
+  dashboard lamp whose mesh is switched by `[visible]`, or a slot fed by the script's text or
+  texture, glows whenever it is drawn, by day as well (#497); a static instrument panel stays
+  dark by day (#3195).
 - On a scenery object it fades in with the night. Street lights use `NightlightA`, bus panels
   `elec_busbar_main`.
 

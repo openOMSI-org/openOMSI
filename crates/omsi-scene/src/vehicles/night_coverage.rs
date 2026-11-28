@@ -41,6 +41,22 @@ pub(super) fn night_coverage(
         && script.is_none()
 }
 
+// A plain vehicle night map follows the night unless something switches the surface itself.
+// `[visible]` meshes (dashboard warning lamps, the stop-requested sign) and slots fed by a
+// script's text or texture are drawn only while their own switch is on: their night map is
+// their lit picture and glows by day as well (#497). A static instrument panel fades with the
+// night instead (#3195).
+pub(super) fn night_map_switched(
+    def: &MeshDef,
+    text_slot: Option<usize>,
+    script_slot: Option<usize>,
+) -> bool {
+    def.visible.is_some()
+        || def.visible_groups().next().is_some()
+        || text_slot.is_some()
+        || script_slot.is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,5 +228,32 @@ mod tests {
         );
         assert_eq!(load_night(&[], &subst, load).or(base), base);
         assert_eq!(load_night(&[&item], &subst, |_| None).or(base), base);
+    }
+
+    #[test]
+    fn only_switched_meshes_glow_by_day() {
+        let plain = MeshDef::default();
+        let empty_visible_group = MeshDef {
+            visible_any: vec![Vec::new()],
+            ..Default::default()
+        };
+        let visible_mesh = MeshDef {
+            visible: Some(("cockpit_light".into(), 1.0)),
+            ..Default::default()
+        };
+        let visible_any_mesh = MeshDef {
+            visible_any: vec![vec![omsi_model::VisibleCond {
+                variable: "stop_requested".into(),
+                lo: 1.0,
+                ..Default::default()
+            }]],
+            ..Default::default()
+        };
+        assert!(!night_map_switched(&plain, None, None));
+        assert!(!night_map_switched(&empty_visible_group, None, None));
+        assert!(night_map_switched(&visible_mesh, None, None));
+        assert!(night_map_switched(&visible_any_mesh, None, None));
+        assert!(night_map_switched(&plain, Some(0), None));
+        assert!(night_map_switched(&plain, None, Some(0)));
     }
 }
