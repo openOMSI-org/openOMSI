@@ -759,6 +759,7 @@ fn new_player(
         give_ticket: false,
         give_change: false,
         door_buttons: hashbrown::HashMap::new(),
+        pending_trigger_frames: hashbrown::HashSet::new(),
         cam_before_special: None,
         held_keys: Default::default(),
         held_repeat: Default::default(),
