@@ -4,6 +4,13 @@
 use super::shadow::{LampSigs, lamp_item_hash};
 use super::*;
 
+/// Solid casters are left out of the near and close maps when the window traces its own
+/// shadows instead. Mirror frames read the maps rather than tracing, so keep those casters
+/// in the maps whenever the mirrors are set to show shadows.
+fn traced_away_from_maps(rt_frame: bool, moon_shadows: bool, mirror_shadow_maps: bool) -> bool {
+    rt_frame && !moon_shadows && !mirror_shadow_maps
+}
+
 /// The shadow cascades of a frame (see `Renderer::plan_shadow_cache`).
 pub(crate) struct ShadowPlan {
     pub moon_shadows: bool,
@@ -266,6 +273,7 @@ impl Renderer {
         list: &mut Vec<u32>,
     ) -> [Vec<Batch>; SHADOW_LISTS] {
         let (camera, cam_rel, rt_frame) = (f.camera, f.cam_rel, f.rt_frame);
+        let mirror_shadow_maps = self.options.mirror_shadows || self.options.mirror_enhanced;
         let (moon_shadows, draw_shadows, redraw_near, redraw_far) = (
             sh.moon_shadows,
             sh.draw_shadows,
@@ -443,8 +451,11 @@ impl Renderer {
                     }
                     // (Enhanced+: what is solid casts its shadow by the traced rays; the
                     // close and near maps keep the cut-out leaves and fences, whose texels
-                    // the rays cannot see)
-                    if rt_frame && kind == PIPE_OPAQUE && !moon_shadows {
+                    // the rays cannot see. Mirrors read the maps instead of tracing, so
+                    // they still need the solid casters there.)
+                    if traced_away_from_maps(rt_frame, moon_shadows, mirror_shadow_maps)
+                        && kind == PIPE_OPAQUE
+                    {
                         kind = PIPE_KINDS;
                     }
                     ranges.push((kind, ri as u32, *slot, mat_id, mat.look));
@@ -656,6 +667,16 @@ mod tests {
             far += p.far_due() as u32;
         }
         assert_eq!((near, far), (200, 100));
+    }
+
+    /// A mirror reads the window's maps, so solid casters stay in the near and close
+    /// cascades rather than being traced away for the window alone.
+    #[test]
+    fn mirror_shadows_keep_opaque_casters_in_the_maps() {
+        assert!(traced_away_from_maps(true, false, false));
+        assert!(!traced_away_from_maps(true, false, true));
+        assert!(!traced_away_from_maps(true, true, false));
+        assert!(!traced_away_from_maps(false, false, false));
     }
 
     /// A still point keeps its place among the map's texels while the camera moves by

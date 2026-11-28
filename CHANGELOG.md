@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **Enhanced+ mirrors show the shadows of vehicles and solid scenery again**: solid casters are
+  no longer left out of the near and close shadow maps when mirror shadows are enabled, because
+  mirror pictures read those maps instead of tracing their own rays
+  ([#3157](https://github.com/openOMSI-org/openOMSI/issues/3157)).
 - **DLSS and AMD FSR 3 no longer shimmer on what stands still**: the motion of the last frame
   is taken without the depth plane each part carries since 0.3.57, so a still picture has no
   motion again ([#4221](https://github.com/openOMSI-org/openOMSI/issues/4221)).
