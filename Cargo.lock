@@ -4360,6 +4360,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "libc",
+ "mlua",
  "omsi-cfg",
  "omsi-content",
  "omsi-map",

@@ -291,6 +291,19 @@ fn read_json(p: &Path) -> Option<Value> {
     serde_json::from_str(&std::fs::read_to_string(p).ok()?).ok()
 }
 
+/// The settings' description: what the game wrote after running the plugin, or - before that -
+/// the declaration read from its Lua source (#4292).
+fn schema_for(f: &Found) -> Option<Value> {
+    f.data_dir
+        .as_ref()
+        .and_then(|d| read_json(&d.join(SCHEMA_FILE)))
+        .or_else(|| {
+            (f.kind == "lua")
+                .then(|| crate::plugin_settings::from_file(&f.path))
+                .flatten()
+        })
+}
+
 /// The list for the launcher's page: every plugin with `{name, title, kind, path, enabled,
 /// state, error, settings, values}`; `state` is what the last session made of it
 /// (`loaded`, `failed`, `switched_off`, `off`, or null when it has not run since).
@@ -312,10 +325,7 @@ pub fn status_in(data: &Path, dirs: &[PathBuf]) -> Value {
     let mut list = Vec::new();
     for f in find_all(dirs) {
         let last = seen(&f.name, f.kind);
-        let schema = f
-            .data_dir
-            .as_ref()
-            .and_then(|d| read_json(&d.join(SCHEMA_FILE)));
+        let schema = schema_for(&f);
         let values = f
             .data_dir
             .as_ref()
@@ -380,9 +390,9 @@ pub fn save_settings_in(dirs: &[PathBuf], name: &str, values: &Value) -> Result<
         .ok_or_else(|| anyhow!("no plugin {name}"))?;
     let data = f
         .data_dir
+        .clone()
         .ok_or_else(|| anyhow!("{name} has no settings"))?;
-    let schema =
-        read_json(&data.join(SCHEMA_FILE)).ok_or_else(|| anyhow!("{name} has no settings"))?;
+    let schema = schema_for(&f).ok_or_else(|| anyhow!("{name} has no settings"))?;
     let mut saved: Map<String, Value> = read_json(&data.join(SETTINGS_FILE))
         .and_then(|v| v.as_object().cloned())
         .unwrap_or_default();
@@ -525,6 +535,56 @@ mod tests {
         let saved = read_json(&plugins.join("cruise.data/settings.json")).unwrap();
         assert_eq!(saved, json!({"step": 8.0}));
         assert!(save_settings_in(&dirs, "old", &json!({})).is_err());
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    #[test]
+    fn a_fresh_plugin_shows_and_saves_its_settings_before_the_first_game() {
+        let data = tmp("data-fresh");
+        let plugins = tmp("plugins-fresh");
+        std::fs::write(
+            plugins.join("warning.lua"),
+            r#"local s = omsi.plugin.settings({
+  { key = "limit", type = "number", label = "Warn above", default = 50, min = 20, max = 120, step = 5 },
+}, "Speed warning")"#,
+        )
+        .unwrap();
+        let dirs = vec![plugins.clone()];
+        let s = status_in(&data, &dirs);
+        assert_eq!(s["plugins"][0]["title"], "Speed warning");
+        assert_eq!(s["plugins"][0]["settings"][0]["key"], "limit");
+        assert!(!s["plugins"][0]["settings"].is_null());
+        save_settings_in(&dirs, "warning.lua", &json!({"limit": 80})).unwrap();
+        assert_eq!(
+            read_json(&plugins.join("warning.data/settings.json")),
+            Some(json!({"limit": 80.0}))
+        );
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    #[test]
+    fn a_fresh_plugin_with_a_local_alias_shows_and_saves_its_settings() {
+        let data = tmp("data-fresh-alias");
+        let plugins = tmp("plugins-fresh-alias");
+        std::fs::write(
+            plugins.join("warning.lua"),
+            r#"local plugin = omsi.plugin
+local s = plugin.settings({
+  { key = "limit", type = "number", label = "Warn above", default = 50, min = 20, max = 120, step = 5 },
+}, "Speed warning")"#,
+        )
+        .unwrap();
+        let dirs = vec![plugins.clone()];
+        let s = status_in(&data, &dirs);
+        assert_eq!(s["plugins"][0]["title"], "Speed warning");
+        assert_eq!(s["plugins"][0]["settings"][0]["key"], "limit");
+        save_settings_in(&dirs, "warning.lua", &json!({"limit": 80})).unwrap();
+        assert_eq!(
+            read_json(&plugins.join("warning.data/settings.json")),
+            Some(json!({"limit": 80.0}))
+        );
         let _ = std::fs::remove_dir_all(&data);
         let _ = std::fs::remove_dir_all(&plugins);
     }
