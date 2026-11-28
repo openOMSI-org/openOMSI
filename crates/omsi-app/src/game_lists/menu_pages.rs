@@ -1154,9 +1154,6 @@ fn sectioned_rows(
 mod pause_weather_tests {
     use super::*;
 
-    mod vehicle;
-    use vehicle::vehicle_pages;
-
     #[test]
     fn pause_weather_merges_temperature_humidity_and_wind_without_losing_commands() {
         let weather = vec![button("Preset", "", "", "weather")];
