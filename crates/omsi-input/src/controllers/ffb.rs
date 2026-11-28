@@ -260,31 +260,56 @@ impl Controllers {
     /// The wheels' jolt this frame (None: not driving, the travel is settled anew on return).
     pub fn wheel_bump(
         &mut self,
-        body: Option<&omsi_sim::rigid::RigidBody>,
+        vehicle: Option<&omsi_sim::vehicle::VehicleInstance>,
         kmh: f32,
         dt: f32,
     ) -> f32 {
-        let Some(body) = body else {
+        let Some(vehicle) = vehicle else {
             self.settled.clear();
             return 0.0;
         };
-        let travel: Vec<f32> = body.wheels.iter().map(|w| w.compression).collect();
-        let ripples = settle(&mut self.settled, &travel, dt);
-        body.wheels
-            .iter()
-            .zip(ripples)
-            .enumerate()
-            .map(|(i, (w, ripple))| {
-                let impact_speed = body
-                    .wheel_impacts
-                    .iter()
-                    .filter(|hit| hit.obstacle == i)
-                    .map(|hit| hit.speed)
-                    .fold(0.0, f32::max);
-                bump_strength(ripple, impact_speed, kmh) * if w.steered { 1.0 } else { 0.55 }
-            })
-            .fold(0.0, f32::max)
+        let mut travel = Vec::new();
+        if let Some(body) = vehicle.rigid.as_ref() {
+            travel.extend(body.wheels.iter().map(|w| w.compression));
+        }
+        // A coupled axle is kinematic: its suspension travel is written to the leading
+        // vehicle's `Axle_Suspension_*` variables, not to a `RigidBody` wheel (#3745).
+        vehicle.trailer_bump_travel(&mut travel);
+        bump_from_travel(&mut self.settled, vehicle.rigid.as_ref(), travel, kmh, dt)
     }
+}
+
+/// One frame's jolt from the compression samples, lead wheels first and coupled axles after
+/// them. A steered wheel reaches the linkage directly; the others, including every coupled
+/// axle (which has no impact records), reach it through the body at a lower strength.
+fn bump_from_travel(
+    settled: &mut Vec<f32>,
+    body: Option<&omsi_sim::rigid::RigidBody>,
+    travel: Vec<f32>,
+    kmh: f32,
+    dt: f32,
+) -> f32 {
+    let lead = body.map_or(0, |b| b.wheels.len());
+    let ripples = settle(settled, &travel, dt);
+    ripples
+        .into_iter()
+        .enumerate()
+        .map(|(i, ripple)| {
+            let (weight, impact) = match body.filter(|_| i < lead) {
+                Some(body) => {
+                    let impact = body
+                        .wheel_impacts
+                        .iter()
+                        .filter(|hit| hit.obstacle == i)
+                        .map(|hit| hit.speed)
+                        .fold(0.0, f32::max);
+                    (if body.wheels[i].steered { 1.0 } else { 0.55 }, impact)
+                }
+                None => (0.55, 0.0),
+            };
+            bump_strength(ripple, impact, kmh) * weight
+        })
+        .fold(0.0, f32::max)
 }
 
 /// How far each wheel's travel leaves where it settled (a 1-2 cm road seam is no jolt).

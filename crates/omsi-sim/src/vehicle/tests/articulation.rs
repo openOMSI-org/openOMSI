@@ -1122,4 +1122,11 @@ fn a_two_axle_rear_section_springs_on_both_axles() {
         lifted > 0.02,
         "the rear section ignored the rise under its front axle: {lifted:.3} m"
     );
+    let mut travel = Vec::new();
+    v.trailer_bump_travel(&mut travel);
+    assert!(travel.len() >= 2, "the rear axles' travel: {travel:?}");
+    assert!(
+        travel.iter().any(|&c| c > 0.01),
+        "the raised coupled axle's compression is not available to feedback: {travel:?}"
+    );
 }

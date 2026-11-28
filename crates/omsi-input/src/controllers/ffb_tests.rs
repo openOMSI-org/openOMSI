@@ -326,6 +326,29 @@ fn wheel_bumps_need_motion_and_a_suspension_or_impact_event() {
 }
 
 #[test]
+fn a_coupled_axle_bump_reaches_the_wheel_without_a_rigid_wheel() {
+    let dt = 1.0 / 60.0;
+    let mut settled = Vec::new();
+    // The first frame takes the coupled axle's travel as settled, as on attaching a section.
+    assert_eq!(
+        super::bump_from_travel(&mut settled, None, vec![0.02], 30.0, dt),
+        0.0
+    );
+    let jolt = super::bump_from_travel(&mut settled, None, vec![0.12], 30.0, dt);
+    assert!(jolt > 0.4, "a 10 cm rise under the third axle: {jolt}");
+    let after = super::bump_from_travel(&mut settled, None, vec![0.12], 30.0, dt);
+    assert!(
+        after < jolt,
+        "the change, not the travel itself, is the jolt"
+    );
+    // A second axle changes the sample count, so its own travel is settled anew.
+    let attached = super::bump_from_travel(&mut settled, None, vec![0.12, 0.12], 30.0, dt);
+    assert_eq!(attached, 0.0, "{attached}");
+    let both = super::bump_from_travel(&mut settled, None, vec![0.12, 0.02], 30.0, dt);
+    assert!(both > 0.4, "a rise under either coupled axle: {both}");
+}
+
+#[test]
 fn settling_ignores_seams_and_keeps_slow_motion_as_it_was() {
     let dt = 1.0 / 60.0;
     let mut settled = Vec::new();
