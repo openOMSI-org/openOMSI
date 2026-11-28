@@ -165,12 +165,24 @@ impl TrafficSim {
     pub(super) fn set_visibility(&mut self) {
         if let Some(v) = self.viewer {
             for c in &mut self.cars {
+                // A train is drawn as one vehicle: its coupled cars only come along when the
+                // lead car's `ai_visuals` is set. Decide from every part of the consist, so a
+                // carriage in view keeps the whole train on screen even when the lead car has
+                // gone round a bend and out of the picture (#3939).
+                let seen = |p: DVec3, r: f64| {
+                    let d = (p - v.pos).length();
+                    d < UNSEEN_NEAR
+                        || (d < MIRROR_REACH && (p - v.pos).dot(v.forward) < 0.0)
+                        || v.frames(p, r)
+                };
                 let p = c.vehicle.position;
                 let r = (c.state.front + c.state.rear).abs().max(4.0) as f64 + 2.0;
                 let d = (p - v.pos).length();
-                c.vehicle.ai_visuals = d < UNSEEN_NEAR
-                    || (d < MIRROR_REACH && (p - v.pos).dot(v.forward) < 0.0)
-                    || v.frames(p, r);
+                c.vehicle.ai_visuals = seen(p, r)
+                    || c.vehicle.trailers.iter().any(|t| {
+                        let (front, rear, _) = super::model::extents(&t.ty, t.length);
+                        seen(t.position, (front + rear).abs().max(4.0) as f64 + 2.0)
+                    });
                 // (a car nobody sees, well out of earshot of the mirrors: its script runs a
                 // few times a second, not every frame - each car at its own beat, so the
                 // runs do not all fall in one frame; a bus keeps its stop handshake)

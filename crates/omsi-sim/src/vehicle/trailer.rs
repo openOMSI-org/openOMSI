@@ -65,8 +65,8 @@ pub struct TrailerPart {
     pub heading: f64,
     /// World position of the rear pivot (the trailer axle) from the last frame.
     pub(super) pivot: Option<DVec3>,
-    /// Coupling → rear axle distance.
-    pub(super) length: f32,
+    /// Coupling → rear axle distance (also used to bound a coupled part for visibility).
+    pub(crate) length: f32,
     pub(super) ground_arm: f32,
     pub(super) coupling_front: Vec3,
     pub(super) coupling_back: Vec3,
