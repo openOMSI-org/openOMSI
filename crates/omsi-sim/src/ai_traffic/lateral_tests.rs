@@ -1118,6 +1118,24 @@ fn a_car_behind_the_camera_is_drawn_as_far_as_the_mirrors_see() {
 }
 
 #[test]
+fn a_train_is_drawn_when_its_carriage_is_in_view_and_its_lead_is_not() {
+    let f = Fixture::new();
+    let mut t = traffic(&f, net_of(vec![street(0.0, -400.0, 0.0, 800.0)], &[]));
+    let id = add_car(&mut t, &f, 0, 250.0, 0xd11, Some(0.0));
+    let c = t.cars.iter_mut().find(|c| c.id == id).unwrap();
+    c.vehicle.attach_trailer(f.ty.clone());
+    // Round a bend: the lead car is beside the camera, while a carriage is ahead of it.
+    c.vehicle.position = DVec3::new(0.0, -300.0, 0.0);
+    c.vehicle.trailers[0].position = DVec3::new(150.0, 0.0, 0.0);
+    t.viewer = Some(viewer::Viewer::lan_player(DVec3::ZERO, 90.0));
+    t.set_visibility();
+    assert!(
+        car(&t, id).unwrap().vehicle.ai_visuals,
+        "the carriage in the picture keeps its whole train drawn"
+    );
+}
+
+#[test]
 fn a_bus_whose_stop_lies_near_its_lane_end_still_gets_onto_its_route() {
     let f = Fixture::new();
     let lanes = vec![
