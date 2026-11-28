@@ -3308,6 +3308,12 @@
 "straight on": "egyenesen"
 "to the left": "balra"
 "to the right": "jobbra"
+"Call the police": "Rendőrség hívása"
+"No accident to report": "Nincs bejelentendő baleset"
+"Stop and switch on the hazard lights first": "Először álljon meg, és kapcsolja be a vészvillogót"
+"The police have taken up the accident": "A rendőrség felvette a balesetet"
+"You left the scene of the accident without calling the police": "Ön elhagyta a baleset helyszínét anélkül, hogy kihívta volna a rendőrséget"
+"Accident! Stop, switch on the hazard lights and call the police": "Baleset! Álljon meg, kapcsolja be a vészvillogót, és hívja a rendőrséget"
 "Lights on in a downpour": "Világítás felhőszakadáskor"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Nappal, erős esőben néhány ház ablakában ég a villany, mert elég sötét lesz ahhoz, hogy felkapcsolják"
 
@@ -3381,3 +3387,6 @@
 "Only for due trips": "Csak esedékes járatokhoz"
 "Passengers wait for open doors": "Az utasok nyitott ajtóra várnak"
 "IBIS stop follows the duty": "Az IBIS megálló a szolgálatot követi"
+
+"Traction": "Hajtás"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Mennyire hangos a vezetett busz motorja (villamosok és trolibuszok esetén is)"

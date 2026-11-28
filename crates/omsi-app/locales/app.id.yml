@@ -3015,6 +3015,12 @@
 "straight on": "lurus"
 "to the left": "ke kiri"
 "to the right": "ke kanan"
+"Call the police": "Panggil polisi"
+"No accident to report": "Tidak ada kecelakaan untuk dilaporkan"
+"Stop and switch on the hazard lights first": "Berhenti dulu dan nyalakan lampu hazard"
+"The police have taken up the accident": "Polisi telah menangani kecelakaan"
+"You left the scene of the accident without calling the police": "Anda meninggalkan lokasi kecelakaan tanpa memanggil polisi"
+"Accident! Stop, switch on the hazard lights and call the police": "Kecelakaan! Berhenti, nyalakan lampu hazard, dan panggil polisi"
 "Lights on in a downpour": "Lampu menyala saat hujan deras"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Pada siang hari saat hujan lebat, beberapa jendela rumah menyala karena cukup gelap untuk menyalakan lampu"
 
@@ -3088,3 +3094,6 @@
 "Only for due trips": "Hanya untuk perjalanan terjadwal"
 "Passengers wait for open doors": "Penumpang menunggu pintu terbuka"
 "IBIS stop follows the duty": "Halte IBIS mengikuti dinas"
+
+"Traction": "Traksi"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Seberapa keras mesin bus yang kamu kendarai (juga trem dan trolleybus)"

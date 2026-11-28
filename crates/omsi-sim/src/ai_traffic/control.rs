@@ -278,6 +278,20 @@ impl TrafficSim {
     /// Deliver the player's moving-vehicle contacts to the AI cars so their collision
     /// scripts and per-instance damage visuals respond to the same impact.
     pub fn player_impacts(&mut self, impacts: Vec<crate::vehicle::DynamicImpact>) {
+        if self.mirror {
+            self.accident.for_host(&impacts);
+        }
+        self.player_impacts_by(impacts, accident::LOCAL, 0);
+    }
+
+    /// The hits of `player` (`accident::LOCAL`, or a LAN client's session id, with the
+    /// number the client gave them).
+    pub fn player_impacts_by(
+        &mut self,
+        impacts: Vec<crate::vehicle::DynamicImpact>,
+        player: u32,
+        seq: u32,
+    ) {
         for impact in impacts {
             let Some(id) = impact
                 .obstacle_id
@@ -290,11 +304,27 @@ impl TrafficSim {
             let Some(car) = self.cars.iter_mut().find(|car| car.id == id) else {
                 continue;
             };
-            car.body.collision_impulse(
+            if car.body.is_loose() {
+                self.accident.hit_again(car.id, player, seq);
+            } else if !self.mirror
+                && !car.vehicle.ty.def.fixed
+                && car.body.kind == crate::ai_motion::MotionKind::Road
+                && self.accident.may_knock(player, seq)
+            {
+                car.body.set_loose(true);
+                self.accident.knock(car.id, player, seq);
+            }
+            let dv = car.body.collision_impulse(
                 impact.push.truncate(),
                 impact.speed,
                 impact.mass,
                 car.vehicle.physics.mass_kg,
+            );
+            car.body.collision_spin(
+                (impact.point - car.vehicle.position).truncate(),
+                impact.push.truncate(),
+                dv,
+                2.0 * car.half_width,
             );
             let inverse = car.vehicle.body_rotation().inverse();
             let point = inverse.transform_point3((impact.point - car.vehicle.position).as_vec3());

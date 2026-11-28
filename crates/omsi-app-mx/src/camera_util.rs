@@ -209,9 +209,18 @@ pub(crate) enum MirrorPick<'a> {
     Only(&'a [usize]),
 }
 
+/// What one redraw chose and drew. The redraw budget counts the mirrors in the picture; a
+/// mirror showing others takes their pictures with it, and all of those cost a draw (#4341).
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct MirrorDraw {
+    /// Mirrors in the picture, the ones the refresh rate is shared between.
+    pub(crate) seen: usize,
+    /// Mirror pictures actually retaken by this call.
+    pub(crate) drawn: usize,
+}
+
 /// Draw the views of the vehicle's `[add_camera_reflexion]` cameras into its mirror textures,
-/// those `pick` takes; the number of mirrors it chose among (those in the picture, or the
-/// list `Only` gives).
+/// those `pick` takes; the mirrors in the picture and the pictures actually redrawn.
 pub(crate) fn render_mirrors(
     renderer: &mut Renderer,
     scene: &mut Scene,
@@ -221,7 +230,7 @@ pub(crate) fn render_mirrors(
     pick: MirrorPick,
     view: Option<(Camera, f32)>,
     on_screen: &[usize],
-) -> usize {
+) -> MirrorDraw {
     // (aimed from the eye of the view being drawn, as Omsi.exe aims them - from the
     // driver's without one)
     let eye = view
@@ -260,7 +269,7 @@ pub(crate) fn render_mirrors(
         }
     }
     if cams.is_empty() {
-        return 0;
+        return MirrorDraw::default();
     }
     let textures = world.mirror_textures.lock().clone();
     // small images: skip objects that would be tiny anyway (the original's
@@ -336,7 +345,7 @@ pub(crate) fn render_mirrors(
             .collect(),
     };
     if seen.is_empty() {
-        return 0;
+        return MirrorDraw::default();
     }
     // A mirror the picture of another holds is drawn too, and before it: the interior mirror
     // over the doors reflects the door mirrors, and looking into it left them standing still
@@ -354,19 +363,15 @@ pub(crate) fn render_mirrors(
     };
     // A turn that takes a mirror showing others takes them with it: their pictures are drawn
     // first, so that the mirror shows the doors as they are now and not a turn before (#3043).
+    // Only a mirror in the picture takes a turn: one drawn for another is not drawn twice per
+    // cycle while the mirror that shows it waits (#4341).
     let draw: Vec<usize> = match pick {
-        MirrorPick::Turn(k, _) => {
-            let p = plan[k % plan.len().max(1)];
-            let mut v: Vec<usize> = plan
-                .iter()
-                .copied()
-                .filter(|&i| i != p && in_view(i, &(views[p], MIRROR_ASPECT)))
-                .collect();
-            v.push(p);
-            v
-        }
+        MirrorPick::Turn(k, _) => mirror_turn_plan(&seen, &plan, k, |p, i| {
+            in_view(i, &(views[p], MIRROR_ASPECT))
+        }),
         _ => plan.clone(),
     };
+    let mut drawn = 0;
     for &i in &draw {
         let (c, at) = &cams[i];
         let Some(Some(tex)) = textures.get(i) else {
@@ -381,14 +386,18 @@ pub(crate) fn render_mirrors(
                 eye.z,
                 pitch.clamp(-89.0, 89.0),
                 c.fov,
-                plan.len(),
+                draw.len(),
                 seen.len(),
                 cams.len()
             );
         }
         renderer.render_to_texture(scene, *tex, &views[i], &lighting, MIRROR_ASPECT);
+        drawn += 1;
     }
-    plan.len()
+    MirrorDraw {
+        seen: seen.len(),
+        drawn,
+    }
 }
 
 /// A mirror's camera as it is drawn: the reflection camera's eye and aim (`mirror_view_in`),

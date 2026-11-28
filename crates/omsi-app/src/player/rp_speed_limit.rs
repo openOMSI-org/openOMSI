@@ -32,4 +32,3 @@ mod rp_governor_tests {
         assert!(downhill.1 > 0.0 && downhill.1 <= 0.30);
     }
 }
-

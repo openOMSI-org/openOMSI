@@ -3014,6 +3014,12 @@
 "straight on": "diretso"
 "to the left": "pakaliwa"
 "to the right": "pakanan"
+"Call the police": "Tumawag ng pulis"
+"No accident to report": "Walang aksidenteng iuulat"
+"Stop and switch on the hazard lights first": "Huminto muna at buksan ang hazard lights"
+"The police have taken up the accident": "Naitala na ng pulis ang aksidente"
+"You left the scene of the accident without calling the police": "Iniwan mo ang lugar ng aksidente nang hindi tumatawag ng pulis"
+"Accident! Stop, switch on the hazard lights and call the police": "Aksidente! Huminto, buksan ang hazard lights at tumawag ng pulis"
 "Lights on in a downpour": "Ilaw sa malakas na ulan"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Sa araw kapag malakas ang ulan, may mga bintana ng bahay na may ilaw, dahil sapat na ang dilim para magbukas ng ilaw"
 
@@ -3087,3 +3093,6 @@
 "Only for due trips": "Para lamang sa mga nakatakdang biyahe"
 "Passengers wait for open doors": "Naghihintay ang pasahero ng bukas na pinto"
 "IBIS stop follows the duty": "Sinusunod ng hintuan ng IBIS ang duty"
+
+"Traction": "Traksyon"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Gaano kalakas ang tunog ng makina ng bus na hinihimok mo (pati ang mga tram at trolleybus)"

@@ -3679,6 +3679,12 @@
 "straight on": "rechtdoor"
 "to the left": "naar links"
 "to the right": "naar rechts"
+"Call the police": "Politie bellen"
+"No accident to report": "Geen ongeval te melden"
+"Stop and switch on the hazard lights first": "Stop eerst en zet de alarmlichten aan"
+"The police have taken up the accident": "De politie heeft het ongeval opgenomen"
+"You left the scene of the accident without calling the police": "U hebt de plaats van het ongeval verlaten zonder de politie te bellen"
+"Accident! Stop, switch on the hazard lights and call the police": "Ongeval! Stop, zet de alarmlichten aan en bel de politie"
 "Lights on in a downpour": "Licht aan bij een wolkbreuk"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Overdag zijn bij zware regen sommige ramen van huizen verlicht, omdat het donker genoeg wordt om het licht aan te doen"
 
@@ -3752,3 +3758,6 @@
 "Only for due trips": "Alleen voor geplande ritten"
 "Passengers wait for open doors": "Passagiers wachten op open deuren"
 "IBIS stop follows the duty": "IBIS-halte volgt de dienst"
+
+"Traction": "Tractie"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Hoe luid de motor van de bus die je rijdt is (ook bij trams en trolleybussen)"

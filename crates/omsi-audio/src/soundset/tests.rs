@@ -15,6 +15,7 @@ fn ctx(view: i32, cab: bool) -> Ctx {
         amount: if view == 2 { 1.0 } else { 0.0 },
         cab,
         master: 1.0,
+        traction: 1.0,
         doppler: false,
         listener: Vec3::ZERO,
         now: std::time::Instant::now(),
@@ -398,6 +399,7 @@ fn a_frame_reads_each_variable_once() {
     let mut set = SoundSet {
         sounds,
         master: 1.0,
+        traction: 1.0,
         dir: Default::default(),
         inside: false,
         amount: 0.0,
@@ -459,6 +461,7 @@ fn a_triggered_sound_reads_its_curve_when_it_fires() {
     let set = SoundSet {
         sounds: vec![RuntimeSound::new(hit.clone(), None)],
         master: 1.0,
+        traction: 1.0,
         dir: Default::default(),
         inside: true,
         amount: 1.0,
@@ -496,6 +499,7 @@ fn articulated_parts_use_trigger_time_curves_and_keep_them() {
     let make = || SoundSet {
         sounds: vec![RuntimeSound::new(entry.clone(), Some(clip.clone()))],
         master: 1.0,
+        traction: 1.0,
         dir: Default::default(),
         inside: false,
         amount: 0.0,
@@ -586,4 +590,105 @@ fn a_file_trigger_writes_what_a_file_name_cannot_have_as_percent() {
     // (the name as the script wrote it: a folder "Falkenseer Ch" that is not there)
     assert!(!omsi_cfg::resolve_path(&sound, file).is_file());
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The traction slider takes the motor's loops and nothing else: a file that marks them
+/// with `[traction]` (#3336) and, without any mark, the loops whose name says what they
+/// are; the door hit and the indicator stay as they were.
+#[test]
+fn the_traction_gain_takes_the_motor_and_nothing_else() {
+    let _g = globals();
+    let engine = AudioEngine::capture(48_000);
+    let clip = Arc::new(Clip {
+        sample_rate: 48_000,
+        channels: 1,
+        samples: vec![1000; 4800],
+    });
+    let mut motor = SoundEntry {
+        file: "engine.wav".into(),
+        volume: 1.0,
+        ..Default::default()
+    };
+    motor.traction = true;
+    let door = SoundEntry {
+        file: "door.wav".into(),
+        volume: 1.0,
+        ..Default::default()
+    };
+    let sounds = vec![
+        RuntimeSound::new(motor, Some(clip.clone())),
+        RuntimeSound::new(door, Some(clip.clone())),
+    ];
+    let mut set = SoundSet {
+        sounds,
+        master: 1.0,
+        traction: 1.0,
+        dir: Default::default(),
+        inside: false,
+        amount: 0.0,
+        ai: false,
+        scenery: false,
+        listener_vehicle: false,
+        muffled: false,
+        parts: Vec::new(),
+        vars: None,
+        pack: Default::default(),
+    };
+    assert!(
+        set.sounds[0].traction && !set.sounds[1].traction,
+        "the mark, and only the mark"
+    );
+    set.set_traction_gain(0.5);
+    set.update(&engine, &|_| Some(1.0), &Mat4::IDENTITY, &[]);
+    let gains: Vec<f32> = set
+        .sounds
+        .iter()
+        .filter_map(|s| engine.voice_state(s.voice?).map(|v| v.1))
+        .collect();
+    assert_eq!(gains.len(), 2);
+    assert!(
+        (gains[0] - 0.5).abs() < 0.01,
+        "the motor at half: {gains:?}"
+    );
+    assert!(gains[1] > 0.9, "the door untouched: {gains:?}");
+    // (a file with no mark at all: the name decides)
+    let plain = SoundEntry {
+        file: "Traction_loop.wav".into(),
+        volume: 1.0,
+        ..Default::default()
+    };
+    let named = SoundEntry {
+        file: "door.wav".into(),
+        volume: 1.0,
+        ..Default::default()
+    };
+    let mut guessed = SoundSet {
+        sounds: vec![
+            RuntimeSound::new(plain, None),
+            RuntimeSound::new(named, None),
+        ],
+        master: 1.0,
+        traction: 1.0,
+        dir: Default::default(),
+        inside: false,
+        amount: 0.0,
+        ai: false,
+        scenery: false,
+        listener_vehicle: false,
+        muffled: false,
+        parts: Vec::new(),
+        vars: None,
+        pack: Default::default(),
+    };
+    let marked_none = !guessed.sounds.iter().any(|s| s.def.traction);
+    assert!(marked_none);
+    if !guessed.sounds.iter().any(|s| s.traction) {
+        for s in &mut guessed.sounds {
+            s.traction = super::looks_like_traction(&s.def.file);
+        }
+    }
+    assert!(
+        guessed.sounds[0].traction && !guessed.sounds[1].traction,
+        "guessed by the file name"
+    );
 }

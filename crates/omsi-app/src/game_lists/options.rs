@@ -101,6 +101,7 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "voice_volume" => s.voice_volume,
         "voice_mic_gain" => s.voice_mic_gain,
         "vol_scenery" => s.vol_scenery,
+        "vol_traction" => s.vol_traction,
         "vol_ambient" => s.vol_ambient,
         "radio_speaker" | "radio_hiss" | "radio_dropouts" => {
             *crate::radio::fx_setting(&mut s.radio_fx.clone(), verb).1
@@ -374,6 +375,15 @@ pub(super) fn option_set(
             app.settings.vol_scenery = (v * 100.0).round() / 100.0;
             Some(("vol_scenery", app.settings.vol_scenery.to_string()))
         }
+        "vol_traction" => {
+            app.settings.vol_traction = (v * 100.0).round() / 100.0;
+            if let Some(p) = app.player.as_mut() {
+                if let Some(ss) = p.sounds.as_mut() {
+                    ss.set_traction_gain(app.settings.vol_traction);
+                }
+            }
+            Some(("vol_traction", app.settings.vol_traction.to_string()))
+        }
         "vol_ambient" => {
             app.settings.vol_ambient = (v * 100.0).round() / 100.0;
             Some(("vol_ambient", app.settings.vol_ambient.to_string()))
@@ -405,31 +415,7 @@ pub(super) fn option_set(
                 app.settings.triple.distance_mm.to_string(),
             ))
         }
-        "triple_bezel_mm" => {
-            app.settings.triple.bezel_mm = v.clamp(0.0, 100.0);
-            Some(("triple_bezel_mm", app.settings.triple.bezel_mm.to_string()))
-        }
-        "triple_left_angle_deg" => {
-            app.settings.triple.left_angle_deg = v.clamp(0.0, 90.0);
-            Some((
-                "triple_left_angle_deg",
-                app.settings.triple.left_angle_deg.to_string(),
-            ))
-        }
-        "triple_right_angle_deg" => {
-            app.settings.triple.right_angle_deg = v.clamp(0.0, 90.0);
-            Some((
-                "triple_right_angle_deg",
-                app.settings.triple.right_angle_deg.to_string(),
-            ))
-        }
-        "triple_eye_height_mm" => {
-            app.settings.triple.eye_height_mm = v.clamp(-500.0, 500.0);
-            Some((
-                "triple_eye_height_mm",
-                app.settings.triple.eye_height_mm.to_string(),
-            ))
-        }
+        k if k.starts_with("triple_") => set_triple_option(app, k, v),
         "fov" => Some(set_camera_fov(&mut app.settings, v)),
         "steer_look_angle" => {
             app.settings.steer_look_angle = v.round();
@@ -520,6 +506,37 @@ fn set_head_tracking_option(app: &mut App, verb: &str, v: f32) -> Option<(&'stat
     };
     *to = omsi_launcher_lib::head_tracking_value(key, Some(v as f64)) as f32;
     Some((key, to.to_string()))
+}
+
+fn set_triple_option(app: &mut App, key: &str, v: f32) -> Option<(&'static str, String)> {
+    let (key, field) = match key {
+        "triple_bezel_mm" => ("triple_bezel_mm", &mut app.settings.triple.bezel_mm),
+        "triple_left_angle_deg" => (
+            "triple_left_angle_deg",
+            &mut app.settings.triple.left_angle_deg,
+        ),
+        "triple_right_angle_deg" => (
+            "triple_right_angle_deg",
+            &mut app.settings.triple.right_angle_deg,
+        ),
+        "triple_eye_height_mm" => (
+            "triple_eye_height_mm",
+            &mut app.settings.triple.eye_height_mm,
+        ),
+        _ => return None,
+    };
+    let min = if key == "triple_eye_height_mm" {
+        -500.0
+    } else {
+        0.0
+    };
+    let max = match key {
+        "triple_bezel_mm" => 100.0,
+        "triple_eye_height_mm" => 500.0,
+        _ => 90.0,
+    };
+    *field = v.clamp(min, max);
+    Some((key, field.to_string()))
 }
 
 fn toggle_head_tracking_invert(

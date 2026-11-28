@@ -4467,6 +4467,12 @@
 "straight on": "pravo"
 "to the left": "levo"
 "to the right": "desno"
+"Call the police": "Pozovi policiju"
+"No accident to report": "Nema nezgode za prijavu"
+"Stop and switch on the hazard lights first": "Prvo stanite i uključite sva četiri žmigavca"
+"The police have taken up the accident": "Policija je zapisnički obradila nezgodu"
+"You left the scene of the accident without calling the police": "Napustili ste mesto nezgode bez pozivanja policije"
+"Accident! Stop, switch on the hazard lights and call the police": "Nezgoda! Stanite, uključite sva četiri žmigavca i pozovite policiju"
 "Lights on in a downpour": "Svetla tokom pljuska"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Danju, po jakoj kiši, u nekim prozorima kuća gori svetlo, jer postane dovoljno mračno da se upali"
 
@@ -4539,3 +4545,6 @@
 "Only for due trips": "Само за поласке по реду вожње"
 "Passengers wait for open doors": "Путници чекају отворена врата"
 "IBIS stop follows the duty": "IBIS станица прати службу"
+
+"Traction": "Тракција"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Колико је гласан мотор аутобуса којим возите (такође за трамваје и тролејбусе)"
