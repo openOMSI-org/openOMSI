@@ -293,61 +293,73 @@ impl MaterialRows {
 /// `@group(1)`) is set once a pass; a draw reads its material's row at its own offset
 /// (`RenderPass::set_buffer_offset`). The rows are kept on the CPU too, to fill a larger
 /// table when it grows.
+///
+/// The rows are deliberately *not* buffer views in mX's bindless heap: there is one view
+/// per row, the table grows in powers of two, and the device's buffer slots are finite
+/// (a few thousand on some drivers). With a large map and many AI vehicle types the
+/// table outgrew the heap and making the next table panicked (#4379). A dynamic uniform
+/// offset needs no heap slot at all, and keeps the material in constant memory.
 pub(crate) struct MaterialTable {
     pub(crate) buffer: mx::Buffer,
-    /// a view of each row in the heap: the scene shader reads its material there (`row`)
-    views: Vec<mx::BufferView>,
+    /// `@group(1)`: the table, read at each draw's dynamic offset
+    pub(crate) group: mx::BindGroup,
     pub(crate) rows: Arc<std::sync::Mutex<MaterialRows>>,
+    pub(crate) stride: u64,
     data: Vec<u8>,
 }
 
-/// A row of the material table: a `MaterialUniform` at an offset uniform buffers may start at.
+/// Minimum row stride of the material table; larger device `min_uniform_buffer_offset_alignment`
+/// values round up from this via `MaterialTable::row_stride_for`.
 pub(crate) const MATERIAL_ROW_BYTES: u64 = 256;
 
 impl MaterialTable {
+    pub(crate) fn row_stride_for(min_alignment: u64) -> u64 {
+        let min_bytes = (std::mem::size_of::<MaterialUniform>() as u64).max(MATERIAL_ROW_BYTES);
+        let align = min_alignment.max(1);
+        min_bytes.div_ceil(align) * align
+    }
+
     pub(crate) fn new(device: &mx::Device, rows: u64) -> MaterialTable {
-        assert!(std::mem::size_of::<MaterialUniform>() as u64 <= MATERIAL_ROW_BYTES);
-        let (buffer, views) = Self::make(device, rows * MATERIAL_ROW_BYTES);
+        let stride =
+            Self::row_stride_for(device.limits().min_uniform_buffer_offset_alignment as u64);
+        assert!(std::mem::size_of::<MaterialUniform>() as u64 <= stride);
+        let (buffer, group) = Self::make(device, rows * stride, stride);
         MaterialTable {
             buffer,
-            views,
+            group,
             rows: Default::default(),
+            stride,
             data: Vec::new(),
         }
     }
 
-    fn make(device: &mx::Device, size: u64) -> (mx::Buffer, Vec<mx::BufferView>) {
+    fn make(device: &mx::Device, size: u64, stride: u64) -> (mx::Buffer, mx::BindGroup) {
         let buffer = device
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("material table"),
                 size,
-                usage: mx::BufferUsages::STORAGE | mx::BufferUsages::COPY_DST,
+                usage: mx::BufferUsages::UNIFORM | mx::BufferUsages::COPY_DST,
             })
             .expect("mX: a buffer");
-        let views = (0..size / MATERIAL_ROW_BYTES)
-            .map(|row| {
-                buffer
-                    .create_view(&mx::BufferViewDescriptor {
-                        offset: Self::offset(row as u32),
-                        size: Some(std::mem::size_of::<MaterialUniform>() as u64),
-                        ..Default::default()
-                    })
-                    .expect("mX: a buffer view")
-            })
-            .collect();
-        (buffer, views)
+        let group = device.create_bind_group(&mx::BindGroupDescriptor {
+            label: Some("materials"),
+            entries: &[mx::BindGroupEntry {
+                binding: 2,
+                resource: mx::BindingResource::Buffer(mx::BufferBinding {
+                    buffer: &buffer,
+                    offset: 0,
+                    size: Some(stride),
+                }),
+            }],
+        });
+        (buffer, group)
     }
 
-    /// Where row `row` lies in the heap (the draw's `row` in its immediates).
-    pub(crate) fn view_index(&self, row: u32) -> u32 {
-        self.views[row as usize].index()
-    }
-
-    /// A draw's immediates with `binding`: the material's slots, its row's place in the heap first.
+    /// A draw's immediates with `binding`: the material's textures' and samplers' places
+    /// in the heap. The material's own values come from `@group(1)` at the row's dynamic
+    /// offset (slot 0 is kept as the row for the draw's state tracking).
     pub(crate) fn immediates(&self, binding: &MaterialBinding) -> [u32; MATERIAL_SLOTS] {
-        let mut slots = binding.slots;
-        slots[0] = self.view_index(binding.row.index);
-        slots
+        binding.slots
     }
 
     /// A row for a new material.
@@ -360,8 +372,8 @@ impl MaterialTable {
     }
 
     /// Where row `row` starts (the draw's `set_buffer_offset`).
-    pub(crate) fn offset(row: u32) -> u64 {
-        row as u64 * MATERIAL_ROW_BYTES
+    pub(crate) fn offset(&self, row: u32) -> u64 {
+        row as u64 * self.stride
     }
 
     /// Write `uniform` at `row`, growing the table (true: it is a new buffer and bind group).
@@ -372,15 +384,19 @@ impl MaterialTable {
         row: u32,
         uniform: &MaterialUniform,
     ) -> bool {
-        let at = Self::offset(row) as usize;
+        let at = self.offset(row) as usize;
+        let stride = self.stride as usize;
         let bytes = bytemuck::bytes_of(uniform);
-        if self.data.len() < at + MATERIAL_ROW_BYTES as usize {
-            self.data.resize(at + MATERIAL_ROW_BYTES as usize, 0);
+        if self.data.len() < at + stride {
+            self.data.resize(at + stride, 0);
         }
         self.data[at..at + bytes.len()].copy_from_slice(bytes);
         if self.data.len() as u64 > self.buffer.size() {
-            (self.buffer, self.views) =
-                Self::make(device, (self.data.len() as u64 * 2).max(1 << 18));
+            (self.buffer, self.group) = Self::make(
+                device,
+                (self.data.len() as u64 * 2).max(1 << 18),
+                self.stride,
+            );
             queue
                 .write_buffer(&self.buffer, 0, &self.data)
                 .expect("mX: a queue write");
@@ -1427,5 +1443,56 @@ impl Renderer {
                 orm_view,
             ]),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The material table used to take one buffer-view slot for every row it could ever
+    /// hold; growing it next to a map full of AI vehicle types ran out of the heap and
+    /// panicked (#4379). With only one buffer slot on the device, adding hundreds of
+    /// materials must still work: the table is read through one bind group, at a dynamic
+    /// offset, not through views in the heap.
+    #[test]
+    fn material_table_grows_with_a_full_buffer_heap() {
+        // Vulkan enforces the heap limit: there one slot is full as soon as the table has
+        // made its first view. The noop device cannot enforce it, but still exercises the
+        // growth on machines without a Vulkan adapter.
+        let full_heap = mx::Instance::with_backends(mx::Backends::VULKAN)
+            .default_adapter()
+            .ok()
+            .and_then(|a| {
+                a.request_device(&mx::DeviceDescriptor {
+                    bindless_buffers: 1,
+                    ..Default::default()
+                })
+                .ok()
+            });
+        let (device, queue) = match full_heap {
+            Some(d) => d,
+            None => {
+                let adapter = mx::Instance::with_backends(mx::Backends::NOOP)
+                    .default_adapter()
+                    .unwrap();
+                adapter
+                    .request_device(&mx::DeviceDescriptor {
+                        bindless_buffers: 1,
+                        ..Default::default()
+                    })
+                    .unwrap()
+            }
+        };
+        let mut table = MaterialTable::new(&device, 1);
+        let start = table.buffer.size();
+        for row in 0..300 {
+            let mut uniform = <MaterialUniform as bytemuck::Zeroable>::zeroed();
+            uniform.color = [row as f32, 0.0, 0.0, 1.0];
+            table.write(&device, &queue, row, &uniform);
+        }
+        assert!(table.buffer.size() > start);
+        // (not one slot of the heap is spent on the table or its growth)
+        assert_eq!(device.bindless_buffers_in_use(), 0);
     }
 }

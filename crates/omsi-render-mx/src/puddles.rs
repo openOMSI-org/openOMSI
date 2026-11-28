@@ -3,6 +3,9 @@
 
 use super::*;
 
+/// The vehicle pass's material draws, kept apart so a test can record them without a GPU.
+pub(super) mod vehicle;
+
 const MAX_TRACE_PIXELS: f32 = 960.0 * 540.0;
 /// The low quality's ray budget: a quarter of the high one's, at a quarter of the picture.
 const MAX_TRACE_PIXELS_LOW: f32 = 480.0 * 270.0;
@@ -732,25 +735,14 @@ impl Renderer {
                 ground: pipelines.vehicle_view.index(),
                 ..scene.frame_heap
             };
-            if !omsi_cfg::flags::OMSI_NO_PUDDLE_VEHICLE.is_set() {
-                if let Some(first) = vehicle_batches.first() {
-                    let binding = &scene.materials[first.material as usize].binding;
-                    let slots = scene.material_table.immediates(binding);
-                    pass.set_immediates(0, bytemuck::cast_slice(&slots));
-                    pass.set_immediates(FrameHeap::OFFSET, bytemuck::bytes_of(&heap));
-                    pass.set_pipeline(&pipelines.chassis);
-                    pass.draw(0..6, 0..origins.len() as u32);
-                }
-                encode_batches_in(
-                    &mut pass,
-                    scene,
-                    &heap,
-                    &vehicle_batches,
-                    |_| true,
-                    |b| b.pipe as u16,
-                    |pipe| &pipelines.vehicle[pipe as usize],
-                );
-            }
+            vehicle::encode(
+                &mut pass,
+                pipelines,
+                scene,
+                &vehicle_batches,
+                origins.len() as u32,
+                &heap,
+            );
         }
         let copy = |texture| mx::TexelCopyTextureInfo {
             texture,

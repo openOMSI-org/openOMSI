@@ -8,6 +8,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
 
 ### Fixes
 
+- **mX no longer runs out of buffer slots while loading vehicles**: the material table is read
+  through one uniform bind group at a dynamic offset, not through a buffer view for every row,
+  so a large map with many AI vehicles keeps rendering
+  ([#4379](https://github.com/openOMSI-org/openOMSI/issues/4379)).
 - **DLSS and AMD FSR 3 no longer shimmer on what stands still**: the motion of the last frame
   is taken without the depth plane each part carries since 0.3.57, so a still picture has no
   motion again ([#4221](https://github.com/openOMSI-org/openOMSI/issues/4221)).

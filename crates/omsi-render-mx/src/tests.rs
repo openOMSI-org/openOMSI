@@ -2135,6 +2135,7 @@ mod light;
 mod light_grid;
 mod light_maps;
 mod long_road;
+mod material_offsets;
 mod more;
 mod night_coverage;
 mod pbr_maps;

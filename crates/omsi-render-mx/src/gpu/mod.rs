@@ -555,7 +555,9 @@ pub(crate) fn material_layout_entries() -> Vec<crate::gpu::schema::BindGroupLayo
             visibility: crate::gpu::schema::ShaderStages::VERTEX_FRAGMENT,
             ty: crate::gpu::schema::BindingType::Buffer {
                 ty: crate::gpu::schema::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
+                // The material table is bound once; each draw picks its row with a dynamic
+                // offset instead of a bind group or a buffer view per material (#4379).
+                has_dynamic_offset: true,
                 min_binding_size: None,
             },
             count: None,
