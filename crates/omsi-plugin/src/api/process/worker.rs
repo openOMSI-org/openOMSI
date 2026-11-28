@@ -76,7 +76,9 @@ pub(crate) struct StartRequest {
 }
 impl StartRequest {
     fn prepare(self, cancel: &AtomicBool) -> Result<Stage, String> {
-        if let Some(permissions) = &self.permissions { permissions.check_denied(&self.entry)?; }
+        if let Some(permissions) = &self.permissions {
+            permissions.check_denied(&self.entry)?;
+        }
         #[cfg(test)]
         if let Some(before) = &self.grants.before_verify {
             before();
@@ -135,7 +137,9 @@ impl StartRequest {
         self.spawn(helper, cancel)
     }
     fn spawn(self, helper: PathBuf, cancel: &AtomicBool) -> Result<Stage, String> {
-        if let Some(permissions) = &self.permissions { permissions.check_denied(&self.entry)?; }
+        if let Some(permissions) = &self.permissions {
+            permissions.check_denied(&self.entry)?;
+        }
         if cancel.load(Ordering::Acquire) {
             return Err("process start cancelled".into());
         }

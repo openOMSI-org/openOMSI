@@ -10,17 +10,36 @@ use super::common::*;
 use super::scene::SceneBase;
 use crate::*;
 
-pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<TemporalUpscaler>) -> Option<TemporalPipelines> {
+pub(crate) fn build(
+    device: &wgpu::Device,
+    scene: &SceneBase,
+    upscaler: Option<TemporalUpscaler>,
+) -> Option<TemporalPipelines> {
     let upscaler = upscaler?;
     if array_path() != ArrayPath::Storage {
-        log::warn!("temporal upscaling: this device reads the scene's arrays from textures; drawing without it");
+        log::warn!(
+            "temporal upscaling: this device reads the scene's arrays from textures; drawing without it"
+        );
         return None;
     }
     log::info!("renderer: compiling the temporal upscaling's motion shaders");
-    let shader = compile_shader(device, wgpu::ShaderModuleDescriptor {
-        label: Some("temporal motion"),
-        source: wgpu::ShaderSource::Wgsl(format!("{}\n{}", scene_shader_source(false), include_str!("../temporal/motion.wgsl")).into()),
-    });
+    let shader = compile_shader(
+        device,
+        wgpu::ShaderModuleDescriptor {
+            label: Some("temporal motion"),
+            source: wgpu::ShaderSource::Wgsl(
+                format!(
+                    "{}\n{}",
+                    scene_shader_source(false),
+                    crate::shaders::hot_wgsl(
+                        include_str!("../temporal/motion.wgsl"),
+                        "temporal/motion.wgsl"
+                    )
+                )
+                .into(),
+            ),
+        },
+    );
     let motion_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("temporal motion"),
         entries: &[
@@ -39,7 +58,12 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
     });
     let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("temporal prepass"),
-        bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout), None, Some(&motion_layout)],
+        bind_group_layouts: &[
+            Some(&scene.camera_layout),
+            Some(&scene.material_layout),
+            None,
+            Some(&motion_layout),
+        ],
         immediate_size: 0,
     });
     // (the late pass reads the panes of the transparency mask, `t_glass` in `motion.wgsl`)
@@ -81,110 +105,147 @@ pub(crate) fn build(device: &wgpu::Device, scene: &SceneBase, upscaler: Option<T
             (2, false) => "fs_late_motion_transmap",
             _ => unreachable!(),
         };
-        compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-            label: Some(if write { "temporal depth prepass" } else { "temporal late motion" }),
-            layout: Some(if write { &pl } else { &late_pl }),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_motion"),
-                buffers: &[scene.vertex_layout.clone()],
-                compilation_options: Default::default(),
+        compile_pipeline(
+            device,
+            &wgpu::RenderPipelineDescriptor {
+                label: Some(if write {
+                    "temporal depth prepass"
+                } else {
+                    "temporal late motion"
+                }),
+                layout: Some(if write { &pl } else { &late_pl }),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_motion"),
+                    buffers: &[scene.vertex_layout.clone()],
+                    compilation_options: Default::default(),
+                },
+                primitive: one_sided_primitive(cull),
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(write),
+                    depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(fragment),
+                    targets: &motion_target,
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: scene.trees,
+                        ..Default::default()
+                    },
+                }),
+                multiview_mask: None,
+                cache: crate::pipeline_cache::get(device).as_ref(),
             },
-            primitive: one_sided_primitive(cull),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(write),
-                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some(fragment),
-                targets: &motion_target,
-                compilation_options: wgpu::PipelineCompilationOptions { constants: scene.trees, ..Default::default() },
-            }),
-            multiview_mask: None,
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        })
+        )
     };
     let sky_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("temporal sky motion"),
         bind_group_layouts: &[None, None, None, Some(&motion_layout)],
         immediate_size: 0,
     });
-    let sky = compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-        label: Some("temporal sky motion"),
-        layout: Some(&sky_pl),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: Some("vs_motion_sky"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: Some(wgpu::DepthStencilState {
-            format: DEPTH_FORMAT,
-            depth_write_enabled: Some(false),
-            depth_compare: Some(wgpu::CompareFunction::Always),
-            stencil: Default::default(),
-            bias: Default::default(),
-        }),
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some("fs_motion_sky"),
-            targets: &motion_target,
-            compilation_options: Default::default(),
-        }),
-        multiview_mask: None,
-        cache: crate::pipeline_cache::get(device).as_ref(),
-    });
-    let mask_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("temporal transparency mask"),
-        bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout)],
-        immediate_size: 0,
-    });
-    let max = wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Max };
-    let mask_target = [Some(wgpu::ColorTargetState {
-        format: TEMPORAL_MASK_FORMAT,
-        blend: Some(wgpu::BlendState { color: max, alpha: max }),
-        write_mask: wgpu::ColorWrites::ALL,
-    })];
-    let mask = |fragment: &str, cull: bool| {
-        compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-            label: Some("temporal transparency mask"),
-            layout: Some(&mask_pl),
+    let sky = compile_pipeline(
+        device,
+        &wgpu::RenderPipelineDescriptor {
+            label: Some("temporal sky motion"),
+            layout: Some(&sky_pl),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_mask"),
-                buffers: &[scene.vertex_layout.clone()],
+                entry_point: Some("vs_motion_sky"),
+                buffers: &[],
                 compilation_options: Default::default(),
             },
-            primitive: one_sided_primitive(cull),
+            primitive: wgpu::PrimitiveState::default(),
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
                 depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                depth_compare: Some(wgpu::CompareFunction::Always),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Some(fragment),
-                targets: &mask_target,
+                entry_point: Some("fs_motion_sky"),
+                targets: &motion_target,
                 compilation_options: Default::default(),
             }),
             multiview_mask: None,
             cache: crate::pipeline_cache::get(device).as_ref(),
-        })
+        },
+    );
+    let mask_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("temporal transparency mask"),
+        bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout)],
+        immediate_size: 0,
+    });
+    let max = wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Max,
+    };
+    let mask_target = [Some(wgpu::ColorTargetState {
+        format: TEMPORAL_MASK_FORMAT,
+        blend: Some(wgpu::BlendState {
+            color: max,
+            alpha: max,
+        }),
+        write_mask: wgpu::ColorWrites::ALL,
+    })];
+    let mask = |fragment: &str, cull: bool| {
+        compile_pipeline(
+            device,
+            &wgpu::RenderPipelineDescriptor {
+                label: Some("temporal transparency mask"),
+                layout: Some(&mask_pl),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_mask"),
+                    buffers: &[scene.vertex_layout.clone()],
+                    compilation_options: Default::default(),
+                },
+                primitive: one_sided_primitive(cull),
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(fragment),
+                    targets: &mask_target,
+                    compilation_options: Default::default(),
+                }),
+                multiview_mask: None,
+                cache: crate::pipeline_cache::get(device).as_ref(),
+            },
+        )
     };
     let glass = upscaler.glass_mask_entry();
     Some(TemporalPipelines {
-        prepass: [make(0, false, true), make(0, true, true), make(1, false, true), make(1, true, true), make(2, false, true), make(2, true, true)],
-        late_motion: [make(0, false, false), make(0, true, false), make(1, false, false), make(1, true, false), make(2, false, false), make(2, true, false)],
+        prepass: [
+            make(0, false, true),
+            make(0, true, true),
+            make(1, false, true),
+            make(1, true, true),
+            make(2, false, true),
+            make(2, true, true),
+        ],
+        late_motion: [
+            make(0, false, false),
+            make(0, true, false),
+            make(1, false, false),
+            make(1, true, false),
+            make(2, false, false),
+            make(2, true, false),
+        ],
         sky,
         motion_layout,
         glass_layout,

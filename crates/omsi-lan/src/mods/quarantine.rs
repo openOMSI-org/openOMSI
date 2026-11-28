@@ -24,13 +24,21 @@ pub(crate) fn screen(path: &str, data: &[u8]) -> Result<(), String> {
 
 /// Is `data` what a file named `path` should be? The reason when it is not.
 pub(crate) fn check(path: &str, data: &[u8]) -> Result<(), String> {
-    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    let ext = path
+        .rsplit_once('.')
+        .map(|(_, e)| e.to_ascii_lowercase())
+        .unwrap_or_default();
     let why = match ext.as_str() {
         // (the game reads a picture by what it is, not by its name: the stock SD77's
         // repaints have bitmaps called .dds)
         "dds" | "tga" | "bmp" | "png" | "jpg" | "jpeg" => picture(data),
-        "wav" => (data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WAVE").then_some(()).ok_or_else(|| "not a WAVE sound".into()),
-        "ogg" => data.starts_with(b"OggS").then_some(()).ok_or_else(|| "not an Ogg sound".into()),
+        "wav" => (data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WAVE")
+            .then_some(())
+            .ok_or_else(|| "not a WAVE sound".into()),
+        "ogg" => data
+            .starts_with(b"OggS")
+            .then_some(())
+            .ok_or_else(|| "not an Ogg sound".into()),
         // (a mesh the reader turns down - cut short, nothing in it (a stub for a part left
         // out: the Caio Apache's interior_bancos0.o3d is 77 bytes) - is turned down the same
         // way by every game that draws the bus, its driver's too; only one that would stop
@@ -44,9 +52,10 @@ pub(crate) fn check(path: &str, data: &[u8]) -> Result<(), String> {
         // OMSI's texts: configuration, scripts, lists, fonts, depot files - or a picture
         // under such a name (the Buildings_MC textures are .dds files called .sco; the
         // game reads a picture by what it is)
-        "cfg" | "bus" | "ovh" | "zug" | "osc" | "txt" | "hof" | "oft" | "cti" | "sco" | "sli" | "hum" | "owt" | "clb" | "ctc" | "ini" => {
-            (text(data) || picture(data).is_ok()).then_some(()).ok_or_else(|| "not a text file".into())
-        }
+        "cfg" | "bus" | "ovh" | "zug" | "osc" | "txt" | "hof" | "oft" | "cti" | "sco" | "sli"
+        | "hum" | "owt" | "clb" | "ctc" | "ini" => (text(data) || picture(data).is_ok())
+            .then_some(())
+            .ok_or_else(|| "not a text file".into()),
         _ => Ok(()),
     };
     why.map_err(|w| format!("{path}: {w}"))
@@ -64,7 +73,8 @@ fn text(data: &[u8]) -> bool {
 
 /// A mesh is read the way the game reads it; one that would stop the reader is no mesh.
 fn mesh(read: impl FnOnce()) -> Result<(), String> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(read)).map_err(|_| "a mesh the reader cannot take".into())
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
+        .map_err(|_| "a mesh the reader cannot take".into())
 }
 
 /// A picture of any kind the game reads, whatever it is called, of a size a texture can have.
@@ -102,10 +112,17 @@ fn dds(d: &[u8]) -> Result<(), String> {
 }
 
 fn tga(d: &[u8]) -> Result<(), String> {
-    if d.len() < 18 || ![1, 2, 3, 9, 10, 11].contains(&d[2]) || ![8, 15, 16, 24, 32].contains(&d[16]) {
+    if d.len() < 18
+        || ![1, 2, 3, 9, 10, 11].contains(&d[2])
+        || ![8, 15, 16, 24, 32].contains(&d[16])
+    {
         return Err("not a TGA picture".into());
     }
-    side("TGA picture", u16::from_le_bytes([d[12], d[13]]) as u32, u16::from_le_bytes([d[14], d[15]]) as u32)
+    side(
+        "TGA picture",
+        u16::from_le_bytes([d[12], d[13]]) as u32,
+        u16::from_le_bytes([d[14], d[15]]) as u32,
+    )
 }
 
 fn bmp(d: &[u8]) -> Result<(), String> {
@@ -115,24 +132,42 @@ fn bmp(d: &[u8]) -> Result<(), String> {
     // (the OS/2 header - 12 bytes, sides of 16 bits - of many an older font's bitmap:
     // read as the Windows one, it said "0 bits a pixel" and the font was refused)
     let (w, h, bpp) = if u32le(d, 14) == 12 {
-        (u16::from_le_bytes([d[18], d[19]]) as u32, u16::from_le_bytes([d[20], d[21]]) as u32, u16::from_le_bytes([d[24], d[25]]))
+        (
+            u16::from_le_bytes([d[18], d[19]]) as u32,
+            u16::from_le_bytes([d[20], d[21]]) as u32,
+            u16::from_le_bytes([d[24], d[25]]),
+        )
     } else {
-        (i32::from_le_bytes([d[18], d[19], d[20], d[21]]).unsigned_abs(), i32::from_le_bytes([d[22], d[23], d[24], d[25]]).unsigned_abs(), u16::from_le_bytes([d[28], d[29]]))
+        (
+            i32::from_le_bytes([d[18], d[19], d[20], d[21]]).unsigned_abs(),
+            i32::from_le_bytes([d[22], d[23], d[24], d[25]]).unsigned_abs(),
+            u16::from_le_bytes([d[28], d[29]]),
+        )
     };
     // (0: the bit count the picture's own data says - a compressed one, or what some font
     // tools write; the game's reader takes it or shows nothing. What is checked here is that
     // it is a picture of a size a texture has - a refused file kept the whole bus away)
     if ![0, 1, 4, 8, 16, 24, 32].contains(&bpp) {
-        return Err(format!("a BMP of {bpp} bits a pixel (header {} bytes, {w}x{h})", u32le(d, 14)));
+        return Err(format!(
+            "a BMP of {bpp} bits a pixel (header {} bytes, {w}x{h})",
+            u32le(d, 14)
+        ));
     }
     side("BMP picture", w, h)
 }
 
 fn png(d: &[u8]) -> Result<(), String> {
-    if d.len() < 24 || !d.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) || &d[12..16] != b"IHDR" {
+    if d.len() < 24
+        || !d.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A])
+        || &d[12..16] != b"IHDR"
+    {
         return Err("not a PNG picture".into());
     }
-    side("PNG picture", u32::from_be_bytes([d[16], d[17], d[18], d[19]]), u32::from_be_bytes([d[20], d[21], d[22], d[23]]))
+    side(
+        "PNG picture",
+        u32::from_be_bytes([d[16], d[17], d[18], d[19]]),
+        u32::from_be_bytes([d[20], d[21], d[22], d[23]]),
+    )
 }
 
 #[cfg(test)]
@@ -152,9 +187,19 @@ mod tests {
     fn files_are_what_their_names_say() {
         assert!(check("Vehicles/B/t.dds", &dds_of(2048, 1024)).is_ok());
         // a picture that claims a size no texture has (a decompression bomb)
-        assert!(check("Vehicles/B/t.dds", &dds_of(100_000, 100_000)).unwrap_err().contains("100000x100000"));
+        assert!(
+            check("Vehicles/B/t.dds", &dds_of(100_000, 100_000))
+                .unwrap_err()
+                .contains("100000x100000")
+        );
         // a program, or anything else, under a picture's name
-        assert!(check("Vehicles/B/t.dds", b"MZ\x90\x00 not a texture at all, padded to a size").is_err());
+        assert!(
+            check(
+                "Vehicles/B/t.dds",
+                b"MZ\x90\x00 not a texture at all, padded to a size"
+            )
+            .is_err()
+        );
         // a picture of another kind under that name is a picture (as the game reads it)
         let mut bmp = vec![0u8; 30];
         bmp[..2].copy_from_slice(b"BM");
@@ -181,16 +226,39 @@ mod tests {
         os2[20..22].copy_from_slice(&60000u16.to_le_bytes());
         os2[24..26].copy_from_slice(&24u16.to_le_bytes());
         assert!(check("Fonts/x.bmp", &os2).is_err());
-        assert!(check("Vehicles/B/t.png", b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\x01\0\0\0\x01\0").is_ok());
-        assert!(check("Vehicles/B/t.png", b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\x7f\xff\xff\xff\0\0\x01\0").is_err());
+        assert!(
+            check(
+                "Vehicles/B/t.png",
+                b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\x01\0\0\0\x01\0"
+            )
+            .is_ok()
+        );
+        assert!(
+            check(
+                "Vehicles/B/t.png",
+                b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\x7f\xff\xff\xff\0\0\x01\0"
+            )
+            .is_err()
+        );
         assert!(check("Vehicles/B/s.wav", b"RIFF\0\0\0\0WAVEfmt ").is_ok());
         assert!(check("Vehicles/B/s.wav", b"ID3\x03 an mp3 called wav").is_err());
         assert!(check("Vehicles/B/model.cfg", b"[mesh]\nbody.o3d\n").is_ok());
         assert!(check("Vehicles/B/model.cfg", b"[mesh]\0\0binary").is_err());
         // a text in UTF-16 with its mark (a font of the O560 E5) is a text; without the mark,
         // with a zero character or half a character, it is not
-        let utf16 = |s: &str| [0xFF, 0xFE].into_iter().chain(s.encode_utf16().flat_map(|u| u.to_le_bytes())).collect::<Vec<u8>>();
-        assert!(check("Fonts/o560_e5_small.oft", &utf16("[newfont]\r\no560_e5_small\r\n")).is_ok());
+        let utf16 = |s: &str| {
+            [0xFF, 0xFE]
+                .into_iter()
+                .chain(s.encode_utf16().flat_map(|u| u.to_le_bytes()))
+                .collect::<Vec<u8>>()
+        };
+        assert!(
+            check(
+                "Fonts/o560_e5_small.oft",
+                &utf16("[newfont]\r\no560_e5_small\r\n")
+            )
+            .is_ok()
+        );
         assert!(check("Fonts/x.oft", &utf16("[newfont]")[2..]).is_err());
         assert!(check("Fonts/x.oft", &utf16("[newfont]\0")).is_err());
         assert!(check("Fonts/x.oft", &utf16("[newfont]")[..7]).is_err());
@@ -201,19 +269,36 @@ mod tests {
         stub[..4].copy_from_slice(&[0x84, 0x19, 0x01, 0x17]);
         assert!(check("Vehicles/B/interior_bancos0.o3d", &stub).is_ok());
         assert!(check("Vehicles/B/body.o3d", b"").is_ok());
-        let x = b"xof 0303txt 0032\nMesh m {\n 3;\n 0;0;0;,\n 1;0;0;,\n 0;1;0;;\n 1;\n 3;0,1,2;;\n}\n";
+        let x =
+            b"xof 0303txt 0032\nMesh m {\n 3;\n 0;0;0;,\n 1;0;0;,\n 0;1;0;;\n 1;\n 3;0,1,2;;\n}\n";
         assert!(check("Vehicles/B/box.x", x).is_ok());
         assert!(check("Vehicles/B/cut.x", &x[..30]).is_ok());
         // a picture under a text's name (the Buildings_MC textures are .dds called .sco)
-        assert!(check("Sceneryobjects/Buildings_MC/texture/Bolle.sco", &dds_of(512, 512)).is_ok());
-        assert!(check("Sceneryobjects/Buildings_MC/texture/Bolle.sco", &dds_of(100_000, 100_000)).is_err());
+        assert!(
+            check(
+                "Sceneryobjects/Buildings_MC/texture/Bolle.sco",
+                &dds_of(512, 512)
+            )
+            .is_ok()
+        );
+        assert!(
+            check(
+                "Sceneryobjects/Buildings_MC/texture/Bolle.sco",
+                &dds_of(100_000, 100_000)
+            )
+            .is_err()
+        );
         // a spline's long texture (412x17902 on the Brasil roads) is a texture; a bomb is not
         bmp[18..22].copy_from_slice(&412i32.to_le_bytes());
         bmp[22..26].copy_from_slice(&17902i32.to_le_bytes());
         assert!(check("Splines/B.V@piaui/texture/B.V_BR_A1.bmp", &bmp).is_ok());
         bmp[18..22].copy_from_slice(&40000i32.to_le_bytes());
         bmp[22..26].copy_from_slice(&40000i32.to_le_bytes());
-        assert!(check("Splines/x.bmp", &bmp).unwrap_err().contains("40000x40000"));
+        assert!(
+            check("Splines/x.bmp", &bmp)
+                .unwrap_err()
+                .contains("40000x40000")
+        );
         // what is not looked into goes as it is
         assert!(check("Vehicles/B/readme.md", b"anything").is_ok());
     }
@@ -222,11 +307,18 @@ mod tests {
     /// and texts.
     #[test]
     fn a_stock_bus_passes_whole() {
-        let Some(root) = std::env::var_os("OMSI_ROOT").map(std::path::PathBuf::from) else { return };
+        let Some(root) = std::env::var_os("OMSI_ROOT").map(std::path::PathBuf::from) else {
+            return;
+        };
         let mut todo = vec![omsi_cfg::resolve_path(&root, "Vehicles/MAN_SD200")];
         let (mut seen, mut bad) = (0, Vec::new());
         while let Some(d) = todo.pop() {
-            for p in std::fs::read_dir(&d).into_iter().flatten().flatten().map(|e| e.path()) {
+            for p in std::fs::read_dir(&d)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.path())
+            {
                 if p.is_dir() {
                     todo.push(p);
                     continue;
@@ -236,7 +328,11 @@ mod tests {
                 if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
                     continue;
                 }
-                let rel = p.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
+                let rel = p
+                    .strip_prefix(&root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
                 seen += 1;
                 if let Err(why) = screen(&rel, &std::fs::read(&p).unwrap()) {
                     bad.push(why);
@@ -267,28 +363,51 @@ mod tests {
             files += 1;
             bytes += data.len() as u64;
             if let Err(w) = screen(rel, data) {
-                let reason = w.strip_prefix(&format!("{rel}: ")).unwrap_or(&w).to_string();
+                let reason = w
+                    .strip_prefix(&format!("{rel}: "))
+                    .unwrap_or(&w)
+                    .to_string();
                 // (sizes in a reason make every file a reason of its own)
                 let key = reason.split(" (").next().unwrap_or(&reason).to_string();
-                refused.entry(key).or_default().push(format!("{rel}  [{reason}]"));
+                refused
+                    .entry(key)
+                    .or_default()
+                    .push(format!("{rel}  [{reason}]"));
             }
         };
         for t in targets.split('|').map(str::trim).filter(|t| !t.is_empty()) {
             let (dir, prefix) = match t.split_once("=>") {
-                Some((d, p)) => (std::path::PathBuf::from(d), Some(p.trim_end_matches('/').to_string())),
+                Some((d, p)) => (
+                    std::path::PathBuf::from(d),
+                    Some(p.trim_end_matches('/').to_string()),
+                ),
                 None => (std::path::PathBuf::from(t), None),
             };
-            if dir.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
-                let Ok(mut z) = std::fs::File::open(&dir).map_err(|e| e.to_string()).and_then(|f| zip::ZipArchive::new(f).map_err(|e| e.to_string())) else { continue };
+            if dir
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+            {
+                let Ok(mut z) = std::fs::File::open(&dir)
+                    .map_err(|e| e.to_string())
+                    .and_then(|f| zip::ZipArchive::new(f).map_err(|e| e.to_string()))
+                else {
+                    continue;
+                };
                 for i in 0..z.len() {
                     let Ok(mut f) = z.by_index(i) else { continue };
                     if f.is_dir() {
                         continue;
                     }
-                    let Ok(name) = f.name().map(|n| n.replace('\\', "/")) else { continue };
+                    let Ok(name) = f.name().map(|n| n.replace('\\', "/")) else {
+                        continue;
+                    };
                     // (a bus zipped without its Vehicles folder is read as one)
                     let top = name.split('/').next().unwrap_or("").to_ascii_lowercase();
-                    let rel = if super::super::FOLDERS.contains(&top.as_str()) { name.clone() } else { format!("Vehicles/{name}") };
+                    let rel = if super::super::FOLDERS.contains(&top.as_str()) {
+                        name.clone()
+                    } else {
+                        format!("Vehicles/{name}")
+                    };
                     let mut data = Vec::new();
                     if std::io::Read::read_to_end(&mut f, &mut data).is_ok() {
                         look(&rel, &data, &mut refused);
@@ -310,7 +429,9 @@ mod tests {
             let mut all = Vec::new();
             walk(&dir, &mut all);
             for path in all {
-                let Ok(sub) = path.strip_prefix(&dir) else { continue };
+                let Ok(sub) = path.strip_prefix(&dir) else {
+                    continue;
+                };
                 let sub = sub.to_string_lossy().replace('\\', "/");
                 let rel = match &prefix {
                     Some(p) => format!("{p}/{sub}"),
@@ -326,14 +447,19 @@ mod tests {
             }
             eprintln!("{t}: done");
         }
-        let mut report = format!("{files} files, {:.1} GB looked at; refused: {}\n", bytes as f64 / 1e9, refused.values().map(Vec::len).sum::<usize>());
+        let mut report = format!(
+            "{files} files, {:.1} GB looked at; refused: {}\n",
+            bytes as f64 / 1e9,
+            refused.values().map(Vec::len).sum::<usize>()
+        );
         for (reason, list) in &refused {
             report += &format!("\n## {reason} ({})\n", list.len());
             for l in list {
                 report += &format!("  {l}\n");
             }
         }
-        let out = std::env::var("QUARANTINE_SCAN_OUT").unwrap_or_else(|_| "quarantine-scan.txt".into());
+        let out =
+            std::env::var("QUARANTINE_SCAN_OUT").unwrap_or_else(|_| "quarantine-scan.txt".into());
         std::fs::write(&out, &report).unwrap();
         eprintln!("{}", report.lines().next().unwrap_or(""));
     }

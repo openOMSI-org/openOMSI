@@ -1,7 +1,7 @@
 //! Which transport mode a vehicle belongs to, for the map-admission rule
 //! ([`omsi_cfg::transport::admit`]).
 
-use omsi_cfg::transport::{admit, Admission, ModeSet};
+use omsi_cfg::transport::{Admission, ModeSet, admit};
 use omsi_vehicle::Vehicle;
 
 /// The modes of a vehicle and whether its file declared them. A file that names none is judged
@@ -21,8 +21,8 @@ pub fn admission(map: ModeSet, def: &Vehicle) -> Admission {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use omsi_cfg::transport::TransportMode;
     use omsi_cfg::CfgFile;
+    use omsi_cfg::transport::TransportMode;
 
     fn vehicle(text: &str) -> Vehicle {
         Vehicle::parse(&CfgFile::from_str("x.bus", text))
@@ -37,7 +37,10 @@ mod tests {
         let metro = vehicle("[mass]\n30\n[boogies]\n1\n[contact_shoe]\n1\n0\n0\n0\n0\n0\n");
         assert_eq!(modes_of(&metro).0, ModeSet::of(TransportMode::Metro));
         let trolley = vehicle("[mass]\n12\n[trolley_pole]\nside left\npos -0.3 1.0 4.1\n");
-        assert!(modes_of(&trolley).0.contains(TransportMode::Bus) && modes_of(&trolley).0.contains(TransportMode::Trolleybus));
+        assert!(
+            modes_of(&trolley).0.contains(TransportMode::Bus)
+                && modes_of(&trolley).0.contains(TransportMode::Trolleybus)
+        );
     }
 
     #[test]

@@ -13,10 +13,18 @@ fn why_text(reason: &str, until: Option<u64>) -> String {
         (None, false) => format!("you are banned from this session (reason: {reason})"),
         (Some((n, Unit::Min)), true) => format!("you are banned from this session ({n} min left)"),
         (Some((n, Unit::Hours)), true) => format!("you are banned from this session ({n} h left)"),
-        (Some((n, Unit::Days)), true) => format!("you are banned from this session ({n} days left)"),
-        (Some((n, Unit::Min)), false) => format!("you are banned from this session ({n} min left): {reason}"),
-        (Some((n, Unit::Hours)), false) => format!("you are banned from this session ({n} h left): {reason}"),
-        (Some((n, Unit::Days)), false) => format!("you are banned from this session ({n} days left): {reason}"),
+        (Some((n, Unit::Days)), true) => {
+            format!("you are banned from this session ({n} days left)")
+        }
+        (Some((n, Unit::Min)), false) => {
+            format!("you are banned from this session ({n} min left): {reason}")
+        }
+        (Some((n, Unit::Hours)), false) => {
+            format!("you are banned from this session ({n} h left): {reason}")
+        }
+        (Some((n, Unit::Days)), false) => {
+            format!("you are banned from this session ({n} days left): {reason}")
+        }
     }
 }
 
@@ -46,25 +54,49 @@ pub fn span(secs: u64) -> String {
 /// Ban the machine of player `id` and send the player away. `by` is the admin's label for the
 /// record. The message is what the admin is told; an Err is a ban that was not made (the
 /// player has not been touched).
-pub fn hardware_ban(lan: &mut LanSession, id: u32, scope: Scope, hours: Option<u32>, reason: &str, by: &str) -> Result<String, String> {
+pub fn hardware_ban(
+    lan: &mut LanSession,
+    id: u32,
+    scope: Scope,
+    hours: Option<u32>,
+    reason: &str,
+    by: &str,
+) -> Result<String, String> {
     let Some(hw) = lan.peer_hardware_id(id).map(str::to_string) else {
         return Err("that player's game sent no hardware identifier (an older game, or it switched it off): use 'ban' to keep them out of this run by name and address".into());
     };
     if lan.hardware_id.as_deref() == Some(hw.as_str()) {
         return Err("that is this machine itself (the host's own): it cannot be banned".into());
     }
-    let name = lan.peers().find(|p| p.pose.id == id).map(|p| p.pose.name.clone()).unwrap_or_default();
+    let name = lan
+        .peers()
+        .find(|p| p.pose.id == id)
+        .map(|p| p.pose.name.clone())
+        .unwrap_or_default();
     let now = omsi_admin::unix_now();
     let until = hours.map(|h| now + h as u64 * 3600);
     let ban = {
-        let Some(mut store) = bans::global() else { return Err("this session keeps no ban list".into()) };
+        let Some(mut store) = bans::global() else {
+            return Err("this session keeps no ban list".into());
+        };
         store.add(scope, &hw, &name, reason, by, until, now)?
     };
     lan.kick(id, &why_text(&ban.reason, until), false);
     let mut seen = 0;
     bans::sync(lan, &mut seen);
-    let name = if name.is_empty() { format!("player {id}") } else { name };
-    let (scope, ban) = (if scope == Scope::Owner { "all sessions" } else { "this session" }, ban.id);
+    let name = if name.is_empty() {
+        format!("player {id}")
+    } else {
+        name
+    };
+    let (scope, ban) = (
+        if scope == Scope::Owner {
+            "all sessions"
+        } else {
+            "this session"
+        },
+        ban.id,
+    );
     Ok(match until.map(|u| span_in(u - now)) {
         None => format!("banned {name} ({scope}), ban {ban}"),
         Some((n, Unit::Min)) => format!("banned {name} ({scope}, {n} min), ban {ban}"),
@@ -76,20 +108,40 @@ pub fn hardware_ban(lan: &mut LanSession, id: u32, scope: Scope, hours: Option<u
 /// Lift ban `id` of either list.
 pub fn unban(lan: &mut LanSession, id: &str) -> Result<String, String> {
     let ban = {
-        let Some(mut store) = bans::global() else { return Err("this session keeps no ban list".into()) };
+        let Some(mut store) = bans::global() else {
+            return Err("this session keeps no ban list".into());
+        };
         store.remove(id)?
     };
     let mut seen = 0;
     bans::sync(lan, &mut seen);
-    Ok(format!("ban {} lifted ({})", ban.id, if ban.name.is_empty() { "no name".to_string() } else { ban.name }))
+    Ok(format!(
+        "ban {} lifted ({})",
+        ban.id,
+        if ban.name.is_empty() {
+            "no name".to_string()
+        } else {
+            ban.name
+        }
+    ))
 }
 
 /// The bans that hold, for the admins' panels.
 pub fn views() -> Vec<omsi_admin::BanView> {
-    let Some(store) = bans::global() else { return Vec::new() };
+    let Some(store) = bans::global() else {
+        return Vec::new();
+    };
     store
         .active(omsi_admin::unix_now())
         .into_iter()
-        .map(|b| omsi_admin::BanView { id: b.id, name: b.name, reason: b.reason, by: b.by, at: b.at, until: b.until, scope: b.scope.name().to_string() })
+        .map(|b| omsi_admin::BanView {
+            id: b.id,
+            name: b.name,
+            reason: b.reason,
+            by: b.by,
+            at: b.at,
+            until: b.until,
+            scope: b.scope.name().to_string(),
+        })
         .collect()
 }

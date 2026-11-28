@@ -63,7 +63,13 @@ impl Traffic {
     /// vehicles were removed. The configured target is unchanged, so random traffic can
     /// populate the roads again normally.
     pub fn clear_random(&mut self) -> usize {
-        let ids: Vec<u64> = self.sim.cars.iter().filter(|c| !c.is_bus()).map(|c| c.id).collect();
+        let ids: Vec<u64> = self
+            .sim
+            .cars
+            .iter()
+            .filter(|c| !c.is_bus())
+            .map(|c| c.id)
+            .collect();
         let removed = ids.len();
         for id in ids {
             self.remove_car(id);
@@ -74,7 +80,10 @@ impl Traffic {
     /// Take a car off the road now (the player took over its tour); its renders follow with
     /// `view_sync::apply_traffic`.
     pub fn remove_car(&mut self, id: u64) -> bool {
-        let Some(c) = self.sim.take_off_id(id, omsi_sim::ai_traffic::control::Removal::TakenOver) else {
+        let Some(c) = self
+            .sim
+            .take_off_id(id, omsi_sim::ai_traffic::control::Removal::TakenOver)
+        else {
             return false;
         };
         self.drop_sounds(c.id);

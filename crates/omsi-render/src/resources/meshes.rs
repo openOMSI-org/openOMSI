@@ -29,7 +29,9 @@ pub struct GpuMesh {
     pub source: Option<String>,
     /// Its flat surfaces by material slot, for the draw order's depth step of a surface
     /// lying on another of its object (`scene::overlay`).
+    /// Earlier slots with a later coplanar duplicate, calculated once at mesh upload.
     pub(crate) flats: Vec<crate::scene::overlay::Flat>,
+    pub(crate) duplicate_surface_slots: Vec<usize>,
     pub(crate) depth_normals: Vec<Vec3>,
 }
 
@@ -38,10 +40,21 @@ pub struct GpuMesh {
 /// integrated chip that shares a small heap: "Out of Memory"), the buffer is invalid, and
 /// mapping it ended the game - "Error in Buffer::get_mapped_range: Validation Error"
 /// (#107, #109) - where writing to it is an error that is logged and the game goes on from.
-pub(crate) fn buffer_init(device: &wgpu::Device, queue: &wgpu::Queue, label: Option<&str>, contents: &[u8], usage: wgpu::BufferUsages) -> wgpu::Buffer {
+pub(crate) fn buffer_init(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: Option<&str>,
+    contents: &[u8],
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
     let align = wgpu::COPY_BUFFER_ALIGNMENT as usize;
     let size = contents.len().next_multiple_of(align).max(align);
-    let buf = device.create_buffer(&wgpu::BufferDescriptor { label, size: size as u64, usage: usage | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+    let buf = device.create_buffer(&wgpu::BufferDescriptor {
+        label,
+        size: size as u64,
+        usage: usage | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
     if !contents.is_empty() {
         if contents.len() == size {
             queue.write_buffer(&buf, 0, contents);
@@ -86,7 +99,12 @@ pub(crate) const MESH_PAGE_VERTEX_BYTES: u64 = 32 << 20;
 pub(crate) const MESH_PAGE_INDEX_BYTES: u64 = 16 << 20;
 
 /// First fit of `len` bytes in `free` (offset, length) or at `top` under `cap`.
-pub(crate) fn page_take(free: &mut Vec<(u64, u64)>, top: &mut u64, cap: u64, len: u64) -> Option<u64> {
+pub(crate) fn page_take(
+    free: &mut Vec<(u64, u64)>,
+    top: &mut u64,
+    cap: u64,
+    len: u64,
+) -> Option<u64> {
     if len == 0 {
         return Some(0);
     }
@@ -128,9 +146,13 @@ pub(crate) fn page_give(free: &mut Vec<(u64, u64)>, top: &mut u64, at: u64, len:
     }
 }
 
-pub(crate) static MESH_OUT_OF_MEMORY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(crate) static MESH_OUT_OF_MEMORY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
-pub(crate) fn try_create_buffer(device: &wgpu::Device, desc: &wgpu::BufferDescriptor) -> Option<wgpu::Buffer> {
+pub(crate) fn try_create_buffer(
+    device: &wgpu::Device,
+    desc: &wgpu::BufferDescriptor,
+) -> Option<wgpu::Buffer> {
     let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
     let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
     let buffer = device.create_buffer(desc);
@@ -138,6 +160,7 @@ pub(crate) fn try_create_buffer(device: &wgpu::Device, desc: &wgpu::BufferDescri
     let out_of_memory = pollster::block_on(memory.pop());
     if out_of_memory.is_some() {
         MESH_OUT_OF_MEMORY.store(true, std::sync::atomic::Ordering::Relaxed);
+        crate::pipelines::errors::note_out_of_memory();
     }
     let Some(e) = out_of_memory.or(invalid) else {
         return Some(buffer);
@@ -145,7 +168,12 @@ pub(crate) fn try_create_buffer(device: &wgpu::Device, desc: &wgpu::BufferDescri
     static FAILED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = FAILED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if n < 5 || n.is_multiple_of(1000) {
-        log::warn!("mesh buffer of {:.1} MB could not be made, its meshes go into smaller ones or are left out (#{}): {}", desc.size as f64 / 1e6, n + 1, crate::gpu_error_text(&e));
+        log::warn!(
+            "mesh buffer of {:.1} MB could not be made, its meshes go into smaller ones or are left out (#{}): {}",
+            desc.size as f64 / 1e6,
+            n + 1,
+            crate::gpu_error_text(&e)
+        );
     }
     None
 }
@@ -179,12 +207,34 @@ pub(crate) fn mesh_blas_usage(features: wgpu::Features) -> wgpu::BufferUsages {
 }
 
 impl MeshPage {
-    pub(crate) fn new(device: &wgpu::Device, vertex_bytes: u64, index_bytes: u64) -> Option<MeshPage> {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        vertex_bytes: u64,
+        index_bytes: u64,
+    ) -> Option<MeshPage> {
         // The device guards auxiliary uploads; the flag also honors runtime RT fallback.
         let blas = mesh_blas_usage(device.features());
         let real = !no_device(device);
-        let size = |bytes: u64| if page_refused(real, bytes) { device.limits().max_buffer_size + wgpu::COPY_BUFFER_ALIGNMENT } else if real { bytes.max(32) } else { 32 };
-        let buffer = |bytes: u64, usage| try_create_buffer(device, &wgpu::BufferDescriptor { label: Some("mesh page"), size: size(bytes), usage: usage | wgpu::BufferUsages::COPY_DST | blas, mapped_at_creation: false });
+        let size = |bytes: u64| {
+            if page_refused(real, bytes) {
+                device.limits().max_buffer_size + wgpu::COPY_BUFFER_ALIGNMENT
+            } else if real {
+                bytes.max(32)
+            } else {
+                32
+            }
+        };
+        let buffer = |bytes: u64, usage| {
+            try_create_buffer(
+                device,
+                &wgpu::BufferDescriptor {
+                    label: Some("mesh page"),
+                    size: size(bytes),
+                    usage: usage | wgpu::BufferUsages::COPY_DST | blas,
+                    mapped_at_creation: false,
+                },
+            )
+        };
         Some(MeshPage {
             vertex: buffer(vertex_bytes, wgpu::BufferUsages::VERTEX)?,
             index: buffer(index_bytes, wgpu::BufferUsages::INDEX)?,
@@ -200,8 +250,18 @@ impl MeshPage {
 
     /// Room for a mesh of these sizes: its vertex and index offsets.
     pub(crate) fn take(&mut self, vertex_bytes: u64, index_bytes: u64) -> Option<(u64, u64)> {
-        let v = page_take(&mut self.vertex_free, &mut self.vertex_top, self.vertex_cap, vertex_bytes)?;
-        match page_take(&mut self.index_free, &mut self.index_top, self.index_cap, index_bytes) {
+        let v = page_take(
+            &mut self.vertex_free,
+            &mut self.vertex_top,
+            self.vertex_cap,
+            vertex_bytes,
+        )?;
+        match page_take(
+            &mut self.index_free,
+            &mut self.index_top,
+            self.index_cap,
+            index_bytes,
+        ) {
             Some(i) => Some((v, i)),
             None => {
                 page_give(&mut self.vertex_free, &mut self.vertex_top, v, vertex_bytes);
@@ -211,23 +271,42 @@ impl MeshPage {
     }
 
     pub(crate) fn give(&mut self, m: &GpuMesh) {
-        page_give(&mut self.vertex_free, &mut self.vertex_top, m.vertex_offset, m.vertex_bytes);
-        page_give(&mut self.index_free, &mut self.index_top, m.first_index as u64 * 4, m.index_bytes);
+        page_give(
+            &mut self.vertex_free,
+            &mut self.vertex_top,
+            m.vertex_offset,
+            m.vertex_bytes,
+        );
+        page_give(
+            &mut self.index_free,
+            &mut self.index_top,
+            m.first_index as u64 * 4,
+            m.index_bytes,
+        );
     }
 
     /// Write the mesh at these offsets.
-    pub(crate) fn place(&self, queue: &wgpu::Queue, data: &MeshData, page: u32, at: (u64, u64)) -> GpuMesh {
+    pub(crate) fn place(
+        &self,
+        queue: &wgpu::Queue,
+        data: &MeshData,
+        page: u32,
+        at: (u64, u64),
+    ) -> GpuMesh {
         let verts = mesh_vertices(data);
-        let (vb, ib): (&[u8], &[u8]) = (bytemuck::cast_slice(&verts), bytemuck::cast_slice(&data.indices));
+        let (vb, ib): (&[u8], &[u8]) = (
+            bytemuck::cast_slice(&verts),
+            bytemuck::cast_slice(&data.indices),
+        );
         if !vb.is_empty() && self.real {
             queue.write_buffer(&self.vertex, at.0, vb);
         }
         if !ib.is_empty() && self.real {
             queue.write_buffer(&self.index, at.1, ib);
         }
-        let (center, radius) = mesh_bounds(data);
         let flats = crate::scene::overlay::mesh_flats(data);
-        let depth_normals = crate::scene::depth_plane::normals(data);
+        let duplicate_surface_slots = crate::scene::overlay::duplicate_support_slots(data, &flats);
+        let (center, radius) = mesh_bounds(data);
         GpuMesh {
             vertex_buf: self.vertex.clone(),
             index_buf: self.index.clone(),
@@ -245,7 +324,8 @@ impl MeshPage {
             one_sided: data.one_sided,
             source: None,
             flats,
-            depth_normals,
+            duplicate_surface_slots,
+            depth_normals: crate::scene::depth_plane::normals(data),
         }
     }
 }
@@ -267,6 +347,7 @@ impl GpuMesh {
             bounds_center: Vec3::ZERO,
             bounds_radius: 0.0,
             one_sided: false,
+            duplicate_surface_slots: Vec::new(),
             source: None,
             flats: Vec::new(),
             depth_normals: Vec::new(),
@@ -288,8 +369,15 @@ pub(crate) fn mesh_vertices(data: &MeshData) -> Vec<Vertex> {
 }
 
 pub(crate) fn mesh_page_bytes(data: &MeshData) -> (u64, u64) {
-    let v = data.positions.len().min(data.normals.len()).min(data.uvs.len());
-    ((v * std::mem::size_of::<Vertex>()) as u64, (data.indices.len() * 4) as u64)
+    let v = data
+        .positions
+        .len()
+        .min(data.normals.len())
+        .min(data.uvs.len());
+    (
+        (v * std::mem::size_of::<Vertex>()) as u64,
+        (data.indices.len() * 4) as u64,
+    )
 }
 
 pub(crate) fn mesh_bounds(data: &MeshData) -> (Vec3, f32) {
@@ -308,27 +396,58 @@ pub(crate) fn mesh_bounds(data: &MeshData) -> (Vec3, f32) {
 
 /// The meshes in one page of their own, sized to them (each in a page of its own where the
 /// adapter cannot draw with a base vertex: `paged` false).
-pub(crate) fn make_meshes(device: &wgpu::Device, queue: &wgpu::Queue, data: &[&MeshData], paged: bool) -> Vec<GpuMesh> {
+pub(crate) fn make_meshes(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    data: &[&MeshData],
+    paged: bool,
+) -> Vec<GpuMesh> {
     if data.is_empty() {
         return Vec::new();
     }
     if !paged {
-        return data.iter().map(|d| make_meshes(device, queue, &[d], true).pop().expect("one mesh")).collect();
+        return data
+            .iter()
+            .map(|d| {
+                make_meshes(device, queue, &[d], true)
+                    .pop()
+                    .expect("one mesh")
+            })
+            .collect();
     }
     let sizes: Vec<(u64, u64)> = data.iter().map(|d| mesh_page_bytes(d)).collect();
-    let Some(page) = MeshPage::new(device, sizes.iter().map(|s| s.0).sum(), sizes.iter().map(|s| s.1).sum()) else {
+    let Some(page) = MeshPage::new(
+        device,
+        sizes.iter().map(|s| s.0).sum(),
+        sizes.iter().map(|s| s.1).sum(),
+    ) else {
         if data.len() > 1 {
-            return data.iter().map(|d| make_meshes(device, queue, &[d], true).pop().expect("one mesh")).collect();
+            return data
+                .iter()
+                .map(|d| {
+                    make_meshes(device, queue, &[d], true)
+                        .pop()
+                        .expect("one mesh")
+                })
+                .collect();
         }
-        let stand_in = device.create_buffer(&wgpu::BufferDescriptor { label: Some("left out mesh"), size: 32, usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::INDEX, mapped_at_creation: false });
+        let stand_in = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("left out mesh"),
+            size: 32,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::INDEX,
+            mapped_at_creation: false,
+        });
         return vec![GpuMesh::left_out(stand_in.clone(), stand_in)];
     };
     let mut at = (0, 0);
-    data.iter().zip(&sizes).map(|(d, s)| {
-        let m = page.place(queue, d, u32::MAX, at);
-        at = (at.0 + s.0, at.1 + s.1);
-        m
-    }).collect()
+    data.iter()
+        .zip(&sizes)
+        .map(|(d, s)| {
+            let m = page.place(queue, d, u32::MAX, at);
+            at = (at.0 + s.0, at.1 + s.1);
+            m
+        })
+        .collect()
 }
 
 /// A mesh on the GPU, made on a worker thread; [`Renderer::add_prepared_mesh`] puts it into
@@ -337,14 +456,24 @@ pub struct PreparedMesh(GpuMesh);
 
 /// Make a mesh's GPU buffers on any thread (the device takes calls from all of them).
 pub fn prepare_mesh(device: &wgpu::Device, queue: &wgpu::Queue, data: &MeshData) -> PreparedMesh {
-    prepare_meshes(device, queue, &[data], false).pop().expect("one mesh")
+    prepare_meshes(device, queue, &[data], false)
+        .pop()
+        .expect("one mesh")
 }
 
 /// [`prepare_mesh`] for several meshes at once, which share one page of buffers.
 /// `paged`: [`Renderer::mesh_pages`] of the renderer the meshes are for.
-pub fn prepare_meshes(device: &wgpu::Device, queue: &wgpu::Queue, data: &[&MeshData], paged: bool) -> Vec<PreparedMesh> {
+pub fn prepare_meshes(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    data: &[&MeshData],
+    paged: bool,
+) -> Vec<PreparedMesh> {
     let _turn = gl_worker_turn();
-    make_meshes(device, queue, data, paged).into_iter().map(PreparedMesh).collect()
+    make_meshes(device, queue, data, paged)
+        .into_iter()
+        .map(PreparedMesh)
+        .collect()
 }
 
 impl Renderer {
@@ -383,8 +512,7 @@ impl Renderer {
             return;
         }
         m.pose = m.pose.wrapping_add(1);
-        // Deformation invalidates static planes; skinned geometry needs fresh metadata.
-        let had_depth_planes = m.depth_normals.iter().any(|n| *n != Vec3::ZERO);
+        let had_depth_planes = m.depth_normals.iter().any(|normal| *normal != Vec3::ZERO);
         m.depth_normals.clear();
         {
             // (a newer pose of the same mesh replaces one still waiting)
@@ -426,30 +554,47 @@ impl Renderer {
             rt.meshes_changed(pending.iter().map(|(id, _)| *id));
         }
         for (id, b) in &pending {
-            let Some(m) = scene.meshes.get(*id) else { continue };
+            let Some(m) = scene.meshes.get(*id) else {
+                continue;
+            };
             let len = (b.len() as u64) / 4 * 4;
             if len == 0 || m.vertex_bytes < len {
                 continue;
             }
-            self.queue.write_buffer(&m.vertex_buf, m.vertex_offset, &b[..len as usize]);
+            self.queue
+                .write_buffer(&m.vertex_buf, m.vertex_offset, &b[..len as usize]);
         }
     }
 
     pub fn add_mesh(&self, scene: &mut Scene, data: &MeshData) -> MeshId {
         let (vb, ib) = mesh_page_bytes(data);
-        let mesh = if vb > MESH_PAGE_VERTEX_BYTES / 4 || ib > MESH_PAGE_INDEX_BYTES / 4 || !self.mesh_pages {
-            make_meshes(&self.device, &self.queue, &[data], true).pop().expect("one mesh")
+        let mesh = if vb > MESH_PAGE_VERTEX_BYTES / 4
+            || ib > MESH_PAGE_INDEX_BYTES / 4
+            || !self.mesh_pages
+        {
+            make_meshes(&self.device, &self.queue, &[data], true)
+                .pop()
+                .expect("one mesh")
         } else {
-            let found = scene.mesh_pages.iter_mut().enumerate().find_map(|(k, p)| p.take(vb, ib).map(|at| (k, at)));
+            let found = scene
+                .mesh_pages
+                .iter_mut()
+                .enumerate()
+                .find_map(|(k, p)| p.take(vb, ib).map(|at| (k, at)));
             let placed = found.or_else(|| {
-                let mut page = MeshPage::new(&self.device, MESH_PAGE_VERTEX_BYTES, MESH_PAGE_INDEX_BYTES)?;
-                let at = page.take(vb, ib).expect("a new page holds a mesh a quarter its size");
+                let mut page =
+                    MeshPage::new(&self.device, MESH_PAGE_VERTEX_BYTES, MESH_PAGE_INDEX_BYTES)?;
+                let at = page
+                    .take(vb, ib)
+                    .expect("a new page holds a mesh a quarter its size");
                 scene.mesh_pages.push(page);
                 Some((scene.mesh_pages.len() - 1, at))
             });
             match placed {
                 Some((k, at)) => scene.mesh_pages[k].place(&self.queue, data, k as u32, at),
-                None => make_meshes(&self.device, &self.queue, &[data], true).pop().expect("one mesh"),
+                None => make_meshes(&self.device, &self.queue, &[data], true)
+                    .pop()
+                    .expect("one mesh"),
             }
         };
         scene.meshes.push(mesh);

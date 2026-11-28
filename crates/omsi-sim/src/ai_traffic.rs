@@ -6,63 +6,69 @@
 //! and sound like, and taking the lanes and the vehicle types from the world, is omsi-app's
 //! `traffic` (its `Traffic` is a `TrafficSim` with its pictures and sounds).
 
-pub mod body_link;
+pub mod accident;
+#[cfg(test)]
+mod accident_tests;
 pub mod admission;
 pub mod berths;
+pub mod blind_spot;
 pub mod blocks;
+pub mod body_link;
+#[cfg(test)]
+mod body_tests;
 pub mod bus_service;
 pub mod control;
 pub mod deadlock;
-pub mod fixed_step;
-pub mod horn;
 pub mod density;
 pub mod dormant;
 pub mod emergency;
+#[cfg(test)]
+mod emergency_tests;
+pub mod fixed_step;
+pub mod foot_grid;
+pub mod horn;
+#[cfg(test)]
+mod junction_tests;
 pub mod junctions;
 pub mod lateral;
+#[cfg(test)]
+mod lateral_tests;
 pub mod light_paths;
 pub mod lights;
+#[cfg(test)]
+mod livery_tests;
 pub mod mirror;
 pub mod model;
 pub mod obstacles;
-pub mod foot_grid;
 pub mod parked;
 pub mod planning;
+#[cfg(test)]
+mod population_tests;
 pub mod random;
+#[cfg(test)]
+mod request_tests;
+#[cfg(test)]
+mod scenario_tests;
 pub mod scenery;
+#[cfg(test)]
+pub(crate) mod service_tests;
 pub mod setup;
+#[cfg(test)]
+mod signal_tests;
 pub mod stats;
+#[cfg(test)]
+mod tests;
 pub mod tick;
 pub mod viewer;
 pub mod waving;
-#[cfg(test)]
-mod body_tests;
-#[cfg(test)]
-mod scenario_tests;
-#[cfg(test)]
-mod junction_tests;
-#[cfg(test)]
-pub(crate) mod service_tests;
-#[cfg(test)]
-mod population_tests;
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod lateral_tests;
-#[cfg(test)]
-mod emergency_tests;
-#[cfg(test)]
-mod signal_tests;
-#[cfg(test)]
-mod request_tests;
 
 use crate::ai_motion::{
-    back_in_ramp, pull_out_ramps, AiBody, MotionKind, BACK_IN_LAT_ACCEL, PULL_OUT_ACCEL,
-    PULL_OUT_CLEARANCE,
+    AiBody, BACK_IN_LAT_ACCEL, MotionKind, PULL_OUT_ACCEL, PULL_OUT_CLEARANCE, back_in_ramp,
+    pull_out_ramps,
 };
 use crate::collision::Obb;
 use crate::traffic::{
-    arrival_time, AiState, Aspect, LaneKind, Lead, Network, TrafficLightController, MAX_BRAKE,
+    AiState, Aspect, LaneKind, Lead, MAX_BRAKE, Network, TrafficLightController, arrival_time,
 };
 use crate::vehicle::AiFrame;
 use crate::{VehicleInstance, VehicleType};
@@ -100,7 +106,9 @@ fn spread_schemes(n: usize, h: u64) -> Vec<usize> {
         stride += 1;
     }
     let start = (h % n.max(1) as u64) as usize;
-    (0..n.min(AI_SCHEMES)).map(|i| (start + i * stride) % n).collect()
+    (0..n.min(AI_SCHEMES))
+        .map(|i| (start + i * stride) % n)
+        .collect()
 }
 
 pub struct TrafficSim {
@@ -151,6 +159,9 @@ pub struct TrafficSim {
     pub(crate) lane_weight_sums: (usize, Vec<f64>),
     pub rng: u64,
     pub scheme_salt: u64,
+    /// The livery of the bus the player drives: the random traffic of the same vehicle file
+    /// draws another paint, number and plate (see `omsi_sim::livery`, #3477).
+    pub player_livery: Option<crate::livery::PlayerLivery>,
     scheme_sets: std::sync::Mutex<HashMap<std::path::PathBuf, Vec<usize>>>,
     /// Target number of cars around the camera.
     pub target: usize,
@@ -328,6 +339,7 @@ pub struct TrafficSim {
     /// Cars the last `tick` took off the road (their ids): their sounds and pictures are
     /// for the game to let go (see omsi-app's `Traffic::tick`).
     pub retired: Vec<u64>,
+    pub accident: accident::Accidents,
     /// The cars that honked since the game last asked (`horn`): id and whether it is a heavy
     /// vehicle. The stock cars' sounds have nothing on `ev_AI_Horn`, so the game plays
     /// OMSI's own AI horn for them.

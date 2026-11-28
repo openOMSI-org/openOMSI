@@ -65,6 +65,25 @@ struct Enhanced {
     // xy what takes a world point to cloud space, z the height of the plane it is taken on,
     // w the share of the sun the main pass has taken off already for the clouds over the camera
     cloud_f2: vec4<f32>,
+    // the player's bus's pitch and roll: sin, cos of each (its panes' condensation sits on
+    // the glass on a slope, `pane_local`)
+    pane_tilt: vec4<f32>,
+    // Slots of the weather overhaul, one owner each (zero until it fills them):
+    // the volumetric clouds, the volumetric fog, the precipitation, the bus's panes, the
+    // surfaces' PBR and the ray tracing, and two spare.
+    clouds_ext: vec4<f32>,
+    clouds_ext2: vec4<f32>,
+    vol_fog: vec4<f32>,
+    vol_fog2: vec4<f32>,
+    precip_ext: vec4<f32>,
+    glass_ext: vec4<f32>,
+    // (pbr_ext: x the share of the sun's light that still comes as a beam - the rest the
+    // clouds scatter, `sun_scattered` - y 1 when x is set)
+    pbr_ext: vec4<f32>,
+    rt_ext: vec4<f32>,
+    // the vehicles' road dirt (vehicle_dirt.rs `pack_all`): x how many, then eight rows each
+    dirt_n: vec4<f32>,
+    dirt: array<vec4<f32>, 512>,
 };
 @group(0) @binding(11) var<uniform> enh: Enhanced;
 @group(0) @binding(13) var s_lin: sampler;

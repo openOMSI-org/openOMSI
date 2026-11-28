@@ -91,7 +91,15 @@ pub struct RailBrake {
 
 impl Default for RailBrake {
     fn default() -> Self {
-        RailBrake { kind: BrakeKind::Air, service: None, emergency: None, pipe_wave: 250.0, apply_time: 4.0, release_time: 12.0, blend: true }
+        RailBrake {
+            kind: BrakeKind::Air,
+            service: None,
+            emergency: None,
+            pipe_wave: 250.0,
+            apply_time: 4.0,
+            release_time: 12.0,
+            blend: true,
+        }
     }
 }
 
@@ -121,10 +129,34 @@ impl RailCoupler {
     /// The usual figures of a kind of coupling.
     pub fn typical(kind: CouplerKind) -> RailCoupler {
         match kind {
-            CouplerKind::Screw => RailCoupler { kind, slack: 0.30, stiffness: 2.0e6, damping: 1.0e5, max_force: 850_000.0 },
-            CouplerKind::Buffer => RailCoupler { kind, slack: 0.12, stiffness: 4.0e6, damping: 1.5e5, max_force: 1_000_000.0 },
-            CouplerKind::Scharfenberg => RailCoupler { kind, slack: 0.03, stiffness: 3.0e6, damping: 8.0e4, max_force: 900_000.0 },
-            CouplerKind::TightLock => RailCoupler { kind, slack: 0.06, stiffness: 3.5e6, damping: 1.0e5, max_force: 1_000_000.0 },
+            CouplerKind::Screw => RailCoupler {
+                kind,
+                slack: 0.30,
+                stiffness: 2.0e6,
+                damping: 1.0e5,
+                max_force: 850_000.0,
+            },
+            CouplerKind::Buffer => RailCoupler {
+                kind,
+                slack: 0.12,
+                stiffness: 4.0e6,
+                damping: 1.5e5,
+                max_force: 1_000_000.0,
+            },
+            CouplerKind::Scharfenberg => RailCoupler {
+                kind,
+                slack: 0.03,
+                stiffness: 3.0e6,
+                damping: 8.0e4,
+                max_force: 900_000.0,
+            },
+            CouplerKind::TightLock => RailCoupler {
+                kind,
+                slack: 0.06,
+                stiffness: 3.5e6,
+                damping: 1.0e5,
+                max_force: 1_000_000.0,
+            },
         }
     }
 }
@@ -147,7 +179,9 @@ fn pairs(lines: &[&str]) -> Vec<(String, String)> {
 }
 
 fn nums(v: &str) -> Vec<f32> {
-    v.split_whitespace().filter_map(|w| w.replace(',', ".").parse().ok()).collect()
+    v.split_whitespace()
+        .filter_map(|w| w.replace(',', ".").parse().ok())
+        .collect()
 }
 
 fn curve(points: &mut Vec<(f32, f32)>) {
@@ -157,12 +191,19 @@ fn curve(points: &mut Vec<(f32, f32)>) {
 
 impl RailTraction {
     pub fn parse(lines: &[&str]) -> RailTraction {
-        let mut t = RailTraction { efficiency: 0.9, ..Default::default() };
+        let mut t = RailTraction {
+            efficiency: 0.9,
+            ..Default::default()
+        };
         for (k, v) in pairs(lines) {
             let n = nums(&v);
             match k.as_str() {
-                "point" if n.len() >= 2 && n[1] >= 0.0 => t.points.push((n[0].max(0.0) / 3.6, n[1] * 1000.0)),
-                "regen_point" if n.len() >= 2 && n[1] >= 0.0 => t.regen.push((n[0].max(0.0) / 3.6, n[1] * 1000.0)),
+                "point" if n.len() >= 2 && n[1] >= 0.0 => {
+                    t.points.push((n[0].max(0.0) / 3.6, n[1] * 1000.0))
+                }
+                "regen_point" if n.len() >= 2 && n[1] >= 0.0 => {
+                    t.regen.push((n[0].max(0.0) / 3.6, n[1] * 1000.0))
+                }
                 "power_kw" if !n.is_empty() => t.power_w = n[0].max(0.0) * 1000.0,
                 "efficiency" if !n.is_empty() => t.efficiency = n[0].clamp(0.3, 1.0),
                 _ => {}
@@ -272,13 +313,23 @@ mod tests {
 
     #[test]
     fn traction_curve_and_power() {
-        let t = RailTraction::parse(&["point 90 36", "point 0 80", "point 40 80 // flat", "power_kw 800", "regen_point 80 60", "regen_point 10 60"]);
+        let t = RailTraction::parse(&[
+            "point 90 36",
+            "point 0 80",
+            "point 40 80 // flat",
+            "power_kw 800",
+            "regen_point 80 60",
+            "regen_point 10 60",
+        ]);
         assert_eq!(t.points.len(), 3);
         assert_eq!(t.points[0], (0.0, 80_000.0));
         assert!((t.pull(0.0) - 80_000.0).abs() < 1.0);
         // 800 kW x 0.9 / 11.1 m/s = 65 kN would be the power limit; the curve gives 80 kN: power wins
         let at40 = t.pull(40.0 / 3.6);
-        assert!((at40 - 800_000.0 * 0.9 / (40.0 / 3.6)).abs() < 50.0, "{at40}");
+        assert!(
+            (at40 - 800_000.0 * 0.9 / (40.0 / 3.6)).abs() < 50.0,
+            "{at40}"
+        );
         // beyond the last point it falls like 1/v
         assert!(t.pull(120.0 / 3.6) < t.pull(90.0 / 3.6));
         assert_eq!(t.pull(-10.0), t.pull(10.0), "either way");
@@ -289,12 +340,27 @@ mod tests {
 
     #[test]
     fn brake_and_coupler_blocks() {
-        let b = RailBrake::parse(&["type ep", "service 1.1", "pipe_wave 900", "apply_time 2", "blend 0"]);
-        assert_eq!((b.kind, b.service, b.blend), (BrakeKind::Ep, Some(1.1), false));
+        let b = RailBrake::parse(&[
+            "type ep",
+            "service 1.1",
+            "pipe_wave 900",
+            "apply_time 2",
+            "blend 0",
+        ]);
+        assert_eq!(
+            (b.kind, b.service, b.blend),
+            (BrakeKind::Ep, Some(1.1), false)
+        );
         assert_eq!(b.pipe_wave, 340.0, "no faster than sound");
         assert_eq!(RailBrake::default().kind, BrakeKind::Air);
         let c = RailCoupler::parse(&["type screw", "slack 0.2", "max_force 600"]);
-        assert_eq!((c.kind, c.slack, c.max_force), (CouplerKind::Screw, 0.2, 600_000.0));
-        assert_eq!(c.stiffness, RailCoupler::typical(CouplerKind::Screw).stiffness);
+        assert_eq!(
+            (c.kind, c.slack, c.max_force),
+            (CouplerKind::Screw, 0.2, 600_000.0)
+        );
+        assert_eq!(
+            c.stiffness,
+            RailCoupler::typical(CouplerKind::Screw).stiffness
+        );
     }
 }

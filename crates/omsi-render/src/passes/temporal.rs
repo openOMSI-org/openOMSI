@@ -7,24 +7,46 @@ impl Renderer {
     /// own order, after its first pane that writes depth: most buses' cabs). They would have only
     /// the street's motion behind the windscreen, and the dashboard would smear while driving.
     /// Drawn after the main pass, over the depth it left, without writing depth (#2059).
-    pub(crate) fn encode_temporal_late_motion(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene, f: &FrameCtx, plan: &DrawPlan) {
-        let Some((_, cut_batches)) = plan.masked.as_ref().filter(|(_, cut)| !cut.is_empty()) else { return };
+    pub(crate) fn encode_temporal_late_motion(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        scene: &Scene,
+        f: &FrameCtx,
+        plan: &DrawPlan,
+    ) {
+        let Some((_, cut_batches)) = plan.masked.as_ref().filter(|(_, cut)| !cut.is_empty()) else {
+            return;
+        };
         if !f.temporal_frame || plan.prefill.is_none() || !self.shares_prepass_depth(f, plan) {
             return;
         }
-        let (Some(d), Some(ao)) = (self.temporal.as_ref(), self.targets.ao.as_ref()) else { return };
-        let (Some(p), Some(t), Some((_, bg))) = (self.temporal_pipes.as_ref(), d.targets.as_ref(), d.prev_models.as_ref()) else { return };
+        let (Some(d), Some(ao)) = (self.temporal.as_ref(), self.targets.ao.as_ref()) else {
+            return;
+        };
+        let (Some(p), Some(t), Some((_, bg))) = (
+            self.temporal_pipes.as_ref(),
+            d.targets.as_ref(),
+            d.prev_models.as_ref(),
+        ) else {
+            return;
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("temporal late motion"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &t.motion_view,
                 depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &ao.depth_view,
-                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }),
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                }),
                 stencil_ops: None,
             }),
             timestamp_writes: None,
@@ -42,7 +64,13 @@ impl Renderer {
         // (plain opaque parts only, prepass codes 0 and 1: a cut-out or transmap layer, the dirt
         // on a windscreen, left its depth in scattered texels, and the motion through the glass
         // would come out speckled)
-        encode_batches_filtered(&mut pass, scene, cut_batches, |b: &Batch| b.pipe < 2, |pipe| &p.late_motion[pipe as usize]);
+        encode_batches_filtered(
+            &mut pass,
+            scene,
+            cut_batches,
+            |b: &Batch| b.pipe < 2,
+            |pipe| &p.late_motion[pipe as usize],
+        );
     }
 
     /// The transparency mask's panes, before the late motion that reads them (`t_glass` in
@@ -82,7 +110,10 @@ impl Renderer {
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &ao.depth_view,
-                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }),
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                }),
                 stencil_ops: None,
             }),
             timestamp_writes: None,

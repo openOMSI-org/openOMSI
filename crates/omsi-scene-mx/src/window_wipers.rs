@@ -1,0 +1,1393 @@
+//! Persistent wetness on the player's glass, cleared by the animated blade's swept area.
+//! A small mask uses the existing transmap binding: no extra draw or offscreen pass.
+
+use glam::{Vec2, Vec3};
+use omsi_geometry::MeshData;
+use omsi_render::{MaterialId, Renderer, Scene, TextureId};
+use omsi_sim::VehicleInstance;
+use omsi_weather::window_drops::{Canvas, Drops};
+use rayon::prelude::*;
+
+// (the shader reads the mask at this size: `WIPE_MASK_SIZE` in shader.wgsl)
+const SIZE: usize = 128;
+const WIPED_FILM: f32 = -0.04;
+// Snow settles more slowly than rain wets: a heavy snowfall closes a pane in about half
+// a minute, where a downpour soaks it in a few seconds.
+const SNOW_SETTLING: f32 = 0.3;
+
+// Eight codes below zero identify a short-lived residual film, without another texture.
+fn encode_wetness(wet: f32) -> u8 {
+    (wet * (247.0 / 2.0) + 8.0).round() as u8
+}
+
+fn advance_wetness(wet: f32, rate: f32, dt: f32) -> f32 {
+    let ridge = (wet - 1.0).max(0.0);
+    let mut base = wet.min(1.0);
+    let mut remaining = dt;
+    if base < 0.0 {
+        let drying = -base / 0.08;
+        if dt < drying {
+            return base + dt * 0.08;
+        }
+        base = 0.0;
+        remaining -= drying;
+    }
+    (base + rate * remaining).clamp(0.0, 1.0) + ridge
+}
+
+struct Blade {
+    mesh: usize,
+    ends: [Vec3; 2],
+    previous: [Vec3; 2],
+    current: [Vec3; 2],
+}
+
+struct Film {
+    mesh: usize,
+    slot: usize,
+    material: MaterialId,
+    snow_material: MaterialId,
+    texture: TextureId,
+    drops: Drops,
+    drops_texture: TextureId,
+    paint_phase: f32,
+    paint_due: bool,
+    painted: bool,
+    pending: Option<std::sync::mpsc::Receiver<(Canvas, bool)>>,
+    runoff_time: f32,
+    points: Vec<Vec3>,
+    // Negative is a recent wipe's residual film; 0..1 droplets; 1..2 the pushed ridge.
+    wet: Vec<f32>,
+    unwiped: f32,
+    local: bool,
+    /// A blade has swept this pane: the washer's water lands only on such a one (it wetted
+    /// every window of the bus, #1884).
+    swept: bool,
+    image: omsi_texture::Image,
+    bounds: [f32; 4],
+    /// Another film's glass lies over this one (`under_layers`): it shows no snow.
+    under: bool,
+}
+
+/// A pane with a rain film and no wetness mask: its layer's material while it rains and the
+/// snow variant it wears while it snows (`Renderer::add_window_snow_material`).
+struct SnowPane {
+    mesh: usize,
+    slot: usize,
+    rain: MaterialId,
+    snow: MaterialId,
+    /// Another film's glass lies over this one (`under_layers`): it shows no snow.
+    under: bool,
+}
+
+/// A slot of the player's bus whose layer is a rain film its script's wetness drives
+/// (`Rain_Window_*_Wetness`), not taken over by a material variant or a script texture.
+fn rain_film_slot(
+    vehicle: &VehicleInstance,
+    render: &crate::VehicleRender,
+    mesh: usize,
+    slot: usize,
+) -> bool {
+    let vm = &vehicle.ty.meshes[mesh];
+    // (a mesh only the traffic's copies draw, `[viewpoint]` 4: a far LOD of a door; its glass
+    // would lie over the drawn one's in `under_layers`)
+    let viewpoint = vehicle.ty.model.meshes[vm.def_index].viewpoint;
+    if viewpoint != 0 && viewpoint & 3 == 0 {
+        return false;
+    }
+    let controlled = vm.overrides.iter().any(|m| {
+        omsi_sim::vehicle::override_slot(&vm.materials, m) == Some(slot)
+            && m.alphascale.as_deref().is_some_and(|v| {
+                matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "rain_window_front_wetness"
+                        | "rain_window_wiped_wetness"
+                        | "rain_window_norm_wetness"
+                )
+            })
+    });
+    controlled
+        && !render
+            .variants
+            .iter()
+            .any(|v| v.mesh == mesh && v.slot == slot)
+        && !vm.overrides.iter().any(|m| {
+            omsi_sim::vehicle::override_slot(&vm.materials, m) == Some(slot)
+                && (m.use_script_texture.is_some() || m.use_text_texture.is_some())
+        })
+}
+
+pub struct WindowWipers {
+    blades: Vec<Blade>,
+    films: Vec<Film>,
+    snow_panes: Vec<SnowPane>,
+    time: f64,
+    runoff: Vec<f32>,
+}
+
+impl WindowWipers {
+    pub fn new(
+        renderer: &Renderer,
+        scene: &mut Scene,
+        vehicle: &VehicleInstance,
+        render: &crate::VehicleRender,
+    ) -> Self {
+        let instances = &render.instances;
+        let mut blades = Vec::new();
+        for (mesh, vm) in vehicle.ty.meshes.iter().enumerate() {
+            let def = &vehicle.ty.model.meshes[vm.def_index];
+            let name = def.file.to_ascii_lowercase();
+            let animated = def.animations.iter().any(|a| {
+                let v = a.variable.to_ascii_lowercase();
+                v.contains("wiper") || v.contains("wisch")
+            });
+            // Prefer a separate blade; some buses (C2) export blade and arm together.
+            if !animated
+                || !["wiper", "wisch"].iter().any(|s| name.contains(s))
+                || ["wash", "wasser", "schalter", "switch", "hebel", "motor"]
+                    .iter()
+                    .any(|s| name.contains(s))
+            {
+                continue;
+            }
+            let Some(data) = vehicle.ty.mesh_data(mesh) else {
+                continue;
+            };
+            // A separate blade takes precedence over an arm mesh. Otherwise find the
+            // narrow rubber strip, whatever the mesh is named: a plain principal axis
+            // tilts towards the arm of a combined mesh and clears the glass at that
+            // wrong angle. Keep the axis as a fallback for a mesh made only of rubber.
+            if name.contains("arm")
+                && vehicle.ty.model.meshes.iter().any(|d| {
+                    let n = d.file.to_ascii_lowercase();
+                    n.contains("wischerblatt")
+                        || n.contains("wiperblade")
+                        || n.contains("wiper_blade")
+                })
+            {
+                continue;
+            }
+            let Some(ends) =
+                combined_blade_ends(&data.positions).or_else(|| blade_ends(&data.positions))
+            else {
+                continue;
+            };
+            let previous = ends.map(|p| vehicle.mesh_transforms[mesh].transform_point3(p));
+            blades.push(Blade {
+                mesh,
+                ends,
+                previous,
+                current: previous,
+            });
+        }
+        let mut films = Vec::new();
+        if !blades.is_empty() {
+            for (mesh, vm) in vehicle.ty.meshes.iter().enumerate() {
+                for slot in 0..vm.materials.len() {
+                    if !rain_film_slot(vehicle, render, mesh, slot) {
+                        continue;
+                    }
+                    let Some(data) = vehicle.ty.mesh_data(mesh) else {
+                        continue;
+                    };
+                    let cab = blades
+                        .iter()
+                        .map(|b| (b.current[0] + b.current[1]) * 0.5)
+                        .sum::<Vec3>()
+                        / blades.len() as f32;
+                    let cab = vehicle.mesh_transforms[mesh]
+                        .inverse()
+                        .transform_point3(cab);
+                    let Some((points, bounds)) = film_points_in_cab(&data, slot, Some(cab)) else {
+                        continue;
+                    };
+                    // Include the cab's side windows; distant passenger panes retain
+                    // the procedural path and do not need individual drop simulations.
+                    if !points.iter().filter(|p| p.is_finite()).any(|p| {
+                        let p = vehicle.mesh_transforms[mesh].transform_point3(*p);
+                        blades.iter().any(|b| {
+                            let [a, c] = b.previous;
+                            let t = ((p - a).dot(c - a) / a.distance_squared(c)).clamp(0.0, 1.0);
+                            p.distance_squared(a.lerp(c, t)) < 1.8 * 1.8
+                        })
+                    }) {
+                        continue;
+                    }
+                    let base = scene.instances[instances[mesh]].materials[slot];
+                    // Keep custom transmaps and material variants under their script's control.
+                    if scene.materials[base].transmap.is_some() {
+                        continue;
+                    }
+                    let wetness = vehicle
+                        .var("Rain_Window_Norm_Wetness")
+                        .map(|wet| (wet * 1.8).clamp(0.0, 1.0))
+                        .unwrap_or(vehicle.mesh_props[mesh].slot_alpha[slot]);
+                    let mut image = omsi_texture::Image {
+                        width: SIZE as u32,
+                        height: SIZE as u32,
+                        rgba: vec![255; SIZE * SIZE * 4],
+                        has_alpha: true,
+                    };
+                    for (pixel, point) in image.rgba.chunks_exact_mut(4).zip(&points) {
+                        // Store depth to distinguish panes which overlap in X/Z (a
+                        // wraparound windscreen's side must not inherit a front wipe).
+                        let depth =
+                            ((pane_depth(*point, bounds) + 32.0) / 64.0 * 65535.0).round() as u16;
+                        pixel[0] = (depth >> 8) as u8;
+                        pixel[1] = depth as u8;
+                        pixel[2] = (wetness * 255.0).round() as u8;
+                        pixel[3] = encode_wetness(wetness);
+                    }
+                    let texture = renderer.add_data_texture(scene, &image);
+                    let drops = Drops::new(
+                        Vec2::new(bounds[2].abs().recip(), bounds[3].recip()),
+                        wetness,
+                        (mesh * 7919 + slot * 104729 + 1) as u32,
+                    );
+                    let drops_texture = renderer.add_data_texture(scene, &drops.canvas.image);
+                    let material = renderer
+                        .add_window_wetness_material(
+                            scene,
+                            base,
+                            texture,
+                            drops_texture,
+                            bounds,
+                            false,
+                        )
+                        .unwrap();
+                    // the same pane wearing the snow the mask holds while it snows
+                    let snow_material = renderer
+                        .add_window_wetness_material(
+                            scene,
+                            base,
+                            texture,
+                            drops_texture,
+                            bounds,
+                            true,
+                        )
+                        .unwrap();
+                    films.push(Film {
+                        mesh,
+                        slot,
+                        material,
+                        snow_material,
+                        texture,
+                        drops,
+                        drops_texture,
+                        paint_phase: 1.0,
+                        paint_due: false,
+                        painted: false,
+                        pending: None,
+                        runoff_time: 0.0,
+                        points,
+                        wet: vec![wetness; SIZE * SIZE],
+                        unwiped: wetness,
+                        local: false,
+                        swept: false,
+                        image,
+                        bounds,
+                        under: false,
+                    });
+                }
+            }
+        }
+        // Every other pane with a rain film (the doors, the opening windows, the side windows
+        // away from the wipers) has no mask: it shows the script's wetness as water drops, and
+        // while it snows the same wetness as settled snow, as the masked panes do.
+        let mut snow_panes = Vec::new();
+        for (mesh, vm) in vehicle.ty.meshes.iter().enumerate() {
+            for slot in 0..vm.materials.len() {
+                if !rain_film_slot(vehicle, render, mesh, slot)
+                    || films.iter().any(|f| f.mesh == mesh && f.slot == slot)
+                {
+                    continue;
+                }
+                let Some(&inst) = instances.get(mesh) else {
+                    continue;
+                };
+                let Some(&base) = scene.instances[inst].materials.get(slot) else {
+                    continue;
+                };
+                // (a custom transmap stays under its script's control, as on the films)
+                if scene.materials[base].transmap.is_some() {
+                    continue;
+                }
+                if let Some(snow) = renderer.add_window_snow_material(scene, base) {
+                    snow_panes.push(SnowPane {
+                        mesh,
+                        slot,
+                        rain: base,
+                        snow,
+                        under: false,
+                    });
+                }
+            }
+        }
+        // (the snow panes' glass on the same grid as the films', for `under_layers`)
+        let pane_points: Vec<Option<(Vec<Vec3>, [f32; 4])>> = snow_panes
+            .iter()
+            .map(|p| {
+                vehicle
+                    .ty
+                    .mesh_data(p.mesh)
+                    .and_then(|data| film_points_in_cab(&data, p.slot, None))
+            })
+            .collect();
+        let layers: Vec<(usize, &[Vec3], [f32; 4])> = films
+            .iter()
+            .map(|f| (f.mesh, f.points.as_slice(), f.bounds))
+            .chain(
+                snow_panes
+                    .iter()
+                    .zip(&pane_points)
+                    .filter_map(|(p, pts)| pts.as_ref().map(|(v, b)| (p.mesh, v.as_slice(), *b))),
+            )
+            .collect();
+        let mut under = under_layers(&layers, &vehicle.mesh_transforms).into_iter();
+        for film in &mut films {
+            film.under = under.next().unwrap_or(false);
+        }
+        for (pane, pts) in snow_panes.iter_mut().zip(&pane_points) {
+            if pts.is_some() {
+                pane.under = under.next().unwrap_or(false);
+            }
+        }
+        let count = films.len();
+        for (k, film) in films.iter_mut().enumerate() {
+            film.paint_phase = first_paint_phase(k, count);
+        }
+        log::debug!(
+            "window wipers: {} blades, {} wetness masks, {} panes without one, {} under another",
+            blades.len(),
+            films.len(),
+            snow_panes.len(),
+            films.iter().filter(|f| f.under).count()
+                + snow_panes.iter().filter(|p| p.under).count()
+        );
+        Self {
+            blades,
+            films,
+            snow_panes,
+            time: vehicle.host.clock.run_time,
+            runoff: vec![0.0; SIZE * SIZE],
+        }
+    }
+
+    pub fn textures(&self) -> impl Iterator<Item = TextureId> + '_ {
+        self.films.iter().flat_map(|f| [f.texture, f.drops_texture])
+    }
+
+    pub fn materials(&self) -> impl Iterator<Item = MaterialId> + '_ {
+        self.films
+            .iter()
+            .flat_map(|f| [f.material, f.snow_material])
+            .chain(self.snow_panes.iter().map(|p| p.snow))
+    }
+
+    /// `rain_quality`: the rain's (see `rain::quality_of`): below high the films are drawn
+    /// half as often.
+    pub fn update(
+        &mut self,
+        renderer: &Renderer,
+        scene: &mut Scene,
+        vehicle: &VehicleInstance,
+        instances: &[usize],
+        rain_quality: u8,
+    ) {
+        let liquid = vehicle.host.precip_type != 2.0 || vehicle.host.temperature > 0.0;
+        for pane in &self.snow_panes {
+            let inst = instances[pane.mesh];
+            let material = if liquid { pane.rain } else { pane.snow };
+            if scene.instances[inst].materials.get(pane.slot) != Some(&material) {
+                renderer.set_material(scene, inst, pane.slot, material);
+            }
+            // (the snow lies once, on the outer layer: see `under_layers`)
+            if !liquid && pane.under {
+                let mut alpha = scene.instances[inst].slot_alpha.clone();
+                if alpha.get(pane.slot).is_some_and(|a| *a != 0.0) {
+                    alpha[pane.slot] = 0.0;
+                    let visible = scene.instances[inst].visible;
+                    renderer.set_params(
+                        scene,
+                        inst,
+                        &alpha,
+                        visible,
+                        &vehicle.mesh_props[pane.mesh].slot_uv,
+                    );
+                }
+            }
+        }
+        if self.films.is_empty() {
+            return;
+        }
+        let now = vehicle.host.clock.run_time;
+        let dt = (now - self.time).max(0.0) as f32;
+        self.time = now;
+        let washer = vehicle.var("wiper_wash").unwrap_or(0.0).clamp(0.0, 1.0);
+        // Do not read Front/Wiped wetness: the script resets those for the whole pane.
+        // Keep rainfall local and let a dry pane evaporate gradually after the shower.
+        for blade in &mut self.blades {
+            blade.current = blade
+                .ends
+                .map(|p| vehicle.mesh_transforms[blade.mesh].transform_point3(p));
+        }
+        for film in &mut self.films {
+            let liquid = vehicle.host.precip_type != 2.0 || vehicle.host.temperature > 0.0;
+            let previous_wetness = film.unwiped;
+            let pane_washer = if film.swept { washer } else { 0.0 };
+            if dt > 0.0 {
+                // Gravity follows the pane's actual inclination. Relative airflow can
+                // carry mobile water sideways/upwards; small pinned beads stay put.
+                let inverse_world = scene.instances[instances[film.mesh]].transform.inverse();
+                let mut air = inverse_world.transform_vector3(
+                    vehicle.host.wind - crate::lights::vehicle_velocity(vehicle),
+                );
+                let normal_air = pane_depth(air, film.bounds).abs();
+                let falling = vehicle.host.falling_precip();
+                let rain = falling * (1.0 + normal_air * 0.035).min(2.0);
+                let rate = if !liquid && rain > 0.0 {
+                    rain * (0.09 + falling * 0.10) * SNOW_SETTLING
+                } else if rain > 0.0 || pane_washer > 0.0 {
+                    rain * (0.09 + falling * 0.10) + pane_washer * 0.8
+                } else if !liquid {
+                    0.0 // settled snow neither runs off nor dries in the frost
+                } else {
+                    -0.025
+                };
+                film.unwiped = (film.unwiped + rate * dt).clamp(0.0, 1.0);
+                // An untouched pane has uniform wetness. Once it is saturated,
+                // only its moving drops need updates, not every mask pixel.
+                if film.local {
+                    for wet in &mut film.wet {
+                        *wet = advance_wetness(*wet, rate, dt);
+                    }
+                } else if previous_wetness != film.unwiped {
+                    film.wet.fill(film.unwiped);
+                }
+                air.z += normal_air * 0.6;
+                let tangent = pane_project(air, film.bounds[2] < 0.0);
+                let air_force =
+                    tangent.normalize_or_zero() * (tangent.length_squared() / 130.0).min(9.0);
+                let gravity = inverse_world.transform_vector3(-Vec3::Z);
+                let force =
+                    gravity + air.normalize_or_zero() * (air.length_squared() / 130.0).min(3.0);
+                if liquid {
+                    if film.local {
+                        drain_water(
+                            &mut film.wet,
+                            &film.points,
+                            film.bounds,
+                            force * 0.12,
+                            dt,
+                            &mut self.runoff,
+                        );
+                    }
+                    let wet = &film.wet;
+                    let points = &film.points;
+                    let bounds = film.bounds;
+                    film.drops.advance(
+                        dt,
+                        rain + pane_washer,
+                        pane_project(gravity, bounds[2] < 0.0),
+                        air_force,
+                        if bounds[2] > 0.0 {
+                            (normal_air * normal_air / 260.0).min(3.0)
+                        } else {
+                            0.0
+                        },
+                        |p| {
+                            let i = drop_pixel(p, bounds);
+                            if points[i].is_finite() {
+                                wet[i]
+                            } else {
+                                f32::NAN
+                            }
+                        },
+                    );
+                }
+                let inverse = vehicle.mesh_transforms[film.mesh].inverse();
+                // (a dry pane with no drop on it has nothing to wipe: a blade sweeping it in
+                // the sun cost a quarter of a millisecond a frame)
+                let dry = !film.local && film.unwiped <= 0.004;
+                let drops = liquid && !film.drops.drops.is_empty();
+                for blade in &self.blades {
+                    // (a dry pane is not wiped, so whether the blade reaches it at all is
+                    // looked at here, while the washer runs)
+                    if !film.swept && washer > 0.0 && vehicle.mesh_props[blade.mesh].visible {
+                        film.swept = blade_reaches(
+                            &film.points,
+                            blade.current.map(|p| inverse.transform_point3(p)),
+                        );
+                    }
+                    if !vehicle.mesh_props[blade.mesh].visible || (dry && !drops) {
+                        continue;
+                    }
+                    let previous = blade.previous.map(|p| inverse.transform_point3(p));
+                    let current = blade.current.map(|p| inverse.transform_point3(p));
+                    // A blade that moved far since the last update (a hitch, or a render that
+                    // runs only now and then) is swept in short steps: one long step pushed
+                    // its whole load to where the blade happened to stand and left a bank of
+                    // snow there in the middle of the sweep.
+                    let travel = previous[0]
+                        .distance(current[0])
+                        .max(previous[1].distance(current[1]));
+                    // (steps narrower than the blade, so the water it pushes up at its ends
+                    // stays one ridge and does not settle as a comb of separate blobs)
+                    let steps = (travel / 0.015).ceil().clamp(1.0, 96.0) as usize;
+                    let at = |k: usize| {
+                        let t = k as f32 / steps as f32;
+                        [
+                            previous[0].lerp(current[0], t),
+                            previous[1].lerp(current[1], t),
+                        ]
+                    };
+                    for k in 0..steps {
+                        let (from, to) = (at(k), at(k + 1));
+                        if !dry {
+                            let wiped = wipe(&mut film.wet, &film.points, film.bounds, from, to);
+                            film.local |= wiped;
+                            film.swept |= wiped;
+                        }
+                        if drops {
+                            wipe_drops(film, from, to);
+                        }
+                    }
+                }
+                // The ridge lets a runner go now and then, at uneven times: at a fixed
+                // interval a moving blade left its runners' trails evenly spaced, a fence.
+                film.runoff_time -= dt;
+                if liquid && film.local && film.runoff_time <= 0.0 {
+                    film.runoff_time = 0.08 + film.drops.random() * 0.3;
+                    release_runoff(
+                        &mut film.wet,
+                        &film.points,
+                        film.bounds,
+                        &mut film.drops,
+                        pane_project(force * 0.12, film.bounds[2] < 0.0),
+                    );
+                }
+            }
+            // (painted and uploaded 30 times a second; 15 at a lower rain quality)
+            let every = if rain_quality >= 2 {
+                1.0 / 30.0
+            } else {
+                1.0 / 15.0
+            };
+            if repaint_due(&mut film.paint_phase, dt, every) {
+                if liquid {
+                    // Also discard initial seeds which landed outside the mesh's slot.
+                    film.drop_strays();
+                } else {
+                    film.drops.drops.clear();
+                }
+                film.paint_due = true;
+            }
+            let mut changed = false;
+            if film.local || previous_wetness != film.unwiped {
+                film.local = false;
+                let unwiped = (film.unwiped * 255.0).round() as u8;
+                for (i, (&point, wet)) in film.points.iter().zip(&film.wet).enumerate() {
+                    film.local |= point.is_finite() && *wet != film.unwiped;
+                    let alpha = encode_wetness(if point.is_finite() {
+                        *wet
+                    } else {
+                        film.unwiped
+                    });
+                    let pixel = &mut film.image.rgba[i * 4..i * 4 + 4];
+                    changed |= pixel[3] != alpha || pixel[2] != unwiped;
+                    pixel[2] = unwiped;
+                    pixel[3] = alpha;
+                }
+            }
+            if changed {
+                renderer.update_texture(scene, film.texture, &film.image);
+            }
+            let inst = instances[film.mesh];
+            renderer.set_material(
+                scene,
+                inst,
+                film.slot,
+                if liquid {
+                    film.material
+                } else {
+                    film.snow_material
+                },
+            );
+            let mut alpha = scene.instances[inst].slot_alpha.clone();
+            // the mask owns wetness; scripts still own visibility. A pane that shows nothing
+            // (dry, no drop on it, nothing wiped) keeps its alpha at 0, as its script had it on
+            // a dry day: the frame leaves such a layer out (`passes/batch.rs`), drawn it ran
+            // the rain shader over the whole windscreen for nothing.
+            let shows = (film.local || film.unwiped > 0.0 || !film.drops.drops.is_empty())
+                && (liquid || !film.under);
+            // (a slot the drawn mesh has no triangles of has no alpha of its own: the
+            // instance's list ends at the last slot it draws, while the film's slot comes from
+            // the model's materials - indexing past it ended the game on Android)
+            if let Some(a) = alpha.get_mut(film.slot) {
+                *a = if shows { 1.0 } else { 0.0 };
+            }
+            let visible = scene.instances[inst].visible;
+            renderer.set_params(
+                scene,
+                inst,
+                &alpha,
+                visible,
+                &vehicle.mesh_props[film.mesh].slot_uv,
+            );
+        }
+        let pool = drops_pool();
+        for film in &mut self.films {
+            film.take_back(renderer, scene, false);
+        }
+        let first = |film: &Film| film.paint_due && (!film.painted || pool.is_none());
+        if self.films.iter().any(first) {
+            let paint = |films: &mut Vec<Film>| -> Vec<bool> {
+                films
+                    .par_iter_mut()
+                    .map(|film| first(film) && film.drops.paint())
+                    .collect()
+            };
+            let painted = match pool {
+                Some(pool) => pool.install(|| paint(&mut self.films)),
+                None => paint(&mut self.films),
+            };
+            for (film, painted) in self.films.iter_mut().zip(painted) {
+                if first(film) {
+                    film.paint_due = false;
+                    film.painted = true;
+                    if painted {
+                        renderer.update_texture(
+                            scene,
+                            film.drops_texture,
+                            &film.drops.canvas.image,
+                        );
+                    }
+                }
+            }
+        }
+        if let Some(pool) = pool {
+            for film in &mut self.films {
+                if !film.paint_due || film.pending.is_some() {
+                    continue;
+                }
+                film.paint_due = false;
+                film.drop_strays();
+                let mut canvas = film.drops.canvas.take();
+                let drops = film.drops.drops.clone();
+                let (done, receiver) = std::sync::mpsc::channel();
+                film.pending = Some(receiver);
+                pool.spawn(move || {
+                    let changed = canvas.paint(&drops);
+                    let _ = done.send((canvas, changed));
+                });
+            }
+        }
+        for blade in &mut self.blades {
+            blade.previous = blade.current;
+        }
+    }
+
+    pub fn finish_paints(&mut self, renderer: &Renderer, scene: &mut Scene) {
+        for film in &mut self.films {
+            film.take_back(renderer, scene, true);
+        }
+    }
+}
+
+impl Film {
+    fn drop_strays(&mut self) {
+        let (bounds, points) = (self.bounds, &self.points);
+        self.drops.drops.retain(|d| {
+            d.pos.cmpge(Vec2::ZERO).all()
+                && (d.pos * Vec2::new(bounds[2].abs(), bounds[3]))
+                    .cmplt(Vec2::ONE)
+                    .all()
+                && points[drop_pixel(d.pos, bounds)].is_finite()
+        });
+    }
+
+    fn take_back(&mut self, renderer: &Renderer, scene: &mut Scene, wait: bool) {
+        let Some(pending) = &self.pending else { return };
+        let got = if wait {
+            pending
+                .recv()
+                .map_err(|_| std::sync::mpsc::TryRecvError::Disconnected)
+        } else {
+            pending.try_recv()
+        };
+        match got {
+            Ok((canvas, changed)) => {
+                self.drops.canvas = canvas;
+                self.pending = None;
+                if changed {
+                    for rect in self.drops.canvas.changed() {
+                        renderer.update_texture_rect(
+                            scene,
+                            self.drops_texture,
+                            &self.drops.canvas.image,
+                            rect,
+                        );
+                    }
+                }
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.pending = None;
+                self.drops.canvas.reset();
+                self.painted = false;
+                self.paint_due = true;
+            }
+        }
+    }
+}
+
+fn drops_pool() -> Option<&'static rayon::ThreadPool> {
+    static POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .thread_name(|_| "window drops".into())
+            .build()
+            .ok()
+    })
+    .as_ref()
+}
+
+fn first_paint_phase(k: usize, count: usize) -> f32 {
+    1.0 + k as f32 / count.max(1) as f32
+}
+
+fn repaint_due(phase: &mut f32, dt: f32, every: f32) -> bool {
+    *phase += dt / every;
+    let due = *phase >= 1.0;
+    if due {
+        *phase %= 1.0;
+    }
+    due
+}
+
+// A signed inverse width selects X/Z for the front or Y/Z for a side pane.
+// The same convention is used by the vertex shader and the two texture maps.
+fn pane_project(p: Vec3, side: bool) -> Vec2 {
+    Vec2::new(if side { p.y } else { p.x }, p.z)
+}
+
+fn pane_depth(p: Vec3, bounds: [f32; 4]) -> f32 {
+    if bounds[2] < 0.0 { p.x } else { p.y }
+}
+
+fn pane_pixel(p: Vec3, bounds: [f32; 4]) -> Vec2 {
+    (pane_project(p, bounds[2] < 0.0) - Vec2::new(bounds[0], bounds[1]))
+        * Vec2::new(bounds[2].abs(), bounds[3])
+        * SIZE as f32
+}
+
+fn drop_pixel(p: Vec2, bounds: [f32; 4]) -> usize {
+    let uv = (p * Vec2::new(bounds[2].abs(), bounds[3]) * SIZE as f32)
+        .clamp(Vec2::ZERO, Vec2::splat((SIZE - 1) as f32));
+    uv.y as usize * SIZE + uv.x as usize
+}
+
+fn wipe_drops(film: &mut Film, previous: [Vec3; 2], current: [Vec3; 2]) {
+    let triangles = [
+        SweepTriangle::new(previous[0], previous[1], current[1], film.bounds[2] < 0.0),
+        SweepTriangle::new(previous[0], current[1], current[0], film.bounds[2] < 0.0),
+    ];
+    let edge = current[1] - current[0];
+    let length2 = edge.length_squared();
+    if length2 < 1e-8 {
+        return;
+    }
+    for drop in &mut film.drops.drops {
+        let mut p = film.points[drop_pixel(drop.pos, film.bounds)];
+        if film.bounds[2] < 0.0 {
+            p.y = drop.pos.x + film.bounds[0];
+        } else {
+            p.x = drop.pos.x + film.bounds[0];
+        }
+        p.z = drop.pos.y + film.bounds[1];
+        let old = drop.previous + Vec2::new(film.bounds[0], film.bounds[1]);
+        let mut before = p;
+        if film.bounds[2] < 0.0 {
+            before.y = old.x;
+        } else {
+            before.x = old.x;
+        }
+        before.z = old.y;
+        if !triangles.iter().flatten().any(|t| t.crosses(before, p)) {
+            continue;
+        }
+        let t = ((p - current[0]).dot(edge) / length2).clamp(0.0, 1.0);
+        let motion = current[0].lerp(current[1], t) - previous[0].lerp(previous[1], t);
+        let across = (motion - edge * (motion.dot(edge) / length2)).normalize_or_zero();
+        let pushed = current[0] + edge * t + across * 0.008;
+        drop.displace(
+            pane_project(pushed, film.bounds[2] < 0.0) - Vec2::new(film.bounds[0], film.bounds[1]),
+            pane_project(across * 0.15, film.bounds[2] < 0.0),
+        );
+    }
+}
+
+/// An arm biases the principal axis of a combined mesh away from the rubber. Find
+/// its dominant long, narrow strip first, using a bounded set of candidate lines.
+/// This runs once on loading; both density and length favour the blade over its joints.
+fn combined_blade_ends(points: &[Vec3]) -> Option<[Vec3; 2]> {
+    if points.len() < 2 {
+        return None;
+    }
+    let mut best = None;
+    let mut score = 0.0;
+    for i in 0..64 {
+        let a = points[i * points.len() / 64];
+        // A fixed stride samples across exporter vertex groups without a runtime RNG.
+        let b = points[(i * 811 + points.len() / 2) % points.len()];
+        if a.distance_squared(b) < 0.09 {
+            continue;
+        }
+        let axis = (b - a).normalize();
+        let mut count = 0;
+        let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+        for &p in points {
+            let d = p - a;
+            if d.cross(axis).length_squared() < 0.015 * 0.015 {
+                count += 1;
+                let t = d.dot(axis);
+                lo = lo.min(t);
+                hi = hi.max(t);
+            }
+        }
+        let candidate = count as f32 * (hi - lo).powi(2);
+        if candidate > score {
+            score = candidate;
+            best = Some((a, axis));
+        }
+    }
+    let (a, axis) = best?;
+    let contact: Vec<_> = points
+        .iter()
+        .copied()
+        .filter(|p| (*p - a).cross(axis).length_squared() < 0.015 * 0.015)
+        .collect();
+    blade_ends(&contact)
+}
+
+/// Principal axis of the narrow blade mesh; box diagonals include its thickness and
+/// give the wrong contact line on a blade exported at an angle.
+fn blade_ends(points: &[Vec3]) -> Option<[Vec3; 2]> {
+    if points.len() < 2 {
+        return None;
+    }
+    let centre = points.iter().copied().sum::<Vec3>() / points.len() as f32;
+    let mut axis = points
+        .iter()
+        .map(|p| *p - centre)
+        .max_by(|a, b| a.length_squared().total_cmp(&b.length_squared()))?
+        .normalize_or_zero();
+    for _ in 0..8 {
+        axis = points
+            .iter()
+            .map(|p| {
+                let d = *p - centre;
+                d * d.dot(axis)
+            })
+            .sum::<Vec3>()
+            .normalize_or_zero();
+    }
+    let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+    for p in points {
+        let t = (*p - centre).dot(axis);
+        lo = lo.min(t);
+        hi = hi.max(t);
+    }
+    (hi - lo > 0.15 && hi - lo < 2.0).then_some([centre + axis * lo, centre + axis * hi])
+}
+
+/// Rasterise only the precipitation slot, once. Mesh coordinates rather than texture UV keep
+/// the mask unique when rain textures repeat or several windows share a texture atlas.
+#[cfg(test)]
+fn film_points(data: &MeshData, slot: usize) -> Option<(Vec<Vec3>, [f32; 4])> {
+    film_points_in_cab(data, slot, None)
+}
+
+/// Which of the rain films' layers lie under another one. A bus's glass is often two meshes,
+/// its outer face and its inner one, each with its films, and the two split the glass into
+/// their slots each their own way (the EN92's windscreen: the wipers' fields on the outer
+/// one, a band across on the inner). The rain drawn on both hardly showed it; the snow, a
+/// layer of its own cover on each, was twice as thick where the two overlapped and showed
+/// every edge where they split the glass differently - straight seams over the windscreen.
+/// The snow lies once, on the outer face. A layer is under when most of its glass has
+/// another layer's within five centimetres in front of it (further from the vehicle's
+/// middle along the pane's depth), or at the same depth on a layer listed before it.
+/// `layers`: each one's mesh, its points on the pane's grid and their bounds
+/// (`film_points_in_cab`).
+fn under_layers(layers: &[(usize, &[Vec3], [f32; 4])], transforms: &[glam::Mat4]) -> Vec<bool> {
+    let world = |mesh: usize| {
+        transforms
+            .get(mesh)
+            .copied()
+            .unwrap_or(glam::Mat4::IDENTITY)
+    };
+    layers
+        .iter()
+        .enumerate()
+        .map(|(i, &(mi, pi, bi))| {
+            let to_vehicle = world(mi);
+            let others: Vec<(usize, glam::Mat4, glam::Mat4, &[Vec3], [f32; 4])> = layers
+                .iter()
+                .enumerate()
+                .filter(|&(j, &(_, _, bj))| j != i && (bj[2] < 0.0) == (bi[2] < 0.0))
+                .map(|(j, &(mj, pj, bj))| (j, world(mj).inverse() * to_vehicle, world(mj), pj, bj))
+                .collect();
+            if others.is_empty() {
+                return false;
+            }
+            let (mut glass, mut covered) = (0usize, 0usize);
+            // (every other point of the grid each way: a quarter of them tell it)
+            for y in (0..SIZE).step_by(2) {
+                for x in (0..SIZE).step_by(2) {
+                    let p = pi[y * SIZE + x];
+                    if !p.is_finite() {
+                        continue;
+                    }
+                    glass += 1;
+                    let depth = pane_depth(to_vehicle.transform_point3(p), bi).abs();
+                    let over = others.iter().any(|&(j, to_j, from_j, pj, bj)| {
+                        let q = to_j.transform_point3(p);
+                        let px = pane_pixel(q, bj).floor();
+                        if px.x < 0.0 || px.y < 0.0 || px.x >= SIZE as f32 || px.y >= SIZE as f32 {
+                            return false;
+                        }
+                        let o = pj[px.y as usize * SIZE + px.x as usize];
+                        if !o.is_finite() || (pane_depth(o, bj) - pane_depth(q, bj)).abs() > 0.05 {
+                            return false;
+                        }
+                        let other = pane_depth(from_j.transform_point3(o), bi).abs();
+                        other > depth + 0.003 || (other >= depth - 0.003 && j < i)
+                    });
+                    covered += usize::from(over);
+                }
+            }
+            glass > 0 && covered * 2 > glass
+        })
+        .collect()
+}
+
+fn film_points_in_cab(
+    data: &MeshData,
+    slot: usize,
+    cab: Option<Vec3>,
+) -> Option<(Vec<Vec3>, [f32; 4])> {
+    let triangles: Vec<[Vec3; 3]> = data
+        .ranges
+        .iter()
+        .filter(|r| r.2 as usize == slot)
+        .flat_map(|&(start, count, _)| {
+            data.indices[start as usize..(start + count) as usize].chunks_exact(3)
+        })
+        .map(|i| {
+            [
+                data.positions[i[0] as usize],
+                data.positions[i[1] as usize],
+                data.positions[i[2] as usize],
+            ]
+        })
+        .collect();
+    let (mut lo3, mut hi3) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+    for &p in triangles.iter().flatten() {
+        lo3 = lo3.min(p);
+        hi3 = hi3.max(p);
+    }
+    let side = hi3.y - lo3.y > (hi3.x - lo3.x) * 1.5;
+    let (mut lo, mut hi) = (Vec2::splat(f32::INFINITY), Vec2::splat(f32::NEG_INFINITY));
+    for p in triangles.iter().flatten() {
+        let p = pane_project(*p, side);
+        lo = lo.min(p);
+        hi = hi.max(p);
+    }
+    if side {
+        if let Some(cab) = cab {
+            lo.x = lo.x.max(cab.y - 1.8);
+            hi.x = hi.x.min(cab.y + 1.8);
+        }
+    }
+    let size = hi - lo;
+    if !size.is_finite() || size.min_element() < 0.05 {
+        return None;
+    }
+    let mut points = vec![Vec3::NAN; SIZE * SIZE];
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let p = lo
+                + size
+                    * Vec2::new(
+                        (x as f32 + 0.5) / SIZE as f32,
+                        (y as f32 + 0.5) / SIZE as f32,
+                    );
+            for &[a, b, c] in &triangles {
+                let (a2, b2, c2) = (
+                    pane_project(a, side),
+                    pane_project(b, side),
+                    pane_project(c, side),
+                );
+                let det = (b2 - a2).perp_dot(c2 - a2);
+                if det.abs() < 1e-8 {
+                    continue;
+                }
+                let u = (p - a2).perp_dot(c2 - a2) / det;
+                let v = (b2 - a2).perp_dot(p - a2) / det;
+                if u >= -0.001 && v >= -0.001 && u + v <= 1.001 {
+                    points[y * SIZE + x] = a + (b - a) * u + (c - a) * v;
+                    break;
+                }
+            }
+        }
+    }
+    Some((
+        points,
+        [
+            lo.x,
+            lo.y,
+            if side { -1.0 / size.x } else { 1.0 / size.x },
+            1.0 / size.y,
+        ],
+    ))
+}
+
+/// Whether a blade standing at `blade` (its two ends, in the pane's frame) lies on the pane:
+/// some point of the pane within ten centimetres of it.
+fn blade_reaches(points: &[Vec3], blade: [Vec3; 2]) -> bool {
+    let [a, b] = blade;
+    let len2 = a.distance_squared(b).max(1e-6);
+    points.iter().filter(|p| p.is_finite()).any(|p| {
+        let t = ((*p - a).dot(b - a) / len2).clamp(0.0, 1.0);
+        p.distance_squared(a.lerp(b, t)) < 0.1 * 0.1
+    })
+}
+
+/// Only visit the small rectangle crossed this frame; stationary blades cost no scan.
+fn wipe(
+    wet: &mut [f32],
+    points: &[Vec3],
+    bounds: [f32; 4],
+    previous: [Vec3; 2],
+    current: [Vec3; 2],
+) -> bool {
+    if previous[0]
+        .distance_squared(current[0])
+        .max(previous[1].distance_squared(current[1]))
+        < 1e-8
+    {
+        return false; // a parked blade must not continually erase fresh rain
+    }
+    let lo = previous[0].min(previous[1]).min(current[0]).min(current[1]) - Vec3::splat(0.1);
+    let hi = previous[0].max(previous[1]).max(current[0]).max(current[1]) + Vec3::splat(0.1);
+    let pixel = |p: Vec3| pane_pixel(p, bounds);
+    let lo = pixel(lo)
+        .floor()
+        .clamp(Vec2::ZERO, Vec2::splat((SIZE - 1) as f32));
+    let hi = pixel(hi)
+        .ceil()
+        .clamp(Vec2::ZERO, Vec2::splat((SIZE - 1) as f32));
+    let triangles = [
+        SweepTriangle::new(previous[0], previous[1], current[1], bounds[2] < 0.0),
+        SweepTriangle::new(previous[0], current[1], current[0], bounds[2] < 0.0),
+    ];
+    let cell = if bounds[2] < 0.0 { Vec3::Y } else { Vec3::X } / (SIZE as f32 * bounds[2].abs())
+        + Vec3::Z / (SIZE as f32 * bounds[3]);
+    let filters = triangles
+        .each_ref()
+        .map(|t| t.as_ref().map(|t| t.edge_filter(cell)));
+    let mut water = 0.0;
+    for y in lo.y as usize..=hi.y as usize {
+        for x in lo.x as usize..=hi.x as usize {
+            let i = y * SIZE + x;
+            if points[i].is_finite() {
+                // Sum the two disjoint triangles so their shared diagonal leaves no seam.
+                let coverage = triangles
+                    .iter()
+                    .zip(&filters)
+                    .filter_map(|(t, f)| Some(t.as_ref()?.coverage(points[i], (*f)?)))
+                    .sum::<f32>()
+                    .min(1.0);
+                water += (wet[i] - 0.004).max(0.0) * coverage;
+                if wet[i] > 0.004 {
+                    wet[i] = if coverage >= 1.0 {
+                        WIPED_FILM
+                    } else {
+                        wet[i] + (WIPED_FILM - wet[i]) * coverage
+                    };
+                }
+            }
+        }
+    }
+    if water > 0.0 {
+        if let Some(plane) = triangles.iter().flatten().next() {
+            push_water(wet, points, bounds, previous, current, plane.normal, water);
+        }
+    }
+    water > 0.0
+}
+
+/// Move collected water to the leading side of the blade. The bounded ridge holds
+/// a little water; excess runs off, rather than growing an opaque wall indefinitely.
+fn push_water(
+    wet: &mut [f32],
+    points: &[Vec3],
+    bounds: [f32; 4],
+    previous: [Vec3; 2],
+    current: [Vec3; 2],
+    normal: Vec3,
+    water: f32,
+) {
+    const WIDTH: f32 = 0.018;
+    let edge = current[1] - current[0];
+    let length2 = edge.length_squared();
+    if length2 < 1e-8 {
+        return;
+    }
+    let pixels = length2.sqrt() * WIDTH * (SIZE * SIZE) as f32 * bounds[2].abs() * bounds[3] * 0.5;
+    let amount = water / pixels.max(1.0);
+    // The ridge starts a cell's half diagonal ahead of the blade: a cell the blade has only
+    // partly wiped must not be filled again, or the next sweep takes only the rest of it
+    // and leaves a stripe on the glass at every place the blade stood at a frame's end.
+    let clear = (0.5f32 / (SIZE as f32 * bounds[2].abs()))
+        .hypot(0.5 / (SIZE as f32 * bounds[3].abs()))
+        .min(WIDTH * 0.5);
+    let pixel = |p: Vec3| pane_pixel(p, bounds);
+    let lo = pixel(current[0].min(current[1]) - Vec3::splat(WIDTH))
+        .floor()
+        .clamp(Vec2::ZERO, Vec2::splat((SIZE - 1) as f32));
+    let hi = pixel(current[0].max(current[1]) + Vec3::splat(WIDTH))
+        .ceil()
+        .clamp(Vec2::ZERO, Vec2::splat((SIZE - 1) as f32));
+    for y in lo.y as usize..=hi.y as usize {
+        for x in lo.x as usize..=hi.x as usize {
+            let i = y * SIZE + x;
+            let p = points[i];
+            if !p.is_finite() {
+                continue;
+            }
+            let t = (p - current[0]).dot(edge) / length2;
+            if !(0.0..=1.0).contains(&t) {
+                continue;
+            }
+            let motion = (current[0] - previous[0]).lerp(current[1] - previous[1], t);
+            let across = (motion - edge * (motion.dot(edge) / length2)).normalize_or_zero();
+            let d = p - current[0] - edge * t;
+            let distance = d.dot(across);
+            if d.dot(normal).abs() <= 0.1 && distance > clear && distance < WIDTH {
+                // Values above one mark mobile water, even when the wiped
+                // pane carried only a few newly landed drops.
+                wet[i] = (wet[i].max(1.0) + amount * (1.0 - (distance - clear) / (WIDTH - clear)))
+                    .min(2.0);
+            }
+        }
+    }
+}
+
+/// Conservative forward transport of mobile water. The grid stores pinned beads
+/// below one; only the surplus moves. Water falling off the pane leaves the system.
+fn drain_water(
+    wet: &mut [f32],
+    points: &[Vec3],
+    bounds: [f32; 4],
+    velocity: Vec3,
+    dt: f32,
+    scratch: &mut [f32],
+) {
+    let step = (pane_project(velocity, bounds[2] < 0.0)
+        * Vec2::new(bounds[2].abs(), bounds[3])
+        * (SIZE as f32 * dt))
+        .clamp(Vec2::splat(-0.95), Vec2::splat(0.95));
+    if step.length_squared() < 1e-8 {
+        return;
+    }
+    for (dst, &src) in scratch.iter_mut().zip(wet.iter()) {
+        *dst = src.min(1.0);
+    }
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let i = y * SIZE + x;
+            let water = (wet[i] - 1.0).max(0.0);
+            if water == 0.0 || !points[i].is_finite() {
+                continue;
+            }
+            let destination = Vec2::new(x as f32, y as f32) + step;
+            let cell = destination.floor();
+            let fraction = destination - cell;
+            for dy in 0..2 {
+                for dx in 0..2 {
+                    let (nx, ny) = (cell.x as i32 + dx, cell.y as i32 + dy);
+                    if nx < 0 || ny < 0 || nx >= SIZE as i32 || ny >= SIZE as i32 {
+                        continue;
+                    }
+                    let j = ny as usize * SIZE + nx as usize;
+                    if !points[j].is_finite()
+                        || (pane_depth(points[j], bounds) - pane_depth(points[i], bounds)).abs()
+                            > 0.1
+                    {
+                        continue;
+                    }
+                    let wx = if dx == 0 {
+                        1.0 - fraction.x
+                    } else {
+                        fraction.x
+                    };
+                    let wy = if dy == 0 {
+                        1.0 - fraction.y
+                    } else {
+                        fraction.y
+                    };
+                    scratch[j] += water * wx * wy;
+                }
+            }
+        }
+    }
+    for (dst, &src) in wet.iter_mut().zip(scratch.iter()) {
+        *dst = src.min(2.0);
+    }
+}
+
+/// A bank drains as distinct runners instead of remaining only a ridge in the mask.
+/// Its excess is transferred, not duplicated; keep the same pane depth and drop limit.
+fn release_runoff(
+    wet: &mut [f32],
+    points: &[Vec3],
+    bounds: [f32; 4],
+    drops: &mut Drops,
+    velocity: Vec2,
+) {
+    let side = bounds[2] < 0.0;
+    let down = velocity.normalize_or_zero();
+    let score = |i: usize| wet[i] + pane_project(points[i], side).dot(down) * 0.1;
+    let Some(i) = (0..wet.len())
+        .filter(|&i| wet[i] > 1.15 && points[i].is_finite())
+        .max_by(|&a, &b| score(a).total_cmp(&score(b)))
+    else {
+        return;
+    };
+    // Gather a small pool so it can overcome adhesion instead of emitting pinned specks.
+    let (x, y) = (i % SIZE, i / SIZE);
+    let mut pool = Vec::with_capacity(9);
+    let mut water = 0.0;
+    for y in y.saturating_sub(1)..=(y + 1).min(SIZE - 1) {
+        for x in x.saturating_sub(1)..=(x + 1).min(SIZE - 1) {
+            let j = y * SIZE + x;
+            if wet[j] > 1.0
+                && points[j].is_finite()
+                && (pane_depth(points[j], bounds) - pane_depth(points[i], bounds)).abs() < 0.1
+            {
+                pool.push(j);
+                water += wet[j] - 1.0;
+            }
+        }
+    }
+    // Calibrate mobile excess as a thin film (~20 micrometres), not total pane wetness.
+    let volume = water * 20000.0 / (SIZE * SIZE) as f32 / (bounds[2].abs() * bounds[3]);
+    let pos = pane_project(points[i], side) - Vec2::new(bounds[0], bounds[1]);
+    if drops.feed(pos, volume, velocity) {
+        for j in pool {
+            // The runner takes the collected water with it; only a thin film remains.
+            wet[j] = WIPED_FILM;
+        }
+    }
+}
+
+struct SweepTriangle {
+    origin: Vec3,
+    normal: Vec3,
+    u: Vec3,
+    v: Vec3,
+    depth: Vec3,
+}
+
+impl SweepTriangle {
+    fn new(a: Vec3, b: Vec3, c: Vec3, side: bool) -> Option<Self> {
+        let (ab, ac) = (b - a, c - a);
+        let n = ab.cross(ac);
+        let det = n.length_squared();
+        if det < 1e-12 {
+            return None;
+        }
+        let axis = if side { Vec3::X } else { Vec3::Y };
+        let facing = axis.dot(n);
+        if facing.abs() < 1e-8 {
+            return None;
+        }
+        let depth = n / facing;
+        let u = ac.cross(n) / det;
+        let v = n.cross(ab) / det;
+        Some(Self {
+            origin: a,
+            normal: n.normalize(),
+            u: u - depth * u.dot(axis),
+            v: v - depth * v.dot(axis),
+            depth,
+        })
+    }
+
+    fn coordinates(&self, p: Vec3) -> Option<Vec2> {
+        let d = p - self.origin;
+        let offset = d.dot(self.depth);
+        if !offset.is_finite() || offset.abs() > 0.12 {
+            return None;
+        }
+        // Project along the pane depth, not the slanted sweep's normal: an
+        // offset rain mesh must keep the same blade endpoints in the glass plane.
+        Some(Vec2::new(d.dot(self.u), d.dot(self.v)))
+    }
+
+    #[cfg(test)]
+    fn contains(&self, p: Vec3) -> bool {
+        self.coordinates(p)
+            .is_some_and(|uv| uv.min_element() >= -1e-5 && uv.element_sum() <= 1.00001)
+    }
+
+    // Barycentric edge widths are constant over a sweep: calculate them once,
+    // then filter partial mask cells without increasing the mask or its uploads.
+    fn edge_filter(&self, cell: Vec3) -> Vec3 {
+        Vec3::new(
+            (self.u * cell).abs().element_sum(),
+            (self.v * cell).abs().element_sum(),
+            ((self.u + self.v) * cell).abs().element_sum(),
+        )
+        .max(Vec3::splat(1e-6))
+        .recip()
+    }
+
+    fn coverage(&self, p: Vec3, filter: Vec3) -> f32 {
+        let Some(uv) = self.coordinates(p) else {
+            return 0.0;
+        };
+        ((Vec3::new(uv.x, uv.y, 1.0 - uv.element_sum()) * filter + Vec3::splat(0.5)).min_element())
+            .clamp(0.0, 1.0)
+    }
+
+    fn crosses(&self, a: Vec3, b: Vec3) -> bool {
+        let (Some(a), Some(b)) = (self.coordinates(a), self.coordinates(b)) else {
+            return false;
+        };
+        let mut enter: f32 = 0.0;
+        let mut leave: f32 = 1.0;
+        for (start, end) in [
+            (a.x, b.x),
+            (a.y, b.y),
+            (1.0 - a.element_sum(), 1.0 - b.element_sum()),
+        ] {
+            if start < 0.0 && end < 0.0 {
+                return false;
+            }
+            if start < 0.0 {
+                enter = enter.max(start / (start - end));
+            }
+            if end < 0.0 {
+                leave = leave.min(start / (start - end));
+            }
+        }
+        enter <= leave
+    }
+}
+
+#[cfg(test)]
+#[path = "window_wipers_tests.rs"]
+mod tests;

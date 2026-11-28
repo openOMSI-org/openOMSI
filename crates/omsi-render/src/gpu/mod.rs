@@ -3,13 +3,15 @@
 
 use crate::*;
 
+mod auxiliary;
 mod fallbacks;
 mod open;
-mod upscaler_device;
 mod timers;
-mod auxiliary;
+mod upscaler_device;
 pub use auxiliary::with_auxiliary_renderer;
-pub(crate) use auxiliary::{auxiliary_context, with_auxiliary_context, update_ceiling, AdapterBool};
+pub(crate) use auxiliary::{
+    AdapterBool, auxiliary_context, update_ceiling, with_auxiliary_context,
+};
 
 #[cfg(test)]
 mod isolation_tests;
@@ -27,7 +29,8 @@ pub static ADAPTER_VRAM_MB: std::sync::atomic::AtomicU64 = std::sync::atomic::At
 /// The adapter the device was opened on (its name, ids, backend and driver), see `Renderer::new`.
 pub static ADAPTER_INFO: std::sync::Mutex<Option<wgpu::AdapterInfo>> = std::sync::Mutex::new(None);
 
-pub(crate) static CEILING: std::sync::Mutex<Option<crate::gpu_memory::Ceiling>> = std::sync::Mutex::new(None);
+pub(crate) static CEILING: std::sync::Mutex<Option<crate::gpu_memory::Ceiling>> =
+    std::sync::Mutex::new(None);
 
 pub fn ceiling() -> Option<crate::gpu_memory::Ceiling> {
     update_ceiling(|c| *c)
@@ -94,7 +97,11 @@ pub(crate) const ARRAY_TEX_WIDTH: u32 = 2048;
 /// (`Rgba32Float`, 16 bytes) or one `u32` (`R32Uint`) - in rows of `ARRAY_TEX_WIDTH`.
 pub(crate) enum GpuArray {
     Buffer(wgpu::Buffer),
-    Texture { texture: wgpu::Texture, view: wgpu::TextureView, texel: u32 },
+    Texture {
+        texture: wgpu::Texture,
+        view: wgpu::TextureView,
+        texel: u32,
+    },
     /// Not bound on this device (the lights under `ArrayPath::NoStorage`): takes any write.
     Unused,
 }
@@ -102,14 +109,22 @@ pub(crate) enum GpuArray {
 impl GpuArray {
     /// An array of `size` bytes of `texel`-byte values (16 or 4), a texture where the
     /// vertex shader reads it on a device without vertex storage (`vertex`), or without any.
-    pub(crate) fn new(device: &wgpu::Device, label: &str, size: u64, texel: u32, vertex: bool) -> GpuArray {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        label: &str,
+        size: u64,
+        texel: u32,
+        vertex: bool,
+    ) -> GpuArray {
         let path = array_path();
         if path == ArrayPath::Storage || (!vertex && path == ArrayPath::VertexTextures) {
             return GpuArray::Buffer(device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
                 size: size.max(16).next_multiple_of(wgpu::COPY_BUFFER_ALIGNMENT),
                 // (copied from too: temporal upscaling keeps last frame's matrices)
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             }));
         }
@@ -120,27 +135,43 @@ impl GpuArray {
         let max_rows = device.limits().max_texture_dimension_2d;
         let rows = (texels.div_ceil(ARRAY_TEX_WIDTH as u64) as u32).clamp(1, max_rows);
         if rows == max_rows {
-            log::warn!("{label}: {texels} values do not fit a texture of {ARRAY_TEX_WIDTH} x {max_rows}; the rest are not drawn");
+            log::warn!(
+                "{label}: {texels} values do not fit a texture of {ARRAY_TEX_WIDTH} x {max_rows}; the rest are not drawn"
+            );
         }
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
-            size: wgpu::Extent3d { width: ARRAY_TEX_WIDTH, height: rows, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width: ARRAY_TEX_WIDTH,
+                height: rows,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: if texel == 16 { wgpu::TextureFormat::Rgba32Float } else { wgpu::TextureFormat::R32Uint },
+            format: if texel == 16 {
+                wgpu::TextureFormat::Rgba32Float
+            } else {
+                wgpu::TextureFormat::R32Uint
+            },
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
         let view = texture.create_view(&Default::default());
-        GpuArray::Texture { texture, view, texel }
+        GpuArray::Texture {
+            texture,
+            view,
+            texel,
+        }
     }
 
     /// Its room in bytes.
     pub(crate) fn size(&self) -> u64 {
         match self {
             GpuArray::Buffer(b) => b.size(),
-            GpuArray::Texture { texture, texel, .. } => texture.width() as u64 * texture.height() as u64 * *texel as u64,
+            GpuArray::Texture { texture, texel, .. } => {
+                texture.width() as u64 * texture.height() as u64 * *texel as u64
+            }
             GpuArray::Unused => u64::MAX,
         }
     }
@@ -161,13 +192,28 @@ impl GpuArray {
                 let t = *texel as usize;
                 let total = texture.width() as u64 * texture.height() as u64;
                 let mut data = data;
-                for (x, y, width, rows) in array_tex_spans(offset / t as u64, (data.len() / t) as u64, total) {
+                for (x, y, width, rows) in
+                    array_tex_spans(offset / t as u64, (data.len() / t) as u64, total)
+                {
                     let bytes = (width * rows) as usize * t;
                     queue.write_texture(
-                        wgpu::TexelCopyTextureInfo { texture, mip_level: 0, origin: wgpu::Origin3d { x, y, z: 0 }, aspect: wgpu::TextureAspect::All },
+                        wgpu::TexelCopyTextureInfo {
+                            texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d { x, y, z: 0 },
+                            aspect: wgpu::TextureAspect::All,
+                        },
                         &data[..bytes],
-                        wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(width * t as u32), rows_per_image: None },
-                        wgpu::Extent3d { width, height: rows, depth_or_array_layers: 1 },
+                        wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(width * t as u32),
+                            rows_per_image: None,
+                        },
+                        wgpu::Extent3d {
+                            width,
+                            height: rows,
+                            depth_or_array_layers: 1,
+                        },
                     );
                     data = &data[bytes..];
                 }
@@ -194,7 +240,11 @@ pub(crate) fn array_tex_spans(mut at: u64, n: u64, total: u64) -> Vec<(u32, u32,
     let mut out = Vec::new();
     while left > 0 {
         let (x, y) = (at % w, at / w);
-        let (width, rows) = if x == 0 && left >= w { (w, left / w) } else { ((w - x).min(left), 1) };
+        let (width, rows) = if x == 0 && left >= w {
+            (w, left / w)
+        } else {
+            ((w - x).min(left), 1)
+        };
         out.push((x as u32, y as u32, width as u32, rows as u32));
         at += width * rows;
         left -= width * rows;
@@ -204,12 +254,21 @@ pub(crate) fn array_tex_spans(mut at: u64, n: u64, total: u64) -> Vec<(u32, u32,
 
 /// The bind group layout entry of a scene array read in `stage` (see `GpuArray`):
 /// `float4` for vec4 values, else u32.
-pub(crate) fn array_layout_entry(binding: u32, stage: wgpu::ShaderStages, float4: bool) -> wgpu::BindGroupLayoutEntry {
+pub(crate) fn array_layout_entry(
+    binding: u32,
+    stage: wgpu::ShaderStages,
+    float4: bool,
+) -> wgpu::BindGroupLayoutEntry {
     array_layout_entry_on(array_path(), binding, stage, float4)
 }
 
 /// The same on a device whose arrays take `path`.
-pub(crate) fn array_layout_entry_on(path: ArrayPath, binding: u32, stage: wgpu::ShaderStages, float4: bool) -> wgpu::BindGroupLayoutEntry {
+pub(crate) fn array_layout_entry_on(
+    path: ArrayPath,
+    binding: u32,
+    stage: wgpu::ShaderStages,
+    float4: bool,
+) -> wgpu::BindGroupLayoutEntry {
     let texture = match path {
         ArrayPath::Storage => false,
         ArrayPath::VertexTextures => stage.contains(wgpu::ShaderStages::VERTEX),
@@ -220,20 +279,28 @@ pub(crate) fn array_layout_entry_on(path: ArrayPath, binding: u32, stage: wgpu::
         visibility: stage,
         ty: if texture {
             wgpu::BindingType::Texture {
-                sample_type: if float4 { wgpu::TextureSampleType::Float { filterable: false } } else { wgpu::TextureSampleType::Uint },
+                sample_type: if float4 {
+                    wgpu::TextureSampleType::Float { filterable: false }
+                } else {
+                    wgpu::TextureSampleType::Uint
+                },
                 view_dimension: wgpu::TextureViewDimension::D2,
                 multisampled: false,
             }
         } else {
-            wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }
+            wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            }
         },
         count: None,
     }
 }
 
 /// The camera group's textures only the enhanced path reads: the reflection probe, the sky
-/// table and the sky cube.
-pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
+/// table, the window's clouds and the traced global illumination.
+pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 4] = [12, 14, 17, 22];
 
 /// wgpu's OpenGL backend has sixteen texture units for a pipeline - for all its groups and
 /// both its shaders together (wgpu-hal's `MAX_TEXTURE_SLOTS`, whatever the chip has) - while
@@ -246,167 +313,195 @@ pub(crate) const ENHANCED_CAMERA_TEXTURES: [u32; 3] = [12, 14, 17];
 /// (vanilla and vanilla+ draw as everywhere). OMSI_GL_TEXTURE_UNITS=1 takes this layout on
 /// any device (with OMSI_GPU_ARRAYS, to try it without such a chip).
 pub(crate) fn sixteen_texture_units() -> bool {
-    array_path() != ArrayPath::Storage && (gl_backend() || omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set())
+    array_path() != ArrayPath::Storage
+        && (gl_backend() || omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set())
 }
 
 /// The camera group's entries on a device whose arrays take `path`, without the enhanced
 /// path's textures where `omit_enhanced`: on the sixteen-texture-unit path (see
 /// `sixteen_texture_units`) and whenever no enhanced pipelines or reflection probe are
 /// prepared (the launcher's preview, or the vanilla GL path).
-pub(crate) fn camera_layout_entries(path: ArrayPath, omit_enhanced: bool) -> Vec<wgpu::BindGroupLayoutEntry> {
+pub(crate) fn camera_layout_entries(
+    path: ArrayPath,
+    omit_enhanced: bool,
+) -> Vec<wgpu::BindGroupLayoutEntry> {
     let mut camera_entries = vec![
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
+        wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
             },
-            array_layout_entry_on(path, 1, wgpu::ShaderStages::VERTEX, true),
-            array_layout_entry_on(path, 2, wgpu::ShaderStages::VERTEX, true),
-            wgpu::BindGroupLayoutEntry {
-                binding: 5,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Depth,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
+            count: None,
+        },
+        array_layout_entry_on(path, 1, wgpu::ShaderStages::VERTEX, true),
+        array_layout_entry_on(path, 2, wgpu::ShaderStages::VERTEX, true),
+        wgpu::BindGroupLayoutEntry {
+            binding: 5,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Depth,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 6,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 6,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 7,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Depth,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 7,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Depth,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 8,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 8,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 9,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        },
+        array_layout_entry_on(path, 10, wgpu::ShaderStages::VERTEX, false),
+        // enhanced: its lighting, the reflection probe, a clamped linear sampler, the sky table
+        wgpu::BindGroupLayoutEntry {
+            binding: 11,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 9,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 12,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::Cube,
+                multisampled: false,
             },
-            array_layout_entry_on(path, 10, wgpu::ShaderStages::VERTEX, false),
-            // enhanced: its lighting, the reflection probe, a clamped linear sampler, the sky table
-            wgpu::BindGroupLayoutEntry {
-                binding: 11,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 13,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 14,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 12,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::Cube,
-                    multisampled: false,
-                },
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 17,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 13,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
+            count: None,
+        },
+        // the tile light maps around the camera, and where they lie
+        wgpu::BindGroupLayoutEntry {
+            binding: 18,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 14,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 19,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 17,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::Cube,
-                    multisampled: false,
-                },
-                count: None,
+            count: None,
+        },
+        // the snow track field around the camera (road_snow.wgsl), and its place
+        wgpu::BindGroupLayoutEntry {
+            binding: 20,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
             },
-            // the tile light maps around the camera, and where they lie
-            wgpu::BindGroupLayoutEntry {
-                binding: 18,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: 21,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 19,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            // the snow track field around the camera (road_snow.wgsl), and its place
-            wgpu::BindGroupLayoutEntry {
-                binding: 20,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 21,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
+            count: None,
+        },
     ];
     if !road_snow_supported() {
         camera_entries.retain(|e| e.binding != 20);
     }
     // the point lights and their grid (see `ArrayPath::NoStorage`)
     if path != ArrayPath::NoStorage {
-        camera_entries.push(array_layout_entry_on(path, 3, wgpu::ShaderStages::FRAGMENT, true));
-        camera_entries.push(array_layout_entry_on(path, 4, wgpu::ShaderStages::FRAGMENT, false));
+        camera_entries.push(array_layout_entry_on(
+            path,
+            3,
+            wgpu::ShaderStages::FRAGMENT,
+            true,
+        ));
+        camera_entries.push(array_layout_entry_on(
+            path,
+            4,
+            wgpu::ShaderStages::FRAGMENT,
+            false,
+        ));
+    }
+    // the traced global illumination (experimental, `rt_gi`; 02_bindings.wgsl `t_gi`): a
+    // seventeenth texture, only where the device takes it (`gi_binding`)
+    if crate::gi_binding() {
+        camera_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 22,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        });
     }
     if omit_enhanced {
         camera_entries.retain(|e| !ENHANCED_CAMERA_TEXTURES.contains(&e.binding));
@@ -541,12 +636,23 @@ pub(crate) fn material_layout_entries() -> Vec<wgpu::BindGroupLayoutEntry> {
 /// a second with a panic - "Could not lock adapter context. This is most-likely a deadlock."
 /// (wgpu-hal's WGL lock; #843: a slow chip took longer than that for a frame). There the
 /// wait is made of short ones, and the context is free between them.
-pub fn wait_gpu(device: &wgpu::Device, submission: Option<wgpu::SubmissionIndex>) -> Result<(), wgpu::PollError> {
+pub fn wait_gpu(
+    device: &wgpu::Device,
+    submission: Option<wgpu::SubmissionIndex>,
+) -> Result<(), wgpu::PollError> {
     if !gl_backend() {
-        return device.poll(wgpu::PollType::Wait { submission_index: submission, timeout: None }).map(|_| ());
+        return device
+            .poll(wgpu::PollType::Wait {
+                submission_index: submission,
+                timeout: None,
+            })
+            .map(|_| ());
     }
     loop {
-        match device.poll(wgpu::PollType::Wait { submission_index: submission.clone(), timeout: Some(GL_WAIT_SLICE) }) {
+        match device.poll(wgpu::PollType::Wait {
+            submission_index: submission.clone(),
+            timeout: Some(GL_WAIT_SLICE),
+        }) {
             Err(wgpu::PollError::Timeout) => std::thread::yield_now(),
             r => return r.map(|_| ()),
         }
@@ -575,16 +681,35 @@ impl Renderer {
         self.env_heading.set(heading);
     }
 
+    /// Send the uploads written so far (textures, buffers) to the GPU and let go of their
+    /// staging copies once it has them: wgpu keeps every `write_texture` in a staging buffer
+    /// until the next submission, and a loading stage that uploads without drawing (the
+    /// timetable's preloading) held all of it until the first frame.
+    pub fn flush_uploads(&self) {
+        self.queue.submit([]);
+        let _ = self.device.poll(wgpu::PollType::Poll);
+    }
+
     /// Whether the card ran out of memory since the last call (the game then keeps fewer
     /// textures, before the driver gives up the device).
     pub fn take_out_of_memory(&self) -> bool {
-        let texture = crate::resources::TEXTURE_OUT_OF_MEMORY.swap(false, std::sync::atomic::Ordering::Relaxed);
-        let mesh = crate::resources::MESH_OUT_OF_MEMORY.swap(false, std::sync::atomic::Ordering::Relaxed);
-        self.errors.out_of_memory.swap(false, std::sync::atomic::Ordering::Relaxed) | texture | mesh
+        let texture = crate::resources::TEXTURE_OUT_OF_MEMORY
+            .swap(false, std::sync::atomic::Ordering::Relaxed);
+        let mesh =
+            crate::resources::MESH_OUT_OF_MEMORY.swap(false, std::sync::atomic::Ordering::Relaxed);
+        self.errors
+            .out_of_memory
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+            | texture
+            | mesh
     }
 
     pub fn device_lost(&self) -> Option<String> {
-        self.errors.device_lost.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.errors
+            .device_lost
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 
@@ -609,4 +734,8 @@ pub(crate) struct GpuErrors {
     pub(crate) out_of_memory: Arc<std::sync::atomic::AtomicBool>,
     /// Why the graphics device was lost (a driver reset, the card removed), once it was.
     pub(crate) device_lost: Arc<std::sync::Mutex<Option<String>>>,
+    /// Errors from `Queue::submit` since the last frame: its work was refused.
+    pub(crate) refused_submits: Arc<std::sync::atomic::AtomicU64>,
+    /// The frames refused in a row (kept through a rebuild, see `Renderer::rebuild_in_place`).
+    pub(crate) rejected: std::cell::Cell<crate::pipelines::errors::RejectedRun>,
 }

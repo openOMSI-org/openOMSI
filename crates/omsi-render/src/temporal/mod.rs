@@ -24,11 +24,12 @@ mod metalfx;
 pub(crate) mod metalfx_frames;
 #[cfg(windows)]
 mod streamline;
-#[cfg(windows)]
-mod vulkan;
 #[cfg(test)]
 mod tests;
+#[cfg(windows)]
+mod vulkan;
 
+pub use frame::DLSS_SHARPEN;
 pub(crate) use frame::*;
 #[cfg(windows)]
 pub use framegen::{FrameGeneration, OwnSwapChain};
@@ -168,7 +169,12 @@ pub enum GenerationWindow {}
 
 #[cfg(not(target_os = "macos"))]
 impl GenerationWindow {
-    pub(crate) fn new(_: &wgpu::Device, _: &wgpu::Queue, _: wgpu::TextureFormat, _: (u32, u32)) -> anyhow::Result<GenerationWindow> {
+    pub(crate) fn new(
+        _: &wgpu::Device,
+        _: &wgpu::Queue,
+        _: wgpu::TextureFormat,
+        _: (u32, u32),
+    ) -> anyhow::Result<GenerationWindow> {
         anyhow::bail!("frame generation is Apple MetalFX's (macOS 26 and newer)")
     }
     pub(crate) fn handle(&self) -> FrameGeneration {
@@ -186,7 +192,13 @@ impl GenerationWindow {
     pub(crate) fn texture(&self) -> wgpu::Texture {
         match *self {}
     }
-    pub(crate) fn present(&self, _: &wgpu::Surface<'_>, _: &wgpu::Device, _: &wgpu::Queue, _: wgpu::SurfaceTexture) {
+    pub(crate) fn present(
+        &self,
+        _: &wgpu::Surface<'_>,
+        _: &wgpu::Device,
+        _: &wgpu::Queue,
+        _: wgpu::SurfaceTexture,
+    ) {
         match *self {}
     }
 }
@@ -284,15 +296,23 @@ impl TemporalQuality {
 
 pub fn fallback_render_size(quality: TemporalQuality, (w, h): (u32, u32)) -> (u32, u32) {
     let s = quality.scale();
-    (((w as f32 * s).round() as u32).max(1), ((h as f32 * s).round() as u32).max(1))
+    (
+        ((w as f32 * s).round() as u32).max(1),
+        ((h as f32 * s).round() as u32).max(1),
+    )
 }
 
 /// The size MetalFX draws at, and whether it is larger than the quality asked for: Apple's
 /// scaler goes up to `max_scale` times a side (`supportedInputContentMaxScaleForDevice`), which
 /// is less than Ultra performance's three on most Macs.
-pub fn metalfx_render_size(quality: TemporalQuality, out: (u32, u32), max_scale: f32) -> ((u32, u32), bool) {
+pub fn metalfx_render_size(
+    quality: TemporalQuality,
+    out: (u32, u32),
+    max_scale: f32,
+) -> ((u32, u32), bool) {
     let asked = fallback_render_size(quality, out);
-    let least = |side: u32| ((side as f32 / max_scale.max(1.0)).ceil() as u32).clamp(1, side.max(1));
+    let least =
+        |side: u32| ((side as f32 / max_scale.max(1.0)).ceil() as u32).clamp(1, side.max(1));
     let size = (asked.0.max(least(out.0)), asked.1.max(least(out.1)));
     (size, size != asked)
 }
@@ -360,7 +380,7 @@ pub(crate) fn dlss_vulkan_abandon() {}
 
 #[cfg(not(windows))]
 mod streamline {
-    use super::{fallback_render_size, FrameConstants, Inputs, TemporalQuality};
+    use super::{FrameConstants, Inputs, TemporalQuality, fallback_render_size};
     use anyhow::Result;
 
     pub struct Runtime;
@@ -376,7 +396,13 @@ mod streamline {
         pub fn render_size(&mut self, quality: TemporalQuality, out: (u32, u32)) -> (u32, u32) {
             fallback_render_size(quality, out)
         }
-        pub fn evaluate(&mut self, _queue: &wgpu::Queue, _quality: TemporalQuality, _inputs: &Inputs, _c: &FrameConstants) -> Result<()> {
+        pub fn evaluate(
+            &mut self,
+            _queue: &wgpu::Queue,
+            _quality: TemporalQuality,
+            _inputs: &Inputs,
+            _c: &FrameConstants,
+        ) -> Result<()> {
             anyhow::bail!("DLSS is Windows-only (DirectX 12)")
         }
     }
@@ -394,7 +420,12 @@ mod fidelityfx {
         pub fn load(_device: &wgpu::Device) -> Result<Upscaler> {
             anyhow::bail!("FSR 3 upscaling is Windows-only (DirectX 12)")
         }
-        pub fn upscale(&mut self, _queue: &wgpu::Queue, _inputs: &Inputs, _c: &FrameConstants) -> Result<()> {
+        pub fn upscale(
+            &mut self,
+            _queue: &wgpu::Queue,
+            _inputs: &Inputs,
+            _c: &FrameConstants,
+        ) -> Result<()> {
             anyhow::bail!("FSR 3 upscaling is Windows-only (DirectX 12)")
         }
     }
@@ -402,7 +433,7 @@ mod fidelityfx {
 
 #[cfg(not(target_os = "macos"))]
 mod metalfx {
-    use super::{fallback_render_size, FrameConstants, Inputs, TemporalQuality};
+    use super::{FrameConstants, Inputs, TemporalQuality, fallback_render_size};
     use anyhow::Result;
 
     pub struct Upscaler;
@@ -415,7 +446,12 @@ mod metalfx {
         pub fn render_size(&mut self, quality: TemporalQuality, out: (u32, u32)) -> (u32, u32) {
             fallback_render_size(quality, out)
         }
-        pub fn upscale(&mut self, _queue: &wgpu::Queue, _inputs: &Inputs, _c: &FrameConstants) -> Result<()> {
+        pub fn upscale(
+            &mut self,
+            _queue: &wgpu::Queue,
+            _inputs: &Inputs,
+            _c: &FrameConstants,
+        ) -> Result<()> {
             anyhow::bail!("MetalFX upscaling is macOS-only (Metal)")
         }
     }

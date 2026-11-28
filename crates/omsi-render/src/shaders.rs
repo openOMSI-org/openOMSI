@@ -35,20 +35,99 @@ pub(crate) const ENHANCED: &str = concat!(
     include_str!("shaders/enhanced/04_shade.wgsl"),
     include_str!("shaders/enhanced/05_puddles.wgsl"),
     include_str!("shaders/enhanced/06_ground.wgsl"),
+    include_str!("shaders/enhanced/07_glass.wgsl"),
 );
+
+const SCENE_PARTS: [&str; 9] = [
+    "shaders/scene/01_camera.wgsl",
+    "shaders/scene/02_bindings.wgsl",
+    "shaders/scene/03_vertex.wgsl",
+    "shaders/scene/04_shadow_passes.wgsl",
+    "shaders/scene/05_sun_shadow.wgsl",
+    "shaders/scene/06_lights.wgsl",
+    "shaders/scene/07_patterns_weather.wgsl",
+    "shaders/scene/08_rain_glass.wgsl",
+    "shaders/scene/09_vanilla.wgsl",
+];
+const ENHANCED_PARTS: [&str; 7] = [
+    "shaders/enhanced/01_brdf_shadow.wgsl",
+    "shaders/enhanced/02_lamps.wgsl",
+    "shaders/enhanced/03_surface.wgsl",
+    "shaders/enhanced/04_shade.wgsl",
+    "shaders/enhanced/05_puddles.wgsl",
+    "shaders/enhanced/06_ground.wgsl",
+    "shaders/enhanced/07_glass.wgsl",
+];
+
+/// A WGSL file as the renderer takes it: the copy compiled in, or with `OMSI_SHADER_HOT`
+/// the file as it is now in that folder (`1`: the `src` the game was built from; `path`
+/// from there),
+/// read once a process, so that a shader can be tried without a rebuild.
+pub(crate) fn hot_wgsl(compiled: &'static str, path: &str) -> &'static str {
+    hot_concat(compiled, &[path])
+}
+
+/// [`hot_wgsl`] of a module joined from parts (`SCENE`, `ENHANCED`).
+pub(crate) fn hot_concat(compiled: &'static str, parts: &[&str]) -> &'static str {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static READ: Mutex<Option<HashMap<String, &'static str>>> = Mutex::new(None);
+    let Some(dir) = omsi_cfg::flags::OMSI_SHADER_HOT.var() else {
+        return compiled;
+    };
+    let key = parts.join("|");
+    let mut read = READ.lock().unwrap_or_else(|e| e.into_inner());
+    let read = read.get_or_insert_with(HashMap::new);
+    if let Some(text) = read.get(&key) {
+        return text;
+    }
+    let root = match dir {
+        "1" => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        _ => std::path::PathBuf::from(dir),
+    };
+    let mut text = String::new();
+    for part in parts {
+        match std::fs::read_to_string(root.join(part)) {
+            Ok(t) => text.push_str(&t),
+            Err(e) => {
+                log::warn!("OMSI_SHADER_HOT: {part}: {e}; the compiled copy is used");
+                return compiled;
+            }
+        }
+    }
+    let text: &'static str = Box::leak(text.into_boxed_str());
+    read.insert(key, text);
+    text
+}
+
+/// The scene module's part as the renderer takes it (see [`hot_concat`]).
+pub(crate) fn scene_part() -> &'static str {
+    hot_concat(SCENE, &SCENE_PARTS)
+}
+
+/// The enhanced part as the renderer takes it (see [`hot_concat`]).
+pub(crate) fn enhanced_part() -> &'static str {
+    hot_concat(ENHANCED, &ENHANCED_PARTS)
+}
 
 /// FSR 1's passes for a picture of `format`: on an sRGB one they take its texels to gamma
 /// and back (`SRGB_TARGET` in `fsr1.wgsl`), on another they read its values as they are.
 /// With `raw_input` (`fsr1_raw_input`) they read an sRGB scene's stored values as they are.
 pub(crate) fn fsr1_source_for(format: wgpu::TextureFormat, raw_input: bool) -> String {
-    let source = include_str!("fsr1.wgsl");
+    let source = hot_wgsl(include_str!("fsr1.wgsl"), "fsr1.wgsl");
     let source = if format.is_srgb() {
         source.to_string()
     } else {
-        source.replace("const SRGB_TARGET: bool = true;", "const SRGB_TARGET: bool = false;")
+        source.replace(
+            "const SRGB_TARGET: bool = true;",
+            "const SRGB_TARGET: bool = false;",
+        )
     };
     if raw_input && format.is_srgb() {
-        source.replace("const RAW_INPUT: bool = false;", "const RAW_INPUT: bool = true;")
+        source.replace(
+            "const RAW_INPUT: bool = false;",
+            "const RAW_INPUT: bool = true;",
+        )
     } else {
         source
     }
@@ -66,9 +145,16 @@ mod tests {
     fn fsr1_shader_parses_and_validates() {
         // No GPU or OMSI installation required. Run even though FSR is off by default.
         // Both variants: an sRGB window (gamma 2.0 in and out) and one that is not.
-        for format in [wgpu::TextureFormat::Bgra8UnormSrgb, wgpu::TextureFormat::Rgba8Unorm] {
+        for format in [
+            wgpu::TextureFormat::Bgra8UnormSrgb,
+            wgpu::TextureFormat::Rgba8Unorm,
+        ] {
             let source = super::fsr1_source_for(format, false);
-            assert_eq!(source.contains("const SRGB_TARGET: bool = true;"), format.is_srgb(), "{format:?}");
+            assert_eq!(
+                source.contains("const SRGB_TARGET: bool = true;"),
+                format.is_srgb(),
+                "{format:?}"
+            );
             let module = naga::front::wgsl::parse_str(&source).expect("FSR1 WGSL must parse");
             naga::valid::Validator::new(
                 naga::valid::ValidationFlags::all(),
@@ -79,9 +165,49 @@ mod tests {
         }
     }
 
+    /// A display's light map lifts it to its own colour (#2051); a roller blind's lamp is
+    /// only a surface's light and keeps ADDSMOOTH's day/night factor (#3472). The GPU test
+    /// in `light_maps` measures the two; this one runs without an adapter.
+    #[test]
+    fn a_light_mapped_surface_keeps_addsmooths_day_night_factor() {
+        let shader = super::ENHANCED.replace("\r\n", "\n");
+        let lightmap = shader
+            .split_once("if (material.params2.x > 0.5 && !terrain && !glass) {")
+            .expect("the enhanced shader must have a light-map branch")
+            .1
+            .split_once("    if (material.emissive.w < -1.5) {")
+            .expect("the LED panel's light map must keep its own branch")
+            .1
+            .split("material.glow.x > 0.0")
+            .next()
+            .unwrap();
+        let display = lightmap
+            .split_once("} else if (material.emissive.w < -0.5) {")
+            .expect("the display's light map must keep its own branch")
+            .1
+            .split("} else {")
+            .next()
+            .unwrap();
+        let surface = lightmap.split("} else {").last().unwrap();
+        assert!(
+            display.contains("display_level(tex.rgb) * enh.exposure.y"),
+            "a display must keep the full lift: {display}"
+        );
+        assert!(
+            surface.contains("(0.12 + 0.88 * night)"),
+            "a surface must keep ADDSMOOTH's factor: {surface}"
+        );
+        assert!(
+            !surface.contains("display_level("),
+            "a surface must not get the display's lift: {surface}"
+        );
+    }
+
     /// FNV-1a, 64 bits: enough to tell one text from another, and no dependency for it.
     fn fnv1a(text: &str) -> u64 {
-        text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
+        text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+            (h ^ b as u64).wrapping_mul(0x0100_0000_01b3)
+        })
     }
 
     /// Regression: road glare has its own lane, not the ground-prepass switch.
@@ -102,13 +228,19 @@ mod tests {
             !shader.contains("spec = spec * camera.lod.y;"),
             "multiplying by the ground flag corrupts road glare"
         );
+        // (compared without whitespace: rustfmt may break the call over lines)
+        let squeeze = |s: &str| s.split_whitespace().collect::<String>();
         assert!(
-            setup.contains("lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), 0.0]"),
+            squeeze(setup).contains(&squeeze(
+                "lod: [self.fsr_mip_bias(f), 0.0, lighting.road_glare.clamp(0.0, 2.0), lighting.air_temp.clamp(-40.0, 45.0)"
+            )),
             "camera uniform must initialize the ground-pass flag to zero and glare in z"
         );
-        let render = include_str!("render.rs");
+        let render = squeeze(include_str!("render.rs"));
         assert!(
-            render.contains("(std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag)"),
+            render.contains(&squeeze(
+                "(std::mem::offset_of!(CameraUniform, lod) + 4) as u64, bytemuck::bytes_of(&flag)"
+            )),
             "the ground pass must set lod.y alone and keep the glare in lod.z"
         );
     }
@@ -130,13 +262,35 @@ mod tests {
     /// Omsi.exe's encoded mix, and the vertex-lit Direct3D headlight excluding its own vehicle,
     /// and the traced sample read once for FXC, the road glare in its own uniform lane,
     /// and the detail grain's octaves left out where faded, and the instance's parameters
-    /// handed to the fragments flat (#1488), no lamp glint on a face seen from behind, no sun glint on a face seen from behind (#3359), and an unswitched night map's gain capped (#3362).
+    /// handed to the fragments flat (#1488), no lamp glint on a face seen from behind, no sun glint on a face seen from behind (#3359), and an unswitched night map's gain capped (#3362),
+    /// depth caps limited to separated target-plane sides; the panes' condensation laid
+    /// in the bus's tilted frame (#3958),
+    /// and the rain and the snow on the panes shared with the classic pictures, the cabin's
+    /// reflection probe gone, the traffic's wet windows and the windows lit in a downpour.
+    /// And #4153: the drops on the panes read as drops again, prefiltered under a pixel.
+    /// And #2687: the sun lights standing cut-outs such as fences from their facing side.
+    /// And the saloon's lamps as line sources, the height maps' parallax, and normal maps
+    /// turned the right way (the tangent frame's handedness).
+    /// And #4258: the wet panes' blur through a plain sampler, a drop's view kept near it.
+    /// And the environment map's reflections through that sampler too (OpenGL: one a texture).
+    /// And the experimental traced global illumination (`rt_gi`: `gi_at`, `t_gi`).
+    /// And the road dirt for 64 bodies, each in the first box that holds it on its outside.
+    /// And #3723: spots and headlight stand-ins come before the lamps a light-mapped road
+    /// ignores, so the classic shader can stop at the first of them.
+    /// And #3472: a light-mapped surface keeps ADDSMOOTH's night factor, only a display
+    /// takes the display's lift.
     /// (with Unix line ends: a Windows checkout may turn the parts' into CRLF, as it did the
     /// single files', and the 0.2.31 release's Windows test failed on that alone)
     #[test]
     fn assembled_shaders_are_the_old_files() {
-        let (scene, enhanced) = (super::SCENE.replace("\r\n", "\n"), super::ENHANCED.replace("\r\n", "\n"));
-        assert_eq!((scene.len(), fnv1a(&scene)), (142015, 11911834074220972968));
-        assert_eq!((enhanced.len(), fnv1a(&enhanced)), (99366, 11134015870607419208));
+        let (scene, enhanced) = (
+            super::SCENE.replace("\r\n", "\n"),
+            super::ENHANCED.replace("\r\n", "\n"),
+        );
+        assert_eq!((scene.len(), fnv1a(&scene)), (162818, 11875086275753959268));
+        assert_eq!(
+            (enhanced.len(), fnv1a(&enhanced)),
+            (144534, 8673936475531420474)
+        );
     }
 }

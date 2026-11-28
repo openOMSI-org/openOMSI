@@ -84,7 +84,11 @@ pub(crate) const ZOOM_INTENT: f32 = 0.70;
 /// Eased Space return for the F1 head: look and zoom glide home on the same
 /// curve as the viewpoint switch instead of teleporting (`cam_approach::home`).
 /// `t` seconds in; returns the current look, zoom and done.
-pub(crate) fn reset_blend(look_from: (f32, f32), zoom_from: f32, t: f32) -> ((f32, f32), f32, bool) {
+pub(crate) fn reset_blend(
+    look_from: (f32, f32),
+    zoom_from: f32,
+    t: f32,
+) -> ((f32, f32), f32, bool) {
     crate::cam_approach::home(look_from, zoom_from, t)
 }
 
@@ -94,7 +98,10 @@ mod look_tests {
     fn chase_orbits_at_035_deg_px_with_stops_above_and_below() {
         // 100 px drag down-right: +35 yaw, -35 pitch.
         let (y, p) = super::chase_orbit_step(0.0, 0.0, 100.0, 100.0);
-        assert!((y - 35.0).abs() < 1e-4 && (p + 35.0).abs() < 1e-4, "{y} {p}");
+        assert!(
+            (y - 35.0).abs() < 1e-4 && (p + 35.0).abs() < 1e-4,
+            "{y} {p}"
+        );
         // yaw wraps the full circle.
         assert!((super::chase_orbit_step(350.0, 0.0, 100.0, 0.0).0 - 25.0).abs() < 1e-3);
         // pitch never leaves the stops, whichever way it is dragged.
@@ -117,15 +124,23 @@ mod look_tests {
     #[test]
     fn the_zoom_key_zooms_while_held_or_until_pressed_again() {
         let mut z = super::ZoomHold::default();
-        for _ in 0..60 { z.step(true, 0.5, false, 1.0 / 60.0); }
+        for _ in 0..60 {
+            z.step(true, 0.5, false, 1.0 / 60.0);
+        }
         assert_eq!(z.factor, 0.5, "held: zoomed in");
-        for _ in 0..60 { z.step(false, 0.5, false, 1.0 / 60.0); }
+        for _ in 0..60 {
+            z.step(false, 0.5, false, 1.0 / 60.0);
+        }
         assert_eq!(z.factor, 1.0, "let go: back");
         z.step(true, 0.4, true, 1.0 / 60.0);
-        for _ in 0..60 { z.step(false, 0.4, true, 1.0 / 60.0); }
+        for _ in 0..60 {
+            z.step(false, 0.4, true, 1.0 / 60.0);
+        }
         assert_eq!(z.factor, 0.4, "latching: stays after one press");
         z.step(true, 0.4, true, 1.0 / 60.0);
-        for _ in 0..60 { z.step(false, 0.4, true, 1.0 / 60.0); }
+        for _ in 0..60 {
+            z.step(false, 0.4, true, 1.0 / 60.0);
+        }
         assert_eq!(z.factor, 1.0, "a second press zooms out");
     }
 
@@ -138,7 +153,10 @@ mod look_tests {
         let mid = super::precision_zoom_step(1.0, 100.0, super::ZOOM_INTENT);
         assert!(mid < 1.0 && mid > 0.45, "{mid}");
         assert!((super::precision_zoom_step(mid, -100.0, super::ZOOM_INTENT) - 1.0).abs() < 1e-4);
-        assert_eq!(super::precision_zoom_step(1.0, -50.0, super::ZOOM_INTENT), 1.0);
+        assert_eq!(
+            super::precision_zoom_step(1.0, -50.0, super::ZOOM_INTENT),
+            1.0
+        );
         // F1 runs the same curve 20% slower.
         let slow = super::precision_zoom_step(1.0, 100.0, super::ZOOM_INTENT_F1);
         assert!(slow > mid && slow < 1.0, "{slow} vs {mid}");
@@ -150,20 +168,22 @@ mod look_tests {
 /// Whether `key` is `look_key_of(view, cam)` (without making that key: asked every frame).
 pub(crate) fn look_key_is(key: &str, view: &str, cam: Option<(usize, usize)>) -> bool {
     let numbered = |prefix: &str, n: usize| {
-        key.strip_prefix(prefix).and_then(|k| k.strip_prefix('#')).is_some_and(|k| {
-            let mut digits = [0u8; 20];
-            let mut at = digits.len();
-            let mut v = n;
-            loop {
-                at -= 1;
-                digits[at] = b'0' + (v % 10) as u8;
-                v /= 10;
-                if v == 0 {
-                    break;
+        key.strip_prefix(prefix)
+            .and_then(|k| k.strip_prefix('#'))
+            .is_some_and(|k| {
+                let mut digits = [0u8; 20];
+                let mut at = digits.len();
+                let mut v = n;
+                loop {
+                    at -= 1;
+                    digits[at] = b'0' + (v % 10) as u8;
+                    v /= 10;
+                    if v == 0 {
+                        break;
+                    }
                 }
-            }
-            k.as_bytes() == &digits[at..]
-        })
+                k.as_bytes() == &digits[at..]
+            })
     };
     match (view, cam) {
         ("driver", Some((d, _))) => numbered("driver", d),
@@ -174,7 +194,11 @@ pub(crate) fn look_key_is(key: &str, view: &str, cam: Option<(usize, usize)>) ->
 
 /// [`App::zoom_by`] on the view's state `cam` and the view `view`.
 pub(crate) fn with_zoom_hold(zoom: Option<f32>, hold: f32) -> Option<f32> {
-    if (hold - 1.0).abs() < 1e-3 { zoom } else { Some(zoom.unwrap_or(1.0) * hold) }
+    if (hold - 1.0).abs() < 1e-3 {
+        zoom
+    } else {
+        Some(zoom.unwrap_or(1.0) * hold)
+    }
 }
 
 pub(crate) struct ZoomHold {
@@ -185,7 +209,11 @@ pub(crate) struct ZoomHold {
 
 impl Default for ZoomHold {
     fn default() -> Self {
-        ZoomHold { factor: 1.0, latched: false, was: false }
+        ZoomHold {
+            factor: 1.0,
+            latched: false,
+            was: false,
+        }
     }
 }
 
@@ -276,7 +304,12 @@ pub(crate) fn swap_cam_zoom(
 /// Put the direction of the view left away and take up the one of the view entered; `true`
 /// when that was another view (the caller then knows the head did not just move: it is where
 /// the view entered last left it).
-pub(crate) fn swap_view_look(look: &mut (f32, f32), looks: &mut std::collections::HashMap<String, (f32, f32)>, look_view: &mut String, view: &str) -> bool {
+pub(crate) fn swap_view_look(
+    look: &mut (f32, f32),
+    looks: &mut std::collections::HashMap<String, (f32, f32)>,
+    look_view: &mut String,
+    view: &str,
+) -> bool {
     if look_view == view {
         return false;
     }
@@ -299,7 +332,12 @@ pub(crate) fn swap_view_look(look: &mut (f32, f32), looks: &mut std::collections
 ///
 /// A free function: it is called where `self` is borrowed in parts, and needs nothing of the
 /// app but the two angles.
-pub(crate) fn ease_look(shown: &mut (f32, f32), wanted: (f32, f32), dt: f32, ms: f32) -> (f32, f32) {
+pub(crate) fn ease_look(
+    shown: &mut (f32, f32),
+    wanted: (f32, f32),
+    dt: f32,
+    ms: f32,
+) -> (f32, f32) {
     let tau = ms * 0.001;
     if !(tau > 0.0) || !dt.is_finite() || dt <= 0.0 {
         *shown = wanted;
@@ -310,7 +348,11 @@ pub(crate) fn ease_look(shown: &mut (f32, f32), wanted: (f32, f32), dt: f32, ms:
     // (in the range the head's yaw is kept in: -180..180 in the cab, `cab_look_yaw`, else
     // 0..360 - a glide across the back would otherwise hand the cab a yaw of 350)
     let yaw = shown.0 + dyaw * f;
-    shown.0 = if (-180.0..=180.0).contains(&wanted.0) { (yaw + 180.0).rem_euclid(360.0) - 180.0 } else { yaw.rem_euclid(360.0) };
+    shown.0 = if (-180.0..=180.0).contains(&wanted.0) {
+        (yaw + 180.0).rem_euclid(360.0) - 180.0
+    } else {
+        yaw.rem_euclid(360.0)
+    };
     shown.1 += (wanted.1 - shown.1) * f;
     *shown
 }
@@ -345,7 +387,10 @@ mod look_smoothing_tests {
         for _ in 0..600 {
             ease_look(&mut fast, to, 1.0 / 600.0, 100.0);
         }
-        assert!((slow.0 - fast.0).abs() < 0.01 && (slow.1 - fast.1).abs() < 0.01, "{slow:?} against {fast:?}");
+        assert!(
+            (slow.0 - fast.0).abs() < 0.01 && (slow.1 - fast.1).abs() < 0.01,
+            "{slow:?} against {fast:?}"
+        );
         // a whole second at a time constant of 100 ms is very nearly there
         assert!(slow.0 > 29.9 && slow.1 > 9.9, "{slow:?}");
     }
@@ -363,7 +408,10 @@ mod look_smoothing_tests {
     #[test]
     fn without_the_setting_the_view_is_where_the_head_points() {
         let mut shown = (0.0, 0.0);
-        assert_eq!(ease_look(&mut shown, (30.0, 10.0), 1.0 / 60.0, 0.0), (30.0, 10.0));
+        assert_eq!(
+            ease_look(&mut shown, (30.0, 10.0), 1.0 / 60.0, 0.0),
+            (30.0, 10.0)
+        );
         assert_eq!(shown, (30.0, 10.0));
     }
 }
@@ -394,13 +442,37 @@ mod look_key_tests {
     #[test]
     fn look_key_is_the_key_made() {
         let views = ["driver", "pax", "free", "foot", "outside", ""];
-        let cams = [None, Some((0, 0)), Some((1, 12)), Some((10, 3)), Some((usize::MAX, 7))];
-        let keys = ["driver#0", "driver#1", "driver#10", "driver#01", "pax#12", "pax#3", "pax#03", "driver", "pax", "free", "", "driver#", "pax#7"];
+        let cams = [
+            None,
+            Some((0, 0)),
+            Some((1, 12)),
+            Some((10, 3)),
+            Some((usize::MAX, 7)),
+        ];
+        let keys = [
+            "driver#0",
+            "driver#1",
+            "driver#10",
+            "driver#01",
+            "pax#12",
+            "pax#3",
+            "pax#03",
+            "driver",
+            "pax",
+            "free",
+            "",
+            "driver#",
+            "pax#7",
+        ];
         for v in views {
             for c in cams {
                 assert!(look_key_is(&look_key_of(v, c), v, c), "{v} {c:?}");
                 for k in keys {
-                    assert_eq!(look_key_is(k, v, c), k == look_key_of(v, c), "{k} {v} {c:?}");
+                    assert_eq!(
+                        look_key_is(k, v, c),
+                        k == look_key_of(v, c),
+                        "{k} {v} {c:?}"
+                    );
                 }
             }
         }

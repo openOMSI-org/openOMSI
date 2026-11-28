@@ -27,7 +27,12 @@ pub struct Glass {
 }
 
 impl Glass {
-    pub const DEFAULT: Glass = Glass { opacity: 0.6, blur: 24.0, edge: 0.16, highlight: 0.10 };
+    pub const DEFAULT: Glass = Glass {
+        opacity: 0.6,
+        blur: 24.0,
+        edge: 0.16,
+        highlight: 0.10,
+    };
 }
 
 /// The colours of the interface, and the corners of its panels.
@@ -170,7 +175,10 @@ impl Palette {
     /// [`palette`]); a colour the theme leaves out follows the one it goes with there (the
     /// panels' greys the surfaces', the texts the inks', the darker red the red), so that a
     /// theme of a few colours is whole. Names it does not know are returned.
-    pub fn with_colors<'a>(base: Palette, given: impl IntoIterator<Item = (&'a str, Color)>) -> (Palette, Vec<&'a str>) {
+    pub fn with_colors<'a>(
+        base: Palette,
+        given: impl IntoIterator<Item = (&'a str, Color)>,
+    ) -> (Palette, Vec<&'a str>) {
         let mut p = base;
         let mut set: Vec<&str> = Vec::new();
         let mut unknown = Vec::new();
@@ -216,7 +224,11 @@ impl Palette {
 
 /// openOMSI's own look, light or dark.
 pub fn palette(light: bool) -> Palette {
-    if light { Palette::LIGHT } else { Palette::OPENOMSI }
+    if light {
+        Palette::LIGHT
+    } else {
+        Palette::OPENOMSI
+    }
 }
 
 static PALETTE: RwLock<Palette> = RwLock::new(Palette::OPENOMSI);
@@ -228,7 +240,9 @@ thread_local! {
 
 /// The palette in force.
 pub fn th() -> Palette {
-    LOCAL.with(|l| l.get()).unwrap_or_else(|| *PALETTE.read().unwrap_or_else(|e| e.into_inner()))
+    LOCAL
+        .with(|l| l.get())
+        .unwrap_or_else(|| *PALETTE.read().unwrap_or_else(|e| e.into_inner()))
 }
 
 /// A corner of `r` as openOMSI draws it, moved by as much as the palette's `radius` differs from
@@ -301,9 +315,15 @@ mod tests {
 
     #[test]
     fn a_theme_colour_is_read_from_hex() {
-        assert_eq!(parse_hex("#f58620"), Some(Color::rgba(0xf5, 0x86, 0x20, 1.0)));
+        assert_eq!(
+            parse_hex("#f58620"),
+            Some(Color::rgba(0xf5, 0x86, 0x20, 1.0))
+        );
         assert_eq!(parse_hex(" #fff "), Some(Color::rgba(255, 255, 255, 1.0)));
-        assert_eq!(parse_hex("#0a142e80"), Some(Color::rgba(10, 20, 46, 128.0 / 255.0)));
+        assert_eq!(
+            parse_hex("#0a142e80"),
+            Some(Color::rgba(10, 20, 46, 128.0 / 255.0))
+        );
         for bad in ["f58620", "#f5862", "#ggg", "", "#", "#ééé"] {
             assert_eq!(parse_hex(bad), None, "{bad}");
         }
@@ -316,7 +336,15 @@ mod tests {
     fn a_colour_left_out_follows_the_one_it_goes_with() {
         let navy = Color::rgba(10, 20, 46, 1.0);
         let orange = Color::rgba(245, 134, 32, 1.0);
-        let (p, unknown) = Palette::with_colors(Palette::OPENOMSI, [("background", navy), ("accent", orange), ("ink", Color::WHITE), ("sparkle", navy)]);
+        let (p, unknown) = Palette::with_colors(
+            Palette::OPENOMSI,
+            [
+                ("background", navy),
+                ("accent", orange),
+                ("ink", Color::WHITE),
+                ("sparkle", navy),
+            ],
+        );
         assert_eq!(unknown, ["sparkle"]);
         assert_eq!((p.bg, p.rail, p.sidebar), (navy, navy, navy));
         assert_eq!((p.accent, p.warn), (orange, orange));
@@ -324,7 +352,10 @@ mod tests {
         assert_eq!(p.text, Color::WHITE);
         assert_eq!(p.surface, Palette::OPENOMSI.surface);
         // (given itself, a colour stays as given)
-        let (p, _) = Palette::with_colors(Palette::OPENOMSI, [("background", navy), ("sidebar", orange)]);
+        let (p, _) = Palette::with_colors(
+            Palette::OPENOMSI,
+            [("background", navy), ("sidebar", orange)],
+        );
         assert_eq!((p.rail, p.sidebar), (navy, orange));
     }
 
@@ -336,17 +367,30 @@ mod tests {
         assert_eq!(palette(true), Palette::LIGHT);
         assert_ne!(Palette::LIGHT.bg, Palette::OPENOMSI.bg);
         assert_ne!(Palette::LIGHT.text, Palette::OPENOMSI.text);
-        assert_eq!((Palette::LIGHT.radius, Palette::LIGHT.glass), (Palette::OPENOMSI.radius, None));
+        assert_eq!(
+            (Palette::LIGHT.radius, Palette::LIGHT.glass),
+            (Palette::OPENOMSI.radius, None)
+        );
         let orange = Color::rgba(245, 134, 32, 1.0);
         let (p, _) = Palette::with_colors(palette(true), [("accent", orange)]);
         assert_eq!((p.accent, p.warn), (orange, orange));
-        assert_eq!((p.bg, p.text, p.surface), (Palette::LIGHT.bg, Palette::LIGHT.text, Palette::LIGHT.surface));
+        assert_eq!(
+            (p.bg, p.text, p.surface),
+            (
+                Palette::LIGHT.bg,
+                Palette::LIGHT.text,
+                Palette::LIGHT.surface
+            )
+        );
     }
 
     /// A palette set for one thread is that thread's: the others keep the one in force.
     #[test]
     fn a_palette_for_a_thread_stays_on_it() {
-        let red = Palette { accent: Color::rgba(255, 0, 0, 1.0), ..Palette::OPENOMSI };
+        let red = Palette {
+            accent: Color::rgba(255, 0, 0, 1.0),
+            ..Palette::OPENOMSI
+        };
         with_palette(red, || {
             assert_eq!(th().accent, red.accent);
             let other = std::thread::spawn(|| th().accent).join().unwrap();

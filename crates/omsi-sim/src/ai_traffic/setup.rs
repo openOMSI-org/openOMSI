@@ -36,24 +36,70 @@ impl TrafficSim {
     pub fn set_lan_seed(&mut self, seed: u64) {
         self.rng = seed | 1;
         self.scheme_salt = seed;
-        self.scheme_sets.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.scheme_sets
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     pub fn ai_schemes(&self, ty: &VehicleType) -> Vec<usize> {
         let mut sets = self.scheme_sets.lock().unwrap_or_else(|e| e.into_inner());
         sets.entry(ty.def.path.clone())
             .or_insert_with(|| {
-                let parts: Vec<String> = ty.def.path.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase()).collect();
-                let from = parts.iter().rposition(|p| p == "vehicles").unwrap_or(parts.len().saturating_sub(1));
-                let fnv = parts[from..].join("/").bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3));
-                spread_schemes(ty.paint_schemes.len(), omsi_script::mix_seed(self.scheme_salt ^ fnv))
+                let parts: Vec<String> = ty
+                    .def
+                    .path
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+                    .collect();
+                let from = parts
+                    .iter()
+                    .rposition(|p| p == "vehicles")
+                    .unwrap_or(parts.len().saturating_sub(1));
+                let fnv = parts[from..]
+                    .join("/")
+                    .bytes()
+                    .fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+                        (h ^ b as u64).wrapping_mul(0x0100_0000_01b3)
+                    });
+                spread_schemes(
+                    ty.paint_schemes.len(),
+                    omsi_script::mix_seed(self.scheme_salt ^ fnv),
+                )
             })
             .clone()
     }
 
+    /// The random traffic's paint for `ty`, drawn by `pick`: never the paint the player's own
+    /// bus of that file shows (#3477) - the next one the traffic draws, or the draw itself
+    /// when every paint it draws is the player's.
     pub fn ai_scheme(&self, ty: &VehicleType, pick: u64) -> Option<usize> {
         let set = self.ai_schemes(ty);
-        (!set.is_empty()).then(|| set[(pick % set.len() as u64) as usize])
+        if set.is_empty() {
+            return None;
+        }
+        let at = (pick % set.len() as u64) as usize;
+        if let Some(mine) = self.player_livery.as_ref().filter(|p| p.is_bus_of(ty)) {
+            for step in 0..set.len() {
+                let i = set[(at + step) % set.len()];
+                let name = ty
+                    .paint_schemes
+                    .get(i)
+                    .map(|s| s.name.as_str())
+                    .unwrap_or("");
+                if !mine.is_paint(name) {
+                    return Some(i);
+                }
+            }
+        }
+        Some(set[at])
+    }
+
+    /// Tell the traffic what the bus the player drives shows (`omsi_sim::livery`); None when
+    /// there is none (on foot, or no traffic). The AI's random buses of that file take another
+    /// paint, number and plate from then on (#3477).
+    pub fn set_player_livery(&mut self, livery: Option<crate::livery::PlayerLivery>) {
+        self.player_livery = livery;
     }
 
     /// The traffic made of its parts: the linked network, the random traffic's types,
@@ -73,7 +119,13 @@ impl TrafficSim {
         (unsched_factor, max_scheduled): (f32, u32),
         target: usize,
     ) -> TrafficSim {
-        let RandomTypes { types, groups, group_curves, group_uvg, uvg_defaults } = random;
+        let RandomTypes {
+            types,
+            groups,
+            group_curves,
+            group_uvg,
+            uvg_defaults,
+        } = random;
         let parked: HashMap<usize, Vec<(f32, f32)>> = HashMap::new();
         let light_log = omsi_cfg::flags::OMSI_DEBUG_LIGHTS.var().map(String::from);
         let light_prev = lights.iter().map(|c| vec![-100; c.lights.len()]).collect();
@@ -105,6 +157,7 @@ impl TrafficSim {
                 .unwrap_or(0x9E37_79B9_7F4A_7C15),
             scheme_salt: omsi_script::session_seed().unwrap_or(0),
             scheme_sets: Default::default(),
+            player_livery: None,
             target,
             lights_only: false,
             spawn_radius: 400.0,
@@ -181,6 +234,7 @@ impl TrafficSim {
             lan_centers: Vec::new(),
             lan_eyes: Vec::new(),
             retired: Vec::new(),
+            accident: Default::default(),
             honked: Vec::new(),
             stats: stats::TrafficStats::from_env(),
             scenery_through: Vec::new(),

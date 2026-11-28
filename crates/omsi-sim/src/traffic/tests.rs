@@ -70,18 +70,44 @@ fn platform_side_uses_the_local_tangent_on_a_curve() {
 fn a_stop_is_matched_to_the_lane_it_stands_beside() {
     // out along y = 0 (east), back along y = 6 (west); the stop stands north of the
     // way back: on its right, across the road from the way out
-    let out = LaneBuilder::polyline(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(100.0, 0.0, 0.0)], LaneKind::Street, 3.0);
-    let back = LaneBuilder::polyline(vec![DVec3::new(100.0, 6.0, 0.0), DVec3::new(0.0, 6.0, 0.0)], LaneKind::Street, 3.0);
-    let net = Network { lanes: vec![out, back], ..Default::default() };
+    let out = LaneBuilder::polyline(
+        vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(100.0, 0.0, 0.0)],
+        LaneKind::Street,
+        3.0,
+    );
+    let back = LaneBuilder::polyline(
+        vec![DVec3::new(100.0, 6.0, 0.0), DVec3::new(0.0, 6.0, 0.0)],
+        LaneKind::Street,
+        3.0,
+    );
+    let net = Network {
+        lanes: vec![out, back],
+        ..Default::default()
+    };
     let stop = DVec3::new(50.0, 9.0, 0.0);
     // nearer to the way back anyway: matched there
-    assert_eq!(net.project_stop_on_route(&[0, 1], stop, Some(25.0), 0).unwrap().0, 1);
+    assert_eq!(
+        net.project_stop_on_route(&[0, 1], stop, Some(25.0), 0)
+            .unwrap()
+            .0,
+        1
+    );
     // a stop on the right of the way out, nearer the middle of the road
     let stop2 = DVec3::new(50.0, -2.0, 0.0);
-    assert_eq!(net.project_stop_on_route(&[0, 1], stop2, Some(25.0), 0).unwrap().0, 0);
+    assert_eq!(
+        net.project_stop_on_route(&[0, 1], stop2, Some(25.0), 0)
+            .unwrap()
+            .0,
+        0
+    );
     // the route out, back and out again: a stop on the way out, once the trip is past
     // its first leg, is the one on the second way out
-    assert_eq!(net.project_stop_on_route(&[0, 1, 0], stop2, Some(25.0), 1).unwrap().0, 2);
+    assert_eq!(
+        net.project_stop_on_route(&[0, 1, 0], stop2, Some(25.0), 1)
+            .unwrap()
+            .0,
+        2
+    );
 }
 
 use super::*;
@@ -92,7 +118,16 @@ fn arc_height_change_and_object_gradients_have_distinct_units() {
     let linear = LaneBuilder::arc(start, 20.0, 20.0, 30.0, 0.2, LaneKind::Street, 3.0);
     assert!((linear.points[5].z - 5.1).abs() < 1e-12);
     assert!((linear.end().z - 5.2).abs() < 1e-12);
-    let graded = LaneBuilder::arc_with_gradients(start, 20.0, 20.0, 30.0, 0.06, -0.04, LaneKind::Street, 3.0);
+    let graded = LaneBuilder::arc_with_gradients(
+        start,
+        20.0,
+        20.0,
+        30.0,
+        0.06,
+        -0.04,
+        LaneKind::Street,
+        3.0,
+    );
     assert!((graded.points[5].z - 5.35).abs() < 1e-12);
     assert!((graded.end().z - 5.2).abs() < 1e-12);
     assert_eq!(linear.headings, graded.headings);
@@ -106,16 +141,31 @@ fn arc_height_change_and_object_gradients_have_distinct_units() {
 /// 60°, then straight on again.
 fn junction() -> Network {
     let a = LaneBuilder::arc(DVec3::ZERO, 0.0, 60.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let bend = LaneBuilder::arc(a.end(), 0.0, 14.0 * 60f64.to_radians(), 14.0, 0.0, LaneKind::Street, 3.0);
+    let bend = LaneBuilder::arc(
+        a.end(),
+        0.0,
+        14.0 * 60f64.to_radians(),
+        14.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     let c = LaneBuilder::arc(bend.end(), 60.0, 80.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![a, bend, c], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![a, bend, c],
+        ..Default::default()
+    };
     net.link(1.5);
     net
 }
 
 #[test]
 fn path_rules_open_lanes_by_vehicle_type() {
-    let mut l = LaneBuilder::polyline(vec![DVec3::ZERO, DVec3::new(0.0, 50.0, 0.0)], LaneKind::Street, 3.0);
+    let mut l = LaneBuilder::polyline(
+        vec![DVec3::ZERO, DVec3::new(0.0, 50.0, 0.0)],
+        LaneKind::Street,
+        3.0,
+    );
     // no rules: cars and taxis, no AI buses or trucks (Omsi.exe 0x71d714)
     assert!(l.allows(0) && l.allows(1) && !l.allows(2) && !l.allows(3) && l.allows(-1));
     l.rule_trucks = true;
@@ -187,14 +237,27 @@ fn slows_down_for_a_bend() {
     assert!(v < 7.5, "entered the bend at {v} m/s");
 }
 
-
 /// A pull-out started a few metres before the car's lane ends (a road of short spline
 /// pieces) carries on across the joint and ends on the lane beside's next piece, without
 /// a jump: it used to be finished at the joint, the car moved sideways in one frame.
 #[test]
 fn a_lane_change_carries_on_across_a_joint() {
-    let lane = |x: f64, y0: f64, y1: f64| LaneBuilder::polyline(vec![DVec3::new(x, y0, 0.0), DVec3::new(x, y1, 0.0)], LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![lane(0.0, 0.0, 20.0), lane(-3.5, 0.0, 20.0), lane(0.0, 20.0, 70.0), lane(-3.5, 20.0, 70.0)], ..Default::default() };
+    let lane = |x: f64, y0: f64, y1: f64| {
+        LaneBuilder::polyline(
+            vec![DVec3::new(x, y0, 0.0), DVec3::new(x, y1, 0.0)],
+            LaneKind::Street,
+            3.0,
+        )
+    };
+    let mut net = Network {
+        lanes: vec![
+            lane(0.0, 0.0, 20.0),
+            lane(-3.5, 0.0, 20.0),
+            lane(0.0, 20.0, 70.0),
+            lane(-3.5, 20.0, 70.0),
+        ],
+        ..Default::default()
+    };
     net.link(1.5);
     net.lanes[0].left = Some(1);
     net.lanes[2].left = Some(3);
@@ -209,7 +272,13 @@ fn a_lane_change_carries_on_across_a_joint() {
         assert!(car.drive(&net, dt, None, None));
         let p = car.way_point(&net, 0.0);
         let step = (p - at).length();
-        assert!(step < car.speed as f64 * dt as f64 + 0.05, "a jump of {step:.2} m on lane {} s {:.1} change {:?}", car.lane, car.s, car.change);
+        assert!(
+            step < car.speed as f64 * dt as f64 + 0.05,
+            "a jump of {step:.2} m on lane {} s {:.1} change {:?}",
+            car.lane,
+            car.s,
+            car.change
+        );
         at = p;
         if car.change.is_none() {
             break;
@@ -222,12 +291,17 @@ fn a_lane_change_carries_on_across_a_joint() {
 
 #[test]
 fn timetable_route_does_not_jump_across_an_unbridged_gap() {
-    let lane = |y0, y1| LaneBuilder::polyline(
-        vec![DVec3::new(0.0, y0, 0.0), DVec3::new(0.0, y1, 0.0)],
-        LaneKind::Street,
-        3.0,
-    );
-    let mut net = Network { lanes: vec![lane(0.0, 10.0), lane(30.0, 40.0)], ..Default::default() };
+    let lane = |y0, y1| {
+        LaneBuilder::polyline(
+            vec![DVec3::new(0.0, y0, 0.0), DVec3::new(0.0, y1, 0.0)],
+            LaneKind::Street,
+            3.0,
+        )
+    };
+    let mut net = Network {
+        lanes: vec![lane(0.0, 10.0), lane(30.0, 40.0)],
+        ..Default::default()
+    };
     net.link(1.5);
     let mut car = AiState::new(0, 10.0, 7);
     car.route = vec![0, 1];
@@ -244,51 +318,122 @@ fn timetable_route_does_not_jump_across_an_unbridged_gap() {
 
 #[test]
 fn a_timetable_route_steps_over_to_the_parallel_path_of_the_next_piece() {
-    let lane = |x: f64, y0, y1| LaneBuilder::polyline(vec![DVec3::new(x, y0, 0.0), DVec3::new(x, y1, 0.0)], LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![lane(0.0, 0.0, 10.0), lane(0.0, 10.0, 40.0), lane(3.75, 10.0, 40.0)], ..Default::default() };
+    let lane = |x: f64, y0, y1| {
+        LaneBuilder::polyline(
+            vec![DVec3::new(x, y0, 0.0), DVec3::new(x, y1, 0.0)],
+            LaneKind::Street,
+            3.0,
+        )
+    };
+    let mut net = Network {
+        lanes: vec![
+            lane(0.0, 0.0, 10.0),
+            lane(0.0, 10.0, 40.0),
+            lane(3.75, 10.0, 40.0),
+        ],
+        ..Default::default()
+    };
     net.link(1.5);
     assert!(!net.lanes[0].next.contains(&2));
     let mut car = AiState::new(0, 10.0, 7);
     car.route = vec![0, 2];
     car.plan_next(&net);
     assert_eq!(car.planned_next, Some(2));
-    assert!(car.advance(&net, 0.0, None, None), "a side step of one lane is no missing piece");
+    assert!(
+        car.advance(&net, 0.0, None, None),
+        "a side step of one lane is no missing piece"
+    );
     assert_eq!(car.lane, 2);
-    assert!((car.lateral + 3.75).abs() < 0.01, "it glides over from where it was: {}", car.lateral);
-    let mut rails = Network { lanes: net.lanes.iter().map(|l| Lane { kind: LaneKind::Rail, next: Vec::new(), ..l.clone() }).collect(), ..Default::default() };
+    assert!(
+        (car.lateral + 3.75).abs() < 0.01,
+        "it glides over from where it was: {}",
+        car.lateral
+    );
+    let mut rails = Network {
+        lanes: net
+            .lanes
+            .iter()
+            .map(|l| Lane {
+                kind: LaneKind::Rail,
+                next: Vec::new(),
+                ..l.clone()
+            })
+            .collect(),
+        ..Default::default()
+    };
     rails.link(1.5);
     let mut tram = AiState::new(0, 10.0, 7);
     tram.route = vec![0, 2];
     tram.plan_next(&rails);
-    assert!(!tram.advance(&rails, 0.0, None, None), "a track beside is no lane change");
+    assert!(
+        !tram.advance(&rails, 0.0, None, None),
+        "a track beside is no lane change"
+    );
 }
 
 #[test]
 fn timetable_change_stops_at_a_diverged_junction_branch() {
     let lane = |points| LaneBuilder::polyline(points, LaneKind::Street, 3.0);
     let mut main = lane(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 60.0, 0.0)]);
-    let mut branch = lane(vec![DVec3::new(3.5, 0.0, 0.0), DVec3::new(3.5, 30.0, 0.0), DVec3::new(18.0, 60.0, 0.0)]);
-    main.key = Some(LaneKey { tile: (0, 0), id: 1, path: 0 });
-    branch.key = Some(LaneKey { tile: (0, 0), id: 1, path: 1 });
-    let net = Network { lanes: vec![main, branch], ..Default::default() };
-    assert!(net.parallel(0, 1), "the authored route treats the fork as a lane change");
+    let mut branch = lane(vec![
+        DVec3::new(3.5, 0.0, 0.0),
+        DVec3::new(3.5, 30.0, 0.0),
+        DVec3::new(18.0, 60.0, 0.0),
+    ]);
+    main.key = Some(LaneKey {
+        tile: (0, 0),
+        id: 1,
+        path: 0,
+    });
+    branch.key = Some(LaneKey {
+        tile: (0, 0),
+        id: 1,
+        path: 1,
+    });
+    let net = Network {
+        lanes: vec![main, branch],
+        ..Default::default()
+    };
+    assert!(
+        net.parallel(0, 1),
+        "the authored route treats the fork as a lane change"
+    );
     assert!(net.route_change_locally_possible(0, 1, 10.0));
     assert!(
         !net.route_change_locally_possible(0, 1, 40.0),
         "do not cut across the divided junction"
     );
     let wait = net.route_change_wait_distance(0, 1, 10.0);
-    assert!(wait > 0.0 && wait < 30.0, "wait before the branches part: {wait}");
+    assert!(
+        wait > 0.0 && wait < 30.0,
+        "wait before the branches part: {wait}"
+    );
 }
 
 #[test]
 fn timetable_change_to_a_longer_branch_stays_beside_the_bus() {
     let lane = |points| LaneBuilder::polyline(points, LaneKind::Street, 3.0);
     let mut main = lane(vec![DVec3::new(0.0, 0.0, 0.0), DVec3::new(0.0, 60.0, 0.0)]);
-    let mut branch = lane(vec![DVec3::new(3.5, 0.0, 0.0), DVec3::new(3.5, 25.0, 0.0), DVec3::new(3.5, 30.0, 0.0), DVec3::new(100.0, 30.0, 0.0)]);
-    main.key = Some(LaneKey { tile: (0, 0), id: 1, path: 0 });
-    branch.key = Some(LaneKey { tile: (0, 0), id: 1, path: 1 });
-    let net = Network { lanes: vec![main, branch], ..Default::default() };
+    let mut branch = lane(vec![
+        DVec3::new(3.5, 0.0, 0.0),
+        DVec3::new(3.5, 25.0, 0.0),
+        DVec3::new(3.5, 30.0, 0.0),
+        DVec3::new(100.0, 30.0, 0.0),
+    ]);
+    main.key = Some(LaneKey {
+        tile: (0, 0),
+        id: 1,
+        path: 0,
+    });
+    branch.key = Some(LaneKey {
+        tile: (0, 0),
+        id: 1,
+        path: 1,
+    });
+    let net = Network {
+        lanes: vec![main, branch],
+        ..Default::default()
+    };
     assert!(net.parallel(0, 1));
     assert!(net.route_change_locally_possible(0, 1, 10.0));
     assert!((net.beside_s(0, 1, 10.0) - 10.0).abs() < 0.01);
@@ -303,14 +448,20 @@ fn timetable_change_to_a_longer_branch_stays_beside_the_bus() {
     for _ in 0..300 {
         assert!(car.drive(&net, 1.0 / 30.0, None, None));
         let p = car.way_point(&net, 0.0);
-        assert!((p - prev).length() < 0.3, "lane change jumped from {prev:?} to {p:?}");
+        assert!(
+            (p - prev).length() < 0.3,
+            "lane change jumped from {prev:?} to {p:?}"
+        );
         prev = p;
         if car.change.is_none() {
             break;
         }
     }
     assert_eq!(car.lane, 1);
-    assert!(prev.x > 3.0 && prev.x < 4.0 && prev.y < 30.0, "bus crossed the branch's turn: {prev:?}");
+    assert!(
+        prev.x > 3.0 && prev.x < 4.0 && prev.y < 30.0,
+        "bus crossed the branch's turn: {prev:?}"
+    );
 }
 
 #[test]
@@ -335,13 +486,21 @@ fn a_turning_lane_is_signalled_in_advance() {
     }
     let (lane, before) = first_on.expect("indicator on");
     assert_eq!(lane, 0);
-    assert!(before >= 24.0, "indicator on only {before} m before the turn");
+    assert!(
+        before >= 24.0,
+        "indicator on only {before} m before the turn"
+    );
 }
 
 /// Einm_erzgebirgs.sco's "Main" light: red and yellow 2 s, green 11 s, yellow 3 s,
 /// red for the rest of the 38 s cycle.
 fn erzgebirgs() -> TrafficLightController {
-    TrafficLightController::from_program(vec![(vec![(3, 2.0), (6, 11.0), (9, 3.0), (0, 0.0)], None)], Some(38.0), &[], &[])
+    TrafficLightController::from_program(
+        vec![(vec![(3, 2.0), (6, 11.0), (9, 3.0), (0, 0.0)], None)],
+        Some(38.0),
+        &[],
+        &[],
+    )
 }
 
 #[test]
@@ -362,12 +521,38 @@ fn a_light_shows_every_aspect_for_its_time_at_any_frame_rate() {
             t += dt;
         }
         let order: Vec<Aspect> = seen.iter().map(|s| s.0).collect();
-        assert_eq!(&order[..5], &[Aspect::RedYellow, Aspect::Green, Aspect::Yellow, Aspect::Red, Aspect::RedYellow], "dt {dt}");
+        assert_eq!(
+            &order[..5],
+            &[
+                Aspect::RedYellow,
+                Aspect::Green,
+                Aspect::Yellow,
+                Aspect::Red,
+                Aspect::RedYellow
+            ],
+            "dt {dt}"
+        );
         let tol = dt + 1e-3;
-        assert!((seen[0].1 - 2.0).abs() <= tol, "red-yellow {} at dt {dt}", seen[0].1);
-        assert!((seen[1].1 - 11.0).abs() <= tol, "green {} at dt {dt}", seen[1].1);
-        assert!((seen[2].1 - 3.0).abs() <= tol, "yellow {} at dt {dt}", seen[2].1);
-        assert!((seen[3].1 - 22.0).abs() <= tol, "red {} at dt {dt}", seen[3].1);
+        assert!(
+            (seen[0].1 - 2.0).abs() <= tol,
+            "red-yellow {} at dt {dt}",
+            seen[0].1
+        );
+        assert!(
+            (seen[1].1 - 11.0).abs() <= tol,
+            "green {} at dt {dt}",
+            seen[1].1
+        );
+        assert!(
+            (seen[2].1 - 3.0).abs() <= tol,
+            "yellow {} at dt {dt}",
+            seen[2].1
+        );
+        assert!(
+            (seen[3].1 - 22.0).abs() <= tol,
+            "red {} at dt {dt}",
+            seen[3].1
+        );
     }
 }
 
@@ -378,7 +563,11 @@ fn stock_state_codes_mean_what_the_lamp_scripts_show() {
     assert_eq!(TrafficLightController::lamps(6), (false, false, true));
     assert_eq!(TrafficLightController::lamps(9), (false, true, false));
     assert_eq!(TrafficLightController::lamps(12), (false, false, false));
-    assert!(TrafficLightController::allows_go(6) && !TrafficLightController::allows_go(9) && !TrafficLightController::allows_go(3));
+    assert!(
+        TrafficLightController::allows_go(6)
+            && !TrafficLightController::allows_go(9)
+            && !TrafficLightController::allows_go(3)
+    );
     assert!(TrafficLightController::allows_go(8));
     // the clock starts from the time of day: two crossings with one cycle run in step
     let (mut a, mut b) = (erzgebirgs(), erzgebirgs());
@@ -395,7 +584,10 @@ fn a_level_crossing_waits_for_its_train() {
     // bue_falks_ohe.sco: road green until a train asks at light 0 (stop at 1 s), barrier
     // down while it is still there (stop at 16 s)
     let mut c = TrafficLightController::from_program(
-        vec![(vec![(0, 15.0), (6, 4.0), (0, 1.0)], None), (vec![(6, 2.0), (9, 12.0), (0, 5.0), (3, 1.0)], None)],
+        vec![
+            (vec![(0, 15.0), (6, 4.0), (0, 1.0)], None),
+            (vec![(6, 2.0), (9, 12.0), (0, 5.0), (3, 1.0)], None),
+        ],
         Some(22.0),
         &[[0.0, 1.0, 1.0], [0.0, 16.0, 0.0]],
         &[],
@@ -404,7 +596,11 @@ fn a_level_crossing_waits_for_its_train() {
     for _ in 0..600 {
         c.advance(0.1);
     }
-    assert!((c.time - (1.0 - 1e-5)).abs() < 1e-6 && c.held, "holding at {}", c.time);
+    assert!(
+        (c.time - (1.0 - 1e-5)).abs() < 1e-6 && c.held,
+        "holding at {}",
+        c.time
+    );
     assert_eq!(c.state(1), 6, "road green while no train comes");
     c.request[0] = true;
     let mut t = 0.0;
@@ -412,7 +608,11 @@ fn a_level_crossing_waits_for_its_train() {
         c.advance(0.1);
         t += 0.1;
     }
-    assert!((c.time - (16.0 - 1e-5)).abs() < 1e-6 && c.held, "the train is still there: holding at {}", c.time);
+    assert!(
+        (c.time - (16.0 - 1e-5)).abs() < 1e-6 && c.held,
+        "the train is still there: holding at {}",
+        c.time
+    );
     assert_eq!(c.state(0), 6);
     assert_eq!(c.state(1), 0, "road red while the train passes");
     c.request[0] = false;
@@ -423,7 +623,15 @@ fn a_level_crossing_waits_for_its_train() {
 #[test]
 fn a_bus_phase_is_skipped_when_no_bus_comes() {
     // Kreuz_Heerstr_Pillnitzer_Reimer.sco: the bus light 3 jumps from 51.5 to 61.5 s
-    let mut c = TrafficLightController::from_program(vec![(vec![(0, 52.0), (3, 2.0), (6, 4.0), (9, 3.0), (0, 0.0)], Some(10.0))], Some(64.0), &[], &[[0.0, 51.5, 1.0, 61.5]]);
+    let mut c = TrafficLightController::from_program(
+        vec![(
+            vec![(0, 52.0), (3, 2.0), (6, 4.0), (9, 3.0), (0, 0.0)],
+            Some(10.0),
+        )],
+        Some(64.0),
+        &[],
+        &[[0.0, 51.5, 1.0, 61.5]],
+    );
     c.start(50.0);
     c.advance(2.0);
     assert!((c.time - 62.0).abs() < 1e-3, "jumped: {}", c.time);
@@ -441,17 +649,31 @@ fn a_rest_loop_holds_while_nobody_asks() {
     // asks at the bus light; a bus sends it on through yellow.
     let mut c = TrafficLightController::from_program(
         vec![
-            (vec![(3, 2.0), (6, 10.0), (9, 3.0), (0, 7.0), (9, 3.0), (0, 1.0)], None),
+            (
+                vec![(3, 2.0), (6, 10.0), (9, 3.0), (0, 7.0), (9, 3.0), (0, 1.0)],
+                None,
+            ),
             (vec![(0, 16.0), (6, 6.0), (0, 1.0)], None),
         ],
         Some(37.0),
         &[],
-        &[[1.0, 12.0, 1.0, 2.0], [1.0, 22.0, 1.0, 2.0], [1.0, 22.0, 0.0, 18.0], [1.0, 2.0, 0.0, 12.0], [1.0, 7.0, 0.0, 12.0]],
+        &[
+            [1.0, 12.0, 1.0, 2.0],
+            [1.0, 22.0, 1.0, 2.0],
+            [1.0, 22.0, 0.0, 18.0],
+            [1.0, 2.0, 0.0, 12.0],
+            [1.0, 7.0, 0.0, 12.0],
+        ],
     );
     c.time = 3.0;
     for _ in 0..1200 {
         c.advance(0.1);
-        assert_eq!(c.state(0), 6, "the main road left its green at {:.1} s with nobody asking", c.time);
+        assert_eq!(
+            c.state(0),
+            6,
+            "the main road left its green at {:.1} s with nobody asking",
+            c.time
+        );
     }
     c.request[1] = true;
     let mut saw_bus_green = false;
@@ -482,7 +704,11 @@ fn a_backwards_jump_replays_its_phase_once() {
 
 #[test]
 fn coincident_skips_wait_for_any_of_their_lights() {
-    let p = |s: [i32; 9]| -> Vec<(i32, f32)> { s.into_iter().zip([3.0, 10.0, 3.0, 3.0, 10.0, 3.0, 3.0, 10.0, 3.0]).collect() };
+    let p = |s: [i32; 9]| -> Vec<(i32, f32)> {
+        s.into_iter()
+            .zip([3.0, 10.0, 3.0, 3.0, 10.0, 3.0, 3.0, 10.0, 3.0])
+            .collect()
+    };
     for asking in [3, 4] {
         let mut c = TrafficLightController::from_program(
             vec![
@@ -495,7 +721,15 @@ fn coincident_skips_wait_for_any_of_their_lights() {
             ],
             Some(48.0),
             &[],
-            &[[3.0, 32.0, 1.0, 48.0], [4.0, 32.0, 1.0, 48.0], [5.0, 16.0, 1.0, 32.0], [5.0, 0.0, 0.0, 16.0], [5.0, 5.0, 0.0, 16.0], [5.0, 10.0, 0.0, 16.0], [0.0, 13.0, 0.0, 8.0]],
+            &[
+                [3.0, 32.0, 1.0, 48.0],
+                [4.0, 32.0, 1.0, 48.0],
+                [5.0, 16.0, 1.0, 32.0],
+                [5.0, 0.0, 0.0, 16.0],
+                [5.0, 5.0, 0.0, 16.0],
+                [5.0, 10.0, 0.0, 16.0],
+                [0.0, 13.0, 0.0, 8.0],
+            ],
         );
         c.start(0.0);
         c.request[asking] = true;
@@ -534,7 +768,15 @@ fn jump_to_zero_at_cycle_boundary_does_not_freeze_the_program() {
     // The jump at 64 lands on the cycle-boundary jump. That second jump makes no progress
     // and must only be processed once, so the bus light can reach its next green.
     let mut lights = vec![Vec::new(); 7];
-    lights[2] = vec![(0, 29.0), (6, 12.0), (9, 2.0), (0, 25.0), (6, 12.0), (9, 2.0), (0, 1.0)];
+    lights[2] = vec![
+        (0, 29.0),
+        (6, 12.0),
+        (9, 2.0),
+        (0, 25.0),
+        (6, 12.0),
+        (9, 2.0),
+        (0, 1.0),
+    ];
     let mut c = TrafficLightController::from_program(
         lights.into_iter().map(|p| (p, None)).collect(),
         Some(84.0),
@@ -543,7 +785,11 @@ fn jump_to_zero_at_cycle_boundary_does_not_freeze_the_program() {
     );
     c.time = 63.9;
     c.advance(0.2);
-    assert!((c.time - 0.1).abs() < 1e-5, "controller clock froze at {}", c.time);
+    assert!(
+        (c.time - 0.1).abs() < 1e-5,
+        "controller clock froze at {}",
+        c.time
+    );
 
     c.advance(29.0);
     assert_eq!(c.state(2), 6, "the bus light reaches its next green");
@@ -560,7 +806,10 @@ fn simultaneous_inactive_events_do_not_hide_a_later_active_jump() {
     c.request[2] = true;
     c.start(0.0);
     c.advance(5.0);
-    assert_eq!(c.time, 13.0, "take the jump and consume the remaining second");
+    assert_eq!(
+        c.time, 13.0,
+        "take the jump and consume the remaining second"
+    );
     assert!(!c.held);
 }
 
@@ -728,7 +977,10 @@ fn a_jump_at_a_stop_time_goes_first() {
     c.time = 3.9;
     c.request[0] = true;
     c.advance(0.2);
-    assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6, "the active stop holds while its jump is not asked");
+    assert!(
+        (c.time - (4.0 - 1e-5)).abs() < 1e-6,
+        "the active stop holds while its jump is not asked"
+    );
     assert!(c.held);
     c.request[1] = true;
     c.advance(0.2);
@@ -750,7 +1002,10 @@ fn simultaneous_stops_release_and_are_checked_on_the_next_cycle() {
     assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6);
     assert!(c.held);
     c.advance(5.0);
-    assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6, "an active stop remains held next frame");
+    assert!(
+        (c.time - (4.0 - 1e-5)).abs() < 1e-6,
+        "an active stop remains held next frame"
+    );
     c.request[2] = false;
     c.advance(5.0);
     assert!((c.time - (9.0 - 1e-5)).abs() < 1e-6);
@@ -759,7 +1014,10 @@ fn simultaneous_stops_release_and_are_checked_on_the_next_cycle() {
     assert!((c.time - (1.0 - 1e-5)).abs() < 1e-6);
     c.request[2] = true;
     c.advance(4.0);
-    assert!((c.time - (4.0 - 1e-5)).abs() < 1e-6, "the active stop is found again after wrapping");
+    assert!(
+        (c.time - (4.0 - 1e-5)).abs() < 1e-6,
+        "the active stop is found again after wrapping"
+    );
     assert!(c.held);
 }
 
@@ -777,7 +1035,10 @@ fn many_simultaneous_inactive_events_consume_the_frame_time() {
     ];
     c.start(4.0);
     c.advance(0.25);
-    assert_eq!(c.time, 4.25, "the inactive group must not exhaust the event budget");
+    assert_eq!(
+        c.time, 4.25,
+        "the inactive group must not exhaust the event budget"
+    );
     assert_eq!(c.state(0), 6);
     assert!(!c.held);
 }
@@ -800,7 +1061,10 @@ fn a_car_stops_at_the_line_without_braking_hard() {
     }
     let front = car.s + car.front;
     assert!(car.speed < 0.01, "stopped: {}", car.speed);
-    assert!(front <= line && front > line - 1.5, "front at {front}, line at {line}");
+    assert!(
+        front <= line && front > line - 1.5,
+        "front at {front}, line at {line}"
+    );
     assert!(hardest > -3.5, "braked at {hardest} m/s²");
 }
 
@@ -821,7 +1085,16 @@ fn a_follower_keeps_its_distance_when_the_leader_brakes() {
         lead_s += lead_v * dt;
         let gap = lead_s - 2.5 - (car.s + car.front);
         closest = closest.min(gap);
-        car.drive(&net, dt, Some(Lead { gap, speed: lead_v, acc: if k > 60 && lead_v > 0.0 { -6.0 } else { 0.0 } }), None);
+        car.drive(
+            &net,
+            dt,
+            Some(Lead {
+                gap,
+                speed: lead_v,
+                acc: if k > 60 && lead_v > 0.0 { -6.0 } else { 0.0 },
+            }),
+            None,
+        );
     }
     assert!(closest > 0.8, "came within {closest} m");
     assert!(car.speed < 0.05);
@@ -831,11 +1104,38 @@ fn a_follower_keeps_its_distance_when_the_leader_brakes() {
 fn right_of_way_between_paths() {
     // a crossing: a from the south going north, b from the east going west, c from the
     // north going south and turning left (east)
-    let a = LaneBuilder::arc(DVec3::new(0.0, -10.0, 0.0), 0.0, 20.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let b = LaneBuilder::arc(DVec3::new(10.0, 0.0, 0.0), 270.0, 20.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut c = LaneBuilder::arc(DVec3::new(-1.5, 10.0, 0.0), 180.0, 10.0 * std::f64::consts::FRAC_PI_2, -10.0, 0.0, LaneKind::Street, 3.0);
+    let a = LaneBuilder::arc(
+        DVec3::new(0.0, -10.0, 0.0),
+        0.0,
+        20.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let b = LaneBuilder::arc(
+        DVec3::new(10.0, 0.0, 0.0),
+        270.0,
+        20.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut c = LaneBuilder::arc(
+        DVec3::new(-1.5, 10.0, 0.0),
+        180.0,
+        10.0 * std::f64::consts::FRAC_PI_2,
+        -10.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     c.turn = 1;
-    let mut net = Network { lanes: vec![a, b, c], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![a, b, c],
+        ..Default::default()
+    };
     net.link(1.5);
     // equal priority: neither gives way by where it comes from - the first there goes
     // first, as in Omsi.exe (no priority to the right, #2058)
@@ -855,11 +1155,39 @@ fn right_of_way_between_paths() {
 fn right_of_way_on_the_left() {
     // the same crossing on a left-hand-traffic map: a right turn across the oncoming traffic
     // waits, a left one not; crossing straight on, nobody gives way by the side
-    let a = LaneBuilder::arc(DVec3::new(0.0, -10.0, 0.0), 0.0, 20.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let b = LaneBuilder::arc(DVec3::new(10.0, 0.0, 0.0), 270.0, 20.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut c = LaneBuilder::arc(DVec3::new(-1.5, 10.0, 0.0), 180.0, 10.0 * std::f64::consts::FRAC_PI_2, -10.0, 0.0, LaneKind::Street, 3.0);
+    let a = LaneBuilder::arc(
+        DVec3::new(0.0, -10.0, 0.0),
+        0.0,
+        20.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let b = LaneBuilder::arc(
+        DVec3::new(10.0, 0.0, 0.0),
+        270.0,
+        20.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut c = LaneBuilder::arc(
+        DVec3::new(-1.5, 10.0, 0.0),
+        180.0,
+        10.0 * std::f64::consts::FRAC_PI_2,
+        -10.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     c.turn = 2;
-    let mut net = Network { lanes: vec![a, b, c], left_hand: true, ..Default::default() };
+    let mut net = Network {
+        lanes: vec![a, b, c],
+        left_hand: true,
+        ..Default::default()
+    };
     net.link(1.5);
     assert!(!net.must_yield(0, 1));
     assert!(!net.must_yield(1, 0));
@@ -873,19 +1201,58 @@ fn right_of_way_on_the_left() {
 fn a_shallow_crossing_is_a_long_meeting_place() {
     // one junction object (source 2, same key): a straight lane and two lanes crossing
     // it, one square, one at 20°
-    let key = |path: u16| Some(LaneKey { tile: (0, 0), id: 1, path });
-    let mut a = LaneBuilder::arc(DVec3::new(0.0, -20.0, 0.0), 0.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut b = LaneBuilder::arc(DVec3::new(20.0, 0.0, 0.0), 270.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let key = |path: u16| {
+        Some(LaneKey {
+            tile: (0, 0),
+            id: 1,
+            path,
+        })
+    };
+    let mut a = LaneBuilder::arc(
+        DVec3::new(0.0, -20.0, 0.0),
+        0.0,
+        40.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut b = LaneBuilder::arc(
+        DVec3::new(20.0, 0.0, 0.0),
+        270.0,
+        40.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     let h = 20f64.to_radians();
-    let mut c = LaneBuilder::arc(DVec3::new(-20.0 * h.sin(), -20.0 * h.cos(), 0.0), 20.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let mut c = LaneBuilder::arc(
+        DVec3::new(-20.0 * h.sin(), -20.0 * h.cos(), 0.0),
+        20.0,
+        40.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     for (l, k) in [(&mut a, 0), (&mut b, 1), (&mut c, 2)] {
         l.source = 2;
         l.key = key(k);
     }
-    let mut net = Network { lanes: vec![a, b, c], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![a, b, c],
+        ..Default::default()
+    };
     net.link(1.5);
-    let square = net.crossings[0].iter().find(|x| x.other == 1).expect("square crossing");
-    let shallow = net.crossings[0].iter().find(|x| x.other == 2).expect("shallow crossing");
+    let square = net.crossings[0]
+        .iter()
+        .find(|x| x.other == 1)
+        .expect("square crossing");
+    let shallow = net.crossings[0]
+        .iter()
+        .find(|x| x.other == 2)
+        .expect("shallow crossing");
     assert!((square.at - 20.0).abs() < 0.5 && (shallow.at - 20.0).abs() < 0.5);
     // square: the bodies touch within a car's width or so of the point
     assert!(square.before <= 3.0 && square.after <= 3.0, "{square:?}");
@@ -897,9 +1264,28 @@ fn a_shallow_crossing_is_a_long_meeting_place() {
 fn a_driver_with_a_choice_keeps_out_of_a_dead_end() {
     // a lane that forks: one way ends after 50 m, the other runs round a long loop
     let a = LaneBuilder::arc(DVec3::ZERO, 0.0, 30.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let dead = LaneBuilder::arc(DVec3::new(0.0, 30.0, 0.0), 10.0, 50.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let on = LaneBuilder::arc(DVec3::new(0.0, 30.0, 0.0), 350.0, 700.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![a, dead, on], ..Default::default() };
+    let dead = LaneBuilder::arc(
+        DVec3::new(0.0, 30.0, 0.0),
+        10.0,
+        50.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let on = LaneBuilder::arc(
+        DVec3::new(0.0, 30.0, 0.0),
+        350.0,
+        700.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut net = Network {
+        lanes: vec![a, dead, on],
+        ..Default::default()
+    };
     net.link(1.5);
     assert_eq!(net.lanes[0].next.len(), 2);
     assert!(net.reach[1] < DEAD_END && net.reach[0] >= DEAD_END && net.reach[2] >= DEAD_END);
@@ -918,8 +1304,19 @@ fn rejecting_a_short_return_preserves_reach_and_existing_exit_choices() {
     let short = LaneBuilder::arc(finite.end(), 10.0, 0.47, 0.0, 0.0, LaneKind::Street, 3.0);
     let next = LaneBuilder::arc(short.end(), 10.0, 1.0, 0.0, 0.0, LaneKind::Street, 3.0);
     let exit = LaneBuilder::arc(next.end(), 10.0, 280.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let on = LaneBuilder::arc(DVec3::new(0.0, 30.0, 0.0), 350.0, 700.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![a, finite, short, next, exit, on], ..Default::default() };
+    let on = LaneBuilder::arc(
+        DVec3::new(0.0, 30.0, 0.0),
+        350.0,
+        700.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut net = Network {
+        lanes: vec![a, finite, short, next, exit, on],
+        ..Default::default()
+    };
     net.link(1.5);
     assert_eq!(net.lanes[0].next.len(), 2);
     assert!(net.lanes[3].next.contains(&2));
@@ -927,8 +1324,11 @@ fn rejecting_a_short_return_preserves_reach_and_existing_exit_choices() {
     assert!(net.reach[5] >= DEAD_END);
     let mut at_joint = AiState::new(3, 0.0, 7);
     assert_eq!(at_joint.choose_after(&net, 3), Some(4));
+    // both exits stay ways on: the emptier is taken (Omsi.exe 0x71f584), so a car on the
+    // first sends the next one to the other
     let mut selected = [0; 2];
-    for seed in 1..128 {
+    for (seed, load) in (1..16).flat_map(|s| [(s, None), (s, Some(1usize)), (s, Some(5))]) {
+        net.refresh_load(load.map(|l| (l, 0u32, Vec::new())));
         let mut car = AiState::new(0, 0.0, seed);
         car.plan_next(&net);
         match car.planned_next {
@@ -936,16 +1336,35 @@ fn rejecting_a_short_return_preserves_reach_and_existing_exit_choices() {
             Some(5) => selected[1] += 1,
             other => panic!("unexpected exit {other:?}"),
         }
+        assert_eq!(
+            car.planned_next,
+            Some(if load == Some(1) { 5 } else { 1 }),
+            "seed {seed}, a car on {load:?}"
+        );
     }
-    assert!(selected.iter().all(|&n| n > 0), "an open exit disappeared: {selected:?}");
+    assert!(
+        selected.iter().all(|&n| n > 0),
+        "an open exit disappeared: {selected:?}"
+    );
 }
 
 #[test]
 fn the_way_has_no_steps_at_a_lane_joint() {
     // two lanes that meet 1.2 m apart: the way bends over the joint instead of jumping
     let a = LaneBuilder::arc(DVec3::ZERO, 0.0, 30.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let b = LaneBuilder::arc(DVec3::new(1.2, 30.0, 0.0), 0.0, 30.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![a, b], ..Default::default() };
+    let b = LaneBuilder::arc(
+        DVec3::new(1.2, 30.0, 0.0),
+        0.0,
+        30.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut net = Network {
+        lanes: vec![a, b],
+        ..Default::default()
+    };
     net.link(1.5);
     let mut car = AiState::new(0, 20.0, 1);
     car.plan_next(&net);
@@ -954,7 +1373,11 @@ fn the_way_has_no_steps_at_a_lane_joint() {
     while d < 25.0 {
         d += 0.25;
         let p = car.way_point(&net, d);
-        assert!((p - last).length() < 0.3, "step of {} m at {d}", (p - last).length());
+        assert!(
+            (p - last).length() < 0.3,
+            "step of {} m at {d}",
+            (p - last).length()
+        );
         last = p;
     }
 }
@@ -963,12 +1386,51 @@ fn the_way_has_no_steps_at_a_lane_joint() {
 /// straight path J1 (10 m), a left turn J2 from the east into the same exit, and the lane
 /// A (50 m) after the junction.
 fn oncoming_road() -> Network {
-    let a = LaneBuilder::arc(DVec3::new(-3.0, 150.0, 0.0), 180.0, 50.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let j1 = LaneBuilder::arc(DVec3::new(-3.0, 160.0, 0.0), 180.0, 10.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let j2 = LaneBuilder::arc(DVec3::new(5.0, 158.0, 0.0), 270.0, 8.0 * std::f64::consts::FRAC_PI_2, -8.0, 0.0, LaneKind::Street, 3.0);
-    let b = LaneBuilder::arc(DVec3::new(-3.0, 220.0, 0.0), 180.0, 60.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    assert!((j2.end() - DVec3::new(-3.0, 150.0, 0.0)).length() < 0.05, "{:?}", j2.end());
-    let mut net = Network { lanes: vec![a, j1, j2, b], ..Default::default() };
+    let a = LaneBuilder::arc(
+        DVec3::new(-3.0, 150.0, 0.0),
+        180.0,
+        50.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let j1 = LaneBuilder::arc(
+        DVec3::new(-3.0, 160.0, 0.0),
+        180.0,
+        10.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let j2 = LaneBuilder::arc(
+        DVec3::new(5.0, 158.0, 0.0),
+        270.0,
+        8.0 * std::f64::consts::FRAC_PI_2,
+        -8.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let b = LaneBuilder::arc(
+        DVec3::new(-3.0, 220.0, 0.0),
+        180.0,
+        60.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    assert!(
+        (j2.end() - DVec3::new(-3.0, 150.0, 0.0)).length() < 0.05,
+        "{:?}",
+        j2.end()
+    );
+    let mut net = Network {
+        lanes: vec![a, j1, j2, b],
+        ..Default::default()
+    };
     net.link(1.5);
     net
 }
@@ -984,13 +1446,19 @@ fn upstream_walks_back_through_the_junction() {
     let (_, off1, into1) = find(1).expect("J1");
     assert!((off1 + 10.0).abs() < 0.01 && into1 == Some(0), "{up:?}");
     let (_, off2, into2) = find(2).expect("J2");
-    assert!((off2 + 8.0 * std::f32::consts::FRAC_PI_2).abs() < 0.05 && into2 == Some(0), "{up:?}");
+    assert!(
+        (off2 + 8.0 * std::f32::consts::FRAC_PI_2).abs() < 0.05 && into2 == Some(0),
+        "{up:?}"
+    );
     let (_, off3, into3) = find(3).expect("B");
     assert!((off3 + 70.0).abs() < 0.01 && into3 == Some(1), "{up:?}");
     // a car 15 m into B is at 15 - 70 = -55 in A's distances: 75 m before the place
     // looking only 25 m back, the lanes that end within reach are there, B is not
     let near = net.upstream(0, 20.0, 25.0, 16);
-    assert!(near.iter().any(|e| e.0 == 1) && !near.iter().any(|e| e.0 == 3), "{near:?}");
+    assert!(
+        near.iter().any(|e| e.0 == 1) && !near.iter().any(|e| e.0 == 3),
+        "{near:?}"
+    );
     // and the list is capped
     assert_eq!(net.upstream(0, 20.0, 100.0, 2).len(), 2);
 }
@@ -1042,12 +1510,23 @@ fn straight_road(pieces: &[(f64, f32)]) -> Network {
     let mut lanes = Vec::new();
     let mut y = 0.0;
     for &(len, kmh) in pieces {
-        let mut l = LaneBuilder::arc(DVec3::new(0.0, y, 0.0), 0.0, len, 0.0, 0.0, LaneKind::Street, 3.0);
+        let mut l = LaneBuilder::arc(
+            DVec3::new(0.0, y, 0.0),
+            0.0,
+            len,
+            0.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        );
         l.speed_limit_kmh = kmh;
         lanes.push(l);
         y += len;
     }
-    let mut net = Network { lanes, ..Default::default() };
+    let mut net = Network {
+        lanes,
+        ..Default::default()
+    };
     net.link(1.5);
     net
 }
@@ -1074,13 +1553,31 @@ fn a_leader_braking_comfortably_needs_no_emergency() {
             lead_s += lead_v * dt;
             let gap = lead_s - 2.5 - (car.s + car.front);
             closest = closest.min(gap);
-            car.drive(&net, dt, Some(Lead { gap, speed: lead_v, acc: if braking { -2.5 } else { 0.0 } }), None);
+            car.drive(
+                &net,
+                dt,
+                Some(Lead {
+                    gap,
+                    speed: lead_v,
+                    acc: if braking { -2.5 } else { 0.0 },
+                }),
+                None,
+            );
             hardest = hardest.min(car.acc);
             emergencies += car.emergency_began as u32;
         }
-        assert_eq!(emergencies, 0, "seed {seed}: the collision-prevention channel took over");
-        assert!(hardest > -car.ordinary_brake + 1.0, "seed {seed}: braked at {hardest:.2} m/s²");
-        assert!(closest > car.min_gap * 0.6, "seed {seed}: came within {closest:.2} m");
+        assert_eq!(
+            emergencies, 0,
+            "seed {seed}: the collision-prevention channel took over"
+        );
+        assert!(
+            hardest > -car.ordinary_brake + 1.0,
+            "seed {seed}: braked at {hardest:.2} m/s²"
+        );
+        assert!(
+            closest > car.min_gap * 0.6,
+            "seed {seed}: came within {closest:.2} m"
+        );
         assert!(car.speed < 0.01);
     }
 }
@@ -1100,12 +1597,24 @@ fn an_emergency_stop_is_its_own_channel_and_stays_clear() {
     for _ in 0..600 {
         let gap = wall - (car.s + car.front);
         closest = closest.min(gap);
-        car.drive(&net, 0.02, Some(Lead { gap, speed: 0.0, acc: 0.0 }), None);
+        car.drive(
+            &net,
+            0.02,
+            Some(Lead {
+                gap,
+                speed: 0.0,
+                acc: 0.0,
+            }),
+            None,
+        );
         hardest = hardest.min(car.acc);
         began += car.emergency_began as u32;
     }
     assert_eq!(began, 1, "one emergency, counted once");
-    assert!(hardest < -car.ordinary_brake, "it braked at {hardest:.2} m/s² only");
+    assert!(
+        hardest < -car.ordinary_brake,
+        "it braked at {hardest:.2} m/s² only"
+    );
     assert!(hardest >= -car.emergency_brake - 1e-3);
     assert!(closest > 0.3, "came within {closest:.2} m");
     assert!(car.speed < 0.01 && !car.emergency);
@@ -1116,7 +1625,14 @@ fn an_emergency_stop_is_its_own_channel_and_stays_clear() {
 #[test]
 fn a_stop_is_reached_without_creeping_or_flicker() {
     let net = straight_road(&[(900.0, 50.0)]);
-    for (seed, v, behind) in [(3u64, 13.9f32, false), (77, 6.0, false), (0x1234, 2.0, false), (3, 13.9, true), (77, 6.0, true), (0x4321, 1.0, true)] {
+    for (seed, v, behind) in [
+        (3u64, 13.9f32, false),
+        (77, 6.0, false),
+        (0x1234, 2.0, false),
+        (3, 13.9, true),
+        (77, 6.0, true),
+        (0x4321, 1.0, true),
+    ] {
         let mut car = AiState::new(0, 0.0, seed);
         car.speed = v;
         car.plan_next(&net);
@@ -1130,7 +1646,18 @@ fn a_stop_is_reached_without_creeping_or_flicker() {
                 line += 0.4;
             }
             // a line, or the back of a car standing there
-            let (lead, stop) = if behind { (Some(Lead { gap: line - car.s - car.front, speed: 0.0, acc: 0.0 }), None) } else { (None, Some(line - car.s)) };
+            let (lead, stop) = if behind {
+                (
+                    Some(Lead {
+                        gap: line - car.s - car.front,
+                        speed: 0.0,
+                        acc: 0.0,
+                    }),
+                    None,
+                )
+            } else {
+                (None, Some(line - car.s))
+            };
             car.drive(&net, 0.02, lead, stop);
             match stood {
                 None if car.speed < 0.01 => stood = Some(car.s),
@@ -1142,11 +1669,22 @@ fn a_stop_is_reached_without_creeping_or_flicker() {
             }
         }
         let at = stood.expect("it stopped");
-        assert!((car.s - at).abs() < 0.01, "seed {seed}: crept {:.3} m on after stopping", car.s - at);
+        assert!(
+            (car.s - at).abs() < 0.01,
+            "seed {seed}: crept {:.3} m on after stopping",
+            car.s - at
+        );
         assert_eq!(flips, 0, "seed {seed}: the brake lights went on and off");
         let front = car.s + car.front;
-        let want = if behind { line - 0.4 - car.min_gap } else { line };
-        assert!(front <= want + 0.3 && front > want - 1.5, "seed {seed}: front at {front:.2}, wanted at {want}");
+        let want = if behind {
+            line - 0.4 - car.min_gap
+        } else {
+            line
+        };
+        assert!(
+            front <= want + 0.3 && front > want - 1.5,
+            "seed {seed}: front at {front:.2}, wanted at {want}"
+        );
     }
 }
 
@@ -1182,15 +1720,41 @@ fn a_lower_limit_ahead_is_met_in_time_and_without_creeping() {
     for _ in 0..100 {
         fast.drive(&net, 0.02, None, None);
     }
-    assert!(fast.speed < limit + 0.1, "{:.2} km/h after 2 s", fast.speed * 3.6);
+    assert!(
+        fast.speed < limit + 0.1,
+        "{:.2} km/h after 2 s",
+        fast.speed * 3.6
+    );
 }
 
 /// A junction object of two paths: a straight one north (path 0) and one from the east
 /// crossing it square (path 1), with `[blockpath]`/`[crossingproblem]` as given.
 fn two_paths(crossing_problem: bool, block: bool) -> Network {
-    let key = |path: u16| Some(LaneKey { tile: (0, 0), id: 1, path });
-    let mut a = LaneBuilder::arc(DVec3::new(0.0, -20.0, 0.0), 0.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut b = LaneBuilder::arc(DVec3::new(20.0, 0.0, 0.0), 270.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let key = |path: u16| {
+        Some(LaneKey {
+            tile: (0, 0),
+            id: 1,
+            path,
+        })
+    };
+    let mut a = LaneBuilder::arc(
+        DVec3::new(0.0, -20.0, 0.0),
+        0.0,
+        40.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut b = LaneBuilder::arc(
+        DVec3::new(20.0, 0.0, 0.0),
+        270.0,
+        40.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     for (l, k) in [(&mut a, 0), (&mut b, 1)] {
         l.source = 2;
         l.key = key(k);
@@ -1199,7 +1763,10 @@ fn two_paths(crossing_problem: bool, block: bool) -> Network {
     if block {
         a.blocks = vec![1];
     }
-    let mut net = Network { lanes: vec![a, b], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![a, b],
+        ..Default::default()
+    };
     net.link(1.5);
     net
 }
@@ -1213,23 +1780,55 @@ fn a_crossing_problem_makes_the_whole_of_both_lanes_the_meeting_place() {
     let flagged = two_paths(true, false);
     for (l, len) in [(0usize, 40.0f32), (1, 40.0)] {
         let c = flagged.crossings[l][0];
-        assert!((c.at - c.before).abs() < 0.01 && (c.at + c.after - len).abs() < 0.01, "{c:?}");
-        assert!((c.other_at - c.other_before).abs() < 0.01 && (c.other_at + c.other_after - len).abs() < 0.01, "{c:?}");
+        assert!(
+            (c.at - c.before).abs() < 0.01 && (c.at + c.after - len).abs() < 0.01,
+            "{c:?}"
+        );
+        assert!(
+            (c.other_at - c.other_before).abs() < 0.01
+                && (c.other_at + c.other_after - len).abs() < 0.01,
+            "{c:?}"
+        );
     }
 }
 
 #[test]
 fn a_blockpath_has_no_effect_as_in_omsi() {
     // two paths that do not cross: a blockpath between them adds no meeting place
-    let key = |path: u16| Some(LaneKey { tile: (0, 0), id: 1, path });
-    let mut a = LaneBuilder::arc(DVec3::new(0.0, -20.0, 0.0), 0.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut b = LaneBuilder::arc(DVec3::new(10.0, -20.0, 0.0), 0.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let key = |path: u16| {
+        Some(LaneKey {
+            tile: (0, 0),
+            id: 1,
+            path,
+        })
+    };
+    let mut a = LaneBuilder::arc(
+        DVec3::new(0.0, -20.0, 0.0),
+        0.0,
+        40.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut b = LaneBuilder::arc(
+        DVec3::new(10.0, -20.0, 0.0),
+        0.0,
+        40.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     for (l, k) in [(&mut a, 0), (&mut b, 1)] {
         l.source = 2;
         l.key = key(k);
     }
     a.blocks = vec![1];
-    let mut net = Network { lanes: vec![a, b], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![a, b],
+        ..Default::default()
+    };
     net.link(1.5);
     assert!(net.crossings[0].is_empty() && net.crossings[1].is_empty());
     // and a crossing pair keeps its geometric meeting place
@@ -1240,9 +1839,28 @@ fn a_blockpath_has_no_effect_as_in_omsi() {
 #[test]
 fn the_ring_goes_before_the_entry_where_the_map_sets_no_priorities() {
     // an entry from the south and a ring lane coming from its left
-    let a = LaneBuilder::arc(DVec3::new(0.0, -10.0, 0.0), 0.0, 20.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let b = LaneBuilder::arc(DVec3::new(-10.0, 0.0, 0.0), 90.0, 20.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![a, b], ..Default::default() };
+    let a = LaneBuilder::arc(
+        DVec3::new(0.0, -10.0, 0.0),
+        0.0,
+        20.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let b = LaneBuilder::arc(
+        DVec3::new(-10.0, 0.0, 0.0),
+        90.0,
+        20.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut net = Network {
+        lanes: vec![a, b],
+        ..Default::default()
+    };
     net.link(1.5);
     // without the ring nobody gives way by the side
     assert!(!net.must_yield(0, 1) && !net.must_yield(1, 0));
@@ -1257,8 +1875,24 @@ fn the_ring_goes_before_the_entry_where_the_map_sets_no_priorities() {
 fn two_turns_sweeping_past_each_other_meet_where_they_pass() {
     // two gentle bends of one junction object from opposite sides, bowing towards each
     // other: 1.5 m apart at their middles, never crossing
-    let key = |path: u16| Some(LaneKey { tile: (0, 0), id: 1, path });
-    let arc = |x: f64, y: f64, h: f64| LaneBuilder::arc(DVec3::new(x, y, 0.0), h, 25.0 * 0.824, 25.0, 0.0, LaneKind::Street, 3.0);
+    let key = |path: u16| {
+        Some(LaneKey {
+            tile: (0, 0),
+            id: 1,
+            path,
+        })
+    };
+    let arc = |x: f64, y: f64, h: f64| {
+        LaneBuilder::arc(
+            DVec3::new(x, y, 0.0),
+            h,
+            25.0 * 0.824,
+            25.0,
+            0.0,
+            LaneKind::Street,
+            3.0,
+        )
+    };
     let net_of = |dy: f64| {
         let mut a = arc(-10.0, -2.84, 66.4);
         let mut b = arc(10.0, 2.84 + dy, 246.4);
@@ -1266,13 +1900,22 @@ fn two_turns_sweeping_past_each_other_meet_where_they_pass() {
             l.source = 2;
             l.key = key(k);
         }
-        let mut net = Network { lanes: vec![a, b], ..Default::default() };
+        let mut net = Network {
+            lanes: vec![a, b],
+            ..Default::default()
+        };
         net.link(1.5);
         net
     };
     let net = net_of(0.0);
-    let c = net.crossings[0].iter().find(|c| c.other == 1).expect("a meeting place where they pass");
-    assert!(!c.merge && (c.at - net.lanes[0].length() * 0.5).abs() < 2.0, "{c:?}");
+    let c = net.crossings[0]
+        .iter()
+        .find(|c| c.other == 1)
+        .expect("a meeting place where they pass");
+    assert!(
+        !c.merge && (c.at - net.lanes[0].length() * 0.5).abs() < 2.0,
+        "{c:?}"
+    );
     // bends well apart do not meet
     assert!(net_of(5.0).crossings[0].is_empty());
 }
@@ -1286,14 +1929,29 @@ fn a_way_on_that_leads_only_into_closed_lanes_is_not_taken() {
     let trap = LaneBuilder::arc(a.end(), 0.0, 30.0, 0.0, 0.0, LaneKind::Street, 3.0);
     let mut closed = LaneBuilder::arc(trap.end(), 0.0, 30.0, 0.0, 0.0, LaneKind::Street, 3.0);
     closed.density = 0.0;
-    let open = LaneBuilder::arc(a.end(), 0.0, 14.0 * 60f64.to_radians(), 14.0, 0.0, LaneKind::Street, 3.0);
+    let open = LaneBuilder::arc(
+        a.end(),
+        0.0,
+        14.0 * 60f64.to_radians(),
+        14.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
     let on = LaneBuilder::arc(open.end(), 60.0, 30.0, 0.0, 0.0, LaneKind::Street, 3.0);
-    let mut net = Network { lanes: vec![a, trap, closed, open, on], ..Default::default() };
+    let mut net = Network {
+        lanes: vec![a, trap, closed, open, on],
+        ..Default::default()
+    };
     net.link(1.5);
     assert!(net.lanes[0].next.contains(&1) && net.lanes[0].next.contains(&3));
     for seed in 1..40 {
         let mut car = AiState::new(0, 0.0, seed);
-        assert_eq!(car.choose_after(&net, 0), Some(3), "seed {seed} took the lane into the closed one");
+        assert_eq!(
+            car.choose_after(&net, 0),
+            Some(3),
+            "seed {seed} took the lane into the closed one"
+        );
     }
     // the open way gone: the trapped one is still taken rather than nothing, and at its end
     // the lane of density 0 (no closure)
@@ -1321,11 +1979,19 @@ fn stop_points_hold_only_where_traffic_goes() {
     let program = || {
         vec![
             (vec![(6, 30.0), (9, 3.0), (0, 0.0)], None),
-            (vec![(0, 36.0), (3, 2.0), (6, 12.0), (9, 3.0), (0, 0.0)], None),
+            (
+                vec![(0, 36.0), (3, 2.0), (6, 12.0), (9, 3.0), (0, 0.0)],
+                None,
+            ),
         ]
     };
     let run = |stop_at: f32, seconds: f32| {
-        let mut ctl = TrafficLightController::from_program(program(), Some(60.0), &[[1.0, stop_at, 0.0]], &[]);
+        let mut ctl = TrafficLightController::from_program(
+            program(),
+            Some(60.0),
+            &[[1.0, stop_at, 0.0]],
+            &[],
+        );
         ctl.time = 34.5;
         ctl.request[1] = true;
         let steps = (seconds / 0.05) as usize;
@@ -1343,14 +2009,27 @@ fn stop_points_hold_only_where_traffic_goes() {
     assert!((in_green.time - 42.0).abs() < 1e-3, "{:.2}", in_green.time);
     // all red (both lights red at 34 s) and a dark rest hold too
     let all_red = run(34.8, 6.0);
-    assert!(all_red.held && (all_red.time - 34.8).abs() < 1e-3, "{:.2}", all_red.time);
-    let mut dark_rest = TrafficLightController::from_program(vec![(vec![(13, 20.0), (0, 0.0)], None)], Some(40.0), &[[0.0, 5.0, 0.0]], &[]);
+    assert!(
+        all_red.held && (all_red.time - 34.8).abs() < 1e-3,
+        "{:.2}",
+        all_red.time
+    );
+    let mut dark_rest = TrafficLightController::from_program(
+        vec![(vec![(13, 20.0), (0, 0.0)], None)],
+        Some(40.0),
+        &[[0.0, 5.0, 0.0]],
+        &[],
+    );
     dark_rest.time = 4.0;
     dark_rest.request[0] = true;
     for _ in 0..80 {
         dark_rest.advance(0.05);
     }
-    assert!(dark_rest.held && (dark_rest.time - 5.0).abs() < 1e-3, "{:.2}", dark_rest.time);
+    assert!(
+        dark_rest.held && (dark_rest.time - 5.0).abs() < 1e-3,
+        "{:.2}",
+        dark_rest.time
+    );
 }
 
 /// A jump to a time beyond the cycle goes on at the start of the next cycle.
@@ -1359,7 +2038,8 @@ fn jumps_beyond_the_cycle_restart_it() {
     // a 90 s cycle that flashes yellow (13) for its first 15 s; at 80 s, unasked, it jumps
     // to 97 s. Wrapped round that would be 7 s, still flashing; it must be 0.
     let program = vec![(vec![(13, 15.0), (6, 60.0), (9, 3.0), (0, 0.0)], None)];
-    let mut ctl = TrafficLightController::from_program(program, Some(90.0), &[], &[[0.0, 80.0, 1.0, 97.0]]);
+    let mut ctl =
+        TrafficLightController::from_program(program, Some(90.0), &[], &[[0.0, 80.0, 1.0, 97.0]]);
     ctl.time = 79.0;
     for _ in 0..12 {
         ctl.advance(0.25);
@@ -1367,7 +2047,12 @@ fn jumps_beyond_the_cycle_restart_it() {
     assert!((ctl.time - 2.0).abs() < 1e-3, "clock at {:.2} s", ctl.time);
     assert_eq!(ctl.state(0), 13);
     // a jump inside the cycle still lands where it says
-    let mut inside = TrafficLightController::from_program(vec![(vec![(6, 60.0), (0, 0.0)], None)], Some(90.0), &[], &[[0.0, 80.0, 1.0, 10.0]]);
+    let mut inside = TrafficLightController::from_program(
+        vec![(vec![(6, 60.0), (0, 0.0)], None)],
+        Some(90.0),
+        &[],
+        &[[0.0, 80.0, 1.0, 10.0]],
+    );
     inside.time = 79.5;
     inside.advance(1.0);
     assert!((inside.time - 10.5).abs() < 1e-3, "{:.2}", inside.time);
@@ -1382,7 +2067,10 @@ fn the_kept_bends_give_the_bend_speed_found_anew() {
     let dt = 1.0 / 50.0;
     for k in 0..400 {
         let (cached, fresh) = (car.curve_speed_cached(&net), car.curve_speed(&net));
-        assert!((cached - fresh).abs() < 0.05 || (cached > 1e30 && fresh > 1e30), "step {k}: {cached} vs {fresh}");
+        assert!(
+            (cached - fresh).abs() < 0.05 || (cached > 1e30 && fresh > 1e30),
+            "step {k}: {cached} vs {fresh}"
+        );
         if !car.advance(&net, dt, None, None) {
             break;
         }
@@ -1395,21 +2083,37 @@ fn two_quiet_jumps_at_the_cycle_start_let_the_clock_run_on() {
     // empty (to 15 s, past the night flashing), and one at 87 s past the cycle's end. At
     // night both detectors are occupied: neither jump fires and the clock runs through the
     // flashing from 0 s, frame after frame, instead of standing at 0.
-    let lights = vec![(vec![(0, 127.0)], None), (vec![(0, 127.0)], None), (vec![(13, 15.0), (6, 112.0)], None)];
-    let jumps = [[0.0, 0.0, 1.0, 15.0], [1.0, 0.0, 1.0, 15.0], [2.0, 87.0, 0.0, 130.0]];
+    let lights = vec![
+        (vec![(0, 127.0)], None),
+        (vec![(0, 127.0)], None),
+        (vec![(13, 15.0), (6, 112.0)], None),
+    ];
+    let jumps = [
+        [0.0, 0.0, 1.0, 15.0],
+        [1.0, 0.0, 1.0, 15.0],
+        [2.0, 87.0, 0.0, 130.0],
+    ];
     let mut night = TrafficLightController::from_program(lights.clone(), Some(127.0), &[], &jumps);
     night.request = vec![true, true, false];
     night.time = 126.0;
     for _ in 0..60 {
         night.advance(0.1);
     }
-    assert!((night.time - 5.0).abs() < 1e-3, "the night clock stood at {:.2} s", night.time);
+    assert!(
+        (night.time - 5.0).abs() < 1e-3,
+        "the night clock stood at {:.2} s",
+        night.time
+    );
     assert_eq!(night.state(2), 13, "the flashing runs at night");
     // by day the empty detectors take their jump at 0 s straight past the flashing
     let mut day = TrafficLightController::from_program(lights, Some(127.0), &[], &jumps);
     day.time = 126.0;
     day.advance(2.0);
-    assert!((day.time - 16.0).abs() < 1e-3, "the day clock went on at {:.2} s", day.time);
+    assert!(
+        (day.time - 16.0).abs() < 1e-3,
+        "the day clock went on at {:.2} s",
+        day.time
+    );
 }
 
 /// win-4.sco ("Hauptbahnhof 4", #3092): the program as the file has it, lights 0 Main,
@@ -1417,7 +2121,10 @@ fn two_quiet_jumps_at_the_cycle_start_let_the_clock_run_on() {
 fn win4() -> TrafficLightController {
     TrafficLightController::from_program(
         vec![
-            (vec![(3, 2.0), (6, 10.0), (9, 3.0), (0, 7.0), (9, 3.0), (0, 1.0)], None),
+            (
+                vec![(3, 2.0), (6, 10.0), (9, 3.0), (0, 7.0), (9, 3.0), (0, 1.0)],
+                None,
+            ),
             (vec![(0, 16.0), (6, 6.0), (0, 1.0)], Some(5.0)),
             (vec![(0, 26.0), (6, 10.0)], Some(40.0)),
             (vec![(6, 1.0)], Some(6.0)),
@@ -1459,22 +2166,38 @@ fn win4_gives_each_bus_light_its_green_when_it_asks_alone() {
             }
         }
         let t = green_at.unwrap_or(f32::INFINITY);
-        assert!(t < 40.0, "light {asking} asking alone waited {t} s for its green");
-        assert_ne!(c.state(0), 6, "the main road stays green over a waiting bus (light {asking})");
+        assert!(
+            t < 40.0,
+            "light {asking} asking alone waited {t} s for its green"
+        );
+        assert_ne!(
+            c.state(0),
+            6,
+            "the main road stays green over a waiting bus (light {asking})"
+        );
     }
     // with nobody asking the main road rests on its green
     let mut c = win4();
     c.time = 3.0;
     for _ in 0..1800 {
         c.advance(0.1);
-        assert_eq!(c.state(0), 6, "the main road left its green with nobody asking");
+        assert_eq!(
+            c.state(0),
+            6,
+            "the main road left its green with nobody asking"
+        );
     }
 }
 
 #[test]
 fn a_door_program_without_green_holds_its_stop_in_state_four() {
     let mut c = TrafficLightController::new(vec![vec![(0, 1.0), (4, 2.0), (0, 1.0)]], 4.0);
-    c.stops = vec![LightStop { light: 0, time: 1.5, if_request: false, jump_to: None }];
+    c.stops = vec![LightStop {
+        light: 0,
+        time: 1.5,
+        if_request: false,
+        jump_to: None,
+    }];
     c.start(0.0);
     c.request[0] = true;
     c.advance(3.0);
@@ -1486,5 +2209,184 @@ fn a_door_program_without_green_holds_its_stop_in_state_four() {
     gdr.start(0.0);
     gdr.request[0] = true;
     gdr.advance(3.0);
-    assert!(!gdr.held, "green with yellow (state 8) is a go phase: the changeover to it is not held");
+    assert!(
+        !gdr.held,
+        "green with yellow (state 8) is a go phase: the changeover to it is not held"
+    );
+}
+
+/// A road north (0) forking into straight on (1, then 3) and a right turn (2).
+fn fork() -> Network {
+    let a = LaneBuilder::arc(DVec3::ZERO, 0.0, 60.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let b = LaneBuilder::arc(a.end(), 0.0, 40.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let c = LaneBuilder::arc(a.end(), 0.0, 30.0, 20.0, 0.0, LaneKind::Street, 3.0);
+    let d = LaneBuilder::arc(b.end(), 0.0, 600.0, 0.0, 0.0, LaneKind::Street, 3.0);
+    let e = LaneBuilder::arc(
+        c.end(),
+        c.headings[c.headings.len() - 1] as f64,
+        600.0,
+        0.0,
+        0.0,
+        LaneKind::Street,
+        3.0,
+    );
+    let mut net = Network {
+        lanes: vec![a, b, c, d, e],
+        ..Default::default()
+    };
+    for l in net.lanes.iter_mut() {
+        l.density = 1.0;
+    }
+    net.link(1.5);
+    net.compute_reach();
+    net
+}
+
+/// Omsi.exe (FUN_0071ee40, 0x71f584): at a fork a random car takes the way on whose chain
+/// has the fewest cars for its density, the first on a tie - not a dice throw, after which
+/// a queue all went the same way (#2909).
+#[test]
+fn a_car_takes_the_emptiest_way_on_from_a_fork() {
+    let mut net = fork();
+    assert_eq!(net.lanes[0].next, vec![1, 2]);
+    assert_eq!(net.chain_of(1), vec![1, 3]);
+    for seed in 1..40u64 {
+        // both empty: the first
+        net.refresh_load(Vec::<(usize, u32, Vec<usize>)>::new());
+        let mut car = AiState::new(0, 0.0, seed);
+        assert_eq!(car.choose_after(&net, 0), Some(1), "seed {seed}");
+        // a car far along the straight on (lane 3 is the same chain): the turn
+        net.refresh_load(vec![(3usize, 0u32, Vec::new())]);
+        let mut car = AiState::new(0, 0.0, seed);
+        assert_eq!(car.choose_after(&net, 0), Some(2), "seed {seed}");
+        // one each: the first again; a car of another group does not count
+        net.refresh_load(vec![
+            (3, 0, Vec::new()),
+            (2, 0, Vec::new()),
+            (4, 1, Vec::new()),
+        ]);
+        let mut car = AiState::new(0, 0.0, seed);
+        assert_eq!(car.choose_after(&net, 0), Some(1), "seed {seed}");
+    }
+}
+
+/// The fill is the cars over the density: twice the density takes two cars to one.
+#[test]
+fn the_ways_on_fill_in_proportion_to_their_density() {
+    let mut net = fork();
+    for l in [1, 3] {
+        net.lanes[l].density = 2.0;
+    }
+    // 1 car on the straight on (fill 1/4) and none on the turn (0): the turn
+    net.refresh_load(vec![(3usize, 0u32, Vec::new())]);
+    assert_eq!(AiState::new(0, 0.0, 3).choose_after(&net, 0), Some(2));
+    // 2 straight on (2/4), 1 on the turn (1/2): a tie, the first
+    net.refresh_load(vec![
+        (3usize, 0u32, Vec::new()),
+        (1, 0, Vec::new()),
+        (4, 0, Vec::new()),
+    ]);
+    assert_eq!(AiState::new(0, 0.0, 3).choose_after(&net, 0), Some(1));
+    // 2 straight on, 0 on the turn: the turn
+    net.refresh_load(vec![(3usize, 0u32, Vec::new()), (1, 0, Vec::new())]);
+    assert_eq!(AiState::new(0, 0.0, 3).choose_after(&net, 0), Some(2));
+}
+
+/// A queue of cars coming to the fork one after the other spreads over both ways: each
+/// counts on the branch it has planned before it gets there.
+#[test]
+fn a_queue_spreads_over_the_ways_on() {
+    let mut net = fork();
+    net.refresh_load(Vec::<(usize, u32, Vec<usize>)>::new());
+    let mut took = Vec::new();
+    for k in 0..6u64 {
+        let mut car = AiState::new(0, 50.0 - k as f32 * 8.0, 11 + k);
+        car.plan_next(&net);
+        let plan: Vec<usize> = car.upcoming().collect();
+        took.push(plan[0]);
+        net.add_load(0, 0, plan);
+    }
+    assert_eq!(took, vec![1, 2, 1, 2, 1, 2]);
+}
+
+#[test]
+fn a_crossing_runs_the_program_the_time_of_day_calls_for() {
+    use crate::traffic::{Aspect, LightProgram, TimedProgram, TrafficLightController};
+    // (green 20 s, red the rest of the 40 s cycle; the rush hour's green is 40 of 60)
+    let day = LightProgram::from_parts(
+        vec![(vec![(6, 20.0), (0, 0.0)], None)],
+        Some(40.0),
+        &[],
+        &[],
+    );
+    let rush = LightProgram::from_parts(
+        vec![(vec![(6, 40.0), (0, 0.0)], None)],
+        Some(60.0),
+        &[],
+        &[],
+    );
+    let night = LightProgram::from_parts(vec![(vec![(9, 2.0)], None)], Some(2.0), &[], &[]);
+    let mut c = TrafficLightController::from_program(
+        vec![(vec![(6, 20.0), (0, 0.0)], None)],
+        Some(40.0),
+        &[],
+        &[],
+    );
+    let h = |h: f64| h * 3600.0;
+
+    // no window, no change: the file's own program runs all day, as it always did
+    assert!(!c.select_time_program(h(3.0)));
+    assert_eq!(c.cycle_len(), 40.0);
+
+    c.set_time_programs(vec![
+        TimedProgram {
+            from: h(7.5),
+            to: h(9.0),
+            program: rush,
+        },
+        TimedProgram {
+            from: h(22.0),
+            to: h(5.0),
+            program: night,
+        },
+    ]);
+    // 08:00: the rush hour's longer green
+    assert!(
+        c.select_time_program(h(8.0)),
+        "08:00 is in the rush hour window"
+    );
+    assert_eq!(c.cycle_len(), 60.0);
+    assert_eq!(TrafficLightController::aspect(c.state(0)), Aspect::Green);
+    // within the same window nothing changes over, whatever the minute
+    assert!(!c.select_time_program(h(8.5)));
+    // 12:00: back to the file's own program
+    assert!(c.select_time_program(h(12.0)));
+    assert_eq!(c.cycle_len(), 40.0);
+    // 23:00 until 05:00: the night program, across midnight
+    assert!(c.select_time_program(h(23.0)));
+    assert_eq!(c.cycle_len(), 2.0);
+    assert_eq!(
+        TrafficLightController::aspect(c.state(0)),
+        Aspect::Yellow,
+        "the night program's flashing yellow"
+    );
+    assert!(
+        !c.select_time_program(h(4.0)),
+        "04:00 is still the same night window"
+    );
+    assert!(
+        c.select_time_program(h(6.0)),
+        "06:00 is the file's own program again"
+    );
+    assert_eq!(c.cycle_len(), 40.0);
+    // and it runs: the clock moves on inside the chosen program
+    let mut seen = Vec::new();
+    for _ in 0..100 {
+        seen.push(TrafficLightController::aspect(c.state(0)));
+        c.advance(0.5);
+    }
+    assert!(
+        seen.contains(&Aspect::Red),
+        "the day program ran a full cycle"
+    );
 }

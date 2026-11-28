@@ -56,7 +56,10 @@ fn a_folder_spelled_twice_hides_neither_ones_content() {
         Some(t.join("maps/Grundorf/global.cfg")),
     );
     // a name neither folder has is still absent
-    assert_eq!(resolve_existing(&t, &["maps", "Nowhere", "global.cfg"]), None);
+    assert_eq!(
+        resolve_existing(&t, &["maps", "Nowhere", "global.cfg"]),
+        None
+    );
 
     std::fs::remove_dir_all(&t).unwrap();
     content_changed();
@@ -75,7 +78,9 @@ fn applications_folder_is_no_content_folder() {
     assert!(is_programs_folder(Path::new("/Users/x/Applications")));
     assert!(!is_programs_folder(Path::new("/Users/x/Games/openOMSI")));
     // content an older version installed there stays in use
-    let dir = std::env::temp_dir().join(format!("omsi-apps-{}", std::process::id())).join("Applications");
+    let dir = std::env::temp_dir()
+        .join(format!("omsi-apps-{}", std::process::id()))
+        .join("Applications");
     std::fs::create_dir_all(dir.join("Mods")).unwrap();
     std::fs::create_dir_all(dir.join("Vehicles")).unwrap();
     std::fs::create_dir_all(dir.join("maps").join("Grundorf")).unwrap();
@@ -91,10 +96,20 @@ fn applications_folder_is_no_content_folder() {
 fn own_inputs_outlive_the_program_folder() {
     let t = std::env::temp_dir().join(format!("omsi-own-inputs-{}", std::process::id()));
     let own = t.join("home").join("Inputs").join("keyboard.cfg");
-    let (first, second) = (t.join("openOMSI-0.2.38").join("keyboard.cfg"), t.join("openOMSI-0.2.39").join("keyboard.cfg"));
+    let (first, second) = (
+        t.join("openOMSI-0.2.38").join("keyboard.cfg"),
+        t.join("openOMSI-0.2.39").join("keyboard.cfg"),
+    );
     std::fs::create_dir_all(first.parent().unwrap()).unwrap();
     std::fs::create_dir_all(second.parent().unwrap()).unwrap();
-    let at = |p: &Path, secs: u64| std::fs::File::options().write(true).open(p).unwrap().set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)).unwrap();
+    let at = |p: &Path, secs: u64| {
+        std::fs::File::options()
+            .write(true)
+            .open(p)
+            .unwrap()
+            .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs))
+            .unwrap()
+    };
     assert_eq!(newest([Some(own.clone()), Some(first.clone())]), None);
     std::fs::write(&first, b"[game]\nsim_pause\n25\n0\n").unwrap();
     std::fs::write(&second, b"[game]\n").unwrap();
@@ -108,18 +123,33 @@ fn own_inputs_outlive_the_program_folder() {
     adopt_input(&own, &second);
     assert_eq!(std::fs::read(&own).unwrap(), b"[game]\nsim_pause\n26\n0\n");
     at(&own, 2_000_000_000);
-    assert_eq!(newest([Some(own.clone()), Some(first.clone())]), Some(own.clone()));
+    assert_eq!(
+        newest([Some(own.clone()), Some(first.clone())]),
+        Some(own.clone())
+    );
     at(&first, 2_000_000_001);
-    assert_eq!(newest([Some(own.clone()), Some(first.clone())]), Some(first.clone()));
+    assert_eq!(
+        newest([Some(own.clone()), Some(first.clone())]),
+        Some(first.clone())
+    );
     assert_eq!(std::fs::read_dir(own.parent().unwrap()).unwrap().count(), 1);
     std::fs::remove_dir_all(&t).unwrap();
     std::fs::create_dir_all(t.join("openOMSI-0.2.38")).unwrap();
     std::fs::write(t.join("openOMSI-0.2.38").join("openomsi.exe"), b"x").unwrap();
     std::fs::create_dir_all(t.join("photos")).unwrap();
-    assert_eq!(sibling_installs(&t.join("openOMSI-0.2.40")), vec![t.join("openOMSI-0.2.38")]);
+    assert_eq!(
+        sibling_installs(&t.join("openOMSI-0.2.40")),
+        vec![t.join("openOMSI-0.2.38")]
+    );
     std::fs::remove_dir_all(&t).unwrap();
-    assert_eq!(content_folder_of_program(Path::new("/x/Games/openOMSI.app/Contents/MacOS/openomsi")), Some(PathBuf::from("/x/Games")));
-    assert_eq!(content_folder_of_program(Path::new("/x/openOMSI-0.2.38/openomsi.exe")), Some(PathBuf::from("/x/openOMSI-0.2.38")));
+    assert_eq!(
+        content_folder_of_program(Path::new("/x/Games/openOMSI.app/Contents/MacOS/openomsi")),
+        Some(PathBuf::from("/x/Games"))
+    );
+    assert_eq!(
+        content_folder_of_program(Path::new("/x/openOMSI-0.2.38/openomsi.exe")),
+        Some(PathBuf::from("/x/openOMSI-0.2.38"))
+    );
 }
 
 #[test]
@@ -138,14 +168,23 @@ fn keywords() {
     assert_eq!(keyword_of("[LOD]"), Some("LOD"));
     assert_eq!(keyword_of("[lod]"), None);
     // … not for the rest
-    assert_eq!(keyword_of("[Infosystem_Busstop]"), Some("Infosystem_Busstop"));
+    assert_eq!(
+        keyword_of("[Infosystem_Busstop]"),
+        Some("Infosystem_Busstop")
+    );
     // .hof: spreadsheet exports
-    assert_eq!(keyword_with("[global_strings]\t\t\t", KeywordRule::TrimEnd), Some("global_strings"));
+    assert_eq!(
+        keyword_with("[global_strings]\t\t\t", KeywordRule::TrimEnd),
+        Some("global_strings")
+    );
     assert_eq!(keyword_with("[end]\"\t", KeywordRule::TrimEnd), Some("end"));
     assert_eq!(keyword_with("\t[end]", KeywordRule::TrimEnd), None);
     assert_eq!(keyword_of("[global_strings]\t"), None);
     // ailists.cfg
-    assert_eq!(keyword_with("[AIGroup_2]", KeywordRule::AnyCase), Some("AIGroup_2"));
+    assert_eq!(
+        keyword_with("[AIGroup_2]", KeywordRule::AnyCase),
+        Some("AIGroup_2")
+    );
     assert_eq!(keyword_with(" [aigroup_2]", KeywordRule::AnyCase), None);
     for k in keywords::MIXED_CASE.iter().chain(keywords::LOWER_CASE) {
         assert_eq!(omsi_spelling(&k.to_ascii_uppercase()), Some(*k));
@@ -183,7 +222,10 @@ fn disabled_blocks() {
         n += 1;
     }
     assert_eq!(n, 4);
-    let f = CfgFile::from_str("model.cfg", "-<DISABLED>-\n[mesh]\nx\n -<ENABLED>-\n[mesh]\ny\n");
+    let f = CfgFile::from_str(
+        "model.cfg",
+        "-<DISABLED>-\n[mesh]\nx\n -<ENABLED>-\n[mesh]\ny\n",
+    );
     assert_eq!(f.reader().disabled_blocks().next_keyword(), None);
 }
 
@@ -193,7 +235,10 @@ fn bare_tokens() {
     let f = CfgFile::from_str("x.sco", text);
     let mut r = f.reader();
     const T: &[&str] = &["attach_trans", "attach_rot_x", "attach_rot_y"];
-    assert_eq!(r.next_entry(T), Some(Entry::Keyword("new_attachment".into())));
+    assert_eq!(
+        r.next_entry(T),
+        Some(Entry::Keyword("new_attachment".into()))
+    );
     assert_eq!(r.next_entry(T), Some(Entry::Keyword("complexity".into())));
     assert_eq!(r.i32(), 2);
     assert_eq!(r.next_entry(T), Some(Entry::Token("attach_trans")));
@@ -216,18 +261,42 @@ fn until_follows_the_rule() {
 
 #[test]
 fn windows_paths() {
-    assert_eq!(windows_components("texture\\anz-oben.jpg."), vec!["texture", "anz-oben.jpg"]);
-    assert_eq!(windows_components(" ..\\..\\Model.\\a.o3d . "), vec!["..", "..", "Model", "a.o3d"]);
-    assert_eq!(windows_components("\\Splines//x\\.\\y.sli"), vec!["Splines", "x", "y.sli"]);
+    assert_eq!(
+        windows_components("texture\\anz-oben.jpg."),
+        vec!["texture", "anz-oben.jpg"]
+    );
+    assert_eq!(
+        windows_components(" ..\\..\\Model.\\a.o3d . "),
+        vec!["..", "..", "Model", "a.o3d"]
+    );
+    assert_eq!(
+        windows_components("\\Splines//x\\.\\y.sli"),
+        vec!["Splines", "x", "y.sli"]
+    );
     assert_eq!(windows_components("Folder..\\x"), vec!["Folder.", "x"]);
     assert_eq!(windows_components("Folder.\\"), vec!["Folder"]);
-    assert_eq!(windows_components("str_gehweg02.bmp "), vec!["str_gehweg02.bmp"]);
+    assert_eq!(
+        windows_components("str_gehweg02.bmp "),
+        vec!["str_gehweg02.bmp"]
+    );
     assert_eq!(windows_components(""), Vec::<&str>::new());
-    assert_eq!(windows_components("a\\.. \\...\\. .\\b.bmp"), vec!["a", "b.bmp"]);
+    assert_eq!(
+        windows_components("a\\.. \\...\\. .\\b.bmp"),
+        vec!["a", "b.bmp"]
+    );
     let dir = std::env::temp_dir().join(format!("omsi-cfg-paths-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("Texture").join("Bahn\u{fc}bergang")).unwrap();
-    std::fs::write(dir.join("Texture").join("Bahn\u{fc}bergang").join("anz-oben.jpg"), b"x").unwrap();
-    let p = resolve_path(&dir.join("model"), "..\\TEXTURE.\\BAHN\u{dc}BERGANG/Anz-Oben.JPG. ");
+    std::fs::write(
+        dir.join("Texture")
+            .join("Bahn\u{fc}bergang")
+            .join("anz-oben.jpg"),
+        b"x",
+    )
+    .unwrap();
+    let p = resolve_path(
+        &dir.join("model"),
+        "..\\TEXTURE.\\BAHN\u{dc}BERGANG/Anz-Oben.JPG. ",
+    );
     assert!(vfs::is_file(&p), "{}", p.display());
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -251,4 +320,106 @@ fn utf16() {
     }
     let f = CfgFile::from_bytes("g.cfg", &b);
     assert_eq!(f.lines, vec!["[name]", "Grundorf"]);
+}
+
+/// A pack dropped into `Mods/` is used where it lies, before the content folder's own tree
+/// (#2135): nothing is copied into the tree, the launcher's own folders are not mods, and a
+/// pack that kept its own folder inside is used from that folder.
+#[test]
+fn a_mod_folder_in_mods_is_a_content_root_of_its_own() {
+    let dir = std::env::temp_dir().join(format!("omsi-mod-roots-{}", std::process::id()));
+    let content = dir.join("content");
+    let w = |rel: &str, bytes: &[u8]| {
+        let f = content.join(rel);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(f, bytes).unwrap();
+    };
+    w("Vehicles/Stock/stock.bus", b"stock");
+    w("Mods/MyBus/Vehicles/ModBus/bus.bus", b"mod");
+    w("Mods/MyBus/Vehicles/ModBus/Sound/sound.cfg", b"cfg");
+    // unzipped with its own folder inside
+    w("Mods/SomeMap/SomeMap/maps/M/global.cfg", b"map");
+    // the launcher's own folders are not mods
+    w("Mods/installed/Vehicles/Old/old.bus", b"old");
+    w("Mods/waiting/Vehicles/Waiting/w.bus", b"w");
+    w("Mods/disabled/Off/Vehicles/Off/off.bus", b"off");
+    w("Mods/README.txt", b"readme");
+
+    let roots = mod_dirs(&content);
+    assert_eq!(
+        roots,
+        vec![
+            content.join("Mods/MyBus"),
+            content.join("Mods/SomeMap/SomeMap")
+        ]
+    );
+
+    let added = mount_mod_dirs(&content);
+    assert_eq!(added, roots);
+    add_content_root(content.clone());
+    // the mod's bus is found, the stock one as well, and the mod is searched first
+    assert_eq!(
+        find_in_roots("Vehicles/ModBus/bus.bus")
+            .unwrap()
+            .1
+            .file_name()
+            .unwrap(),
+        "bus.bus"
+    );
+    assert!(
+        find_in_roots("Vehicles/ModBus/bus.bus")
+            .unwrap()
+            .0
+            .starts_with(content.join("Mods/MyBus"))
+    );
+    assert!(
+        find_in_roots("Vehicles/Stock/stock.bus")
+            .unwrap()
+            .0
+            .starts_with(&content)
+    );
+    // the map inside the pack's own folder
+    assert!(
+        find_in_roots("maps/M/global.cfg")
+            .unwrap()
+            .1
+            .starts_with(content.join("Mods/SomeMap/SomeMap"))
+    );
+    // nothing of the launcher's own folders
+    assert!(find_in_roots("Vehicles/Old/old.bus").is_none());
+    assert!(find_in_roots("Vehicles/Waiting/w.bus").is_none());
+    assert!(find_in_roots("Vehicles/Off/off.bus").is_none());
+
+    for r in &roots {
+        remove_content_root(r);
+    }
+    remove_content_root(&content);
+    std::fs::remove_dir_all(&dir).ok();
+    content_changed();
+}
+
+/// A folder of a mod whose only child is one the game has at the top of a content root is a
+/// mod itself (`Mods/Winter/Texture/...` and `Mods/Audio/Sounds/...` lie at the mod folder,
+/// not at the inner content folder).
+#[test]
+fn a_mod_folder_with_one_top_level_name_is_its_own_root() {
+    let dir = std::env::temp_dir().join(format!("omsi-mod-top-{}", std::process::id()));
+    let content = dir.join("content");
+    std::fs::create_dir_all(content.join("Mods/Winter").join("Texture")).unwrap();
+    std::fs::write(
+        content.join("Mods/Winter").join("Texture").join("snow.dds"),
+        b"dds",
+    )
+    .unwrap();
+    std::fs::create_dir_all(content.join("Mods/Audio").join("Sounds")).unwrap();
+    std::fs::write(
+        content.join("Mods/Audio").join("Sounds").join("engine.wav"),
+        b"wav",
+    )
+    .unwrap();
+    assert_eq!(
+        mod_dirs(&content),
+        vec![content.join("Mods/Audio"), content.join("Mods/Winter")]
+    );
+    std::fs::remove_dir_all(&dir).ok();
 }

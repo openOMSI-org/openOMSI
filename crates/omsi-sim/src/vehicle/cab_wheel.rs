@@ -18,7 +18,12 @@ pub const CAB_WHEEL_MIN_FACTOR: f32 = 300.0;
 /// Whether `a` turns a steering wheel: a rotation on an axle's steering angle by a large
 /// factor.
 pub fn is_cab_wheel_anim(a: &Animation) -> bool {
-    a.kind == Some(AnimKind::Rot) && a.factor.abs() >= CAB_WHEEL_MIN_FACTOR && a.variable.trim().to_ascii_lowercase().starts_with("axle_steering")
+    a.kind == Some(AnimKind::Rot)
+        && a.factor.abs() >= CAB_WHEEL_MIN_FACTOR
+        && a.variable
+            .trim()
+            .to_ascii_lowercase()
+            .starts_with("axle_steering")
 }
 
 /// The multiplier for a steering wheel's animation factor `factor` (degrees per radian of the
@@ -63,15 +68,26 @@ impl VehicleInstance {
             }
         }
         let max_steer_rad = self.physics.max_steer_deg.to_radians();
-        let Some(&(wi, wj, factor)) = found.iter().max_by(|a, b| a.2.abs().total_cmp(&b.2.abs())) else {
+        let Some(&(wi, wj, factor)) = found.iter().max_by(|a, b| a.2.abs().total_cmp(&b.2.abs()))
+        else {
             if deg != 0 {
-                log::info!("cab wheel rotation {deg}°: {} has no steering wheel turned by Axle_Steering_* (factor >= {CAB_WHEEL_MIN_FACTOR}); its own animation stays", ty.def.path.display());
+                log::info!(
+                    "cab wheel rotation {deg}°: {} has no steering wheel turned by Axle_Steering_* (factor >= {CAB_WHEEL_MIN_FACTOR}); its own animation stays",
+                    ty.def.path.display()
+                );
             }
             return;
         };
-        let scale = if deg == 0 { Some(1.0) } else { cab_wheel_scale(factor, max_steer_rad, deg as f32) };
+        let scale = if deg == 0 {
+            Some(1.0)
+        } else {
+            cab_wheel_scale(factor, max_steer_rad, deg as f32)
+        };
         let Some(scale) = scale else {
-            log::info!("cab wheel rotation {deg}°: no usable steering lock ({:.1}°): the bus's own animation stays", self.physics.max_steer_deg);
+            log::info!(
+                "cab wheel rotation {deg}°: no usable steering lock ({:.1}°): the bus's own animation stays",
+                self.physics.max_steer_deg
+            );
             return;
         };
         for &(i, j, f) in &found {
@@ -86,7 +102,11 @@ impl VehicleInstance {
             def.file,
             def.animations[wj].variable,
             self.physics.max_steer_deg,
-            if deg == 0 { "kept".to_string() } else { format!("{deg}° now") },
+            if deg == 0 {
+                "kept".to_string()
+            } else {
+                format!("{deg}° now")
+            },
             found.len()
         );
     }
@@ -110,14 +130,39 @@ mod tests {
 
     #[test]
     fn only_large_rotations_on_the_steering_angle_are_a_steering_wheel() {
-        let anim = |kind, variable: &str, factor| Animation { kind: Some(kind), variable: variable.into(), factor, ..Default::default() };
-        assert!(is_cab_wheel_anim(&anim(AnimKind::Rot, "Axle_Steering_0_L", 1450.0)));
-        assert!(is_cab_wheel_anim(&anim(AnimKind::Rot, "axle_steering_0_l", -1680.0)));
+        let anim = |kind, variable: &str, factor| Animation {
+            kind: Some(kind),
+            variable: variable.into(),
+            factor,
+            ..Default::default()
+        };
+        assert!(is_cab_wheel_anim(&anim(
+            AnimKind::Rot,
+            "Axle_Steering_0_L",
+            1450.0
+        )));
+        assert!(is_cab_wheel_anim(&anim(
+            AnimKind::Rot,
+            "axle_steering_0_l",
+            -1680.0
+        )));
         // a road wheel, a sliding part, another variable
-        assert!(!is_cab_wheel_anim(&anim(AnimKind::Rot, "Axle_Steering_0_L", 57.29578)));
-        assert!(!is_cab_wheel_anim(&anim(AnimKind::Trans, "Axle_Steering_0_L", 1450.0)));
+        assert!(!is_cab_wheel_anim(&anim(
+            AnimKind::Rot,
+            "Axle_Steering_0_L",
+            57.29578
+        )));
+        assert!(!is_cab_wheel_anim(&anim(
+            AnimKind::Trans,
+            "Axle_Steering_0_L",
+            1450.0
+        )));
         assert!(!is_cab_wheel_anim(&anim(AnimKind::Rot, "Lenkwinkel", -1.0)));
-        assert!(!is_cab_wheel_anim(&anim(AnimKind::Rot, "ventilator_rot", 800.0)));
+        assert!(!is_cab_wheel_anim(&anim(
+            AnimKind::Rot,
+            "ventilator_rot",
+            800.0
+        )));
     }
 
     /// A bus whose cab wheel (and the horn button on it) turns with `Axle_Steering_0_L` by
@@ -132,6 +177,7 @@ mod tests {
                 def_index,
                 data: Default::default(),
                 file: Default::default(),
+                stamp: 0,
                 materials: Vec::new(),
                 overrides: Vec::new(),
                 pivot: glam::Mat4::IDENTITY,
@@ -140,7 +186,10 @@ mod tests {
                 keep_winding: false,
             })
             .collect();
-        VehicleInstance::new(std::sync::Arc::new(ty), crate::host::VehicleHost::new(Default::default()))
+        VehicleInstance::new(
+            std::sync::Arc::new(ty),
+            crate::host::VehicleHost::new(Default::default()),
+        )
     }
 
     #[test]
@@ -151,7 +200,11 @@ mod tests {
         assert_eq!(v.cab_wheel_rotation(), 0);
         assert_eq!(factor(&v, 0), 1450.0);
         v.set_cab_wheel_rotation(1080);
-        assert!((factor(&v, 0) * 2.0 * lock - 1080.0).abs() < 0.01, "{}", factor(&v, 0));
+        assert!(
+            (factor(&v, 0) * 2.0 * lock - 1080.0).abs() < 0.01,
+            "{}",
+            factor(&v, 0)
+        );
         // the button on the wheel turns with it, the road wheel keeps the axle's angle
         assert_eq!(factor(&v, 1), -factor(&v, 0));
         assert_eq!(factor(&v, 2), 57.29578);

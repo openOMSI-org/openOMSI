@@ -51,16 +51,28 @@ impl VehicleInstance {
     /// Only small corrections (under 8 cm) and only axles the model moves with
     /// `Axle_Suspension`: a larger mismatch is the model's own business.
     pub(super) fn seat_wheels(&mut self) {
-        let Some(rb) = self.rigid.as_ref() else { return };
+        let Some(rb) = self.rigid.as_ref() else {
+            return;
+        };
         if self.wheel_seats.is_none() {
             let mut seats = Vec::new();
             for (i, vm) in self.ty.meshes.iter().enumerate() {
                 let def = &self.ty.model.meshes[vm.def_index];
-                let Some(an) = def.animations.iter().find(|a| a.variable.to_ascii_lowercase().starts_with("wheel_rotation_")) else { continue };
+                let Some(an) = def.animations.iter().find(|a| {
+                    a.variable
+                        .to_ascii_lowercase()
+                        .starts_with("wheel_rotation_")
+                }) else {
+                    continue;
+                };
                 let v = an.variable.to_ascii_lowercase();
                 let rest = v.trim_start_matches("wheel_rotation_");
                 let mut parts = rest.split('_');
-                let (Some(Ok(axle)), Some(side)) = (parts.next().map(|a| a.parse::<usize>()), parts.next()) else { continue };
+                let (Some(Ok(axle)), Some(side)) =
+                    (parts.next().map(|a| a.parse::<usize>()), parts.next())
+                else {
+                    continue;
+                };
                 if !self.ty.suspension_axles.contains(&axle) {
                     continue;
                 }
@@ -76,7 +88,9 @@ impl VehicleInstance {
                 let mut hub = None;
                 for o in &an.origins {
                     match o {
-                        omsi_model::AnimOrigin::Trans(t) => hub = Some(hub.unwrap_or(Vec3::ZERO) + Vec3::from(*t)),
+                        omsi_model::AnimOrigin::Trans(t) => {
+                            hub = Some(hub.unwrap_or(Vec3::ZERO) + Vec3::from(*t))
+                        }
                         omsi_model::AnimOrigin::FromMesh => hub = Some(vm.pivot.w_axis.truncate()),
                         _ => {}
                     }
@@ -87,16 +101,25 @@ impl VehicleInstance {
         }
         let seats = self.wheel_seats.as_ref().unwrap();
         for &(i, k, pivot) in seats {
-            let comp = rb.wheels[k].compression.clamp(-crate::rigid::DROOP, crate::rigid::BUMP);
+            let comp = rb.wheels[k]
+                .compression
+                .clamp(-crate::rigid::DROOP, crate::rigid::BUMP);
             let drawn = self.mesh_transforms[i].transform_point3(pivot).z;
             let dz = pivot.z + comp - drawn;
             if omsi_cfg::flags::OMSI_DEBUG_SEAT.is_set() {
-                log::info!("seat mesh {i} wheel {k}: comp {:.4} drawn {:.4} pivot {:.4} dz {:.4}", comp, drawn, pivot.z, dz);
+                log::info!(
+                    "seat mesh {i} wheel {k}: comp {:.4} drawn {:.4} pivot {:.4} dz {:.4}",
+                    comp,
+                    drawn,
+                    pivot.z,
+                    dz
+                );
             }
             // (every frame, however small: a dead band of 3 mm had the correction switch on
             // and off as the travel crossed it, and the tyre ticked up and down by that much)
             if dz.abs() < 0.08 {
-                self.mesh_transforms[i] = Mat4::from_translation(Vec3::new(0.0, 0.0, dz)) * self.mesh_transforms[i];
+                self.mesh_transforms[i] =
+                    Mat4::from_translation(Vec3::new(0.0, 0.0, dz)) * self.mesh_transforms[i];
             }
         }
     }
@@ -111,7 +134,12 @@ impl VehicleInstance {
         // a raised pantograph is shown where its head meets the wire, not at the full travel
         // the script's variable says: shown that value for the animations only
         let shown = self.pantograph_shown();
-        let raw = shown.map(|(id, v)| (id as usize, std::mem::replace(&mut self.state.vars[id as usize], v)));
+        let raw = shown.map(|(id, v)| {
+            (
+                id as usize,
+                std::mem::replace(&mut self.state.vars[id as usize], v),
+            )
+        });
         for (i, a) in self.animators.iter_mut().enumerate() {
             self.mesh_transforms[i] = a.update(dt, &self.state.vars);
         }
@@ -155,6 +183,8 @@ impl VehicleInstance {
         self.props_plan.refresh(&self.ty, &self.var_index);
         self.props_plan
             .apply(&self.state.vars, &mut self.mesh_props);
+        self.props_plan
+            .apply_emission(dt, &self.state.vars, &mut self.mesh_props);
         // Dirt overlays are engine-owned layers. A model may declare Dirt_Norm or
         // Dirt_Wiped in its cfg without putting the name in the script varlist; the
         // generic alphascale fallback is 1.0 in that case, which makes Dreck.tga an
@@ -163,7 +193,21 @@ impl VehicleInstance {
         // mesh was compared by name each frame of every AI vehicle)
         for &(i, slot, wiped) in &self.props_plan.dirt {
             let value = if wiped {
-                PropSource::value(self.props_plan.dirt_wiped.map(PropSource::Var).unwrap_or(PropSource::Missing), &self.state.vars, 0.0)
+                PropSource::value(
+                    self.props_plan
+                        .dirt_wiped
+                        .map(PropSource::Var)
+                        .unwrap_or(PropSource::Missing),
+                    &self.state.vars,
+                    0.0,
+                )
+            } else if super::road_dirt::procedural_for(
+                &self.ty.def,
+                self.road_dirt_drawn
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            ) {
+                // (the road dirt of the enhanced picture takes its place: one or the other)
+                0.0
             } else {
                 self.dirt
             };
@@ -173,7 +217,11 @@ impl VehicleInstance {
         }
         // the lamps come on and go out with their `timeconst`
         let mut lf = std::mem::take(&mut self.light_fade);
-        let mut part_fades: Vec<Vec<f32>> = self.trailers.iter_mut().map(|t| std::mem::take(&mut t.light_fade)).collect();
+        let mut part_fades: Vec<Vec<f32>> = self
+            .trailers
+            .iter_mut()
+            .map(|t| std::mem::take(&mut t.light_fade))
+            .collect();
         // (the vehicle's own lights and the coupled parts' - which read this vehicle's
         // variables too - by their plans' sources, resolved against this vehicle's variables
         // as the names were: each part's lamp was a look-up by name every frame)
@@ -185,10 +233,18 @@ impl VehicleInstance {
         let value = |part: Option<&TrailerPart>, n: &str| -> f32 {
             let n = n.trim();
             let run = part.and_then(|t| t.run.as_deref());
-            n.parse::<f32>().ok().or_else(|| run.map_or_else(|| self.var(n), |r| r.get(n))).unwrap_or(0.0)
+            n.parse::<f32>()
+                .ok()
+                .or_else(|| run.map_or_else(|| self.var(n), |r| r.get(n)))
+                .unwrap_or(0.0)
         };
-        let fade = |part: Option<&TrailerPart>, model: &omsi_model::Model, fades: &mut Vec<f32>, lights: &[PropSource]| {
-            let vars = part.and_then(|t| t.run.as_deref()).map_or(&self.state.vars, |r| &r.state.vars);
+        let fade = |part: Option<&TrailerPart>,
+                    model: &omsi_model::Model,
+                    fades: &mut Vec<f32>,
+                    lights: &[PropSource]| {
+            let vars = part
+                .and_then(|t| t.run.as_deref())
+                .map_or(&self.state.vars, |r| &r.state.vars);
             let mut k = 0;
             for md in &model.meshes {
                 for l in &md.light_enh_2 {
@@ -228,15 +284,31 @@ impl VehicleInstance {
         // vehicle and its coupled parts, which read the same scripts' variables
         if !self.particles.is_empty() || self.trailers.iter().any(|t| !t.particles.is_empty()) {
             let mut ps = std::mem::take(&mut self.particles);
-            let mut parts: Vec<ParticleSet> = self.trailers.iter_mut().map(|t| std::mem::take(&mut t.particles)).collect();
+            let mut parts: Vec<ParticleSet> = self
+                .trailers
+                .iter_mut()
+                .map(|t| std::mem::take(&mut t.particles))
+                .collect();
             {
                 // (each puff keeps the height of the road under it - the plane the wheels
                 // stand on - for the renderer to fade it out into, see `particles`)
                 let value = |n: &str| self.var(n).unwrap_or(0.0);
-                ps.update_over(dt, self.position, self.body_rotation(), &|| self.particle_ground(), &value);
+                ps.update_over(
+                    dt,
+                    self.position,
+                    self.body_rotation(),
+                    &|| self.particle_ground(),
+                    &value,
+                );
                 for (t, set) in self.trailers.iter().zip(parts.iter_mut()) {
                     let value = |n: &str| t.run_var(n).or_else(|| self.var(n)).unwrap_or(0.0);
-                    set.update_over(dt, t.position, t.body_rotation(), &|| [-t.ground_lift(), 0.0, 0.0], &value);
+                    set.update_over(
+                        dt,
+                        t.position,
+                        t.body_rotation(),
+                        &|| [-t.ground_lift(), 0.0, 0.0],
+                        &value,
+                    );
                 }
             }
             self.particles = ps;
@@ -343,7 +415,26 @@ impl VehicleInstance {
             let c = (lo + hi) * 0.5;
             let pv = m.pivot.col(3);
             let px = m.pivot.col(0);
-            let mut line = format!("{} {}: centre ({:.3}, {:.3}, {:.3}) pivot ({:.3}, {:.3}, {:.3}) x ({:.2}, {:.2}, {:.2}) det {:.2}", self.ty.def.path.file_name().unwrap_or_default().to_string_lossy(), self.ty.model.meshes[m.def_index].file, c.x, c.y, c.z, pv.x, pv.y, pv.z, px.x, px.y, px.z, m.pivot.determinant());
+            let mut line = format!(
+                "{} {}: centre ({:.3}, {:.3}, {:.3}) pivot ({:.3}, {:.3}, {:.3}) x ({:.2}, {:.2}, {:.2}) det {:.2}",
+                self.ty
+                    .def
+                    .path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
+                self.ty.model.meshes[m.def_index].file,
+                c.x,
+                c.y,
+                c.z,
+                pv.x,
+                pv.y,
+                pv.z,
+                px.x,
+                px.y,
+                px.z,
+                m.pivot.determinant()
+            );
             for name in names {
                 let Some(id) = self.ty.program.var(name) else {
                     continue;

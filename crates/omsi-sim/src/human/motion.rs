@@ -100,7 +100,27 @@ impl Pose {
         };
         format!(
             "origin ({:.2}, {:.2}, {:.2}) heading {:.0} turning {:.0}/s frame {} speed {:.2} gait {} walk {:.2} phase {:.2} sit {:.2} reach {:.2} hold {:.2} head ({:.0}, {:.0}) floor {:.2} drop {:.3} catch-ups {} shuffles {}; left {}; right {}",
-            self.origin.x, self.origin.y, self.origin.z, self.heading, self.turn, self.frame, self.speed, self.gait, self.walk, self.phase, self.sit, self.reach, self.hold, self.head.x, self.head.y, self.body_floor, self.drop, self.catch_ups, self.shuffles, foot(&self.feet[0]), foot(&self.feet[1])
+            self.origin.x,
+            self.origin.y,
+            self.origin.z,
+            self.heading,
+            self.turn,
+            self.frame,
+            self.speed,
+            self.gait,
+            self.walk,
+            self.phase,
+            self.sit,
+            self.reach,
+            self.hold,
+            self.head.x,
+            self.head.y,
+            self.body_floor,
+            self.drop,
+            self.catch_ups,
+            self.shuffles,
+            foot(&self.feet[0]),
+            foot(&self.feet[1])
         )
     }
 
@@ -191,7 +211,11 @@ impl Pose {
             let (p, yaw) = self.rest_target(rig, side, input.origin, input.heading, false);
             let f = &mut self.feet[side];
             *f = Foot::new();
-            f.pos = DVec3::new(p.x, p.y, Self::sample_floor(input, p.truncate(), input.origin.z));
+            f.pos = DVec3::new(
+                p.x,
+                p.y,
+                Self::sample_floor(input, p.truncate(), input.origin.z),
+            );
             f.yaw = yaw;
         }
         self.body_floor = 0.0;
@@ -241,7 +265,8 @@ impl Pose {
         }
         let input = &clean;
         let dt = dt.clamp(0.0, 0.25);
-        let floor_changed = self.init && ((input.origin.z - self.origin.z).abs() > 1e-6 || input.frame != self.frame);
+        let floor_changed = self.init
+            && ((input.origin.z - self.origin.z).abs() > 1e-6 || input.frame != self.frame);
         self.landed = false;
         // a new floor frame (boarding, getting off): keep the feet where they are
         if self.init && input.frame != self.frame {
@@ -263,9 +288,9 @@ impl Pose {
             }
             self.gait = false;
         }
-        let turned = angle_diff(self.heading, input.heading) as f32;
+        let turned = angle_diff(self.heading, input.heading);
         if dt > 1e-5 {
-            self.turn += (turned / dt - self.turn) * ease_k(dt, 0.15);
+            self.turn += ((turned / dt as f64) as f32 - self.turn) * ease_k(dt, 0.15);
             let v_now = input.velocity.length() as f32;
             let fwd = {
                 let h = input.heading.to_radians();
@@ -295,6 +320,17 @@ impl Pose {
             self.sit = approach(self.sit, 0.0, dt / 1.1);
         }
         let seated = self.sit > 0.0;
+        // A seat turns with its occupant, but a sitting foot takes no steps to turn with
+        // it: pivot the planted feet (and a swing still on its way) by the body's turn,
+        // or their shoes stay pointed where the passenger boarded (#4057). This includes
+        // the turn into the seat on the first frame of sitting down.
+        if wants_sit || seated {
+            for f in &mut self.feet {
+                f.yaw += turned;
+                f.from_yaw += turned;
+                f.to_yaw += turned;
+            }
+        }
 
         self.ease_hands(input, seated, dt);
 
@@ -388,7 +424,8 @@ impl Pose {
                 f.to_sampled = DVec2::splat(f64::MAX);
                 f.land_z = f.pos.z;
                 f.land_wait = 0.0;
-                f.lift = (0.035 + 0.035 * (speed / 1.3).min(1.3) + 0.11 * run_factor(speed)) * rig.scale;
+                f.lift =
+                    (0.035 + 0.035 * (speed / 1.3).min(1.3) + 0.11 * run_factor(speed)) * rig.scale;
             }
             if self.feet[side].planted {
                 continue;
@@ -570,7 +607,13 @@ impl Pose {
                 }
             }
             // (on the phone: looking down at it, glancing up now and then)
-            None if self.idle_to == Idle::Phone && self.walk < 0.2 && self.sit <= 0.0 && self.glance.x.abs() < 40.0 => Vec2::new(self.glance.x * 0.15, -32.0),
+            None if self.idle_to == Idle::Phone
+                && self.walk < 0.2
+                && self.sit <= 0.0
+                && self.glance.x.abs() < 40.0 =>
+            {
+                Vec2::new(self.glance.x * 0.15, -32.0)
+            }
             None if self.walk > 0.3 => Vec2::new(self.glance.x.clamp(-25.0, 25.0), self.glance.y),
             None => self.glance,
         };
@@ -771,7 +814,11 @@ impl Pose {
             Self::sample_floor(input, f.to.truncate(), fallback)
         };
         // (within a centimetre of where the swing brought it, or it gave up waiting)
-        let floor = if (floor - f.land_z).abs() < 0.05 { floor } else { f.land_z + (floor - f.land_z).clamp(-0.05, 0.05) };
+        let floor = if (floor - f.land_z).abs() < 0.05 {
+            floor
+        } else {
+            f.land_z + (floor - f.land_z).clamp(-0.05, 0.05)
+        };
         f.pos = DVec3::new(f.to.x, f.to.y, floor);
         f.yaw = f.to_yaw;
         f.planted = true;
@@ -790,7 +837,11 @@ impl Pose {
             if !f.planted {
                 let gap = f.to_floor - f.land_z;
                 let step = (gap * ease_k(dt, 0.05) as f64).clamp(-1.8 * dt as f64, 1.8 * dt as f64);
-                f.land_z = if gap.abs() < 0.002 { f.to_floor } else { f.land_z + step };
+                f.land_z = if gap.abs() < 0.002 {
+                    f.to_floor
+                } else {
+                    f.land_z + step
+                };
             }
         }
     }

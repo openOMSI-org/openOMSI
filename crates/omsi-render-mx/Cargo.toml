@@ -1,0 +1,41 @@
+[package]
+name = "omsi-render-mx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The renderer (on mX): textured, lit meshes with OMSI alpha modes; on-screen and off-screen targets"
+
+[features]
+default = ["test-hooks"]
+# The fault-injection hook OMSI_FAKE_GPU_ERROR (see docs/DEBUG_FLAGS.md); a build without
+# it cannot be made to fail on purpose.
+test-hooks = []
+
+[dependencies]
+omsi-cfg = { path = "../omsi-cfg" }
+omsi-geometry = { path = "../omsi-geometry" }
+omsi-texture = { path = "../omsi-texture" }
+mx.workspace = true
+mx-upscale.workspace = true
+bitflags = "2"
+bytemuck.workspace = true
+glam.workspace = true
+pollster.workspace = true
+rayon.workspace = true
+hashbrown.workspace = true
+log.workspace = true
+anyhow.workspace = true
+# (the moon's map, `moon_map`)
+image.workspace = true
+winit.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# (the graphics memory budget, `gpu_memory`)
+windows = { workspace = true, features = ["Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Foundation"] }
+
+[dev-dependencies]
+naga = { version = "30", features = ["spv-out", "glsl-out", "hlsl-out"] }
+env_logger.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ash = "0.38"

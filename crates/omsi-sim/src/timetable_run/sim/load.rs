@@ -56,11 +56,7 @@ impl ScheduleSim {
                     skipped_tours += 1;
                 }
                 for t in &tour.trips {
-                    if let Some(ti) = data
-                        .trips
-                        .iter()
-                        .position(|x| x.is_named(&t.trip))
-                    {
+                    if let Some(ti) = data.trips.iter().position(|x| x.is_named(&t.trip)) {
                         let profile = usize::try_from(t.profile)
                             .unwrap_or(0)
                             .min(times[ti].len() - 1);
@@ -80,7 +76,14 @@ impl ScheduleSim {
                         // does one that leaves before midnight and is still on its way after
                         // it, for a map opened in the small hours)
                         if reaches_tomorrow(d.time, times[ti][profile].duration) {
-                            departures.push(Departure { time: d.time - DAY, yesterday: true, line: d.line.clone(), ai_group: d.ai_group.clone(), tour: d.tour.clone(), ..d });
+                            departures.push(Departure {
+                                time: d.time - DAY,
+                                yesterday: true,
+                                line: d.line.clone(),
+                                ai_group: d.ai_group.clone(),
+                                tour: d.tour.clone(),
+                                ..d
+                            });
                         }
                         departures.push(d);
                     }
@@ -100,7 +103,14 @@ impl ScheduleSim {
         for (i, d) in departures.iter().enumerate() {
             // (yesterday's night trips are a tour of their own: tonight's run on from the
             // evening's trips)
-            let key = (d.line.clone(), if d.yesterday { format!("{}\u{1}", d.tour) } else { d.tour.clone() });
+            let key = (
+                d.line.clone(),
+                if d.yesterday {
+                    format!("{}\u{1}", d.tour)
+                } else {
+                    d.tour.clone()
+                },
+            );
             tour_prev[i] = last_of.get(&key).copied();
             last_of.insert(key, i);
         }
@@ -227,9 +237,23 @@ impl ScheduleSim {
                 bytes as f64 / 1e6
             );
         }
-        let today = departures.iter().filter(|d| d.mask & day_bit != 0 && d.mask & school_bit != 0).count();
-        log::info!("timetable: {} lines, {} trips, {} tracks, {} departures today (weekday {weekday}, holiday {holiday}, school holidays {school_holiday}; {skipped_tours} tours not today), {} depot groups", data.lines.len(), data.trips.len(), data.tracks.len(), today, depots.len());
-        let transit_unrouted: HashSet<String> = data.transit_trips.iter().map(|t| t.trip.to_ascii_lowercase()).collect();
+        let today = departures
+            .iter()
+            .filter(|d| d.mask & day_bit != 0 && d.mask & school_bit != 0)
+            .count();
+        log::info!(
+            "timetable: {} lines, {} trips, {} tracks, {} departures today (weekday {weekday}, holiday {holiday}, school holidays {school_holiday}; {skipped_tours} tours not today), {} depot groups",
+            data.lines.len(),
+            data.trips.len(),
+            data.tracks.len(),
+            today,
+            depots.len()
+        );
+        let transit_unrouted: HashSet<String> = data
+            .transit_trips
+            .iter()
+            .map(|t| t.trip.to_ascii_lowercase())
+            .collect();
         let mut s = ScheduleSim {
             transit_unrouted,
             data,
@@ -252,9 +276,11 @@ impl ScheduleSim {
             trip_departures,
             boards_made: f64::NEG_INFINITY,
             player_tour: None,
+            player_bus: None,
             player_departure: None,
             purge_player_tour: false,
             player_twins: HashSet::new(),
+            lan_progress: Default::default(),
             lan_tours: HashSet::new(),
             last_tod: 0.0,
             deactivated,
@@ -275,7 +301,9 @@ impl ScheduleSim {
             car_use,
             tour_vehicle: HashMap::new(),
             used_numbers: HashSet::new(),
-            vehicle_seed: omsi_script::session_seed().map(|s| omsi_script::mix_seed(s ^ 0x746f_7572_5f62_7573)).unwrap_or(0),
+            vehicle_seed: omsi_script::session_seed()
+                .map(|s| omsi_script::mix_seed(s ^ 0x746f_7572_5f62_7573))
+                .unwrap_or(0),
         };
         s.yesterday_bits = s.yesterday_bits();
         s.assign_car_use();
@@ -295,17 +323,38 @@ impl ScheduleSim {
         let mut n_fixed = 0;
         let mut n_typed = 0;
         for cu in self.car_use.iter().filter(|c| c.valid_on(date)) {
-            let Some(line) = self.data.lines.iter().find(|l| l.name.trim().eq_ignore_ascii_case(cu.line.trim())) else { continue };
+            let Some(line) = self
+                .data
+                .lines
+                .iter()
+                .find(|l| l.name.trim().eq_ignore_ascii_case(cu.line.trim()))
+            else {
+                continue;
+            };
             // [number_tour]: this tour runs with this vehicle
             for (number, tour) in &cu.number_tour {
-                let Some(t) = line.tours.iter().find(|t| t.number.trim().eq_ignore_ascii_case(tour.trim())) else { continue };
+                let Some(t) = line
+                    .tours
+                    .iter()
+                    .find(|t| t.number.trim().eq_ignore_ascii_case(tour.trim()))
+                else {
+                    continue;
+                };
                 let group = t.ai_group.to_ascii_lowercase();
                 let key = tour_key_of(&group, &line.name, &t.number);
-                if self.tour_vehicle.contains_key(&key) || self.used_numbers.contains(&(group.clone(), number.trim().to_string())) {
+                if self.tour_vehicle.contains_key(&key)
+                    || self
+                        .used_numbers
+                        .contains(&(group.clone(), number.trim().to_string()))
+                {
                     continue;
                 }
                 let found = self.depots.get(&group).and_then(|v| {
-                    v.iter().enumerate().find_map(|(k, (_, nums, _))| nums.iter().position(|e| e.number.trim() == number.trim()).map(|j| (k, j)))
+                    v.iter().enumerate().find_map(|(k, (_, nums, _))| {
+                        nums.iter()
+                            .position(|e| e.number.trim() == number.trim())
+                            .map(|j| (k, j))
+                    })
                 });
                 if let Some(kj) = found {
                     self.tour_vehicle.insert(key, kj);
@@ -314,7 +363,9 @@ impl ScheduleSim {
                 }
             }
             // [onlytypes] / [types_prefered]: the other tours from those types
-            let Some((factor, types)) = cu.types() else { continue };
+            let Some((factor, types)) = cu.types() else {
+                continue;
+            };
             let types: Vec<String> = types.iter().map(|t| norm_vehicle_path(t)).collect();
             for t in &line.tours {
                 let group = t.ai_group.to_ascii_lowercase();
@@ -326,7 +377,9 @@ impl ScheduleSim {
                 if (h >> 11) as f64 / (1u64 << 53) as f64 > factor as f64 {
                     continue;
                 }
-                let Some(vehicles) = self.depots.get(&group) else { continue };
+                let Some(vehicles) = self.depots.get(&group) else {
+                    continue;
+                };
                 let candidates: Vec<(usize, usize)> = vehicles
                     .iter()
                     .enumerate()
@@ -335,22 +388,36 @@ impl ScheduleSim {
                         types.iter().any(|w| p.ends_with(w.as_str()))
                     })
                     .flat_map(|(k, (_, nums, _))| (0..nums.len()).map(move |j| (k, j)))
-                    .filter(|(k, j)| !self.used_numbers.contains(&(group.clone(), vehicles[*k].1[*j].number.trim().to_string())))
+                    .filter(|(k, j)| {
+                        !self.used_numbers.contains(&(
+                            group.clone(),
+                            vehicles[*k].1[*j].number.trim().to_string(),
+                        ))
+                    })
                     .collect();
                 if candidates.is_empty() {
                     continue;
                 }
                 let (k, j) = candidates[(mix(h) % candidates.len() as u64) as usize];
                 if omsi_cfg::flags::OMSI_DEBUG_TRAFFIC.is_set() {
-                    log::info!("car_use: line {} tour {} -> {} #{}", line.name, t.number, vehicles[k].0.def.path.display(), vehicles[k].1[j].number);
+                    log::info!(
+                        "car_use: line {} tour {} -> {} #{}",
+                        line.name,
+                        t.number,
+                        vehicles[k].0.def.path.display(),
+                        vehicles[k].1[j].number
+                    );
                 }
-                self.used_numbers.insert((group.clone(), vehicles[k].1[j].number.trim().to_string()));
+                self.used_numbers
+                    .insert((group.clone(), vehicles[k].1[j].number.trim().to_string()));
                 self.tour_vehicle.insert(key, (k, j));
                 n_typed += 1;
             }
         }
         if n_fixed + n_typed > 0 {
-            log::info!("timetable: car_use gives {n_fixed} tours their fleet number and {n_typed} a vehicle of their line's types");
+            log::info!(
+                "timetable: car_use gives {n_fixed} tours their fleet number and {n_typed} a vehicle of their line's types"
+            );
         }
     }
 
@@ -362,7 +429,9 @@ impl ScheduleSim {
     /// Move the calendar without rebuilding every intervening day's timetable.
     /// A large date jump needs only the final day's mask and fleet assignment.
     pub(super) fn shift_calendar_days(&mut self, days: i64) {
-        if days == 0 { return; }
+        if days == 0 {
+            return;
+        }
         self.day_base += days as f64 * DAY;
         step_calendar(&mut self.date_clock, days);
         let c = self.date_clock.clone();
@@ -371,9 +440,13 @@ impl ScheduleSim {
 
     /// Past midnight on the traffic's clock: the next day's timetable.
     pub(super) fn roll_day(&mut self, day_time: f64) {
-        if !day_time.is_finite() { return; }
+        if !day_time.is_finite() {
+            return;
+        }
         let days = ((day_time - self.day_base) / DAY).floor() as i64;
         if days > 0 {
+            // (the departures are numbered anew)
+            self.lan_progress = Default::default();
             self.shift_calendar_days(days);
         }
     }
@@ -396,7 +469,8 @@ impl ScheduleSim {
     }
 
     pub fn tour_from_yesterday(&self, tour: &omsi_timetable::Tour) -> bool {
-        tour.trips.iter().any(|t| t.departure >= 24.0 * 60.0) && self.tour_runs_on(tour, self.yesterday_bits())
+        tour.trips.iter().any(|t| t.departure >= 24.0 * 60.0)
+            && self.tour_runs_on(tour, self.yesterday_bits())
     }
 
     /// Whether a tour's day mask has these day bits (`day_bits`).
@@ -420,7 +494,11 @@ impl ScheduleSim {
     /// Whether departure `i`'s tour runs on the current day.
     pub(super) fn runs(&self, i: usize) -> bool {
         let d = &self.departures[i];
-        let bits = if d.yesterday { self.yesterday_bits } else { self.day_bits };
+        let bits = if d.yesterday {
+            self.yesterday_bits
+        } else {
+            self.day_bits
+        };
         d.mask & bits.0 != 0 && d.mask & bits.1 != 0
     }
 
@@ -447,12 +525,23 @@ impl ScheduleSim {
         self.pending.iter_mut().for_each(map);
         self.waiting.iter_mut().for_each(map);
         let moved = |set: &mut std::collections::HashSet<usize>| {
-            *set = set.iter().map(|i| to.get(i).copied().unwrap_or(*i)).collect();
+            *set = set
+                .iter()
+                .map(|i| to.get(i).copied().unwrap_or(*i))
+                .collect();
         };
         moved(&mut self.awaiting);
-        self.later_layover = self.later_layover.iter().map(|(i, t)| (to.get(i).copied().unwrap_or(*i), *t)).collect();
+        self.later_layover = self
+            .later_layover
+            .iter()
+            .map(|(i, t)| (to.get(i).copied().unwrap_or(*i), *t))
+            .collect();
         moved(&mut self.startup);
-        self.retry_at = self.retry_at.iter().map(|(i, t)| (to.get(i).copied().unwrap_or(*i), *t)).collect();
+        self.retry_at = self
+            .retry_at
+            .iter()
+            .map(|(i, t)| (to.get(i).copied().unwrap_or(*i), *t))
+            .collect();
         for (&from, &j) in &to {
             if self.departures[from].spawned {
                 self.departures[j].spawned = true;
@@ -505,7 +594,9 @@ impl ScheduleSim {
         self.boards_made = f64::NEG_INFINITY;
         self.assign_car_use();
         let today = (0..self.departures.len()).filter(|&i| self.runs(i)).count();
-        log::info!("timetable: a new day ({date}): {today} departures today, {n} made ready to run again");
+        log::info!(
+            "timetable: a new day ({date}): {today} departures today, {n} made ready to run again"
+        );
     }
 
     /// When departure `i`'s bus is at its trip's stations.
@@ -517,7 +608,12 @@ impl ScheduleSim {
         let times = self.times_of(i);
         let kinds = &times.kinds;
         let of = |want: &[u8]| -> Vec<i64> {
-            stations.iter().zip(kinds).filter(|(_, k)| want.contains(k)).map(|(id, _)| *id).collect()
+            stations
+                .iter()
+                .zip(kinds)
+                .filter(|(_, k)| want.contains(k))
+                .map(|(id, _)| *id)
+                .collect()
         };
         let holds: Vec<i64> = stations
             .iter()
@@ -543,7 +639,15 @@ impl ScheduleSim {
 /// Per departure, its night twin (`ScheduleSim::night_twin`): the trip after 24:00 of a tour
 /// and the same trip of yesterday's tour, a day earlier.
 pub(super) fn night_twins(departures: &[Departure]) -> Vec<Option<usize>> {
-    let key = |d: &Departure, time: f64| (d.line.clone(), d.tour.clone(), d.trip, d.profile, (time * 10.0).round() as i64);
+    let key = |d: &Departure, time: f64| {
+        (
+            d.line.clone(),
+            d.tour.clone(),
+            d.trip,
+            d.profile,
+            (time * 10.0).round() as i64,
+        )
+    };
     let tonight: HashMap<_, usize> = departures
         .iter()
         .enumerate()
@@ -585,9 +689,13 @@ mod midnight_tests {
 /// assignments and can stall the main thread on a large date jump.
 fn step_calendar(clock: &mut crate::SimClock, days: i64) {
     if days >= 0 {
-        for _ in 0..days { clock.next_day(); }
+        for _ in 0..days {
+            clock.next_day();
+        }
     } else {
-        for _ in 0..days.unsigned_abs() { clock.prev_day(); }
+        for _ in 0..days.unsigned_abs() {
+            clock.prev_day();
+        }
     }
 }
 

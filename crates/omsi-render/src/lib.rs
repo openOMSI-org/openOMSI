@@ -17,35 +17,41 @@
 
 pub mod angle;
 pub mod atmosphere;
+mod cloud_pass;
 pub mod clouds;
 mod cookies;
-pub use cookies::{Cookie, COOKIE_LAYERS};
+pub use cookies::{COOKIE_LAYERS, Cookie};
+mod glass_mips;
 mod gpu_memory;
-pub use gpu_memory::{card_vram_mb, Ceiling, GpuMemory};
-mod passes;
+pub use gpu_memory::{Ceiling, GpuMemory, card_vram_mb, set_system_memory_mb};
 mod device_selection;
-use passes::{Encoders, FrameArgs, FrameEnv, PassTimers, StageClock};
+mod passes;
 use gpu_memory::adapter_vram_mb;
-pub mod pipeline_cache;
-mod pipelines;
-mod puddles;
-mod rt;
-mod rt_tex;
-mod shaders;
-mod srgb_encode;
-mod triple;
+use passes::{Encoders, FrameArgs, FrameEnv, PassTimers, StageClock};
 mod frame_plan;
+mod vehicle_dirt;
+pub use vehicle_dirt::{DIRT_VEHICLES, VehicleDirt};
 mod gpu;
 mod lighting;
+pub mod pipeline_cache;
+mod pipelines;
+mod precip;
+mod puddles;
 mod render;
 mod resources;
+mod rt;
+mod rt_tex;
 mod scene;
+mod shaders;
 mod sky;
+mod srgb_encode;
 mod surface;
 mod targets;
 pub mod temporal;
+mod triple;
 mod uniforms;
 mod view;
+mod vol_fog;
 pub(crate) use frame_plan::*;
 pub use gpu::*;
 pub use lighting::*;
@@ -56,13 +62,17 @@ pub(crate) use shaders::*;
 pub use sky::*;
 pub use surface::*;
 pub(crate) use targets::*;
-pub use temporal::{FrameGeneration, FrameGenerationKind, Temporal, TemporalQuality, TemporalUpscaler};
-pub(crate) use temporal::{TemporalFrame, TemporalPipelines, TemporalState, TEMPORAL_MASK_FORMAT, TEMPORAL_MOTION_FORMAT};
+pub use temporal::{
+    DLSS_SHARPEN, FrameGeneration, FrameGenerationKind, Temporal, TemporalQuality, TemporalUpscaler,
+};
+pub(crate) use temporal::{
+    TEMPORAL_MASK_FORMAT, TEMPORAL_MOTION_FORMAT, TemporalFrame, TemporalPipelines, TemporalState,
+};
+pub use triple::{ScreenView, TripleScreen, panel_width};
 pub use uniforms::*;
 pub use view::*;
-pub use triple::{panel_width, ScreenView, TripleScreen};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use glam::{DVec3, Mat4, Vec3, Vec4};
 use omsi_geometry::MeshData;
 use std::collections::HashMap;
@@ -85,7 +95,8 @@ pub(crate) fn fsr1_rcas_strength(slider: f32) -> f32 {
 pub(crate) fn fsr1_enabled() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENABLED.get_or_init(|| {
-        omsi_cfg::flags::OMSI_FSR1.var()
+        omsi_cfg::flags::OMSI_FSR1
+            .var()
             .is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "on"))
     })
 }
@@ -115,10 +126,10 @@ struct PassPipelines {
     corona_pipeline: wgpu::RenderPipeline,
     /// Smoke particles (`[smoke]`): the corona sprite alpha-blended with the smoke texture.
     smoke_pipeline: wgpu::RenderPipeline,
-    /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); none with
-    /// `basic_pipelines`.
+    /// The snowfall (snow.wgsl), opaque over the scene (premultiplied); with
+    /// `basic_pipelines` on a phone only (`snowfall_pipeline`).
     snow_pipeline: Option<wgpu::RenderPipeline>,
-    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` on computers too.
+    /// The rainfall (rain.wgsl), as the snowfall; with `basic_pipelines` too (`rainfall_pipeline`).
     rain_fall_pipeline: Option<wgpu::RenderPipeline>,
     sky_pipeline: wgpu::RenderPipeline,
 }
@@ -160,6 +171,12 @@ pub struct Renderer {
     temporal_failed: bool,
     temporal_window: bool,
     temporal_kept: Option<temporal::Runtime>,
+    /// The upscaler failed while the card was out of memory: the options it was drawn with,
+    /// tried once more when the texture budget has had its time (`retry_upscaler`), its
+    /// runtime kept meanwhile in `temporal_kept` (Streamline on Vulkan cannot start twice).
+    upscaler_retry: Option<(std::time::Instant, RenderOptions)>,
+    /// That retry was made (there is no second).
+    upscaler_retried: bool,
     /// The window's frame generation, while it has one: on Windows while its swap chain is
     /// frame generation's, on a Mac `SurfaceState::set_frame_generation`'s.
     frame_generation: Option<temporal::FrameGeneration>,
@@ -212,6 +229,8 @@ pub struct Renderer {
     mirror_sampler: wgpu::Sampler,
     /// The addressing of the next material's textures (`[matl_texadress_*]`).
     pub address_next: std::cell::Cell<TexAddressing>,
+    /// The vehicles' road dirt the enhanced picture lays over them (`set_vehicle_dirt`).
+    pub(crate) vehicle_dirt: std::cell::RefCell<Vec<VehicleDirt>>,
     /// The next material is lit at night by the tile light maps (`[LightMapMapping]`, the
     /// splines) instead of the map's lamps.
     pub light_map_next: std::cell::Cell<bool>,
@@ -309,6 +328,9 @@ pub struct RenderOptions {
     pub msaa_fallback: u32,
     /// RCAS sharpening strength, from 0 (none) to 1.
     pub fsr_sharpness: f32,
+    /// How much DLSS's result is sharpened after it (DLSS no longer sharpens itself), from 0
+    /// (none) to 1; 0.25 was the fixed amount before it was a setting. Read every frame.
+    pub dlss_sharpness: f32,
     /// VR: each eye is drawn at this fraction of its headset image and scaled up to it (by
     /// FSR 1, or the standard upscaler with FSR 1 off); 1 = drawn at the image's size.
     /// Set by `start_xr`: below 1 only when VR started with FSR 1.
@@ -363,6 +385,11 @@ pub struct RenderOptions {
     /// reflections, where the device can trace rays (hardware ray queries); elsewhere the
     /// enhanced picture as it is.
     pub ray_tracing: bool,
+    /// Experimental, with `ray_tracing`: ray-traced global illumination (the settings'
+    /// `rt_gi`) - the light the surfaces round a point send back to it, one diffuse bounce
+    /// traced at half size and gathered over the frames (rt/gi.rs). Read every frame: it
+    /// needs no rebuild.
+    pub rt_gi: bool,
     /// The Enhanced picture's street-scale light: the sky's occlusion by houses and trees
     /// over 18 m, and the light the surfaces send to each other (the settings'
     /// `street_light`). `None`: as the chip allows (off on a small or shared one, see
@@ -378,6 +405,10 @@ pub struct RenderOptions {
     /// The glare round bright lights and the lamps' halo in the night air (the settings'
     /// `light_glow`).
     pub light_glow: bool,
+    /// The Enhanced picture's volumetric fog (the settings' `volumetric_fog`): the air
+    /// marched through, with the sun's shafts, the clouds' shadows and drifting banks of
+    /// fog (volumetric_fog.wgsl). Off, the analytic fog of the main pass as before.
+    pub volumetric_fog: bool,
     pub puddle_reflections: bool,
     pub max_scene: Option<(u32, u32)>,
     pub detailed_trees: bool,
@@ -396,6 +427,7 @@ impl Default for RenderOptions {
             msaa_fallback: 0,
             xr_scale: 1.0,
             fsr_sharpness: 0.8,
+            dlss_sharpness: temporal::DLSS_SHARPEN,
             compress_textures: true,
             gpu_texture_compression: true,
             fxaa: true,
@@ -410,10 +442,12 @@ impl Default for RenderOptions {
             no_enhanced: false,
             preview_only: false,
             ray_tracing: false,
+            rt_gi: false,
             street_light: None,
             light_shadows: 1,
             cloud_shadows: false,
             light_glow: false,
+            volumetric_fog: true,
             puddle_reflections: true,
             max_scene: None,
             detailed_trees: false,
@@ -429,7 +463,15 @@ impl Default for RenderOptions {
 /// million pixels, a 4K screen showed a picture of 58 % its size, and the enhanced
 /// graphics looked like textures of low quality; the frame-rate governor still steps down
 /// on a card that cannot keep up.
-pub const AUTO_SCALE_PIXELS: f32 = if cfg!(any(target_os = "macos", target_os = "android", target_os = "ios")) { 2_800_000.0 } else { 8_400_000.0 };
+pub const AUTO_SCALE_PIXELS: f32 = if cfg!(any(
+    target_os = "macos",
+    target_os = "android",
+    target_os = "ios"
+)) {
+    2_800_000.0
+} else {
+    8_400_000.0
+};
 
 /// Interior lamps one mesh may be lit by (OMSI: four; a model may list more in its
 /// `[illumination_interior]`), and the step of the lamp code sent to the shaders (`first *
@@ -455,32 +497,79 @@ static RT_GBUF: crate::AdapterBool = crate::AdapterBool::new(6);
 fn rt_gbuf() -> bool {
     RT_GBUF.load(std::sync::atomic::Ordering::Relaxed)
 }
+/// The camera group holds the traced global illumination's result (binding 22, `t_gi`):
+/// with the ray tracing, on a device that takes a seventeenth texture in a shader stage. The
+/// scene's camera and material groups hold sixteen without it - the WebGPU default and all
+/// that the Intel Vulkan profile asks for (`intel_vulkan_profile`); there the scene shader
+/// reads no `t_gi` and the global illumination stays off (rt/gi.rs).
+static GI_BINDING: crate::AdapterBool = crate::AdapterBool::new(8);
+pub(crate) fn gi_binding() -> bool {
+    GI_BINDING.load(std::sync::atomic::Ordering::Relaxed)
+}
 const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 /// The colour targets of a pipeline drawing into `format`: Enhanced and classic puddle
 /// shading draw into `HDR_FORMAT` with the screen mask beside it,
 /// written by the scene's own shader only (`mask`), coverage-blended where the colour is.
-fn color_targets_for(format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>, write: wgpu::ColorWrites, mask: bool, gbuf: bool,
-    surfaces: bool) -> Vec<Option<wgpu::ColorTargetState>> {
-    let mut v = vec![Some(wgpu::ColorTargetState { format, blend, write_mask: write })];
+fn color_targets_for(
+    format: wgpu::TextureFormat,
+    blend: Option<wgpu::BlendState>,
+    write: wgpu::ColorWrites,
+    mask: bool,
+    gbuf: bool,
+    surfaces: bool,
+) -> Vec<Option<wgpu::ColorTargetState>> {
+    let mut v = vec![Some(wgpu::ColorTargetState {
+        format,
+        blend,
+        write_mask: write,
+    })];
     if format == HDR_FORMAT {
         v.push(Some(wgpu::ColorTargetState {
             format: MASK_FORMAT,
             blend: blend.map(|_| wgpu::BlendState {
-                color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::SrcAlpha, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
                 alpha: wgpu::BlendComponent::REPLACE,
             }),
-            write_mask: if mask { wgpu::ColorWrites::ALL } else { wgpu::ColorWrites::empty() },
+            write_mask: if mask {
+                wgpu::ColorWrites::ALL
+            } else {
+                wgpu::ColorWrites::empty()
+            },
         }));
         if surfaces {
             // (premultiplied by the reflection's weight, the shader's alpha)
             let over = blend.map(|_| wgpu::BlendState {
-                color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
-                alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
             });
-            let write = if gbuf { wgpu::ColorWrites::ALL } else { wgpu::ColorWrites::empty() };
-            v.push(Some(wgpu::ColorTargetState { format: GBUF_FORMAT, blend: over, write_mask: write }));
-            v.push(Some(wgpu::ColorTargetState { format: AUX_FORMAT, blend: over, write_mask: write }));
+            let write = if gbuf {
+                wgpu::ColorWrites::ALL
+            } else {
+                wgpu::ColorWrites::empty()
+            };
+            v.push(Some(wgpu::ColorTargetState {
+                format: GBUF_FORMAT,
+                blend: over,
+                write_mask: write,
+            }));
+            v.push(Some(wgpu::ColorTargetState {
+                format: AUX_FORMAT,
+                blend: over,
+                write_mask: write,
+            }));
         }
     }
     v
@@ -528,9 +617,12 @@ impl Renderer {
                 .as_ref()
                 .or(self.hdr_pass.as_ref())
                 .unwrap()
-        } else if enhanced { self.hdr_pass.as_ref().unwrap() }
-        else if reflections { self.reflection_pass.as_ref().unwrap() }
-        else { &self.pass
+        } else if enhanced {
+            self.hdr_pass.as_ref().unwrap()
+        } else if reflections {
+            self.reflection_pass.as_ref().unwrap()
+        } else {
+            &self.pass
         }
     }
 
@@ -568,7 +660,10 @@ impl Renderer {
         // (1, 0.85, 0.7 or 0.55 - the last for a phone's chip that is still too slow: see
         // the game's governor)
         let s = s.clamp(0.55, 1.0);
-        let level = [1.0f32, 0.85, 0.7, 0.55].into_iter().min_by(|a, b| (a - s).abs().total_cmp(&(b - s).abs())).unwrap_or(1.0);
+        let level = [1.0f32, 0.85, 0.7, 0.55]
+            .into_iter()
+            .min_by(|a, b| (a - s).abs().total_cmp(&(b - s).abs()))
+            .unwrap_or(1.0);
         self.scale.dynamic_scale.set(level);
     }
 
@@ -586,7 +681,11 @@ impl Renderer {
         self.options.render_scale = render_scale;
         let mut refused_now = false;
         if fsr1 && self.scale.fsr.is_none() && !self.scale.fsr_refused {
-            match pipelines::upscale::build_fsr(&self.device, self.format, &self.scale.upscale_layout) {
+            match pipelines::upscale::build_fsr(
+                &self.device,
+                self.format,
+                &self.scale.upscale_layout,
+            ) {
                 Some(p) => self.scale.fsr = Some(p),
                 None => (self.scale.fsr_refused, refused_now) = (true, true),
             }
@@ -614,7 +713,11 @@ impl Renderer {
     /// `eye_scale` here, and only here (read again for the headset image as well, it shrank
     /// the image and FSR 1 shrank the eyes within it a second time).
     pub fn start_xr(&mut self, eye_scale: f32) -> f32 {
-        let eye_scale = omsi_cfg::flags::OMSI_OPENXR_SCALE.parse::<f32>().filter(|s| s.is_finite()).unwrap_or(eye_scale).clamp(0.5, 1.0);
+        let eye_scale = omsi_cfg::flags::OMSI_OPENXR_SCALE
+            .parse::<f32>()
+            .filter(|s| s.is_finite())
+            .unwrap_or(eye_scale)
+            .clamp(0.5, 1.0);
         let fsr = self.options.fsr1 && self.scale.fsr.is_some() && eye_scale < 0.999;
         self.options.xr_scale = if fsr { eye_scale } else { 1.0 };
         if fsr { 1.0 } else { eye_scale }
@@ -629,7 +732,9 @@ impl Renderer {
     /// FSR 1 upscales the window's picture now (asked for, built, and the picture drawn
     /// smaller than the window).
     pub fn fsr_active(&self, width: u32, height: u32) -> bool {
-        self.options.fsr1 && self.scale.fsr.is_some() && self.scene_size(width, height) != (width, height)
+        self.options.fsr1
+            && self.scale.fsr.is_some()
+            && self.scene_size(width, height) != (width, height)
     }
 
     /// The upscaler the window's picture goes through now, as the frame rate names it: DLSS or
@@ -650,12 +755,19 @@ impl Renderer {
 
     /// The in-between frames frame generation has made since it started, while it runs.
     pub fn frames_generated(&self) -> Option<u64> {
-        self.frame_generation.as_ref().filter(|g| g.working()).map(|g| g.generated())
+        self.frame_generation
+            .as_ref()
+            .filter(|g| g.working())
+            .map(|g| g.generated())
     }
 
     /// The size the 3D scene is drawn at for a window of this size.
     pub fn scene_size(&self, width: u32, height: u32) -> (u32, u32) {
-        if let Some(t) = self.options.temporal.filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed) {
+        if let Some(t) = self
+            .options
+            .temporal
+            .filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed)
+        {
             return temporal::fallback_render_size(t.quality, (width, height));
         }
         self.scaled_size(width, height)
@@ -683,7 +795,12 @@ fn scene_scale_for(requested: f32, width: u32, height: u32) -> f32 {
     let pixels = width as f32 * height as f32;
     if requested > 0.0 {
         let requested = requested.clamp(0.5, 1.0);
-        if cfg!(any(target_os = "macos", target_os = "android", target_os = "ios")) && pixels > AUTO_SCALE_PIXELS {
+        if cfg!(any(
+            target_os = "macos",
+            target_os = "android",
+            target_os = "ios"
+        )) && pixels > AUTO_SCALE_PIXELS
+        {
             return requested.min((AUTO_SCALE_PIXELS / pixels).sqrt().clamp(0.5, 1.0));
         }
         return requested;
@@ -696,7 +813,11 @@ fn scene_scale_for(requested: f32, width: u32, height: u32) -> f32 {
 }
 
 fn scene_scale_within(s: f32, max_scene: Option<(u32, u32)>, width: u32, height: u32) -> f32 {
-    max_scene.map_or(s, |(w, h)| s.min(w as f32 / width as f32).min(h as f32 / height as f32).max(0.5))
+    max_scene.map_or(s, |(w, h)| {
+        s.min(w as f32 / width as f32)
+            .min(h as f32 / height as f32)
+            .max(0.5)
+    })
 }
 
 /// Is `p` inside a vehicle's `[boundingbox]` (origin, heading in degrees, w l h cx cy cz)?
@@ -720,15 +841,23 @@ fn snap_rect(r: [f32; 4]) -> [f32; 4] {
     // and a rectangle across the left edge came out a pixel wider)
     let snap = |v: f32| (v + 0.5).floor();
     let (x0, y0) = (snap(r[0]), snap(r[1]));
-    let x1 = if r[2] > r[0] { snap(r[2]).max(x0 + 1.0) } else { snap(r[2]) };
-    let y1 = if r[3] > r[1] { snap(r[3]).max(y0 + 1.0) } else { snap(r[3]) };
+    let x1 = if r[2] > r[0] {
+        snap(r[2]).max(x0 + 1.0)
+    } else {
+        snap(r[2])
+    };
+    let y1 = if r[3] > r[1] {
+        snap(r[3]).max(y0 + 1.0)
+    } else {
+        snap(r[3])
+    };
     [x0, y0, x1, y1]
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod stream_tests;
+#[cfg(test)]
+mod tests;
 
 /// Panics caught on purpose (a driver wgpu cannot use): see `omsi_cfg::panic_guard`.
 pub use omsi_cfg::panic_guard::{catch, catching};

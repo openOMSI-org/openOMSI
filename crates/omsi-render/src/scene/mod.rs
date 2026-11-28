@@ -3,12 +3,21 @@
 
 use crate::*;
 
-mod instances;
 pub(crate) mod depth_plane;
+mod instances;
+mod lod;
 pub(crate) mod overlay;
 mod upload;
-mod lod;
 pub(crate) use lod::object_screen_size;
+
+/// What `Renderer::set_sky_textures_vanilla` was given last.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SkyTextures {
+    pub(crate) gradients: [TextureId; 3],
+    pub(crate) clouds: Option<TextureId>,
+    pub(crate) vanilla_clouds: Option<TextureId>,
+    pub(crate) sun: Option<TextureId>,
+}
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct InstanceBounds {
@@ -32,9 +41,13 @@ pub(crate) const CULL_BLOCK: usize = 128;
 pub(crate) const CULL_BLOCK_REBUILDS: usize = 8;
 
 pub(crate) fn transform_scale(transform: Mat4) -> f32 {
-    transform.x_axis.truncate().length_squared()
+    transform
+        .x_axis
+        .truncate()
+        .length_squared()
         .max(transform.y_axis.truncate().length_squared())
-        .max(transform.z_axis.truncate().length_squared()).sqrt()
+        .max(transform.z_axis.truncate().length_squared())
+        .sqrt()
 }
 
 /// The ordered world passes used by OMSI for ground and scenery geometry.
@@ -177,8 +190,8 @@ pub struct Instance {
     /// The draw order's depth step of each material slot (see `draw_order_level`): above 0
     /// only for a slot lying on an earlier surface of the same object (`overlay`).
     pub(crate) slot_levels: Vec<u8>,
-    /// Depth-bias limit for slots near another surface.
-    pub(crate) slot_depth_caps: Vec<f32>,
+    pub(crate) slot_depth_floors: Vec<u8>,
+    pub(crate) slot_depth_caps: Vec<overlay::DepthCaps>,
 }
 
 /// The rain the renderer draws round the camera (rain.wgsl): every drop is worked out on
@@ -254,6 +267,10 @@ pub struct Scene {
     /// As `shadow_bind_group`, with the precipitation roof map's camera.
     pub(crate) precip_bind_group: Option<wgpu::BindGroup>,
     pub(crate) sky_bind_group: Option<wgpu::BindGroup>,
+    /// The textures `sky_bind_group` was made with (`set_sky_textures_vanilla`): the group
+    /// also binds the renderer's own sky buffers and cloud noise, so a rebuilt renderer
+    /// makes it again from these (`Renderer::rebuild_in_place`).
+    pub(crate) sky_textures: Option<SkyTextures>,
     /// HUD images drawn after the scene: (texture, rect in pixels x0,y0,x1,y1).
     pub overlays: Vec<(TextureId, [f32; 4])>,
     /// Overlay textures that hold premultiplied alpha (drawn by `omsi-ui`, e.g. the
@@ -403,10 +420,18 @@ impl Scene {
 
     /// Bytes the meshes' pages take on the GPU, each page once, whatever share of it is in use.
     pub fn mesh_page_bytes(&self) -> u64 {
-        let shared: u64 = self.mesh_pages.iter().map(|p| p.vertex_cap + p.index_cap).sum();
+        let shared: u64 = self
+            .mesh_pages
+            .iter()
+            .map(|p| p.vertex_cap + p.index_cap)
+            .sum();
         // (a set: without base vertices every mesh has buffers of its own, thousands of them)
         let mut own: std::collections::HashSet<&wgpu::Buffer> = std::collections::HashSet::new();
-        for m in self.meshes.iter().filter(|m| m.page == u32::MAX && !m.ranges.is_empty()) {
+        for m in self
+            .meshes
+            .iter()
+            .filter(|m| m.page == u32::MAX && !m.ranges.is_empty())
+        {
             if own.insert(&m.vertex_buf) {
                 own.insert(&m.index_buf);
             }
@@ -419,11 +444,17 @@ impl Scene {
     pub fn gpu_bytes(&self) -> (u64, u64, u64) {
         let tex = self.textures.iter().map(|t| t.bytes).sum();
         let mesh = self.mesh_page_bytes();
-        let other = [&self.model_buf, &self.params_buf, &self.light_buf, &self.grid_buf, &self.draw_buf]
-            .iter()
-            .filter_map(|b| b.as_ref())
-            .map(|b| b.gpu_bytes())
-            .sum::<u64>()
+        let other = [
+            &self.model_buf,
+            &self.params_buf,
+            &self.light_buf,
+            &self.grid_buf,
+            &self.draw_buf,
+        ]
+        .iter()
+        .filter_map(|b| b.as_ref())
+        .map(|b| b.gpu_bytes())
+        .sum::<u64>()
             + self.corona_buf.as_ref().map_or(0, |b| b.size());
         (tex, mesh, other)
     }

@@ -11,7 +11,9 @@ impl App {
             if !self.vr_nav_profile().enabled {
                 self.vr_nav_adjust("enabled", 1.0);
             } else if self.menus.navigator.as_ref().is_some_and(|n| n.schedule) {
-                if let Some(n) = self.menus.navigator.as_mut() { n.schedule = false; }
+                if let Some(n) = self.menus.navigator.as_mut() {
+                    n.schedule = false;
+                }
                 self.vr_nav_adjust("enabled", 1.0);
             } else if let Some(n) = self.menus.navigator.as_mut() {
                 n.schedule = true;
@@ -51,7 +53,9 @@ impl App {
     /// menu's "Skip the next stop", Ctrl+Shift+H): the IBIS moves on with it, as it does
     /// when a bus page sets the next stop.
     pub(crate) fn skip_next_stop(&mut self) {
-        let Some(d) = self.session.duty.as_mut() else { return };
+        let Some(d) = self.session.duty.as_mut() else {
+            return;
+        };
         let Some(name) = d.skip_next() else {
             self.service_msg = Some(("The trip is over: no stop to skip".into(), 3.0));
             return;
@@ -61,38 +65,54 @@ impl App {
             let (trip, k) = d.trip_for_ibis();
             p.ibis_to_stop(trip, k);
         }
-        self.service_msg = Some((omsi_ui::i18n::tr_fill("Stop skipped: {name}", &[("{name}", &name)]), 3.0));
+        self.service_msg = Some((
+            omsi_ui::i18n::tr_fill("Stop skipped: {name}", &[("{name}", &name)]),
+            3.0,
+        ));
     }
 
     #[cfg(windows)]
     fn vr_action(&mut self, name: &str) -> bool {
         if name == "vr_toggle_mode" {
             self.xr.vr_zoom_active = false;
-            if !self.settings.vr_requested() { return false; }
+            if !self.settings.vr_requested() {
+                return false;
+            }
             if self.xr.vr.is_some() {
                 self.xr.vr = None;
                 self.service_msg = Some(("Desktop mode".into(), 2.0));
             } else if let Some(renderer) = self.renderer.as_mut() {
                 let image_scale = renderer.start_xr(self.settings.vr_scale);
-                match crate::openxr::Vr::new(renderer, image_scale,
-                                             self.settings.vr_desktop_mirror) {
+                match crate::openxr::Vr::new(renderer, image_scale, self.settings.vr_desktop_mirror)
+                {
                     Ok(vr) => {
                         self.xr.vr = Some(vr);
                         self.service_msg = Some(("VR mode".into(), 2.0));
                     }
                     Err(e) => {
                         log::error!("OpenXR could not restart: {e:#}");
-                        self.service_msg = Some((omsi_ui::i18n::tr_fill_words("Could not start VR ({e})", &[("{e}", &e)]), 5.0));
+                        self.service_msg = Some((
+                            omsi_ui::i18n::tr_fill_words(
+                                "Could not start VR ({e})",
+                                &[("{e}", &e)],
+                            ),
+                            5.0,
+                        ));
                     }
                 }
             }
             self.menus.hover_key = None;
-            if matches!(self.menus.list_kind, Some(crate::game_lists::ListKind::Options(_))) {
+            if matches!(
+                self.menus.list_kind,
+                Some(crate::game_lists::ListKind::Options(_))
+            ) {
                 self.refresh_list();
             }
             return true;
         }
-        if self.xr.vr.is_none() { return false; }
+        if self.xr.vr.is_none() {
+            return false;
+        }
         match name {
             "vr_recenter" => {
                 self.xr.vr.as_mut().unwrap().recenter();
@@ -102,8 +122,15 @@ impl App {
             "vr_toggle_desktop_mirror" => {
                 let visible = self.xr.vr.as_mut().unwrap().toggle_desktop_mirror();
                 self.settings.vr_desktop_mirror = visible;
-                self.service_msg = Some((if visible { "Desktop VR mirror on" }
-                                         else { "Desktop VR mirror off" }.into(), 2.0));
+                self.service_msg = Some((
+                    if visible {
+                        "Desktop VR mirror on"
+                    } else {
+                        "Desktop VR mirror off"
+                    }
+                    .into(),
+                    2.0,
+                ));
             }
             "vr_toggle_navigator" => self.vr_nav_adjust("enabled", 1.0),
             "vr_position_navigator" => self.start_vr_nav_edit(),
@@ -115,14 +142,36 @@ impl App {
     /// The flashlight on or off (Alt+F): it lights what the view looks at, in every view.
     pub(crate) fn toggle_flashlight(&mut self) {
         self.cam.flashlight = !self.cam.flashlight;
-        let text = if self.cam.flashlight { "Flashlight on" } else { "Flashlight off" };
+        let text = if self.cam.flashlight {
+            "Flashlight on"
+        } else {
+            "Flashlight off"
+        };
         self.service_msg = Some((text.into(), 1.5));
+    }
+
+    /// `change_switch` (J): the points ahead of the train's leading end set to their next branch
+    /// (see `rail_drive::change_switch`), and what it did on the screen.
+    fn change_switch(&mut self) {
+        let msg = match (
+            self.player.as_ref(),
+            self.session.traffic.as_ref(),
+            self.world.clone(),
+        ) {
+            (Some(p), Some(t), Some(w)) if p.rail_bound => {
+                crate::rail_drive::change_switch(p, &t.net, &w, &mut self.session.scenery)
+            }
+            _ => omsi_ui::tr("There are no points to set from here").into_owned(),
+        };
+        self.service_msg = Some((msg, 3.0));
     }
 
     /// One of OMSI's global key actions; false when it is not one this game does.
     pub(crate) fn game_action(&mut self, name: &str) -> bool {
         #[cfg(windows)]
-        if self.vr_action(name) { return true; }
+        if self.vr_action(name) {
+            return true;
+        }
         match name {
             "sim_pause" => self.toggle_pause(),
             "pax_door_request" => self.request_passenger_door(),
@@ -146,9 +195,15 @@ impl App {
             }
             "screenshot" => self.take_screenshot(),
             "flashlight" => self.toggle_flashlight(),
+            "cruise_control" => self.toggle_cruise(),
             "clean_screen" => self.toggle_clean_screen(),
             "get_up" => {
-                if self.session.on_foot.as_ref().is_some_and(|f| f.inside.is_some()) {
+                if self
+                    .session
+                    .on_foot
+                    .as_ref()
+                    .is_some_and(|f| f.inside.is_some())
+                {
                     self.step_out();
                 } else if self.session.on_foot.is_none() && self.player.is_some() {
                     self.get_up();
@@ -161,7 +216,8 @@ impl App {
                 if let (Some(cam), Some(p)) = (self.camera.as_mut(), self.player.as_ref()) {
                     if self.view != "free" {
                         let h = (p.vehicle.heading as f32 - 90.0).to_radians();
-                        cam.position = p.vehicle.position + glam::DVec3::new(h.sin() as f64, h.cos() as f64, 0.0) * 2.5;
+                        cam.position = p.vehicle.position
+                            + glam::DVec3::new(h.sin() as f64, h.cos() as f64, 0.0) * 2.5;
                         cam.yaw = p.vehicle.heading as f32;
                         cam.pitch = 0.0;
                     }
@@ -178,7 +234,11 @@ impl App {
             // four-mode cycle, with the map in it, and stays where it is.
             "view_toggle_interior" => {
                 if !self.cam.ego {
-                    self.view = if self.view == "outside" { "driver".into() } else { "outside".into() };
+                    self.view = if self.view == "outside" {
+                        "driver".into()
+                    } else {
+                        "outside".into()
+                    };
                 }
             }
             "view_set_map" => {
@@ -188,7 +248,11 @@ impl App {
                     if let (Some(cam), Some(p)) = (self.camera.as_mut(), self.player.as_ref()) {
                         let h = (p.vehicle.heading as f32).to_radians();
                         cam.position = p.vehicle.position
-                            + glam::DVec3::new(-(h.sin() as f64) * 25.0, -(h.cos() as f64) * 25.0, 30.0);
+                            + glam::DVec3::new(
+                                -(h.sin() as f64) * 25.0,
+                                -(h.cos() as f64) * 25.0,
+                                30.0,
+                            );
                         cam.yaw = p.vehicle.heading as f32;
                         cam.pitch = -45.0;
                     }
@@ -206,12 +270,19 @@ impl App {
                 }
                 if let Some(p) = self.player.as_mut() {
                     let def = &p.vehicle.ty.def;
-                    let cam = if schedule { def.view_schedule } else { def.view_ticketselling };
+                    let cam = if schedule {
+                        def.view_schedule
+                    } else {
+                        def.view_ticketselling
+                    };
                     let n = def.cameras_driver.len().max(1);
                     let all = p.driver_camera_count().max(1);
                     // (the choice counts from the standard camera, over the coupled parts'
                     // cameras as well: `Player::driver_camera_slot`)
-                    if let Some(c) = cam.filter(|c| *c < def.cameras_driver.len()).map(|c| (c + all - def.camera_std % n) % all) {
+                    if let Some(c) = cam
+                        .filter(|c| *c < def.cameras_driver.len())
+                        .map(|c| (c + all - def.camera_std % n) % all)
+                    {
                         let back = p.cam_before_special.take();
                         if self.view == "driver" && p.cam_choice.0 == c {
                             p.cam_choice.0 = back.unwrap_or(0);
@@ -249,7 +320,9 @@ impl App {
                     self.cam.view_zoom.remove(&self.view);
                 }
                 #[cfg(windows)]
-                if let Some(vr) = self.xr.vr.as_mut() { vr.recenter(); }
+                if let Some(vr) = self.xr.vr.as_mut() {
+                    vr.recenter();
+                }
             }
             // (Space in Inputs/keyboard.cfg: every view looks ahead again, and back to the
             // standard camera - "center")
@@ -264,6 +337,9 @@ impl App {
                     && (self.cam.look != (0.0, 0.0) || self.cam.view_zoom.contains_key(&self.view));
                 if let Some(p) = self.player.as_mut() {
                     p.cam_choice = (0, 0);
+                    if let Some(k) = p.vehicle.active_cab {
+                        crate::on_foot::seat_in_cab(p, Some(k));
+                    }
                 }
                 self.cam.orbit = ORBIT_DEFAULT;
                 if eyed {
@@ -295,28 +371,65 @@ impl App {
                     "outside" => 2,
                     _ => 3,
                 };
-                let next = if name == "view_toggle_viewpoint" { (mode + 1) % 4 } else { (mode + 3) % 4 };
-                return self.game_action(["view_set_driver", "view_set_passenger", "view_set_outside", "view_set_map"][next]);
+                let next = if name == "view_toggle_viewpoint" {
+                    (mode + 1) % 4
+                } else {
+                    (mode + 3) % 4
+                };
+                return self.game_action(
+                    [
+                        "view_set_driver",
+                        "view_set_passenger",
+                        "view_set_outside",
+                        "view_set_map",
+                    ][next],
+                );
             }
             // a manual gearbox (Ctrl+Up / Ctrl+Down unless moved; a controller's button)
             "gear_up" | "gear_down" => {
                 self.shift_gear(name == "gear_up");
             }
+            "change_switch" => self.change_switch(),
             "view_interiorcam_plus" | "view_interiorcam_minus" => {
-                let Some(p) = self.player.as_mut() else { return true };
+                let Some(p) = self.player.as_mut() else {
+                    return true;
+                };
+                if self.view == "outside" {
+                    let back = name == "view_interiorcam_minus";
+                    if let Some(msg) = crate::on_foot::change_driving_end(p, back) {
+                        self.service_msg = Some((msg, 2.5));
+                        self.sync_view_look();
+                    }
+                    return true;
+                }
                 // (the interior cameras only cycle in the interior: from outside the keys
                 // would change an invisible camera)
                 if !matches!(self.view.as_str(), "driver" | "pax") {
                     return true;
                 }
-                let (count, pax) = if self.view == "pax" { (p.pax_camera_count(), true) } else { (p.driver_camera_count(), false) };
+                let (count, pax) = if self.view == "pax" {
+                    (p.pax_camera_count(), true)
+                } else {
+                    (p.driver_camera_count(), false)
+                };
                 if count > 1 {
-                    let c = if pax { &mut p.cam_choice.1 } else { &mut p.cam_choice.0 };
-                    *c = if name == "view_interiorcam_minus" { (*c + count - 1) % count } else { (*c + 1) % count };
+                    let c = if pax {
+                        &mut p.cam_choice.1
+                    } else {
+                        &mut p.cam_choice.0
+                    };
+                    *c = if name == "view_interiorcam_minus" {
+                        (*c + count - 1) % count
+                    } else {
+                        (*c + 1) % count
+                    };
                     let n = *c + 1;
                     // (the camera left keeps its look, the one taken finds its own again)
                     self.sync_view_look();
-                    let message = format!("{} camera {n} of {count}", if pax { "Passenger" } else { "Driver" });
+                    let message = format!(
+                        "{} camera {n} of {count}",
+                        if pax { "Passenger" } else { "Driver" }
+                    );
                     self.service_msg = Some((omsi_ui::tr(&message).into_owned(), 2.0));
                 }
             }
@@ -325,7 +438,10 @@ impl App {
             "open_menue" => self.quick_menu_key(),
             // the radio's own keys, for a keyboard, a wheel's or a pad's buttons (#1293, #1462)
             "radio_power" => {
-                let msg = self.sound.radio.toggle_power(self.player.as_ref().map(|p| &p.vehicle));
+                let msg = self
+                    .sound
+                    .radio
+                    .toggle_power(self.player.as_ref().map(|p| &p.vehicle));
                 self.service_msg = Some((msg, 3.0));
             }
             "radio_next" | "radio_previous" | "radio_volume_up" | "radio_volume_down" => {
@@ -339,20 +455,34 @@ impl App {
             // the free camera's keys handed to the bus and back (#1779)
             "view_camera_keys_toggle" => {
                 self.input.camera_keys_off = !self.input.camera_keys_off;
-                let msg = if self.input.camera_keys_off { "Camera keys off: in the free view the keys work the bus, the mouse turns the camera" } else { "Camera keys on: W, A, S, D, Q, E and the arrows fly the free camera" };
+                let msg = if self.input.camera_keys_off {
+                    "Camera keys off: in the free view the keys work the bus, the mouse turns the camera"
+                } else {
+                    "Camera keys on: W, A, S, D, Q, E and the arrows fly the free camera"
+                };
                 self.service_msg = Some((msg.into(), 4.0));
             }
             // the zoom keys work while held: the frame reads them (`view_keys::zoom_keys`)
             "view_zoom_in" | "view_zoom_out" | "view_zoom_hold" => {}
             "toggel_mouse_ctrl" => {
                 self.set_mouse_drive(!self.input.mouse_drive);
-                let msg = if self.input.mouse_drive { "Mouse steering on: across steers, up is the throttle, down the brake (O turns it off)" } else { "Mouse steering off" };
+                let msg = if self.input.mouse_drive {
+                    "Mouse steering on: across steers, up is the throttle, down the brake (O turns it off)"
+                } else {
+                    "Mouse steering off"
+                };
                 self.service_msg = Some((msg.into(), 4.0));
             }
             "toggel_ctrler" => {
                 if let Some(c) = self.input.controllers.as_mut() {
                     c.enabled = !c.enabled;
-                    let msg = if !c.any() { "No game controller found" } else if c.enabled { "Game controller on" } else { "Game controller off" };
+                    let msg = if !c.any() {
+                        "No game controller found"
+                    } else if c.enabled {
+                        "Game controller on"
+                    } else {
+                        "Game controller off"
+                    };
                     self.service_msg = Some((msg.into(), 3.0));
                 }
             }
@@ -375,24 +505,62 @@ impl App {
 
     pub(crate) fn shift_gear(&mut self, up: bool) -> bool {
         let names: &[&str] = if up {
-            &["kw_s_plus", "upshift", "gear_up", "gearup", "shift_up", "gang_hoch", "schalten_hoch", "manual_up"]
+            &[
+                "kw_s_plus",
+                "upshift",
+                "gear_up",
+                "gearup",
+                "shift_up",
+                "gang_hoch",
+                "schalten_hoch",
+                "manual_up",
+            ]
         } else {
-            &["kw_s_minus", "downshift", "gear_down", "geardown", "shift_down", "gang_runter", "schalten_runter", "manual_down"]
+            &[
+                "kw_s_minus",
+                "downshift",
+                "gear_down",
+                "geardown",
+                "shift_down",
+                "gang_runter",
+                "schalten_runter",
+                "manual_down",
+            ]
         };
-        let Some(p) = self.player.as_mut() else { return false };
+        let Some(p) = self.player.as_mut() else {
+            return false;
+        };
         // a gear lever with a trigger per gate (`kw_s_1`..`kw_s_10`, `kw_s_N`, `kw_s_R`: the
         // LiAZ MKPP - its `kw_s_plus` never fires, the script's condition is broken): the
         // next gate from the gear engaged, with the clutch down as the gates want it
         if p.vehicle.ty.program.trigger("kw_s_1").is_some() {
-            let Some(cur) = p.gate_gear() else { return false };
+            let Some(cur) = p.gate_gear() else {
+                return false;
+            };
             let to = if up { cur + 1 } else { cur - 1 };
             if !p.shift_gate_to(to) {
                 return false;
             }
-            self.service_msg = Some((omsi_ui::i18n::tr_fill("Gear {gear}", &[("{gear}", &match to { 0 => "N".to_string(), -1 => "R".to_string(), n => n.to_string() })]), 1.5));
+            self.service_msg = Some((
+                omsi_ui::i18n::tr_fill(
+                    "Gear {gear}",
+                    &[(
+                        "{gear}",
+                        &match to {
+                            0 => "N".to_string(),
+                            -1 => "R".to_string(),
+                            n => n.to_string(),
+                        },
+                    )],
+                ),
+                1.5,
+            ));
             return true;
         }
-        let Some(n) = names.iter().find(|n| p.vehicle.ty.program.trigger(n).is_some()) else {
+        let Some(n) = names
+            .iter()
+            .find(|n| p.vehicle.ty.program.trigger(n).is_some())
+        else {
             self.service_msg = Some(("This vehicle has no manual gearbox to shift".into(), 2.0));
             return false;
         };
@@ -425,8 +593,23 @@ impl App {
             #[cfg(windows)]
             self.reset_vr_pointer();
         }
-        self.input.mouse_steer = (self.player.as_ref().map(|p| p.vehicle.physics.controls.steering).unwrap_or(0.0), 1.0);
-        self.input.mouse_pedals = self.player.as_ref().map(|p| (p.vehicle.physics.controls.throttle, p.vehicle.physics.controls.brake)).unwrap_or((0.0, 0.0));
+        self.input.mouse_steer = (
+            self.player
+                .as_ref()
+                .map(|p| p.vehicle.physics.controls.steering)
+                .unwrap_or(0.0),
+            1.0,
+        );
+        self.input.mouse_pedals = self
+            .player
+            .as_ref()
+            .map(|p| {
+                (
+                    p.vehicle.physics.controls.throttle,
+                    p.vehicle.physics.controls.brake,
+                )
+            })
+            .unwrap_or((0.0, 0.0));
         if self.settings.mouse_steering != on {
             self.settings.mouse_steering = on;
             crate::game_lists::remember_setting("mouse_steering", if on { "1" } else { "0" });
@@ -439,6 +622,12 @@ impl App {
         if self.settings.info_bar != on {
             self.settings.info_bar = on;
             crate::game_lists::remember_setting("info_bar", if on { "1" } else { "0" });
+        }
+    }
+
+    pub(crate) fn toggle_cruise(&mut self) {
+        if let Some(p) = self.player.as_mut() {
+            self.service_msg = Some((p.toggle_cruise(), 2.5));
         }
     }
 
@@ -474,12 +663,23 @@ impl App {
     /// OMSI's `screenshot`: the picture into the content folder's `Screenshots`, named by the
     /// date and time.
     pub(crate) fn take_screenshot(&mut self) {
-        let dir = crate::startup::content_dir().unwrap_or_else(|| self.args.root.clone()).join("Screenshots");
+        let dir = crate::startup::content_dir()
+            .unwrap_or_else(|| self.args.root.clone())
+            .join("Screenshots");
         let _ = std::fs::create_dir_all(&dir);
-        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         let path = dir.join(format!("omsi_{secs}.png"));
         if !cfg!(target_os = "android") {
-            self.service_msg = Some((omsi_ui::i18n::tr_fill("Screenshot: {path}", &[("{path}", &path.display().to_string())]), 4.0));
+            self.service_msg = Some((
+                omsi_ui::i18n::tr_fill(
+                    "Screenshot: {path}",
+                    &[("{path}", &path.display().to_string())],
+                ),
+                4.0,
+            ));
         }
         self.perf.shot = Some((path, false));
     }
@@ -514,19 +714,36 @@ mod gear_lever_tests {
     #[test]
     fn the_gear_is_read_where_the_gates_store_it() {
         let program = |vars: &str, osc: &str| {
-            let dir = std::env::temp_dir().join(format!("omsi_gates_{}_{}", std::process::id(), vars.len()));
+            let dir = std::env::temp_dir().join(format!(
+                "omsi_gates_{}_{}",
+                std::process::id(),
+                vars.len()
+            ));
             std::fs::create_dir_all(&dir).unwrap();
             let (vl, sc) = (dir.join("varlist.txt"), dir.join("antrieb.osc"));
             std::fs::write(&vl, vars).unwrap();
             std::fs::write(&sc, osc).unwrap();
-            let p = omsi_script::compile(&omsi_script::CompileInput { varlists: vec![vl], scripts: vec![sc], ..Default::default() });
+            let p = omsi_script::compile(&omsi_script::CompileInput {
+                varlists: vec![vl],
+                scripts: vec![sc],
+                ..Default::default()
+            });
             let _ = std::fs::remove_dir_all(&dir);
             p
         };
-        let stock = program("antrieb_getr_gang\n", "{trigger:kw_s_1_fest}\n{trigger:kw_s_1}\n1 (S.L.antrieb_getr_gang)\n{end}\n{end}\n{trigger:kw_s_2}\n2 (S.L.antrieb_getr_gang)\n{end}\n");
-        assert_eq!(super::gate_gear_var(&stock).as_deref(), Some("antrieb_getr_gang"));
+        let stock = program(
+            "antrieb_getr_gang\n",
+            "{trigger:kw_s_1_fest}\n{trigger:kw_s_1}\n1 (S.L.antrieb_getr_gang)\n{end}\n{end}\n{trigger:kw_s_2}\n2 (S.L.antrieb_getr_gang)\n{end}\n",
+        );
+        assert_eq!(
+            super::gate_gear_var(&stock).as_deref(),
+            Some("antrieb_getr_gang")
+        );
         // a lever moved by every gate is not the gear
-        let own = program("lever_moved\nmy_gear\n", "{trigger:kw_s_1}\n1 (S.L.lever_moved)\n1 (S.L.my_gear)\n{end}\n{trigger:kw_s_2}\n1 (S.L.lever_moved)\n2 (S.L.my_gear)\n{end}\n");
+        let own = program(
+            "lever_moved\nmy_gear\n",
+            "{trigger:kw_s_1}\n1 (S.L.lever_moved)\n1 (S.L.my_gear)\n{end}\n{trigger:kw_s_2}\n1 (S.L.lever_moved)\n2 (S.L.my_gear)\n{end}\n",
+        );
         assert_eq!(super::gate_gear_var(&own).as_deref(), Some("my_gear"));
     }
 }

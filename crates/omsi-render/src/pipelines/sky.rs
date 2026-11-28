@@ -9,8 +9,15 @@ pub(crate) struct SkyBase {
     pub layout: wgpu::BindGroupLayout,
     pub cloud_shape_view: wgpu::TextureView,
     pub cloud_detail_view: wgpu::TextureView,
+    /// The clouds' base volume and curl map: read by the passes that march the clouds (the
+    /// sky cube and the screen's clouds, cloud_pass.rs), not by the dome.
+    pub cloud_base_view: wgpu::TextureView,
+    pub cloud_curl_view: wgpu::TextureView,
     pub cloud_sampler: wgpu::Sampler,
-    pub cloud_shape_cpu: Vec<u8>,
+    pub moon_view: wgpu::TextureView,
+    pub cloud_shape_cpu: crate::lighting::CloudCpu,
+    /// Where the screen's clouds were traced from (`CloudView`, binding 12).
+    pub cloud_view_buf: wgpu::Buffer,
     /// The classic sky's weather (`VanillaSkyUniform`, binding 10).
     pub vanilla_buf: wgpu::Buffer,
     pub shader: wgpu::ShaderModule,
@@ -20,7 +27,12 @@ pub(crate) struct SkyBase {
 impl SkyBase {
     /// With no enhanced pass, use the vanilla sky module and placeholder noise textures.
     /// This includes ANGLE's texture-unit fallback, not only the launcher's preview.
-    pub(crate) fn new(device: &wgpu::Device, queue: &wgpu::Queue, camera_layout: &wgpu::BindGroupLayout, enhanced: bool) -> SkyBase {
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        camera_layout: &wgpu::BindGroupLayout,
+        enhanced: bool,
+    ) -> SkyBase {
         // sky dome
         let float_2d = wgpu::TextureSampleType::Float { filterable: true };
         let sky_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -38,25 +50,55 @@ impl SkyBase {
                 float_texture_entry(9),
                 uniform_entry(10, wgpu::ShaderStages::FRAGMENT),
                 float_texture_entry(11),
+                uniform_entry(12, wgpu::ShaderStages::FRAGMENT),
+                float_texture_entry(13),
             ],
         });
-        let (cloud_shape_view, cloud_detail_view, cloud_sampler, cloud_shape_cpu) = cloud_noise_textures(device, queue, enhanced);
+        let clouds = cloud_noise_textures(device, queue, enhanced);
         log::info!("renderer: compiling the sky and clouds shaders");
-        let sky_shader = compile_shader(device, wgpu::ShaderModuleDescriptor {
-            label: Some("sky"),
-            source: wgpu::ShaderSource::Wgsl(shader_source(enhanced).into()),
-        });
+        let sky_shader = compile_shader(
+            device,
+            wgpu::ShaderModuleDescriptor {
+                label: Some("sky"),
+                source: wgpu::ShaderSource::Wgsl(shader_source(enhanced).into()),
+            },
+        );
         let sky_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("sky"),
             bind_group_layouts: &[Some(camera_layout), Some(&sky_layout)],
             immediate_size: 0,
         });
-        let vanilla_buf = uniform_buffer(device, "vanilla sky", std::mem::size_of::<VanillaSkyUniform>() as u64);
-        SkyBase { layout: sky_layout, cloud_shape_view, cloud_detail_view, cloud_sampler, cloud_shape_cpu, vanilla_buf, shader: sky_shader, pl: sky_pl }
+        let vanilla_buf = uniform_buffer(
+            device,
+            "vanilla sky",
+            std::mem::size_of::<VanillaSkyUniform>() as u64,
+        );
+        let cloud_view_buf = uniform_buffer(
+            device,
+            "cloud view",
+            std::mem::size_of::<crate::cloud_pass::CloudView>() as u64,
+        );
+        SkyBase {
+            layout: sky_layout,
+            cloud_shape_view: clouds.weather,
+            cloud_detail_view: clouds.detail,
+            cloud_base_view: clouds.base,
+            cloud_curl_view: clouds.curl,
+            cloud_sampler: clouds.sampler,
+            moon_view: crate::sky::moon_texture(device, queue),
+            cloud_shape_cpu: clouds.cpu,
+            cloud_view_buf,
+            vanilla_buf,
+            shader: sky_shader,
+            pl: sky_pl,
+        }
     }
 
     pub(crate) fn pipeline_base(&self) -> SkyPipelineBase {
-        SkyPipelineBase { shader: self.shader.clone(), pl: self.pl.clone() }
+        SkyPipelineBase {
+            shader: self.shader.clone(),
+            pl: self.pl.clone(),
+        }
     }
 }
 
@@ -68,7 +110,13 @@ pub(crate) struct SkyPipelineBase {
 }
 
 impl SkyPipelineBase {
-    pub(crate) fn pipeline(&self, device: &wgpu::Device, f: wgpu::TextureFormat, fs: &str, msaa: u32) -> wgpu::RenderPipeline {
+    pub(crate) fn pipeline(
+        &self,
+        device: &wgpu::Device,
+        f: wgpu::TextureFormat,
+        fs: &str,
+        msaa: u32,
+    ) -> wgpu::RenderPipeline {
         self.pipeline_for(device, f, fs, msaa, rt_gbuf())
     }
 
@@ -85,40 +133,48 @@ impl SkyPipelineBase {
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &SKY_ATTRIBUTES,
         };
-        compile_pipeline(device, &wgpu::RenderPipelineDescriptor {
-            label: Some("sky"),
-            layout: Some(&self.pl),
-            vertex: wgpu::VertexState {
-                module: &self.shader,
-                entry_point: Some("vs_main"),
-                buffers: &[sky_vertex],
-                compilation_options: Default::default(),
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                front_face: wgpu::FrontFace::Ccw,
-                ..Default::default()
-            },
-            // (the dome lies on the far plane: over a cleared depth it covers everything,
-            // over laid depth only what is still empty)
-            depth_stencil: Some(depth_test(wgpu::CompareFunction::GreaterEqual)),
-            multisample: wgpu::MultisampleState {
-                count: msaa,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &self.shader,
-                entry_point: Some(fs),
-                targets: &color_targets_for(f, None, wgpu::ColorWrites::COLOR, false, false,
+        compile_pipeline(
+            device,
+            &wgpu::RenderPipelineDescriptor {
+                label: Some("sky"),
+                layout: Some(&self.pl),
+                vertex: wgpu::VertexState {
+                    module: &self.shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[sky_vertex],
+                    compilation_options: Default::default(),
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    ..Default::default()
+                },
+                // (the dome lies on the far plane: over a cleared depth it covers everything,
+                // over laid depth only what is still empty)
+                depth_stencil: Some(depth_test(wgpu::CompareFunction::GreaterEqual)),
+                multisample: wgpu::MultisampleState {
+                    count: msaa,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &self.shader,
+                    entry_point: Some(fs),
+                    targets: &color_targets_for(
+                        f,
+                        None,
+                        wgpu::ColorWrites::COLOR,
+                        false,
+                        false,
                         surfaces,
                     ),
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: crate::pipeline_cache::get(device).as_ref(),
-        })
+                    compilation_options: Default::default(),
+                }),
+                multiview_mask: None,
+                cache: crate::pipeline_cache::get(device).as_ref(),
+            },
+        )
     }
 }
 
@@ -126,7 +182,11 @@ fn shader_source(enhanced: bool) -> String {
     if enhanced {
         sky_shader_source()
     } else {
-        [include_str!("../colour.wgsl"), include_str!("../sky.wgsl")].join("\n")
+        [
+            crate::shaders::hot_wgsl(include_str!("../colour.wgsl"), "colour.wgsl"),
+            crate::shaders::hot_wgsl(include_str!("../sky.wgsl"), "sky.wgsl"),
+        ]
+        .join("\n")
     }
 }
 
@@ -185,7 +245,10 @@ mod tests {
 }
 
 /// The sky's sampler and the dome's vertex and index buffers (and index count).
-pub(crate) fn dome(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Sampler, (wgpu::Buffer, wgpu::Buffer, u32)) {
+pub(crate) fn dome(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> (wgpu::Sampler, (wgpu::Buffer, wgpu::Buffer, u32)) {
     let sky_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         address_mode_u: wgpu::AddressMode::Repeat,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -210,7 +273,19 @@ pub(crate) fn dome(device: &wgpu::Device, queue: &wgpu::Queue) -> (wgpu::Sampler
             si.extend_from_slice(&[a, b, a + 1, a + 1, b, b + 1]);
         }
     }
-    let sky_vb = buffer_init(device, queue, Some("sky vb"), bytemuck::cast_slice(&sv), wgpu::BufferUsages::VERTEX);
-    let sky_ib = buffer_init(device, queue, Some("sky ib"), bytemuck::cast_slice(&si), wgpu::BufferUsages::INDEX);
+    let sky_vb = buffer_init(
+        device,
+        queue,
+        Some("sky vb"),
+        bytemuck::cast_slice(&sv),
+        wgpu::BufferUsages::VERTEX,
+    );
+    let sky_ib = buffer_init(
+        device,
+        queue,
+        Some("sky ib"),
+        bytemuck::cast_slice(&si),
+        wgpu::BufferUsages::INDEX,
+    );
     (sky_sampler, (sky_vb, sky_ib, si.len() as u32))
 }

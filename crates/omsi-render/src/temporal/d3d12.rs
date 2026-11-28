@@ -1,9 +1,9 @@
 //! What both upscalers need of Direct3D 12 beside wgpu.
 
 use anyhow::{Context, Result};
-use windows::core::Interface;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D12::*;
+use windows::core::Interface;
 
 /// Until `fence` reaches `value` (at once after a device is lost: its fences read the most).
 pub(super) fn wait_fence(fence: &ID3D12Fence, value: u64) -> bool {
@@ -19,7 +19,10 @@ pub(super) fn game_dir() -> std::path::PathBuf {
 
 pub(super) fn wide(s: &std::path::Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
-    s.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+    s.as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 struct Slot {
@@ -37,28 +40,51 @@ pub(super) struct ListRing {
 
 impl ListRing {
     pub(super) fn new(device: &ID3D12Device) -> Result<ListRing> {
-        let fence: ID3D12Fence = unsafe { device.CreateFence(0, D3D12_FENCE_FLAG_NONE) }.context("creating a fence")?;
+        let fence: ID3D12Fence =
+            unsafe { device.CreateFence(0, D3D12_FENCE_FLAG_NONE) }.context("creating a fence")?;
         let slots = (0..3)
             .map(|_| -> Result<Slot> {
-                let allocator: ID3D12CommandAllocator = unsafe { device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT) }?;
-                let list: ID3D12GraphicsCommandList = unsafe { device.CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, &allocator, None::<&ID3D12PipelineState>) }?;
+                let allocator: ID3D12CommandAllocator =
+                    unsafe { device.CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT) }?;
+                let list: ID3D12GraphicsCommandList = unsafe {
+                    device.CreateCommandList(
+                        0,
+                        D3D12_COMMAND_LIST_TYPE_DIRECT,
+                        &allocator,
+                        None::<&ID3D12PipelineState>,
+                    )
+                }?;
                 unsafe { list.Close() }?;
-                Ok(Slot { allocator, list, done_at: 0 })
+                Ok(Slot {
+                    allocator,
+                    list,
+                    done_at: 0,
+                })
             })
             .collect::<Result<Vec<_>>>()
             .context("creating command lists")?;
-        Ok(ListRing { slots, next: 0, fence, value: 0 })
+        Ok(ListRing {
+            slots,
+            next: 0,
+            fence,
+            value: 0,
+        })
     }
 
     pub(super) fn begin(&mut self) -> Result<ID3D12GraphicsCommandList> {
         let slot = &mut self.slots[self.next];
         if unsafe { self.fence.GetCompletedValue() } < slot.done_at {
             // (a null event handle makes this call block until the fence is reached)
-            unsafe { self.fence.SetEventOnCompletion(slot.done_at, HANDLE::default()) }.context("waiting for a command list")?;
+            unsafe {
+                self.fence
+                    .SetEventOnCompletion(slot.done_at, HANDLE::default())
+            }
+            .context("waiting for a command list")?;
         }
         unsafe {
             slot.allocator.Reset()?;
-            slot.list.Reset(&slot.allocator, None::<&ID3D12PipelineState>)?;
+            slot.list
+                .Reset(&slot.allocator, None::<&ID3D12PipelineState>)?;
         }
         Ok(slot.list.clone())
     }
@@ -78,7 +104,10 @@ impl ListRing {
 
     pub(super) fn wait(&self) {
         if unsafe { self.fence.GetCompletedValue() } < self.value {
-            let _ = unsafe { self.fence.SetEventOnCompletion(self.value, HANDLE::default()) };
+            let _ = unsafe {
+                self.fence
+                    .SetEventOnCompletion(self.value, HANDLE::default())
+            };
         }
     }
 }

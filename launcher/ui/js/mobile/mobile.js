@@ -24,6 +24,7 @@ import { GamesPage } from '../pages/games.js';
 import { TutorialsPage } from '../pages/tutorials.js';
 import { SetupPage } from '../pages/setup.js';
 import { AddonsPage } from '../pages/addons.js';
+import { PluginsPage } from '../pages/plugins.js';
 
 const TABS = [
   ['drive', 'Drive', 'bus'],
@@ -37,12 +38,12 @@ const TABS = [
 export function MobileApp() {
   const s = useStore();
   // (the keys and the game controllers open from Settings, #2308: they fell back to Drive)
-  const page = TABS.some((x) => x[0] === s.page) || ['games', 'tutorials', 'setup', 'controls', 'addons', 'troubleshoot'].includes(s.page) ? s.page : 'drive';
-  const Body = { drive: MobileDrive, multiplayer: MultiplayerPage, profile: ProfilePage, mods: ModsPage, troubleshoot: TroubleshootPage, settings: SettingsPage, more: More, games: GamesPage, tutorials: TutorialsPage, setup: SetupPage, controls: ControlsPage, addons: AddonsPage }[page];
+  const page = TABS.some((x) => x[0] === s.page) || ['games', 'tutorials', 'setup', 'controls', 'addons', 'plugins', 'troubleshoot'].includes(s.page) ? s.page : 'drive';
+  const Body = { drive: MobileDrive, multiplayer: MultiplayerPage, profile: ProfilePage, mods: ModsPage, troubleshoot: TroubleshootPage, settings: SettingsPage, more: More, games: GamesPage, tutorials: TutorialsPage, setup: SetupPage, controls: ControlsPage, addons: AddonsPage, plugins: PluginsPage }[page];
   const running = s.poll.instances?.length || 0;
   return html`<div class="m-shell">
     <nav class="m-rail">
-      ${TABS.map(([id, label, icon]) => html`<button class=${'m-tab' + (page === id || (id === 'more' && ['games', 'tutorials', 'setup', 'addons', 'troubleshoot'].includes(page)) || (id === 'settings' && page === 'controls') ? ' on' : '')} onClick=${() => set({ page: id })}>
+      ${TABS.map(([id, label, icon]) => html`<button class=${'m-tab' + (page === id || (id === 'more' && ['games', 'tutorials', 'setup', 'addons', 'plugins', 'troubleshoot'].includes(page)) || (id === 'settings' && page === 'controls') ? ' on' : '')} onClick=${() => set({ page: id })}>
         <${Icon} name=${icon} size=${22} /><span>${t(label)}</span>${id === 'more' && running > 0 && html`<i class="m-dot"></i>`}
       </button>`)}
     </nav>
@@ -64,6 +65,7 @@ function More() {
       ${item('tutorials', 'Tutorials', 'book')}
       ${item('setup', 'Setup', 'folder')}
       ${item('addons', 'Add-ons', 'globe')}
+      ${item('plugins', 'Plugins', 'power')}
     </div>
     <p class="m-foot">openOMSI ${s.boot?.version || ''}</p>
   </div>`;
@@ -134,6 +136,7 @@ function MobileDrive() {
       <div class="m-group">
         ${row('map', 'map', 'Map', mapLabel, joined ? t('Set by {server}', { server: srv.name || c.lan_addr }) : null, joined)}
         ${row('bus', 'bus', 'Bus', v ? v.name : s.vehicles || !s.boot?.root ? '-' : html`<${Spinner} />`)}
+        ${v && row('number', 'ticket', 'Fleet number', c.number || t('Automatic'))}
         ${v && row('paint', 'sun', 'Paint', c.paint || v.default_paint || t('Standard'))}
         ${v && row('plate', 'badge', 'Number plate', c.plate || t('Automatic'))}
       </div>
@@ -175,8 +178,8 @@ const rt = (c) => (realTime() || realDate() ? t('Follows the computer\'s clock (
 
 /** A full-screen sheet: a title bar with Back, and what to choose from. */
 function Sheet({ which, close }) {
-  const titles = { map: 'Choose a map', bus: 'Choose a bus', paint: 'Paint', line: 'Line', tour: 'Tour', trip: 'Trips of the tour', entry: 'Start at', time: 'Time and date', weather: 'Weather', plate: 'Number plate' };
-  const Body = { map: MapSheet, bus: BusSheet, paint: PaintSheet, line: LineSheet, tour: TourSheet, trip: TripSheet, entry: EntrySheet, time: TimeSheet, weather: WeatherSheet, plate: PlateSheet }[which];
+  const titles = { map: 'Choose a map', bus: 'Choose a bus', paint: 'Paint', number: 'Fleet number', line: 'Line', tour: 'Tour', trip: 'Trips of the tour', entry: 'Start at', time: 'Time and date', weather: 'Weather', plate: 'Number plate' };
+  const Body = { map: MapSheet, bus: BusSheet, paint: PaintSheet, number: NumberSheet, line: LineSheet, tour: TourSheet, trip: TripSheet, entry: EntrySheet, time: TimeSheet, weather: WeatherSheet, plate: PlateSheet }[which];
   useEffect(() => {
     // the phone's Back closes the sheet
     const k = (e) => (e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack') && close();
@@ -315,6 +318,20 @@ function TimeSheet() {
 function PlateSheet() {
   const c = useStore().choice;
   return html`<input class="m-search" value=${c.plate || ''} placeholder=${t('Automatic')} onInput=${(e) => choose({ plate: e.currentTarget.value })} />`;
+}
+
+/** The bus's fleet number (its prefix): typed, or one of the numbers the bus itself lists. Set
+ * before the session starts it reaches every vehicle, even one that cannot change it any more
+ * once it stands on the map (#4056). */
+function NumberSheet({ close }) {
+  const s = useStore();
+  const v = curBus();
+  const numbers = v?.numbers || [];
+  const number = s.choice.number || '';
+  return html`<div>
+    <input class="m-search" value=${number} placeholder=${t('Automatic')} onInput=${(e) => choose({ number: e.currentTarget.value })} />
+    ${numbers.map(([n, p]) => pick(number === n, () => (choose({ number: n }), close()), html`<span class="m-pick-text"><b>${n}</b>${p && html`<small>${p}</small>`}</span>`))}
+  </div>`;
 }
 
 function WeatherSheet({ close }) {

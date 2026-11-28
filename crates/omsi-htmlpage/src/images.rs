@@ -14,6 +14,11 @@ const MAX_SRC_PX: u64 = 16 * 1024 * 1024;
 const MAX_DST_PX: u64 = 4 * 1024 * 1024;
 /// Memory the resized copies may hold together; the lot is dropped when it is exceeded.
 const SCALED_BUDGET: usize = 64 * 1024 * 1024;
+const SCALED_ENTRIES: usize = 512;
+/// Decoded original pictures need a budget too: an animated display can
+/// otherwise retain every file it has ever used for the entire journey.
+const ORIGINAL_BUDGET: usize = 64 * 1024 * 1024;
+const ORIGINAL_ENTRIES: usize = 512;
 
 /// A decoded picture: RGBA8, straight alpha, top-left origin.
 pub(crate) struct Img {
@@ -26,29 +31,122 @@ pub(crate) struct Img {
 
 #[derive(Default)]
 struct Scaled {
-    map: HashMap<(String, u32, u32), Arc<Img>>,
+    map: HashMap<(String, u32, u32), (Arc<Img>, u64)>,
     bytes: usize,
+    clock: u64,
+}
+
+impl Scaled {
+    fn get(&mut self, key: &(String, u32, u32)) -> Option<Arc<Img>> {
+        self.clock = self.clock.wrapping_add(1);
+        let (img, used) = self.map.get_mut(key)?;
+        *used = self.clock;
+        Some(img.clone())
+    }
+
+    fn insert_limited(&mut self, key: (String, u32, u32), img: Arc<Img>) {
+        let size = img.rgba.len();
+        if size > SCALED_BUDGET {
+            return;
+        }
+        self.clock = self.clock.wrapping_add(1);
+        if let Some((old, _)) = self.map.insert(key, (img, self.clock)) {
+            self.bytes = self.bytes.saturating_sub(old.rgba.len());
+        }
+        self.bytes = self.bytes.saturating_add(size);
+        while self.bytes > SCALED_BUDGET || self.map.len() > SCALED_ENTRIES {
+            let oldest = self
+                .map
+                .iter()
+                .min_by_key(|(_, (_, used))| *used)
+                .map(|(key, _)| key.clone());
+            let Some(oldest) = oldest else { break };
+            if let Some((old, _)) = self.map.remove(&oldest) {
+                self.bytes = self.bytes.saturating_sub(old.rgba.len());
+            }
+        }
+    }
+}
+
+/// Originals and missing-file lookups, with bounded memory and LRU timestamps.
+#[derive(Default)]
+struct Originals {
+    map: HashMap<String, (Option<Arc<Img>>, u64)>,
+    bytes: usize,
+    clock: u64,
+}
+
+impl Originals {
+    fn get(&mut self, key: &str) -> Option<Option<Arc<Img>>> {
+        self.clock = self.clock.wrapping_add(1);
+        let (image, used) = self.map.get_mut(key)?;
+        *used = self.clock;
+        Some(image.clone())
+    }
+
+    fn insert_limited(
+        &mut self,
+        key: String,
+        image: Option<Arc<Img>>,
+        budget: usize,
+        max_entries: usize,
+    ) {
+        let size = image.as_ref().map_or(0, |i| i.rgba.len());
+        // Oversized originals can still be painted, just not cached forever.
+        if size > budget || max_entries == 0 {
+            return;
+        }
+        self.clock = self.clock.wrapping_add(1);
+        if let Some((previous, _)) = self.map.insert(key, (image, self.clock)) {
+            self.bytes = self
+                .bytes
+                .saturating_sub(previous.as_ref().map_or(0, |i| i.rgba.len()));
+        }
+        self.bytes += size;
+        while self.bytes > budget || self.map.len() > max_entries {
+            let oldest = self
+                .map
+                .iter()
+                .min_by_key(|(_, (_, at))| *at)
+                .map(|(key, _)| key.clone());
+            let Some(oldest) = oldest else { break };
+            if let Some((image, _)) = self.map.remove(&oldest) {
+                self.bytes = self
+                    .bytes
+                    .saturating_sub(image.as_ref().map_or(0, |i| i.rgba.len()));
+            }
+        }
+    }
 }
 
 pub(crate) struct ImageStore {
     dirs: Vec<PathBuf>,
-    files: Mutex<HashMap<String, Option<Arc<Img>>>>,
+    files: Mutex<Originals>,
     scaled: Mutex<Scaled>,
 }
 
 impl ImageStore {
     /// `dirs` are searched in order for a relative path (the page's folder first).
     pub(crate) fn new(dirs: Vec<PathBuf>) -> ImageStore {
-        ImageStore { dirs, files: Mutex::new(HashMap::new()), scaled: Mutex::new(Scaled::default()) }
+        ImageStore {
+            dirs,
+            files: Mutex::new(Originals::default()),
+            scaled: Mutex::new(Scaled::default()),
+        }
     }
 
     /// The picture behind `src`, `None` when there is none.
     pub(crate) fn get(&self, src: &str) -> Option<Arc<Img>> {
         if let Some(hit) = self.files.lock().unwrap().get(src) {
-            return hit.clone();
+            return hit;
         }
         let loaded = self.load(src);
-        self.files.lock().unwrap().insert(src.to_string(), loaded.clone());
+        self.files.lock().unwrap().insert_limited(
+            src.to_string(),
+            loaded.clone(),
+            ORIGINAL_BUDGET,
+            ORIGINAL_ENTRIES,
+        );
         loaded
     }
 
@@ -61,7 +159,11 @@ impl ImageStore {
         if rel.is_empty() || rel.contains("://") || rel.starts_with("data:") {
             return None;
         }
-        let path = self.dirs.iter().map(|d| omsi_cfg::resolve_path(d, rel)).find(|p| omsi_cfg::vfs::is_file(p));
+        let path = self
+            .dirs
+            .iter()
+            .map(|d| omsi_cfg::resolve_path(d, rel))
+            .find(|p| omsi_cfg::vfs::is_file(p));
         let Some(path) = path else {
             log::debug!("htmltexture: image {rel} not found");
             return None;
@@ -75,12 +177,27 @@ impl ImageStore {
         };
         let px = img.width as u64 * img.height as u64;
         if px == 0 || px > MAX_SRC_PX || img.rgba.len() as u64 != px * 4 {
-            log::warn!("htmltexture: image {} has an unusable size {}x{}", path.display(), img.width, img.height);
+            log::warn!(
+                "htmltexture: image {} has an unusable size {}x{}",
+                path.display(),
+                img.width,
+                img.height
+            );
             return None;
         }
         let alpha = img.has_alpha && img.rgba.chunks_exact(4).any(|p| p[3] != 255);
-        log::debug!("htmltexture: image {rel} -> {} ({}x{})", path.display(), img.width, img.height);
-        Some(Arc::new(Img { w: img.width, h: img.height, rgba: img.rgba, alpha }))
+        log::debug!(
+            "htmltexture: image {rel} -> {} ({}x{})",
+            path.display(),
+            img.width,
+            img.height
+        );
+        Some(Arc::new(Img {
+            w: img.width,
+            h: img.height,
+            rgba: img.rgba,
+            alpha,
+        }))
     }
 
     /// The picture resized to `w` x `h` (the picture itself when it already has that size).
@@ -93,17 +210,15 @@ impl ImageStore {
             return None;
         }
         let key = (src.to_string(), w, h);
-        if let Some(hit) = self.scaled.lock().unwrap().map.get(&key) {
-            return Some(hit.clone());
+        if let Some(hit) = self.scaled.lock().unwrap().get(&key) {
+            return Some(hit);
         }
         let out = Arc::new(resize(&orig, w, h));
-        let mut g = self.scaled.lock().unwrap();
-        if g.bytes + out.rgba.len() > SCALED_BUDGET {
-            g.map.clear();
-            g.bytes = 0;
+        // A single large resize must not exceed the shared cache budget.
+        if out.rgba.len() > SCALED_BUDGET {
+            return Some(out);
         }
-        g.bytes += out.rgba.len();
-        g.map.insert(key, out.clone());
+        self.scaled.lock().unwrap().insert_limited(key, out.clone());
         Some(out)
     }
 }
@@ -166,7 +281,12 @@ fn halve(cur: &Img, hx: bool, hy: bool) -> Img {
             }
         }
     }
-    Img { w: nw, h: nh, rgba: out, alpha: cur.alpha }
+    Img {
+        w: nw,
+        h: nh,
+        rgba: out,
+        alpha: cur.alpha,
+    }
 }
 
 /// (first index, second index, weight of the second) of every output row/column.
@@ -191,8 +311,18 @@ fn bilinear(cur: &Img, w: u32, h: u32) -> Img {
     let mut o = 0;
     for &(y0, y1, fy) in &ys {
         for &(x0, x1, fx) in &xs {
-            let wt = [(1.0 - fx) * (1.0 - fy), fx * (1.0 - fy), (1.0 - fx) * fy, fx * fy];
-            let ix = [(y0 * cw + x0) * 4, (y0 * cw + x1) * 4, (y1 * cw + x0) * 4, (y1 * cw + x1) * 4];
+            let wt = [
+                (1.0 - fx) * (1.0 - fy),
+                fx * (1.0 - fy),
+                (1.0 - fx) * fy,
+                fx * fy,
+            ];
+            let ix = [
+                (y0 * cw + x0) * 4,
+                (y0 * cw + x1) * 4,
+                (y1 * cw + x0) * 4,
+                (y1 * cw + x1) * 4,
+            ];
             if cur.alpha {
                 let (mut r, mut g, mut b, mut a) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
                 for k in 0..4 {
@@ -225,5 +355,76 @@ fn bilinear(cur: &Img, w: u32, h: u32) -> Img {
             o += 4;
         }
     }
-    Img { w, h, rgba: out, alpha: cur.alpha }
+    Img {
+        w,
+        h,
+        rgba: out,
+        alpha: cur.alpha,
+    }
+}
+#[cfg(test)]
+mod original_cache_tests {
+    use super::*;
+
+    fn picture(bytes: usize) -> Option<Arc<Img>> {
+        Some(Arc::new(Img {
+            w: 1,
+            h: 1,
+            rgba: vec![0; bytes],
+            alpha: false,
+        }))
+    }
+
+    #[test]
+    fn evicts_oldest_picture_but_keeps_the_recently_used_one() {
+        let mut cache = Originals::default();
+        cache.insert_limited("a".into(), picture(4), 8, 2);
+        cache.insert_limited("b".into(), picture(4), 8, 2);
+        assert!(cache.get("a").is_some());
+        cache.insert_limited("c".into(), picture(4), 8, 2);
+        assert!(cache.get("a").is_some());
+        assert!(cache.get("b").is_none());
+        assert_eq!(cache.bytes, 8);
+    }
+
+    #[test]
+    fn misses_are_bounded_and_oversized_images_are_not_retained() {
+        let mut cache = Originals::default();
+        cache.insert_limited("huge".into(), picture(20), 8, 2);
+        assert!(cache.get("huge").is_none());
+        for i in 0..10 {
+            cache.insert_limited(format!("missing-{i}"), None, 8, 2);
+        }
+        assert_eq!(cache.map.len(), 2);
+        assert_eq!(cache.bytes, 0);
+    }
+}
+
+// Keep the hot resized variants instead of discarding every variant whenever
+// a new screen resolution pushes the cache over the budget.
+#[cfg(test)]
+mod scaled_cache_tests {
+    use super::*;
+
+    fn image() -> Arc<Img> {
+        Arc::new(Img {
+            w: 1,
+            h: 1,
+            rgba: vec![255; 4],
+            alpha: false,
+        })
+    }
+
+    #[test]
+    fn scaled_cache_evicts_least_recent_variant() {
+        let mut cache = Scaled::default();
+        for i in 0..SCALED_ENTRIES {
+            cache.insert_limited(("display".into(), i as u32 + 1, 1), image());
+        }
+        assert!(cache.get(&("display".into(), 1, 1)).is_some());
+        cache.insert_limited(("display".into(), 999, 1), image());
+        assert!(cache.get(&("display".into(), 1, 1)).is_some());
+        assert!(cache.get(&("display".into(), 2, 1)).is_none());
+        assert_eq!(cache.map.len(), SCALED_ENTRIES);
+    }
 }

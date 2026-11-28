@@ -96,11 +96,18 @@ impl Pair {
         std::thread::sleep(Duration::from_millis(5));
     }
     fn wait(&mut self, test: impl Fn(&[Received]) -> bool) {
-        let deadline = Instant::now() + Duration::from_secs(15);
+        // The emulated transfer is driven by the test thread, so a busy Windows
+        // runner can starve it well past 15 seconds even though the protocol works.
+        let deadline = Instant::now() + Duration::from_secs(60);
         while !test(&self.received) && Instant::now() < deadline {
             self.step();
         }
-        assert!(test(&self.received), "pixel transfer timed out: {} bytes, {} committed images", self.bytes, self.received.len());
+        assert!(
+            test(&self.received),
+            "pixel transfer timed out: {} bytes, {} committed images",
+            self.bytes,
+            self.received.len()
+        );
     }
 }
 
@@ -280,8 +287,10 @@ fn matching_file_and_pixels_sha_skip_pixels_but_same_name_different_file_does_no
     pair.received.clear();
     let before = pair.bytes;
     pair.wait(|v| {
-        v.iter().any(|r| r.incoming.owner == 1 && r.generation == 21)
-            && v.iter().any(|r| r.incoming.owner == 2 && r.generation == 11)
+        v.iter()
+            .any(|r| r.incoming.owner == 1 && r.generation == 21)
+            && v.iter()
+                .any(|r| r.incoming.owner == 2 && r.generation == 11)
     });
     assert!(
         pair.bytes - before >= rgba.len(),

@@ -114,14 +114,72 @@ fn bays() {
 }
 
 #[test]
+fn a_docking_bus_stays_within_the_lane() {
+    use crate::traffic::{LaneBuilder, LaneKind, Network};
+    use glam::DVec3;
+
+    let bus = script_test_vehicle("{frame}\n{end}\n", "", "");
+    let ty = &bus.ty;
+    // A pole behind the pavement asked for 3.05 m of bay on a 3 m lane: the bus's
+    // 2.5 m body then stood with its wheels on the kerb (#3728).
+    let room = 1.5 - 1.25 - 0.2;
+    assert!((bay_in_lane(3.05, ty, 3.0) - room).abs() < 1e-5);
+    assert!((bay_in_lane(-3.05, ty, 3.0) + room).abs() < 1e-5);
+    // A lane too narrow for the bus gives it no bay; a real bay is left alone.
+    assert_eq!(bay_in_lane(3.05, ty, 2.0), 0.0);
+    assert!((bay_in_lane(3.05, ty, 10.0) - 3.05).abs() < 1e-5);
+    // Without a usable lane width, the OMSI alignment is kept.
+    assert_eq!(bay_in_lane(3.05, ty, 0.0), 3.05);
+
+    let net = Network {
+        lanes: vec![LaneBuilder::polyline(
+            vec![DVec3::ZERO, DVec3::new(100.0, 0.0, 0.0)],
+            LaneKind::Street,
+            3.0,
+        )],
+        ..Default::default()
+    };
+    let mut stops = [(0, 50.0, 4.0, 0.0, 42, 0.0)];
+    place_stops(&net, &[0], 0, &mut stops, ty, false);
+    assert!(
+        (stops[0].2 - room).abs() < 1e-5,
+        "the bus docked {:.2} m off its lane",
+        stops[0].2
+    );
+    assert!(stops[0].2 + 1.25 < 1.5, "the body reached the kerb");
+}
+
+#[test]
+fn the_bay_limit_uses_the_flank_facing_the_stop() {
+    let mut bus = script_test_vehicle("{frame}\n{end}\n", "", "");
+    std::sync::Arc::get_mut(&mut bus.ty)
+        .unwrap()
+        .def
+        .bounding_box = Some([2.5, 12.0, 3.0, 0.6, 0.0, 1.5]);
+    // On a 5 m lane the right flank (1.85 m from the origin) has 0.45 m of room,
+    // the left flank (0.65 m) has 1.65 m, after the kerb clearance.
+    assert!((bay_in_lane(3.65, &bus.ty, 5.0) - 0.45).abs() < 1e-5);
+    assert!((bay_in_lane(-3.65, &bus.ty, 5.0) + 1.65).abs() < 1e-5);
+    assert_eq!(bay_in_lane(0.0, &bus.ty, 5.0), 0.0);
+}
+
+#[test]
 fn brt_authored_track_projection_keeps_bays_and_platform_guards() {
-    use crate::traffic::{Network, LaneBuilder, LaneKind};
+    use crate::traffic::{LaneBuilder, LaneKind, Network};
     use glam::DVec3;
     let bus = script_test_vehicle("{frame}\n{end}\n", "", "");
     for radius in [-40.0, 40.0] {
         for left_hand in [false, true] {
             let net = Network {
-                lanes: vec![LaneBuilder::arc(DVec3::ZERO, 0.0, 60.0, radius, 0.0, LaneKind::Street, 3.0)],
+                lanes: vec![LaneBuilder::arc(
+                    DVec3::ZERO,
+                    0.0,
+                    60.0,
+                    radius,
+                    0.0,
+                    LaneKind::Street,
+                    3.0,
+                )],
                 left_hand,
                 ..Default::default()
             };
@@ -130,17 +188,41 @@ fn brt_authored_track_projection_keeps_bays_and_platform_guards() {
             let right = DVec3::new(h.cos(), -h.sin(), 0.0);
             for offset in [-14.0, -4.0, 4.0, 14.0] {
                 for side in [0.0, 1.0, 2.0] {
-                    let (ri, s, lat) = project_stop(&net, &[0, 0], point + right * offset,
-                        Some(25.0), 0, side, StopRoute::Track(1)).unwrap();
+                    let (ri, s, lat) = project_stop(
+                        &net,
+                        &[0, 0],
+                        point + right * offset,
+                        Some(25.0),
+                        0,
+                        side,
+                        StopRoute::Track(1),
+                    )
+                    .unwrap();
                     assert_eq!(ri, 1, "do not replace the authored repeated track visit");
                     assert!((s - 30.0).abs() < 0.5);
                     let mut stops = [(ri, s, bay_offset(lat), 0.0, 42, side)];
                     place_stops(&net, &[0, 0], 0, &mut stops, &bus.ty, false);
-                    let left = if side == 2.0 { lat < 0.0 } else { left_hand != (side == 1.0) };
-                    if lat.abs() > 8.0 || (left && lat > 0.3) || (!left && lat < -0.3) {
-                        assert_eq!(stops[0].2, 0.0, "never follow a distant/opposite platform box");
+                    let left = if side == 2.0 {
+                        lat < 0.0
                     } else {
-                        assert!(stops[0].2.abs() > 2.0, "retain conventional authored bays");
+                        left_hand != (side == 1.0)
+                    };
+                    if lat.abs() > 8.0 || (left && lat > 0.3) || (!left && lat < -0.3) {
+                        assert_eq!(
+                            stops[0].2, 0.0,
+                            "never follow a distant/opposite platform box"
+                        );
+                    } else {
+                        // The bay keeps the platform's side, but its body stays on the
+                        // lane instead of climbing the kerb (#3728).
+                        let room = 1.5 - 1.25 - 0.2;
+                        let bay = if lat < 0.0 { -room } else { room };
+                        assert!(
+                            (stops[0].2 - bay).abs() < 1e-5,
+                            "authored bay {:.2} clamped to {:.2}",
+                            stops[0].2,
+                            bay
+                        );
                     }
                 }
             }

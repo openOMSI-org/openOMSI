@@ -17,7 +17,45 @@ pub fn option_arity(k: &str) -> usize {
         "performance_dyn_redrefl" | "performance_dyn_tile_red" | "texfilter" | "texture" => 2,
         "smokesystems" => 4,
         "aimaxcountrandom" => 9,
-        "useacttime" | "useactdate" | "useactyear" | "driverview_smooth" | "driverview_moving" | "altview" | "autocenter" | "no_collision" | "no_collision_terrain" | "no_collision_vehtoveh" | "no_collision_pedastrians" | "no_ticketinfo_visible" | "no_automaticclutch" | "no_schedanapopup" | "see_own_driver" | "nopreview" | "no_multithreading_calculate" | "no_multithreading_texload" | "loadalltiles" | "noautosave" | "showerrormessages" | "no_rain_refl" | "no_humans_on_rain_refl" | "no_stencilbuffer" | "sunglow" | "texmax256" | "texture_uselow" | "no_lightmap_terr" | "no_lightmap" | "no_nightmap" | "no_reflmap" | "no_bumpmap" | "gamectrleron" | "trackir_active" | "uselowailist" | "sound_ai" | "sound_scenery" | "sound_noreverb" | "no_tex_low_high_switch" => 0,
+        "useacttime"
+        | "useactdate"
+        | "useactyear"
+        | "driverview_smooth"
+        | "driverview_moving"
+        | "altview"
+        | "autocenter"
+        | "no_collision"
+        | "no_collision_terrain"
+        | "no_collision_vehtoveh"
+        | "no_collision_pedastrians"
+        | "no_ticketinfo_visible"
+        | "no_automaticclutch"
+        | "no_schedanapopup"
+        | "see_own_driver"
+        | "nopreview"
+        | "no_multithreading_calculate"
+        | "no_multithreading_texload"
+        | "loadalltiles"
+        | "noautosave"
+        | "showerrormessages"
+        | "no_rain_refl"
+        | "no_humans_on_rain_refl"
+        | "no_stencilbuffer"
+        | "sunglow"
+        | "texmax256"
+        | "texture_uselow"
+        | "no_lightmap_terr"
+        | "no_lightmap"
+        | "no_nightmap"
+        | "no_reflmap"
+        | "no_bumpmap"
+        | "gamectrleron"
+        | "trackir_active"
+        | "uselowailist"
+        | "sound_ai"
+        | "sound_scenery"
+        | "sound_noreverb"
+        | "no_tex_low_high_switch" => 0,
         _ => 1,
     }
 }
@@ -40,7 +78,10 @@ impl Options {
     }
 
     pub fn str(&self, k: &str) -> Option<&str> {
-        self.values.get(k).and_then(|v| v.first()).map(|s| s.as_str())
+        self.values
+            .get(k)
+            .and_then(|v| v.first())
+            .map(|s| s.as_str())
     }
 
     pub fn f32(&self, k: &str, default: f32) -> f32 {

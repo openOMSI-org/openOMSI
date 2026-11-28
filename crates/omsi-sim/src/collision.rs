@@ -60,12 +60,32 @@ impl Obb {
         let (cx, cy) = (bb[3] as f64, bb[4] as f64);
         // local (x right, y forward) → world for a clockwise heading
         let world = DVec2::new(pos.x + cx * ch + cy * sh, pos.y - cx * sh + cy * ch);
-        Obb { center: world, half: DVec2::new(bb[0] as f64 * 0.5, bb[1] as f64 * 0.5), heading: h, z0: pos.z + bb[5] as f64 - bb[2] as f64 * 0.5, z1: pos.z + bb[5] as f64 + bb[2] as f64 * 0.5, velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 }
+        Obb {
+            center: world,
+            half: DVec2::new(bb[0] as f64 * 0.5, bb[1] as f64 * 0.5),
+            heading: h,
+            z0: pos.z + bb[5] as f64 - bb[2] as f64 * 0.5,
+            z1: pos.z + bb[5] as f64 + bb[2] as f64 * 0.5,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: -1,
+        }
     }
 
     /// A small upright box (the camera's probe).
     pub fn point(p: DVec3, half: f64) -> Obb {
-        Obb { center: p.truncate(), half: DVec2::splat(half), heading: 0.0, z0: p.z - half, z1: p.z + half, velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 }
+        Obb {
+            center: p.truncate(),
+            half: DVec2::splat(half),
+            heading: 0.0,
+            z0: p.z - half,
+            z1: p.z + half,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: -1,
+        }
     }
 
     /// A moving obstacle: its ground velocity (m/s), its mass (kg) and a key that stays the
@@ -86,7 +106,12 @@ impl Obb {
     pub fn corners(&self) -> [DVec2; 4] {
         let [r, f] = self.axes();
         let (hx, hy) = (self.half.x, self.half.y);
-        [self.center + r * hx + f * hy, self.center - r * hx + f * hy, self.center - r * hx - f * hy, self.center + r * hx - f * hy]
+        [
+            self.center + r * hx + f * hy,
+            self.center - r * hx + f * hy,
+            self.center - r * hx - f * hy,
+            self.center + r * hx - f * hy,
+        ]
     }
 
     fn interval(&self, axis: DVec2) -> (f64, f64) {
@@ -127,7 +152,11 @@ impl Obb {
                 return None;
             }
             // move self along +axis by (max_b - min_a), or along -axis by (max_a - min_b)
-            let (d, n) = if max_b - min_a < max_a - min_b { (max_b - min_a, axis) } else { (max_a - min_b, -axis) };
+            let (d, n) = if max_b - min_a < max_a - min_b {
+                (max_b - min_a, axis)
+            } else {
+                (max_a - min_b, -axis)
+            };
             if best.map(|b| d < b.0).unwrap_or(true) {
                 best = Some((d, n));
             }
@@ -137,8 +166,16 @@ impl Obb {
         // north on Spandau) drown a small overlap's area in rounding noise, and the contact
         // came out kilometres away
         let local = |c: [DVec2; 4]| c.map(|p| p - self.center);
-        let point = centroid(&clip(&local(self.corners()), &local(o.corners()))).map(|p| p + self.center).unwrap_or((self.center + o.center) * 0.5);
-        Some(Contact { normal, depth, point, z0: self.z0.max(o.z0), z1: self.z1.min(o.z1) })
+        let point = centroid(&clip(&local(self.corners()), &local(o.corners())))
+            .map(|p| p + self.center)
+            .unwrap_or((self.center + o.center) * 0.5);
+        Some(Contact {
+            normal,
+            depth,
+            point,
+            z0: self.z0.max(o.z0),
+            z1: self.z1.min(o.z1),
+        })
     }
 
     /// Separating axis test in plan view only.
@@ -155,7 +192,17 @@ impl Obb {
     pub fn vehicle(origin: DVec2, heading_deg: f64, front: f64, rear: f64, half_width: f64) -> Obb {
         let h = heading_deg.to_radians();
         let fwd = DVec2::new(h.sin(), h.cos());
-        Obb { center: origin + fwd * ((front - rear) * 0.5), half: DVec2::new(half_width, (front + rear) * 0.5), heading: h, z0: f64::MIN, z1: f64::MAX, velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 }
+        Obb {
+            center: origin + fwd * ((front - rear) * 0.5),
+            half: DVec2::new(half_width, (front + rear) * 0.5),
+            heading: h,
+            z0: f64::MIN,
+            z1: f64::MAX,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: -1,
+        }
     }
 
     /// How far apart two boxes are in plan view (heights ignored): the widest gap along
@@ -166,10 +213,13 @@ impl Obb {
         let d = o.center - self.center;
         let (ra, fa) = (self.axes()[0], self.axes()[1]);
         let (rb, fb) = (o.axes()[0], o.axes()[1]);
-        let extent = |r: DVec2, f: DVec2, half: DVec2, axis: DVec2| r.dot(axis).abs() * half.x + f.dot(axis).abs() * half.y;
+        let extent = |r: DVec2, f: DVec2, half: DVec2, axis: DVec2| {
+            r.dot(axis).abs() * half.x + f.dot(axis).abs() * half.y
+        };
         let mut best = f64::MIN;
         for axis in [ra, fa, rb, fb] {
-            let gap = d.dot(axis).abs() - extent(ra, fa, self.half, axis) - extent(rb, fb, o.half, axis);
+            let gap =
+                d.dot(axis).abs() - extent(ra, fa, self.half, axis) - extent(rb, fb, o.half, axis);
             best = best.max(gap);
         }
         best
@@ -193,7 +243,11 @@ impl Box3 {
             return None;
         }
         let [r, f] = b.axes();
-        Some(Box3 { center: DVec3::new(b.center.x, b.center.y, (b.z0 + b.z1) * 0.5), axes: [r.extend(0.0), f.extend(0.0), DVec3::Z], half: DVec3::new(b.half.x, b.half.y, (b.z1 - b.z0) * 0.5) })
+        Some(Box3 {
+            center: DVec3::new(b.center.x, b.center.y, (b.z0 + b.z1) * 0.5),
+            axes: [r.extend(0.0), f.extend(0.0), DVec3::Z],
+            half: DVec3::new(b.half.x, b.half.y, (b.z1 - b.z0) * 0.5),
+        })
     }
 
     /// Does the convex polygon (a face) pass through the box? Separating axes: the box's
@@ -206,7 +260,9 @@ impl Box3 {
             if axis.length_squared() < 1e-12 {
                 return false;
             }
-            let r = self.half.x * self.axes[0].dot(axis).abs() + self.half.y * self.axes[1].dot(axis).abs() + self.half.z * self.axes[2].dot(axis).abs();
+            let r = self.half.x * self.axes[0].dot(axis).abs()
+                + self.half.y * self.axes[1].dot(axis).abs()
+                + self.half.z * self.axes[2].dot(axis).abs();
             let (mut lo, mut hi) = (f64::MAX, f64::MIN);
             for p in &pts {
                 let d = p.dot(axis);
@@ -314,7 +370,11 @@ impl MeshShape {
     /// From triangles in the object's frame. Triangles whose top stays below `min_top` over
     /// the origin (a kerb, a floor at ground level) are no obstacle.
     pub fn from_triangles(tris: impl Iterator<Item = [DVec3; 3]>, min_top: f64) -> MeshShape {
-        let mut shape = MeshShape { lo: DVec3::splat(f64::MAX), hi: DVec3::splat(f64::MIN), ..Default::default() };
+        let mut shape = MeshShape {
+            lo: DVec3::splat(f64::MAX),
+            hi: DVec3::splat(f64::MIN),
+            ..Default::default()
+        };
         let mut seen: hashbrown::HashSet<[i64; 6]> = hashbrown::HashSet::new();
         for t in tris {
             let mut out = Vec::new();
@@ -327,7 +387,14 @@ impl MeshShape {
                 }
                 // the two halves of a flat wall make the same slab
                 let q = |v: f64| (v * 100.0).round() as i64;
-                if !seen.insert([q(part.center.x), q(part.center.y), q(part.half.x), q(part.half.y), q(part.z0), q(part.z1)]) {
+                if !seen.insert([
+                    q(part.center.x),
+                    q(part.center.y),
+                    q(part.half.x),
+                    q(part.half.y),
+                    q(part.z0),
+                    q(part.z1),
+                ]) {
                     continue;
                 }
                 shape.add(part);
@@ -353,10 +420,18 @@ impl MeshShape {
         let i = self.parts.len() as u32;
         self.parts.push(b);
         let r = b.radius();
-        self.lo = self.lo.min(DVec3::new(b.center.x - r, b.center.y - r, b.z0));
-        self.hi = self.hi.max(DVec3::new(b.center.x + r, b.center.y + r, b.z1));
-        for y in ((b.center.y - r) / PART_CELL).floor() as i32..=((b.center.y + r) / PART_CELL).floor() as i32 {
-            for x in ((b.center.x - r) / PART_CELL).floor() as i32..=((b.center.x + r) / PART_CELL).floor() as i32 {
+        self.lo = self
+            .lo
+            .min(DVec3::new(b.center.x - r, b.center.y - r, b.z0));
+        self.hi = self
+            .hi
+            .max(DVec3::new(b.center.x + r, b.center.y + r, b.z1));
+        for y in ((b.center.y - r) / PART_CELL).floor() as i32
+            ..=((b.center.y + r) / PART_CELL).floor() as i32
+        {
+            for x in ((b.center.x - r) / PART_CELL).floor() as i32
+                ..=((b.center.x + r) / PART_CELL).floor() as i32
+            {
                 self.grid.entry((x, y)).or_default().push(i);
             }
         }
@@ -365,7 +440,10 @@ impl MeshShape {
     /// Indices of the parts within `r` of the local point `c` (each once).
     fn near(&self, c: DVec2, r: f64) -> Vec<u32> {
         let mut out: Vec<u32> = Vec::new();
-        let (x0, y0) = (((c.x - r) / PART_CELL).floor() as i32, ((c.y - r) / PART_CELL).floor() as i32);
+        let (x0, y0) = (
+            ((c.x - r) / PART_CELL).floor() as i32,
+            ((c.y - r) / PART_CELL).floor() as i32,
+        );
         for y in y0..=((c.y + r) / PART_CELL).floor() as i32 {
             for x in x0..=((c.x + r) / PART_CELL).floor() as i32 {
                 for &i in self.grid.get(&(x, y)).map(|v| v.as_slice()).unwrap_or(&[]) {
@@ -391,10 +469,27 @@ impl MeshShape {
 fn triangle_parts(t: [DVec3; 3], out: &mut Vec<Obb>) {
     let q = t.map(|p| p.truncate());
     let area = 0.5 * (q[1] - q[0]).perp_dot(q[2] - q[0]).abs();
-    let (z0, z1) = (t[0].z.min(t[1].z).min(t[2].z), t[0].z.max(t[1].z).max(t[2].z));
+    let (z0, z1) = (
+        t[0].z.min(t[1].z).min(t[2].z),
+        t[0].z.max(t[1].z).max(t[2].z),
+    );
     let mut part = |poly: &[DVec3], along: DVec2| {
-        let heading = if along.length() < 1e-6 { 0.0 } else { along.x.atan2(along.y) };
-        let mut b = Obb { center: DVec2::ZERO, half: DVec2::ZERO, heading, z0: f64::MAX, z1: f64::MIN, velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 };
+        let heading = if along.length() < 1e-6 {
+            0.0
+        } else {
+            along.x.atan2(along.y)
+        };
+        let mut b = Obb {
+            center: DVec2::ZERO,
+            half: DVec2::ZERO,
+            heading,
+            z0: f64::MAX,
+            z1: f64::MIN,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: -1,
+        };
         let [r, f] = b.axes();
         let (mut u0, mut u1, mut v0, mut v1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
         for p in poly {
@@ -407,13 +502,19 @@ fn triangle_parts(t: [DVec3; 3], out: &mut Vec<Obb>) {
             b.z1 = b.z1.max(p.z);
         }
         b.center = r * ((u0 + u1) * 0.5) + f * ((v0 + v1) * 0.5);
-        b.half = DVec2::new(((u1 - u0) * 0.5).max(PART_HALF_MIN), ((v1 - v0) * 0.5).max(PART_HALF_MIN));
+        b.half = DVec2::new(
+            ((u1 - u0) * 0.5).max(PART_HALF_MIN),
+            ((v1 - v0) * 0.5).max(PART_HALF_MIN),
+        );
         out.push(b);
     };
     if area * (z1 - z0) <= PART_SLACK {
         // along the longest edge in plan view
         let edges = [q[1] - q[0], q[2] - q[1], q[0] - q[2]];
-        let d = edges.into_iter().max_by(|a, b| a.length_squared().total_cmp(&b.length_squared())).unwrap();
+        let d = edges
+            .into_iter()
+            .max_by(|a, b| a.length_squared().total_cmp(&b.length_squared()))
+            .unwrap();
         part(&t, d);
         return;
     }
@@ -461,23 +562,55 @@ pub struct MeshObstacle {
 }
 
 impl MeshObstacle {
-    pub fn new(shape: std::sync::Arc<MeshShape>, pos: DVec3, heading_deg: f64, id: i64) -> MeshObstacle {
+    pub fn new(
+        shape: std::sync::Arc<MeshShape>,
+        pos: DVec3,
+        heading_deg: f64,
+        id: i64,
+    ) -> MeshObstacle {
         let (lo, hi) = (shape.lo, shape.hi);
         let size = hi - lo;
         let c = (lo + hi) * 0.5;
-        let mut bounds = Obb::from_box([size.x as f32, size.y as f32, size.z as f32, c.x as f32, c.y as f32, c.z as f32], pos, heading_deg);
+        let mut bounds = Obb::from_box(
+            [
+                size.x as f32,
+                size.y as f32,
+                size.z as f32,
+                c.x as f32,
+                c.y as f32,
+                c.z as f32,
+            ],
+            pos,
+            heading_deg,
+        );
         // the f32 of a box's centre offset is fine, not so its height over a map at 4000 km
         bounds.z0 = pos.z + lo.z;
         bounds.z1 = pos.z + hi.z;
         bounds.id = id;
-        MeshObstacle { shape, pos, heading: heading_deg.to_radians(), id, bounds }
+        MeshObstacle {
+            shape,
+            pos,
+            heading: heading_deg.to_radians(),
+            id,
+            bounds,
+        }
     }
 
     /// Object frame → world.
     fn to_world(&self, p: &Obb) -> Obb {
         let (s, c) = self.heading.sin_cos();
         let l = p.center;
-        Obb { center: DVec2::new(self.pos.x + l.x * c + l.y * s, self.pos.y - l.x * s + l.y * c), heading: p.heading + self.heading, z0: p.z0 + self.pos.z, z1: p.z1 + self.pos.z, id: self.id, ..*p }
+        Obb {
+            center: DVec2::new(
+                self.pos.x + l.x * c + l.y * s,
+                self.pos.y - l.x * s + l.y * c,
+            ),
+            heading: p.heading + self.heading,
+            z0: p.z0 + self.pos.z,
+            z1: p.z1 + self.pos.z,
+            id: self.id,
+            ..*p
+        }
     }
 
     /// World point → object frame (plan view).
@@ -490,9 +623,17 @@ impl MeshObstacle {
     /// The parts that may touch `b`, in the world; with `solid`, only those whose face
     /// really passes through that box (a pitched bus's own, which the plan-view box with the
     /// height range of all its corners overstates on a ramp).
-    pub fn parts_near<'a>(&'a self, b: &Obb, solid: Option<&'a Box3>) -> impl Iterator<Item = Obb> + 'a {
+    pub fn parts_near<'a>(
+        &'a self,
+        b: &Obb,
+        solid: Option<&'a Box3>,
+    ) -> impl Iterator<Item = Obb> + 'a {
         let (z0, z1) = (b.z0 - self.pos.z, b.z1 - self.pos.z);
-        let list = if self.bounds.overlaps_plan(b) { self.shape.near(self.to_local(b.center), b.radius()) } else { Vec::new() };
+        let list = if self.bounds.overlaps_plan(b) {
+            self.shape.near(self.to_local(b.center), b.radius())
+        } else {
+            Vec::new()
+        };
         list.into_iter()
             .filter(move |&i| {
                 let p = &self.shape.parts[i as usize];
@@ -501,7 +642,18 @@ impl MeshObstacle {
             .filter(move |&i| {
                 let Some(solid) = solid else { return true };
                 let (s, c) = self.heading.sin_cos();
-                let face: Vec<DVec3> = self.shape.face(i as usize).into_iter().map(|l| DVec3::new(self.pos.x + l.x * c + l.y * s, self.pos.y - l.x * s + l.y * c, self.pos.z + l.z)).collect();
+                let face: Vec<DVec3> = self
+                    .shape
+                    .face(i as usize)
+                    .into_iter()
+                    .map(|l| {
+                        DVec3::new(
+                            self.pos.x + l.x * c + l.y * s,
+                            self.pos.y - l.x * s + l.y * c,
+                            self.pos.z + l.z,
+                        )
+                    })
+                    .collect();
                 face.len() >= 3 && solid.meets(&face)
             })
             .map(|i| self.to_world(&self.shape.parts[i as usize]))
@@ -522,8 +674,14 @@ impl CollisionWorld {
         let i = self.boxes.len();
         self.boxes.push(b);
         let r = b.radius();
-        let (x0, x1) = (((b.center.x - r) / CELL).floor() as i32, ((b.center.x + r) / CELL).floor() as i32);
-        let (y0, y1) = (((b.center.y - r) / CELL).floor() as i32, ((b.center.y + r) / CELL).floor() as i32);
+        let (x0, x1) = (
+            ((b.center.x - r) / CELL).floor() as i32,
+            ((b.center.x + r) / CELL).floor() as i32,
+        );
+        let (y0, y1) = (
+            ((b.center.y - r) / CELL).floor() as i32,
+            ((b.center.y + r) / CELL).floor() as i32,
+        );
         for y in y0..=y1 {
             for x in x0..=x1 {
                 self.grid.entry((x, y)).or_default().push(i);
@@ -536,8 +694,11 @@ impl CollisionWorld {
         let b = m.bounds;
         self.meshes.push(m);
         let r = b.radius();
-        for y in ((b.center.y - r) / CELL).floor() as i32..=((b.center.y + r) / CELL).floor() as i32 {
-            for x in ((b.center.x - r) / CELL).floor() as i32..=((b.center.x + r) / CELL).floor() as i32 {
+        for y in ((b.center.y - r) / CELL).floor() as i32..=((b.center.y + r) / CELL).floor() as i32
+        {
+            for x in
+                ((b.center.x - r) / CELL).floor() as i32..=((b.center.x + r) / CELL).floor() as i32
+            {
                 self.mesh_grid.entry((x, y)).or_default().push(i);
             }
         }
@@ -547,9 +708,17 @@ impl CollisionWorld {
     fn meshes_near(&self, b: &Obb) -> Vec<usize> {
         let r = b.radius();
         let mut out = Vec::new();
-        for y in ((b.center.y - r) / CELL).floor() as i32..=((b.center.y + r) / CELL).floor() as i32 {
-            for x in ((b.center.x - r) / CELL).floor() as i32..=((b.center.x + r) / CELL).floor() as i32 {
-                for &i in self.mesh_grid.get(&(x, y)).map(|v| v.as_slice()).unwrap_or(&[]) {
+        for y in ((b.center.y - r) / CELL).floor() as i32..=((b.center.y + r) / CELL).floor() as i32
+        {
+            for x in
+                ((b.center.x - r) / CELL).floor() as i32..=((b.center.x + r) / CELL).floor() as i32
+            {
+                for &i in self
+                    .mesh_grid
+                    .get(&(x, y))
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[])
+                {
                     let o = &self.meshes[i].bounds;
                     if (o.center - b.center).length() <= r + o.radius() && !out.contains(&i) {
                         out.push(i);
@@ -645,7 +814,17 @@ impl CollisionWorld {
         }
         // a collision mesh counts by its size as a whole and blocks where the segment meets
         // one of its faces
-        let span = Obb { center: (a.truncate() + b.truncate()) * 0.5, half: DVec2::new(0.1, len * 0.5 + 0.1), heading: d.x.atan2(d.y), z0: a.z.min(b.z), z1: a.z.max(b.z), velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 };
+        let span = Obb {
+            center: (a.truncate() + b.truncate()) * 0.5,
+            half: DVec2::new(0.1, len * 0.5 + 0.1),
+            heading: d.x.atan2(d.y),
+            z0: a.z.min(b.z),
+            z1: a.z.max(b.z),
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: -1,
+        };
         for i in self.meshes_near(&span) {
             let m = &self.meshes[i];
             let o = &m.bounds;
@@ -654,9 +833,22 @@ impl CollisionWorld {
             }
             let steps = (len / PART_CELL).ceil().max(1.0) as usize;
             for k in 0..steps {
-                let (p0, p1) = (a + d * (k as f64 / steps as f64), a + d * ((k + 1) as f64 / steps as f64));
-                let piece = Obb { center: (p0.truncate() + p1.truncate()) * 0.5, half: DVec2::new(0.05, (len / steps as f64) * 0.5 + 0.05), heading: span.heading, z0: p0.z.min(p1.z), z1: p0.z.max(p1.z), ..span };
-                if let Some(p) = m.parts_near(&piece, None).find(|p| segment_through(p0, p1, p)) {
+                let (p0, p1) = (
+                    a + d * (k as f64 / steps as f64),
+                    a + d * ((k + 1) as f64 / steps as f64),
+                );
+                let piece = Obb {
+                    center: (p0.truncate() + p1.truncate()) * 0.5,
+                    half: DVec2::new(0.05, (len / steps as f64) * 0.5 + 0.05),
+                    heading: span.heading,
+                    z0: p0.z.min(p1.z),
+                    z1: p0.z.max(p1.z),
+                    ..span
+                };
+                if let Some(p) = m
+                    .parts_near(&piece, None)
+                    .find(|p| segment_through(p0, p1, p))
+                {
                     return Some(p);
                 }
             }
@@ -667,8 +859,14 @@ impl CollisionWorld {
     /// Indices of the boxes that may touch `b` (a box listed in several cells once).
     pub fn near(&self, b: &Obb) -> Vec<usize> {
         let r = b.radius();
-        let (x0, x1) = (((b.center.x - r) / CELL).floor() as i32, ((b.center.x + r) / CELL).floor() as i32);
-        let (y0, y1) = (((b.center.y - r) / CELL).floor() as i32, ((b.center.y + r) / CELL).floor() as i32);
+        let (x0, x1) = (
+            ((b.center.x - r) / CELL).floor() as i32,
+            ((b.center.x + r) / CELL).floor() as i32,
+        );
+        let (y0, y1) = (
+            ((b.center.y - r) / CELL).floor() as i32,
+            ((b.center.y + r) / CELL).floor() as i32,
+        );
         let mut out = Vec::new();
         for y in y0..=y1 {
             for x in x0..=x1 {
@@ -726,12 +924,20 @@ mod tests {
 
     fn bus_at(y: f64) -> Obb {
         // 2.5 m wide, 12 m long, heading north, centred at (0, y)
-        Obb::from_box([2.5, 12.0, 3.0, 0.0, 0.0, 1.5], DVec3::new(0.0, y, 0.0), 0.0)
+        Obb::from_box(
+            [2.5, 12.0, 3.0, 0.0, 0.0, 1.5],
+            DVec3::new(0.0, y, 0.0),
+            0.0,
+        )
     }
 
     #[test]
     fn a_post_ahead_pushes_the_bus_back_not_sideways() {
-        let post = Obb::from_box([0.1, 0.1, 3.0, 0.0, 0.0, 1.5], DVec3::new(0.3, 6.0, 0.0), 0.0);
+        let post = Obb::from_box(
+            [0.1, 0.1, 3.0, 0.0, 0.0, 1.5],
+            DVec3::new(0.3, 6.0, 0.0),
+            0.0,
+        );
         // the bumper is 0.25 m past the post's near face
         let bus = bus_at(0.2);
         let c = bus.contact(&post).expect("touching");
@@ -743,16 +949,31 @@ mod tests {
     #[test]
     fn contact_point_far_from_the_map_origin() {
         let base = DVec3::new(892248.2, 4196461.4, 33.2);
-        let post = Obb::from_box([0.1, 0.1, 3.0, 0.0, 0.0, 1.5], base + DVec3::new(0.3, 6.0, 0.0), 0.0);
-        let bus = Obb::from_box([2.5, 12.0, 3.0, 0.0, 0.0, 1.5], base + DVec3::new(0.0, 0.2, 0.0), 0.0);
+        let post = Obb::from_box(
+            [0.1, 0.1, 3.0, 0.0, 0.0, 1.5],
+            base + DVec3::new(0.3, 6.0, 0.0),
+            0.0,
+        );
+        let bus = Obb::from_box(
+            [2.5, 12.0, 3.0, 0.0, 0.0, 1.5],
+            base + DVec3::new(0.0, 0.2, 0.0),
+            0.0,
+        );
         let c = bus.contact(&post).expect("touching");
-        assert!((c.point - DVec2::new(base.x + 0.3, base.y + 6.0)).length() < 1e-3, "{c:?}");
+        assert!(
+            (c.point - DVec2::new(base.x + 0.3, base.y + 6.0)).length() < 1e-3,
+            "{c:?}"
+        );
     }
 
     #[test]
     fn glancing_contact_with_a_turned_wall() {
         // a wall along the east side, turned 10° so it meets the bus's front right corner
-        let wall = Obb::from_box([1.0, 20.0, 3.0, 0.0, 0.0, 1.5], DVec3::new(2.0, 0.0, 0.0), -10.0);
+        let wall = Obb::from_box(
+            [1.0, 20.0, 3.0, 0.0, 0.0, 1.5],
+            DVec3::new(2.0, 0.0, 0.0),
+            -10.0,
+        );
         let bus = bus_at(0.0);
         let c = bus.contact(&wall).expect("touching");
         // pushed out to the west, a little to the north (the wall's own normal)
@@ -763,8 +984,16 @@ mod tests {
 
     #[test]
     fn no_contact_under_a_high_or_low_box() {
-        let sign = Obb::from_box([2.0, 2.0, 1.0, 0.0, 0.0, 4.0], DVec3::new(0.0, 0.0, 0.0), 0.0);
-        let low = Obb::from_box([2.0, 2.0, 0.2, 0.0, 0.0, 0.1], DVec3::new(0.0, 0.0, 0.0), 0.0);
+        let sign = Obb::from_box(
+            [2.0, 2.0, 1.0, 0.0, 0.0, 4.0],
+            DVec3::new(0.0, 0.0, 0.0),
+            0.0,
+        );
+        let low = Obb::from_box(
+            [2.0, 2.0, 0.2, 0.0, 0.0, 0.1],
+            DVec3::new(0.0, 0.0, 0.0),
+            0.0,
+        );
         let bus = Obb::from_box([2.5, 12.0, 3.0, 0.0, 0.0, 1.8], DVec3::ZERO, 0.0);
         assert!(bus.contact(&sign).is_none() && bus.contact(&low).is_none());
         assert!(bus.overlaps(&bus_at(1.0)));
@@ -776,7 +1005,17 @@ mod ray_tests {
     use super::*;
 
     fn square(x: f64, y: f64, heading_deg: f64) -> Obb {
-        Obb { center: DVec2::new(x, y), half: DVec2::new(1.0, 1.0), heading: heading_deg.to_radians(), z0: 0.0, z1: 1.0, velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 }
+        Obb {
+            center: DVec2::new(x, y),
+            half: DVec2::new(1.0, 1.0),
+            heading: heading_deg.to_radians(),
+            z0: 0.0,
+            z1: 1.0,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: -1,
+        }
     }
 
     #[test]
@@ -797,7 +1036,17 @@ mod ray_tests {
         assert!((b.center - DVec2::new(11.0, 5.0)).length() < 1e-9);
         assert!((b.half - DVec2::new(0.9, 2.0)).length() < 1e-9);
         // its front bumper is at x = 13
-        let wall = Obb { center: DVec2::new(14.0, 5.0), half: DVec2::new(5.0, 0.5), heading: 90f64.to_radians(), z0: 0.0, z1: 1.0, velocity: DVec2::ZERO, mass: 0.0, pole: None, id: -1 };
+        let wall = Obb {
+            center: DVec2::new(14.0, 5.0),
+            half: DVec2::new(5.0, 0.5),
+            heading: 90f64.to_radians(),
+            z0: 0.0,
+            z1: 1.0,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: -1,
+        };
         assert!((b.separation(&wall) - 0.5).abs() < 1e-9);
     }
 }
@@ -809,9 +1058,25 @@ mod mesh_tests {
 
     /// The twelve triangles of a closed box from `lo` to `hi`.
     fn cube(lo: DVec3, hi: DVec3) -> Vec<[DVec3; 3]> {
-        let c = |i: u32| DVec3::new(if i & 1 == 0 { lo.x } else { hi.x }, if i & 2 == 0 { lo.y } else { hi.y }, if i & 4 == 0 { lo.z } else { hi.z });
-        let quads = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]];
-        quads.iter().flat_map(|q| [[c(q[0]), c(q[1]), c(q[2])], [c(q[0]), c(q[2]), c(q[3])]]).collect()
+        let c = |i: u32| {
+            DVec3::new(
+                if i & 1 == 0 { lo.x } else { hi.x },
+                if i & 2 == 0 { lo.y } else { hi.y },
+                if i & 4 == 0 { lo.z } else { hi.z },
+            )
+        };
+        let quads = [
+            [0, 1, 3, 2],
+            [4, 5, 7, 6],
+            [0, 1, 5, 4],
+            [2, 3, 7, 6],
+            [0, 2, 6, 4],
+            [1, 3, 7, 5],
+        ];
+        quads
+            .iter()
+            .flat_map(|q| [[c(q[0]), c(q[1]), c(q[2])], [c(q[0]), c(q[2]), c(q[3])]])
+            .collect()
     }
 
     fn bus(x: f64, y: f64, z: f64) -> Obb {
@@ -822,20 +1087,36 @@ mod mesh_tests {
     fn near_lists_each_part_once_in_the_order_met() {
         let mut seed = 7u64;
         let mut rnd = |a: f64, b: f64| {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             a + (b - a) * ((seed >> 11) as f64 / (1u64 << 53) as f64)
         };
         let mut tris = Vec::new();
         for _ in 0..400 {
-            let (x, y, w, d) = (rnd(-30.0, 30.0), rnd(-30.0, 30.0), rnd(0.2, 14.0), rnd(0.2, 14.0));
-            tris.extend(cube(DVec3::new(x, y, 0.0), DVec3::new(x + w, y + d, rnd(1.0, 6.0))));
+            let (x, y, w, d) = (
+                rnd(-30.0, 30.0),
+                rnd(-30.0, 30.0),
+                rnd(0.2, 14.0),
+                rnd(0.2, 14.0),
+            );
+            tris.extend(cube(
+                DVec3::new(x, y, 0.0),
+                DVec3::new(x + w, y + d, rnd(1.0, 6.0)),
+            ));
         }
         let shape = MeshShape::from_triangles(tris.into_iter(), 0.3);
         for _ in 0..300 {
-            let (c, r) = (DVec2::new(rnd(-40.0, 40.0), rnd(-40.0, 40.0)), rnd(0.5, 25.0));
+            let (c, r) = (
+                DVec2::new(rnd(-40.0, 40.0), rnd(-40.0, 40.0)),
+                rnd(0.5, 25.0),
+            );
             let mut want: Vec<u32> = Vec::new();
-            for y in ((c.y - r) / PART_CELL).floor() as i32..=((c.y + r) / PART_CELL).floor() as i32 {
-                for x in ((c.x - r) / PART_CELL).floor() as i32..=((c.x + r) / PART_CELL).floor() as i32 {
+            for y in ((c.y - r) / PART_CELL).floor() as i32..=((c.y + r) / PART_CELL).floor() as i32
+            {
+                for x in
+                    ((c.x - r) / PART_CELL).floor() as i32..=((c.x + r) / PART_CELL).floor() as i32
+                {
                     for &i in shape.grid.get(&(x, y)).map(|v| v.as_slice()).unwrap_or(&[]) {
                         let p = &shape.parts[i as usize];
                         if (p.center - c).length() <= r + p.radius() && !want.contains(&i) {
@@ -852,14 +1133,21 @@ mod mesh_tests {
     fn two_houses_leave_the_street_between_them_open() {
         // two houses 10 m apart in one mesh: its extents cover the street between them
         let mut tris = cube(DVec3::new(-20.0, -10.0, 0.0), DVec3::new(-5.0, 10.0, 12.0));
-        tris.extend(cube(DVec3::new(5.0, -10.0, 0.0), DVec3::new(20.0, 10.0, 12.0)));
+        tris.extend(cube(
+            DVec3::new(5.0, -10.0, 0.0),
+            DVec3::new(20.0, 10.0, 12.0),
+        ));
         let shape = Arc::new(MeshShape::from_triangles(tris.into_iter(), 0.3));
         let base = DVec3::new(892248.2, 4196461.4, 33.2);
         let mut w = CollisionWorld::default();
         w.add_mesh(MeshObstacle::new(shape, base, 30.0, 7));
         let turn = |x: f64, y: f64| {
             let h = 30f64.to_radians();
-            DVec3::new(base.x + x * h.cos() + y * h.sin(), base.y - x * h.sin() + y * h.cos(), base.z)
+            DVec3::new(
+                base.x + x * h.cos() + y * h.sin(),
+                base.y - x * h.sin() + y * h.cos(),
+                base.z,
+            )
         };
         let street = turn(0.0, 0.0);
         let mut b = bus(street.x, street.y, street.z);
@@ -880,8 +1168,14 @@ mod mesh_tests {
     fn a_bridge_deck_passes_over_the_bus_and_carries_it() {
         // a deck 5.5..6.5 m up, 20 m wide across the road, with a railing along each edge
         let mut tris = cube(DVec3::new(-50.0, -10.0, 5.5), DVec3::new(50.0, 10.0, 6.5));
-        tris.extend(cube(DVec3::new(-50.0, -10.0, 6.5), DVec3::new(50.0, -9.8, 7.5)));
-        tris.extend(cube(DVec3::new(-50.0, 9.8, 6.5), DVec3::new(50.0, 10.0, 7.5)));
+        tris.extend(cube(
+            DVec3::new(-50.0, -10.0, 6.5),
+            DVec3::new(50.0, -9.8, 7.5),
+        ));
+        tris.extend(cube(
+            DVec3::new(-50.0, 9.8, 6.5),
+            DVec3::new(50.0, 10.0, 7.5),
+        ));
         let shape = Arc::new(MeshShape::from_triangles(tris.into_iter(), 0.3));
         let mut w = CollisionWorld::default();
         w.add_mesh(MeshObstacle::new(shape, DVec3::ZERO, 0.0, 1));
@@ -911,18 +1205,45 @@ mod mesh_tests {
         let mut w = CollisionWorld::default();
         w.add_mesh(MeshObstacle::new(Arc::new(shape), DVec3::ZERO, 0.0, 1));
         // a 3 m tall bus 1 m over the ground under the eave's edge
-        let b = Obb::from_box([2.5, 12.0, 3.0, 0.0, 0.0, 2.5], DVec3::new(4.5, 0.0, 0.0), 0.0);
+        let b = Obb::from_box(
+            [2.5, 12.0, 3.0, 0.0, 0.0, 2.5],
+            DVec3::new(4.5, 0.0, 0.0),
+            0.0,
+        );
         assert!(w.hit(&b).is_none());
     }
 
     #[test]
     fn camera_ray_meets_a_mesh_wall() {
-        let shape = Arc::new(MeshShape::from_triangles(cube(DVec3::new(-10.0, -10.0, 0.0), DVec3::new(10.0, 10.0, 12.0)).into_iter(), 0.3));
+        let shape = Arc::new(MeshShape::from_triangles(
+            cube(DVec3::new(-10.0, -10.0, 0.0), DVec3::new(10.0, 10.0, 12.0)).into_iter(),
+            0.3,
+        ));
         let mut w = CollisionWorld::default();
-        w.add_mesh(MeshObstacle::new(shape, DVec3::new(100.0, 0.0, 0.0), 0.0, 1));
-        assert!(w.ray_blocked(DVec3::new(50.0, 0.0, 2.0), DVec3::new(150.0, 0.0, 2.0), 2.5, 3.0));
-        assert!(!w.ray_blocked(DVec3::new(50.0, 0.0, 20.0), DVec3::new(150.0, 0.0, 20.0), 2.5, 3.0));
-        assert!(!w.ray_blocked(DVec3::new(50.0, 20.0, 2.0), DVec3::new(150.0, 20.0, 2.0), 2.5, 3.0));
+        w.add_mesh(MeshObstacle::new(
+            shape,
+            DVec3::new(100.0, 0.0, 0.0),
+            0.0,
+            1,
+        ));
+        assert!(w.ray_blocked(
+            DVec3::new(50.0, 0.0, 2.0),
+            DVec3::new(150.0, 0.0, 2.0),
+            2.5,
+            3.0
+        ));
+        assert!(!w.ray_blocked(
+            DVec3::new(50.0, 0.0, 20.0),
+            DVec3::new(150.0, 0.0, 20.0),
+            2.5,
+            3.0
+        ));
+        assert!(!w.ray_blocked(
+            DVec3::new(50.0, 20.0, 2.0),
+            DVec3::new(150.0, 20.0, 2.0),
+            2.5,
+            3.0
+        ));
     }
 }
 
@@ -933,26 +1254,51 @@ mod ramp_tests {
     #[test]
     fn a_bus_drives_up_a_mesh_ramp() {
         // the Heerstraße bridge's ramp: 70 m long, rising 6.95 m, 3.6 m wide
-        let (a, b, c, d) = (DVec3::new(-1.8, 0.0, 0.0), DVec3::new(1.8, 0.0, 0.0), DVec3::new(1.8, 70.0, 6.95), DVec3::new(-1.8, 70.0, 6.95));
+        let (a, b, c, d) = (
+            DVec3::new(-1.8, 0.0, 0.0),
+            DVec3::new(1.8, 0.0, 0.0),
+            DVec3::new(1.8, 70.0, 6.95),
+            DVec3::new(-1.8, 70.0, 6.95),
+        );
         let shape = MeshShape::from_triangles([[a, b, c], [a, c, d]].into_iter(), 0.3);
         let mut w = CollisionWorld::default();
-        w.add_mesh(MeshObstacle::new(std::sync::Arc::new(shape), DVec3::ZERO, 0.0, 1));
+        w.add_mesh(MeshObstacle::new(
+            std::sync::Arc::new(shape),
+            DVec3::ZERO,
+            0.0,
+            1,
+        ));
         // a 12 m bus standing on the ramp (pitched with it), its floor 0.35 m over it
         for y in [8.0, 20.0, 40.0, 63.0] {
             let z = y * 6.95 / 70.0;
             let pitch = (6.95f64 / 70.0).atan();
-            let mut bus = Obb::from_box([2.5, 12.0, 2.85, 0.0, 0.0, 1.775], DVec3::new(0.0, y, z), 0.0);
+            let mut bus = Obb::from_box(
+                [2.5, 12.0, 2.85, 0.0, 0.0, 1.775],
+                DVec3::new(0.0, y, z),
+                0.0,
+            );
             // the pitched box's lowest corner is at the rear: 6 m back, 0.35 m up
             bus.z0 = z - 6.0 * pitch.sin() + 0.35 * pitch.cos();
             // which is all the plan-view box knows: it is in the ramp ahead
             assert!(w.hit(&bus).is_some());
-            let (up, fwd) = (DVec3::new(0.0, -pitch.sin(), pitch.cos()), DVec3::new(0.0, pitch.cos(), pitch.sin()));
-            let solid = Box3 { center: DVec3::new(0.0, y, z) + up * 1.775, axes: [DVec3::X, fwd, up], half: DVec3::new(1.25, 6.0, 1.425) };
+            let (up, fwd) = (
+                DVec3::new(0.0, -pitch.sin(), pitch.cos()),
+                DVec3::new(0.0, pitch.cos(), pitch.sin()),
+            );
+            let solid = Box3 {
+                center: DVec3::new(0.0, y, z) + up * 1.775,
+                axes: [DVec3::X, fwd, up],
+                half: DVec3::new(1.25, 6.0, 1.425),
+            };
             let faces = w.obstacles_near_solid(&bus, Some(&solid));
             assert!(faces.iter().all(|f| !f.overlaps(&bus)), "at {y}: {faces:?}");
         }
         // but a bus level with the foot of the ramp, 10 m up it, is in it
-        let bus = Obb::from_box([2.5, 12.0, 2.85, 0.0, 0.0, 1.775], DVec3::new(0.0, 10.0, 0.0), 0.0);
+        let bus = Obb::from_box(
+            [2.5, 12.0, 2.85, 0.0, 0.0, 1.775],
+            DVec3::new(0.0, 10.0, 0.0),
+            0.0,
+        );
         assert!(w.hit(&bus).is_some());
     }
 }

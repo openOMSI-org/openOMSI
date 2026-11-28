@@ -13,49 +13,6 @@ fn rain_hash(p: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(f32(a), f32(b)) * (1.0 / 4294967296.0);
 }
 
-// The rain on a window pane at one pixel: the water's surface and how much of the pixel it
-// covers. Three kinds of water, as on a bus window in the rain:
-// * fine droplets and connected water film, which soften and bend the view;
-// * drops that sit on the glass in three sizes (they land, grow and dry up again, each at
-//   its own pace; more and bigger ones the wetter the pane), each a little dome flattened
-//   by its weight;
-// * runners: drops grown heavy enough to slide down, in fits and starts, a teardrop that
-//   wipes a clear track through the mist and the drops below it and leaves a string of
-//   beads behind.
-// `uv` is the pane's own texture coordinate (without the [texcoordtransY] scroll: that
-// moved the whole picture of drops down at once, like paper off a roll), `n` its normal,
-// `wet` how wet it is. Laid out in metres over the glass and running down along the
-// world's vertical as it lies on the pane, whatever way the model's texture is turned.
-struct RainGlass {
-    // the water's surface normal (world), pointing out of the water
-    n: vec3<f32>,
-    // how much of the pixel a drop or a bead covers (0..1, antialiased)
-    cover: f32,
-    // the pane's normal on the side the rain is on (outside the bus)
-    out: vec3<f32>,
-    // coverage of fine droplets and irregular water film (0..1)
-    mist: f32,
-};
-
-// One drop of radius `r` (metres) centred `d` (metres, across / down the glass) away:
-// its cover of the pixel (`px`: the pixel's size on the glass) and the slope of its dome
-// (the normal's part along the glass). A shallow cap suits water spreading on glass;
-// steep caps make every rim internally reflect and look like thick glass beads.
-fn rain_dome(d: vec2<f32>, r: f32, px: f32) -> vec3<f32> {
-    let rr = length(d) / max(r, 1e-5);
-    let aa = max(px / max(r, 1e-5), 0.02);
-    // Subpixel drops retain diminishing coverage instead of disappearing at a
-    // fixed cutoff; their opposing slopes average towards the flat pane.
-    let seen = smoothstep(0.0, 0.9, r / max(px, 1e-6));
-    let cover = (1.0 - smoothstep(1.0 - aa, 1.0 + aa, rr)) * seen;
-    // A subpixel cap contains both opposing slopes. Filter its normal before
-    // refraction; using the full rim slope turns fine rain into high-contrast grit.
-    let cap = mix(0.18, 0.6, smoothstep(0.6, 2.0, r / max(px, 1e-6))) * seen;
-    let slope = d / max(r, 1e-5) * cap;
-    let s = select(slope, slope / max(length(slope), 1e-5) * cap, length(slope) > cap);
-    return vec3<f32>(s, cover);
-}
-
 // Smooth noise for water-film refraction and residual wiper streaks (0..1).
 fn rain_patches(q: vec2<f32>) -> vec2<f32> {
     let c = floor(q);
@@ -75,405 +32,6 @@ fn rain_turn(q: vec2<f32>, a: f32) -> vec2<f32> {
     return vec2<f32>(q.x * cs.x - q.y * cs.y, q.x * cs.y + q.y * cs.x);
 }
 
-fn rain_glass(world: vec3<f32>, uv: vec2<f32>, n: vec3<f32>, water: f32, t: f32, outside_in: bool, pane: vec3<f32>) -> RainGlass {
-    // Match the collector map's larger visible caps (#3019). Scale the cell spacing
-    // too, so larger drops replace fine specks rather than multiplying their cover.
-    let wet = clamp(water, 0.0, 1.0);
-    // The drops are bigger the harder it has rained on the pane (a drizzle leaves beads, a
-    // downpour full drops), and on an upright side pane, which the rain meets edge on and
-    // the airstream sweeps, smaller than on the sloping windscreen (#3076).
-    let drop_scale = mix(1.2, 2.0, smoothstep(0.1, 0.8, wet)) * mix(0.7, 1.0, smoothstep(0.0, 0.4, abs(n.z)));
-    let heavy = smoothstep(0.55, 1.0, wet);
-    let wiped_film = clamp(-water * 25.0, 0.0, 1.0);
-    var g: RainGlass;
-    g.n = n;
-    g.out = n;
-    g.cover = 0.0;
-    g.mist = 0.0;
-    // (the derivatives first, while every pixel of the quad still takes part)
-    let dpx = dpdx(world);
-    let dpy = dpdy(world);
-    let dux = dpdx(uv);
-    let duy = dpdy(uv);
-    let water_dx = dpdx(water);
-    let water_dy = dpdy(water);
-    let pane_dx = dpdx(pane.xy);
-    let pane_dy = dpdy(pane.xy);
-    var collectors = vec4<f32>(0.0);
-    var tracked = false;
-    if (material.wipe_bounds.z != 0.0) {
-        // the nearest texel's own depth: a filtered sample mixes the packed depth bytes of
-        // neighbouring texels into a depth of neither (see `window_wetness`)
-        let dims = vec2<i32>(WIPE_MASK_SIZE);
-        let texel = textureLoad(t_trans, clamp(vec2<i32>(pane.xy * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0);
-        let depth = dot(texel.rg, vec2<f32>(256.0, 1.0)) * (64.0 / 257.0) - 32.0;
-        tracked = abs(depth - pane.z) <= 0.1 && all(pane.xy >= vec2<f32>(0.0)) && all(pane.xy <= vec2<f32>(1.0));
-        if (tracked) { collectors = textureSampleLevel(t_bump, s_diffuse, pane.xy, 0.0); }
-    }
-    // Preserve pixel area at oblique angles; the longest axis alone erased
-    // still-visible beads on passenger windows viewed along the bus.
-    let px = max(sqrt(length(cross(dpx, dpy))), 1e-5);
-    let footprint = max(length(dpx), length(dpy));
-    let det = dux.x * duy.y - dux.y * duy.x;
-    if ((wet <= 0.01 && wiped_film <= 0.01 && collectors.a <= 0.01) || abs(det) < 1e-12) {
-        return g;
-    }
-    // world position's derivative along u and v (inverse of the screen Jacobian): metres
-    // per unit of uv, and which way is down in uv
-    let dpdu = (dpx * duy.y - dpy * dux.y) / det;
-    let dpdv = (dpy * dux.x - dpx * duy.x) / det;
-    let mu = length(dpdu);
-    let mv = length(dpdv);
-    if (mu < 1e-6 || mv < 1e-6) {
-        return g;
-    }
-    // quantised so neighbouring triangles of one pane share the grid
-    let su = exp2(round(log2(mu)));
-    let sv = exp2(round(log2(mv)));
-    let p = vec2<f32>(uv.x * su, uv.y * sv);
-    // down in uv: against the height's gradient
-    var down = -vec2<f32>(dpdu.z / mu, dpdv.z / mv);
-    if (length(down) < 0.2) {
-        down = vec2<f32>(0.0, 1.0); // a roof light: no way down, the drops just sit
-    }
-    // Snapped to the nearest eighth of a turn: `down` comes from the world's vertical, and
-    // the body rolls and pitches on its springs all the time - a grid turned with it by a
-    // degree moves drops a metre from its origin by more than a cell, so every drop on the
-    // pane jumped to a neighbour's place and back from frame to frame (the drops trembled
-    // and flickered while driving). A pane's texture is laid out square to it, so the eighth
-    // turns keep the drops fixed to the glass and still running down it.
-    let ang = round(atan2(down.y, down.x) / 0.7853982) * 0.7853982;
-    down = vec2<f32>(cos(ang), sin(ang));
-    let side = vec2<f32>(down.y, -down.x);
-    // pane coordinates in metres: x across, y down the glass
-    let q = vec2<f32>(dot(p, side), dot(p, down));
-    // the same two directions in the world, and the pane's normal on the rain's side: the
-    // film faces the eye unless the eye is in the bus behind it
-    let tu = dpdu / su;
-    let tv = dpdv / sv;
-    let eye = normalize(camera.cam_pos.xyz - world);
-    var out = safe_normal(n);
-    out = select(-out, out, dot(out, eye) >= 0.0);
-    out = select(out, -out, outside_in);
-    g.out = out;
-    var side_w = side.x * tu + side.y * tv;
-    side_w = side_w - out * dot(side_w, out);
-    side_w = side_w / max(length(side_w), 1e-6);
-    var down_w = down.x * tu + down.y * tv;
-    down_w = down_w - out * dot(down_w, out) - side_w * dot(down_w, side_w);
-    down_w = down_w / max(length(down_w), 1e-6);
-
-    // The wiper pushes a small ridge ahead of its lip. Its height gradient bends
-    // the view through this connected water, using the same sample as the droplets.
-    var best = clamp((water - 1.0) * 0.18, 0.0, 1.0);
-    let gradient = vec2<f32>((water_dx * duy.y - water_dy * dux.y) / (det * su),
-                            (water_dy * dux.x - water_dx * duy.x) / (det * sv));
-    if (wiped_film > 0.01 && collectors.a <= 0.01) {
-        // The age gradient follows the actual sweep. Fine, directional residual
-        // streaks briefly distort the view, without repopulating the pane with drops.
-        var along = vec2<f32>(0.0, 1.0);
-        if (length(gradient) > 0.01) { along = normalize(vec2<f32>(dot(gradient, side), dot(gradient, down))); }
-        let across = vec2<f32>(-along.y, along.x);
-        let streak = rain_patches(vec2<f32>(dot(q, across) * 600.0, dot(q, along) * 4.0));
-        let strength = wiped_film * (0.012 + 0.018 * streak.x);
-        g.cover = strength;
-        g.n = normalize(out + (side_w * across.x + down_w * across.y) * (streak.y - 0.5) * wiped_film * 0.003);
-        return g;
-    }
-    var slope = clamp(-0.00005 * vec2<f32>(dot(gradient, side), dot(gradient, down)), vec2<f32>(-0.15), vec2<f32>(0.15)) * best;
-    // Heavy rain and a strong relative airstream increase coverage. Three larger
-    // droplet layers leave room for filtering the view without adding a render pass.
-    let density = wet * wet * (1.0 + 0.65 * smoothstep(0.35, 0.9, wet)
-                            + 0.45 * clamp(length(camera.wind.xyz) / 20.0, 0.0, 1.0));
-
-    // --- the airstream: the glass moves through the air with the bus, and a drop's drag
-    // grows with the speed squared - at about 40 km/h it matches the drop's weight. Along
-    // the glass the air drives drops back; where it meets the glass head on (the
-    // windscreen) it parts, up and out. The runners go where weight and air take them
-    // together (in sixteenths of a turn, so that they do not shiver with every change of
-    // speed); the drops that sit hold on.
-    var flow = vec2<f32>(0.0, 1.0);
-    var blow = 0.0;
-    if (camera.wind.w > 0.5 && near_player_vehicle(world) > 0.5) {
-        let air = -camera.wind.xyz;
-        var aw = vec2<f32>(dot(air, side_w), dot(air, down_w));
-        aw.y = aw.y - abs(dot(air, out)) * 0.6;
-        let v2 = dot(aw, aw);
-        blow = clamp(v2 / 130.0, 0.0, 3.0);
-        flow = flow + aw / max(sqrt(v2), 1e-4) * blow;
-    }
-    let fa = round(atan2(flow.x, flow.y) / 0.3926991) * 0.3926991;
-    // pane coordinates turned so the runners run down +y
-    let qr = rain_turn(q, fa);
-
-    // --- the runners: now and then a drop grown heavy breaks loose and slides down on its
-    // own - each at its own moment, a few centimetres to a hand's width, nearly straight
-    // with a little drift, in jerks (it sticks, then slips on), and stops again; it leaves a
-    // cleared track with a few beads in it. (They were lanes of drops on wavy paths all
-    // going at once: the pane looked like a wave of snakes.) One chance a cell of 5 x 140 cm;
-    // a pixel looks at its own cell and the one above, whose drop may have slid into it.
-    let lane_w = 0.05;
-    let seg_h = 1.4;
-    let lane = floor(qr.x / lane_w);
-    let seg0 = floor(qr.y / seg_h);
-    var track = 0.0;
-    for (var k = 0; k < 2; k = k + 1) {
-        if (tracked) { break; } // these panes use persistent, merging drops
-        let seg = seg0 - f32(k);
-        let h1 = rain_hash(vec2<f32>(lane * 1.7 + 3.0, seg * 2.3 + 11.0));
-        if (h1.x >= wet * (0.7 + 0.08 * blow + 0.2 * heavy)) {
-            continue;
-        }
-        let h2 = rain_hash(vec2<f32>(lane * 1.7 + 8.1, seg * 2.3 + 5.1));
-        let sit = 0.3 + 0.8 * h2.y;
-        let speed = (0.07 + 0.16 * h1.y * h1.y) * (1.0 + 0.7 * blow) * (1.0 + 0.4 * heavy);
-        let run_len = 0.9 + 0.3 * h2.y;
-        let period = sit + run_len / speed + 0.4;
-        let cycle = t / period + h2.x;
-        let tau = fract(cycle) * period;
-        let h3 = rain_hash(vec2<f32>(lane * 1.7 + 1.3, seg * 2.3 + 29.7)
-                           + floor(cycle) * vec2<f32>(13.0, 41.0));
-        // sits and grows a moment, then goes in jerks, then lies still till it dries
-        let st = max(tau - sit, 0.0);
-        let pulse = 0.18 + 0.25 * h3.x;
-        // Larger drops overcome pinning more easily. Random surface resistance
-        // modulates their speed; consecutive arrivals do not repeat one track.
-        let step_len = speed * pulse;
-        // Less than one segment: checking this cell and its predecessor sees the
-        // complete runner, including its head after it crosses the cell boundary.
-        let travel = min((floor(st / pulse) + smoothstep(0.2, 0.9, fract(st / pulse))) * step_len, run_len);
-        let vis = smoothstep(0.0, 0.2, tau) * (1.0 - smoothstep(period - 0.4, period, tau));
-        let y0 = (seg + 0.02 + 0.08 * h3.x) * seg_h;
-        let x0 = (lane + 0.4 + 0.2 * h3.y) * lane_w;
-        let drift = (h2.y - 0.5) * 0.025;
-        // (a downpour's runners are heavier: wider heads, wider cleared tracks)
-        let rh = drop_scale * (0.001 + 0.0012 * h1.y * h1.y) * (1.0 + 0.9 * heavy) * mix(0.3, 1.0, smoothstep(0.0, sit, tau));
-        let bend = 0.0015 * sin(travel * (30.0 + 25.0 * h3.y) + h2.x * 6.283185);
-        var head_d = vec2<f32>(qr.x - (x0 + drift * travel + bend), qr.y - (y0 + travel));
-        head_d.y *= select(0.65, 1.0, head_d.y > 0.0);
-        let head = rain_dome(head_d, rh, px);
-        if (head.z * vis > best) {
-            best = head.z * vis;
-            slope = rain_turn(head.xy, -fa);
-        }
-        // the track it cleared, and a few beads left in it
-        let along = qr.y - y0;
-        if (along > 0.0 && along < travel - rh) {
-            let path_bend = 0.0015 * sin(along * (30.0 + 25.0 * h3.y) + h2.x * 6.283185);
-            let dxp = qr.x - (x0 + drift * along + path_bend);
-            let hw = rh * 0.7;
-            track = max(track, (1.0 - smoothstep(hw * 0.6, hw, abs(dxp))) * vis);
-            // A heavy drop draws a narrowing, connected filament behind it. The
-            // tail breaks up as the head moves on; lighter runners leave only beads.
-            let tail_len = min(travel, (0.08 + 0.4 * h1.y) * wet);
-            let tail = smoothstep(travel - tail_len, travel, along);
-            let width = rh * (0.12 + 0.35 * tail) * (0.8 + 0.2 * sin(along * 170.0 + h3.x * 6.283185));
-            let filament = rain_dome(vec2<f32>(dxp, 0.0), width, px);
-            let filament_cover = filament.z * tail * vis;
-            if (filament_cover > best) {
-                best = filament_cover;
-                slope = rain_turn(filament.xy * 0.75, -fa);
-            }
-            let bc = floor(along / 0.008);
-            let bh = rain_hash(vec2<f32>(lane * 3.1 + bc, seg * 1.9 + 41.0));
-            if (bh.x < 0.35) {
-                let bcen = vec2<f32>((bh.y - 0.5) * hw, (bc + 0.5) * 0.008 - along);
-                let bead = rain_dome(vec2<f32>(dxp, 0.0) - bcen, 0.0004 + 0.0005 * bh.y, px);
-                if (bead.z * vis > best) {
-                    best = bead.z * vis;
-                    slope = rain_turn(bead.xy, -fa);
-                }
-            }
-        }
-    }
-
-    // Rainfall has the same chance across an equally wet pane. Random arrivals
-    // scatter individual drops; only runoff and wiping leave cleared regions.
-    track = max(track, max(collectors.b, collectors.a));
-    let patches = rain_patches(q * 12.0 + 3.1);
-
-    // --- the drops that sit: fine beads, medium drops and larger merged drops.
-    for (var layer = 0; layer < 3; layer = layer + 1) {
-        if (tracked && layer == 0) { continue; }
-        let fl = f32(layer);
-        let cellsz = drop_scale * select(select(0.018, 0.005, layer == 1), 0.0085, layer == 2);
-        let turn = 0.61 + fl * 1.37;
-        let g2 = rain_turn(q, turn) / cellsz + vec2<f32>(fl * 17.3, fl * 5.1);
-        let c = floor(g2);
-        let timing = rain_hash(c + 3.7);
-        let life = 4.0 + timing.y * 7.0;
-        let cycle = t / life + timing.x;
-        let ph = fract(cycle);
-        let arrival = c + floor(cycle) * vec2<f32>(17.0, 43.0);
-        let h = rain_hash(arrival);
-        let h2 = rain_hash(arrival + 3.7);
-        // landed, grown, drying: a drop comes and goes; more of them the wetter the pane,
-        // and the big ones only on a wet pane
-        let dens = density * 0.7 * (1.0 - clamp(water - 1.0, 0.0, 1.0)) * select(0.62, 0.48 * smoothstep(0.15, 0.6, wet), layer == 0);
-        let present = step(h.x, dens) * smoothstep(0.0, 0.12, ph) * (1.0 - smoothstep(0.7, 1.0, ph)) * (1.0 - track);
-        if (present <= 0.0) {
-            continue;
-        }
-        let r = (0.1 + 0.3 * h.y * h.y) * mix(0.3, 1.0, smoothstep(0.0, 0.6, ph)) * mix(0.35, 1.1, smoothstep(0.05, 0.9, wet));
-        // (anywhere in the cell it still fits in)
-        let room = min(r * 1.12, 0.48);
-        let centre = c + vec2<f32>(room) + rain_hash(arrival + 9.1) * (1.0 - 2.0 * room);
-        // flattened by its weight (below the pane's own down, not the turned grid's):
-        // fuller below than above
-        var d = rain_turn((g2 - centre) * cellsz, -turn);
-        d.y = d.y * select(1.12, 0.9, d.y > 0.0);
-        // no drop is a circle: its rim wanders where the glass held it as it spread, the
-        // big ones most, and a heavy one hangs drawn out downwards
-        // (a pixel beyond any rim it could have: nothing more to work out)
-        let dl = length(d);
-        if (dl > r * cellsz * 1.5) {
-            continue;
-        }
-        let h3 = rain_hash(arrival + 23.9);
-        // the rim's wander as waves of 2, 3 and 4 round the drop, each turned its own way
-        // (sin(k a + phase) from the direction's cosine and sine, without an atan2)
-        let u = d / max(dl, 1e-6);
-        let c2 = u.x * u.x - u.y * u.y;
-        let s2 = 2.0 * u.x * u.y;
-        let c3 = u.x * (4.0 * u.x * u.x - 3.0);
-        let s3 = u.y * (3.0 - 4.0 * u.y * u.y);
-        let c4 = c2 * c2 - s2 * s2;
-        let s4 = 2.0 * s2 * c2;
-        let p2 = h3 * 2.0 - 1.0;
-        let p3 = h2.yx * 2.0 - 1.0;
-        let wave = (s2 * p2.x + c2 * p2.y) * h3.y + 0.55 * (s3 * p3.x + c3 * p3.y) + 0.3 * (s4 * p2.y - c4 * p3.x);
-        let wob = 1.0 + (0.03 + 0.06 * h.y) * wave;
-        d = d / max(wob, 0.4);
-        d.y = d.y * mix(1.0, 0.88, h.y * h.y * h3.x);
-        // Large drops belong to moving water; stationary spray stays fine.
-        let radius = min(r * cellsz, drop_scale * 0.0015);
-        let drop = rain_dome(d, radius, px);
-        let cover = drop.z * present;
-        if (cover > best) {
-            best = cover;
-            slope = drop.xy;
-        }
-    }
-
-    // --- the mist: independently scattered droplets of a millimetre or less
-    var grain = 0.0;
-    {
-        let mg = rain_turn(q, 0.33) / 0.0028;
-        let mc = floor(mg);
-        let mh = rain_hash(mc + 71.0);
-        let mr = 0.1 + 0.16 * mh.y;
-        let at = mc + vec2<f32>(mr) + rain_hash(mc + 5.3) * (1.0 - 2.0 * mr);
-        grain = max(grain, step(mh.x, wet * 0.25) * (1.0 - smoothstep(mr * 0.6, mr, length(mg - at))));
-    }
-    // (seen from further than a millimetre a pixel: their average)
-    let mist = mix(wet * 0.25 * 0.12, grain, smoothstep(0.0015, 0.0006, px));
-    // Connected water bends the view between visible beads, rather than greying
-    // otherwise sharp glass. Runoff clears this film along with the fine drops.
-    let film = smoothstep(0.2, 1.0, wet) * 0.7 * (1.0 - track);
-    // (The film only bends the view, through the slope below: it covers nothing. A thin
-    // even sheet of water on glass lets nearly all the light through; drawn as a cover of
-    // up to 70 % over the picture behind it, it laid a milky veil over every wet pane: a
-    // third of the street's contrast left, and darker still in the classic picture.)
-    g.mist = clamp(mist * (1.0 - track), 0.0, 1.0);
-    // Unresolved water must soften the view, not retain large, sharp lens ripples.
-    let facing = abs(dot(out, eye));
-    let film_detail = (1.0 - smoothstep(0.003, 0.012, footprint)) * facing * facing;
-    slope = slope + (patches - vec2<f32>(0.5)) * film * 0.03 * film_detail * (1.0 - best);
-
-    // The CPU map stores slopes along the mesh projection; recover those two
-    // directions from the screen derivatives, including a rotated side window.
-    if (collectors.a > best) {
-        let pd = pane_dx.x * pane_dy.y - pane_dx.y * pane_dy.x;
-        if (abs(pd) > 1e-12) {
-            let pu = safe_normal((dpx * pane_dy.y - dpy * pane_dx.y) / pd);
-            let pv = safe_normal((dpy * pane_dx.x - dpx * pane_dy.x) / pd);
-            let cap = (collectors.rg * 255.0 - vec2<f32>(128.0)) / 127.0;
-            g.n = normalize(out + pu * cap.x + pv * cap.y);
-            g.cover = collectors.a;
-            return g;
-        }
-    }
-    g.cover = best;
-    let nz = sqrt(max(1.0 - dot(slope, slope), 0.02));
-    g.n = normalize(out * nz + side_w * slope.x + down_w * slope.y);
-    return g;
-}
-
-// The way the eye looks through a drop: bent at its dome and at the flat glass, like
-// through a strong lens (the world shows upside down in it). Zero where the light is
-// trapped by total internal reflection: the dark ring round every drop.
-fn rain_through(g: RainGlass, v: vec3<f32>) -> vec3<f32> {
-    if (dot(g.out, v) > 0.0) {
-        // the eye on the rain's side: into the dome, out through the glass
-        let t1 = refract(-v, g.n, 1.0 / 1.333);
-        if (dot(t1, t1) < 1e-4) {
-            return vec3<f32>(0.0);
-        }
-        return refract(normalize(t1), g.out, 1.333);
-    }
-    // the eye in the bus: through the glass into the water, out of the dome
-    let t1 = refract(-v, -g.out, 1.0 / 1.333);
-    if (dot(t1, t1) < 1e-4) {
-        return vec3<f32>(0.0);
-    }
-    return refract(normalize(t1), -g.n, 1.333);
-}
-
-// What the eye sees along `through` (the way out of a drop, `rain_through`) from the drop
-// at `world`: the clean current street behind the glass, looked up where that
-// way meets it a few metres on - through a drop's rim the way bends far round, so the
-// drop holds the whole street small and upside down, the sky at its bottom, as a real
-// one does. The rain film's reflection slot holds that picture (see `Renderer::glass_slot`);
-// without it (a mirror's view) or off the picture's edge,
-// `fallback` (the sky's colours). `scale` takes the picture into the caller's units.
-fn rain_behind(world: vec3<f32>, through: vec3<f32>, fallback: vec3<f32>, scale: f32, scatter: f32) -> vec3<f32> {
-    if (camera.flags.z > -0.5 || dot(through, through) < 1e-4) {
-        return fallback;
-    }
-    let c = camera.view_proj * vec4<f32>(world + normalize(through) * 6.0, 1.0);
-    if (c.w <= 0.05) {
-        return fallback;
-    }
-    let ndc = c.xy / c.w;
-    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-    let inside = smoothstep(0.0, 0.06, min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y)));
-    // A wet film scatters the view. Filter the existing clean scene picture locally:
-    // clear glass has a sub-texel footprint, heavy water softens several pixels.
-    let offset = vec2<f32>(1.0, 0.6) * scatter * 4.0 / vec2<f32>(textureDimensions(t_env));
-    let a = textureSampleLevel(t_env, s_diffuse, clamp(uv - offset, vec2<f32>(0.001), vec2<f32>(0.999)), 0.0).rgb;
-    let b = textureSampleLevel(t_env, s_diffuse, clamp(uv + offset, vec2<f32>(0.001), vec2<f32>(0.999)), 0.0).rgb;
-    let seen = finite_or((a + b) * (0.5 * scale), fallback);
-    return mix(fallback, seen, inside);
-}
-
-// A drop lit: `refl` what the dome mirrors, `thru` what is seen through it (both
-// radiance), `mist_col` the light the mist scatters, `sun` the sun's strength for the
-// sparkles, `d_thru` the way through (from `rain_through`). Colour and cover.
-fn rain_light(g: RainGlass, v: vec3<f32>, d_thru: vec3<f32>, refl: vec3<f32>, thru: vec3<f32>, mist_col: vec3<f32>, sun: vec3<f32>) -> vec4<f32> {
-    let facing = dot(g.out, v) > 0.0;
-    let cosv = clamp(abs(dot(g.n, v)), 0.0, 1.0);
-    // (from inside, the dome's inner face mirrors the cab: little of it)
-    let f = select(0.02, 0.02 + 0.98 * pow(1.0 - cosv, 5.0), facing);
-    let trapped = dot(d_thru, d_thru) < 1e-4;
-    // the trapped light at the rim: what the dome mirrors, darkened
-    var c = select(thru * 0.96 * (1.0 - f), refl * 0.3, trapped) + refl * f;
-    // the sun: a pinpoint where the dome mirrors it, and the drop lit up whole where it
-    // focuses the sun towards the eye
-    let s = camera.sun_dir.xyz;
-    if (facing) {
-        let r = reflect(-v, g.n);
-        c = c + sun * pow(max(dot(r, s), 0.0), 900.0) * f * 60.0;
-    }
-    if (!trapped) {
-        c = c + sun * pow(max(dot(normalize(d_thru), s), 0.0), 60.0) * 1.5;
-    }
-    let a_drop = g.cover * 0.94;
-    let a_mist = g.mist * (1.0 - a_drop);
-    let a = a_drop + a_mist;
-    let col = (c * a_drop + mix(mist_col, thru, 0.98) * a_mist) / max(a, 1e-4);
-    return vec4<f32>(col, a);
-}
-
 // What a drop shows in the classic picture: the sky from the weather's colours, the
 // horizon in the fog's, the ground darker.
 fn rain_env_vanilla(d: vec3<f32>) -> vec3<f32> {
@@ -485,3 +43,705 @@ fn rain_env_vanilla(d: vec3<f32>) -> vec3<f32> {
     return select(c, srgb_decode(c), camera.sky_color.w > 0.5);
 }
 
+// --- The rain on a pane as all the pictures draw it (the enhanced film, enhanced/07_glass.wgsl
+// `glass_film`, and the classic one, scene/09_vanilla.wgsl `glass_film_classic`): the drops laid
+// out in the vehicle's own frame (`FsIn.local`), so they stay on the glass however the body
+// rolls and pitches and on a door that swings open. The modellers' texture coordinates of a
+// film are no measure of the glass: on the windscreen of the NL202 they run half as fast
+// again one way as the other and at sixty degrees to each other, from triangle to triangle
+// anew, and every drop drawn in them came out a slanting streak (the classic pictures' old
+// `rain_glass` did, and was replaced by this). So a pane is laid flat by the axes of the
+// vehicle (`pane_proj`).
+
+// The glass at a pixel: the position and the flat normal in the vehicle's frame, the
+// normal on the rain's side in the world, the pixel's footprint on the glass (m, its longer
+// side and the side of a square of its area), and the screen derivatives of both positions.
+struct PaneBase {
+    l: vec3<f32>,
+    nl: vec3<f32>,
+    out: vec3<f32>,
+    px: f32,
+    px_area: f32,
+    dlx: vec3<f32>,
+    dly: vec3<f32>,
+    dwx: vec3<f32>,
+    dwy: vec3<f32>,
+    ok: bool,
+};
+
+fn pane_base(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, outside_in: bool) -> PaneBase {
+    return pane_base_d(world, local, n, outside_in, dpdx(world), dpdy(world), dpdx(local), dpdy(local));
+}
+
+// `pane_base` with the positions' screen derivatives taken by the caller (`dwx`, `dwy` of the
+// world position, `dlx`, `dly` of the vehicle's own), where the pixel may be in a branch of
+// its own: there a derivative has no meaning, and taken there it brought Apple's M4 shader
+// compiler service down (`body_water`).
+fn pane_base_d(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, outside_in: bool, dwx: vec3<f32>, dwy: vec3<f32>, dlx: vec3<f32>, dly: vec3<f32>) -> PaneBase {
+    var b: PaneBase;
+    b.l = local;
+    b.dlx = dlx;
+    b.dly = dly;
+    b.dwx = dwx;
+    b.dwy = dwy;
+    // the film faces the eye unless the eye is in the bus behind it (the triangle's own
+    // normal: a film mesh's vertex normals are not to be relied on, many have none, and
+    // the drops' size followed their noise)
+    let eye = normalize(camera.cam_pos.xyz - world);
+    let gn = cross(b.dwx, b.dwy);
+    var out = select(safe_normal(n), gn / max(length(gn), 1e-20), dot(gn, gn) > 1e-24);
+    out = select(-out, out, dot(out, eye) >= 0.0);
+    out = select(out, -out, outside_in);
+    b.out = out;
+    b.px = max(max(length(b.dwx), length(b.dwy)), 1e-5);
+    b.px_area = max(sqrt(length(cross(b.dwx, b.dwy))), 1e-5);
+    let c = cross(b.dlx, b.dly);
+    let cl = length(c);
+    b.ok = cl > 1e-12;
+    b.nl = select(vec3<f32>(0.0, 1.0, 0.0), c / max(cl, 1e-20), b.ok);
+    return b;
+}
+
+// A direction on the glass in the vehicle's frame, in the world (through the two positions'
+// screen derivatives).
+fn pane_to_world(b: PaneBase, t: vec3<f32>) -> vec3<f32> {
+    let g = vec3<f32>(dot(b.dlx, b.dlx), dot(b.dlx, b.dly), dot(b.dly, b.dly));
+    let det = g.x * g.z - g.y * g.y;
+    if (abs(det) < 1e-24) {
+        return vec3<f32>(0.0);
+    }
+    let r = vec2<f32>(dot(b.dlx, t), dot(b.dly, t));
+    let a = (g.z * r.x - g.y * r.y) / det;
+    let c = (g.x * r.y - g.y * r.x) / det;
+    return a * b.dwx + c * b.dwy;
+}
+
+// The pane laid flat along two of the vehicle's axes (`axis`: 0 across and up, the
+// windscreen and the rear window; 1 along and up, the side windows; 2 the plan, a roof
+// light): where the pixel is (m: x across, y down), how an offset there is taken back onto
+// the glass (`m`: metres along `side_w` and `down_w`, the glass's own across and down in
+// the world), and the projection's screen derivatives (for the wiper's ridge).
+struct PaneProj {
+    q: vec2<f32>,
+    m: mat2x2<f32>,
+    side_w: vec3<f32>,
+    down_w: vec3<f32>,
+    dqx: vec2<f32>,
+    dqy: vec2<f32>,
+    steep: bool,
+};
+
+fn pane_proj(b: PaneBase, axis: i32) -> PaneProj {
+    var p: PaneProj;
+    var ea = vec3<f32>(1.0, 0.0, 0.0);
+    var eb = vec3<f32>(0.0, 0.0, -1.0);
+    var ec = vec3<f32>(0.0, 1.0, 0.0);
+    if (axis == 1) {
+        ea = vec3<f32>(0.0, 1.0, 0.0);
+        ec = vec3<f32>(1.0, 0.0, 0.0);
+    } else if (axis == 2) {
+        eb = vec3<f32>(0.0, 1.0, 0.0);
+        ec = vec3<f32>(0.0, 0.0, 1.0);
+    }
+    let nl = b.nl;
+    let nc = dot(nl, ec);
+    let ncs = select(nc, select(-1e-3, 1e-3, nc >= 0.0), abs(nc) < 1e-3);
+    p.q = vec2<f32>(dot(b.l, ea), dot(b.l, eb));
+    p.dqx = vec2<f32>(dot(b.dlx, ea), dot(b.dlx, eb));
+    p.dqy = vec2<f32>(dot(b.dly, ea), dot(b.dly, eb));
+    // the glass under a step of the projection's two axes
+    let t1 = ea - ec * (dot(nl, ea) / ncs);
+    let t2 = eb - ec * (dot(nl, eb) / ncs);
+    // the glass's own down (the steepest way on it) and across, in the vehicle's frame
+    p.steep = axis != 2;
+    var dl = vec3<f32>(0.0, 0.0, -1.0) + nl * nl.z;
+    dl = select(normalize(t2), dl / max(length(dl), 1e-6), dot(dl, dl) > 0.02 && p.steep);
+    var sl = t1 - dl * dot(t1, dl);
+    sl = sl / max(length(sl), 1e-6);
+    p.m = mat2x2<f32>(vec2<f32>(dot(t1, sl), dot(t1, dl)), vec2<f32>(dot(t2, sl), dot(t2, dl)));
+    // the same two ways in the world, square to the normal on the rain's side
+    var sw = pane_to_world(b, sl);
+    sw = sw - b.out * dot(sw, b.out);
+    var dw = pane_to_world(b, dl);
+    dw = dw - b.out * dot(dw, b.out);
+    p.side_w = sw / max(length(sw), 1e-6);
+    dw = dw - p.side_w * dot(dw, p.side_w);
+    p.down_w = dw / max(length(dw), 1e-6);
+    return p;
+}
+
+// The water on a pane at a pixel: the surface's normal (world, out of the water), how much
+// of the pixel a drop or a bead covers and how far out on it the pixel lies (0 its middle,
+// 1 its rim), the drop's radius in pixels, the pane's normal on the rain's side, the fine
+// mist of droplets under a millimetre, and how much of the view through the pane the
+// connected water scatters into a soft blur (`veil`).
+struct GlassWater {
+    n: vec3<f32>,
+    cover: f32,
+    out: vec3<f32>,
+    mist: f32,
+    veil: f32,
+    rim: f32,
+    size_px: f32,
+};
+
+// One drop of radius `r` (m) at `d` (m on the glass, across / down): the slope of its dome
+// (the normal's part along the glass), its cover of the pixel (`px`: the pixel's size on
+// the glass) and how far out on it the pixel lies. A shallow cap, as water spreading on
+// glass makes; a drop smaller than the pixel keeps its share of it, its slopes flattened
+// to their average.
+fn glass_dome(d: vec2<f32>, r: f32, px: f32) -> vec4<f32> {
+    let rr = length(d) / max(r, 1e-6);
+    let aa = clamp(px / max(r, 1e-6), 0.02, 1.0);
+    let cover = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, rr);
+    let seen = smoothstep(0.0, 0.8, r / px);
+    let cap = mix(0.15, 0.55, smoothstep(0.7, 2.5, r / px));
+    let s = d / max(r, 1e-6) * cap * (0.6 + 0.4 * rr * rr);
+    return vec4<f32>(s, cover * seen, min(rr, 1.0));
+}
+
+// What covers the pixel, gathered over the layers: the cover, the slope, the rim and the
+// drop's size in pixels of the drop on top.
+struct DropAcc {
+    cover: f32,
+    slope: vec2<f32>,
+    rim: f32,
+    size_px: f32,
+    track: f32,
+    // the cover of the drops too small for the pixel to see one by one, as their average
+    // (taken into the mist, so that they read as an even haze, not as random specks)
+    avg: f32,
+};
+
+fn drop_take(a: ptr<function, DropAcc>, d: vec4<f32>, r: f32, px: f32) {
+    if (d.z > (*a).cover) {
+        (*a).cover = d.z;
+        (*a).slope = d.xy;
+        (*a).rim = d.w;
+        (*a).size_px = r / px;
+    }
+}
+
+// One layer of the drops that sit on the glass: a jittered grid of cells `cell` metres
+// wide (of the projection), each holding a drop now and then (`occ` the share of cells
+// that hold one). A drop lands, spreads to its size within a moment and sits; after its
+// own while it is gone again, taken by a runner or merged into a neighbour, and the next
+// lands somewhere else in the cell - all fading, nothing popping.
+fn glass_bead(a: ptr<function, DropAcc>, p: PaneProj, layer: f32, cell: f32, occ: f32, r0: f32, size: f32, t: f32, px: f32) {
+    // (a layer whose drops are smaller than the pixel, or cells no wider than it - a mirror's
+    // small picture, the glass seen from afar - is taken at its average cover: sampled one
+    // random cell a pixel, it drew white noise)
+    // Filter by the typical bead diameter. Using its minimum radius suppressed
+    // distinguishable drops on oblique panes and at reduced render scales.
+    let diameter = 2.0 * (4.0 / 3.0) * r0 * size;
+    let fine = max(1.0 - smoothstep(0.7, 1.5, diameter / px), 1.0 - smoothstep(1.0, 2.5, cell / px));
+    if (fine > 0.0) {
+        let rr = 1.6 * r0 * size / cell;
+        (*a).avg = (*a).avg + fine * occ * min(3.14159 * rr * rr, 1.0);
+        if (fine > 0.99) {
+            return;
+        }
+    }
+    let turn = 0.61 + layer * 1.37;
+    let g2 = rain_turn(p.q, turn) / cell + vec2<f32>(layer * 17.3, layer * 5.1);
+    let c = floor(g2);
+    let timing = rain_hash(c + vec2<f32>(3.7, 9.2 + layer));
+    let life = (9.0 + layer * 4.0) * (1.0 + timing.y);
+    let cycle = t / life + timing.x;
+    let ph = fract(cycle);
+    let arrival = c + floor(cycle) * vec2<f32>(17.0, 43.0);
+    let h = rain_hash(arrival);
+    // (a share of cells rising with the wetness: a drop fades in over a small rise of it)
+    let shown = clamp((occ - h.x) * 20.0, 0.0, 1.0) * smoothstep(0.0, 0.03, ph) * (1.0 - smoothstep(0.9, 1.0, ph)) * (1.0 - fine);
+    if (shown <= 0.0) {
+        return;
+    }
+    // (`r0` the layer's smallest drop, the largest twice that: rain on glass sits as drops of
+    // half a millimetre to four across - drawn up to a share of the cell they made drops of a
+    // centimetre and more, few and far between)
+    let radius = r0 * (1.0 + h.y * h.y) * mix(0.6, 1.0, smoothstep(0.0, 0.2, ph)) * size;
+    // (anywhere in the cell the largest still fits in - on the glass it is never smaller
+    // than in the projection - and the same place whatever its size: the size follows the
+    // wetness, which changes across the glass)
+    let room = min(r0 * 3.0 / cell, 0.45);
+    let centre = c + vec2<f32>(room) + rain_hash(arrival + 9.1) * (1.0 - 2.0 * room);
+    let dq = rain_turn((g2 - centre) * cell, -turn);
+    if (length(dq) > radius * 1.3) {
+        return;
+    }
+    var d = p.m * dq;
+    // No drop is a circle: its rim wanders where the glass held it as it spread, and its
+    // weight draws it a little fuller below than above.
+    let h3 = rain_hash(arrival + 23.9);
+    let dl = max(length(d), 1e-7);
+    let u = d / dl;
+    let c2 = u.x * u.x - u.y * u.y;
+    let s2 = 2.0 * u.x * u.y;
+    let c3 = u.x * (4.0 * u.x * u.x - 3.0);
+    let s3 = u.y * (3.0 - 4.0 * u.y * u.y);
+    let p2 = h3 * 2.0 - 1.0;
+    let wave = (s2 * p2.x + c2 * p2.y) * 0.7 + 0.45 * (s3 * p2.y - c3 * p2.x);
+    d = d / (1.0 + (0.03 + 0.05 * h.y) * wave);
+    d.y = d.y * select(1.06, 0.94, d.y > 0.0);
+    let dome = glass_dome(d, radius, px);
+    drop_take(a, vec4<f32>(dome.xy, dome.z * shown, dome.w), radius, px);
+}
+
+// A runner's sideways wander as it goes down (m): a smooth random path of its own.
+fn glass_meander(s: f32, seed: vec2<f32>, amp: f32) -> f32 {
+    let w = rain_patches(vec2<f32>(s * 9.0 + seed.x, seed.y));
+    return amp * ((w.x - 0.5) * 1.5 + (w.y - 0.5) * 0.5);
+}
+
+// The runners in a lattice of lanes (`qr`: the projection turned so they run down +y, `mr`
+// taking its offsets onto the glass): now and then a drop grown heavy breaks loose and
+// slides a hand's breadth or two down, in fits and starts, wandering a little from side to
+// side, and stops again. It sweeps a narrow clear track through the small drops, which
+// fill in again as the rain falls on it; behind it lies a short wet trail that drains
+// within a second, and a few beads it left. One chance a cell of 4.5 cm x 1.2 m; a pixel
+// looks at its own cell and the one above, whose drop may have slid into it.
+fn glass_runners(a: ptr<function, DropAcc>, qr: vec2<f32>, mr: mat2x2<f32>, seed: f32, wet: f32, heavy: f32, blow: f32, size: f32, t: f32, px: f32) {
+    // (lanes of 4.5 cm and cells 1.2 m tall, few of them running at once: with lanes of 2 cm
+    // and cells of 0.8 m nearly every lane ran in a downpour, and their tracks cut the glass
+    // into wide clear stripes, #4153)
+    let lane_w = 0.045;
+    let seg_h = 1.2;
+    let lane = floor(qr.x / lane_w);
+    let seg0 = floor(qr.y / seg_h);
+    for (var k = 0; k < 2; k = k + 1) {
+        let seg = seg0 - f32(k);
+        let key = vec2<f32>(lane * 1.7 + seed * 101.0, seg * 2.3 + seed * 37.0);
+        let h1 = rain_hash(key + vec2<f32>(3.0, 11.0));
+        if (h1.x >= wet * (0.15 + 0.15 * heavy + 0.1 * blow)) {
+            continue;
+        }
+        let h2 = rain_hash(key + vec2<f32>(8.1, 5.1));
+        // (it gathers a while, runs, and its trail fills in with new rain)
+        // (a drop grown heavy on upright glass runs off at some ten to twenty centimetres a
+        // second, most of the way down the pane)
+        let sit = 0.6 + 2.4 * h2.y;
+        let v = (0.08 + 0.16 * h1.y * h1.y) * (1.0 + 0.8 * blow) * (1.0 + 0.4 * heavy);
+        let run_len = 0.12 + 0.4 * h2.x;
+        let run_t = run_len / v;
+        let refill = mix(3.0, 1.5, wet);
+        let period = sit + run_t + refill;
+        let cycle = t / period + h2.x;
+        let tau = fract(cycle) * period;
+        let h3 = rain_hash(key + vec2<f32>(1.3, 29.7) + floor(cycle) * vec2<f32>(13.0, 41.0));
+        // stick and slip: v s - v P / 2 pi sin(2 pi s / P) halts once a pulse P
+        let pulse = 0.3 + 0.4 * h3.x;
+        let st = clamp(tau - sit, 0.0, run_t * 1.05);
+        let travel = min(v * st - v * pulse * 0.1591549 * sin(6.283185 * st / pulse), run_len);
+        let vis = smoothstep(0.0, 0.6, tau) * (1.0 - smoothstep(period - 1.0, period, tau));
+        let y0 = (seg + 0.02 + 0.32 * h3.x) * seg_h;
+        let x0 = (lane + 0.3 + 0.4 * h3.y) * lane_w;
+        let wseed = h3 * 57.0;
+        let amp = 0.002 + 0.002 * h2.y;
+        if (abs(qr.x - x0) > lane_w * 0.5 + amp * 1.5 || qr.y < y0 - 0.01 || qr.y > y0 + run_len + 0.01) {
+            continue;
+        }
+        // (a downpour's runners are heavier; a drop gathers before it goes)
+        let rh = size * (0.0012 + 0.0008 * h1.y) * (1.0 + 0.3 * heavy) * mix(0.6, 1.0, smoothstep(0.0, sit, tau));
+        var head_d = mr * vec2<f32>(qr.x - (x0 + glass_meander(travel, wseed, amp)), qr.y - (y0 + travel));
+        // (drawn out a little behind, full in front)
+        head_d.y = head_d.y * select(0.8, 1.0, head_d.y > 0.0);
+        let head = glass_dome(head_d, rh, px);
+        // (once stopped it sits at the end of its run and is taken into the new rain)
+        let head_vis = vis * (1.0 - smoothstep(sit + run_t, sit + run_t + refill * 0.8, tau));
+        drop_take(a, vec4<f32>(head.xy, head.z * head_vis, head.w), rh, px);
+        let along = qr.y - y0;
+        if (along > 0.0 && along < travel - rh * 0.5) {
+            let dxq = qr.x - (x0 + glass_meander(along, wseed, amp));
+            let dx = (mr * vec2<f32>(dxq, 0.0)).x;
+            // how long ago the head passed here
+            let age = max(tau - sit - along / v, 0.0);
+            let hw = rh * 0.9;
+            let cleared = (1.0 - smoothstep(hw * 0.6, hw * 1.1, abs(dx))) * (1.0 - smoothstep(refill * 0.4, refill, age)) * vis;
+            (*a).track = max((*a).track, cleared);
+            // the thin wet trail it draws, draining within a second: a faint lens, no strip
+            let tw = rh * 0.45 * exp(-age * 2.0);
+            let trail = glass_dome(vec2<f32>(dx, 0.0), max(tw, 1e-5), px);
+            let trail_cover = trail.z * 0.35 * (1.0 - smoothstep(0.2, 1.0, age)) * vis;
+            drop_take(a, vec4<f32>(trail.xy * 0.4, trail_cover, trail.w), tw, px);
+            // ... and a few beads, left behind where the trail broke
+            let bc = floor(along / 0.009);
+            let bh = rain_hash(vec2<f32>(lane * 3.1 + bc, seg * 1.9 + 41.0 + seed * 7.0));
+            if (bh.x < 0.3) {
+                let bcen = vec2<f32>((bh.y - 0.5) * hw * 0.8, ((bc + 0.5) * 0.009 - along) * (mr * vec2<f32>(0.0, 1.0)).y);
+                let br = 0.0004 + 0.0005 * bh.y;
+                let bead = glass_dome(vec2<f32>(dx, 0.0) - bcen, br, px);
+                let bead_cover = bead.z * smoothstep(0.4, 1.0, age) * (1.0 - smoothstep(refill * 0.5, refill, age)) * vis;
+                drop_take(a, vec4<f32>(bead.xy, bead_cover, bead.w), br, px);
+            }
+        }
+    }
+}
+
+// The drops on one projection of the pane (`w` its share, see `glass_water`).
+fn glass_drops(a: ptr<function, DropAcc>, b: PaneBase, p: PaneProj, w: f32, wet: f32, heavy: f32, bank: f32, size: f32, world: vec3<f32>, t: f32) {
+    // --- the airstream: a drop's drag grows with the speed squared, and at some 40 km/h it
+    // matches its weight. Along the glass the air drives the water back; where it meets the
+    // glass head on (the windscreen) it parts, up and out. The runners go where weight and
+    // air take them together; the drops that sit hold on.
+    var flow = vec2<f32>(0.0, 1.0);
+    var blow = 0.0;
+    if (camera.wind.w > 0.5 && near_player_vehicle(world) > 0.5) {
+        let air = -camera.wind.xyz;
+        var aw = vec2<f32>(dot(air, p.side_w), dot(air, p.down_w));
+        aw.y = aw.y - abs(dot(air, b.out)) * 0.6;
+        let v2 = dot(aw, aw);
+        blow = clamp(v2 / 130.0, 0.0, 3.0);
+        flow = flow + aw / max(sqrt(v2), 1e-4) * blow;
+    }
+    if (p.steep) {
+        // The runners' lanes are laid along the way the water runs, in sixteenths of a turn
+        // (turned freely, a degree moved every lane a metre off by its width). Between two
+        // such ways the two lattices cross-fade, so a change of speed fades the runners
+        // over instead of jumping them. (`flow` is on the glass; the lanes in the
+        // projection, whose down is the glass's down.)
+        let fstep = 0.3926991;
+        let fa = atan2(flow.x, flow.y) / fstep;
+        let f0 = floor(fa);
+        let fw = smoothstep(0.35, 0.65, fa - f0);
+        for (var k = 0; k < 2; k = k + 1) {
+            let wk = select(1.0 - fw, fw, k == 1) * w;
+            if (wk < 0.01) {
+                continue;
+            }
+            let ang = (f0 + f32(k)) * fstep;
+            let cs = vec2<f32>(cos(ang), sin(ang));
+            let mr = p.m * mat2x2<f32>(vec2<f32>(cs.x, -cs.y), vec2<f32>(cs.y, cs.x));
+            glass_runners(a, rain_turn(p.q, ang), mr, f0 + f32(k), wet * wk, heavy, blow, size, t, b.px_area);
+        }
+    }
+    // --- the drops that sit: four sizes, a great many small ones and fewer large ones (radius
+    // 1 to 2, 1.6 to 3.2, 2.4 to 4.8 and 3.4 to 6.8 mm: smaller ones, true to a drizzle's,
+    // were under a pixel from the driver's seat and drew the windscreen as an even grain),
+    // all fewer in the runners' fresh
+    // tracks and under the bank
+    let room = (1.0 - (*a).track) * (1.0 - bank) * w;
+    for (var layer = 0; layer < 4; layer = layer + 1) {
+        let fl = f32(layer);
+        var cell = 0.0068;
+        var r0 = 0.001;
+        var occ = 0.85 * smoothstep(0.02, 0.25, wet);
+        if (layer == 1) {
+            cell = 0.0108;
+            r0 = 0.0016;
+            occ = 0.75 * smoothstep(0.05, 0.4, wet);
+        } else if (layer == 2) {
+            cell = 0.016;
+            r0 = 0.0024;
+            occ = 0.6 * smoothstep(0.15, 0.6, wet);
+        } else if (layer == 3) {
+            cell = 0.023;
+            r0 = 0.0034;
+            occ = 0.4 * smoothstep(0.35, 0.9, wet);
+        }
+        glass_bead(a, p, fl, cell, occ * room, r0, size, t, b.px_area);
+    }
+}
+
+// The rain on a pane at a pixel (see the head of this file). `water` is the pane's
+// wetness (0..1; below 0 a blade has just wiped it, above 1 the bank a blade pushed),
+// `t` the animation clock, `outside_in` true for the eye in the bus.
+fn glass_water(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, water: f32, t: f32, outside_in: bool) -> GlassWater {
+    let b = pane_base(world, local, n, outside_in);
+    let wdx = dpdx(water);
+    let wdy = dpdy(water);
+    var g: GlassWater;
+    g.n = b.out;
+    g.out = b.out;
+    g.cover = 0.0;
+    g.mist = 0.0;
+    g.veil = 0.0;
+    g.rim = 0.0;
+    g.size_px = 0.0;
+    let wet = clamp(water, 0.0, 1.0);
+    let wiped = clamp(-water * 25.0, 0.0, 1.0);
+    let bank = clamp((water - 1.0) * 0.18, 0.0, 1.0);
+    if (!b.ok || (wet <= 0.01 && wiped <= 0.01 && bank <= 0.0)) {
+        return g;
+    }
+    // Which way the pane is laid flat: by the larger of its normal's parts across and along
+    // the vehicle, the two cross-faded over a band round 45 degrees (a windscreen's curved
+    // corner), each drop of either set coming or going whole; a pane facing up is a roof's.
+    let an = abs(b.nl);
+    let roof = an.z > max(an.x, an.y) * 2.0;
+    let w_front = select(smoothstep(-0.12, 0.12, an.y - an.x), 1.0, roof);
+    let main_axis = select(select(1, 0, w_front >= 0.5), 2, roof);
+    let p = pane_proj(b, main_axis);
+    // the wetness's gradient on the glass (from its screen derivatives)
+    let jd = p.dqx.x * p.dqy.y - p.dqx.y * p.dqy.x;
+    var grad = vec2<f32>(0.0);
+    if (abs(jd) > 1e-14) {
+        grad = vec2<f32>(wdx * p.dqy.y - wdy * p.dqx.y, wdy * p.dqx.x - wdx * p.dqy.x) / jd;
+    }
+    if (wiped > 0.01) {
+        // Just wiped: fine streaks along the blade's sweep (the age gradient follows it)
+        // bend the view for a moment, without bringing the drops back.
+        var along = vec2<f32>(0.0, 1.0);
+        if (length(grad) > 0.01) {
+            along = normalize(grad);
+        }
+        let across = vec2<f32>(-along.y, along.x);
+        let streak = rain_patches(vec2<f32>(dot(p.q, across) * 600.0, dot(p.q, along) * 4.0));
+        g.cover = wiped * (0.012 + 0.018 * streak.x);
+        g.veil = wiped * 0.06;
+        g.size_px = 4.0;
+        g.n = normalize(b.out + (p.side_w * across.x + p.down_w * across.y) * (streak.y - 0.5) * wiped * 0.003);
+        return g;
+    }
+    let heavy = smoothstep(0.55, 1.0, wet);
+    // (a drizzle leaves beads, a downpour full drops; on an upright side pane, which the rain
+    // meets edge on and the airstream sweeps, they stay smaller than on a raked windscreen)
+    let size = mix(0.85, 1.1, smoothstep(0.1, 0.8, wet)) * mix(0.8, 1.0, smoothstep(0.0, 0.4, abs(b.out.z)));
+    var acc: DropAcc;
+    acc.cover = 0.0;
+    acc.slope = vec2<f32>(0.0);
+    acc.rim = 0.0;
+    acc.size_px = 0.0;
+    acc.track = 0.0;
+    acc.avg = 0.0;
+    // the bank a blade pushed: its ridge bends the view
+    if (bank > 0.0) {
+        acc.cover = bank;
+        acc.slope = clamp(-0.00005 * grad, vec2<f32>(-0.15), vec2<f32>(0.15)) * bank;
+        acc.size_px = 8.0;
+    }
+    let w_main = select(select(1.0 - w_front, w_front, main_axis == 0), 1.0, roof);
+    glass_drops(&acc, b, p, w_main, wet, heavy, bank, size, world, t);
+    var side_w = p.side_w;
+    var down_w = p.down_w;
+    if (w_main < 0.99) {
+        let p2 = pane_proj(b, 1 - main_axis);
+        glass_drops(&acc, b, p2, 1.0 - w_main, wet, heavy, bank, size, world, t);
+    }
+    // --- the mist: droplets of a millimetre and less, too many to draw one by one far off
+    var grain = 0.0;
+    {
+        let mg = rain_turn(p.q, 0.33) / 0.0024;
+        let mc = floor(mg);
+        let mh = rain_hash(mc + 71.0);
+        let mr = 0.1 + 0.16 * mh.y;
+        let at = mc + vec2<f32>(mr) + rain_hash(mc + 5.3) * (1.0 - 2.0 * mr);
+        grain = step(mh.x, wet * 0.3) * (1.0 - smoothstep(mr * 0.6, mr, length(mg - at)));
+    }
+    // (seen from further than a millimetre a pixel: their average)
+    let mist = mix(wet * 0.3 * 0.12, grain, smoothstep(0.0015, 0.0006, b.px));
+    g.mist = clamp((mist + 0.6 * acc.avg) * (1.0 - acc.track), 0.0, 1.0);
+    // The connected water between the drops scatters some of the view into a soft haze
+    // (the veil, drawn from the picture's blurred levels), the same on every pane as wet.
+    // A runner's fresh track is a clear sheet of water, sharper than the rest.
+    let film = smoothstep(0.03, 0.4, wet) * (1.0 - 0.3 * acc.track);
+    // (by the air's temperature, `camera.lod.w`: on cold glass the water spreads into a film
+    // and a fine mist of droplets that scatter the view - near freezing the sleet's slush on
+    // top - while in a warm summer rain it beads up and runs off, the glass between the drops
+    // nearly clear)
+    let cold = 1.0 - smoothstep(2.0, 24.0, camera.lod.w);
+    // (light: a strong veil hid the drops behind a uniform fog)
+    g.veil = film * mix(0.12, 0.25, heavy) * mix(0.7, 1.2, cold);
+    g.cover = acc.cover;
+    g.rim = acc.rim;
+    g.size_px = acc.size_px;
+    let slope = acc.slope;
+    let nz = sqrt(max(1.0 - dot(slope, slope), 0.02));
+    g.n = normalize(b.out * nz + side_w * slope.x + down_w * slope.y);
+    return g;
+}
+
+// The picture behind the glass (`glass_mips.rs`, pre-exposed radiance) at `uv`, blurred to
+// level `lod`: five reads round the point a texel of that level apart, so the small levels'
+// texels do not show as blocks when they are spread over many pixels. (Through `s_ao`, a
+// plain trilinear sampler: the material's own `s_diffuse` is anisotropic, and read at an
+// explicit level some Windows drivers took its small levels unfiltered - the street behind
+// a wet windscreen in squares of four and eight pixels, #4258.)
+fn glass_blur(uv: vec2<f32>, lod: f32) -> vec3<f32> {
+    let dims = vec2<f32>(textureDimensions(t_env));
+    let o = exp2(lod) * 0.75 / dims;
+    let c = clamp(uv, vec2<f32>(0.001), vec2<f32>(0.999));
+    var s = textureSampleLevel(t_env, s_ao, c, lod).rgb * 2.0;
+    s = s + textureSampleLevel(t_env, s_ao, clamp(c + vec2<f32>(o.x, o.y * 0.5), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
+    s = s + textureSampleLevel(t_env, s_ao, clamp(c + vec2<f32>(-o.x * 0.5, o.y), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
+    s = s + textureSampleLevel(t_env, s_ao, clamp(c + vec2<f32>(-o.x, -o.y * 0.5), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
+    s = s + textureSampleLevel(t_env, s_ao, clamp(c + vec2<f32>(o.x * 0.5, -o.y), vec2<f32>(0.001), vec2<f32>(0.999)), lod).rgb;
+    return s / 6.0;
+}
+
+// The snow a pane holds while it snows (see enhanced/07_glass.wgsl `glass_snow`):
+// `defrost` how far the windscreen's defroster has cleared it (0..0.85), `fz` the height on
+// the glass in the bus's frame (-1 its bottom, 1 its top), for the drift along the bottom.
+fn glass_snow_with(in: FsIn, cover: f32, defrost: f32, fz: f32) -> vec4<f32> {
+    if (cover <= 0.0) {
+        return vec4<f32>(1.0, 1.0, 1.0, 0.0);
+    }
+    // (laid out on the glass as the drops are, `pane_proj`: the film's own coordinates
+    // drew the crystals and the drifts out long on the windscreen)
+    let b = pane_base(in.world, in.local, in.normal, false);
+    let an = abs(b.nl);
+    let roof = an.z > max(an.x, an.y) * 2.0;
+    let axis = select(select(1, 0, an.y >= an.x), 2, roof);
+    let m = pane_proj(b, axis).q;
+    let t = camera.post.y;
+    // The defroster warms the glass that faces ahead on the panes the wipers sweep. By the
+    // pane's facing and not by its film's slot: a windscreen is several slots, a side one
+    // among them at its wrapped corner, and the slot's flag melted the snow on one and kept it
+    // on the next, a straight seam across the glass.
+    let ahead = select(smoothstep(-0.12, 0.12, an.y - an.x), 0.0, roof) * select(0.0, 1.0, material.wipe_bounds.z != 0.0);
+    let heat = mix(0.15, 0.45 + 0.55 * clamp(defrost / 0.85, 0.0, 1.0), ahead);
+    // The flakes as they land: soft clumps of a few millimetres (sharp six-armed stars a
+    // centimetre across were each a star drawn on the street behind), each staying a while
+    // and melting into a little water - soon on the warm windscreen, slowly on a side window.
+    // Where a flake is smaller than a pixel it is drawn as the share of the glass it covers
+    // (a speckle of single pixels flickered as the view moved); where its cell is, as the
+    // share all of them cover.
+    let px = b.px;
+    var flakes = 0.0;
+    var melt_water = 0.0;
+    for (var layer = 0; layer < 2; layer = layer + 1) {
+        let fl = f32(layer);
+        let cell = select(0.007, 0.012, layer == 1);
+        let density = clamp(cover * select(1.15, 0.85, layer == 1), 0.0, 1.0);
+        let p = m / cell + fl * 37.0;
+        let c = floor(p);
+        let tm = rain_hash(c + vec2<f32>(5.0, 1.0 + fl));
+        let life = mix(40.0, 6.0, heat) * (0.6 + 0.8 * tm.y);
+        let cycle = t / life + tm.x;
+        let ph = fract(cycle);
+        let arrival = c + floor(cycle) * vec2<f32>(19.0, 47.0);
+        let h = rain_hash(arrival);
+        let h2 = rain_hash(arrival + vec2<f32>(91.0, 13.0));
+        // (a flake shows once the cover passes its own threshold: they come one by one)
+        let shown = clamp((density - h2.y) * 12.0, 0.0, 1.0) * smoothstep(0.0, 0.02, ph);
+        // the second half of its while it melts: it shrinks and goes clear
+        let melt = smoothstep(0.45, 0.95, ph);
+        let d = (p - (c + 0.3 + 0.4 * h)) * cell;
+        let r = cell * (0.11 + 0.13 * h2.x) * (1.0 - 0.5 * melt);
+        // a clump is round only roughly: three soft lobes, turned its own way
+        let lobe = 0.88 + 0.12 * cos(3.0 * atan2(d.y, d.x) + h.x * 6.283185);
+        let aa = max(px * 0.7, r * 0.2);
+        let edge = 1.0 - smoothstep(r * lobe - aa, r * lobe + aa, length(d));
+        let detail = smoothstep(0.5, 1.5, r / px);
+        let own = mix(shown * 3.14159 * r * r / (cell * cell), shown * edge, detail);
+        // (the cells' average: a flake shows for some 70 % of its while, solid for some half)
+        let mean = density * 0.55 * 3.14159 * 0.0324;
+        let lit = mix(mean, own, smoothstep(1.0, 3.0, cell / px));
+        flakes = max(flakes, lit * (0.7 + 0.3 * h.x) * (1.0 - melt));
+        melt_water = max(melt_water, mix(mean * 0.5, shown * edge * detail, smoothstep(1.0, 3.0, cell / px)) * melt * (1.0 - smoothstep(0.92, 1.0, ph)));
+    }
+    // The settled layer closes evenly as the cover grows, its edge broken up at the scale of
+    // a hand (a noise of a few centimetres drew a blotchy film over the whole pane), deepest
+    // along the windscreen's bottom edge, where the blades and the airstream do not reach.
+    let lumps = snow_noise(m / 0.11) * 0.75 + snow_noise(m / 0.035 + 7.0) * 0.25;
+    var drift = 0.0;
+    // (by the height in the bus's own frame, not by the wiper mask's `wipe_uv`: a
+    // windscreen's film is several slots - each wiper's field and the glass round them -
+    // each with its own mask and its own 0 .. 1, and a bank laid along their edges drew
+    // seams down the middle of the windscreen and round the wipers' arcs)
+    if (camera.inside_c.w > 0.5 && ahead > 0.0) {
+        let low = 1.0 - (fz * 0.5 + 0.5);
+        drift = ahead * smoothstep(0.5, 0.75, low + 0.12 * (lumps - 0.5)) * smoothstep(0.1, 0.6, cover);
+    }
+    let c = cover * (0.8 + 0.4 * lumps) * (1.0 - 0.3 * heat) + drift * 0.9;
+    let sheet = smoothstep(0.65, 1.25, c) * 0.72 + smoothstep(1.05, 1.7, c) * 0.22;
+    let white = mix(vec3<f32>(0.9, 0.92, 0.96), vec3<f32>(0.97, 0.98, 1.0), smoothstep(1.0, 1.8, c));
+    let solid = max(flakes * 0.9, sheet);
+    // (the melt water: a faint clear bead, the street a shade darker through it)
+    let wet = melt_water * 0.16 * (1.0 - solid);
+    let alpha = clamp(solid + wet, 0.0, 0.97);
+    let col = (white * solid + vec3<f32>(0.5, 0.55, 0.6) * wet) / max(solid + wet, 1e-4);
+    return vec4<f32>(col, alpha);
+}
+
+// The rain on a pane that has no film of its own to carry it (`glass_film`): the windows of
+// the traffic's cars and buses, seen from the street. OMSI gives only some buses a rain film,
+// and only the player's own wets it, so every other window stayed dry and clear in a downpour.
+// The same drops and runners (`glass_water`), as wet as the roads (`camera.shadow.w`); none
+// on the player's own bus, whose films carry its rain.
+fn pane_rain(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>) -> GlassWater {
+    let wet = clamp(camera.shadow.w * 1.3, 0.0, 1.0);
+    let own = near_player_vehicle(world) > 0.5;
+    let far = distance(world, camera.cam_pos.xyz) > 80.0;
+    let w = select(wet, 0.0, own || far);
+    return glass_water(world, local, n, w, camera.post.y, false);
+}
+
+// The pane's colour `rgb` and cover `a` under that rain (`vn` towards the eye): the drops,
+// small lenses darker than the glass round them with the sky mirrored on their domes
+// (`refl`, what the dome mirrors), and between them the wet film, a little milky
+// (`haze`, the daylight it scatters) and less see-through.
+fn pane_rain_compose(g: GlassWater, rgb: vec3<f32>, a: f32, vn: vec3<f32>, refl: vec3<f32>, haze: vec3<f32>) -> vec4<f32> {
+    let cosv = clamp(abs(dot(g.n, vn)), 0.0, 1.0);
+    let f = 0.02 + 0.98 * pow(1.0 - cosv, 5.0);
+    let drop = mix(rgb * 0.7, refl, clamp(f * 3.0, 0.15, 0.8));
+    var c = mix(rgb, drop, g.cover * 0.85);
+    let film = clamp(g.veil * 0.35 + g.mist * 0.2, 0.0, 0.5);
+    c = mix(c, haze, film);
+    let a2 = clamp(a + (1.0 - a) * (g.cover * 0.5 + film), a, 1.0);
+    return vec4<f32>(c, a2);
+}
+
+
+// The rain on a vehicle (Enhanced, `shade_enhanced`): the drops a waxed paint beads the
+// water into - the glass's own (`glass_bead`), laid out the same way on the body
+// (`pane_proj`), with fewer layers than a pane's: the paint's film is smooth already, the
+// drops only break its mirror into points of light. (No runners: with `glass_runners` as
+// well the lean pipelines' code brought Apple's M4 shader compiler service down.) On an outside mirror the
+// same drops bend the picture it shows (`mirror_bend`). `wet` 0..1; `dw` and `dl` the
+// world's and the vehicle's positions' screen derivatives in x and y, taken where every
+// pixel of the draw takes them (in a branch of the pixel's own they brought Apple's M4
+// shader compiler service down, as did a second copy of this code in the same pipeline).
+struct VehicleDrops {
+    // the water's normal (world) and the surface's, on the eye's side
+    n: vec3<f32>,
+    out: vec3<f32>,
+    // how much of the pixel a drop covers, and how far out on it the pixel lies
+    cover: f32,
+    rim: f32,
+};
+
+fn vehicle_drops(world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, wet: f32, t: f32, dw: mat2x3<f32>, dl: mat2x3<f32>) -> VehicleDrops {
+    let b = pane_base_d(world, local, n, false, dw[0], dw[1], dl[0], dl[1]);
+    var out = VehicleDrops(b.out, b.out, 0.0, 0.0);
+    if (!b.ok || wet <= 0.01) {
+        return out;
+    }
+    let an = abs(b.nl);
+    let roof = an.z > max(an.x, an.y) * 2.0;
+    let axis = select(select(1, 0, an.y > an.x), 2, roof);
+    let p = pane_proj(b, axis);
+    var acc: DropAcc;
+    acc.cover = 0.0;
+    acc.slope = vec2<f32>(0.0);
+    acc.rim = 0.0;
+    acc.size_px = 0.0;
+    acc.track = 0.0;
+    acc.avg = 0.0;
+    // (the paint holds bigger beads than glass, fewer of them: a polished body's water
+    // contracts into round drops)
+    let room = 1.0;
+    glass_bead(&acc, p, 1.0, 0.0125, 0.55 * smoothstep(0.03, 0.35, wet) * room, 0.0018, 1.0, t, b.px_area);
+    glass_bead(&acc, p, 3.0, 0.026, 0.4 * smoothstep(0.25, 0.85, wet) * room, 0.0036, 1.0, t, b.px_area);
+    let slope = acc.slope;
+    let nz = sqrt(max(1.0 - dot(slope, slope), 0.02));
+    out.n = normalize(b.out * nz + p.side_w * slope.x + p.down_w * slope.y);
+    out.cover = clamp(acc.cover + acc.avg * 0.5, 0.0, 1.0);
+    out.rim = acc.rim;
+    return out;
+}
+
+// Where an outside mirror's picture is read under its drops (`vehicle_drops`): a drop's
+// dome tilts the view through it, some 3 cm across the glass for a slope of one against the
+// mirror's 20 cm or so - the picture inside it is the street turned over and drawn small.
+// `duv` the picture's coordinates' screen derivatives in x and y, `dw` the world position's.
+fn mirror_bend(uv: vec2<f32>, duv: mat2x2<f32>, dw: mat2x3<f32>, d: VehicleDrops) -> vec2<f32> {
+    let det = duv[0].x * duv[1].y - duv[0].y * duv[1].x;
+    if (d.cover <= 0.0 || abs(det) < 1e-14) {
+        return uv;
+    }
+    let dw_du = (dw[0] * duv[1].y - dw[1] * duv[0].y) / det;
+    let dw_dv = (dw[1] * duv[0].x - dw[0] * duv[1].x) / det;
+    let tilt = (d.n - d.out) * 0.03;
+    let shift = vec2<f32>(dot(tilt, dw_du) / max(dot(dw_du, dw_du), 1e-12), dot(tilt, dw_dv) / max(dot(dw_dv, dw_dv), 1e-12));
+    return uv - shift * d.cover;
+}

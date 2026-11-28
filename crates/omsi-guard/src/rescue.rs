@@ -1,7 +1,7 @@
 //! Healing a version that does not start here: a newer release, else the version before it,
 //! else safe mode, else telling the player - each step said in a message box.
 
-use crate::dialog::{show, Message};
+use crate::dialog::{Message, show};
 use crate::journal::{Journal, Kind};
 use crate::process::alive;
 use omsi_platform::recovery;
@@ -38,7 +38,9 @@ pub fn due_at_start(version: &str) -> Option<String> {
     // in a row, of a version none of whose sessions ever ran here, count)
     let (failures, ever) = j.record(Kind::Game, version, alive);
     if failures >= 2 && !ever {
-        return Some(format!("the last game sessions of {version} failed to start here"));
+        return Some(format!(
+            "the last game sessions of {version} failed to start here"
+        ));
     }
     None
 }
@@ -56,7 +58,9 @@ fn program() -> Option<(std::path::PathBuf, std::path::PathBuf)> {
 
 /// Start the program again (the launcher), in safe mode or not.
 fn relaunch(safe: bool) -> bool {
-    let Some((exe, dir)) = program() else { return false };
+    let Some((exe, dir)) = program() else {
+        return false;
+    };
     let mut cmd = std::process::Command::new(&exe);
     cmd.current_dir(&dir).env_remove("OMSI_GUARD_STATE");
     if safe {
@@ -66,7 +70,11 @@ fn relaunch(safe: bool) -> bool {
     }
     match cmd.spawn() {
         Ok(_) => {
-            crate::note(&format!("started {} again{}", exe.display(), if safe { " in safe mode" } else { "" }));
+            crate::note(&format!(
+                "started {} again{}",
+                exe.display(),
+                if safe { " in safe mode" } else { "" }
+            ));
             true
         }
         Err(e) => {
@@ -80,7 +88,11 @@ fn relaunch(safe: bool) -> bool {
 pub fn run(reason: &str, mode: Mode) -> bool {
     let version = updater::current_version().to_string();
     let journal = Journal::load();
-    let listed = journal.remote_bad.as_ref().filter(|(v, _)| *v == version).map(|(_, why)| why.clone());
+    let listed = journal
+        .remote_bad
+        .as_ref()
+        .filter(|(v, _)| *v == version)
+        .map(|(_, why)| why.clone());
     crate::note(&format!("healing {version} ({mode:?}): {reason}"));
     // 1. a newer release (its program passes its self-test, or it is not installed); the
     // version left behind is broken here, and never gone back to
@@ -88,8 +100,15 @@ pub fn run(reason: &str, mode: Mode) -> bool {
         Ok(Some(r)) => {
             recovery::mark_bad(&version);
             show(&match &listed {
-                Some(why) => Message::ReplacedBroken { from: version.clone(), to: r.version.clone(), why: why.clone() },
-                None => Message::Updated { from: version.clone(), to: r.version.clone() },
+                Some(why) => Message::ReplacedBroken {
+                    from: version.clone(),
+                    to: r.version.clone(),
+                    why: why.clone(),
+                },
+                None => Message::Updated {
+                    from: version.clone(),
+                    to: r.version.clone(),
+                },
             });
             crate::journal::update(|j| j.remote_bad = None);
             return relaunch(false);
@@ -103,8 +122,15 @@ pub fn run(reason: &str, mode: Mode) -> bool {
             match recovery::rollback(&place) {
                 Ok(prev) => {
                     show(&match &listed {
-                        Some(why) => Message::ReplacedBroken { from: version.clone(), to: prev.clone(), why: why.clone() },
-                        None => Message::WentBack { from: version.clone(), to: prev.clone() },
+                        Some(why) => Message::ReplacedBroken {
+                            from: version.clone(),
+                            to: prev.clone(),
+                            why: why.clone(),
+                        },
+                        None => Message::WentBack {
+                            from: version.clone(),
+                            to: prev.clone(),
+                        },
                     });
                     crate::journal::update(|j| j.remote_bad = None);
                     return relaunch(false);
@@ -121,12 +147,17 @@ pub fn run(reason: &str, mode: Mode) -> bool {
     // 3. once more in safe mode
     if !journal.safe_tried.contains(&version) {
         crate::journal::update(|j| j.safe_tried.push(version.clone()));
-        show(&Message::SafeMode { version: version.clone() });
+        show(&Message::SafeMode {
+            version: version.clone(),
+        });
         return relaunch(true);
     }
     // 4. nothing helped: say what to do (once per version; the next start just tries)
     crate::journal::update(|j| j.gave_up.push(version.clone()));
-    let log = recovery::guard_dir().join("guard.log").display().to_string();
+    let log = recovery::guard_dir()
+        .join("guard.log")
+        .display()
+        .to_string();
     show(&Message::GiveUp { version, log });
     false
 }

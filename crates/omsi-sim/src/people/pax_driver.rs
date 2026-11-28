@@ -9,7 +9,14 @@ impl PeopleSim {
     /// of the ticket pack's voices) - the third time getting off at the next stop. The
     /// toll eases off by 0.2 a kilometre (`pax_tick`). OMSI's passengers did this; here
     /// they never said a word about the driving (#862, #873).
-    pub fn ride_comfort(&mut self, dt: f32, bus: Option<&PlayerBusView>, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>, world: &dyn World) {
+    pub fn ride_comfort(
+        &mut self,
+        dt: f32,
+        bus: Option<&PlayerBusView>,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+        world: &dyn World,
+    ) {
         let Some(v) = bus else { return };
         if dt <= 0.0 || self.avatar_only {
             return;
@@ -24,19 +31,36 @@ impl PeopleSim {
                 continue;
             }
             let Some(p) = self.pax(i) else { continue };
-            if p.bus != Some(BusId::Player) || p.inside != Some(BusId::Player) || !matches!(p.task, Task::InBusToPlace | Task::InBusToExit | Task::SittingInBus) {
+            if p.bus != Some(BusId::Player)
+                || p.inside != Some(BusId::Player)
+                || !matches!(
+                    p.task,
+                    Task::InBusToPlace | Task::InBusToExit | Task::SittingInBus
+                )
+            {
                 continue;
             }
             if p.bad_at[2] <= 0.0 {
-                let r = [self.rand_f() as f32, self.rand_f() as f32, self.rand_f() as f32];
+                let r = [
+                    self.rand_f() as f32,
+                    self.rand_f() as f32,
+                    self.rand_f() as f32,
+                ];
                 self.pax_mut(i).unwrap().bad_at = bad_ride_thresholds(r);
             }
             let p = self.pax_mut(i).unwrap();
             p.discomfort += (1.0 - p.discomfort) * k;
-            let Some(c) = bad_ride_complaint(p.discomfort, p.complaint, p.bad_at) else { continue };
+            let Some(c) = bad_ride_complaint(p.discomfort, p.complaint, p.bad_at) else {
+                continue;
+            };
             p.complaint = c;
             if debug_pax() {
-                log::info!("t={:.1} pax {} complains about the driving ({c}, toll {:.2})", self.time, self.people[i].label(), self.pax(i).unwrap().discomfort);
+                log::info!(
+                    "t={:.1} pax {} complains about the driving ({c}, toll {:.2})",
+                    self.time,
+                    self.people[i].label(),
+                    self.pax(i).unwrap().discomfort
+                );
             }
             match c {
                 1 => self.say_ex(i, "TooBad_A", true),
@@ -51,7 +75,10 @@ impl PeopleSim {
 
     /// The greeting or complaint stepping into the player's bus (0x62bf2d - 0x62c43c).
     pub fn greet_or_complain(&mut self, i: usize, bn: &BusNow) {
-        let Some((whinge, chat)) = self.tickets.as_ref().map(|t| (t.whinge_prop, t.chattiness)) else { return };
+        let Some((whinge, chat)) = self.tickets.as_ref().map(|t| (t.whinge_prop, t.chattiness))
+        else {
+            return;
+        };
         let air = bn.air;
         let mut complaint_seen = false;
         let mut code = 0u8;
@@ -81,7 +108,11 @@ impl PeopleSim {
             if hot {
                 complaint_seen = true;
                 if code == 0 && (self.rand_f() as f32) < whinge {
-                    code = if air.rel_hum <= 0.9 + 0.1 * self.rand_f() as f32 { 3 } else { 5 };
+                    code = if air.rel_hum <= 0.9 + 0.1 * self.rand_f() as f32 {
+                        3
+                    } else {
+                        5
+                    };
                 }
             }
             let r = (self.rand() % 10) as f32 + 8.0;
@@ -102,7 +133,7 @@ impl PeopleSim {
                 }
             }
         }
-        if self.delay > 300.0 {
+        if self.late_tolerance > 0.0 && self.delay > self.late_tolerance {
             complaint_seen = true;
             if code == 0 && (self.rand_f() as f32) < whinge {
                 code = 2;
@@ -118,8 +149,18 @@ impl PeopleSim {
             _ => {
                 if (self.rand_f() as f32) < chat {
                     let h = (self.time_of_day.rem_euclid(86_400.0) / 3600.0).floor() as i32;
-                    let daypart = if (3..=10).contains(&h) { 1 } else if (18..=23).contains(&h) { 2 } else { 0 };
-                    let k = if daypart == 0 { self.rand() % 2 } else { self.rand() % 3 };
+                    let daypart = if (3..=10).contains(&h) {
+                        1
+                    } else if (18..=23).contains(&h) {
+                        2
+                    } else {
+                        0
+                    };
+                    let k = if daypart == 0 {
+                        self.rand() % 2
+                    } else {
+                        self.rand() % 3
+                    };
                     if k < 2 {
                         self.say_ex(i, &format!("Hello_{}", k + 1), false);
                     } else if daypart == 1 {
@@ -158,7 +199,13 @@ impl PeopleSim {
         let id = p.ticket_id as usize;
         // (the pack's ticket, or what a plugin made of it)
         let (name, value) = self.ticket_request(&p);
-        let tol = self.money.as_ref().map(|m| m.smallest_value()).unwrap_or(0.01) / 2.0;
+        // (half the currency's unit, as 0x7e8900 counts the change - not half its
+        // smallest coin, which let a currency without one-cent coins be short changed)
+        let tol = self
+            .money
+            .as_ref()
+            .and_then(|m| m.currency.as_ref())
+            .map_or(0.005, |c| c.tolerance());
         let owed = p.paid - p.price;
         // the change on the tray (sub_7e8900): enough of it, too much, too many coins
         let change = |h: &mut Self| -> (bool, bool, bool) {
@@ -168,7 +215,11 @@ impl PeopleSim {
             let given = h.money.as_ref().map(|m| m.change_value()).unwrap_or(0.0);
             let too_much = tol < given - owed;
             let enough = owed - given <= tol;
-            let needed = h.money.as_mut().map(|m| m.exact_coins_for(owed.max(0.0)).len()).unwrap_or(0) as f32;
+            let needed = h
+                .money
+                .as_mut()
+                .map(|m| m.exact_coins_for(owed.max(0.0)).len())
+                .unwrap_or(0) as f32;
             let count = h.money.as_ref().map(|m| m.change_count()).unwrap_or(0) as f32;
             let r = h.rand_f() as f32;
             let many = needed * (r + 1.5) <= count && count > 0.0;
@@ -186,8 +237,16 @@ impl PeopleSim {
             let ok = (given - (id as f32 - 1.0)).abs() < 0.5;
             (ok, !ok)
         };
-        let (ch_ok, too_much, many) = if p.sub == 7 { change(self) } else { (false, false, false) };
-        let (tk_ok, wrong) = if p.sub == 5 { ticket(self) } else { (false, false) };
+        let (ch_ok, too_much, many) = if p.sub == 7 {
+            change(self)
+        } else {
+            (false, false, false)
+        };
+        let (tk_ok, wrong) = if p.sub == 5 {
+            ticket(self)
+        } else {
+            (false, false)
+        };
         if p.sub == 3 {
             // the plugins have not had their say about this ticket yet (a frame or two)
             if self.ticket_pending(i) {
@@ -200,11 +259,10 @@ impl PeopleSim {
             // A previous passenger's payment must be collected before another passenger starts
             // selling a ticket - by the driver; in `auto` boarding the game plays the driver
             // and takes it with the ticket, as before.
-            let payment_still_on_desk = self.money.as_ref().is_some_and(|m| {
-                m.placed
-                    .iter()
-                    .any(|(_, _, _, change, _)| !*change)
-            });
+            let payment_still_on_desk = self
+                .money
+                .as_ref()
+                .is_some_and(|m| m.placed.iter().any(|(_, _, _, change, _)| !*change));
 
             if payment_still_on_desk && !auto {
                 return;
@@ -226,42 +284,69 @@ impl PeopleSim {
             if p.timer > 0.0 {
                 return;
             }
+            // whether the fare keeps a ticket (#2742) - read before the passenger is borrowed
+            let keeps_ticket = !self.no_ticket;
             // the money on the desk (sub_7e8254)
             let point = bn.cabin.money_var.clone();
             let mut paid = value;
             // Target amount indicated by the plugin, if any.
-            let payment = p.plugin().payment.filter(|amount| amount.is_finite()).map(|amount| amount.max(value));
+            let payment = p
+                .plugin()
+                .payment
+                .filter(|amount| amount.is_finite())
+                .map(|amount| amount.max(value));
             if let Some(m) = self.money.as_mut() {
-                let coins = if auto { m.exact_coins_for(value) }
-                else if let Some(payment) = payment {  m.exact_coins_for(payment) }
-                else if self.exact_fare { m.exact_coins_for(value) }
-                else { m.omsi_coins_for(value) };
+                let coins = if auto {
+                    m.exact_coins_for(value)
+                } else if let Some(payment) = payment {
+                    m.exact_coins_for(payment)
+                } else if self.exact_fare {
+                    m.exact_coins_for(value)
+                } else {
+                    m.omsi_coins_for(value)
+                };
                 // Real payment made by the passenger, which may be different from the ticket price.
                 paid = m.value_of(&coins);
                 if let Some((pos, var, parent)) = point {
-                    let coin_count = m.currency.as_ref().map(|currency| currency.coins.len()).unwrap_or(0);
+                    let coin_count = m
+                        .currency
+                        .as_ref()
+                        .map(|currency| currency.coins.len())
+                        .unwrap_or(0);
                     if coins.iter().any(|&id| id < coin_count) {
-                        self.sale_events.push((bn.id, SaleEvent::PassengerGaveMoney));
+                        self.sale_events
+                            .push((bn.id, SaleEvent::PassengerGaveMoney));
                     }
                     // (put there when the view catches up: view_sync::apply_people)
-                    self.bodies.ops.push(BodyOp::Coins { coins, point: pos, var, change: false, parent });
+                    self.bodies.ops.push(BodyOp::Coins {
+                        coins,
+                        point: pos,
+                        var,
+                        change: false,
+                        parent,
+                    });
                 }
             }
             self.paid = Some((paid, value));
             let pp = self.pax_mut(i).unwrap();
             pp.paid = paid;
-            pp.sub = 5;
+            // paid: after the ticket (5) - or, with a fare that keeps no ticket, at once
+            // where the change is counted (6), #2742
+            pp.sub = if keeps_ticket { 5 } else { 6 };
             pp.reach = false;
             pp.talking = false;
             pp.look_driver = false;
-            pp.timer = 10.0;
+            pp.timer = if keeps_ticket { 10.0 } else { 0.0 };
         } else if p.sub == 5 && tk_ok {
             // the ticket: the hand to where it comes out
             let pp = self.pax_mut(i).unwrap();
             pp.sub = 6;
             pp.timer = 0.5;
             pp.reach = true;
-            pp.taking_ticket = player_bus.and_then(|b| b.given_ticket).filter(|n| n.is_finite() && *n >= 0.0).map(|n| n.round() as usize);
+            pp.taking_ticket = player_bus
+                .and_then(|b| b.given_ticket)
+                .filter(|n| n.is_finite() && *n >= 0.0)
+                .map(|n| n.round() as usize);
             if let Some((_, t)) = bn.cabin.sale {
                 pp.reach_at = t;
             }
@@ -270,12 +355,19 @@ impl PeopleSim {
             let pp = self.pax_mut(i).unwrap();
             pp.reach = false;
             pp.taking_ticket = None;
-            self.tickets_sold += 1;
+            if self.no_ticket {
+                self.fares_no_ticket += 1;
+            } else {
+                self.tickets_sold += 1;
+                *taken_ticket = true;
+                self.sales.push((name, value));
+            }
             self.ticket_cash += value;
-            self.sales.push((name, value));
-            *taken_ticket = true;
             if let Some(ticket_type) = p.taking_ticket {
-                self.sale_events.push((bn.id, SaleEvent::PassengerTookTicket(ticket_type)));
+                if !self.no_ticket {
+                    self.sale_events
+                        .push((bn.id, SaleEvent::PassengerTookTicket(ticket_type)));
+                }
             }
             if auto {
                 if let Some(m) = self.money.as_mut() {
@@ -333,13 +425,18 @@ impl PeopleSim {
             pp.sub = 0;
             pp.ticket = TICKET_NONE;
             pp.pt = bn.cabin.sale.and_then(|s| s.0);
-        } else if (p.sub == 5 || p.sub == 7) && (p.timer <= 0.0 || (too_much && self.pardons == 0)) {
+        } else if (p.sub == 5 || p.sub == 7) && (p.timer <= 0.0 || (too_much && self.pardons == 0))
+        {
             // asking again (0x62ce80)
             let n = self.pardons as u64;
             let r = self.rand() % (n + 2);
             self.pax_mut(i).unwrap().timer = if n < 2 { 5.0 } else { 3.0 };
             let line = if (n == 0 || r == 0) && p.sub == 5 {
-                if wrong { "BadTicket_A".to_string() } else { "PardonTicket_1".to_string() }
+                if wrong {
+                    "BadTicket_A".to_string()
+                } else {
+                    "PardonTicket_1".to_string()
+                }
             } else if wrong && n == 1 && p.sub == 5 {
                 "BadTicket_B".to_string()
             } else if !too_much && n == 0 && p.sub == 7 {

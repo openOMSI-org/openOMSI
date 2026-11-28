@@ -12,10 +12,10 @@ pub mod constfile;
 pub mod sysvar;
 pub mod vm;
 
-pub use compile::{compile, CompileInput, Program, ScriptError};
+pub use compile::{CompileInput, Program, ScriptError, compile};
 pub use constfile::{ConstFile, Curve};
 pub use sysvar::SysVar;
-pub use vm::{mix_seed, session_seed, set_session_seed, Host, NullHost, Stacks, State, Vm};
+pub use vm::{Host, NullHost, Stacks, State, Vm, mix_seed, session_seed, set_session_seed};
 
 /// Identifier of a float variable inside a [`Program`].
 pub type VarId = u32;
@@ -37,6 +37,10 @@ pub enum Op {
     Const(f32),
     Curve(u32),
     Macro(BlockId),
+    /// The end of a block without its `{end}`: it runs on into the given block, the next one
+    /// of the script files. Not a call: Omsi.exe links the words of all script files into one
+    /// chain, so this costs no macro depth.
+    FallThrough(BlockId),
     Callback(NameId),
     SoundTrigger(NameId),
     /// `(T.F.name)`: a sound trigger with the file to play taken from the string stack

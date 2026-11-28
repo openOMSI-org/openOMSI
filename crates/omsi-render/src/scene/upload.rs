@@ -23,15 +23,16 @@ impl Renderer {
         let m =
             (Mat4::from_translation((i.origin - ro).as_vec3()) * i.transform).to_cols_array_2d();
         let vis = if i.visible { 1.0 } else { 0.0 };
-        let normal_matrix = if mesh.depth_normals.is_empty() || !i.slot_levels.iter().any(|&l| l > 0) {
-            Mat4::IDENTITY
-        } else {
-            i.transform.inverse().transpose()
-        };
+        let normal_matrix =
+            if mesh.depth_normals.is_empty() || !i.slot_levels.iter().any(|&level| level > 0) {
+                Mat4::IDENTITY
+            } else {
+                i.transform.inverse().transpose()
+            };
         for (k, a) in i.slot_alpha.iter().enumerate() {
             let mut m = m;
             m[0][3] = draw_order_level(i, k);
-            let n = if i.slot_levels.get(k).copied().unwrap_or(0) > 0 {
+            let normal = if i.slot_levels.get(k).copied().unwrap_or(0) > 0 {
                 super::depth_plane::encode(
                     normal_matrix,
                     mesh.depth_normals.get(k).copied().unwrap_or(Vec3::ZERO),
@@ -39,8 +40,8 @@ impl Renderer {
             } else {
                 super::depth_plane::NO_PLANE
             };
-            m[1][3] = n[0];
-            m[2][3] = n[1];
+            m[1][3] = normal[0];
+            m[2][3] = normal[1];
             mats.push(m);
             let uv = i.slot_uv.get(k).copied().unwrap_or([0.0; 2]);
             params.push([*a, vis, uv[0], uv[1]]);
@@ -77,10 +78,13 @@ impl Renderer {
     /// carry it (see `instance_entries`).
     pub(crate) fn roof_code(i: &Instance, ro: DVec3) -> Option<f32> {
         let roof = i.roof.filter(|_| !i.blob && !i.surface)?;
-        let z = (i.origin - ro).z as f32 + i.transform.transform_point3(Vec3::new(0.0, 0.0, roof)).z;
+        let z =
+            (i.origin - ro).z as f32 + i.transform.transform_point3(Vec3::new(0.0, 0.0, roof)).z;
         // (the snow on the roof in the code's ten thousands: 1..41 for 0..1 where the roads'
         // built-up snow keeps it, 0 for the weather's snow - road_snow.wgsl)
-        let snow = i.roof_snow.map_or(0.0, |s| 1.0 + (s.clamp(0.0, 1.0) * 40.0).round());
+        let snow = i
+            .roof_snow
+            .map_or(0.0, |s| 1.0 + (s.clamp(0.0, 1.0) * 40.0).round());
         Some(-(5000.0 + z.clamp(-4000.0, 4000.0) + 10000.0 * snow))
     }
 
@@ -95,30 +99,51 @@ impl Renderer {
             let n = scene.uploaded_entries as usize;
             let params_known = n * 2 <= scene.cpu_params.len();
             for i in &scene.instances[..scene.uploaded_instances] {
-                let t = (Mat4::from_translation((i.origin - ro).as_vec3()) * i.transform).w_axis.to_array();
+                let t = (Mat4::from_translation((i.origin - ro).as_vec3()) * i.transform)
+                    .w_axis
+                    .to_array();
                 let (b, k) = (i.base as usize, i.slot_alpha.len());
                 if b + k <= n.min(scene.cpu_models.len()) {
                     for m in &mut scene.cpu_models[b..b + k] {
                         m[3] = t;
                     }
-                    if let (true, true, Some(code)) = (moved_z, params_known, Self::roof_code(i, ro)) {
-                        for p in scene.cpu_params[b * 2..(b + k) * 2].iter_mut().skip(1).step_by(2) {
+                    if let (true, true, Some(code)) =
+                        (moved_z, params_known, Self::roof_code(i, ro))
+                    {
+                        for p in scene.cpu_params[b * 2..(b + k) * 2]
+                            .iter_mut()
+                            .skip(1)
+                            .step_by(2)
+                        {
                             p[3] = code;
                         }
                     }
                 }
             }
             match (scene.model_buf.as_ref(), scene.params_buf.as_ref()) {
-                (Some(buf), Some(pbuf)) if (n * 64) as u64 <= buf.size() && n <= scene.cpu_models.len() && (!moved_z || (params_known && (n * 32) as u64 <= pbuf.size())) => {
+                (Some(buf), Some(pbuf))
+                    if (n * 64) as u64 <= buf.size()
+                        && n <= scene.cpu_models.len()
+                        && (!moved_z || (params_known && (n * 32) as u64 <= pbuf.size())) =>
+                {
                     buf.write(&self.queue, 0, bytemuck::cast_slice(&scene.cpu_models[..n]));
                     if moved_z {
-                        pbuf.write(&self.queue, 0, bytemuck::cast_slice(&scene.cpu_params[..n * 2]));
+                        pbuf.write(
+                            &self.queue,
+                            0,
+                            bytemuck::cast_slice(&scene.cpu_params[..n * 2]),
+                        );
                     }
                 }
                 _ => scene.dirty = true,
             }
             if profile {
-                log::info!("render origin moved: {} entries of {} instances written again in {:.1} ms", n, scene.uploaded_instances, t0.elapsed().as_secs_f64() * 1000.0);
+                log::info!(
+                    "render origin moved: {} entries of {} instances written again in {:.1} ms",
+                    n,
+                    scene.uploaded_instances,
+                    t0.elapsed().as_secs_f64() * 1000.0
+                );
             }
         }
         if !scene.dirty
@@ -169,19 +194,30 @@ impl Renderer {
                 scene.uploaded_entries = base;
                 let bytes: &[u8] = bytemuck::cast_slice(&scene.cpu_models);
                 let pbytes: &[u8] = bytemuck::cast_slice(&scene.cpu_params);
-                let model_buf = GpuArray::new(&self.device, "models", entry_room(bytes.len()), 16, true);
-                let params_buf = GpuArray::new(&self.device, "params", entry_room(pbytes.len()), 16, true);
+                let model_buf =
+                    GpuArray::new(&self.device, "models", entry_room(bytes.len()), 16, true);
+                let params_buf =
+                    GpuArray::new(&self.device, "params", entry_room(pbytes.len()), 16, true);
                 model_buf.write(&self.queue, 0, bytes);
                 params_buf.write(&self.queue, 0, pbytes);
                 scene.model_buf = Some(model_buf);
                 scene.params_buf = Some(params_buf);
                 self.rebuild_camera_bind_group(scene);
                 if profile {
-                    log::info!("instance entries: {} new ones did not fit: {} in bigger buffers in {:.1} ms", mats.len(), scene.uploaded_entries, t0.elapsed().as_secs_f64() * 1000.0);
+                    log::info!(
+                        "instance entries: {} new ones did not fit: {} in bigger buffers in {:.1} ms",
+                        mats.len(),
+                        scene.uploaded_entries,
+                        t0.elapsed().as_secs_f64() * 1000.0
+                    );
                 }
             } else {
                 if profile {
-                    log::info!("instance entries: {} new ones do not fit the buffers ({} bytes): all built again", mats.len(), scene.model_buf.as_ref().map(|b| b.size()).unwrap_or(0));
+                    log::info!(
+                        "instance entries: {} new ones do not fit the buffers ({} bytes): all built again",
+                        mats.len(),
+                        scene.model_buf.as_ref().map(|b| b.size()).unwrap_or(0)
+                    );
                 }
                 scene.dirty = true;
             }
@@ -215,7 +251,13 @@ impl Renderer {
                         };
                         mats.clear();
                         params.clear();
-                        Self::instance_entries(i, &scene.meshes[i.mesh], ro, &mut mats, &mut params);
+                        Self::instance_entries(
+                            i,
+                            &scene.meshes[i.mesh],
+                            ro,
+                            &mut mats,
+                            &mut params,
+                        );
                         let (b, n) = (i.base as usize, mats.len());
                         if b + n > scene.cpu_models.len() || (b + n) * 2 > scene.cpu_params.len() {
                             continue;
@@ -283,7 +325,12 @@ impl Renderer {
                 pbuf.write(&self.queue, 0, pbytes);
                 scene.dirty = false;
                 if profile {
-                    log::info!("instance entries: {} of {} instances written again in {:.1} ms", scene.uploaded_entries, scene.instances.len(), t0.elapsed().as_secs_f64() * 1000.0);
+                    log::info!(
+                        "instance entries: {} of {} instances written again in {:.1} ms",
+                        scene.uploaded_entries,
+                        scene.instances.len(),
+                        t0.elapsed().as_secs_f64() * 1000.0
+                    );
                 }
                 return;
             }
@@ -297,7 +344,12 @@ impl Renderer {
         self.rebuild_camera_bind_group(scene);
         scene.dirty = false;
         if profile {
-            log::info!("instance entries: {} of {} instances in new buffers in {:.1} ms", scene.uploaded_entries, scene.instances.len(), t0.elapsed().as_secs_f64() * 1000.0);
+            log::info!(
+                "instance entries: {} of {} instances in new buffers in {:.1} ms",
+                scene.uploaded_entries,
+                scene.instances.len(),
+                t0.elapsed().as_secs_f64() * 1000.0
+            );
         }
     }
 
@@ -316,92 +368,123 @@ impl Renderer {
         let snow_field = self.lights.snow_track.borrow();
         scene.snow_track_seen = self.lights.snow_track_made.get();
         let mut entries = vec![
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.camera_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: model_buf.binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buf.binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::TextureView(&self.shadows.shadow_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::Sampler(&self.shadows.shadow_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: wgpu::BindingResource::TextureView(&self.shadows.shadow_view_far),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 8,
-                    // (Enhanced+: the traced lighting, full size, in place of the SSAO)
-                    // (while the AO is off the ground albedo picture is bound here, see `ground_should_bind`)
-                    resource: wgpu::BindingResource::TextureView(
-                        self.rt
-                            .as_ref()
-                            .and_then(|r| r.targets.as_ref())
-                            .map(|t| &t.out)
-                            .or(self.targets.ao.as_ref().map(|a| match self.targets.ground.as_ref().filter(|_| ground_bound) { Some((_, g)) => g, None => &a.blur_view }))
-                            .unwrap_or(&self.white_texture.view),
-                    ),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 9,
-                    resource: wgpu::BindingResource::Sampler(&self.ao_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 10,
-                    resource: draw_buf.binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 11,
-                    resource: self.tone.enh_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 13,
-                    resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 18,
-                    resource: wgpu::BindingResource::TextureView(&self.lights.lm_atlas_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 19,
-                    resource: self.lights.lm_uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 20,
-                    resource: snow_field.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 21,
-                    resource: self.lights.snow_track_uniform.as_entire_binding(),
-                },
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: self.camera_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: model_buf.binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: params_buf.binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::TextureView(&self.shadows.shadow_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::Sampler(&self.shadows.shadow_sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 7,
+                resource: wgpu::BindingResource::TextureView(&self.shadows.shadow_view_far),
+            },
+            wgpu::BindGroupEntry {
+                binding: 8,
+                // (Enhanced+: the traced lighting, full size, in place of the SSAO)
+                // (while the AO is off the ground albedo picture is bound here, see `ground_should_bind`)
+                resource: wgpu::BindingResource::TextureView(
+                    self.rt
+                        .as_ref()
+                        .and_then(|r| r.targets.as_ref())
+                        .map(|t| &t.out)
+                        .or(self.targets.ao.as_ref().map(|a| {
+                            match self.targets.ground.as_ref().filter(|_| ground_bound) {
+                                Some((_, g)) => g,
+                                None => &a.blur_view,
+                            }
+                        }))
+                        .unwrap_or(&self.white_texture.view),
+                ),
+            },
+            wgpu::BindGroupEntry {
+                binding: 9,
+                resource: wgpu::BindingResource::Sampler(&self.ao_sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 10,
+                resource: draw_buf.binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 11,
+                resource: self.tone.enh_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 13,
+                resource: wgpu::BindingResource::Sampler(&self.tone.lin_sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 18,
+                resource: wgpu::BindingResource::TextureView(&self.lights.lm_atlas_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 19,
+                resource: self.lights.lm_uniform.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 20,
+                resource: snow_field.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 21,
+                resource: self.lights.snow_track_uniform.as_entire_binding(),
+            },
         ];
         if !road_snow_supported() {
             entries.retain(|e| e.binding != 20);
         }
         // (the point lights where the device has storage buffers for them)
         if array_path() != ArrayPath::NoStorage {
-            entries.push(wgpu::BindGroupEntry { binding: 3, resource: light_buf.binding() });
-            entries.push(wgpu::BindGroupEntry { binding: 4, resource: grid_buf.binding() });
+            entries.push(wgpu::BindGroupEntry {
+                binding: 3,
+                resource: light_buf.binding(),
+            });
+            entries.push(wgpu::BindGroupEntry {
+                binding: 4,
+                resource: grid_buf.binding(),
+            });
         }
         // (the enhanced path's textures: not on the sixteen-texture-unit path, nor in the
         // launcher's preview, which has no reflection probe - see `camera_layout_entries`)
         if let (false, Some(probe)) = (sixteen_texture_units(), self.tone.probe.as_ref()) {
             entries.extend([
-                wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::TextureView(&probe.view) },
-                wgpu::BindGroupEntry { binding: 14, resource: wgpu::BindingResource::TextureView(&self.sky.sky_lut_view) },
-                wgpu::BindGroupEntry { binding: 17, resource: wgpu::BindingResource::TextureView(&probe.cube_view) },
+                wgpu::BindGroupEntry {
+                    binding: 12,
+                    resource: wgpu::BindingResource::TextureView(&probe.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 14,
+                    resource: wgpu::BindingResource::TextureView(&self.sky.sky_lut_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 17,
+                    resource: wgpu::BindingResource::TextureView(probe.clouds.display_view()),
+                },
             ]);
+            if crate::gi_binding() {
+                entries.push(wgpu::BindGroupEntry {
+                    binding: 22,
+                    resource: wgpu::BindingResource::TextureView(
+                        self.rt
+                            .as_ref()
+                            .and_then(|r| r.gi_view())
+                            .unwrap_or(&self.black_texture.view),
+                    ),
+                });
+            }
         }
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("camera"),
@@ -413,7 +496,11 @@ impl Renderer {
             if let Some(e) = other.iter_mut().find(|e| e.binding == 8) {
                 e.resource = wgpu::BindingResource::TextureView(&self.white_texture.view);
             }
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("camera, ground albedo pass"), layout: &self.camera_layout, entries: &other })
+            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("camera, ground albedo pass"),
+                layout: &self.camera_layout,
+                entries: &other,
+            })
         });
         scene.camera_bind_group = Some(bg);
         let sbg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -443,10 +530,22 @@ impl Renderer {
             label: Some("precipitation roof camera"),
             layout: &self.shadows.shadow_layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: self.shadows.precip.camera_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: model_buf.binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: params_buf.binding() },
-                wgpu::BindGroupEntry { binding: 10, resource: draw_buf.binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.shadows.precip.camera_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: model_buf.binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buf.binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 10,
+                    resource: draw_buf.binding(),
+                },
             ],
         }));
     }
@@ -464,7 +563,10 @@ impl Renderer {
             let cap = (bytes.len() as u64 * 3 / 2).max(1 << 16).div_ceil(4) * 4;
             scene.draw_buf = Some(GpuArray::new(&self.device, "draw list", cap, 4, true));
             self.rebuild_camera_bind_group(scene);
-        } else if scene.camera_bind_group.is_none() || scene.shadow_bind_group.is_none() || scene.snow_track_seen != self.lights.snow_track_made.get() {
+        } else if scene.camera_bind_group.is_none()
+            || scene.shadow_bind_group.is_none()
+            || scene.snow_track_seen != self.lights.snow_track_made.get()
+        {
             // (made again too when the snow track field has been made in place of its token)
             self.rebuild_camera_bind_group(scene);
         }
@@ -494,29 +596,55 @@ pub(crate) fn draw_order_level(i: &Instance, slot: usize) -> f32 {
         if omsi_cfg::flags::OMSI_NO_DRAW_ORDER_DEPTH.is_set() {
             3
         } else {
-            omsi_cfg::flags::OMSI_ZFIGHT_PROBE.parse::<f64>().map(|m| m.round() as u8).filter(|m| *m == 1 || *m == 2).unwrap_or(0)
+            omsi_cfg::flags::OMSI_ZFIGHT_PROBE
+                .parse::<f64>()
+                .map(|m| m.round() as u8)
+                .filter(|m| *m == 1 || *m == 2)
+                .unwrap_or(0)
         }
     });
     let level = i.slot_levels.get(slot).copied().unwrap_or(0);
     let spline = i.surface && i.render_phase == crate::scene::RenderPhase::Spline;
-    if mode == 3 || level == 0 || (i.surface && !spline) || i.render_phase == crate::scene::RenderPhase::Terrain {
+    if mode == 3
+        || level == 0
+        || (i.surface && !spline)
+        || i.render_phase == crate::scene::RenderPhase::Terrain
+    {
         return 0.0;
     }
     let max = crate::scene::overlay::MAX_LEVEL as u64;
     let level = match mode {
-        0 => level,
+        0 => level as f32,
         _ => {
             let h = 1 + (slot as u64 ^ i.draw_order).wrapping_mul(0x9e37_79b9_7f4a_7c15) % max;
-            (if mode == 1 { h } else { max + 1 - h }) as u8
+            (if mode == 1 { h } else { max + 1 - h }) as f32
         }
     };
     if mode != 0 {
-        return level as f32;
+        return level;
     }
-    let Some(cap) = i.slot_depth_caps.get(slot).copied().filter(|cap| cap.is_finite()) else {
-        return level as f32;
+    let Some(caps) = i
+        .slot_depth_caps
+        .get(slot)
+        .copied()
+        .filter(|caps| caps.positive.is_finite() || caps.negative.is_finite())
+    else {
+        return level;
     };
-    // Pack the cap into exactly representable float metadata.
-    let micrometres = (cap * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
-    (4096 | (micrometres << 2) | level as u32) as f32
+    // Both 10-bit limits and side flags fit exactly in the f32 instance value.
+    let mut encoded = level.round() as u32;
+    if caps.positive.is_finite() {
+        let micrometres = (caps.positive * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
+        encoded |= (1 << 22) | (micrometres << 2);
+    }
+    if caps.negative.is_finite() {
+        let micrometres = (caps.negative * 1_000_000.0).round().clamp(0.0, 1023.0) as u32;
+        encoded |= (1 << 23) | (micrometres << 12);
+    }
+    // 負號標記共用上限，保留 24 位元整數的精度。
+    if caps.shared {
+        -(encoded as f32)
+    } else {
+        encoded as f32
+    }
 }

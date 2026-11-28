@@ -6,6 +6,6 @@ contact_links:
   - name: Security problem
     url: https://github.com/openOMSI-org/openOMSI/security/advisories/new
     about: A vulnerability in the game, the server or the updater - report it privately, not as an issue (see SECURITY.md).
-  - name: User guide
-    url: https://github.com/openOMSI-org/openOMSI/blob/main/docs/USER_GUIDE.md
+  - name: Documentation
+    url: https://openomsi.org/docs/troubleshooting/
     about: Settings, controls, multiplayer and common problems explained.

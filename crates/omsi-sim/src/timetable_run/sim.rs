@@ -8,6 +8,7 @@
 mod boards;
 mod choice;
 mod dispatch;
+mod due;
 mod load;
 mod place;
 mod route;
@@ -18,14 +19,14 @@ pub mod transit;
 pub use tours::{TourPlan, TourPlanTrip};
 
 use super::*;
-use crate::ai_traffic::TrafficSim;
 use crate::VehicleType;
+use crate::ai_traffic::TrafficSim;
 use omsi_timetable::TimetableData;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub use choice::{depot_file, pool_depot};
-pub use dispatch::{tour_entry, TOUR_ENTRY_LANES};
+pub use dispatch::{TOUR_ENTRY_LANES, tour_entry};
 pub use place::Placing;
 
 /// What the timetable needs of the loaded map: its folders, the AI lists, the tiles, the
@@ -101,13 +102,119 @@ struct RunningTrip {
     station_steps: Vec<Option<usize>>,
 }
 
-/// How long before a trip is due at a stop the people for it turn up there (s).
+/// How long before a trip is due at a stop the people for it begin to turn up there (s).
 pub const PAX_SPAWN_AHEAD: f64 = 15.0 * 60.0;
 
-pub const PAX_LATE_WAIT: f64 = 15.0 * 60.0;
+/// How long after a trip was due at a stop it may still bring people there (s): Omsi.exe
+/// keeps a late trip up to 40 minutes (see [`pax_share`]), unless its bus has passed the stop
+/// already (0x61a068, [`TourBuses`]).
+pub const PAX_LATE_WAIT: f64 = 40.0 * 60.0;
+
+/// How much of a stop's number of waiting people a trip due there `ahead` seconds from now
+/// asks for (a late trip: `ahead` < 0). Omsi.exe's station manager (0x61a068) gives each
+/// trip of the stop's timetable two straight lines through 0x7f07b4 and keeps the lower,
+/// in 0..1: nothing a quarter of an hour ahead, rising to all of it 4 minutes ahead, all of
+/// it until 20 minutes late, nothing again 40 minutes late. 0x61bf94 then takes the stop's
+/// number times the sum of its trips' shares, at most 1 - so the people turn up bit by bit
+/// as the bus draws near instead of all of them the moment a trip is a quarter hour off.
+pub fn pax_share(ahead: f64) -> f32 {
+    let rising = (15.0 * 60.0 - ahead) / ((15.0 - 4.0) * 60.0);
+    let falling = (ahead + 40.0 * 60.0) / ((40.0 - 20.0) * 60.0);
+    rising.min(falling).clamp(0.0, 1.0) as f32
+}
 
 pub(crate) fn pax_turn_up_for(due: f64, tod: f64) -> bool {
-    (tod - PAX_LATE_WAIT..=tod + PAX_SPAWN_AHEAD).contains(&due)
+    due >= tod - PAX_LATE_WAIT && pax_share(due - tod) > 0.0
+}
+
+/// The trips due at the stops about now ([`ScheduleSim::due_trips`]): per bus stop the
+/// destinations of those trips and their calls there, each with its [`pax_share`]; and where
+/// the tours' buses are, which takes the calls they have passed off again. Reads as the map
+/// of destinations.
+#[derive(Debug, Clone, Default)]
+pub struct DueTrips {
+    pub dests: HashMap<i64, HashSet<String>>,
+    pub visits: HashMap<i64, Vec<DueVisit>>,
+    /// Kept up to date every frame (`ScheduleSim::tour_buses`); the rest once a game minute.
+    pub buses: TourBuses,
+}
+
+/// A trip's call at a stop that brings people there: Omsi.exe's entry of the stop's trip list
+/// (0x61a068, 0x14 bytes: line, tour, the trip's entry in the tour, the station in the trip,
+/// the time).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DueVisit {
+    /// The bus that drives the trip: its tour's ([`tour_key_of`]), or the player's.
+    pub tour: u64,
+    /// The trip's departure: a later trip of the same tour has a higher one.
+    pub departure: usize,
+    /// The stop's place among the trip's stations.
+    pub station: usize,
+    /// How much of the stop's people it asks for ([`pax_share`]).
+    pub share: f32,
+}
+
+/// Where each tour's bus is (by [`DueVisit::tour`]): the departure it runs and how many of that
+/// trip's stations lie behind it, that is the index of the station it is making for or stands
+/// at. Omsi.exe's vehicle keeps both (+0x668 its entry in the tour, counted on at the trip's
+/// last stop; +0x680 the next station, counted on once the bus has stood within 60 m of it and
+/// left that again, 0x7d5124).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TourBuses(pub HashMap<u64, (usize, usize)>);
+
+impl TourBuses {
+    /// The bus of the tour has driven on from the call: it is on a later trip of its tour, or
+    /// has left the station behind (0x61a068 compares the trip entry, then the station, of
+    /// the vehicle +0x668/+0x680 with the call's). A tour whose bus is not on the road keeps
+    /// its calls, as Omsi.exe's whose vehicle it does not find.
+    pub fn passed(&self, v: &DueVisit) -> bool {
+        self.0.get(&v.tour).is_some_and(|&(dep, next)| {
+            dep > v.departure || (dep == v.departure && v.station < next)
+        })
+    }
+
+    /// The tour's bus is on `departure` with `next` of its stations ahead: kept when another
+    /// bus of the tour is further on (a bus let go at the end of its trip and the one that
+    /// took the next on).
+    pub fn insert(&mut self, tour: u64, departure: usize, next: usize) {
+        let e = self.0.entry(tour).or_insert((departure, next));
+        if (departure, next) > *e {
+            *e = (departure, next);
+        }
+    }
+}
+
+impl DueTrips {
+    /// The part of stop `id`'s number of people its trips ask for now (0..1): the sum of the
+    /// shares of the calls whose bus has not passed it yet, at most all of them (0x61bf94).
+    pub fn share_of(&self, id: i64) -> f32 {
+        self.visits
+            .get(&id)
+            .map(|v| {
+                v.iter()
+                    .filter(|v| !self.buses.passed(v))
+                    .map(|v| v.share)
+                    .sum::<f32>()
+            })
+            .unwrap_or(0.0)
+            .min(1.0)
+    }
+}
+
+impl std::ops::Deref for DueTrips {
+    type Target = HashMap<i64, HashSet<String>>;
+    fn deref(&self) -> &Self::Target {
+        &self.dests
+    }
+}
+
+impl From<HashMap<i64, HashSet<String>>> for DueTrips {
+    fn from(dests: HashMap<i64, HashSet<String>>) -> Self {
+        DueTrips {
+            dests,
+            ..Default::default()
+        }
+    }
 }
 
 /// How far from a route a bus stop may stand when the route is only a part of the trip (a
@@ -130,10 +237,17 @@ pub struct Choice {
 pub type TrainCars = Vec<(Arc<VehicleType>, bool)>;
 
 /// A depot's vehicle: its type, its fleet from the ailists, its depot file.
-pub type DepotVehicle = (Arc<VehicleType>, Vec<omsi_map::DepotEntry>, Option<Arc<omsi_vehicle::Hof>>);
+pub type DepotVehicle = (
+    Arc<VehicleType>,
+    Vec<omsi_map::DepotEntry>,
+    Option<Arc<omsi_vehicle::Hof>>,
+);
 
 pub struct ScheduleSim {
     pub data: TimetableData,
+    /// The bus the player drives, while they drive one: a depot bus of the same vehicle file
+    /// never takes its fleet number, plate or paint (#3477, see [`player_entry`]).
+    pub player_bus: Option<crate::livery::PlayerLivery>,
     departures: Vec<Departure>,
     /// Depot vehicles per AI group: (type, its fleet from the ailists, depot file).
     depots: HashMap<String, Vec<DepotVehicle>>,
@@ -185,6 +299,9 @@ pub struct ScheduleSim {
     player_twins: HashSet<usize>,
     /// A player tour was just taken over: its buses already on the road go at the next tick.
     purge_player_tour: bool,
+    /// LAN play (host): how far the other players' buses have got on their tours
+    /// ([`ScheduleSim::lan_bus_left`]).
+    lan_progress: TourBuses,
     /// LAN play (host): the tours the other players drive (line, tour; lower case), left to
     /// them like our own.
     lan_tours: HashSet<(String, String)>,

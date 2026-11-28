@@ -1,4 +1,4 @@
-use crate::{bc, gpu, Image, PixelFormat, TextureData};
+use crate::{Image, PixelFormat, TextureData, bc, gpu};
 
 fn picture(size: u32, clear: bool) -> Image {
     let rgba = (0..size * size)
@@ -78,7 +78,9 @@ fn entirely_clear_colour_and_data_maps_keep_their_rgb() {
         rgba: opaque,
         has_alpha: false,
     }));
-    assert!(small.levels[0]
-        .chunks_exact(4)
-        .all(|p| p == [40, 80, 120, 255]));
+    assert!(
+        small.levels[0]
+            .chunks_exact(4)
+            .all(|p| p == [40, 80, 120, 255])
+    );
 }

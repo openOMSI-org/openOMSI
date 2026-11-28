@@ -102,12 +102,8 @@ const CLOUD_FIELD_TILE: f32 = 14000.0;
 // The ground point under the sky at distance `t` along the view ray `d`, in the clouds' own
 // frame (world coordinates modulo 70 km, lib.rs `CLOUD_ORIGIN_PERIOD`), so that the cloud
 // field stays where it is when the floating render origin moves on.
-// Where the clouds are seen from, relative to the camera (the enhanced sky cube's own eye
-// while it is drawn; 0 everywhere else).
-var<private> eye_off: vec3<f32> = vec3<f32>(0.0);
-
 fn cloud_ground(d: vec3<f32>, t: f32) -> vec2<f32> {
-    return camera.cam_pos.xy + eye_off.xy + camera.world_origin.zw + d.xy * t;
+    return camera.cam_pos.xy + camera.world_origin.zw + d.xy * t;
 }
 
 // The cloud cover over ground point p (x, 0..1, its edges frayed by the billows), how tall
@@ -153,14 +149,65 @@ fn vs_main(@location(0) pos: vec3<f32>) -> VsOut {
 // The classic sky's weather (lib.rs `VanillaSky`): the cloud type's own texture and
 // cloud: x height H (m over the map's zero), y the type's size (m a tile; 0: no clouds),
 // zw the wind's drift (m); haze: x the weather's fog range (m), y the visibility (m),
-// z 1 for an overcast type, w the render origin's height.
+// z 1 for an overcast type, w the render origin's height; and the moon.
 struct VanillaSkyUniform {
     cloud: vec4<f32>,
     haze: vec4<f32>,
+    // xyz towards the moon, w its angular radius
+    moon: vec4<f32>,
 };
 @group(1) @binding(9) var t_vclouds: texture_2d<f32>;
 @group(1) @binding(10) var<uniform> vsky: VanillaSkyUniform;
 @group(1) @binding(11) var t_sun: texture_2d<f32>;
+// The moon's near side as seen from the Earth, north up (grey, `moon_map`; made from
+// NASA's Scientific Visualization Studio's CGI Moon Kit, LRO's LROC colour map).
+@group(1) @binding(13) var t_moon: texture_2d<f32>;
+
+// The moon of both skies towards d: a sphere of angular radius r towards m with the real
+// face on it, lit from the sun's side - its phase is what the sun's direction makes of it.
+// x how bright the pixel's point of it is (about 1 on the full moon's highlands), y how
+// much of the pixel (`pix` across, rad) the disc covers.
+fn moon_face(d: vec3<f32>, m: vec3<f32>, r: f32, sun: vec3<f32>, pix: f32) -> vec2<f32> {
+    if (r <= 0.0 || dot(d, m) <= cos(r * 1.5)) {
+        return vec2<f32>(0.0);
+    }
+    // the point on the moon's sphere seen in direction d
+    let right = normalize(cross(m, vec3<f32>(0.0, 0.0, 1.0)) + vec3<f32>(1e-5, 0.0, 0.0));
+    let up = cross(right, m);
+    let q = vec2<f32>(dot(d, right), dot(d, up)) / r;
+    let q2 = dot(q, q);
+    // a pixel in disc radii: the limb's edge and the map's level
+    let px = max(pix * 0.6 / r, 1e-4);
+    let covered = 1.0 - smoothstep(1.0 - px, 1.0 + px, sqrt(q2));
+    let nz = sqrt(max(1.0 - q2, 0.0));
+    let n = normalize(right * q.x + up * q.y - m * nz);
+    // the dust's reflection (Lommel-Seeliger): a full moon is as bright at the limb as in
+    // the middle, and the light fades out towards the terminator
+    let mu0 = dot(n, sun);
+    let lit = 2.0 * max(mu0, 0.0) / (max(mu0, 0.0) + max(nz, 0.05)) * smoothstep(-0.02, 0.1, mu0);
+    let level = log2(max(px * f32(textureDimensions(t_moon).x) * 0.5, 1.0));
+    let map = textureSampleLevel(t_moon, s_sky, vec2<f32>(0.5 + 0.5 * q.x, 0.5 - 0.5 * q.y), level).r;
+    // (about 1 on the highlands, a third of it in the darkest seas)
+    let albedo = pow(map * 1.75, 1.35);
+    // (the dark part keeps a trace of earthshine, more of it by a thin crescent)
+    let dark = 0.5 - 0.5 * dot(-m, sun);
+    return vec2<f32>((lit + 0.004 + 0.02 * dark * dark) * albedo, covered);
+}
+
+// The moon on the classic sky (`base` in sRGB terms), laid over it as light is: bright at
+// night, pale on a day's blue sky; the haze and the clouds cover it as the sky. A low moon
+// is warmer.
+fn vanilla_moon(base: vec3<f32>, d: vec3<f32>, pix: f32) -> vec3<f32> {
+    let m = vsky.moon.xyz;
+    let f = moon_face(d, m, vsky.moon.w, normalize(camera.sun_dir.xyz), pix);
+    let shown = f.y * smoothstep(-0.01, 0.02, d.z);
+    let tint = mix(vec3<f32>(1.0, 0.82, 0.62), vec3<f32>(1.0, 0.98, 0.95), smoothstep(0.0, 0.3, m.z));
+    // (against a day's sky it is pale, and its earthshine not seen at all)
+    let day = smoothstep(-0.12, 0.1, camera.sun_dir.z);
+    let light = max(f.x * 0.5 - 0.012 * day, 0.0) * mix(1.0, 0.5, day);
+    let face = srgb_encode(clamp(tint * light, vec3<f32>(0.0), vec3<f32>(1.0)));
+    return base + face * (vec3<f32>(1.0) - base) * shown;
+}
 
 fn vanilla_sun(d: vec3<f32>) -> vec3<f32> {
     let s = normalize(camera.sun_dir.xyz);
@@ -257,6 +304,87 @@ fn vanilla_cloud_reach(d: vec3<f32>) -> vec2<f32> {
     return vec2<f32>(r, 1.0);
 }
 
+// The classic layer with a body (Vanilla and Vanilla+). Omsi.exe's cone is a flat sheet: the
+// texture slides over it as one evenly lit picture, it does not curve down to the horizon,
+// and the sun has no part in it. Here the same picture lies on a shell of the earth's
+// (exaggerated) curvature - from the ground it reaches about as far as the cone's rim, and
+// the far clouds crowd down to the horizon as a real layer does - and is lit as a body: the
+// picture's alpha is taken for how thick the cloud is there, so a heap's thick middle is
+// dark underneath and its thin edges let the light through; the sun is followed a little
+// way through the picture towards it (a cloud with more cloud on its sunward side lies in
+// that one's shade); and near the sun the thin edges glow (the droplets' forward
+// scattering). Its colours stay the weather's - the picture times the fog colour, as
+// Omsi.exe's, only shaded - and its cover is the picture's own.
+const VCLOUD_EARTH: f32 = 60000.0;
+
+// The distance along d from the ground under the camera to the shell h over it (-1: none).
+fn vcloud_shell(d: vec3<f32>, h: f32) -> f32 {
+    let oz = VCLOUD_EARTH;
+    let b = d.z * oz;
+    let c = oz * oz - (VCLOUD_EARTH + h) * (VCLOUD_EARTH + h);
+    let disc = b * b - c;
+    if (disc < 0.0) {
+        return -1.0;
+    }
+    return -b + sqrt(disc);
+}
+
+fn vcloud_hg(c: f32, g: f32) -> f32 {
+    let k = 1.0 + g * g - 2.0 * g * c;
+    return (1.0 - g * g) / (12.566371 * k * sqrt(k));
+}
+
+// rgb (the sky's own terms) and cover of the classic layer towards d, or none (a 0).
+fn vanilla_clouds_3d(d: vec3<f32>, fog: vec3<f32>, encoded: bool, uv: vec2<f32>, t: f32, gx: vec2<f32>, gy: vec2<f32>) -> vec4<f32> {
+    let h_abs = vsky.cloud.x;
+    let size = max(vsky.cloud.y, 1.0);
+    let h0 = camera.cam_pos.z + vsky.haze.w;
+    if (vsky.cloud.y <= 0.0 || h_abs <= h0 || h_abs <= 0.0) {
+        return vec4<f32>(0.0);
+    }
+    let ovc = vsky.haze.z > 0.5;
+    if (t <= 0.0) {
+        return vec4<f32>(0.0);
+    }
+    let rim = 9.363 * h_abs;
+    let sun = normalize(camera.sun_dir.xyz);
+    let sun_h = normalize(vec2<f32>(sun.x, sun.y) + vec2<f32>(1e-5, 0.0));
+    let day = smoothstep(-0.08, 0.12, sun.z);
+    let sc = camera.sun_color.rgb;
+    let sun_tint = sc / max(max(sc.r, max(sc.g, sc.b)), 1e-4);
+    let tex = textureSampleGrad(t_vclouds, s_repeat, uv, gx, gy);
+    var a = tex.a;
+    var thick = a;
+    if (ovc) {
+        // (an overcast deck's picture is all alpha: its brightness says where it is thicker)
+        a = 1.0;
+        thick = mix(1.0, 0.55, dot(tex.rgb, vec3<f32>(0.3, 0.5, 0.2)));
+    }
+    if (a <= 0.002) {
+        return vec4<f32>(0.0);
+    }
+    // the sun through the cloud towards it: the picture a few hundred metres over towards it
+    let reach = clamp(h_abs * 0.25, 120.0, 700.0) / size;
+    let a1 = textureSampleGrad(t_vclouds, s_repeat, uv + sun_h * reach, gx, gy).a;
+    let a2 = textureSampleGrad(t_vclouds, s_repeat, uv + sun_h * reach * 2.2, gx, gy).a;
+    let toward = select(a1 * 0.6 + a2 * 0.4, thick, ovc);
+    let shade = exp(-1.8 * toward - 0.9 * thick);
+    // seen from under it, a thick cloud is dark in the middle, a thin one lit through
+    let belly = mix(1.05, 0.62, smoothstep(0.25, 1.0, thick));
+    let phase = vcloud_hg(dot(d, sun), 0.6) * 5.0 * (1.0 - thick) * (1.0 - thick);
+    let rgb0 = select(tex.rgb, srgb_encode(tex.rgb), encoded) * fog;
+    var rgb = rgb0 * (belly * mix(1.0, 0.85, day) + day * (0.32 * shade + phase) * sun_tint);
+    // the fog takes the far layer into its colour by its depth in the view over the
+    // visibility (Omsi.exe's fixed-function fog), and it thins out towards the horizon
+    let fwd = normalize(cross(camera.cam_up.xyz, camera.cam_right.xyz));
+    let depth = t * max(dot(d, fwd), 0.0);
+    let vis = max(vsky.haze.y, 1.0);
+    let k = clamp(1.0 - depth / vis, 0.0, 1.0);
+    rgb = mix(fog, rgb, k);
+    let horizon = 1.0 - smoothstep(rim * 0.8, rim * 1.3, t);
+    return vec4<f32>(rgb, a * select(horizon, 1.0, ovc));
+}
+
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let d = normalize(in.dir);
@@ -278,18 +406,24 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let ground = camera.cam_pos.xy + camera.world_origin.zw + d.xy / hl * reach.x;
     let size = max(vsky.cloud.y, 1.0);
     let cuv = (ground + vsky.cloud.zw) / size + vec2<f32>(0.5, -0.5) * (vsky.cloud.x / size);
-    let ctex = textureSample(t_vclouds, s_repeat, vec2<f32>(cuv.x, cuv.y));
     // Vanilla blends in the 8-bit sRGB terms of Omsi.exe's fixed-function stages,
     // Vanilla+ in linear light
     let encoded = camera.sky_color.w > 0.5;
     let fog = camera.fog.xyz;
-    let lit = min(srgb_encode(sky) + vanilla_sun(d), vec3<f32>(1.0));
+    let sunlit = min(srgb_encode(sky) + vanilla_sun(d), vec3<f32>(1.0));
+    let lit = vanilla_moon(sunlit, d, length(fwidth(d)));
     var col = select(srgb_decode(lit), lit, encoded);
     col = mix(col, fog, vanilla_haze(v));
-    if (reach.y > 0.5) {
-        let c = vanilla_clouds(d, fog, ctex, reach.x, encoded);
-        col = mix(col, c.rgb, c.a);
-    }
+    // (where the ray meets the layer's shell and the texture's footprint there, taken here in
+    // uniform control flow; the footprint held to a sane size where the shell runs off
+    // towards the horizon)
+    let h0s = camera.cam_pos.z + vsky.haze.w;
+    let t_shell = vcloud_shell(d, max(vsky.cloud.x - h0s, 1.0));
+    let suv = (camera.cam_pos.xy + camera.world_origin.zw + d.xy * max(t_shell, 0.0) + vsky.cloud.zw) / size + vec2<f32>(0.5, -0.5) * (vsky.cloud.x / size);
+    let gx = clamp(dpdx(suv), vec2<f32>(-0.25), vec2<f32>(0.25));
+    let gy = clamp(dpdy(suv), vec2<f32>(-0.25), vec2<f32>(0.25));
+    let c = vanilla_clouds_3d(d, fog, encoded, suv, t_shell, gx, gy);
+    col = mix(col, c.rgb, c.a);
     if (encoded) {
         return vec4<f32>(srgb_decode(col), 1.0);
     }

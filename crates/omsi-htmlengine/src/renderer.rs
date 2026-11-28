@@ -34,7 +34,12 @@ impl EngineRenderer {
     }
 
     /// A page whose `window.omsi` is the one of `api` (see [`omsi_sim::htmltex::PageApi`]).
-    pub fn with_api(width: u32, height: u32, html: &str, api: omsi_sim::htmltex::PageApi) -> EngineRenderer {
+    pub fn with_api(
+        width: u32,
+        height: u32,
+        html: &str,
+        api: omsi_sim::htmltex::PageApi,
+    ) -> EngineRenderer {
         let dom = Dom::parse(html);
         let scripts = dom.scripts.clone();
         log::debug!(
@@ -78,8 +83,19 @@ impl EngineRenderer {
             }
         }
         let root = self.root_style(lay);
-        let b = lay.build(self.js.dom.body, &root, 0.0, 0.0, self.width as f32, self.height as f32);
-        LayoutCache { generation: self.js.dom.generation, root, b }
+        let b = lay.build(
+            self.js.dom.body,
+            &root,
+            0.0,
+            0.0,
+            self.width as f32,
+            self.height as f32,
+        );
+        LayoutCache {
+            generation: self.js.dom.generation,
+            root,
+            b,
+        }
     }
 
     pub(crate) fn clock(&mut self) {
@@ -89,7 +105,13 @@ impl EngineRenderer {
     /// Run the timers that are due. True when one ran (the page probably changed).
     pub(crate) fn run_timers(&mut self) -> bool {
         let now = self.js.now;
-        let due: Vec<(u32, Val)> = self.js.timers.iter().filter(|t| t.due <= now).map(|t| (t.id, t.f.clone())).collect();
+        let due: Vec<(u32, Val)> = self
+            .js
+            .timers
+            .iter()
+            .filter(|t| t.due <= now)
+            .map(|t| (t.id, t.f.clone()))
+            .collect();
         if due.is_empty() {
             return false;
         }
@@ -128,14 +150,21 @@ impl EngineRenderer {
     pub(crate) fn hit_node(&self, x: f32, y: f32) -> usize {
         let body = self.js.dom.body;
         with_fonts(|reg, bold| {
-            let lay = Layouter { dom: &self.js.dom, reg, bold, vw: self.width as f32, vh: self.height as f32, imgs: &*self.imgs };
+            let lay = Layouter {
+                dom: &self.js.dom,
+                reg,
+                bold,
+                vw: self.width as f32,
+                vh: self.height as f32,
+                imgs: &*self.imgs,
+            };
             let c = self.layout_cache(&lay);
             let r = hit(&c.b, x, y);
             *self.cache.lock().unwrap() = Some(c);
             r
         })
-            .flatten()
-            .unwrap_or(body)
+        .flatten()
+        .unwrap_or(body)
     }
 
     /// Fire `ty` on `node` and let it bubble up through its parents.
@@ -148,16 +177,30 @@ impl EngineRenderer {
             ("clientY", Val::Num(y as f64)),
             ("target", Val::Elem(node)),
         ]);
-        self.js.global.lock().unwrap().vars.insert("event".into(), Val::Obj(ev.clone()));
+        self.js
+            .global
+            .lock()
+            .unwrap()
+            .vars
+            .insert("event".into(), Val::Obj(ev.clone()));
         let mut cur = Some(node);
         while let Some(n) = cur {
-            let src = self.js.dom.nodes[n].on.iter().find(|(k, _)| k == ty).map(|(_, s)| s.clone());
+            let src = self.js.dom.nodes[n]
+                .on
+                .iter()
+                .find(|(k, _)| k == ty)
+                .map(|(_, s)| s.clone());
             if let Some(src) = src {
                 if let Err(e) = self.js.run(&src) {
                     log::warn!("htmltexture: on{ty} handler failed: {e}");
                 }
             }
-            let listeners = self.js.handlers.get(&(n, ty.to_string())).cloned().unwrap_or_default();
+            let listeners = self
+                .js
+                .handlers
+                .get(&(n, ty.to_string()))
+                .cloned()
+                .unwrap_or_default();
             for f in listeners {
                 self.js.steps = 0;
                 if let Err(e) = self.js.call(f, Val::Undef, vec![Val::Obj(ev.clone())]) {
@@ -227,14 +270,31 @@ impl EngineRenderer {
             log::debug!("htmltexture: the page has no window.omsi.update function");
             return;
         };
-        log::debug!("htmltexture: window.omsi.update with {} numeric and {} string variable(s)", num.len(), strs.len());
+        log::debug!(
+            "htmltexture: window.omsi.update with {} numeric and {} string variable(s)",
+            num.len(),
+            strs.len()
+        );
         let (veh, vars) = {
             let g = omsi.lock().unwrap();
-            (g.get("vehicle").cloned().unwrap_or(Val::Undef), g.get("vars").cloned().unwrap_or(Val::Undef))
+            (
+                g.get("vehicle").cloned().unwrap_or(Val::Undef),
+                g.get("vars").cloned().unwrap_or(Val::Undef),
+            )
         };
-        let nums: HashMap<String, Val> = num.iter().map(|(k, v)| (k.clone(), Val::Num(*v as f64))).collect();
-        let strv: HashMap<String, Val> = strs.iter().map(|(k, v)| (k.clone(), Val::Str(v.clone()))).collect();
-        let mut fields = vec![("num", Val::Obj(Arc::new(Mutex::new(nums)))), ("str", Val::Obj(Arc::new(Mutex::new(strv)))), ("vars", vars)];
+        let nums: HashMap<String, Val> = num
+            .iter()
+            .map(|(k, v)| (k.clone(), Val::Num(*v as f64)))
+            .collect();
+        let strv: HashMap<String, Val> = strs
+            .iter()
+            .map(|(k, v)| (k.clone(), Val::Str(v.clone())))
+            .collect();
+        let mut fields = vec![
+            ("num", Val::Obj(Arc::new(Mutex::new(nums)))),
+            ("str", Val::Obj(Arc::new(Mutex::new(strv)))),
+            ("vars", vars),
+        ];
         // (a scenery object's page has no vehicle)
         if !matches!(veh, Val::Undef) {
             fields.push(("vehicle", veh));
@@ -242,7 +302,10 @@ impl EngineRenderer {
         let arg = obj_of(&fields);
         self.js.steps = 0;
         let result = self.js.call(update, Val::Obj(omsi), vec![Val::Obj(arg)]);
-        log::debug!("htmltexture: window.omsi.update took {} steps", self.js.steps);
+        log::debug!(
+            "htmltexture: window.omsi.update took {} steps",
+            self.js.steps
+        );
         if let Err(e) = result {
             if !self.warned {
                 log::warn!("htmltexture: omsi.update failed: {e}");
@@ -253,9 +316,20 @@ impl EngineRenderer {
 
     pub(crate) fn render(&self) -> Vec<u8> {
         let started = std::time::Instant::now();
-        let mut cv = Canvas { w: self.width, h: self.height, px: vec![0; (self.width * self.height * 4) as usize] };
+        let mut cv = Canvas {
+            w: self.width,
+            h: self.height,
+            px: vec![0; (self.width * self.height * 4) as usize],
+        };
         with_fonts(|reg, bold| {
-            let lay = Layouter { dom: &self.js.dom, reg, bold, vw: self.width as f32, vh: self.height as f32, imgs: &*self.imgs };
+            let lay = Layouter {
+                dom: &self.js.dom,
+                reg,
+                bold,
+                vw: self.width as f32,
+                vh: self.height as f32,
+                imgs: &*self.imgs,
+            };
             let mut c = self.layout_cache(&lay);
             // the background of html and body covers the whole texture
             let full = [0.0, 0.0, self.width as f32, self.height as f32];
@@ -274,7 +348,12 @@ impl EngineRenderer {
             c.b.st.bg_img = bg_img;
             *self.cache.lock().unwrap() = Some(c);
         });
-        log::debug!("htmltexture: rendered {}x{} in {:?}", self.width, self.height, started.elapsed());
+        log::debug!(
+            "htmltexture: rendered {}x{} in {:?}",
+            self.width,
+            self.height,
+            started.elapsed()
+        );
         cv.px
     }
 
@@ -293,7 +372,9 @@ impl HtmlRenderer for EngineRenderer {
 
     fn set_vehicle(&mut self, api: &omsi_sim::vehicle_api::ApiValue) {
         if let Some(omsi) = self.omsi() {
-            omsi.lock().unwrap().insert("vehicle".to_string(), api_to_val(api));
+            omsi.lock()
+                .unwrap()
+                .insert("vehicle".to_string(), api_to_val(api));
         }
     }
 
@@ -354,7 +435,9 @@ impl HtmlRenderer for EngineRenderer {
 
     fn set_depot(&mut self, depot: &omsi_sim::vehicle_api::ApiValue) {
         if let Some(omsi) = self.omsi() {
-            omsi.lock().unwrap().insert("depot".to_string(), api_to_val(depot));
+            omsi.lock()
+                .unwrap()
+                .insert("depot".to_string(), api_to_val(depot));
         }
     }
 
@@ -364,7 +447,9 @@ impl HtmlRenderer for EngineRenderer {
 
     fn set_departures(&mut self, departures: &omsi_sim::vehicle_api::ApiValue) {
         if let Some(omsi) = self.omsi() {
-            omsi.lock().unwrap().insert("departures".to_string(), api_to_val(departures));
+            omsi.lock()
+                .unwrap()
+                .insert("departures".to_string(), api_to_val(departures));
         }
     }
 

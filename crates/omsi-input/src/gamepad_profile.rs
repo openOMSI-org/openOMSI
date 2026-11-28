@@ -29,7 +29,12 @@ impl PadKind {
                     0x05c4 | 0x09cc | 0x0ba0 | 0x0cda => Some(PadKind::Ps4),
                     _ if n.contains("dualsense") || n.contains("ps5") => Some(PadKind::Ps5),
                     // (a Sony device nobody lists by name: most are DualShocks)
-                    _ if n.contains("dualshock") || n.contains("ps4") || n.contains("wireless controller") => Some(PadKind::Ps4),
+                    _ if n.contains("dualshock")
+                        || n.contains("ps4")
+                        || n.contains("wireless controller") =>
+                    {
+                        Some(PadKind::Ps4)
+                    }
                     _ => None,
                 };
             }
@@ -67,22 +72,88 @@ impl PadKind {
     pub fn label(self, b: Button) -> &'static str {
         let sony = self != PadKind::Xbox;
         match b {
-            Button::South => if sony { "Cross" } else { "A" },
-            Button::East => if sony { "Circle" } else { "B" },
-            Button::West => if sony { "Square" } else { "X" },
-            Button::North => if sony { "Triangle" } else { "Y" },
-            Button::LeftTrigger => if sony { "L1" } else { "LB" },
-            Button::RightTrigger => if sony { "R1" } else { "RB" },
-            Button::LeftTrigger2 => if sony { "L2" } else { "LT" },
-            Button::RightTrigger2 => if sony { "R2" } else { "RT" },
+            Button::South => {
+                if sony {
+                    "Cross"
+                } else {
+                    "A"
+                }
+            }
+            Button::East => {
+                if sony {
+                    "Circle"
+                } else {
+                    "B"
+                }
+            }
+            Button::West => {
+                if sony {
+                    "Square"
+                } else {
+                    "X"
+                }
+            }
+            Button::North => {
+                if sony {
+                    "Triangle"
+                } else {
+                    "Y"
+                }
+            }
+            Button::LeftTrigger => {
+                if sony {
+                    "L1"
+                } else {
+                    "LB"
+                }
+            }
+            Button::RightTrigger => {
+                if sony {
+                    "R1"
+                } else {
+                    "RB"
+                }
+            }
+            Button::LeftTrigger2 => {
+                if sony {
+                    "L2"
+                } else {
+                    "LT"
+                }
+            }
+            Button::RightTrigger2 => {
+                if sony {
+                    "R2"
+                } else {
+                    "RT"
+                }
+            }
             Button::Select => match self {
                 PadKind::Xbox => "View",
                 PadKind::Ps4 => "Share",
                 PadKind::Ps5 => "Create",
             },
-            Button::Start => if sony { "Options" } else { "Menu" },
-            Button::LeftThumb => if sony { "L3" } else { "Left stick click" },
-            Button::RightThumb => if sony { "R3" } else { "Right stick click" },
+            Button::Start => {
+                if sony {
+                    "Options"
+                } else {
+                    "Menu"
+                }
+            }
+            Button::LeftThumb => {
+                if sony {
+                    "L3"
+                } else {
+                    "Left stick click"
+                }
+            }
+            Button::RightThumb => {
+                if sony {
+                    "R3"
+                } else {
+                    "Right stick click"
+                }
+            }
             Button::DPadUp => "D-pad up",
             Button::DPadDown => "D-pad down",
             Button::DPadLeft => "D-pad left",
@@ -213,15 +284,39 @@ mod tests {
 
     #[test]
     fn families_are_found_by_ids_and_names() {
-        assert_eq!(PadKind::detect("Wireless Controller", Some((0x054c, 0x0ce6))), Some(PadKind::Ps5));
-        assert_eq!(PadKind::detect("Wireless Controller", Some((0x054c, 0x09cc))), Some(PadKind::Ps4));
+        assert_eq!(
+            PadKind::detect("Wireless Controller", Some((0x054c, 0x0ce6))),
+            Some(PadKind::Ps5)
+        );
+        assert_eq!(
+            PadKind::detect("Wireless Controller", Some((0x054c, 0x09cc))),
+            Some(PadKind::Ps4)
+        );
         assert_eq!(PadKind::detect("PS5 Controller", None), Some(PadKind::Ps5));
-        assert_eq!(PadKind::detect("DualShock 4 Wireless Controller", None), Some(PadKind::Ps4));
-        assert_eq!(PadKind::detect("Xbox Wireless Controller", Some((0x045e, 0x0b12))), Some(PadKind::Xbox));
-        assert_eq!(PadKind::detect("Controller (XBOX 360 For Windows)", None), Some(PadKind::Xbox));
-        assert_eq!(PadKind::detect("Logitech G29 Driving Force Racing Wheel", Some((0x046d, 0xc24f))), None);
+        assert_eq!(
+            PadKind::detect("DualShock 4 Wireless Controller", None),
+            Some(PadKind::Ps4)
+        );
+        assert_eq!(
+            PadKind::detect("Xbox Wireless Controller", Some((0x045e, 0x0b12))),
+            Some(PadKind::Xbox)
+        );
+        assert_eq!(
+            PadKind::detect("Controller (XBOX 360 For Windows)", None),
+            Some(PadKind::Xbox)
+        );
+        assert_eq!(
+            PadKind::detect(
+                "Logitech G29 Driving Force Racing Wheel",
+                Some((0x046d, 0xc24f))
+            ),
+            None
+        );
         // (a "Wireless Controller" of another maker is nobody's gamepad family)
-        assert_eq!(PadKind::detect("Wireless Controller", Some((0x057e, 0x2009))), None);
+        assert_eq!(
+            PadKind::detect("Wireless Controller", Some((0x057e, 0x2009))),
+            None
+        );
     }
 
     #[test]

@@ -14,7 +14,11 @@ fn lut() -> &'static [f32; 256] {
         let mut t = [0.0f32; 256];
         for (i, v) in t.iter_mut().enumerate() {
             let c = i as f32 / 255.0;
-            *v = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+            *v = if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            };
         }
         t
     })
@@ -28,53 +32,57 @@ pub fn linear(rgba: &[u8], w: u32, h: u32, highlights: f32) -> Vec<f32> {
     let lut = lut();
     let n = (w * h) as usize;
     let mut out = vec![0.0f32; n * 3];
-    out.par_chunks_mut(w as usize * 3).zip(rgba.par_chunks(w as usize * 4)).for_each(|(o, px)| {
-        for (o, p) in o.chunks_exact_mut(3).zip(px.chunks_exact(4)) {
-            let c = [lut[p[0] as usize], lut[p[1] as usize], lut[p[2] as usize]];
-            let k = if highlights > 0.0 {
-                let m = c[0].max(c[1]).max(c[2]);
-                let over = ((m - 0.85) / 0.15).clamp(0.0, 1.0);
-                1.0 + highlights * 8.0 * over * over
-            } else {
-                1.0
-            };
-            o[0] = c[0] * k;
-            o[1] = c[1] * k;
-            o[2] = c[2] * k;
-        }
-    });
+    out.par_chunks_mut(w as usize * 3)
+        .zip(rgba.par_chunks(w as usize * 4))
+        .for_each(|(o, px)| {
+            for (o, p) in o.chunks_exact_mut(3).zip(px.chunks_exact(4)) {
+                let c = [lut[p[0] as usize], lut[p[1] as usize], lut[p[2] as usize]];
+                let k = if highlights > 0.0 {
+                    let m = c[0].max(c[1]).max(c[2]);
+                    let over = ((m - 0.85) / 0.15).clamp(0.0, 1.0);
+                    1.0 + highlights * 8.0 * over * over
+                } else {
+                    1.0
+                };
+                o[0] = c[0] * k;
+                o[1] = c[1] * k;
+                o[2] = c[2] * k;
+            }
+        });
     out
 }
 
 /// Each row's pixels the mean of the row round them, `radius[x]` pixels to either side
 /// (between two whole widths for a fraction); in place, RGB.
 fn rows(lin: &mut [f32], w: usize, radius: &[f32]) {
-    lin.par_chunks_mut(w * 3).zip(radius.par_chunks(w)).for_each(|(row, rad)| {
-        if rad.iter().all(|r| *r < 0.02) {
-            return;
-        }
-        let mut pre = vec![0.0f64; (w + 1) * 3];
-        for x in 0..w {
-            for c in 0..3 {
-                pre[(x + 1) * 3 + c] = pre[x * 3 + c] + row[x * 3 + c] as f64;
+    lin.par_chunks_mut(w * 3)
+        .zip(radius.par_chunks(w))
+        .for_each(|(row, rad)| {
+            if rad.iter().all(|r| *r < 0.02) {
+                return;
             }
-        }
-        let boxed = |x: usize, r: usize, c: usize| {
-            let (a, b) = (x.saturating_sub(r), (x + r + 1).min(w));
-            ((pre[b * 3 + c] - pre[a * 3 + c]) / (b - a) as f64) as f32
-        };
-        for x in 0..w {
-            let r = rad[x].clamp(0.0, 96.0);
-            if r < 0.02 {
-                continue;
+            let mut pre = vec![0.0f64; (w + 1) * 3];
+            for x in 0..w {
+                for c in 0..3 {
+                    pre[(x + 1) * 3 + c] = pre[x * 3 + c] + row[x * 3 + c] as f64;
+                }
             }
-            let r0 = r.floor() as usize;
-            let t = r - r0 as f32;
-            for c in 0..3 {
-                row[x * 3 + c] = boxed(x, r0, c) * (1.0 - t) + boxed(x, r0 + 1, c) * t;
+            let boxed = |x: usize, r: usize, c: usize| {
+                let (a, b) = (x.saturating_sub(r), (x + r + 1).min(w));
+                ((pre[b * 3 + c] - pre[a * 3 + c]) / (b - a) as f64) as f32
+            };
+            for x in 0..w {
+                let r = rad[x].clamp(0.0, 96.0);
+                if r < 0.02 {
+                    continue;
+                }
+                let r0 = r.floor() as usize;
+                let t = r - r0 as f32;
+                for c in 0..3 {
+                    row[x * 3 + c] = boxed(x, r0, c) * (1.0 - t) + boxed(x, r0 + 1, c) * t;
+                }
             }
-        }
-    });
+        });
 }
 
 /// `src` (`w` x `h`, `k` values a pixel) with rows and columns swapped.
@@ -104,26 +112,41 @@ pub fn soften(lin: &mut Vec<f32>, w: u32, h: u32, radius: &[f32]) {
 
 /// A picture (RGBA) and its depth moved over the frame: each pixel takes what lies
 /// `by(x, y)` pixels before it (bilinear for the colour, the nearest for the depth).
-pub fn warp(rgba: &[u8], depth: &[f32], w: u32, h: u32, by: impl Fn(f32, f32) -> (f32, f32) + Sync) -> (Vec<u8>, Vec<f32>) {
+pub fn warp(
+    rgba: &[u8],
+    depth: &[f32],
+    w: u32,
+    h: u32,
+    by: impl Fn(f32, f32) -> (f32, f32) + Sync,
+) -> (Vec<u8>, Vec<f32>) {
     let (wu, hu) = (w as usize, h as usize);
     let mut px = vec![0u8; wu * hu * 4];
     let mut dp = vec![0.0f32; wu * hu];
-    px.par_chunks_mut(wu * 4).zip(dp.par_chunks_mut(wu)).enumerate().for_each(|(y, (row, drow))| {
-        for x in 0..wu {
-            let (dx, dy) = by(x as f32, y as f32);
-            let (sx, sy) = ((x as f32 - dx).clamp(0.0, w as f32 - 1.0), (y as f32 - dy).clamp(0.0, h as f32 - 1.0));
-            let (x0, y0) = (sx.floor() as usize, sy.floor() as usize);
-            let (x1, y1) = ((x0 + 1).min(wu - 1), (y0 + 1).min(hu - 1));
-            let (tx, ty) = (sx - x0 as f32, sy - y0 as f32);
-            for c in 0..4 {
-                let at = |xx: usize, yy: usize| rgba[(yy * wu + xx) * 4 + c] as f32;
-                let top = at(x0, y0) + (at(x1, y0) - at(x0, y0)) * tx;
-                let bot = at(x0, y1) + (at(x1, y1) - at(x0, y1)) * tx;
-                row[x * 4 + c] = (top + (bot - top) * ty + 0.5) as u8;
+    px.par_chunks_mut(wu * 4)
+        .zip(dp.par_chunks_mut(wu))
+        .enumerate()
+        .for_each(|(y, (row, drow))| {
+            for x in 0..wu {
+                let (dx, dy) = by(x as f32, y as f32);
+                let (sx, sy) = (
+                    (x as f32 - dx).clamp(0.0, w as f32 - 1.0),
+                    (y as f32 - dy).clamp(0.0, h as f32 - 1.0),
+                );
+                let (x0, y0) = (sx.floor() as usize, sy.floor() as usize);
+                let (x1, y1) = ((x0 + 1).min(wu - 1), (y0 + 1).min(hu - 1));
+                let (tx, ty) = (sx - x0 as f32, sy - y0 as f32);
+                for c in 0..4 {
+                    let at = |xx: usize, yy: usize| rgba[(yy * wu + xx) * 4 + c] as f32;
+                    let top = at(x0, y0) + (at(x1, y0) - at(x0, y0)) * tx;
+                    let bot = at(x0, y1) + (at(x1, y1) - at(x0, y1)) * tx;
+                    row[x * 4 + c] = (top + (bot - top) * ty + 0.5) as u8;
+                }
+                drow[x] = depth
+                    .get((sy.round() as usize) * wu + sx.round() as usize)
+                    .copied()
+                    .unwrap_or(f32::MAX);
             }
-            drow[x] = depth.get((sy.round() as usize) * wu + sx.round() as usize).copied().unwrap_or(f32::MAX);
-        }
-    });
+        });
     (px, dp)
 }
 

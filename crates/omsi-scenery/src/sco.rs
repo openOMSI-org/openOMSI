@@ -24,7 +24,10 @@ impl RenderType {
     /// traffic light poles and the shelters of many mods say `3`, and taken as ground they
     /// cast no shadow and had the terrain cut away under them.
     pub fn is_ground_layer(self) -> bool {
-        matches!(self, RenderType::PreSurface | RenderType::Surface | RenderType::OnSurface)
+        matches!(
+            self,
+            RenderType::PreSurface | RenderType::Surface | RenderType::OnSurface
+        )
     }
 }
 
@@ -58,6 +61,33 @@ pub struct TrafficLight {
     /// `[approachdist]` written after this light: how far before its stop line a vehicle
     /// registers a request (m).
     pub approach_dist: Option<f32>,
+}
+
+/// A `[traffic_light_time]` program of a crossing: the whole light program the object runs
+/// between two times of day, both written as `HHMM` (`730 900`: 07:30 until 09:00;
+/// `2200 500`: from 22:00 to 05:00 the next morning), on one line or one per line. The `[traffic_light]`s, their
+/// `[phase]`s, `[approachdist]`, `[traffic_lights_group]`, `[traffic_light_stop]` and
+/// `[traffic_light_jump]`s written after the line belong to it; the lights before it are the
+/// crossing's own program, run at every time no window holds. A file without the line loads
+/// exactly as it always did.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TrafficLightTime {
+    /// Start of the window, seconds of the day.
+    pub from: f32,
+    /// End of it, seconds of the day; below `from` the window runs across midnight.
+    pub to: f32,
+    pub group: Option<f32>,
+    pub lights: Vec<TrafficLight>,
+    pub stop: Vec<[f32; 3]>,
+    pub jump: Vec<[f32; 4]>,
+}
+
+/// A time of day written the way the stock timetables write it (`730` = 07:30), in seconds
+/// of the day, wrapped into a day.
+pub fn hhmm_seconds(value: f32) -> f32 {
+    let n = value.round() as i64;
+    let (h, m) = (n / 100, n % 100);
+    (h * 3600 + m * 60).rem_euclid(86_400) as f32
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -149,6 +179,9 @@ pub struct SceneryObject {
     pub traffic_light_stop: Vec<[f32; 3]>,
     /// `[traffic_light_jump] light time if_request jump_to`.
     pub traffic_light_jump: Vec<[f32; 4]>,
+    /// `[traffic_light_time] from to` programs (openOMSI's own line, ignored by OMSI 2):
+    /// the light programs of the other times of day, in file order.
+    pub traffic_light_times: Vec<TrafficLightTime>,
     pub spline_helpers: Vec<SplineHelper>,
     pub paths: Vec<PathDef>,
     /// `[use_traffic_light]` index per path (parallel to `paths`, -1 when none).
@@ -180,7 +213,8 @@ pub struct SceneryObject {
     pub attachments: Vec<Attachment>,
     pub map_lights: Vec<MapLight>,
     pub rail_enh: Vec<[f32; 8]>,
-    pub third_rail: Vec<[f32; 6]>,
+    /// (the `[path]` before it in the file, the rail)
+    pub third_rail: Vec<(usize, [f32; 6])>,
     pub trigger_boxes: Vec<TriggerBox>,
     pub joinable: bool,
     pub model: Model,
@@ -189,7 +223,10 @@ pub struct SceneryObject {
 
 fn read_list(r: &mut omsi_cfg::CfgReader, base: &Path) -> Vec<PathBuf> {
     let n = r.count();
-    (0..n).map(|_| omsi_cfg::resolve_path(base, r.str())).filter(|p| !p.as_os_str().is_empty()).collect()
+    (0..n)
+        .map(|_| omsi_cfg::resolve_path(base, r.str()))
+        .filter(|p| !p.as_os_str().is_empty())
+        .collect()
 }
 
 impl SceneryObject {
@@ -205,14 +242,20 @@ impl SceneryObject {
 
     /// Cutter filenames and their source folders. A separate model.cfg does not replace
     /// the object's own [terrainhole] declarations, which are not render-mesh overrides.
-    pub fn terrain_hole_sources<'a>(&'a self, model: &'a Model) -> impl Iterator<Item = (&'a Path, &'a str)> {
+    pub fn terrain_hole_sources<'a>(
+        &'a self,
+        model: &'a Model,
+    ) -> impl Iterator<Item = (&'a Path, &'a str)> {
         let model_dir = model.path.parent().unwrap_or_else(|| Path::new(""));
         let sco_dir = self.path.parent().unwrap_or_else(|| Path::new(""));
-        model.terrain_hole_meshes().map(move |f| (model_dir, f)).chain(
-            self.model_file.iter().flat_map(move |_| {
-                self.model.terrain_hole_meshes().map(move |f| (sco_dir, f))
-            }),
-        )
+        model
+            .terrain_hole_meshes()
+            .map(move |f| (model_dir, f))
+            .chain(
+                self.model_file
+                    .iter()
+                    .flat_map(move |_| self.model.terrain_hole_meshes().map(move |f| (sco_dir, f))),
+            )
     }
 
     pub fn load(path: &Path) -> Result<SceneryObject, omsi_cfg::CfgError> {
@@ -244,26 +287,59 @@ impl SceneryObject {
         // Normalize only this placement tag; indented mesh/animation commands must
         // retain their existing semantics, including disabled blocks.
         let normalized;
-        let file = if file.lines.iter().any(|line| line != "[surface]" && line.trim() == "[surface]") {
+        let file = if file
+            .lines
+            .iter()
+            .any(|line| line != "[surface]" && line.trim() == "[surface]")
+        {
             normalized = CfgFile {
                 path: file.path.clone(),
-                lines: file.lines.iter().map(|line| {
-                    if line.trim() == "[surface]" { "[surface]".to_string() } else { line.clone() }
-                }).collect(),
+                lines: file
+                    .lines
+                    .iter()
+                    .map(|line| {
+                        if line.trim() == "[surface]" {
+                            "[surface]".to_string()
+                        } else {
+                            line.clone()
+                        }
+                    })
+                    .collect(),
             };
             &normalized
         } else {
             file
         };
-        let mut o = SceneryObject { path: file.path.clone(), complexity: 0, model: Model { path: file.path.clone(), detail_factor: 1.0, tex_detail_factor: 1.0, ..Default::default() }, ..Default::default() };
+        let mut o = SceneryObject {
+            path: file.path.clone(),
+            complexity: 0,
+            model: Model {
+                path: file.path.clone(),
+                detail_factor: 1.0,
+                tex_detail_factor: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let base = file.dir().to_path_buf();
         let mut r = file.reader().disabled_blocks();
-        let tokens: Vec<&str> = ATTACH_TOKENS.iter().chain(omsi_model::ANIM_TOKENS).copied().collect();
+        // The `[traffic_light_time]` program the reader is inside, if any: the light keywords
+        // after its line fill that program instead of the object's own one.
+        let mut timed: Option<usize> = None;
+        let tokens: Vec<&str> = ATTACH_TOKENS
+            .iter()
+            .chain(omsi_model::ANIM_TOKENS)
+            .copied()
+            .collect();
         while let Some(e) = r.next_entry(&tokens) {
             let k = match e {
                 Entry::Keyword(k) => k,
                 Entry::Token(t) if ATTACH_TOKENS.contains(&t) => {
-                    let values = if t == "attach_trans" { r.f32s::<3>().to_vec() } else { vec![r.f32()] };
+                    let values = if t == "attach_trans" {
+                        r.f32s::<3>().to_vec()
+                    } else {
+                        vec![r.f32()]
+                    };
                     if let Some(a) = o.attachments.last_mut() {
                         a.ops.push((t.to_string(), values));
                     }
@@ -295,7 +371,9 @@ impl SceneryObject {
                 // `[collisionmesh]` (the Staaken checkpoints on the Heerstraße among them)
                 // have no collision shape in OMSI and are driven through
                 "collision_mesh" => o.collision_mesh = Some(r.str().to_string()),
-                "crossing_heightdeformation" => o.crossing_height_deformation = Some(r.str().to_string()),
+                "crossing_heightdeformation" => {
+                    o.crossing_height_deformation = Some(r.str().to_string())
+                }
                 "nocollision" => o.no_collision = true,
                 // (and `[fixed]` with it, as Omsi.exe sets both at 0x7b6823)
                 "surface" => {
@@ -313,33 +391,29 @@ impl SceneryObject {
                         *last = Some(d);
                     }
                 }
-                "traffic_lights_group" => o.traffic_lights_group = Some(r.f32()),
-                "traffic_light" => o.traffic_lights.push(TrafficLight { name: r.str().to_string(), phases: Vec::new(), approach_dist: None }),
-                "phase" => {
-                    let state = r.i32();
-                    let duration = r.f32();
-                    if let Some(t) = o.traffic_lights.last_mut() {
-                        t.phases.push(TrafficLightPhase { state, duration });
-                    }
-                }
-                "approachdist" => {
-                    // belongs to the light before it (a request button or a detector loop)
-                    let d = r.f32();
-                    o.approach_dist = Some(d);
-                    if let Some(t) = o.traffic_lights.last_mut() {
-                        t.approach_dist = Some(d);
-                    }
-                }
-                "traffic_light_stop" => o.traffic_light_stop.push(r.f32s::<3>()),
-                "traffic_light_jump" => o.traffic_light_jump.push(r.f32s::<4>()),
                 "splinehelper" => {
                     let spline = r.str().to_string();
                     let v = r.f32s::<6>();
-                    o.spline_helpers.push(SplineHelper { spline, x: v[0], y: v[1], z: v[2], heading: v[3], length: v[4], radius: v[5] });
+                    o.spline_helpers.push(SplineHelper {
+                        spline,
+                        x: v[0],
+                        y: v[1],
+                        z: v[2],
+                        heading: v[3],
+                        length: v[4],
+                        radius: v[5],
+                    });
                 }
                 "path" => {
                     let v = r.f32s::<12>();
-                    o.paths.push(PathDef { kind: v[8] as i32, start: [v[0], v[1], v[2]], end: [v[3], v[4], v[5]], width: v[9], direction: v[10] as i32, params: v.to_vec() });
+                    o.paths.push(PathDef {
+                        kind: v[8] as i32,
+                        start: [v[0], v[1], v[2]],
+                        end: [v[3], v[4], v[5]],
+                        width: v[9],
+                        direction: v[10] as i32,
+                        params: v.to_vec(),
+                    });
                     o.path_traffic_light.push(-1);
                     o.path_switch_dir.push(None);
                     o.path_blocks.push(Vec::new());
@@ -347,7 +421,14 @@ impl SceneryObject {
                 }
                 "path_2" => {
                     let v = r.f32s::<14>();
-                    o.paths.push(PathDef { kind: v[8] as i32, start: [v[0], v[1], v[2]], end: [v[3], v[4], v[5]], width: v[9], direction: v[10] as i32, params: v.to_vec() });
+                    o.paths.push(PathDef {
+                        kind: v[8] as i32,
+                        start: [v[0], v[1], v[2]],
+                        end: [v[3], v[4], v[5]],
+                        width: v[9],
+                        direction: v[10] as i32,
+                        params: v.to_vec(),
+                    });
                     o.path_traffic_light.push(-1);
                     o.path_switch_dir.push(None);
                     o.path_blocks.push(Vec::new());
@@ -404,8 +485,12 @@ impl SceneryObject {
                     let v = r.f32s::<4>();
                     o.tree = Some((t, v[0], v[1], v[2], v[3]));
                 }
-                "add_camera_reflexion" => o.reflexion_cameras.push(ReflexionCamera { values: r.f32s::<7>().to_vec() }),
-                "add_camera_reflexion_2" => o.reflexion_cameras.push(ReflexionCamera { values: r.f32s::<8>().to_vec() }),
+                "add_camera_reflexion" => o.reflexion_cameras.push(ReflexionCamera {
+                    values: r.f32s::<7>().to_vec(),
+                }),
+                "add_camera_reflexion_2" => o.reflexion_cameras.push(ReflexionCamera {
+                    values: r.f32s::<8>().to_vec(),
+                }),
                 "mass" => o.mass = Some(r.f32()),
                 "momentofintertia" => o.moment_of_inertia = Some(r.f32s::<3>()),
                 "cog" => o.cog = Some(r.f32s::<3>()),
@@ -426,13 +511,26 @@ impl SceneryObject {
                 "new_attachment" => o.attachments.push(Attachment::default()),
                 "maplight" => {
                     let v = r.f32s::<7>();
-                    o.map_lights.push(MapLight { pos: [v[0], v[1], v[2]], color: [v[3], v[4], v[5]], radius: v[6] });
+                    o.map_lights.push(MapLight {
+                        pos: [v[0], v[1], v[2]],
+                        color: [v[3], v[4], v[5]],
+                        radius: v[6],
+                    });
                 }
                 "rail_enh" => o.rail_enh.push(r.f32s::<8>()),
-                "third_rail" => o.third_rail.push(r.f32s::<6>()),
+                "third_rail" => {
+                    let rail = r.f32s::<6>();
+                    if let Some(path) = o.paths.len().checked_sub(1) {
+                        o.third_rail.push((path, rail));
+                    }
+                }
                 "triggerbox_new" => {
                     let v = r.f32s::<6>();
-                    o.trigger_boxes.push(TriggerBox { size: [v[0], v[1], v[2]], center: [v[3], v[4], v[5]], reverb: None });
+                    o.trigger_boxes.push(TriggerBox {
+                        size: [v[0], v[1], v[2]],
+                        center: [v[3], v[4], v[5]],
+                        reverb: None,
+                    });
                 }
                 "triggerbox_setreverb" => {
                     let a = r.f32();
@@ -443,7 +541,9 @@ impl SceneryObject {
                 }
                 "joinable" => o.joinable = true,
                 _ => {
-                    if !o.model.handle_keyword(&k, &mut r) {
+                    if !traffic_light_keyword(&k, &mut r, &mut o, &mut timed)
+                        && !o.model.handle_keyword(&k, &mut r)
+                    {
                         o.unknown_keywords.push((k, r.block_line()));
                     }
                 }
@@ -452,6 +552,63 @@ impl SceneryObject {
         o.model.tidy_visible();
         o
     }
+    /// A path without [switchdir] that starts where a path with one ends takes that path's
+    /// value, so the continuation of a branch is active whenever the branch is.
+    pub fn inherit_switch_dirs(&self) -> Vec<Option<i32>> {
+        let paths = &self.paths;
+        let mut out = self.path_switch_dir.clone();
+        for _ in 0..paths.len() {
+            let mut changed = false;
+            for i in 0..paths.len() {
+                if out[i].is_some() {
+                    continue;
+                }
+                for j in 0..paths.len() {
+                    if i == j || out[j].is_none() {
+                        continue;
+                    }
+                    let (e, h) = path_end(&paths[j]);
+                    let close = (e[0] - paths[i].start[0]).hypot(e[1] - paths[i].start[1]) < 0.05
+                        && (paths[i].start[2] - paths[j].start[2]).abs() < 0.05
+                        && angle_gap(h, paths[i].end[0].to_radians()).abs() < 0.05;
+                    if close {
+                        out[i] = out[j];
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        out
+    }
+}
+
+/// Shortest signed difference `a - b` between two headings in radians, in [-PI, PI).
+fn angle_gap(a: f32, b: f32) -> f32 {
+    (a - b + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
+}
+
+fn path_end(p: &PathDef) -> ([f32; 2], f32) {
+    let th0 = p.end[0].to_radians();
+    let (r, len) = (p.end[1], p.end[2]);
+    if r == 0.0 {
+        (
+            [p.start[0] + len * th0.sin(), p.start[1] + len * th0.cos()],
+            th0,
+        )
+    } else {
+        let th1 = th0 + len / r;
+        (
+            [
+                p.start[0] + r * (th0.cos() - th1.cos()),
+                p.start[1] + r * (th1.sin() - th0.sin()),
+            ],
+            th1,
+        )
+    }
 }
 
 /// The `[new_attachment]` sub-commands (`attach_trans x y z`, `attach_rot_x a` …). The
@@ -459,15 +616,141 @@ impl SceneryObject {
 /// attachment wherever they stand after it: the stock `Timetable_Terminus_Pole_S.sco` lifts
 /// its point to 2.68 m with an `attach_trans` after its `[complexity]` block (read as part of
 /// the `[new_attachment]` block only, the timetable hung at the foot of the pole).
-pub const ATTACH_TOKENS: &[&str] = &["attach_trans", "attach_rot_x", "attach_rot_y", "attach_rot_z"];
+pub const ATTACH_TOKENS: &[&str] = &[
+    "attach_trans",
+    "attach_rot_x",
+    "attach_rot_y",
+    "attach_rot_z",
+];
+
+/// The `if_request` line of a `[traffic_light_stop]` / `[traffic_light_jump]` as 1.0 or
+/// 0.0. Omsi.exe compares the raw line with "0" (0x7b8485, 0x7b85d7): anything else - `1`,
+/// `-1`, `0.0`, a word - sets the flag.
+fn request_flag(line: &str) -> f32 {
+    if line == "0" { 0.0 } else { 1.0 }
+}
+
+/// The traffic-light keywords that fill either the crossing's own program or, after a
+/// `[traffic_light_time]` line, that time window's program. Returns whether `k` was one of
+/// them; an unknown keyword leaves the reader untouched for the model parser.
+fn traffic_light_keyword(
+    k: &str,
+    r: &mut omsi_cfg::CfgReader<'_>,
+    o: &mut SceneryObject,
+    timed: &mut Option<usize>,
+) -> bool {
+    match k {
+        "traffic_lights_group" => {
+            let g = r.f32();
+            match *timed {
+                Some(i) => o.traffic_light_times[i].group = Some(g),
+                None => o.traffic_lights_group = Some(g),
+            }
+        }
+        "traffic_light_time" => {
+            // Both times on their own line (`730 900`), or one per line as the rest
+            // of the format writes its numbers.
+            let line = r.word();
+            let mut v: Vec<f32> = line
+                .split_whitespace()
+                .map(|t| t.replace(',', ".").parse::<f32>().unwrap_or(0.0))
+                .collect();
+            if v.len() < 2 {
+                v.push(r.f32());
+            }
+            o.traffic_light_times.push(TrafficLightTime {
+                from: hhmm_seconds(v[0]),
+                to: hhmm_seconds(v[1]),
+                ..Default::default()
+            });
+            *timed = Some(o.traffic_light_times.len() - 1);
+        }
+        "traffic_light" => {
+            let l = TrafficLight {
+                name: r.str().to_string(),
+                phases: Vec::new(),
+                approach_dist: None,
+            };
+            match *timed {
+                Some(i) => o.traffic_light_times[i].lights.push(l),
+                None => o.traffic_lights.push(l),
+            }
+        }
+        "phase" => {
+            let state = r.i32();
+            let duration = r.f32();
+            let light = match *timed {
+                Some(i) => o.traffic_light_times[i].lights.last_mut(),
+                None => o.traffic_lights.last_mut(),
+            };
+            if let Some(t) = light {
+                t.phases.push(TrafficLightPhase { state, duration });
+            }
+        }
+        "approachdist" => {
+            // belongs to the light before it (a request button or a detector loop)
+            let d = r.f32();
+            o.approach_dist = Some(d);
+            let light = match *timed {
+                Some(i) => o.traffic_light_times[i].lights.last_mut(),
+                None => o.traffic_lights.last_mut(),
+            };
+            if let Some(t) = light {
+                t.approach_dist = Some(d);
+            }
+        }
+        "traffic_light_stop" => {
+            let v = light_point(r);
+            match *timed {
+                Some(i) => o.traffic_light_times[i].stop.push(v),
+                None => o.traffic_light_stop.push(v),
+            }
+        }
+        "traffic_light_jump" => {
+            let [light, time, if_request] = light_point(r);
+            let v = [light, time, if_request, r.f32()];
+            match *timed {
+                Some(i) => o.traffic_light_times[i].jump.push(v),
+                None => o.traffic_light_jump.push(v),
+            }
+        }
+        _ => return false,
+    }
+    true
+}
+
+/// The light, the time and the `if_request` flag a `[traffic_light_stop]` or
+/// `[traffic_light_jump]` starts with.
+fn light_point(r: &mut omsi_cfg::CfgReader<'_>) -> [f32; 3] {
+    let light = r.f32();
+    let time = r.f32();
+    [light, time, request_flag(r.line())]
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    fn a_light_stop_asks_for_a_request_unless_its_line_is_exactly_0() {
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[traffic_light_stop]\n0\n12\n-1\n[traffic_light_stop]\n1\n20\n0\n\
+             [traffic_light_jump]\n0\n30\n0.0\n5\n[traffic_light_jump]\n1\n40\n0\n7\n",
+        ));
+        assert_eq!(o.traffic_light_stop, [[0.0, 12.0, 1.0], [1.0, 20.0, 0.0]]);
+        assert_eq!(
+            o.traffic_light_jump,
+            [[0.0, 30.0, 1.0, 5.0], [1.0, 40.0, 0.0, 7.0]]
+        );
+    }
+
+    #[test]
     fn lua_scripts_of_an_object_are_read_with_range_and_rate() {
-        let o = SceneryObject::parse(&CfgFile::from_str("objects/gate.sco", "[mesh]\narm.o3d\n[lua_script]\ngate.lua\n[lua_range]\n120\n[lua_rate]\n20\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/gate.sco",
+            "[mesh]\narm.o3d\n[lua_script]\ngate.lua\n[lua_range]\n120\n[lua_rate]\n20\n",
+        ));
         assert_eq!(o.scripts.lua.len(), 1);
         assert!(o.scripts.lua[0].ends_with("gate.lua"));
         assert_eq!((o.scripts.lua_range, o.scripts.lua_rate), (120.0, 20.0));
@@ -477,16 +760,25 @@ mod tests {
 
     #[test]
     fn a_count_larger_than_the_file_reads_only_what_is_there() {
-        let o = SceneryObject::parse(&CfgFile::from_str("objects/x.sco", "[groups]\n1000000000000\nA\nB\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[groups]\n1000000000000\nA\nB\n",
+        ));
         assert_eq!(o.groups, ["A", "B"]);
-        let o = SceneryObject::parse(&CfgFile::from_str("objects/x.sco", "[groups]\n2\nA\nB\n[onlyeditor]\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[groups]\n2\nA\nB\n[onlyeditor]\n",
+        ));
         assert_eq!(o.groups, ["A", "B"]);
         assert!(o.only_editor);
     }
 
     #[test]
     fn several_plain_visible_blocks_keep_the_last_as_omsi_does() {
-        let o = SceneryObject::parse(&CfgFile::from_str("objects/x.sco", "[mesh]\na.o3d\n[visible]\nExclamation\n1\n[visible]\nTrafficLightApproach\n1\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[mesh]\na.o3d\n[visible]\nExclamation\n1\n[visible]\nTrafficLightApproach\n1\n",
+        ));
         let m = &o.model.meshes[0];
         let var = |e: f32, t: f32| move |n: &str| Some(if n == "Exclamation" { e } else { t });
         assert_eq!(m.visible_by(var(0.0, 1.0)), Some(true));
@@ -499,10 +791,15 @@ mod tests {
             "objects/cutting.sco",
             "[terrainhole]\ncut.o3d\n[mesh]\nvisible.o3d\n[terrainhole]\nend.o3d\n",
         ));
-        assert_eq!(inline.terrain_hole_sources(&inline.model).collect::<Vec<_>>(), [
-            (Path::new("objects"), "cut.o3d"),
-            (Path::new("objects"), "end.o3d"),
-        ]);
+        assert_eq!(
+            inline
+                .terrain_hole_sources(&inline.model)
+                .collect::<Vec<_>>(),
+            [
+                (Path::new("objects"), "cut.o3d"),
+                (Path::new("objects"), "end.o3d"),
+            ]
+        );
         let wrapper = SceneryObject::parse(&CfgFile::from_str(
             "objects/cutting.sco",
             "[terrainhole]\ncut.o3d\n[model]\nmodel/model.cfg\n",
@@ -511,10 +808,13 @@ mod tests {
             "objects/model/model.cfg",
             "[terrainhole]\nend.o3d\n[mesh]\nvisible.o3d\n",
         ));
-        assert_eq!(wrapper.terrain_hole_sources(&model).collect::<Vec<_>>(), [
-            (Path::new("objects/model"), "end.o3d"),
-            (Path::new("objects"), "cut.o3d"),
-        ]);
+        assert_eq!(
+            wrapper.terrain_hole_sources(&model).collect::<Vec<_>>(),
+            [
+                (Path::new("objects/model"), "end.o3d"),
+                (Path::new("objects"), "cut.o3d"),
+            ]
+        );
     }
 
     /// The stock timetable pole: the `attach_trans` after `[complexity]` belongs to the
@@ -526,8 +826,14 @@ mod tests {
         assert_eq!(o.complexity, 2);
         assert_eq!(o.model.meshes.len(), 1);
         assert_eq!(o.attachments.len(), 2);
-        assert_eq!(o.attachments[0].ops, vec![("attach_trans".to_string(), vec![0.042, 0.0, 2.68])]);
-        assert_eq!(o.attachments[1].ops, vec![("attach_rot_x".to_string(), vec![-10.0])]);
+        assert_eq!(
+            o.attachments[0].ops,
+            vec![("attach_trans".to_string(), vec![0.042, 0.0, 2.68])]
+        );
+        assert_eq!(
+            o.attachments[1].ops,
+            vec![("attach_rot_x".to_string(), vec![-10.0])]
+        );
     }
 
     #[test]
@@ -553,7 +859,10 @@ mod tests {
             ("0", RenderType::Normal),
         ] {
             let text = format!("[rendertype]\n{value}\n");
-            assert_eq!(SceneryObject::parse(&CfgFile::from_str("phase.sco", &text)).render_type, expected);
+            assert_eq!(
+                SceneryObject::parse(&CfgFile::from_str("phase.sco", &text)).render_type,
+                expected
+            );
         }
     }
 
@@ -581,12 +890,21 @@ mod tests {
     #[test]
     fn an_object_with_a_path_keeps_the_height_the_map_gives_it() {
         let path = "[path]\n0\n0\n0\n0\n0\n10\n0\n0\n0\n3.5\n0\n0\n";
-        let road = SceneryObject::parse(&CfgFile::from_str("road.sco", &format!("[mesh]\nroad.o3d\n{path}")));
+        let road = SceneryObject::parse(&CfgFile::from_str(
+            "road.sco",
+            &format!("[mesh]\nroad.o3d\n{path}"),
+        ));
         assert!(!road.abs_height && road.spline_helpers.is_empty());
-        assert!(road.absolute_height(), "a road piece without [splinehelper]");
+        assert!(
+            road.absolute_height(),
+            "a road piece without [splinehelper]"
+        );
         let house = SceneryObject::parse(&CfgFile::from_str("house.sco", "[mesh]\nhouse.o3d\n"));
         assert!(!house.absolute_height());
-        let lifted = SceneryObject::parse(&CfgFile::from_str("bridge.sco", "[absheight]\n[mesh]\nb.o3d\n"));
+        let lifted = SceneryObject::parse(&CfgFile::from_str(
+            "bridge.sco",
+            "[absheight]\n[mesh]\nb.o3d\n",
+        ));
         assert!(lifted.absolute_height());
     }
 
@@ -599,13 +917,38 @@ mod tests {
         assert_eq!(o.model.meshes.len(), 1);
         assert_eq!(o.model.meshes[0].file, "Weiche_L_Asphalt.o3d");
 
-        let o = SceneryObject::parse(&CfgFile::from_str("switch.sco", " \t[surface] \t\n0\n[mesh]\nswitch.o3d\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "switch.sco",
+            " \t[surface] \t\n0\n[mesh]\nswitch.o3d\n",
+        ));
         assert!(o.surface_explicit);
         assert!(!o.surface);
         assert_eq!(o.model.meshes.len(), 1);
 
-        let o = SceneryObject::parse(&CfgFile::from_str("switch.sco", "-<DISABLED>-\n\t[surface]\n1\n-<ENABLED>-\n[mesh]\nswitch.o3d\n"));
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "switch.sco",
+            "-<DISABLED>-\n\t[surface]\n1\n-<ENABLED>-\n[mesh]\nswitch.o3d\n",
+        ));
         assert!(!o.surface_explicit && !o.surface);
         assert_eq!(o.model.meshes.len(), 1);
+    }
+
+    #[test]
+    fn a_continuation_across_the_north_heading_inherits_the_switch_dir() {
+        let o = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[path]\n0\n0\n0.449\n359\n0\n10\n0\n0\n2\n2.5\n2\n0\n[switchdir]\n1\n\
+             [path]\n-0.1745\n9.9985\n0.449\n1\n0\n5\n0\n0\n2\n2.5\n2\n0\n",
+        ));
+        assert_eq!(o.path_switch_dir, [Some(1), None]);
+        assert_eq!(o.inherit_switch_dirs(), [Some(1), Some(1)]);
+
+        // control: the same joint with a 20° kink is no continuation
+        let kinked = SceneryObject::parse(&CfgFile::from_str(
+            "objects/x.sco",
+            "[path]\n0\n0\n0.449\n359\n0\n10\n0\n0\n2\n2.5\n2\n0\n[switchdir]\n1\n\
+             [path]\n-0.1745\n9.9985\n0.449\n20\n0\n5\n0\n0\n2\n2.5\n2\n0\n",
+        ));
+        assert_eq!(kinked.inherit_switch_dirs(), [Some(1), None]);
     }
 }

@@ -13,13 +13,23 @@ pub(crate) struct Post {
     pub adapt_bg: [wgpu::BindGroup; 2],
 }
 
-pub(crate) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, hdr_format: wgpu::TextureFormat, white_texture: &GpuTexture) -> Post {
+pub(crate) fn build(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    hdr_format: wgpu::TextureFormat,
+    white_texture: &GpuTexture,
+) -> Post {
     // --- enhanced graphics: the post passes (glow, metering, adaptation, tone curve, FXAA)
     log::info!("renderer: compiling the post passes shaders");
-    let post_shader = compile_shader(device, wgpu::ShaderModuleDescriptor {
-        label: Some("post"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("../post.wgsl").into()),
-    });
+    let post_shader = compile_shader(
+        device,
+        wgpu::ShaderModuleDescriptor {
+            label: Some("post"),
+            source: wgpu::ShaderSource::Wgsl(
+                crate::shaders::hot_wgsl(include_str!("../post.wgsl"), "post.wgsl").into(),
+            ),
+        },
+    );
     let post_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("post"),
         entries: &[
@@ -33,7 +43,11 @@ pub(crate) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, hdr_form
             float_texture_entry(5),
         ],
     });
-    let post_buf = uniform_buffer(device, "post params", std::mem::size_of::<PostUniform>() as u64);
+    let post_buf = uniform_buffer(
+        device,
+        "post params",
+        std::mem::size_of::<PostUniform>() as u64,
+    );
     let post_sampler = clamped_linear_sampler(device);
     let post_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("post"),
@@ -41,7 +55,14 @@ pub(crate) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, hdr_form
         immediate_size: 0,
     });
     let post_pipeline = |entry: &str, format: wgpu::TextureFormat| {
-        no_vertex_pipeline(entry, &post_pl, &post_shader, entry, &[target(format, None)]).create(device)
+        no_vertex_pipeline(
+            entry,
+            &post_pl,
+            &post_shader,
+            entry,
+            &[target(format, None)],
+        )
+        .create(device)
     };
     let post = PostPipelines {
         down_first: post_pipeline("fs_down_first", hdr_format),
@@ -110,5 +131,13 @@ pub(crate) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, hdr_form
             ],
         })
     });
-    Post { pipelines: post, layout: post_layout, buf: post_buf, sampler: post_sampler, meter_view, adapt_views, adapt_bg }
+    Post {
+        pipelines: post,
+        layout: post_layout,
+        buf: post_buf,
+        sampler: post_sampler,
+        meter_view,
+        adapt_views,
+        adapt_bg,
+    }
 }

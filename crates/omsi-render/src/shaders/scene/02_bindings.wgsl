@@ -50,6 +50,51 @@ fn rt_at(frag: vec2<f32>, world: vec3<f32>) -> vec4<f32> {
     return best;
 }
 
+// Experimental (`rt_gi`, camera.clouds.w 3): the traced global illumination at the picture's
+// size (rt_gi_denoise.wgsl `cs_gi_upsample`): rgb the light the surroundings send back
+// (irradiance, not pre-exposed), a the sky's visibility.
+@group(0) @binding(22) var t_gi: texture_2d<f32>;
+
+// The traced global illumination at a pixel, taken where `rt_at` takes the traced lighting
+// (the texel at this surface's depth, the pixel's own or a neighbour's); a < 0 where there is
+// none for it (the surface is not in the depth prepass, or no ray stood for it): the main
+// pass then lights it as without it.
+fn gi_at(frag: vec2<f32>, world: vec3<f32>) -> vec4<f32> {
+    if (camera.clouds.w < 2.5) {
+        return vec4<f32>(0.0, 0.0, 0.0, -1.0);
+    }
+    let size = vec2<i32>(textureDimensions(t_ao));
+    let z = (camera.view_proj * vec4<f32>(world, 1.0)).w;
+    let tol = 0.03 + 0.01 * z;
+    let px = vec2<i32>(frag);
+    var best = vec2<i32>(-1);
+    var best_d = tol;
+    for (var k = 0; k < 5; k = k + 1) {
+        var o = vec2<i32>(0, 0);
+        switch k {
+            case 1: { o = vec2<i32>(1, 0); }
+            case 2: { o = vec2<i32>(-1, 0); }
+            case 3: { o = vec2<i32>(0, 1); }
+            case 4: { o = vec2<i32>(0, -1); }
+            default: {}
+        }
+        let q = clamp(px + o, vec2<i32>(0), size - vec2<i32>(1));
+        let s = textureLoad(t_ao, q, 0);
+        let d = abs(s.g - z);
+        if (s.g > 0.0 && d < best_d) {
+            best_d = d;
+            best = q;
+        }
+        if (k == 0 && d < tol * 0.3) {
+            break;
+        }
+    }
+    if (best.x < 0) {
+        return vec4<f32>(0.0, 0.0, 0.0, -1.0);
+    }
+    return textureLoad(t_gi, best, 0);
+}
+
 // The ambient occlusion at a pixel of the full picture. It is worked out at half size, and
 // a plain bilinear lookup blended the occlusion of the ground behind an edge with that of
 // the object in front: every wheel, pole and kerb stood in a pale outline on the shaded
@@ -204,11 +249,16 @@ fn light_map_mapped(m: vec4<f32>) -> bool {
 // (the model matrices as their columns, four vec4 each: some phone GPUs (Mali, Adreno) read an
 // array of matrices from a storage buffer wrongly, and every mesh came out flat and far away)
 @group(0) @binding(1) var<storage, read> models: array<vec4<f32>>;
-// The affine row carries the draw order level and its octahedral geometric normal.
-// Neither belongs to the transform used by shading, shadows or motion vectors.
+// (the first column's w, 0 in an affine matrix, carries the draw's order level: see
+// `draw_order_level` and `scene_clip`)
 fn model_matrix(e: u32) -> mat4x4<f32> {
     let k = e * 4u;
-    return mat4x4<f32>(vec4<f32>(models[k].xyz, 0.0), vec4<f32>(models[k + 1u].xyz, 0.0), vec4<f32>(models[k + 2u].xyz, 0.0), models[k + 3u]);
+    return mat4x4<f32>(
+        vec4<f32>(models[k].xyz, 0.0),
+        vec4<f32>(models[k + 1u].xyz, 0.0),
+        vec4<f32>(models[k + 2u].xyz, 0.0),
+        models[k + 3u],
+    );
 }
 // x: alpha multiplier, y: visible (0/1), zw: uv offset
 @group(0) @binding(2) var<storage, read> inst_params: array<vec4<f32>>;
@@ -264,9 +314,31 @@ struct MaterialParams {
     // x: [matl_glow] strength (0 = the keyword is not there; the material is its own light -
     // its `t_light` is a greyscale mask of how much shines where, its colour is its own, see
     // the enhanced pass), y an LED panel's share of the `Led glow` ([led_glow_effect],
-    // 1 without it), z/w free
+    // 1 without it), z [matl_emissive]'s scale (see `emission`), w free
     glow: vec4<f32>,
+    // The PBR factors (openOMSI `[matl_metallic]` and the rest, `PbrFactors`): x metalness,
+    // y roughness, z the normal map's strength, w the occlusion map's - each only where its
+    // bit of `base_color.w` is set (`pbr_set`)
+    pbr_factor: vec4<f32>,
+    // rgb the base colour factor (linear); w bits: 1 base colour, 2 metalness, 4 roughness,
+    // 8 normal strength, 16 occlusion strength
+    base_color: vec4<f32>,
+    // [matl_emissive] (`EmissionLight`): rgb its colour (linear), w bits - 1 it shines, 2 its
+    // texture is in `t_light`, 4 physical units, 8 the instance's slot value scales it, 16
+    // that value carries its temperature; its scale is `glow.z`
+    emission: vec4<f32>,
 };
+
+// Whether the material's commands set the PBR factor of bit `b` (see `base_color.w`).
+fn pbr_set(b: u32) -> bool {
+    return (u32(material.base_color.w + 0.5) & b) != 0u;
+}
+
+// Whether a PBR map or factor says how the material reflects (its roughness or metalness):
+// it mirrors the probe as an envmapped one does.
+fn pbr_reflective() -> bool {
+    return material.pbr.z > 0.5 || material.pbr.w > 0.5 || pbr_set(6u);
+}
 @group(1) @binding(2) var<uniform> material: MaterialParams;
 @group(1) @binding(3) var t_trans: texture_2d<f32>;
 @group(1) @binding(4) var t_night: texture_2d<f32>;

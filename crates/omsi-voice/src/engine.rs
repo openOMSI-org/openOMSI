@@ -12,8 +12,8 @@ use crate::jitter::{Jitter, Playout};
 use omsi_audio::stream::StreamBuf;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 /// Players heard at once, at most (each has a decoder and a buffer).
@@ -78,7 +78,14 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { enabled: false, mode: Mode::PushToTalk, open_channel: Channel::Nearby, mic_gain: 1.0, gate_db: -45.0, input_device: String::new() }
+        Settings {
+            enabled: false,
+            mode: Mode::PushToTalk,
+            open_channel: Channel::Nearby,
+            mic_gain: 1.0,
+            gate_db: -45.0,
+            input_device: String::new(),
+        }
     }
 }
 
@@ -183,7 +190,10 @@ impl Core {
             muted: HashSet::new(),
             all_off: false,
             out: Vec::new(),
-            new_streams: vec![NewStream { id: 0, stream: cue.clone() }],
+            new_streams: vec![NewStream {
+                id: 0,
+                stream: cue.clone(),
+            }],
             cue,
         })
     }
@@ -206,7 +216,12 @@ impl Core {
 
     fn end_transmission(&mut self) {
         if let Some(ch) = self.sending.take() {
-            self.out.push(Outgoing { channel: ch, end: true, seq: self.seq, payload: Vec::new() });
+            self.out.push(Outgoing {
+                channel: ch,
+                end: true,
+                seq: self.seq,
+                payload: Vec::new(),
+            });
             self.seq = self.seq.wrapping_add(1);
             if ch == Channel::Radio {
                 feed(&self.cue, &dsp::squelch(false));
@@ -232,7 +247,11 @@ impl Core {
             let mut frame: Vec<f32> = self.pcm.drain(..FRAME).collect();
             dsp::mic_gain(&mut frame, self.settings.mic_gain);
             let level = dsp::rms_db(&frame);
-            self.mic_level_db = if level > self.mic_level_db { level } else { self.mic_level_db * 0.9 + level * 0.1 };
+            self.mic_level_db = if level > self.mic_level_db {
+                level
+            } else {
+                self.mic_level_db * 0.9 + level * 0.1
+            };
             let channel = match (transmit, self.settings.mode) {
                 (Some(c), _) => Some(c),
                 (None, Mode::Open) if self.gate.process(&frame) => Some(self.settings.open_channel),
@@ -249,7 +268,12 @@ impl Core {
                             feed(&self.cue, &dsp::squelch(true));
                         }
                         self.sending = Some(ch);
-                        self.out.push(Outgoing { channel: ch, end: false, seq: self.seq, payload });
+                        self.out.push(Outgoing {
+                            channel: ch,
+                            end: false,
+                            seq: self.seq,
+                            payload,
+                        });
                         self.seq = self.seq.wrapping_add(1);
                     }
                 }
@@ -271,11 +295,27 @@ impl Core {
             if self.speakers.len() >= MAX_SPEAKERS || (f.end && f.payload.is_empty()) {
                 return;
             }
-            let (Some(dec), stream) = (Decoder::new(), voice_buffer()) else { return };
-            self.new_streams.push(NewStream { id: f.from, stream: stream.clone() });
+            let (Some(dec), stream) = (Decoder::new(), voice_buffer()) else {
+                return;
+            };
+            self.new_streams.push(NewStream {
+                id: f.from,
+                stream: stream.clone(),
+            });
             self.speakers.insert(
                 f.from,
-                Speaker { dec, jit: Jitter::new(), stream, radio: RadioVoice::default(), channel: f.channel, active: false, ending: false, due: now, last_rx: now, level_db: -120.0 },
+                Speaker {
+                    dec,
+                    jit: Jitter::new(),
+                    stream,
+                    radio: RadioVoice::default(),
+                    channel: f.channel,
+                    active: false,
+                    ending: false,
+                    due: now,
+                    last_rx: now,
+                    level_db: -120.0,
+                },
             );
         }
         let sp = self.speakers.get_mut(&f.from).unwrap();
@@ -316,7 +356,9 @@ impl Core {
                 let samples = match sp.jit.pop() {
                     Playout::Wait => break,
                     Playout::Frame(p) => sp.dec.decode(&p).unwrap_or_else(|| sp.dec.conceal()),
-                    Playout::Recover(next) => sp.dec.recover(&next).unwrap_or_else(|| sp.dec.conceal()),
+                    Playout::Recover(next) => {
+                        sp.dec.recover(&next).unwrap_or_else(|| sp.dec.conceal())
+                    }
                     Playout::Conceal => sp.dec.conceal(),
                     Playout::Dead => {
                         Self::finish(sp);
@@ -335,7 +377,11 @@ impl Core {
                     sp.radio.process(&mut samples);
                 }
                 let level = dsp::rms_db(&samples);
-                sp.level_db = if level > sp.level_db { level } else { sp.level_db * 0.8 + level * 0.2 };
+                sp.level_db = if level > sp.level_db {
+                    level
+                } else {
+                    sp.level_db * 0.8 + level * 0.2
+                };
                 feed(&sp.stream, &samples);
                 sp.due += step;
                 if sp.ending && sp.jit.is_empty() {
@@ -350,7 +396,12 @@ impl Core {
             }
         }
         // the forgotten
-        let idle: Vec<u32> = self.speakers.iter().filter(|(_, s)| !s.active && now.saturating_duration_since(s.last_rx) > IDLE_FORGET).map(|(i, _)| *i).collect();
+        let idle: Vec<u32> = self
+            .speakers
+            .iter()
+            .filter(|(_, s)| !s.active && now.saturating_duration_since(s.last_rx) > IDLE_FORGET)
+            .map(|(i, _)| *i)
+            .collect();
         for id in idle {
             if let Some(sp) = self.speakers.remove(&id) {
                 sp.stream.close();
@@ -370,7 +421,16 @@ impl Core {
 
     /// Who is heard now.
     pub fn talkers(&self) -> Vec<Talker> {
-        let mut v: Vec<Talker> = self.speakers.iter().filter(|(_, s)| s.active).map(|(id, s)| Talker { id: *id, channel: s.channel, level_db: s.level_db }).collect();
+        let mut v: Vec<Talker> = self
+            .speakers
+            .iter()
+            .filter(|(_, s)| s.active)
+            .map(|(id, s)| Talker {
+                id: *id,
+                channel: s.channel,
+                level_db: s.level_db,
+            })
+            .collect();
         v.sort_by_key(|t| t.id);
         v
     }
@@ -432,7 +492,11 @@ enum Mic {
     Device(Capture),
     /// A synthetic source for tests (`OMSI_VOICE_TEST_TONE`): a tone at this pitch, made at the
     /// pace of real time.
-    Tone { freq: f32, made: u64, started: Instant },
+    Tone {
+        freq: f32,
+        made: u64,
+        started: Instant,
+    },
 }
 
 /// `OMSI_VOICE_TEST_TONE=1` (or a pitch in Hz): the microphone is a tone, the device is never
@@ -449,9 +513,15 @@ pub fn test_tone() -> Option<f32> {
 
 impl Voice {
     pub fn new() -> Voice {
-        let shared = Arc::new(Shared { inbox: Mutex::new(Inbox::default()), stop: AtomicBool::new(false) });
+        let shared = Arc::new(Shared {
+            inbox: Mutex::new(Inbox::default()),
+            stop: AtomicBool::new(false),
+        });
         let s = shared.clone();
-        let thread = std::thread::Builder::new().name("voice".into()).spawn(move || worker(s)).ok();
+        let thread = std::thread::Builder::new()
+            .name("voice".into())
+            .spawn(move || worker(s))
+            .ok();
         Voice { shared, thread }
     }
 
@@ -546,7 +616,12 @@ fn worker(shared: Arc<Shared>) {
             core.all_off = i.all_off;
             let frames: Vec<Frame> = i.incoming.drain(..).collect();
             i.received += frames.len() as u64;
-            (i.settings.clone(), i.transmit, frames, std::mem::take(&mut i.probe))
+            (
+                i.settings.clone(),
+                i.transmit,
+                frames,
+                std::mem::take(&mut i.probe),
+            )
         };
         core.apply(&settings);
         if probe {
@@ -572,7 +647,13 @@ fn worker(shared: Arc<Shared>) {
         let keep = (settings.enabled && (wanted || now < mic_wanted_until)) || probing;
         if keep && mic.is_none() && now.duration_since(last_error_try) > Duration::from_secs(3) {
             match tone {
-                Some(freq) => mic = Some(Mic::Tone { freq, made: 0, started: now }),
+                Some(freq) => {
+                    mic = Some(Mic::Tone {
+                        freq,
+                        made: 0,
+                        started: now,
+                    })
+                }
                 None => match Capture::open(&settings.input_device) {
                     Ok(c) => {
                         mic_device = c.device.clone();
@@ -592,17 +673,32 @@ fn worker(shared: Arc<Shared>) {
             log::info!("voice: microphone closed");
         }
         // an input device changed in the settings
-        if let (Some(Mic::Device(_)), true) = (&mic, tone.is_none() && !settings.input_device.is_empty() && settings.input_device != mic_asked) {
+        if let (Some(Mic::Device(_)), true) = (
+            &mic,
+            tone.is_none()
+                && !settings.input_device.is_empty()
+                && settings.input_device != mic_asked,
+        ) {
             mic = None;
         }
         buf.clear();
         match &mut mic {
             Some(Mic::Device(c)) => c.take(&mut buf),
-            Some(Mic::Tone { freq, made, started }) => {
+            Some(Mic::Tone {
+                freq,
+                made,
+                started,
+            }) => {
                 let due = (started.elapsed().as_secs_f64() * RATE as f64) as u64;
                 while *made < due {
                     let n = (due - *made).min(FRAME as u64);
-                    buf.extend((0..n).map(|k| 0.3 * (2.0 * std::f32::consts::PI * *freq * ((*made + k) as f32 / RATE as f32)).sin()));
+                    buf.extend((0..n).map(|k| {
+                        0.3 * (2.0
+                            * std::f32::consts::PI
+                            * *freq
+                            * ((*made + k) as f32 / RATE as f32))
+                            .sin()
+                    }));
                     *made += n;
                 }
             }
@@ -625,10 +721,18 @@ fn worker(shared: Arc<Shared>) {
             i.status = Status {
                 mic_open: mic.is_some(),
                 error: mic_error.clone(),
-                mic_level_db: if mic.is_some() { core.mic_level_db } else { -120.0 },
+                mic_level_db: if mic.is_some() {
+                    core.mic_level_db
+                } else {
+                    -120.0
+                },
                 transmitting: core.sending(),
                 talkers: core.talkers(),
-                device: if matches!(mic, Some(Mic::Tone { .. })) { "test tone".into() } else { mic_device.clone() },
+                device: if matches!(mic, Some(Mic::Tone { .. })) {
+                    "test tone".into()
+                } else {
+                    mic_device.clone()
+                },
             };
         }
         std::thread::sleep(Duration::from_millis(4));

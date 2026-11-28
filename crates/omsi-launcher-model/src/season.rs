@@ -1,6 +1,6 @@
 //! The Drive page's season and its phase: what the choice does to the date.
 use super::state::State;
-use omsi_weather::season_phase::{map_latitude, phase_date, SeasonChoice};
+use omsi_weather::season_phase::{SeasonChoice, map_lat_deg, phase_date};
 
 impl State {
     /// The season choice changed to `season` ("auto" = by date): a season moves the date
@@ -40,10 +40,19 @@ pub(crate) fn launcher_choice(season: &str, phase: &str) -> Option<SeasonChoice>
 /// The launcher's date (`YYYY-MM-DD`) for its season and phase on `map`: the phase's
 /// typical day of its year, or with `keep_in_phase` the date itself when it lies in the
 /// phase already (see [`phase_date`]). None with no season chosen.
-pub(crate) fn launcher_date(season: &str, phase: &str, date: &str, map: &str, keep_in_phase: bool) -> Option<String> {
+pub(crate) fn launcher_date(
+    season: &str,
+    phase: &str,
+    date: &str,
+    map: &str,
+    keep_in_phase: bool,
+) -> Option<String> {
     let choice = launcher_choice(season, phase)?;
     let num = |r: std::ops::Range<usize>| date.get(r).and_then(|x| x.parse::<u32>().ok());
-    let lat = map_latitude(std::path::Path::new(&omsi_launcher_lib::load_config().root), map);
+    let lat = map_lat_deg(
+        std::path::Path::new(&omsi_launcher_lib::load_config().root),
+        map,
+    );
     let year = num(0..4).unwrap_or(1989) as i32;
     let (y, m, d) = match (num(5..7), num(8..10)) {
         (Some(m), Some(d)) if keep_in_phase => phase_date(choice, (year, m, d), lat),

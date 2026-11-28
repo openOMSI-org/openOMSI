@@ -83,8 +83,8 @@ fn vs_motion(in: VsIn) -> MotionOut {
     out.lifted = motion.vp * vec4<f32>(wp.xyz + to_eye * min(BEHIND_GLASS / max(length(to_eye), 1e-4), 0.5), 1.0);
     if (motion.params.z > 0.5 && f32(e) < motion.params.w) {
         let k = e * 4u;
-        // Drop the affine row's draw-order and depth-normal metadata, as model_matrix does.
-        let pm = mat4x4<f32>(vec4<f32>(prev_models[k].xyz, 0.0), vec4<f32>(prev_models[k + 1u].xyz, 0.0), vec4<f32>(prev_models[k + 2u].xyz, 0.0), prev_models[k + 3u]);
+        // (x's w carries the slot's draw order level, not the matrix: `model_matrix` drops it)
+        let pm = mat4x4<f32>(vec4<f32>(prev_models[k].xyz, 0.0), prev_models[k + 1u], prev_models[k + 2u], prev_models[k + 3u]);
         // (an entry handed over to another object since: its old matrix is not this one's)
         let jump = pm[3].xyz + motion.origin_delta.xyz - m[3].xyz;
         if (dot(jump, jump) <= motion.origin_delta.w * motion.origin_delta.w) {

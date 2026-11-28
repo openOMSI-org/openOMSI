@@ -44,9 +44,19 @@ impl Buses {
     pub(super) fn keep_packed(&self, sha: &str, i: u64, codec: char, wire: &[u8]) {
         let sha = sha.to_ascii_lowercase();
         let g = self.lock();
-        let Some(v) = g.as_ref().filter(|v| v.sizes.get(&sha).is_some_and(|size| i < pieces::count(*size))) else { return };
+        let Some(v) = g.as_ref().filter(|v| {
+            v.sizes
+                .get(&sha)
+                .is_some_and(|size| i < pieces::count(*size))
+        }) else {
+            return;
+        };
         // (one that does not get smaller is kept as a mark: it goes as it is)
-        let kept = if codec == '-' { v.store.put_packed(&sha, i, '-', &[]) } else { v.store.put_packed(&sha, i, codec, wire) };
+        let kept = if codec == '-' {
+            v.store.put_packed(&sha, i, '-', &[])
+        } else {
+            v.store.put_packed(&sha, i, codec, wire)
+        };
         if let Err(e) = kept {
             log::warn!("vehicles: a packed piece not kept: {e}");
         }
@@ -70,10 +80,12 @@ impl Buses {
             return;
         }
         r.running = true;
-        let spawned = std::thread::Builder::new().name("recompress".into()).spawn(move || {
-            self.recompress_queued();
-            self.recompressing().running = false;
-        });
+        let spawned = std::thread::Builder::new()
+            .name("recompress".into())
+            .spawn(move || {
+                self.recompress_queued();
+                self.recompressing().running = false;
+            });
         if spawned.is_err() {
             r.running = false;
         }
@@ -100,7 +112,12 @@ impl Buses {
             }
         }
         if files > 0 {
-            log::info!("vehicles: {files} files packed at their smallest - {:.1} MB go as {:.1} MB ({:.0} s)", raw as f64 / 1e6, wire as f64 / 1e6, t0.elapsed().as_secs_f64());
+            log::info!(
+                "vehicles: {files} files packed at their smallest - {:.1} MB go as {:.1} MB ({:.0} s)",
+                raw as f64 / 1e6,
+                wire as f64 / 1e6,
+                t0.elapsed().as_secs_f64()
+            );
         }
     }
 
@@ -114,7 +131,11 @@ impl Buses {
             let (start, len) = pieces::span(size, i);
             let piece = &data[start as usize..(start + len) as usize];
             // (the slowest is not the smallest every time: the smaller of the two is kept)
-            let (codec, packed) = [pieces::ZSTD_BEST, pieces::ZSTD_FAST].map(|level| pieces::pack_zstd(piece, level)).into_iter().min_by_key(|(_, p)| p.len()).unwrap_or(('-', Vec::new()));
+            let (codec, packed) = [pieces::ZSTD_BEST, pieces::ZSTD_FAST]
+                .map(|level| pieces::pack_zstd(piece, level))
+                .into_iter()
+                .min_by_key(|(_, p)| p.len())
+                .unwrap_or(('-', Vec::new()));
             wire += packed.len() as u64;
             // (kept with the store held: a file let go meanwhile leaves no packed pieces behind)
             let g = self.lock();
@@ -124,7 +145,11 @@ impl Buses {
                 return None;
             }
             // (one that does not get smaller is kept as a mark: it goes as it is)
-            let kept = if codec == '-' { v.store.put_packed(sha, i, '-', &[]) } else { v.store.put_packed(sha, i, codec, &packed) };
+            let kept = if codec == '-' {
+                v.store.put_packed(sha, i, '-', &[])
+            } else {
+                v.store.put_packed(sha, i, codec, &packed)
+            };
             if let Err(e) = kept {
                 log::warn!("vehicles: a packed piece not kept: {e}");
                 return None;

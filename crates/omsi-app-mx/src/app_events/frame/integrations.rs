@@ -1,0 +1,262 @@
+//! Discord, Steam, the Lua plugins and the personnel file's counts in the window's frame.
+
+use super::*;
+
+impl App {
+    /// Discord's status, Steam's callbacks, the plugins' frame (and what they asked the game
+    /// to do), `OMSI_WATCH_VARS`, and the people's counts for the personnel file.
+    pub(super) fn frame_integrations(&mut self, event_loop: &ActiveEventLoop, dt: f32) {
+        // Discord's status: the map, the bus, the line (every few seconds)
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            self.integrations.discord_t -= dt;
+            if self.integrations.discord_t <= 0.0 {
+                self.integrations.discord_t = 5.0;
+                if self.args.server.is_none()
+                    && self.integrations.discord.is_none()
+                    && self.settings.discord_status
+                {
+                    self.integrations.discord =
+                        crate::discord::Discord::start(&self.settings.discord_app_id);
+                }
+                let show = self.settings.discord_show;
+                let max = if show.players && self.integrations.discord.is_some() {
+                    self.discord_server_max()
+                } else {
+                    0
+                };
+                if let Some(d) = self.integrations.discord.as_ref() {
+                    let bus = self.player.as_ref().map(|p| {
+                        let definition = &p.vehicle.ty.def;
+                        let short = omsi_launcher_lib::vehicle_type_label(
+                            &definition.type_name,
+                            &definition.path,
+                        );
+                        let full = omsi_launcher_lib::display_bus_name(&format!(
+                            "{} {short}",
+                            definition.manufacturer
+                        ));
+                        (short, full)
+                    });
+                    let duty = self.session.duty.as_ref();
+                    let next_stop = duty.zip(self.player.as_ref()).and_then(|(d, p)| {
+                        let stop = d.trips.get(d.trip_index)?.stops.get(d.next_stop)?;
+                        Some((stop.name.as_str(), p.vehicle.host.tt_delay as f32))
+                    });
+                    let game = crate::discord::Game {
+                        map: self.world.as_ref().map(|w| w.global.name.as_str()),
+                        bus: bus
+                            .as_ref()
+                            .map(|(short, full)| (short.as_str(), full.as_str())),
+                        duty: duty.map(|d| (d.line.as_str(), d.tour.as_str())),
+                        next_stop,
+                        players: self
+                            .net
+                            .lan
+                            .as_ref()
+                            .map(|lan| (lan.session, crate::player_list::count(self), max)),
+                    };
+                    d.set(crate::discord::Presence::for_game(&game, show));
+                }
+            }
+        }
+
+        // Steam's callbacks (rich presence)
+        #[cfg(steam)]
+        if let Some(steam) = self.integrations.steam.as_ref() {
+            steam.client.run_callbacks();
+        }
+        self.frame_remote(dt);
+        // the plugins' frame, with the bus's scripts done
+        // (their main chunk already knows the interface themes: `ui.themes`, `ui.theme`)
+        let mut plugins = self.integrations.plugins.take().unwrap_or_else(|| {
+            omsi_plugin::ui::themes_for_load(theme_infos(), &self.settings.ui_theme_pack);
+            crate::plugins::load(self.args.no_plugins)
+        });
+        self.sync_vehicle_scripts(&mut plugins);
+        if !self.paused && !self.args.no_plugins && !omsi_cfg::flags::OMSI_NO_PLUGINS.is_set() {
+            crate::plugin_io::object::drive(self, &mut plugins, dt);
+        }
+        if !plugins.is_empty() {
+            self.plugin_watch(&mut plugins);
+        }
+        // the mouse on the plugins' script textures since their frame, and which those are now
+        plugins.pointer = std::mem::take(&mut self.integrations.plugin_pointer.pending);
+        self.integrations.plugin_pointer.pages = plugins.pointer_textures();
+        if !plugins.is_empty() {
+            // the interface themes there are, and the one in use (`ui.themes`, `ui.theme`)
+            let mut ui = plugins.ui.borrow_mut();
+            if ui.themes().is_empty() {
+                ui.set_themes(theme_infos(), &self.settings.ui_theme_pack);
+            } else if ui.theme() != self.settings.ui_theme_pack {
+                let list = ui.themes().to_vec();
+                ui.set_themes(list, &self.settings.ui_theme_pack);
+            }
+        }
+        // (#2536) a `/`-line the player typed: the plugins' while one of them hears it, and
+        // not said to the session (the app's chat send asks the same question)
+        let hears_commands = !plugins.is_empty() && plugins.hears("chat_command");
+        self.sync_plugin_commands(hears_commands);
+        if !plugins.is_empty() && !self.paused {
+            let keys = std::mem::take(&mut self.integrations.plugin_keys);
+            let events = std::mem::take(&mut self.integrations.plugin_events);
+            let events_ex = std::mem::take(&mut self.integrations.plugin_events_ex);
+            let asks = std::mem::take(&mut self.integrations.plugin_ticket_asks);
+            let heard: Vec<u32> = asks.iter().map(|a| a.person).collect();
+            // (the plugins see the whole game; they are out of it for their frame)
+            let mut io = crate::plugins::Io::new(self, dt, keys, events, events_ex);
+            io.ticket_asks = asks;
+            plugins.frame(&mut io);
+            let commands = std::mem::take(&mut io.commands);
+            drop(io);
+            // the passengers they heard of ask at the cash desk now
+            if let Some(h) = self.session.humans.as_mut() {
+                h.ticket_asks_heard(&heard);
+            }
+            crate::plugin_io::world::follow_sounds(self);
+            // what the plugins asked the game to do: lines of the game menu (not another
+            // plugin's line)
+            self.integrations.plugin_command = true;
+            for c in commands {
+                if let Some(k) = self
+                    .game_menu_items()
+                    .iter()
+                    .position(|m| m.0 == c && m.0 != "plugin")
+                {
+                    let was = self.menus.game_menu;
+                    self.menus.menu_prev_pause = self.paused;
+                    self.menu_choose(event_loop, k);
+                    // (an action leaves the menu as it found it)
+                    if self.menus.chooser.is_none() && was.is_none() {
+                        self.menus.game_menu = None;
+                    }
+                } else {
+                    // (a line of the vehicle or world pages)
+                    self.menus.menu_prev_pause = self.paused;
+                    self.page_action(&c);
+                }
+            }
+            self.integrations.plugin_command = false;
+        } else {
+            self.integrations.plugin_keys.clear();
+            // (while the game is paused they wait for the next frame)
+            if plugins.is_empty() {
+                self.integrations.plugin_events.clear();
+                self.integrations.plugin_events_ex.clear();
+                self.integrations.plugin_ticket_asks.clear();
+            }
+        }
+        // the passengers report their tickets only while a plugin hears of them
+        let hear_tickets = plugins.hear_tickets();
+        // a plugin switched the interface theme (`ui.set_theme`): the player's setting, as if
+        // chosen in Options › Interface
+        let theme_ask = plugins.ui.borrow_mut().take_theme_ask();
+        self.integrations.plugins = Some(plugins);
+        if let Some(id) = theme_ask.filter(|id| *id != self.settings.ui_theme_pack) {
+            log::info!("plugins: the interface theme \"{id}\" asked for");
+            let value = if id.is_empty() {
+                crate::themes::OWN.to_string()
+            } else {
+                id
+            };
+            crate::game_lists::store_with(self, |v| v["ui_theme_pack"] = serde_json::json!(value));
+        }
+        // OMSI_WATCH_VARS=a,b: every change of those variables of the player's bus
+        if let (Some(p), Some(list)) =
+            (self.player.as_ref(), omsi_cfg::flags::OMSI_WATCH_VARS.var())
+        {
+            thread_local!(static LAST: std::cell::RefCell<std::collections::HashMap<String, f32>> = Default::default());
+            LAST.with(|last| {
+                let mut last = last.borrow_mut();
+                for n in list.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+                    let v = p.vehicle.var(n).unwrap_or(f32::NAN);
+                    if last.get(n).is_none_or(|&o| o.to_bits() != v.to_bits()) {
+                        log::info!("watch: {n} = {v} at {:.2} s", self.clock.time);
+                        last.insert(n.to_string(), v);
+                    }
+                }
+            });
+        }
+        if let Some(h) = self.session.humans.as_mut() {
+            h.ticket_hook = hear_tickets;
+            let asks = &mut self.integrations.plugin_ticket_asks;
+            // (the plugins hear of 256 at most a frame; whoever is left out does not wait)
+            let mut dropped = Vec::new();
+            for a in h.take_ticket_asks() {
+                if asks.len() < 256 {
+                    asks.push(crate::plugin_io::bus::ticket_ask(a));
+                } else {
+                    dropped.push(a.person);
+                }
+            }
+            h.ticket_asks_heard(&dropped);
+        }
+        if let (Some(h), Some(p)) = (self.session.humans.as_mut(), self.player.as_ref()) {
+            let hurt = steps::people_in_career(
+                &mut self.session.career,
+                h,
+                p,
+                self.settings.collision_pedestrians,
+            );
+            for (name, price) in h.take_sales() {
+                let args = vec![
+                    omsi_plugin::InfoValue::Text(name.trim().to_string()),
+                    crate::plugins::num_f32(price),
+                ];
+                crate::plugins::queue_event(
+                    &mut self.integrations.plugin_events,
+                    "ticket_sold",
+                    args,
+                );
+            }
+            if hurt > 0 {
+                self.service_msg = Some(("Pedestrian knocked down!".into(), 6.0));
+                crate::plugins::queue_event(
+                    &mut self.integrations.plugin_events,
+                    "pedestrian",
+                    vec![omsi_plugin::InfoValue::Num(hurt as f64)],
+                );
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn discord_server_max(&mut self) -> usize {
+        let Some(lan) = self.net.lan.as_ref() else {
+            return 0;
+        };
+        if lan.role == omsi_net::Role::Host {
+            return 64;
+        }
+        let Some(target) = self.args.lan_join.clone() else {
+            return 0;
+        };
+        self.integrations.discord_max.get(&target, |t| {
+            omsi_net::ws::query(t, false).ok().map(|i| i.max_players)
+        })
+    }
+
+    pub(crate) fn sync_plugin_commands(&mut self, hears: bool) {
+        self.net.remotes.take_commands = hears;
+        if hears && !self.paused {
+            for text in std::mem::take(&mut self.net.remotes.plugin_commands) {
+                crate::plugins::queue_event_ex(
+                    &mut self.integrations.plugin_events_ex,
+                    "chat_command",
+                    vec![omsi_plugin::api::Value::Str(text)],
+                );
+            }
+        }
+    }
+}
+
+/// The game's interface themes as the plugins see them (`ui.themes`).
+fn theme_infos() -> Vec<omsi_plugin::ui::ThemeInfo> {
+    crate::themes::choices()
+        .iter()
+        .map(|(id, name)| omsi_plugin::ui::ThemeInfo {
+            id: id.clone(),
+            name: name.clone(),
+        })
+        .collect()
+}

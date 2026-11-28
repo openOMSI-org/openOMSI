@@ -13,6 +13,7 @@
 //!   pause menu, photo mode and developer tools.
 
 pub mod atlas;
+pub mod cursor;
 pub mod edit;
 pub mod gpu;
 pub mod i18n;

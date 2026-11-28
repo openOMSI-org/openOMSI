@@ -18,8 +18,8 @@ use parking_lot::Mutex;
 use render::{Back, Cmd, Mixer, MixerCell, Room, Shared, Voice};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 pub struct Clip {
     pub sample_rate: u32,
@@ -52,8 +52,7 @@ pub struct VoiceParams {
     /// bodywork from the cabin loses its edge, not just some volume (a straight gain cut
     /// still reads as "the same sound, turned down" rather than "coming from outside").
     pub lowpass_hz: f32,
-    /// OMSI's `[important]`: keep this sound ahead of ordinary voices when the
-    /// mixer limit is reached.
+    /// OMSI's `[important]` (kept for the traces: the mixer cuts no voice).
     pub important: bool,
 }
 
@@ -72,7 +71,6 @@ impl Default for VoiceParams {
     }
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct Listener {
     pub position: Vec3,
@@ -83,6 +81,9 @@ pub struct Listener {
     /// its reverberation time in seconds, and how much of it is heard (0..1).
     pub reverb_time: f32,
     pub reverb_mix: f32,
+    /// The output is a 5.1 system and `[3d]` sounds are to be placed on its five speakers
+    /// (#2037, the options' switch): off, everything is panned across two channels as before.
+    pub surround: bool,
 }
 
 impl Default for Listener {
@@ -94,12 +95,10 @@ impl Default for Listener {
             master: 1.0,
             reverb_time: 0.0,
             reverb_mix: 0.0,
+            surround: false,
         }
     }
 }
-
-/// At most this many clip voices are mixed at once (OMSI's `[sound_maxcount]` default).
-pub const MAX_VOICES: usize = 200;
 
 /// Commands the ring between the game and the mixer holds; more wait on the game's side.
 const RING: usize = 8192;
@@ -235,6 +234,8 @@ pub struct AudioEngine {
     capture: bool,
     /// Mixed never (see [`AudioEngine::silent`]): the voices are kept as they are told.
     silent: bool,
+    /// The sound sets updated, sorted once a frame for `[sound_maxcount]` (see `packs`).
+    packs: Mutex<crate::packs::Packs>,
 }
 
 struct DeviceState {
@@ -258,7 +259,9 @@ fn muted() -> bool {
 }
 
 /// The sound formats tried for a file that is missing under its own name, best first.
-pub const SOUND_EXTENSIONS: [&str; 9] = ["wav", "ogg", "flac", "mp3", "m4a", "aac", "aiff", "aif", "caf"];
+pub const SOUND_EXTENSIONS: [&str; 9] = [
+    "wav", "ogg", "flac", "mp3", "m4a", "aac", "aiff", "aif", "caf",
+];
 
 /// Read and decode a clip (any thread).
 pub fn read_clip(path: &Path) -> Option<Arc<Clip>> {
@@ -291,11 +294,22 @@ pub fn read_clip(path: &Path) -> Option<Arc<Clip>> {
 
 impl AudioEngine {
     /// An engine around a mixer at `rate`/`channels`, no device opened yet.
-    fn with_mixer(rate: u32, channels: usize, muted: bool, capture: bool, silent: bool) -> AudioEngine {
+    fn with_mixer(
+        rate: u32,
+        channels: usize,
+        muted: bool,
+        capture: bool,
+        silent: bool,
+    ) -> AudioEngine {
         let shared = Arc::new(Shared::new(rate, channels, muted, capture));
         let (cmd_tx, cmd_rx) = crate::spsc::channel(RING);
         let (back_tx, back_rx) = crate::spsc::channel(RING / 2);
-        let mixer = Arc::new(MixerCell::new(Mixer::new(shared.clone(), cmd_rx, back_tx, FIRST_ROOM)));
+        let mixer = Arc::new(MixerCell::new(Mixer::new(
+            shared.clone(),
+            cmd_rx,
+            back_tx,
+            FIRST_ROOM,
+        )));
         AudioEngine {
             game: Mutex::new(GameSide {
                 cmds: cmd_tx,
@@ -310,7 +324,12 @@ impl AudioEngine {
             }),
             shared,
             mixer,
-            device: Mutex::new(DeviceState { thread: None, name: String::new(), playing: false, opened: std::time::Instant::now() }),
+            device: Mutex::new(DeviceState {
+                thread: None,
+                name: String::new(),
+                playing: false,
+                opened: std::time::Instant::now(),
+            }),
             reopen: Arc::new(AtomicBool::new(false)),
             clips: Default::default(),
             last_trim: Mutex::new(std::time::Instant::now()),
@@ -318,6 +337,7 @@ impl AudioEngine {
             enabled: true,
             capture,
             silent,
+            packs: Default::default(),
         }
     }
 
@@ -378,7 +398,11 @@ impl AudioEngine {
     pub fn new() -> AudioEngine {
         crate::trace::engine("device");
         let mut engine = AudioEngine::with_mixer(48_000, 2, muted(), false, false);
-        let thread = device::DeviceThread::start(engine.shared.clone(), engine.mixer.clone(), engine.reopen.clone());
+        let thread = device::DeviceThread::start(
+            engine.shared.clone(),
+            engine.mixer.clone(),
+            engine.reopen.clone(),
+        );
         let name = thread.as_ref().and_then(|t| t.open());
         engine.enabled = name.is_some();
         *engine.device.get_mut() = DeviceState {
@@ -449,10 +473,12 @@ impl AudioEngine {
         let mut freed = 0usize;
         self.clips.lock().retain(|_, (clip, used)| {
             let idle = used.elapsed() >= unused
+                // Failed lookups have no owners; expire those negative cache entries
+                // too, or changing/missing sound paths accumulate for the whole session.
                 && clip
                     .as_ref()
                     .map(|c| Arc::strong_count(c) == 1)
-                    .unwrap_or(false);
+                    .unwrap_or(true);
             if idle {
                 freed += clip.as_ref().map(|c| c.samples.len() * 2).unwrap_or(0);
             }
@@ -546,17 +572,31 @@ impl AudioEngine {
 
     fn play_at(&self, clip: Arc<Clip>, params: VoiceParams, start: f64) -> VoiceId {
         let trace_clip = Arc::as_ptr(&clip) as usize;
-        self.start_voice(Some(trace_clip), params, start, |id| Voice::new(id, clip, None, params, start))
+        self.start_voice(Some(trace_clip), params, start, |id| {
+            Voice::new(id, clip, None, params, start)
+        })
     }
 
     /// A new voice given its id (drawn in the order the commands go to the mixer, so that
     /// its list stays in the order of the ids) and handed to the mixer; playing from now on.
-    fn start_voice(&self, trace_clip: Option<usize>, params: VoiceParams, start: f64, voice: impl FnOnce(VoiceId) -> Voice) -> VoiceId {
+    fn start_voice(
+        &self,
+        trace_clip: Option<usize>,
+        params: VoiceParams,
+        start: f64,
+        voice: impl FnOnce(VoiceId) -> Voice,
+    ) -> VoiceId {
         let mut g = self.game.lock();
         let id = g.next_id;
         g.next_id += 1;
         crate::trace::play(id, trace_clip, &params, start);
-        g.live.insert(id, Live { params, pending: None });
+        g.live.insert(
+            id,
+            Live {
+                params,
+                pending: None,
+            },
+        );
         g.make_room();
         self.send(&mut g, Cmd::Play(voice(id)));
         id
@@ -579,9 +619,19 @@ impl AudioEngine {
 
     /// Play what `stream` is fed with (see `stream::StreamBuf`); the voice ends when the
     /// stream is closed.
-    pub fn play_stream(&self, stream: Arc<crate::stream::StreamBuf>, params: VoiceParams) -> VoiceId {
-        let clip = Arc::new(Clip { sample_rate: 44100, channels: 2, samples: Vec::new() });
-        self.start_voice(None, params, 0.0, |id| Voice::new(id, clip, Some(stream), params, 0.0))
+    pub fn play_stream(
+        &self,
+        stream: Arc<crate::stream::StreamBuf>,
+        params: VoiceParams,
+    ) -> VoiceId {
+        let clip = Arc::new(Clip {
+            sample_rate: 44100,
+            channels: 2,
+            samples: Vec::new(),
+        });
+        self.start_voice(None, params, 0.0, |id| {
+            Voice::new(id, clip, Some(stream), params, 0.0)
+        })
     }
 
     /// The bus radio's effects on stream voice `id` (see `radio_fx`): made, retuned, or
@@ -590,7 +640,11 @@ impl AudioEngine {
         crate::trace::radio_fx(id, &params);
         let rate = self.shared.sample_rate.load(Ordering::Relaxed);
         // (made here, should the voice have none yet: the mixer's thread allocates nothing)
-        let fresh = if params.is_off() { None } else { crate::radio_fx::RadioFx::new(params, rate).map(Box::new) };
+        let fresh = if params.is_off() {
+            None
+        } else {
+            crate::radio_fx::RadioFx::new(params, rate).map(Box::new)
+        };
         let mut g = self.game.lock();
         self.send(&mut g, Cmd::RadioFx(id, params, fresh));
     }
@@ -654,6 +708,20 @@ impl AudioEngine {
         // (once a frame: what waits on the game's side goes on, what came back is let go of)
         g.flush();
         g.take_back();
+        drop(g);
+        // (and the sound packs of the frame are sorted for the next: `[sound_maxcount]`)
+        self.packs.lock().end_frame(crate::packs::sound_maxcount());
+    }
+
+    /// A sound set (a pack, see `packs`) is updated: whether it may be heard, as the packs
+    /// were sorted at the end of the last frame.
+    pub(crate) fn pack_heard(&self, p: crate::packs::Pack) -> bool {
+        self.packs.lock().heard(p)
+    }
+
+    /// Whether the sound set (pack) `id` was too far at the end of the last frame.
+    pub(crate) fn pack_too_far(&self, id: u64) -> bool {
+        self.packs.lock().is_too_far(id)
     }
 
     /// OMSI's `sound_doppler`: a sound coming closer is higher, one going away lower (on
@@ -677,291 +745,7 @@ impl AudioEngine {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::render::apply_params;
-    use super::*;
-
-    /// A mixer at 48 kHz, mono, and the game's ends of its rings.
-    fn shared() -> (Mixer, crate::spsc::Producer<Cmd>, crate::spsc::Consumer<Back>) {
-        let s = Arc::new(Shared::new(48_000, 1, false, false));
-        let (cmd_tx, cmd_rx) = crate::spsc::channel(64);
-        let (back_tx, back_rx) = crate::spsc::channel(64);
-        (Mixer::new(s, cmd_rx, back_tx, FIRST_ROOM), cmd_tx, back_rx)
-    }
-
-    fn voice(clip: Arc<Clip>, gain: f32) -> Voice {
-        let mut v = Voice::new(
-            1,
-            clip,
-            None,
-            VoiceParams { gain, pitch: 1.0, looping: true, position: None, doppler: true, range: 10.0, lowpass_hz: 0.0, important: false },
-            0.0,
-        );
-        v.cur_gain = gain;
-        v
-    }
-
-    #[test]
-    fn a_loop_has_no_gap_where_it_turns() {
-        // a 5-frame loop of a constant level at the device rate: every output frame carries it
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![16_384; 5] });
-        let (mut s, _, _) = shared();
-        s.voices.push(voice(clip, 1.0));
-        let mut out = vec![0.0f32; 64];
-        s.render(&mut out);
-        assert!(out.iter().all(|x| (*x - 0.5).abs() < 1e-3), "{out:?}");
-    }
-
-    #[test]
-    fn parameters_arrive_with_the_next_block() {
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![16_384; 5] });
-        let (mut s, mut cmds, _) = shared();
-        s.voices.push(voice(clip, 1.0));
-        assert!(cmds.push(Cmd::Params(1, VoiceParams { gain: 0.0, looping: true, ..Default::default() }, std::time::Instant::now(), 7)).is_ok());
-        let mut out = vec![0.0f32; 4];
-        s.render(&mut out);
-        assert_eq!(s.voices[0].params.gain, 0.0);
-        assert!(cmds.is_empty());
-        assert_eq!(s.shared.taken.load(Ordering::Relaxed), 7);
-    }
-
-    #[test]
-    fn listener_vehicle_keeps_spatial_sound_at_its_original_pitch() {
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![0; 5] });
-        let mut own = voice(clip.clone(), 1.0);
-        let mut passing = voice(clip, 1.0);
-        let now = std::time::Instant::now();
-        for (distance, elapsed) in [(2.0, 0), (2.2, 20)] {
-            let at = now + std::time::Duration::from_millis(elapsed);
-            let position = Some(Vec3::new(distance, 0.0, 0.0));
-            apply_params(&mut own, VoiceParams { position, doppler: false, ..Default::default() }, at, Vec3::ZERO, true);
-            apply_params(&mut passing, VoiceParams { position, ..Default::default() }, at, Vec3::ZERO, true);
-        }
-        assert_eq!(own.doppler.2, 1.0);
-        assert!(passing.doppler.2 < 1.0);
-    }
-
-    /// A recording's clock is the sound it mixed, not the wall clock: a fade-in by seconds
-    /// played comes out the same however slowly the run goes.
-    #[test]
-    fn a_recording_goes_by_the_sound_it_mixed() {
-        let e = AudioEngine::capture(48_000);
-        let t0 = e.clock();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        assert_eq!(e.clock(), t0);
-        e.render_capture(24_000);
-        assert_eq!(e.clock() - t0, std::time::Duration::from_millis(500));
-    }
-
-    /// The stream opened again (as when the system's output device changed) keeps playing;
-    /// on a machine without an output device there is nothing to follow.
-    #[test]
-    fn follows_the_output_device() {
-        let e = AudioEngine::new();
-        if !e.enabled {
-            return;
-        }
-        let before = e.device.lock().name.clone();
-        e.reopen.store(true, Ordering::Relaxed);
-        e.device.lock().opened = std::time::Instant::now() - std::time::Duration::from_secs(2);
-        e.follow_device();
-        assert!(e.device.lock().playing);
-        assert_eq!(e.device.lock().name, before);
-        assert!(!e.reopen.load(Ordering::Relaxed));
-    }
-
-    /// A voice at `d` metres in front of the listener, heard at full gain whatever `d` is.
-    fn far_voice(clip: Arc<Clip>, d: f32) -> Voice {
-        let mut v = voice(clip, 1.0);
-        v.params.position = Some(Vec3::new(0.0, 0.0, -d));
-        v.params.range = 1.0e6;
-        v.params.doppler = false;
-        v
-    }
-
-    /// A capture engine mixes on demand, with its own clock.
-    #[test]
-    fn a_capture_mixes_voices_on_demand() {
-        let e = AudioEngine::capture(48_000);
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![8_192; 4_800] });
-        e.play(clip, VoiceParams { gain: 1.0, looping: true, ..Default::default() });
-        let t0 = e.shared.now();
-        let a = e.render_capture(4_800);
-        assert_eq!(a.len(), 9_600);
-        assert!((e.shared.now() - t0).as_millis() == 100, "the clock moves with the sound");
-        assert!(a[2000..].iter().all(|x| (*x - 0.25).abs() < 0.01));
-        assert!(AudioEngine::new_for_test_device_less().render_capture(10).is_empty());
-    }
-
-    /// What the game asks and tells a voice never waits for a block being mixed (the mixer
-    /// holds the voices a whole block); a voice that ended by itself is gone once mixed, one
-    /// stopped at once.
-    #[test]
-    fn the_game_never_waits_for_the_mixer() {
-        let e = AudioEngine::capture(48_000);
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![8_192; 480] });
-        let short = e.play(clip.clone(), VoiceParams::default());
-        let looped = e.play(clip.clone(), VoiceParams { looping: true, ..Default::default() });
-        e.render_capture(4_800);
-        assert!(!e.is_playing(short) && e.is_playing(looped) && e.voice_count() == 1);
-        // (a block being mixed: the mixer held for half a second)
-        let (mixer, (tx, rx)) = (e.mixer.clone(), std::sync::mpsc::channel());
-        let mixing = std::thread::spawn(move || {
-            mixer.with(|_| {
-                tx.send(()).unwrap();
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            })
-        });
-        rx.recv().unwrap();
-        let t = std::time::Instant::now();
-        e.set_params(looped, VoiceParams { gain: 0.5, looping: true, ..Default::default() });
-        let other = e.play(clip, VoiceParams::default());
-        e.set_radio_fx(other, Default::default());
-        let asked = (e.is_playing(looped), e.voice_state(looped).map(|s| s.1), e.is_playing(other));
-        e.stop(other);
-        assert!(t.elapsed() < std::time::Duration::from_millis(250), "the game waited for the mixer");
-        assert_eq!((asked, e.is_playing(other)), ((true, Some(1.0), true), false));
-        mixing.join().unwrap();
-        e.render_capture(480);
-        assert_eq!(e.voice_state(looped).map(|s| s.1), Some(0.5));
-        assert_eq!(e.mixer.with(|m| m.voices.len()), 1);
-    }
-
-    impl AudioEngine {
-        fn new_for_test_device_less() -> AudioEngine {
-            AudioEngine::silent()
-        }
-    }
-
-    /// A stream with its effects all at 0 plays exactly as one never given any; with the
-    /// speaker on it does not.
-    #[test]
-    fn a_stream_with_no_effects_is_bit_identical() {
-        let render = |fx: Option<crate::radio_fx::RadioFxParams>| {
-            let e = AudioEngine::capture(48_000);
-            let buf = Arc::new(crate::stream::StreamBuf::default());
-            buf.push(48_000, (0..48_000 * 3).map(|i| {
-                let t = i as f32 / 48_000.0;
-                [(t * 440.0 * std::f32::consts::TAU).sin() * 0.5, (t * 660.0 * std::f32::consts::TAU).sin() * 0.4]
-            }));
-            let id = e.play_stream(buf, VoiceParams { gain: 0.8, ..Default::default() });
-            if let Some(p) = fx {
-                e.set_radio_fx(id, p);
-            }
-            e.render_capture(48_000 * 2)
-        };
-        let plain = render(None);
-        assert!(plain.iter().any(|x| x.abs() > 0.1));
-        let off = render(Some(Default::default()));
-        assert!(plain.iter().zip(&off).all(|(a, b)| a.to_bits() == b.to_bits()));
-        let speaker = render(Some(crate::radio_fx::RadioFxParams { speaker: 1.0, ..Default::default() }));
-        assert!(plain.iter().zip(&speaker).any(|(a, b)| (a - b).abs() > 0.01));
-    }
-
-    /// The one-pole low-pass of a voice heard through the bodywork: a 5 kHz tone through
-    /// 500 Hz comes out some 20 dB down, a 100 Hz one hardly touched.
-    #[test]
-    fn the_voice_low_pass_follows_its_corner() {
-        let level = |hz: f32| {
-            let n = 48_000usize;
-            let samples: Vec<i16> = (0..n).map(|i| ((i as f32 / 48_000.0 * hz * std::f32::consts::TAU).sin() * 16_000.0) as i16).collect();
-            let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples });
-            let (mut s, _, _) = shared();
-            let mut v = voice(clip, 1.0);
-            v.params.lowpass_hz = 500.0;
-            v.params.looping = false;
-            s.voices.push(v);
-            let mut out = vec![0.0f32; n];
-            s.render(&mut out);
-            let tail = &out[n / 2..];
-            (tail.iter().map(|x| x * x).sum::<f32>() / tail.len() as f32).sqrt() / (16_000.0 / 32_768.0 / 2f32.sqrt())
-        };
-        let high = 20.0 * level(5_000.0).log10();
-        assert!((high + 20.0).abs() < 1.5, "{high} dB");
-        assert!(level(100.0) > 0.97);
-    }
-
-    #[test]
-    fn a_low_pass_switched_on_starts_from_the_sound() {
-        let mut v = voice(Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![0; 4] }), 1.0);
-        v.lp = [0.7, -0.7];
-        apply_params(&mut v, VoiceParams { lowpass_hz: 800.0, ..Default::default() }, std::time::Instant::now(), Vec3::ZERO, true);
-        assert!(v.lp_fresh);
-        apply_params(&mut v, VoiceParams { lowpass_hz: 0.0, ..Default::default() }, std::time::Instant::now(), Vec3::ZERO, true);
-        let mut w = voice(Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![0; 4] }), 1.0);
-        apply_params(&mut w, VoiceParams { lowpass_hz: 0.0, ..Default::default() }, std::time::Instant::now(), Vec3::ZERO, true);
-        assert!(!w.lp_fresh);
-    }
-
-    #[test]
-    fn important_voices_win_the_mixer_limit() {
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![64; 100] });
-        let (mut s, _, _) = shared();
-        for _ in 0..MAX_VOICES {
-            s.voices.push(far_voice(clip.clone(), 10.0));
-        }
-        // the farthest of all, but [important]: it stays, one of the near ones goes
-        let mut far_important = far_voice(clip, 500.0);
-        far_important.id = 9_999;
-        far_important.params.important = true;
-        s.voices.push(far_important);
-        let mut out = vec![0.0f32; 16];
-        s.render(&mut out);
-        let expect = MAX_VOICES as f32 * 64.0 / 32_768.0;
-        assert!((out[0] - expect).abs() < 1e-3, "{} vs {expect}", out[0]);
-    }
-
-    #[test]
-    fn the_nearest_voices_are_mixed_and_the_driven_bus_is_never_cut() {
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![64; 100] });
-        let (mut s, _, _) = shared();
-        // 50 far voices, MAX_VOICES near ones, and the bus's own (non-spatial) at half gain
-        for k in 0..MAX_VOICES + 50 {
-            s.voices.push(far_voice(clip.clone(), if k < 50 { 900.0 } else { 5.0 }));
-        }
-        s.voices.push(voice(clip, 0.5));
-        let mut out = vec![0.0f32; 16];
-        s.render(&mut out);
-        // the bus kept, then the nearest: MAX_VOICES - 1 near ones at full gain + 0.5
-        let expect = ((MAX_VOICES - 1) as f32 + 0.5) * 64.0 / 32_768.0;
-        assert!((out[0] - expect).abs() < 1e-3, "{} vs {expect}", out[0]);
-    }
-
-    /// More voices than the mixer had room for at first: room is made on the game's side
-    /// (the mixer never grows a list), and the voices that end come back to the game, which
-    /// lets go of their clips.
-    #[test]
-    fn room_is_made_by_the_game_and_ended_voices_come_back() {
-        let e = AudioEngine::capture(48_000);
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![64; 48] });
-        let ids: Vec<VoiceId> = (0..FIRST_ROOM * 3).map(|_| e.play(clip.clone(), VoiceParams::default())).collect();
-        e.render_capture(16);
-        let cap = e.mixer.with(|m| (m.voices.len(), m.voices.capacity()));
-        assert_eq!(cap.0, FIRST_ROOM * 3);
-        assert!(cap.1 >= FIRST_ROOM * 3 && e.game.lock().room == cap.1, "{cap:?}");
-        e.render_capture(480);
-        assert!(ids.iter().all(|id| !e.is_playing(*id)) && e.voice_count() == 0);
-        assert_eq!(Arc::strong_count(&clip), 1, "the ended voices' clips are let go of");
-        assert_eq!(e.game.lock().in_mixer, 0);
-    }
-
-    /// Commands beyond the ring's room wait on the game's side and arrive in order.
-    #[test]
-    fn commands_beyond_the_ring_arrive_in_order() {
-        let e = AudioEngine::capture(48_000);
-        let clip = Arc::new(Clip { sample_rate: 48_000, channels: 1, samples: vec![64; 48] });
-        let id = e.play(clip, VoiceParams { looping: true, ..Default::default() });
-        for k in 0..RING + 100 {
-            e.set_params(id, VoiceParams { gain: k as f32, looping: true, ..Default::default() });
-        }
-        assert!(!e.game.lock().overflow.is_empty());
-        assert_eq!(e.voice_state(id).map(|s| s.0.gain), Some(1.0));
-        e.render_capture(16);
-        assert_eq!(e.voice_state(id).map(|s| s.0.gain), Some((RING + 99) as f32));
-        assert_eq!(e.mixer.with(|m| m.voices[0].params.gain), (RING + 99) as f32);
-    }
-}
-
+mod tests;
 /// How loud a sound `dist` metres away arrives, with `range` its `[3d]` reference distance:
 /// Omsi.exe multiplies the volume by `min(range / distance, 1)` itself (`TSound` update
 /// 0x7509fe) - full up to the range, then 1/d (6 dB per doubling); a range of 0 is silent
@@ -992,14 +776,63 @@ pub fn pan_gains(listener: &Listener, d: Vec3, stereo: f32) -> (f32, f32) {
     }
     let right = listener.right.normalize_or_zero();
     let up = right.cross(listener.forward).normalize_or_zero();
-    let s = (d - up * d.dot(up)).normalize_or_zero().dot(right).clamp(-1.0, 1.0);
+    let s = (d - up * d.dot(up))
+        .normalize_or_zero()
+        .dot(right)
+        .clamp(-1.0, 1.0);
     let pan = (50.0 * stereo * s * s * s).clamp(-10_000.0, 10_000.0);
     let far = 10f32.powf(-pan.abs() / 2000.0);
-    if pan > 0.0 {
-        (far, 1.0)
-    } else {
-        (1.0, far)
+    if pan > 0.0 { (far, 1.0) } else { (1.0, far) }
+}
+
+/// Where a 5.1 layout's speakers stand, in degrees from straight ahead, clockwise (the angle
+/// [`surround_gains`] measures a source at): centre, front left, front right, back left,
+/// back right. The sub-woofer is not here: it takes the bass of the whole mix, not a source.
+const SURROUND_SPEAKERS: [(usize, f32); 5] =
+    [(2, 0.0), (0, -30.0), (1, 30.0), (4, -110.0), (5, 110.0)];
+
+/// The gains of a `[3d]` sound `d` away from the listener on a 5.1 system, in the order front
+/// left, front right, centre, low frequency, back left, back right (#2037).
+///
+/// The sound goes to the speakers its direction points at, and only those: a door opening at
+/// the front right of the bus is heard on the front right speaker, a rear door on the back
+/// right one, the engine behind the cab on the back pair. A speaker 60° or more away from the
+/// source is silent, the ones nearer share the sound with equal power (so a source exactly
+/// towards one speaker has the whole of it there), and the sub-woofer never gets any of it -
+/// bass management is the receiver's business, and a source placed in the sub is heard under
+/// the seats.
+///
+/// `stereo` is not used: OMSI's `[sound_stereo]` narrows the stereo picture, which a surround
+/// system does not need (it has a speaker where the sound is).
+pub fn surround_gains(listener: &Listener, d: Vec3) -> [f32; 6] {
+    let right = listener.right.normalize_or_zero();
+    let forward = listener.forward.normalize_or_zero();
+    let up = right.cross(forward).normalize_or_zero();
+    // (the direction in the listener's horizontal plane: height picks no speaker)
+    let flat = (d - up * d.dot(up)).normalize_or_zero();
+    let angle = flat.dot(right).atan2(flat.dot(forward)).to_degrees();
+    let mut gains = [0.0f32; 6];
+    for (speaker, at) in SURROUND_SPEAKERS {
+        // (the angle between the two, the short way round: -180..180)
+        let mut off = (angle - at).abs() % 360.0;
+        if off > 180.0 {
+            off = 360.0 - off;
+        }
+        gains[speaker] = (1.0 - off / 60.0).clamp(0.0, 1.0);
     }
+    // equal power: the squares add up to one, so a sound between two speakers is as loud as
+    // it is on one of them
+    let power: f32 = gains.iter().map(|g| g * g).sum();
+    if power > 0.0 {
+        let norm = power.sqrt();
+        for g in gains.iter_mut() {
+            *g /= norm;
+        }
+    } else {
+        // (nowhere on the ring - straight above, say: the centre it is)
+        gains[2] = 1.0;
+    }
+    gains
 }
 
 #[cfg(test)]
@@ -1010,16 +843,79 @@ mod distance_tests {
         assert!((super::distance_gain(2.0, 4.0) - 0.5).abs() < 1e-6);
         assert!((super::distance_gain(1.0, 10.0) - 0.1).abs() < 1e-6);
         assert_eq!(super::distance_gain(0.0, 3.0), 0.0, "a range of 0");
-        assert_eq!(super::distance_gain(5.0, f32::NAN), 0.0, "nowhere: not heard");
+        assert_eq!(
+            super::distance_gain(5.0, f32::NAN),
+            0.0,
+            "nowhere: not heard"
+        );
         assert_eq!(super::distance_gain(5.0, f32::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn a_surround_source_is_heard_from_the_speakers_it_faces() {
+        use glam::Vec3;
+        let l = super::Listener {
+            forward: Vec3::Y,
+            right: Vec3::X,
+            ..Default::default()
+        };
+        let at = |deg: f32| {
+            let r = deg.to_radians();
+            super::surround_gains(&l, Vec3::new(r.sin() * 5.0, r.cos() * 5.0, 0.0))
+        };
+        // (the front right door, 30° to the driver's right: the front right speaker, the
+        // middle of the front taken along by the centre - and nothing on the left or behind)
+        let g = at(30.0);
+        assert!(g[1] > 0.8 && g[2] > 0.0 && g[2] < g[1], "{g:?}");
+        assert!(g[0] < 1e-4 && g[4] < 1e-4 && g[5] < 1e-4);
+        // (a rear door 110° behind on the right: the back right one, alone)
+        let g = at(110.0);
+        assert!((g[5] - 1.0).abs() < 1e-4, "{g:?}");
+        assert!(g[0] < 1e-4 && g[1] < 1e-4 && g[2] < 1e-4 && g[4] < 1e-4);
+        // (the engine straight ahead: the centre speaker, and never the sub-woofer)
+        let g = at(0.0);
+        assert!(
+            (g[2] - 0.8).abs() < 0.1 && g[2] > g[0] && g[2] > g[1],
+            "{g:?}"
+        );
+        assert_eq!(g[3], 0.0, "the sub gets nothing");
+        // (between two speakers the sound is shared, at the same power as on one of them)
+        let g = at(20.0);
+        assert!(g[1] > 0.5 && g[2] > 0.5, "{g:?}");
+        assert!((g[0] * g[0] + g[1] * g[1] + g[2] * g[2] - 1.0).abs() < 1e-4);
+        // (behind on the left: the back pair, that side first)
+        let g = at(-140.0);
+        assert!(
+            g[4] > g[5] && g[4] > 0.5 && g[0] < 1e-4 && g[1] < 1e-4,
+            "{g:?}"
+        );
+        // (right above the listener there is no side to go to: the front, centre and all)
+        let g = super::surround_gains(&l, Vec3::new(0.0, 0.0, 2.0));
+        assert!(
+            g[2] > 0.8 && g[2] > g[0] && g[0] == g[1] && g[4] < 1e-4 && g[5] < 1e-4,
+            "{g:?}"
+        );
+        // (the same direction 20 m away and higher: the same speakers - the distance and the
+        // height are the mixer's business)
+        assert_eq!(at(-90.0), {
+            let r = (-90.0f32).to_radians();
+            super::surround_gains(&l, Vec3::new(r.sin() * 20.0, r.cos() * 20.0, 3.0))
+        });
     }
 
     #[test]
     fn a_sound_to_the_right_is_5_db_down_on_the_left() {
         use glam::Vec3;
-        let l = super::Listener { forward: Vec3::Y, right: Vec3::X, ..Default::default() };
+        let l = super::Listener {
+            forward: Vec3::Y,
+            right: Vec3::X,
+            ..Default::default()
+        };
         let (left, right) = super::pan_gains(&l, Vec3::new(3.0, 0.0, 1.0), 10.0);
-        assert!((left - 10f32.powf(-0.25)).abs() < 1e-4 && right == 1.0, "{left} {right}");
+        assert!(
+            (left - 10f32.powf(-0.25)).abs() < 1e-4 && right == 1.0,
+            "{left} {right}"
+        );
         let (left, right) = super::pan_gains(&l, Vec3::new(0.0, 5.0, 0.0), 10.0);
         assert_eq!((left, right), (1.0, 1.0), "ahead: both at full");
         let (left, right) = super::pan_gains(&l, Vec3::new(-1.0, 1.0, 0.0), 10.0);
@@ -1036,5 +932,42 @@ mod limiter_tests {
         assert_eq!(soft_clip(0.5), 0.5);
         assert!(soft_clip(3.0) <= 1.0 && soft_clip(-3.0) >= -1.0);
         assert!(soft_clip(0.95) > 0.9 && soft_clip(0.95) < 0.95);
+    }
+}
+
+#[cfg(test)]
+mod clip_cache_eviction_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn expired_missing_sound_files_leave_the_cache() {
+        let engine = AudioEngine::capture(48_000);
+        let missing = PathBuf::from("nonexistent-audio-for-trim-test.wav");
+        engine.clips.lock().insert(
+            missing.clone(),
+            (None, Instant::now() - Duration::from_secs(90)),
+        );
+        *engine.last_trim.lock() = Instant::now() - Duration::from_secs(11);
+        assert_eq!(engine.trim_clips(Duration::from_secs(60)), 0);
+        assert!(!engine.clips.lock().contains_key(&missing));
+    }
+
+    #[test]
+    fn referenced_sound_remains_in_cache_when_old() {
+        let engine = AudioEngine::capture(48_000);
+        let path = PathBuf::from("sound-with-an-active-owner.wav");
+        let clip = Arc::new(Clip {
+            sample_rate: 48_000,
+            channels: 1,
+            samples: vec![0; 48],
+        });
+        engine.clips.lock().insert(
+            path.clone(),
+            (Some(clip.clone()), Instant::now() - Duration::from_secs(90)),
+        );
+        *engine.last_trim.lock() = Instant::now() - Duration::from_secs(11);
+        assert_eq!(engine.trim_clips(Duration::from_secs(60)), 0);
+        assert!(engine.clips.lock().contains_key(&path));
     }
 }

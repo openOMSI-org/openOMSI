@@ -63,7 +63,11 @@ fn part(name: &str, value: f32) -> Option<(&'static str, &'static str, bool)> {
         return Some((id, label, value < 0.0));
     }
     if n.starts_with("door_malf_") {
-        return Some(("door", "Automatic door faulty", n.ends_with("_remcyc") && value < 0.0));
+        return Some((
+            "door",
+            "Automatic door faulty",
+            n.ends_with("_remcyc") && value < 0.0,
+        ));
     }
     if n.starts_with("collision_energy") {
         return Some(("body", "Body damage", value > 0.0));
@@ -128,7 +132,10 @@ const HISTORY: usize = 30;
 
 impl DepotBus {
     pub fn wear_var(&self, name: &str) -> Option<f32> {
-        self.wear.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, v)| *v)
+        self.wear
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| *v)
     }
 
     pub fn fuel(&self) -> Option<f32> {
@@ -141,7 +148,10 @@ impl DepotBus {
 
     /// What its odometer shows (km), once a session has read it.
     pub fn odometer(&self) -> Option<f64> {
-        Some(self.wear_var("kmcounter_km")? as f64 + self.wear_var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0)
+        Some(
+            self.wear_var("kmcounter_km")? as f64
+                + self.wear_var("kmcounter_m").unwrap_or(0.0) as f64 / 1000.0,
+        )
     }
 
     /// The depot's services: "refuel" (the tank as the bus comes, full), "wash", "repair"
@@ -157,7 +167,9 @@ impl DepotBus {
             }
             "repair" => self.wear.retain(|(n, v)| part(n, *v).is_none()),
             _ => {
-                let Some(id) = kind.strip_prefix("repair:") else { return false };
+                let Some(id) = kind.strip_prefix("repair:") else {
+                    return false;
+                };
                 // (the energy a collision built up goes with the failure it caused, as OMSI's
                 // Collision_Malfunction_Reset does: the engine and the drive with the rear's)
                 let energy = match id {
@@ -165,7 +177,10 @@ impl DepotBus {
                     "elec" => Some("collision_energy"),
                     _ => None,
                 };
-                self.wear.retain(|(n, v)| part(n, *v).is_none_or(|(p, _, _)| p != id) && !energy.is_some_and(|e| n.eq_ignore_ascii_case(e)));
+                self.wear.retain(|(n, v)| {
+                    part(n, *v).is_none_or(|(p, _, _)| p != id)
+                        && !energy.is_some_and(|e| n.eq_ignore_ascii_case(e))
+                });
             }
         }
         true
@@ -183,7 +198,6 @@ impl DepotBus {
         }
         out
     }
-
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -235,7 +249,12 @@ impl Depot {
     /// A new depot; false for an empty name or one there is already.
     pub fn add_group(&mut self, name: &str) -> bool {
         let name = name.trim();
-        if name.is_empty() || self.group_names().iter().any(|g| g.eq_ignore_ascii_case(name)) {
+        if name.is_empty()
+            || self
+                .group_names()
+                .iter()
+                .any(|g| g.eq_ignore_ascii_case(name))
+        {
             return false;
         }
         self.groups.push(name.to_string());
@@ -245,7 +264,12 @@ impl Depot {
     /// A depot renamed, with its buses; false when the new name is empty or taken.
     pub fn rename_group(&mut self, from: &str, to: &str) -> bool {
         let to = to.trim();
-        if to.is_empty() || self.group_names().iter().any(|g| g != from && g.eq_ignore_ascii_case(to)) {
+        if to.is_empty()
+            || self
+                .group_names()
+                .iter()
+                .any(|g| g != from && g.eq_ignore_ascii_case(to))
+        {
             return false;
         }
         for g in self.groups.iter_mut().filter(|g| *g == from) {
@@ -279,7 +303,12 @@ pub fn french_plate(seed: u64) -> String {
         x % n
     };
     loop {
-        let mut pair = || [PLATE_LETTERS[next(PLATE_LETTERS.len() as u64) as usize] as char, PLATE_LETTERS[next(PLATE_LETTERS.len() as u64) as usize] as char];
+        let mut pair = || {
+            [
+                PLATE_LETTERS[next(PLATE_LETTERS.len() as u64) as usize] as char,
+                PLATE_LETTERS[next(PLATE_LETTERS.len() as u64) as usize] as char,
+            ]
+        };
         let (a, c) = (pair(), pair());
         let n = next(999) + 1;
         if a == ['S', 'S'] || c == ['S', 'S'] || a == ['W', 'W'] {
@@ -292,7 +321,10 @@ pub fn french_plate(seed: u64) -> String {
 impl Depot {
     /// A French plate none of the depot's buses has.
     pub fn new_plate(&self, seed: u64) -> String {
-        (0..).map(|k| french_plate(seed.wrapping_add(k))).find(|p| !self.buses.iter().any(|b| b.plate.eq_ignore_ascii_case(p))).unwrap_or_default()
+        (0..)
+            .map(|k| french_plate(seed.wrapping_add(k)))
+            .find(|p| !self.buses.iter().any(|b| b.plate.eq_ignore_ascii_case(p)))
+            .unwrap_or_default()
     }
 }
 
@@ -324,7 +356,9 @@ pub fn save(d: &Depot) -> Result<()> {
 
 pub fn load_from(p: &Path) -> Result<Depot> {
     match std::fs::read(p) {
-        Ok(bytes) => serde_json::from_slice(&bytes).with_context(|| format!("reading {}", p.display())),
+        Ok(bytes) => {
+            serde_json::from_slice(&bytes).with_context(|| format!("reading {}", p.display()))
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Depot::default()),
         Err(e) => Err(e).with_context(|| format!("reading {}", p.display())),
     }
@@ -352,7 +386,14 @@ pub fn update_in<R>(p: &Path, f: impl FnOnce(&mut Depot) -> Result<R>) -> Result
 pub fn save_to(p: &Path, d: &Depot) -> Result<()> {
     static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let tmp = p.with_extension(format!("json.{}.{:?}.{n}.tmp", std::process::id(), std::thread::current().id()).replace(['(', ')'], ""));
+    let tmp = p.with_extension(
+        format!(
+            "json.{}.{:?}.{n}.tmp",
+            std::process::id(),
+            std::thread::current().id()
+        )
+        .replace(['(', ')'], ""),
+    );
     std::fs::write(&tmp, serde_json::to_vec_pretty(d)?)?;
     std::fs::rename(&tmp, p).with_context(|| format!("writing {}", p.display()))
 }
@@ -360,15 +401,34 @@ pub fn save_to(p: &Path, d: &Depot) -> Result<()> {
 /// Adds a session to bus `id` in the file at `p` and keeps the wear it ended with; false when the bus is gone.
 pub fn record_in(p: &Path, id: &str, outing: &Outing, wear: Vec<(String, f32)>) -> Result<bool> {
     update_in(p, |d| {
-        let Some(b) = d.get_mut(id) else { return Ok(false) };
+        let Some(b) = d.get_mut(id) else {
+            return Ok(false);
+        };
         let start = b.fuel();
-        let end = wear.iter().find(|(n, _)| n.eq_ignore_ascii_case(FUEL)).map(|(_, v)| *v);
+        let end = wear
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(FUEL))
+            .map(|(_, v)| *v);
         let fuel = match (start, end) {
             (Some(s), Some(e)) => (s - e).max(0.0) as f64,
             _ => 0.0,
         };
         b.fuel_used += fuel;
-        b.history.insert(0, Run { time: now_secs(), map: outing.map.clone(), line: outing.line.clone(), tour: outing.tour.clone(), metres: outing.metres, seconds: outing.seconds, stops: outing.stops, tickets: outing.tickets, crashes: outing.crashes, fuel });
+        b.history.insert(
+            0,
+            Run {
+                time: now_secs(),
+                map: outing.map.clone(),
+                line: outing.line.clone(),
+                tour: outing.tour.clone(),
+                metres: outing.metres,
+                seconds: outing.seconds,
+                stops: outing.stops,
+                tickets: outing.tickets,
+                crashes: outing.crashes,
+                fuel,
+            },
+        );
         b.history.truncate(HISTORY);
         b.sessions += 1;
         b.metres += outing.metres;
@@ -399,10 +459,22 @@ mod tests {
 
     #[test]
     fn wear_is_fuel_battery_dirt_and_damage_not_thresholds() {
-        for n in ["engine_tank_content", "Dirt_Norm", "kmcounter_km", "elec_battery_load", "collision_energy", "collision_energy_eng"] {
+        for n in [
+            "engine_tank_content",
+            "Dirt_Norm",
+            "kmcounter_km",
+            "elec_battery_load",
+            "collision_energy",
+            "collision_energy_eng",
+        ] {
             assert!(is_wear_var(n), "{n}");
         }
-        for n in ["collision_energy_eng_threshold", "engine_RPM", "door_0", "cp_odometer_1"] {
+        for n in [
+            "collision_energy_eng_threshold",
+            "engine_RPM",
+            "door_0",
+            "cp_odometer_1",
+        ] {
             assert!(!is_wear_var(n), "{n}");
         }
     }
@@ -417,13 +489,22 @@ mod tests {
             for i in [0, 1, 7, 8] {
                 assert!(c[i].is_ascii_uppercase() && !"IOU".contains(c[i]), "{p}");
             }
-            assert!(c[3..6].iter().all(|d| d.is_ascii_digit()) && &p[3..6] != "000", "{p}");
-            assert!(&p[0..2] != "SS" && &p[7..9] != "SS" && &p[0..2] != "WW", "{p}");
+            assert!(
+                c[3..6].iter().all(|d| d.is_ascii_digit()) && &p[3..6] != "000",
+                "{p}"
+            );
+            assert!(
+                &p[0..2] != "SS" && &p[7..9] != "SS" && &p[0..2] != "WW",
+                "{p}"
+            );
         }
         assert_ne!(french_plate(1), french_plate(2));
         let mut d = Depot::default();
         let taken = d.new_plate(42);
-        d.add(DepotBus { plate: taken.clone(), ..Default::default() });
+        d.add(DepotBus {
+            plate: taken.clone(),
+            ..Default::default()
+        });
         assert_ne!(d.new_plate(42), taken);
     }
 
@@ -433,7 +514,11 @@ mod tests {
         let _ = std::fs::remove_file(&p);
         assert_eq!(load_from(&p).unwrap(), Depot::default());
         let mut d = Depot::default();
-        let id = d.add(DepotBus { name: "Mon Citaro".into(), plate: "GP-123-MO".into(), ..Default::default() });
+        let id = d.add(DepotBus {
+            name: "Mon Citaro".into(),
+            plate: "GP-123-MO".into(),
+            ..Default::default()
+        });
         save_to(&p, &d).unwrap();
         let back = load_from(&p).unwrap();
         assert_eq!(back, d);
@@ -444,28 +529,71 @@ mod tests {
     fn a_session_adds_up_and_leaves_its_wear() {
         let p = scratch("record");
         let mut d = Depot::default();
-        let id = d.add(DepotBus { wear: vec![(FUEL.into(), 200.0)], metres: 1000.0, ..Default::default() });
+        let id = d.add(DepotBus {
+            wear: vec![(FUEL.into(), 200.0)],
+            metres: 1000.0,
+            ..Default::default()
+        });
         save_to(&p, &d).unwrap();
-        let outing = Outing { map: "maps/Grundorf/global.cfg".into(), line: "1".into(), metres: 12_000.0, seconds: 1800.0, stops: 14, tickets: 3, takings: 6.3, crashes: 1, ..Default::default() };
+        let outing = Outing {
+            map: "maps/Grundorf/global.cfg".into(),
+            line: "1".into(),
+            metres: 12_000.0,
+            seconds: 1800.0,
+            stops: 14,
+            tickets: 3,
+            takings: 6.3,
+            crashes: 1,
+            ..Default::default()
+        };
         let wear = vec![(FUEL.into(), 188.5), ("collision_energy".into(), 40.0)];
         assert!(record_in(&p, &id, &outing, wear.clone()).unwrap());
         let b = load_from(&p).unwrap().get(&id).cloned().unwrap();
-        assert_eq!((b.sessions, b.metres, b.stops, b.tickets, b.crashes), (1, 13_000.0, 14, 3, 1));
+        assert_eq!(
+            (b.sessions, b.metres, b.stops, b.tickets, b.crashes),
+            (1, 13_000.0, 14, 3, 1)
+        );
         assert!((b.fuel_used - 11.5).abs() < 1e-6);
         assert_eq!(b.wear, wear);
-        assert_eq!(b.faults(), [Fault { id: "body", label: "Body damage" }]);
+        assert_eq!(
+            b.faults(),
+            [Fault {
+                id: "body",
+                label: "Body damage"
+            }]
+        );
         assert!(!record_in(&p, "gone", &outing, Vec::new()).unwrap());
-        assert_eq!((b.history.len(), b.history[0].line.as_str(), b.history[0].fuel), (1, "1", 11.5));
+        assert_eq!(
+            (
+                b.history.len(),
+                b.history[0].line.as_str(),
+                b.history[0].fuel
+            ),
+            (1, "1", 11.5)
+        );
     }
 
     #[test]
     fn the_wear_of_omsi_s_scripts_is_kept_and_its_broken_parts_listed() {
-        for n in ["lights_blinker_l_bulb_3_lifetime", "lights_abbl_bulb_1_lifetime", "door_malf_autobdoor_remcyc", "engine_failure_general"] {
+        for n in [
+            "lights_blinker_l_bulb_3_lifetime",
+            "lights_abbl_bulb_1_lifetime",
+            "door_malf_autobdoor_remcyc",
+            "engine_failure_general",
+        ] {
             assert!(is_wear_var(n), "{n}");
         }
         assert!(!is_wear_var("lights_blinker_l") && !is_wear_var("lights_bulb_signal_livetime_h"));
-        assert!(keeps("lights_abbl_bulb_1_lifetime", 1500.0) && !keeps("lights_abbl_bulb_1_lifetime", 2.5e8) && keeps(FUEL, 2.5e8));
-        let wear = |v: &[(&str, f32)]| v.iter().map(|(n, x)| (n.to_string(), *x)).collect::<Vec<_>>();
+        assert!(
+            keeps("lights_abbl_bulb_1_lifetime", 1500.0)
+                && !keeps("lights_abbl_bulb_1_lifetime", 2.5e8)
+                && keeps(FUEL, 2.5e8)
+        );
+        let wear = |v: &[(&str, f32)]| {
+            v.iter()
+                .map(|(n, x)| (n.to_string(), *x))
+                .collect::<Vec<_>>()
+        };
         let mut b = DepotBus {
             wear: wear(&[
                 ("lights_blinker_l_bulb_1_lifetime", 120.0),
@@ -486,11 +614,18 @@ mod tests {
         assert!(b.service("repair:blinker_l"));
         assert_eq!(ids(&b), ["headlight", "engine", "body"]);
         // (every bulb of the left indicator gets new hours, the right one's stay as they are)
-        assert!(b.wear_var("lights_blinker_l_bulb_1_lifetime").is_none() && b.wear_var("lights_blinker_r_bulb_1_lifetime").is_some());
+        assert!(
+            b.wear_var("lights_blinker_l_bulb_1_lifetime").is_none()
+                && b.wear_var("lights_blinker_r_bulb_1_lifetime").is_some()
+        );
         assert!(b.service("repair:engine"));
         assert_eq!(ids(&b), ["headlight"]);
         assert!(b.service("repair"));
-        assert!(b.faults().is_empty() && b.fuel() == Some(90.0) && b.wear_var("door_malf_autobdoor_remcyc").is_none());
+        assert!(
+            b.faults().is_empty()
+                && b.fuel() == Some(90.0)
+                && b.wear_var("door_malf_autobdoor_remcyc").is_none()
+        );
         assert!(!b.service("paint"));
     }
 
@@ -499,14 +634,29 @@ mod tests {
         let mut d = Depot::default();
         assert!(d.add_group("Grand Paris-Moulon") && d.add_group("St-Servan"));
         assert!(!d.add_group(" st-servan ") && !d.add_group(""));
-        let a = d.add(DepotBus { group: "St-Servan".into(), ..Default::default() });
-        let b = d.add(DepotBus { group: "Ahlheim".into(), ..Default::default() });
-        assert_eq!(d.group_names(), ["Grand Paris-Moulon", "St-Servan", "Ahlheim"]);
+        let a = d.add(DepotBus {
+            group: "St-Servan".into(),
+            ..Default::default()
+        });
+        let b = d.add(DepotBus {
+            group: "Ahlheim".into(),
+            ..Default::default()
+        });
+        assert_eq!(
+            d.group_names(),
+            ["Grand Paris-Moulon", "St-Servan", "Ahlheim"]
+        );
         assert!(!d.rename_group("St-Servan", "grand paris-moulon"));
         assert!(d.rename_group("St-Servan", "Saint-Servan"));
         assert_eq!(d.get(&a).unwrap().group, "Saint-Servan");
         d.remove_group("Saint-Servan");
-        assert_eq!((d.get(&a).unwrap().group.as_str(), d.get(&b).unwrap().group.as_str()), ("", "Ahlheim"));
+        assert_eq!(
+            (
+                d.get(&a).unwrap().group.as_str(),
+                d.get(&b).unwrap().group.as_str()
+            ),
+            ("", "Ahlheim")
+        );
         assert_eq!(d.groups, ["Grand Paris-Moulon"]);
     }
 
@@ -517,7 +667,15 @@ mod tests {
         let threads: Vec<_> = (0..16)
             .map(|i| {
                 let p = p.clone();
-                std::thread::spawn(move || update_in(&p, |d| Ok(d.add(DepotBus { name: format!("bus {i}"), ..Default::default() }))).unwrap())
+                std::thread::spawn(move || {
+                    update_in(&p, |d| {
+                        Ok(d.add(DepotBus {
+                            name: format!("bus {i}"),
+                            ..Default::default()
+                        }))
+                    })
+                    .unwrap()
+                })
             })
             .collect();
         for t in threads {
@@ -535,14 +693,33 @@ mod tests {
         for _ in 0..40 {
             assert!(record_in(&p, &id, &Outing::default(), Vec::new()).unwrap());
         }
-        assert_eq!(load_from(&p).unwrap().get(&id).unwrap().history.len(), HISTORY);
+        assert_eq!(
+            load_from(&p).unwrap().get(&id).unwrap().history.len(),
+            HISTORY
+        );
     }
 
     #[test]
     fn the_services_fill_clean_and_repair() {
-        let mut b = DepotBus { wear: vec![(FUEL.into(), 40.0), (DIRT.into(), 0.8), ("collision_energy".into(), 30.0), ("kmcounter_km".into(), 9.0)], ..Default::default() };
+        let mut b = DepotBus {
+            wear: vec![
+                (FUEL.into(), 40.0),
+                (DIRT.into(), 0.8),
+                ("collision_energy".into(), 30.0),
+                ("kmcounter_km".into(), 9.0),
+            ],
+            ..Default::default()
+        };
         assert!(b.service("refuel") && b.service("wash") && b.service("repair"));
-        assert_eq!((b.fuel(), b.dirt(), b.faults().is_empty(), b.wear_var("kmcounter_km")), (None, Some(0.0), true, Some(9.0)));
+        assert_eq!(
+            (
+                b.fuel(),
+                b.dirt(),
+                b.faults().is_empty(),
+                b.wear_var("kmcounter_km")
+            ),
+            (None, Some(0.0), true, Some(9.0))
+        );
         assert!(!b.service("paint"));
     }
 }

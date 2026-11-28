@@ -19,6 +19,12 @@ struct PuddleParams {
     // x: the farthest wet pixel traced (m), y: the most steps a ray takes, z: the picture
     // pixels one ray stands for, each way
     quality: vec4<f32>,
+    // the last frame's camera, against this frame's render origin
+    prev_view_proj: mat4x4<f32>,
+    prev_inv_view_proj: mat4x4<f32>,
+    // x: 1 when the last frame's reflections may be carried on, y: how much of them is kept,
+    // z: the frame's number, which moves the rays' steps on
+    history: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> p: PuddleParams;
 @group(0) @binding(1) var t_scene: texture_2d<f32>;
@@ -30,6 +36,9 @@ struct PuddleParams {
 // Opaque scene depth plus reflective windows; receiver reconstruction uses t_depth.
 @group(0) @binding(7) var t_hit_depth: texture_depth_2d;
 @group(0) @binding(8) var t_vehicle: texture_2d<f32>;
+// The reflections kept from the last frames (`fs_accumulate`), at the rays' size: rgb the
+// change of light, a the depth of the water it lies on (as the rays' own).
+@group(0) @binding(9) var t_history: texture_2d<f32>;
 
 struct PuddleVertex {
     @builtin(position) clip: vec4<f32>,
@@ -117,6 +126,29 @@ fn receiver_normal(px: vec2<i32>, uv: vec2<f32>, world: vec3<f32>, depth: f32) -
     return normalize(n * select(-1.0, 1.0, n.z > 0.0));
 }
 
+// How far from `world` the view ray through `uv` meets the water's plane there (normal
+// `n`): a ray's footprint on it, one way (m).
+fn ray_footprint(uv: vec2<f32>, world: vec3<f32>, n: vec3<f32>) -> f32 {
+    let r = normalize(world_pos(uv, 0.5) - p.eye_time.xyz);
+    let den = dot(r, n);
+    if (abs(den) < 1e-3) { return 1.0; }
+    let t = dot(world - p.eye_time.xyz, n) / den;
+    if (t <= 0.0) { return 1.0; }
+    return min(length(p.eye_time.xyz + r * t - world), 1.0);
+}
+
+// Whether the trace's texel at `q` (its depth `d`) holds water of the same surface as the
+// point `world` (Enhanced): the water lies flat, so a texel of it is at nearly the same
+// height - a kerb, a bus's side or a wall behind is not. Compared by depth, the texels of a
+// road seen at a slant differ more from row to row than the bilateral filters allowed, and
+// the low quality's rays (4x4 pixels each) were kept apart into blocks.
+fn same_water(q: vec2<i32>, d: f32, world: vec3<f32>) -> f32 {
+    let size = vec2<f32>(textureDimensions(t_trace));
+    let w = world_pos((vec2<f32>(q) + vec2<f32>(0.5)) / size, d);
+    let tol = 0.05 + 0.004 * length(world - p.eye_time.xyz);
+    return 1.0 - smoothstep(tol, 2.0 * tol, abs(w.z - world.z));
+}
+
 @fragment
 fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
     let size = vec2<i32>(textureDimensions(t_scene));
@@ -145,13 +177,26 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
     let world = world_pos(uv, depth);
     let distance = length(world - p.eye_time.xyz);
     if (distance > p.quality.x) { return vec4<f32>(0.0); }
-    let ripple = puddle_ripple(world.xy + p.origin_rain.xy, p.eye_time.w, p.origin_rain.z, 1.0);
     var surface_normal = p.vehicle_plane.xyz;
     if (!local_vehicle_plane(world)) { surface_normal = receiver_normal(px, uv, world, depth); }
-    let normal = normalize(surface_normal + vec3<f32>(ripple.xy, 0.0));
+    // (Enhanced's rain rings, as fine as the ray's footprint on the water lets it see them;
+    // Vanilla+'s own)
+    var ripple = vec3<f32>(0.0);
+    if (p.vehicle_info.w > 0.5) {
+        let span = f32(clamp(i32(p.quality.z), 1, 8));
+        let fp = max(ray_footprint(uv + vec2<f32>(span / f32(size.x), 0.0), world, surface_normal),
+            ray_footprint(uv + vec2<f32>(0.0, span / f32(size.y)), world, surface_normal));
+        ripple = puddle_ripple_seen(world.xy + p.origin_rain.xy, p.eye_time.w, p.origin_rain.z, 1.0, fp);
+    } else {
+        ripple = puddle_ripple_classic(world.xy + p.origin_rain.xy, p.eye_time.w, p.origin_rain.z, 1.0);
+    }
+    // The discrete screen-space hit must stay on the same ray as the ripple
+    // moves. Keep the rain distortion in the filtered planar sample below.
+    let normal = select(normalize(surface_normal + vec3<f32>(ripple.xy, 0.0)), surface_normal, p.vehicle_info.w > 0.5);
     let direction = reflect(normalize(world - p.eye_time.xyz), normal);
     if (local_vehicle_plane(world)) {
-        let vehicle = textureSampleLevel(t_vehicle, s_linear, uv + ripple.xy * 0.006, 0.0);
+        let distortion = select(0.006, 0.0015, p.vehicle_info.w > 0.5);
+        let vehicle = textureSampleLevel(t_vehicle, s_linear, uv + ripple.xy * distortion, 0.0);
         if (vehicle.a > 0.01) {
             if (p.projection_trace.z == 2.0) { return vec4<f32>(0.0, 1.0, 0.0, depth); }
             if (p.projection_trace.z == 3.0) { return vec4<f32>(finite_colour(vehicle.rgb), depth); }
@@ -185,8 +230,15 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
     let z1 = c1.z / c1.w;
     var previous = 0.0;
     var previous_delta = -1.0;
+    // The steps start at another point of the first one each frame (an interleaved gradient
+    // moved on by the golden ratio). At the same places every frame, a thin pole, a branch or
+    // a gap in the leaves was met or stepped over as the view moved, all at once, and the
+    // reflection flickered between the two; moved on, a ray meets it in a share of the frames
+    // and the history (`fs_accumulate`) averages that out.
+    let ign = fract(52.9829189 * fract(dot(floor(in.clip.xy), vec2<f32>(0.06711056, 0.00583715))));
+    let shift = fract(ign + p.history.z * 0.61803399);
     for (var i = 1; i <= steps; i++) {
-        let t = end * f32(i) / f32(steps);
+        let t = end * (f32(i) - 1.0 + shift) / f32(steps);
         let at = uv0 + duv * t;
         let seen = textureLoad(t_hit_depth, scene_pixel(at), 0);
         let delta = linear_depth(mix(z0, z1, t)) - linear_depth(seen);
@@ -226,7 +278,7 @@ fn fs_trace(in: PuddleVertex) -> @location(0) vec4<f32> {
     return trace_miss(depth);
 }
 
-// Separable five-tap binomial filter at the bounded trace resolution. Filter the
+// Separable blur at the bounded trace resolution. Filter the
 // signed lighting change, including misses, to soften silhouettes and isolated gaps.
 // Receiver depth prevents mixing water on opposite sides of a kerb or foreground mesh.
 fn filter_reflection(px: vec2<i32>, axis: vec2<i32>) -> vec4<f32> {
@@ -234,16 +286,28 @@ fn filter_reflection(px: vec2<i32>, axis: vec2<i32>) -> vec4<f32> {
     let centre = textureLoad(t_trace, px, 0);
     if (centre.a <= 0.0) { return vec4<f32>(0.0); }
     let kernel = array<f32, 5>(1.0, 4.0, 6.0, 4.0, 1.0);
+    // Enhanced keeps the wider blur, but weights all three texel phases equally.
+    // Sparse taps at a stride of three left those phases isolated in both passes.
+    let enhanced_kernel = array<f32, 13>(
+        1.0, 2.0, 4.0, 6.0, 8.0, 10.0, 10.0, 10.0, 8.0, 6.0, 4.0, 2.0, 1.0,
+    );
     var sum = vec3<f32>(0.0);
     var total = 0.0;
-    // (Enhanced blurs wider: a puddle on asphalt is no mirror, its picture is soft)
-    let step = select(1, 3, p.vehicle_info.w > 0.5);
-    for (var i = -2; i <= 2; i++) {
-        let q = clamp(px + axis * i * step, vec2<i32>(0), size - vec2<i32>(1));
+    let enhanced = p.vehicle_info.w > 0.5;
+    let radius = select(2, 6, enhanced);
+    var here = vec3<f32>(0.0);
+    if (enhanced) {
+        here = world_pos((vec2<f32>(px) + vec2<f32>(0.5)) / vec2<f32>(size), centre.a);
+    }
+    for (var i = -radius; i <= radius; i++) {
+        let q = clamp(px + axis * i, vec2<i32>(0), size - vec2<i32>(1));
         let r = textureLoad(t_trace, q, 0);
         let difference = abs(r.a - centre.a) / max(centre.a, 1e-6);
-        let w = kernel[u32(i + 2)] * (1.0 - smoothstep(0.015, 0.06, difference))
-            * select(0.0, 1.0, r.a > 0.0);
+        var same = 1.0 - smoothstep(0.015, 0.06, difference);
+        if (enhanced && r.a > 0.0) { same = same_water(q, r.a, here); }
+        var tap = enhanced_kernel[u32(i + 6)];
+        if (!enhanced) { tap = kernel[u32(i + 2)]; }
+        let w = tap * same * select(0.0, 1.0, r.a > 0.0);
         sum += r.rgb * w;
         total += w;
     }
@@ -256,6 +320,72 @@ fn fs_blur_x(in: PuddleVertex) -> @location(0) vec4<f32> {
 @fragment
 fn fs_blur_y(in: PuddleVertex) -> @location(0) vec4<f32> {
     return filter_reflection(vec2<i32>(in.clip.xy), vec2<i32>(0, 1));
+}
+
+// The filtered rays (t_trace) carried on from frame to frame. A ray meets or misses a thin
+// pole, a branch or a gap in a tree's leaves anew every frame, as its steps happen to fall
+// on the screen, and alone every frame's reflection was a little different: on the move they
+// shimmered. Here each texel's water is found where the last frame saw it, that frame's
+// reflection there is taken (only from texels of the same water), held within what this
+// frame's rays see round the texel - so that nothing stale trails behind - and most of it
+// kept.
+@fragment
+fn fs_accumulate(in: PuddleVertex) -> @location(0) vec4<f32> {
+    let size = vec2<i32>(textureDimensions(t_trace));
+    let px = vec2<i32>(in.clip.xy);
+    let current = textureLoad(t_trace, px, 0);
+    if (current.a <= 0.0 || p.history.x < 0.5) { return current; }
+    let fsize = vec2<f32>(size);
+    let world = world_pos((vec2<f32>(px) + vec2<f32>(0.5)) / fsize, current.a);
+    let before = p.prev_view_proj * vec4<f32>(world, 1.0);
+    if (before.w <= 0.0) { return current; }
+    let uv = clip_uv(before);
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) { return current; }
+    // what this frame's rays see round the texel, on the same water
+    var lo = current.rgb;
+    var hi = current.rgb;
+    for (var y = -1; y <= 1; y++) {
+        for (var x = -1; x <= 1; x++) {
+            let q = clamp(px + vec2<i32>(x, y), vec2<i32>(0), size - vec2<i32>(1));
+            let r = textureLoad(t_trace, q, 0);
+            if (r.a > 0.0 && same_water(q, r.a, world) > 0.5) {
+                lo = min(lo, r.rgb);
+                hi = max(hi, r.rgb);
+            }
+        }
+    }
+    // the last frame's reflection where it saw this water (bilinear, its own water only)
+    let q = uv * fsize - vec2<f32>(0.5);
+    let origin = vec2<i32>(floor(q));
+    let fraction = fract(q);
+    let distance = length(world - p.eye_time.xyz);
+    let tol = 0.05 + 0.004 * distance;
+    var sum = vec3<f32>(0.0);
+    var total = 0.0;
+    for (var y = 0; y < 2; y++) {
+        for (var x = 0; x < 2; x++) {
+            let c = clamp(origin + vec2<i32>(x, y), vec2<i32>(0), size - vec2<i32>(1));
+            let h = textureLoad(t_history, c, 0);
+            if (h.a <= 0.0) { continue; }
+            let ndc = (vec2<f32>(c) + vec2<f32>(0.5)) / fsize;
+            let hw = p.prev_inv_view_proj * vec4<f32>(ndc.x * 2.0 - 1.0, 1.0 - ndc.y * 2.0, h.a, 1.0);
+            let then = hw.xyz / hw.w;
+            // (the same water: at the same height, and near along the road - a texel of road
+            // seen at a slant spans metres)
+            let same = (1.0 - smoothstep(tol, 2.0 * tol, abs(then.z - world.z)))
+                * (1.0 - smoothstep(0.5 + 0.03 * distance, 1.0 + 0.06 * distance, length(then.xy - world.xy)));
+            let f = select(vec2<f32>(1.0) - fraction, fraction, vec2<bool>(x == 1, y == 1));
+            let w = f.x * f.y * same;
+            sum += h.rgb * w;
+            total += w;
+        }
+    }
+    if (total < 0.05) { return current; }
+    // (a little beyond what the rays see round it: held to exactly that, the box moved with
+    // every frame's own flicker, and the flicker came through)
+    let grow = (hi - lo) * 0.5 + vec3<f32>(0.002);
+    let kept = clamp(sum / total, lo - grow, hi + grow);
+    return vec4<f32>(mix(current.rgb, kept, p.history.y * min(total * 1.25, 1.0)), current.a);
 }
 
 @fragment
@@ -276,6 +406,11 @@ fn fs_resolve(in: PuddleVertex) -> @location(0) vec4<f32> {
     let fraction = fract(q);
     var sum = vec3<f32>(0.0);
     var total = 0.0;
+    let enhanced = p.vehicle_info.w > 0.5;
+    var here = vec3<f32>(0.0);
+    if (enhanced) {
+        here = world_pos(in.uv, depth);
+    }
     for (var y = 0; y < 2; y++) {
         for (var x = 0; x < 2; x++) {
             let c = clamp(origin + vec2<i32>(x, y), vec2<i32>(0), size - vec2<i32>(1));
@@ -284,7 +419,9 @@ fn fs_resolve(in: PuddleVertex) -> @location(0) vec4<f32> {
             // Bilateral upsampling keeps a half-size ray on its receiver. The full-size
             // material mask keeps reflections off kerbs, bus bodies and dry patches.
             let difference = abs(r.a - depth) / max(depth, 1e-6);
-            let w = f.x * f.y * (1.0 - smoothstep(0.01, 0.04, difference)) * select(0.0, 1.0, r.a > 0.0);
+            var same = 1.0 - smoothstep(0.01, 0.04, difference);
+            if (enhanced && r.a > 0.0) { same = same_water(c, r.a, here); }
+            let w = f.x * f.y * same * select(0.0, 1.0, r.a > 0.0);
             sum += r.rgb * w;
             total += w;
         }

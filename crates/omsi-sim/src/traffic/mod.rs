@@ -10,27 +10,38 @@ use glam::{DVec2, DVec3};
 use hashbrown::HashMap;
 
 mod ai_state;
+mod chain_load;
 mod extend;
 mod lane;
 mod lights;
 mod network;
-mod walk_path;
-pub mod way;
+mod rail_points;
+pub use rail_points::{next_branch, settable_branches};
 #[cfg(test)]
 mod extend_tests;
+mod walk_path;
+pub mod way;
 
-pub use ai_state::{
-    arrival_time, ramp_progress_for, AiState, BodyLink, Envelope, Lead, LaneChange, BODY_MAX_LEAD, BODY_SLACK,
-    EMERGENCY_LIMIT_FACTOR, EMERGENCY_LIMIT_PLUS, JERK, MAX_BRAKE, ORDINARY_BRAKE, SIGNAL_BEFORE_CHANGE,
-};
-pub use extend::LINK_TOLERANCE;
-pub use walk_path::PathFooting;
-pub use lane::{arc_point, pool_density, wrap_deg, Lane, LaneBuilder, LaneKey, LaneKind, AIR_NO_LIMIT_KMH, DEFAULT_PRIORITY};
-pub use lights::{Aspect, LightStop, TrafficLightController, DEFAULT_APPROACH, RAIL_ASK_DISTANCE, UNLINKED_PHASE, WAITING_AT_LINE};
 #[cfg(test)]
 use ai_state::smooth01;
+pub use ai_state::{
+    AiState, BODY_MAX_LEAD, BODY_SLACK, BodyLink, EMERGENCY_LIMIT_FACTOR, EMERGENCY_LIMIT_PLUS,
+    Envelope, JERK, LaneChange, Lead, MAX_BRAKE, ORDINARY_BRAKE, SIGNAL_BEFORE_CHANGE,
+    arrival_time, ramp_progress_for,
+};
+pub use chain_load::{LaneLoad, NO_DENSITY_FILL, load_group};
+pub use extend::LINK_TOLERANCE;
 #[cfg(test)]
 use lane::heading_dir;
+pub use lane::{
+    AIR_NO_LIMIT_KMH, DEFAULT_PRIORITY, Lane, LaneBuilder, LaneKey, LaneKind, arc_point,
+    pool_density, wrap_deg,
+};
+pub use lights::{
+    Aspect, DEFAULT_APPROACH, LightProgram, LightStop, PLAYER_SEARCH_RANGE, TimedProgram,
+    TrafficLightController, UNLINKED_PHASE, WAITING_AT_LINE,
+};
+pub use walk_path::PathFooting;
 
 /// The whole network.
 #[derive(Default)]
@@ -61,6 +72,9 @@ pub struct Network {
     /// The map drives on the left (`global.cfg` `[lht]`): priority to the left, the
     /// oncoming lane on the right, turning right across the oncoming traffic.
     pub left_hand: bool,
+    /// The AI cars of each traffic group on each lane this step (see `chain_load`): how
+    /// full the ways on from a fork are.
+    pub load: LaneLoad,
 }
 
 /// `Network::reach` is counted up to this far (m).
@@ -96,7 +110,11 @@ const MEET_MAX: f32 = 14.0;
 /// How far before and after distance `at` of lane `a` its centre line stays within
 /// `MEET_DIST` of lane `b`'s (in half-metre steps, at least the half metre around the point).
 fn meeting_extent(a: &Lane, at: f32, b: &Lane) -> (f32, f32) {
-    let near = |s: f32| b.nearest_point(a.at(s).0).map(|(_, d)| d < MEET_DIST).unwrap_or(false);
+    let near = |s: f32| {
+        b.nearest_point(a.at(s).0)
+            .map(|(_, d)| d < MEET_DIST)
+            .unwrap_or(false)
+    };
     let mut before = 0.5f32;
     while before < MEET_MAX && at - before >= 0.0 && near(at - before) {
         before += 0.5;
@@ -141,7 +159,9 @@ fn polyline_crossing(a: &Lane, b: &Lane) -> Option<(f32, f32)> {
 /// closest, away from the ends (a fork or a joint is not such a place). Without it the two
 /// cars met there with nothing to sort out who goes first.
 fn near_pass(a: &Lane, b: &Lane) -> Option<(f32, f32)> {
-    if (a.start() - b.start()).truncate().length() < 3.0 || (a.end() - b.end()).truncate().length() < 3.0 {
+    if (a.start() - b.start()).truncate().length() < 3.0
+        || (a.end() - b.end()).truncate().length() < 3.0
+    {
         return None;
     }
     let mut best: Option<(f64, f32, f32)> = None;
@@ -150,7 +170,9 @@ fn near_pass(a: &Lane, b: &Lane) -> Option<(f32, f32)> {
         if sa < 1.0 || sa > a.length() - 1.0 {
             continue;
         }
-        let Some((sb, d)) = b.nearest_point(*p) else { continue };
+        let Some((sb, d)) = b.nearest_point(*p) else {
+            continue;
+        };
         if sb < 1.0 || sb > b.length() - 1.0 {
             continue;
         }
@@ -191,9 +213,19 @@ mod light_tests {
         assert_eq!(c.state(0), 0);
         assert!((c.remaining(0) - 18.0).abs() < 1e-4);
         // red running over the end of the cycle into a red start
-        let d = at(TrafficLightController::new(vec![vec![(0, 19.0), (3, 2.0), (6, 11.0), (9, 3.0), (0, 0.0)]], 38.0), 36.0);
+        let d = at(
+            TrafficLightController::new(
+                vec![vec![(0, 19.0), (3, 2.0), (6, 11.0), (9, 3.0), (0, 0.0)]],
+                38.0,
+            ),
+            36.0,
+        );
         assert!((d.remaining(0) - 21.0).abs() < 1e-4, "{}", d.remaining(0));
-        assert!(at(TrafficLightController::new(vec![vec![(6, 5.0)]], 0.0), 1.0).remaining(0).is_infinite());
+        assert!(
+            at(TrafficLightController::new(vec![vec![(6, 5.0)]], 0.0), 1.0)
+                .remaining(0)
+                .is_infinite()
+        );
     }
 }
 

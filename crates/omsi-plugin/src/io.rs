@@ -10,6 +10,15 @@
 use crate::api::Value;
 use std::path::Path;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyEvent {
+    pub key: String,
+    pub down: bool,
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+}
+
 /// The game's side of a frame.
 pub trait PluginIo {
     /// Snapshot of every parsed field of the player's currently loaded HOF.
@@ -137,6 +146,21 @@ pub trait PluginIo {
     fn keys(&self) -> Vec<(String, bool)> {
         Vec::new()
     }
+    fn key_events(&self) -> Vec<KeyEvent> {
+        let ctrl = self.key_held("ControlLeft") || self.key_held("ControlRight");
+        let shift = self.key_held("ShiftLeft") || self.key_held("ShiftRight");
+        let alt = self.key_held("AltLeft") || self.key_held("AltRight");
+        self.keys()
+            .into_iter()
+            .map(|(key, down)| KeyEvent {
+                key,
+                down,
+                ctrl,
+                shift,
+                alt,
+            })
+            .collect()
+    }
     /// The other vehicles within `radius` m of the player's (`omsi.others`): the AI traffic
     /// and the other LAN players' buses.
     fn others(&self, _radius: f64) -> Vec<Other> {
@@ -244,6 +268,19 @@ pub trait PluginIo {
     }
     /// What the bus drives with: throttle, brake, clutch (0..1) and steering (-1..1, right +).
     fn bus_controls(&self) -> Option<[f32; 4]> {
+        None
+    }
+    /// The speed the cruise control holds (km/h), while it is on.
+    fn bus_cruise(&self) -> Option<f32> {
+        None
+    }
+    /// Cruise control on at `kmh` (`None`: off); false where there is no bus, or `kmh` or the
+    /// bus's speed is below 5 km/h.
+    fn bus_set_cruise(&mut self, _kmh: Option<f32>) -> bool {
+        false
+    }
+    /// Where the player's rail vehicle is on its track (None: not on rails).
+    fn bus_track(&self) -> Option<TrackPos> {
         None
     }
     /// The front wheels' angle and the most they turn, degrees (right +).
@@ -745,6 +782,19 @@ pub struct AiCar {
     /// The heading the box's axes follow (the body's; the path's `heading` + 180 for a
     /// vehicle driven backwards along its file's axis).
     pub box_heading: f64,
+}
+
+/// Where a rail vehicle is on its track, along the track rather than in x and y (#3969).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TrackPos {
+    /// An index into the map's lanes.
+    pub lane: usize,
+    pub s: f32,
+    pub lane_length: f32,
+    pub forward: bool,
+    /// Net metres along the tracks since it was put on them: backing up takes them off,
+    /// below zero too.
+    pub travelled: f64,
 }
 
 /// A timetable bus on the road.

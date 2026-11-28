@@ -59,12 +59,22 @@ pub struct VehiclePhysics {
 
 impl VehiclePhysics {
     pub fn from_definition(def: &Vehicle) -> VehiclePhysics {
-        let mass_kg = if def.mass < 100.0 { def.mass * 1000.0 } else { def.mass };
+        let mass_kg = def.mass_kg();
         let wheels: Vec<[WheelState; 2]> = def
             .axles
             .iter()
             .map(|a| {
-                let mk = |lat: f32| WheelState { long: a.long, lat, radius: (a.wheel_diameter / 2.0).max(0.1), driven: a.driven, rotation_deg: 0.0, turned: 0.0, turned_put: 0.0, rpm: 0.0, suspension: 0.0 };
+                let mk = |lat: f32| WheelState {
+                    long: a.long,
+                    lat,
+                    radius: (a.wheel_diameter / 2.0).max(0.1),
+                    driven: a.driven,
+                    rotation_deg: 0.0,
+                    turned: 0.0,
+                    turned_put: 0.0,
+                    rpm: 0.0,
+                    suspension: 0.0,
+                };
                 [mk(-a.max_width / 2.0), mk(a.max_width / 2.0)]
             })
             .collect();
@@ -73,8 +83,25 @@ impl VehiclePhysics {
         let wheelbase = (front - rear).abs().max(1.0);
         // inv_min_turnradius = tan(alpha_max) / s  →  alpha_max
         let s = (front - def.rot_pnt_long).abs().max(1.0);
-        let max_steer_deg = (def.inv_min_turn_radius * s).atan().to_degrees().clamp(10.0, 60.0);
-        VehiclePhysics { mass_kg: mass_kg.max(500.0), rolling_resistance: def.rolling_resistance, inv_min_turn_radius: def.inv_min_turn_radius, rot_pnt_long: def.rot_pnt_long, wheelbase, wheels, speed: 0.0, accel: Vec3::ZERO, a_trans: Vec3::ZERO, steer_deg: 0.0, max_steer_deg, controls: Controls::default(), steer_rate: 0.8 }
+        let max_steer_deg = (def.inv_min_turn_radius * s)
+            .atan()
+            .to_degrees()
+            .clamp(10.0, 60.0);
+        VehiclePhysics {
+            mass_kg: mass_kg.max(500.0),
+            rolling_resistance: def.rolling_resistance,
+            inv_min_turn_radius: def.inv_min_turn_radius,
+            rot_pnt_long: def.rot_pnt_long,
+            wheelbase,
+            wheels,
+            speed: 0.0,
+            accel: Vec3::ZERO,
+            a_trans: Vec3::ZERO,
+            steer_deg: 0.0,
+            max_steer_deg,
+            controls: Controls::default(),
+            steer_rate: 0.8,
+        }
     }
 
     /// Advance one step. `drive_torque` is `M_Wheel`, `brake_forces` the per-wheel brake
@@ -88,7 +115,13 @@ impl VehiclePhysics {
         self.steer_deg += (target - self.steer_deg).clamp(-rate, rate);
 
         // forces along the forward axis
-        let driven_radius = self.wheels.iter().find(|w| w[0].driven).or(self.wheels.first()).map(|w| w[0].radius).unwrap_or(0.5);
+        let driven_radius = self
+            .wheels
+            .iter()
+            .find(|w| w[0].driven)
+            .or(self.wheels.first())
+            .map(|w| w[0].radius)
+            .unwrap_or(0.5);
         let f_drive = drive_torque / driven_radius;
         let f_brake: f32 = brake_forces.iter().sum::<f32>().max(0.0);
         let f_roll = self.rolling_resistance.max(0.0);

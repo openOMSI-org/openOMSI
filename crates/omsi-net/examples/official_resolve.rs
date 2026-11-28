@@ -4,7 +4,10 @@ fn main() {
         Ok(url) => {
             println!("openomsi -> {url}");
             match omsi_net::ws::query(omsi_net::official::ALIAS, false) {
-                Ok(i) => println!("status: {} ({} / {} players)", i.name, i.players, i.max_players),
+                Ok(i) => println!(
+                    "status: {} ({} / {} players)",
+                    i.name, i.players, i.max_players
+                ),
                 Err(e) => println!("status: {e}"),
             }
         }

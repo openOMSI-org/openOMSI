@@ -84,7 +84,7 @@ impl SeasonChoice {
 
     /// The month of the phase (1..12) at `latitude` (degrees north): March, April, May for
     /// the northern spring, half a year later south of the equator.
-    pub fn month(&self, latitude: f64) -> u32 {
+    pub fn month(&self, lat_deg: f64) -> u32 {
         let first = match self.season {
             SeasonName::Spring => 3,
             SeasonName::Summer => 6,
@@ -96,19 +96,19 @@ impl SeasonChoice {
             Phase::Mid => 1,
             Phase::Late => 2,
         };
-        let south = if latitude < 0.0 { 6 } else { 0 };
+        let south = if lat_deg < 0.0 { 6 } else { 0 };
         (first + step + south - 1) % 12 + 1
     }
 
     /// The phase's typical day (month, day): early in its month for the early phase (the
     /// season has just begun), the middle for the middle, later for the late one.
-    pub fn day(&self, latitude: f64) -> (u32, u32) {
+    pub fn day(&self, lat_deg: f64) -> (u32, u32) {
         let d = match self.phase {
             Phase::Early => 10,
             Phase::Mid => 15,
             Phase::Late => 20,
         };
-        (self.month(latitude), d)
+        (self.month(lat_deg), d)
     }
 
     /// The two texture looks of the phase and the share of the plants in the second (see
@@ -146,7 +146,11 @@ impl SeasonChoice {
     pub fn mix(&self) -> Option<omsi_texture::SeasonMix> {
         let (from, to, share) = self.looks();
         let folder = |k: i32| omsi_map::global::Season::folder(k).map(String::from);
-        (from != to && share > 0.0).then(|| omsi_texture::SeasonMix { from: folder(from), to: folder(to), share })
+        (from != to && share > 0.0).then(|| omsi_texture::SeasonMix {
+            from: folder(from),
+            to: folder(to),
+            share,
+        })
     }
 }
 
@@ -159,24 +163,24 @@ pub fn phase_word(p: Phase) -> &'static str {
 }
 
 /// The map's latitude (degrees north) from its `timezone.txt`, else Berlin's as the sun's.
-pub fn map_latitude(root: &Path, map: &str) -> f64 {
+pub fn map_lat_deg(root: &Path, map: &str) -> f64 {
     let cfg = omsi_cfg::resolve_path(root, map);
     cfg.parent()
         .and_then(|dir| omsi_map::TimeZone::load(&omsi_cfg::resolve_path(dir, "timezone.txt")).ok())
         .and_then(|tz| tz.lat_lon())
         .map(|(lat, _)| lat)
-        .unwrap_or(omsi_sim::daylight::SunPlace::default().latitude)
+        .unwrap_or(omsi_sim::daylight::SunPlace::default().lat_deg)
 }
 
 /// The date of `choice` in `year` at `latitude`, or `date` itself (`(year, month, day)`)
 /// when that already lies in the phase's month: a date the player set within the phase
 /// (Christmas in early winter) stays; one outside it goes to the phase's typical day.
-pub fn phase_date(choice: SeasonChoice, date: (i32, u32, u32), latitude: f64) -> (i32, u32, u32) {
+pub fn phase_date(choice: SeasonChoice, date: (i32, u32, u32), lat_deg: f64) -> (i32, u32, u32) {
     let (year, month, _) = date;
-    if month == choice.month(latitude) {
+    if month == choice.month(lat_deg) {
         return date;
     }
-    let (m, d) = choice.day(latitude);
+    let (m, d) = choice.day(lat_deg);
     (year, m, d)
 }
 
@@ -190,11 +194,29 @@ mod tests {
 
     #[test]
     fn parses_seasons_and_phases() {
-        assert_eq!(ch("autumn"), SeasonChoice { season: SeasonName::Autumn, phase: Phase::Mid });
-        assert_eq!(ch("Autumn-Late"), SeasonChoice { season: SeasonName::Autumn, phase: Phase::Late });
+        assert_eq!(
+            ch("autumn"),
+            SeasonChoice {
+                season: SeasonName::Autumn,
+                phase: Phase::Mid
+            }
+        );
+        assert_eq!(
+            ch("Autumn-Late"),
+            SeasonChoice {
+                season: SeasonName::Autumn,
+                phase: Phase::Late
+            }
+        );
         assert_eq!(ch("fall_early").phase, Phase::Early);
         assert_eq!(ch("herbst spät").season, SeasonName::Autumn);
-        assert_eq!(ch("fruehling-frueh"), SeasonChoice { season: SeasonName::Spring, phase: Phase::Early });
+        assert_eq!(
+            ch("fruehling-frueh"),
+            SeasonChoice {
+                season: SeasonName::Spring,
+                phase: Phase::Early
+            }
+        );
         assert!(SeasonChoice::parse("auto").is_none());
         assert!(SeasonChoice::parse("winter-soon").is_none());
         assert!(SeasonChoice::parse("").is_none());
@@ -228,8 +250,14 @@ mod tests {
         let w = ch("winter-early");
         assert_eq!(phase_date(w, (1989, 12, 24), 52.5), (1989, 12, 24));
         assert_eq!(phase_date(w, (1989, 5, 30), 52.5), (1989, 12, 10));
-        assert_eq!(phase_date(ch("winter-mid"), (1989, 5, 30), 52.5), (1989, 1, 15));
-        assert_eq!(phase_date(ch("autumn-late"), (2024, 3, 1), -34.0), (2024, 5, 20));
+        assert_eq!(
+            phase_date(ch("winter-mid"), (1989, 5, 30), 52.5),
+            (1989, 1, 15)
+        );
+        assert_eq!(
+            phase_date(ch("autumn-late"), (2024, 3, 1), -34.0),
+            (2024, 5, 20)
+        );
     }
 
     #[test]
@@ -244,7 +272,10 @@ mod tests {
         assert_eq!(day_of_year(2024, spring), 70);
         // late winter's day is in February either way
         assert_eq!(day_of_year(2024, ch("winter-late").day(52.5)), 51);
-        assert_eq!(phase_date(ch("winter-late"), (2024, 2, 29), 52.5), (2024, 2, 29));
+        assert_eq!(
+            phase_date(ch("winter-late"), (2024, 2, 29), 52.5),
+            (2024, 2, 29)
+        );
     }
 
     #[test]
@@ -264,10 +295,16 @@ mod tests {
         assert_eq!(kind("winter-late"), WINTER);
         // the mixes: early autumn a quarter of the plants in Fall, the rest summer's
         let m = ch("autumn-early").mix().unwrap();
-        assert_eq!((m.from, m.to.as_deref(), m.share), (None, Some("fall"), 0.25));
+        assert_eq!(
+            (m.from, m.to.as_deref(), m.share),
+            (None, Some("fall"), 0.25)
+        );
         assert!(ch("summer").mix().is_none());
         assert!(ch("winter").mix().is_none());
         let late = ch("autumn-late").mix().unwrap();
-        assert_eq!((late.from.as_deref(), late.to.as_deref()), (Some("fall"), Some("Winter")));
+        assert_eq!(
+            (late.from.as_deref(), late.to.as_deref()),
+            (Some("fall"), Some("Winter"))
+        );
     }
 }

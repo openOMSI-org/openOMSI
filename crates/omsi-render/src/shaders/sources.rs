@@ -15,18 +15,37 @@ pub(crate) fn scene_shader_source(gl: bool) -> String {
 
 pub(crate) fn scene_shader_for(gl: bool, path: ArrayPath) -> String {
     let src = arrays_as_textures(&scene_shader_text(gl), path);
-    if gl && path.no_storage() { compares_without_gather(&src) } else { src }
+    if gl && path.no_storage() {
+        compares_without_gather(&src)
+    } else {
+        src
+    }
 }
 
 fn without_tree_fade(src: &str) -> String {
     let src = stub_fn(src, "fn tree_card_fade(world: vec3<f32>) -> f32 {", "1.0");
-    stub_fn(&src, "fn tree_crown_normal(local: vec3<f32>, m: mat4x4<f32>, up: vec3<f32>) -> vec3<f32> {", "up")
+    stub_fn(
+        &src,
+        "fn tree_crown_normal(local: vec3<f32>, m: mat4x4<f32>, up: vec3<f32>) -> vec3<f32> {",
+        "up",
+    )
 }
 
 fn stub_fn(src: &str, head: &str, value: &str) -> String {
-    let start = src.find(head).unwrap_or_else(|| panic!("scene shader: {head} not found"));
-    let close = start + src[start..].find("\n}").unwrap_or_else(|| panic!("scene shader: {head} has no end")) + 2;
-    format!("{}{head}\n    return {value};\n}}{}", &src[..start], &src[close..])
+    stub_body(src, head, &format!("return {value};"))
+}
+
+/// `head`'s function with `body` for all it does.
+fn stub_body(src: &str, head: &str, body: &str) -> String {
+    let start = src
+        .find(head)
+        .unwrap_or_else(|| panic!("scene shader: {head} not found"));
+    let close = start
+        + src[start..]
+            .find("\n}")
+            .unwrap_or_else(|| panic!("scene shader: {head} has no end"))
+        + 2;
+    format!("{}{head}\n    {body}\n}}{}", &src[..start], &src[close..])
 }
 
 /// The sun's shadow tent with each gather of four depth comparisons taken as four single
@@ -37,11 +56,21 @@ fn stub_fn(src: &str, head: &str, value: &str) -> String {
 pub(crate) fn compares_without_gather(src: &str) -> String {
     let mut out = src.to_string();
     for t in ["t_shadow", "t_shadow_far"] {
-        let at = |x: f32, y: f32| format!("textureSampleCompareLevel({t}, s_shadow, a + vec2<f32>({x:?}, {y:?}) / dims, zr)");
+        let at = |x: f32, y: f32| {
+            format!(
+                "textureSampleCompareLevel({t}, s_shadow, a + vec2<f32>({x:?}, {y:?}) / dims, zr)"
+            )
+        };
         let gather = format!("textureGatherCompare({t}, s_shadow, a, zr)");
         assert!(out.contains(&gather), "scene shader: {gather} not found");
         // (in the gather's order: (0, 1), (1, 1), (1, 0), (0, 0) of the quad around `a`)
-        let four = format!("vec4<f32>({}, {}, {}, {})", at(-0.5, 0.5), at(0.5, 0.5), at(0.5, -0.5), at(-0.5, -0.5));
+        let four = format!(
+            "vec4<f32>({}, {}, {}, {})",
+            at(-0.5, 0.5),
+            at(0.5, 0.5),
+            at(0.5, -0.5),
+            at(-0.5, -0.5)
+        );
         out = out.replace(&gather, &four);
     }
     out
@@ -64,18 +93,47 @@ pub(crate) fn arrays_as_textures(src: &str, path: ArrayPath) -> String {
     let load = |name: &str, ty: &str, pick: &str| {
         format!(
             "var {name}_tex: texture_2d<{ty}>;\nfn {name}_at(i: u32) -> {} {{ return textureLoad({name}_tex, vec2<u32>(i % {w}u, i / {w}u), 0){pick}; }}",
-            if pick.is_empty() { format!("vec4<{ty}>") } else { ty.to_string() }
+            if pick.is_empty() {
+                format!("vec4<{ty}>")
+            } else {
+                ty.to_string()
+            }
         )
     };
-    swap("var<storage, read> models: array<vec4<f32>>;", load("models", "f32", ""), "models", "models_at");
-    swap("var<storage, read> inst_params: array<vec4<f32>>;", load("inst_params", "f32", ""), "inst_params", "inst_params_at");
-    swap("var<storage, read> draw_list: array<u32>;", load("draw_list", "u32", ".x"), "draw_list", "draw_list_at");
+    swap(
+        "var<storage, read> models: array<vec4<f32>>;",
+        load("models", "f32", ""),
+        "models",
+        "models_at",
+    );
+    swap(
+        "var<storage, read> inst_params: array<vec4<f32>>;",
+        load("inst_params", "f32", ""),
+        "inst_params",
+        "inst_params_at",
+    );
+    swap(
+        "var<storage, read> draw_list: array<u32>;",
+        load("draw_list", "u32", ".x"),
+        "draw_list",
+        "draw_list_at",
+    );
     if path == ArrayPath::LightTextures {
         let lights = format!(
             "var lights_tex: texture_2d<f32>;\nfn lights_texel(t: u32) -> vec4<f32> {{ return textureLoad(lights_tex, vec2<u32>(t % {w}u, t / {w}u), 0); }}\nfn lights_at(i: u32) -> PointLight {{ return PointLight(lights_texel(i * 4u), lights_texel(i * 4u + 1u), lights_texel(i * 4u + 2u), lights_texel(i * 4u + 3u)); }}"
         );
-        swap("var<storage, read> lights: array<PointLight>;", lights, "lights", "lights_at");
-        swap("var<storage, read> grid: array<u32>;", load("grid", "u32", ".x"), "grid", "grid_at");
+        swap(
+            "var<storage, read> lights: array<PointLight>;",
+            lights,
+            "lights",
+            "lights_at",
+        );
+        swap(
+            "var<storage, read> grid: array<u32>;",
+            load("grid", "u32", ".x"),
+            "grid",
+            "grid_at",
+        );
     }
     if path == ArrayPath::NoStorage {
         swap(
@@ -84,7 +142,12 @@ pub(crate) fn arrays_as_textures(src: &str, path: ArrayPath) -> String {
             "lights",
             "lights_at",
         );
-        swap("@group(0) @binding(4) var<storage, read> grid: array<u32>;", "fn grid_at(i: u32) -> u32 { return 0xffffffffu; }".to_string(), "grid", "grid_at");
+        swap(
+            "@group(0) @binding(4) var<storage, read> grid: array<u32>;",
+            "fn grid_at(i: u32) -> u32 { return 0xffffffffu; }".to_string(),
+            "grid",
+            "grid_at",
+        );
     }
     out
 }
@@ -128,30 +191,79 @@ pub(crate) fn indexing_as_calls(src: &str, name: &str, call: &str) -> String {
     out
 }
 
-pub(crate) fn backend_forms(src: String, gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
-    let src = if !gl && amd_vulkan { src.replace("//VK ", "") } else { src.replace("//DX ", "") };
-    if !gl && multisampled_shading { src.replace("//MS ", "") } else { src }
+pub(crate) fn backend_forms(
+    src: String,
+    gl: bool,
+    amd_vulkan: bool,
+    multisampled_shading: bool,
+) -> String {
+    let src = if !gl && amd_vulkan {
+        src.replace("//VK ", "")
+    } else {
+        src.replace("//DX ", "")
+    };
+    if !gl && multisampled_shading {
+        src.replace("//MS ", "")
+    } else {
+        src
+    }
 }
 
 pub(crate) fn scene_shader_text(gl: bool) -> String {
-    scene_shader_forms(gl, AMD_VULKAN.load(std::sync::atomic::Ordering::Relaxed), MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed))
+    scene_shader_forms(
+        gl,
+        AMD_VULKAN.load(std::sync::atomic::Ordering::Relaxed),
+        MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed),
+    )
 }
 
 pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shading: bool) -> String {
     let src = [
-        include_str!("../colour.wgsl"),
-        shaders::SCENE,
-        if road_snow_supported_on(gl, omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(), array_path()) { include_str!("../road_snow.wgsl") } else { include_str!("../road_snow_off.wgsl") },
-        include_str!("../enhanced_common.wgsl"),
-        include_str!("../puddle_common.wgsl"),
-        include_str!("../beam_shadow_none.wgsl"),
-        include_str!("../lamp_air.wgsl"),
-        shaders::ENHANCED,
+        crate::shaders::hot_wgsl(include_str!("../colour.wgsl"), "colour.wgsl"),
+        shaders::scene_part(),
+        if road_snow_supported_on(
+            gl,
+            omsi_cfg::flags::OMSI_GL_TEXTURE_UNITS.is_set(),
+            array_path(),
+        ) {
+            crate::shaders::hot_wgsl(include_str!("../road_snow.wgsl"), "road_snow.wgsl")
+        } else {
+            crate::shaders::hot_wgsl(include_str!("../road_snow_off.wgsl"), "road_snow_off.wgsl")
+        },
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../puddle_common.wgsl"), "puddle_common.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../beam_shadow_none.wgsl"),
+            "beam_shadow_none.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
+        shaders::enhanced_part(),
     ]
     .join("\n");
     // Enhanced+: the enhanced pass writes the reflections' surfaces as well (`GBUF_FORMAT`)
-    let src = if rt_gbuf() { src.replace("//RT ", "") } else { src };
-    let src = if basic_pipelines() { lean_scene(src) } else { src };
+    let src = if rt_gbuf() {
+        src.replace("//RT ", "")
+    } else {
+        src
+    };
+    let src = if basic_pipelines() {
+        lean_scene(src)
+    } else {
+        src
+    };
+    // (the traced global illumination's result only where the camera group holds it,
+    // `gi_binding`: elsewhere none, and the lookup goes)
+    let src = if crate::gi_binding() || gl {
+        src
+    } else {
+        src.replace(
+            "gi_at(in.clip.xy, in.world)",
+            "vec4<f32>(0.0, 0.0, 0.0, -1.0)",
+        )
+    };
     let src = backend_forms(src, gl, amd_vulkan, multisampled_shading);
     if !gl {
         return src;
@@ -167,13 +279,34 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
     // D3D compiler under ANGLE (fxc) recursed without end in CProgram::CheckAssertion_Group
     // and the game closed before its first frame (#197).
     let out = without_tree_fade(&src)
-        .replace("textureSampleBias(t_trans, s_tile, uv, bias)", &clamped("t_trans", "bias"))
-        .replace("textureSampleBias(t_night, s_tile, uv, camera.lod.x)", &clamped("t_night", "camera.lod.x"))
+        .replace(
+            "textureSampleBias(t_trans, s_tile, uv, bias)",
+            &clamped("t_trans", "bias"),
+        )
+        .replace(
+            "textureSampleBias(t_night, s_tile, uv, camera.lod.x)",
+            &clamped("t_night", "camera.lod.x"),
+        )
         .replace("ao = ao_at(in.clip.xy, in.world);", "ao = 1.0;")
-        .replace("let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);", "let ag = vec4<f32>(1.0, 0.0, 0.0, 0.0);")
-        .replace("rt_at(in.clip.xy, in.world)", "vec4<f32>(1.0, 0.0, -1.0, 0.0)");
+        .replace(
+            "let ag = ao_gi_at(in.clip.xy, in.world, surface_rt);",
+            "let ag = vec4<f32>(1.0, 0.0, 0.0, 0.0);",
+        )
+        .replace(
+            "rt_at(in.clip.xy, in.world)",
+            "vec4<f32>(1.0, 0.0, -1.0, 0.0)",
+        )
+        .replace(
+            "gi_at(in.clip.xy, in.world)",
+            "vec4<f32>(0.0, 0.0, 0.0, -1.0)",
+        );
     debug_assert!(!out.contains("s_tile, uv)") && !out.contains("s_tile, uv, "));
-    debug_assert!(!out.contains("ao_at(in.") && !out.contains("ao_gi_at(in.") && !out.contains("rt_at(in."));
+    debug_assert!(
+        !out.contains("ao_at(in.")
+            && !out.contains("ao_gi_at(in.")
+            && !out.contains("rt_at(in.")
+            && !out.contains("gi_at(in.")
+    );
     out
 }
 
@@ -186,21 +319,38 @@ pub(crate) fn scene_shader_forms(gl: bool, amd_vulkan: bool, multisampled_shadin
 pub(crate) fn lean_scene(src: String) -> String {
     let out = src
         .replace("irr = irr * lamp_shadow_at(li, p, n, thin);", "")
-        .replace("seen_light = seen_light + share * lamp_shadow_at(li, p, n, false);", "seen_light = seen_light + share;")
+        .replace(
+            "seen_light = seen_light + share * lamp_shadow_at(li, p, n, false);",
+            "seen_light = seen_light + share;",
+        )
         .replace("ms = sun_shadow_soft(in.world, n, thin);", "ms = 1.0;")
-        .replace("let sm = sun_shadow_soft(in.world, n, thin);", "let sm = 1.0;");
+        .replace(
+            "let sm = sun_shadow_soft(in.world, n, thin);",
+            "let sm = 1.0;",
+        );
     debug_assert_eq!(out.matches("sun_shadow_soft(in.world").count(), 1);
     debug_assert!(!out.contains("* lamp_shadow_at("));
-    out
+    // and no drops on the panes, only their film and blur: FXC unrolls the drops' cell
+    // loops into each of the shader's glass paths, and Direct3D 11 on WARP spent over two
+    // minutes on the scene pipelines (the ANGLE startup check timed out)
+    stub_body(
+        &out,
+        "fn glass_drops(a: ptr<function, DropAcc>, b: PaneBase, p: PaneProj, w: f32, wet: f32, heavy: f32, bank: f32, size: f32, world: vec3<f32>, t: f32) {",
+        "",
+    )
 }
 
 /// The sky dome (both paths) and the enhanced reflection probe.
 pub(crate) fn sky_shader_source() -> String {
     [
-        include_str!("../colour.wgsl"),
-        include_str!("../sky.wgsl"),
-        include_str!("../enhanced_common.wgsl"),
-        include_str!("../sky_enhanced.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../colour.wgsl"), "colour.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../sky.wgsl"), "sky.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../sky_enhanced.wgsl"), "sky_enhanced.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../clouds_ss.wgsl"), "clouds_ss.wgsl"),
     ]
     .join("\n")
 }
@@ -208,17 +358,43 @@ pub(crate) fn sky_shader_source() -> String {
 /// The snowfall (snow.wgsl), with the lamps the enhanced picture lights it by (none
 /// without storage buffers).
 pub(crate) fn snow_shader_source() -> String {
-    precip_shader_source(include_str!("../snow.wgsl"))
+    let src = precip_shader_source(crate::shaders::hot_wgsl(
+        include_str!("../snow.wgsl"),
+        "snow.wgsl",
+    ));
+    if basic_pipelines() {
+        lean_snow(src)
+    } else {
+        src
+    }
+}
+
+/// The snowfall as the basic set makes it: lit without the loop over the lamps (one more
+/// thing a phone's compiler can fail on, see `lean_scene`), by the sky's light from above.
+pub(crate) fn lean_snow(src: String) -> String {
+    // (no line end in the pattern: a Windows checkout turns the file's into CRLF)
+    const LAMPS: &str = "l = (precip_light(in.pos, to_eye, true) + up) * 0.5 * 0.85";
+    debug_assert_eq!(src.matches(LAMPS).count(), 1);
+    src.replace(LAMPS, "l = (up + up) * 0.5 * 0.85")
 }
 
 /// The rainfall (rain.wgsl), as the snowfall.
 pub(crate) fn rain_shader_source() -> String {
-    let src = precip_shader_source(include_str!("../rain.wgsl"));
-    if basic_pipelines() { lean_rain(src) } else { src }
+    let src = precip_shader_source(crate::shaders::hot_wgsl(
+        include_str!("../rain.wgsl"),
+        "rain.wgsl",
+    ));
+    if basic_pipelines() {
+        lean_rain(src)
+    } else {
+        src
+    }
 }
 
 pub(crate) fn lean_rain(src: String) -> String {
-    const LAMPS: &str = "precip_light(in.pos, to_eye, false) * 0.3 + ";
+    // (no line end in the pattern: a Windows checkout turns the file's into CRLF)
+    const LAMPS: &str =
+        "l = max(precip_light(in.pos, to_eye, true) - round, vec3<f32>(0.0)) * 1.5 + l;";
     debug_assert_eq!(src.matches(LAMPS).count(), 1);
     src.replace(LAMPS, "")
 }
@@ -226,26 +402,44 @@ pub(crate) fn lean_rain(src: String) -> String {
 pub(crate) fn roof_as_float(src: String) -> String {
     const DECL: &str = "var roof_map: texture_depth_2d;";
     const LOAD: &str = "return textureLoad(roof_map, t, 0); }";
-    debug_assert_eq!((src.matches(DECL).count(), src.matches(LOAD).count()), (1, 1));
-    src.replace(DECL, "var roof_map: texture_2d<f32>;").replace(LOAD, "return textureLoad(roof_map, t, 0).x; }")
+    debug_assert_eq!(
+        (src.matches(DECL).count(), src.matches(LOAD).count()),
+        (1, 1)
+    );
+    src.replace(DECL, "var roof_map: texture_2d<f32>;")
+        .replace(LOAD, "return textureLoad(roof_map, t, 0).x; }")
 }
 
 pub(crate) fn precip_shader_source(own: &str) -> String {
     let src = [
-        include_str!("../precip_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../precip_common.wgsl"), "precip_common.wgsl"),
         own,
-        include_str!("../enhanced_common.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
         FOG_LAMP_LIGHTS,
-        include_str!("../beam_shadow_none.wgsl"),
-        include_str!("../lamp_air.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../beam_shadow_none.wgsl"),
+            "beam_shadow_none.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
     ]
     .join("\n");
-    let src = if gl_backend() { roof_as_float(src) } else { src };
+    let src = if gl_backend() {
+        roof_as_float(src)
+    } else {
+        src
+    };
     if array_path().no_storage() {
         let src = src
             .replace("@group(0) @binding(3) var<storage, read> lights: array<PointLight>;", "fn lights_at(i: u32) -> PointLight { return PointLight(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0)); }")
             .replace("@group(0) @binding(4) var<storage, read> grid: array<u32>;", "fn grid_at(i: u32) -> u32 { return 0xffffffffu; }");
-        return indexing_as_calls(&indexing_as_calls(&src, "lights", "lights_at"), "grid", "grid_at");
+        return indexing_as_calls(
+            &indexing_as_calls(&src, "lights", "lights_at"),
+            "grid",
+            "grid_at",
+        );
     }
     src
 }
@@ -258,6 +452,9 @@ pub(crate) struct SnowUniform {
     /// The roof map's matrix, and x 1 when there is one (`passes::PrecipMap::uniform`).
     pub(crate) roof: [[f32; 4]; 4],
     pub(crate) roof_on: [f32; 4],
+    /// Enhanced: where the veil's panels begin, how many, the gusts' strength, the picture's
+    /// height (px).
+    pub(crate) ext: [f32; 4],
 }
 
 /// The snowfall's flakes for a snowfall of strength `s` (0..1): how many each layer of
@@ -266,7 +463,14 @@ pub(crate) struct SnowUniform {
 /// crystals of a millimetre, a heavy one aggregates of several.
 pub(crate) fn snowfall_flakes(s: f32) -> ([u32; 3], f32) {
     let k = 0.08 + 0.92 * s.clamp(0.0, 1.0);
-    ([(70000.0 * k) as u32, (55000.0 * k) as u32, (25000.0 * k) as u32], 0.0006 + 0.0034 * s * s)
+    (
+        [
+            (70000.0 * k) as u32,
+            (55000.0 * k) as u32,
+            (25000.0 * k) as u32,
+        ],
+        0.0006 + 0.0034 * s * s,
+    )
 }
 
 #[repr(C)]
@@ -278,6 +482,15 @@ pub(crate) struct RainUniform {
     pub(crate) view: [f32; 4],
     pub(crate) roof: [[f32; 4]; 4],
     pub(crate) roof_on: [f32; 4],
+    /// Enhanced: where the veil's panels begin, how many, the gusts' strength, the quality.
+    pub(crate) ext: [f32; 4],
+}
+
+/// The enhanced rain's and snow's far veil (rain.wgsl, snow.wgsl `veil_corner`): twelve
+/// panels a ring, one ring on the `rain_quality` setting's low, two on medium, three on
+/// high.
+pub(crate) fn veil_panels(quality: u8) -> u32 {
+    12 * (quality.min(2) as u32 + 1)
 }
 
 /// How many drops each layer of rain.wgsl holds in a rain of strength `r` (0..1) at the
@@ -288,18 +501,33 @@ pub(crate) struct RainUniform {
 /// on each square metre at a time in a downpour, close by.
 pub(crate) fn rainfall_drops(r: f32, quality: u8) -> [u32; 4] {
     let k = (0.12 + 0.88 * r.clamp(0.0, 1.0)) * [0.3, 0.6, 1.0][quality.min(2) as usize];
-    [(90000.0 * k) as u32, (110000.0 * k) as u32, (60000.0 * k) as u32, (25000.0 * k) as u32]
+    [
+        (90000.0 * k) as u32,
+        (110000.0 * k) as u32,
+        (60000.0 * k) as u32,
+        (25000.0 * k) as u32,
+    ]
 }
 
 /// Enhanced: the lamps' light in the fog over the drawn picture (`fog_lamps.wgsl`; not
 /// without storage buffers, where there are no lamps).
 pub(crate) fn fog_lamps_shader_source() -> String {
     [
-        include_str!("../fog_lamps.wgsl"),
-        include_str!("../enhanced_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../fog_lamps.wgsl"), "fog_lamps.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
         FOG_LAMP_LIGHTS,
-        if omsi_cfg::flags::OMSI_NO_BEAM_SHADOWS.is_set() { include_str!("../beam_shadow_none.wgsl") } else { include_str!("../beam_shadow.wgsl") },
-        include_str!("../lamp_air.wgsl"),
+        if omsi_cfg::flags::OMSI_NO_BEAM_SHADOWS.is_set() {
+            crate::shaders::hot_wgsl(
+                include_str!("../beam_shadow_none.wgsl"),
+                "beam_shadow_none.wgsl",
+            )
+        } else {
+            crate::shaders::hot_wgsl(include_str!("../beam_shadow.wgsl"), "beam_shadow.wgsl")
+        },
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
     ]
     .join("\n")
 }
@@ -320,17 +548,26 @@ const CELL_CAP: u32 = 32u;
 /// The light coronas (both paths).
 pub(crate) fn corona_shader_source() -> String {
     let src = [
-        include_str!("../corona.wgsl"),
-        include_str!("../enhanced_common.wgsl"),
+        crate::shaders::hot_wgsl(include_str!("../corona.wgsl"), "corona.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../enhanced_common.wgsl"),
+            "enhanced_common.wgsl",
+        ),
         FOG_LAMP_LIGHTS,
-        include_str!("../beam_shadow_none.wgsl"),
-        include_str!("../lamp_air.wgsl"),
+        crate::shaders::hot_wgsl(
+            include_str!("../beam_shadow_none.wgsl"),
+            "beam_shadow_none.wgsl",
+        ),
+        crate::shaders::hot_wgsl(include_str!("../lamp_air.wgsl"), "lamp_air.wgsl"),
     ]
     .join("\n");
     // (the basic set lights rain by the sky alone: the loop over the lamps is one more
     // thing a phone's compiler can fail on, see `lean_scene`)
     let src = if basic_pipelines() {
-        src.replace("let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);", "let l = sh_irradiance(vec3<f32>(0.0, 0.0, 1.0)) / PI;")
+        src.replace(
+            "let l = precip_light(in.wpos.xyz, to_eye, in.wpos.w > 1.5);",
+            "let l = sh_irradiance(vec3<f32>(0.0, 0.0, 1.0)) / PI;",
+        )
     } else {
         src
     };
@@ -339,7 +576,11 @@ pub(crate) fn corona_shader_source() -> String {
         let src = src
             .replace("@group(0) @binding(3) var<storage, read> lights: array<PointLight>;", "fn lights_at(i: u32) -> PointLight { return PointLight(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0)); }")
             .replace("@group(0) @binding(4) var<storage, read> grid: array<u32>;", "fn grid_at(i: u32) -> u32 { return 0xffffffffu; }");
-        return indexing_as_calls(&indexing_as_calls(&src, "lights", "lights_at"), "grid", "grid_at");
+        return indexing_as_calls(
+            &indexing_as_calls(&src, "lights", "lights_at"),
+            "grid",
+            "grid_at",
+        );
     }
     src
 }
@@ -348,10 +589,17 @@ pub(crate) fn corona_shader_source() -> String {
 mod tree_detail_tests {
     #[test]
     fn opengl_leaves_the_tree_detail_out_with_either_line_end() {
-        for src in [super::shaders::SCENE.to_string(), super::shaders::SCENE.replace('\n', "\r\n")] {
+        for src in [
+            super::shaders::SCENE.to_string(),
+            super::shaders::SCENE.replace('\n', "\r\n"),
+        ] {
             let out = super::without_tree_fade(&src);
-            assert!(!out.contains("cross(dpdx(world), dpdy(world))") && !out.contains("0.65 * crown"));
-            assert!(out.contains("fn tree_card_fade(world: vec3<f32>) -> f32 {\n    return 1.0;\n}"));
+            assert!(
+                !out.contains("cross(dpdx(world), dpdy(world))") && !out.contains("0.65 * crown")
+            );
+            assert!(
+                out.contains("fn tree_card_fade(world: vec3<f32>) -> f32 {\n    return 1.0;\n}")
+            );
             assert!(out.contains("-> vec3<f32> {\n    return up;\n}"));
             assert_eq!(out.matches("fn ").count(), src.matches("fn ").count());
         }

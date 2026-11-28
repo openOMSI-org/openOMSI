@@ -1,8 +1,8 @@
 mod common;
-use common::{dir, Game};
+use common::{Game, dir};
 use omsi_plugin::{
-    api::{json, Value},
     HostConfig, Plugins,
+    api::{Value, json},
 };
 use std::{
     path::{Path, PathBuf},
@@ -13,7 +13,11 @@ use std::{
 #[ignore = "subprocess helper, exercised by the process wait tests"]
 fn process_wait_child() {
     let gate = std::env::var_os("PLUGIN_WAIT_TEST_GATE").expect("helper gate");
-    std::fs::write(Path::new(&gate).with_extension("pid"), std::process::id().to_string()).unwrap();
+    std::fs::write(
+        Path::new(&gate).with_extension("pid"),
+        std::process::id().to_string(),
+    )
+    .unwrap();
     let deadline = Instant::now() + Duration::from_secs(30);
     while !Path::new(&gate).exists() {
         if Instant::now() > deadline {
@@ -43,7 +47,11 @@ fn child(gate: &Path) -> String {
     let quote = |s: &str| json::encode(&Value::Str(s.into()));
     format!(
         r#"assert(omsi.process.start({}, {{"--exact", "process_wait_child", "--ignored"}}, {{env = {{PLUGIN_WAIT_TEST_GATE = {}}}}}))"#,
-        quote(if cfg!(windows) { "helper.exe" } else { "helper" }),
+        quote(if cfg!(windows) {
+            "helper.exe"
+        } else {
+            "helper"
+        }),
         quote(gate.to_str().unwrap())
     )
 }
@@ -258,17 +266,22 @@ fn a_resumed_handler_can_wait_for_another_child() {
 
 fn load(dirs: &[PathBuf]) -> Plugins {
     use omsi_plugin::api::process::{ProcessGrant, ProcessGrants};
-    let helper = if cfg!(windows) { "helper.exe" } else { "helper" };
+    let helper = if cfg!(windows) {
+        "helper.exe"
+    } else {
+        "helper"
+    };
     for d in dirs {
         std::fs::copy(std::env::current_exe().unwrap(), d.join(helper)).unwrap();
     }
-    let grants = dirs.iter().flat_map(|d| omsi_plugin::lua::find_lua(d))
-        .map(|entry| ProcessGrant::capture(&entry, entry.parent().unwrap(), &[helper.into()]).unwrap()).collect();
-    Plugins::load_with_process_grants(
-        dirs,
-        &HostConfig::default(),
-        ProcessGrants { grants },
-    )
+    let grants = dirs
+        .iter()
+        .flat_map(|d| omsi_plugin::lua::find_lua(d))
+        .map(|entry| {
+            ProcessGrant::capture(&entry, entry.parent().unwrap(), &[helper.into()]).unwrap()
+        })
+        .collect();
+    Plugins::load_with_process_grants(dirs, &HostConfig::default(), ProcessGrants { grants })
 }
 
 #[test]
@@ -383,21 +396,40 @@ fn managed_callbacks_reuse_finished_threads_and_preserve_return_values() {
 fn callback_cost() {
     let d = dir("process-callback-cost");
     let entry = d.join("callbacks.lua");
-    std::fs::write(&entry, r#"
+    std::fs::write(
+        &entry,
+        r#"
         local n = 0
         function on_frame() n = n + 1 end
         omsi.every(0.001, function() n = n + 1 end)
         omsi.every(0.001, function() n = n + 1 end)
         omsi.every(0.001, function() n = n + 1 end)
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
     for consent in [false, true] {
-        let grants = omsi_plugin::api::process::ProcessGrants::from_paths(if consent { vec![entry.clone()] } else { vec![] });
-        let mut p = Plugins::load_with_process_grants(std::slice::from_ref(&d), &HostConfig::default(), grants);
+        let grants = omsi_plugin::api::process::ProcessGrants::from_paths(if consent {
+            vec![entry.clone()]
+        } else {
+            vec![]
+        });
+        let mut p = Plugins::load_with_process_grants(
+            std::slice::from_ref(&d),
+            &HostConfig::default(),
+            grants,
+        );
         let mut g = game();
-        for _ in 0..1000 { p.frame(&mut g); }
+        for _ in 0..1000 {
+            p.frame(&mut g);
+        }
         let start = Instant::now();
-        for _ in 0..100000 { p.frame(&mut g); }
-        println!("process_consent={consent}: {:.3} us/frame (on_frame + 3 timers)", start.elapsed().as_secs_f64() * 10.0);
+        for _ in 0..100000 {
+            p.frame(&mut g);
+        }
+        println!(
+            "process_consent={consent}: {:.3} us/frame (on_frame + 3 timers)",
+            start.elapsed().as_secs_f64() * 10.0
+        );
         assert!(!p.lua[0].disabled);
         p.finalize();
     }
@@ -419,13 +451,27 @@ fn reload_revokes_consent_after_entry_or_module_changes() {
         let module_path = d.join("module.lua");
         std::fs::write(&module_path, "return 1").unwrap();
         let grants = ProcessGrants::from_paths([entry.clone()]);
-        let mut p = Plugins::load_with_process_grants(std::slice::from_ref(&d), &HostConfig::default(), grants);
+        let mut p = Plugins::load_with_process_grants(
+            std::slice::from_ref(&d),
+            &HostConfig::default(),
+            grants,
+        );
         let mut g = game();
-        drive_until(&mut p, &mut g, |g| g.messages.iter().any(|s| s.contains("helper is not listed")));
-        if module { std::fs::write(module_path, "return 2").unwrap(); }
+        drive_until(&mut p, &mut g, |g| {
+            g.messages
+                .iter()
+                .any(|s| s.contains("helper is not listed"))
+        });
+        if module {
+            std::fs::write(module_path, "return 2").unwrap();
+        }
         std::thread::sleep(Duration::from_millis(1100));
         std::fs::write(&entry, format!("{source}\n-- reloaded")).unwrap();
-        drive_until(&mut p, &mut g, |g| g.messages.iter().any(|s| s.contains("plugin content changed")));
+        drive_until(&mut p, &mut g, |g| {
+            g.messages
+                .iter()
+                .any(|s| s.contains("plugin content changed"))
+        });
         p.finalize();
     }
 }

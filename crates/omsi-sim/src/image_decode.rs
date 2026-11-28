@@ -46,7 +46,12 @@ pub fn decode(path: &Path) -> Result<DecodedImage, String> {
         Some(d) => d(path),
         None => {
             static WARNED: std::sync::Once = std::sync::Once::new();
-            WARNED.call_once(|| log::warn!("no picture decoder registered: {} and every other picture stay empty", path.display()));
+            WARNED.call_once(|| {
+                log::warn!(
+                    "no picture decoder registered: {} and every other picture stay empty",
+                    path.display()
+                )
+            });
             Err("no picture decoder registered".to_string())
         }
     }
@@ -56,6 +61,11 @@ pub fn decode(path: &Path) -> Result<DecodedImage, String> {
 #[cfg(test)]
 fn texture_decoder(path: &Path) -> Result<DecodedImage, String> {
     omsi_texture::decode_file(path)
-        .map(|i| DecodedImage { width: i.width, height: i.height, rgba: i.rgba, has_alpha: i.has_alpha })
+        .map(|i| DecodedImage {
+            width: i.width,
+            height: i.height,
+            rgba: i.rgba,
+            has_alpha: i.has_alpha,
+        })
         .map_err(|e| e.to_string())
 }

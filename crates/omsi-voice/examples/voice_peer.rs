@@ -11,30 +11,57 @@
 //! Arguments: `host <port> <seconds> <talk> <x>` or `join <port> <seconds> <talk> <x>`, with
 //! `talk` one of `nearby`, `radio`, `listen`, and `x` the player's place (m) on the map.
 
-use omsi_net::{LanSession, Pose, WorldInfo, FLAG_VEHICLE};
+use omsi_net::{FLAG_VEHICLE, LanSession, Pose, WorldInfo};
 use omsi_voice::{Channel, Frame, Settings, Voice};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 fn main() {
-    let _ = env_logger::builder().filter_level(log::LevelFilter::Warn).try_init();
+    let _ = env_logger::builder()
+        .filter_level(log::LevelFilter::Warn)
+        .try_init();
     let a: Vec<String> = std::env::args().collect();
     let (role, port, secs, talk, x) = (
         a.get(1).map(String::as_str).unwrap_or("host"),
-        a.get(2).and_then(|v| v.parse::<u16>().ok()).unwrap_or(27500),
+        a.get(2)
+            .and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(27500),
         a.get(3).and_then(|v| v.parse::<u64>().ok()).unwrap_or(10),
         a.get(4).map(String::as_str).unwrap_or("listen"),
         a.get(5).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0),
     );
-    let world = WorldInfo { map: "m".into(), date: "1989-05-30".into(), time: 32400.0, weather: String::new(), season: String::new() };
+    let world = WorldInfo {
+        map: "m".into(),
+        date: "1989-05-30".into(),
+        time: 32400.0,
+        weather: String::new(),
+        season: String::new(),
+    };
     let mut lan = if role == "host" {
         LanSession::host(port, "host", world, false).expect("host")
     } else {
-        LanSession::join_addr(vec![SocketAddr::from(([127, 0, 0, 1], port))], None, "guest", world).expect("join")
+        LanSession::join_addr(
+            vec![SocketAddr::from(([127, 0, 0, 1], port))],
+            None,
+            "guest",
+            world,
+        )
+        .expect("join")
     };
-    let pose = Pose { name: role.into(), bus: "Vehicles/x.bus".into(), x, y: 0.0, z: 0.0, flags: FLAG_VEHICLE, ..Default::default() };
+    let pose = Pose {
+        name: role.into(),
+        bus: "Vehicles/x.bus".into(),
+        x,
+        y: 0.0,
+        z: 0.0,
+        flags: FLAG_VEHICLE,
+        ..Default::default()
+    };
     let voice = Voice::new();
-    voice.set_settings(&Settings { enabled: true, ..Default::default() });
+    voice.set_settings(&Settings {
+        enabled: true,
+        ..Default::default()
+    });
     let channel = match talk {
         "nearby" => Some(Channel::Nearby),
         "radio" => Some(Channel::Radio),
@@ -65,7 +92,13 @@ fn main() {
             got += 1;
             heard_from.insert((v.from, v.channel));
             if let Some(c) = Channel::from_id(v.channel) {
-                voice.feed(Frame { from: v.from, channel: c, seq: v.seq, end: v.end, payload: v.payload });
+                voice.feed(Frame {
+                    from: v.from,
+                    channel: c,
+                    seq: v.seq,
+                    end: v.end,
+                    payload: v.payload,
+                });
             }
         }
         let st = voice.status();

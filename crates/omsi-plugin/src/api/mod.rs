@@ -42,12 +42,20 @@ pub struct Param {
 
 /// A required parameter.
 pub const fn p(name: &'static str, ty: &'static str) -> Param {
-    Param { name, ty, optional: false }
+    Param {
+        name,
+        ty,
+        optional: false,
+    }
 }
 
 /// An optional parameter.
 pub const fn o(name: &'static str, ty: &'static str) -> Param {
-    Param { name, ty, optional: true }
+    Param {
+        name,
+        ty,
+        optional: true,
+    }
 }
 
 /// What a plugin must have declared to call a function (an `.oop`'s `permissions`; a plain
@@ -72,6 +80,8 @@ pub enum Perm {
     Audio,
     /// UDP to other programs on this computer.
     NetworkLocal,
+    /// Read-only WebSocket feeds from the hosts the player allowed (`omsi.ws`).
+    NetworkRemote,
     /// Messages to the other players of a LAN game.
     Lan,
     /// Launching native programs outside the plugin sandbox.
@@ -91,6 +101,7 @@ impl Perm {
             Perm::Camera => "camera",
             Perm::Audio => "audio",
             Perm::NetworkLocal => "network_local",
+            Perm::NetworkRemote => "network_remote",
             Perm::Lan => "lan",
             Perm::Process => "process",
         }
@@ -100,7 +111,19 @@ impl Perm {
         Self::ALL.into_iter().find(|p| p.as_str() == s)
     }
 
-    pub const ALL: [Perm; 10] = [Perm::Ui, Perm::Storage, Perm::VehicleWrite, Perm::TrafficWrite, Perm::WorldWrite, Perm::Camera, Perm::Audio, Perm::NetworkLocal, Perm::Lan, Perm::Process];
+    pub const ALL: [Perm; 11] = [
+        Perm::Ui,
+        Perm::Storage,
+        Perm::VehicleWrite,
+        Perm::TrafficWrite,
+        Perm::WorldWrite,
+        Perm::Camera,
+        Perm::Audio,
+        Perm::NetworkLocal,
+        Perm::NetworkRemote,
+        Perm::Lan,
+        Perm::Process,
+    ];
 }
 
 /// The handler of a function.
@@ -128,7 +151,10 @@ pub struct ApiFn {
 
 impl std::fmt::Debug for ApiFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ApiFn").field("name", &self.name).field("group", &self.group).finish()
+        f.debug_struct("ApiFn")
+            .field("name", &self.name)
+            .field("group", &self.group)
+            .finish()
     }
 }
 
@@ -186,7 +212,12 @@ impl Args {
 
     fn bad(&self, i: usize, want: &str) -> ApiError {
         let name = self.f.params.get(i).map_or("?", |p| p.name);
-        ApiError(format!("omsi.{}: argument {} ({name}) must be {want}, not {}", self.f.name, i + 1, self.get(i).kind()))
+        ApiError(format!(
+            "omsi.{}: argument {} ({name}) must be {want}, not {}",
+            self.f.name,
+            i + 1,
+            self.get(i).kind()
+        ))
     }
 
     pub fn num(&self, i: usize) -> Result<f64, ApiError> {
@@ -272,13 +303,31 @@ impl<'a> Ctx<'a> {
     /// The three must stay valid for `'a`, and nothing else may use them while a reference
     /// that this context handed out is alive (the bindings make one context per call into
     /// the API, from pointers set only for the length of the plugin's call).
-    pub unsafe fn from_raw(io: *mut (dyn PluginIo + 'a), state: *mut PluginState, binding: *const (dyn Binding + 'a)) -> Ctx<'a> {
-        Ctx { io, state, binding, _life: std::marker::PhantomData }
+    pub unsafe fn from_raw(
+        io: *mut (dyn PluginIo + 'a),
+        state: *mut PluginState,
+        binding: *const (dyn Binding + 'a),
+    ) -> Ctx<'a> {
+        Ctx {
+            io,
+            state,
+            binding,
+            _life: std::marker::PhantomData,
+        }
     }
 
     /// A context over borrowed parts (the runtime's own calls, the tests).
-    pub fn new(io: &'a mut dyn PluginIo, state: &'a mut PluginState, binding: &'a dyn Binding) -> Ctx<'a> {
-        Ctx { io, state, binding, _life: std::marker::PhantomData }
+    pub fn new(
+        io: &'a mut dyn PluginIo,
+        state: &'a mut PluginState,
+        binding: &'a dyn Binding,
+    ) -> Ctx<'a> {
+        Ctx {
+            io,
+            state,
+            binding,
+            _life: std::marker::PhantomData,
+        }
     }
 
     pub fn io(&mut self) -> &mut dyn PluginIo {
@@ -356,10 +405,17 @@ pub fn call(ctx: &mut Ctx<'_>, name: &str, args: Vec<Value>) -> Result<Value, Ap
 /// Call a function with the permission check.
 pub fn call_fn(ctx: &mut Ctx<'_>, f: &'static ApiFn, args: Vec<Value>) -> Result<Value, ApiError> {
     if f.perm == Perm::Process && !ctx.state().process_allowed {
-        return Err(ApiError(format!("omsi.{}: native process access is disabled; the player must opt in with OMSI_PLUGIN_PROCESS_ALLOW", f.name)));
+        return Err(ApiError(format!(
+            "omsi.{}: native process access is disabled; the player must opt in with OMSI_PLUGIN_PROCESS_ALLOW",
+            f.name
+        )));
     }
     if f.perm != Perm::None && !ctx.state().allows(f.perm) {
-        return Err(ApiError(format!("omsi.{}: the plugin has no \"{}\" permission", f.name, f.perm.as_str())));
+        return Err(ApiError(format!(
+            "omsi.{}: the plugin has no \"{}\" permission",
+            f.name,
+            f.perm.as_str()
+        )));
     }
     (f.call)(ctx, Args::new(f, args))
 }
@@ -369,7 +425,17 @@ pub fn manifest() -> Value {
     let functions = registry()
         .iter()
         .map(|f| {
-            let params = f.params.iter().map(|p| Value::map([("name", p.name.into()), ("type", p.ty.into()), ("optional", p.optional.into())])).collect::<Vec<_>>();
+            let params = f
+                .params
+                .iter()
+                .map(|p| {
+                    Value::map([
+                        ("name", p.name.into()),
+                        ("type", p.ty.into()),
+                        ("optional", p.optional.into()),
+                    ])
+                })
+                .collect::<Vec<_>>();
             Value::map([
                 ("name", f.name.into()),
                 ("group", f.group.into()),
@@ -378,13 +444,31 @@ pub fn manifest() -> Value {
                 ("params", Value::List(params)),
                 ("returns", f.returns.into()),
                 ("multi", f.multi.into()),
-                ("permission", Value::opt((f.perm != Perm::None).then(|| f.perm.as_str()))),
+                (
+                    "permission",
+                    Value::opt((f.perm != Perm::None).then(|| f.perm.as_str())),
+                ),
             ])
         })
         .collect::<Vec<_>>();
     let events = events::EVENTS
         .iter()
-        .map(|e| Value::map([("name", e.name.into()), ("args", Value::List(e.args.iter().map(|a| Value::from(*a)).collect())), ("doc", e.doc.into()), ("since", e.since.into())]))
+        .map(|e| {
+            Value::map([
+                ("name", e.name.into()),
+                (
+                    "args",
+                    Value::List(e.args.iter().map(|a| Value::from(*a)).collect()),
+                ),
+                ("doc", e.doc.into()),
+                ("since", e.since.into()),
+            ])
+        })
         .collect::<Vec<_>>();
-    Value::map([("abi", ABI.into()), ("version", VERSION.into()), ("functions", Value::List(functions)), ("events", Value::List(events))])
+    Value::map([
+        ("abi", ABI.into()),
+        ("version", VERSION.into()),
+        ("functions", Value::List(functions)),
+        ("events", Value::List(events)),
+    ])
 }

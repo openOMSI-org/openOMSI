@@ -9,14 +9,20 @@
 //! admin from afar, with the same checks of the role and of the player picked (number *and*
 //! connection) as every other way of administering.
 
-use crate::game_lists::ListKind;
 use crate::App;
+use crate::game_lists::ListKind;
 use omsi_admin::{BanView, Player, PlayerState, Role, Target};
 use omsi_multiplayer_ui::vehicle_name;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The reasons a player sent away or banned can be given (the first: none).
-const REASONS: [&str; 5] = ["", "Reckless driving or blocking others", "Insulting or spamming in the chat", "Cheating or exploiting the game", "Against the server's rules"];
+const REASONS: [&str; 5] = [
+    "",
+    "Reckless driving or blocking others",
+    "Insulting or spamming in the chat",
+    "Cheating or exploiting the game",
+    "Against the server's rules",
+];
 
 /// The reason picked on the open page.
 static REASON: AtomicUsize = AtomicUsize::new(0);
@@ -31,7 +37,9 @@ pub(crate) fn rights(app: &App) -> Option<Role> {
     let lan = app.net.lan.as_ref()?;
     match lan.role {
         omsi_net::Role::Host => Some(Role::Admin),
-        omsi_net::Role::Client if app.net.is_admin => Some(app.net.admin_panel.role.unwrap_or(Role::Admin)),
+        omsi_net::Role::Client if app.net.is_admin => {
+            Some(app.net.admin_panel.role.unwrap_or(Role::Admin))
+        }
         omsi_net::Role::Client => None,
     }
 }
@@ -39,14 +47,38 @@ pub(crate) fn rights(app: &App) -> Option<Role> {
 /// The players as this game knows them: a server's admin gets the server's own list, anybody
 /// else the session's.
 pub(crate) fn players(app: &App) -> Vec<Player> {
-    let Some(lan) = app.net.lan.as_ref() else { return Vec::new() };
+    let Some(lan) = app.net.lan.as_ref() else {
+        return Vec::new();
+    };
     if crate::admin_panel::remote(app) && !app.net.admin_panel.players.is_empty() {
         return app.net.admin_panel.players.clone();
     }
     let mut v = omsi_lan::admin::players(lan, &omsi_lan::admin::ServerAdmin::default());
     if !v.iter().any(|p| p.id == lan.my_id) {
-        let state = if app.session.on_foot.is_some() { PlayerState::OnFoot } else if app.player.is_some() { PlayerState::Driving } else { PlayerState::Joining };
-        v.push(Player { id: lan.my_id, conn: 0, name: lan.my_name.clone(), state, vehicle: app.args.bus.clone().filter(|_| app.player.is_some()).unwrap_or_default(), line: String::new(), tour: String::new(), aboard: None, online_secs: 0, admin: (lan.role == omsi_net::Role::Host).then_some(Role::Admin) });
+        let state = if app.session.on_foot.is_some() {
+            PlayerState::OnFoot
+        } else if app.player.is_some() {
+            PlayerState::Driving
+        } else {
+            PlayerState::Joining
+        };
+        v.push(Player {
+            id: lan.my_id,
+            conn: 0,
+            name: lan.my_name.clone(),
+            state,
+            vehicle: app
+                .args
+                .bus
+                .clone()
+                .filter(|_| app.player.is_some())
+                .unwrap_or_default(),
+            line: String::new(),
+            tour: String::new(),
+            aboard: None,
+            online_secs: 0,
+            admin: (lan.role == omsi_net::Role::Host).then_some(Role::Admin),
+        });
     }
     v.sort_by_key(|p| p.id);
     v
@@ -56,15 +88,35 @@ pub(crate) fn count(app: &App) -> usize {
     players(app).len()
 }
 
-fn describe(p: &Player, tr: &dyn Fn(&str) -> String) -> String {
+fn describe(app: &App, p: &Player, tr: &dyn Fn(&str) -> String) -> String {
     let what = match p.state {
         PlayerState::Driving => tr("driving"),
         PlayerState::OnFoot => tr("on foot"),
         PlayerState::Aboard => tr("aboard a bus"),
         PlayerState::Joining => tr("joining"),
     };
-    let bus = Some(vehicle_name(&p.vehicle)).filter(|b| !b.is_empty()).map(|b| format!(", {b}")).unwrap_or_default();
-    format!("{what}{bus}")
+    let bus = Some(vehicle_name(&p.vehicle))
+        .filter(|b| !b.is_empty())
+        .map(|b| format!(", {b}"))
+        .unwrap_or_default();
+    // (#2859) the conductor of a bus: ours, or another player's that told the session
+    let crew = if app.net.crew.is_conductor(p.id) {
+        format!(", {}", tr("the conductor of my bus"))
+    } else if let Some(owner) = app
+        .net
+        .conductors
+        .iter()
+        .find(|(_, c)| **c == p.id)
+        .map(|(o, _)| *o)
+    {
+        format!(
+            ", {}",
+            tr("the conductor of #{owner}'s bus").replace("{owner}", &owner.to_string())
+        )
+    } else {
+        String::new()
+    };
+    format!("{what}{bus}{crew}")
 }
 
 /// The role a player is shown with: the host of a session, an admin or a moderator.
@@ -93,11 +145,36 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
     let my_id = app.net.lan.as_ref().map(|l| l.my_id).unwrap_or(0);
     match kind {
         ListKind::PlayerList => {
-            let mut out = vec![(format!("{}: {}", tr("Voice chat of everybody else"), if app.settings.voice_all_off { tr("off") } else { tr("on") }), "vall".into())];
+            let mut out = vec![(
+                format!(
+                    "{}: {}",
+                    tr("Voice chat of everybody else"),
+                    if app.settings.voice_all_off {
+                        tr("off")
+                    } else {
+                        tr("on")
+                    }
+                ),
+                "vall".into(),
+            )];
             for p in &list {
-                let you = if p.id == my_id { format!(" ({})", tr("you")) } else { String::new() };
-                let silenced = if p.id != my_id && app.sound.voice_mutes.is_muted(&p.name) { format!(" [{}]", tr("muted")) } else { String::new() };
-                let label = format!("{} (#{}){you} - {}{}{silenced}", p.name, p.id, describe(p, &tr), role_word(p, &tr));
+                let you = if p.id == my_id {
+                    format!(" ({})", tr("you"))
+                } else {
+                    String::new()
+                };
+                let silenced = if p.id != my_id && app.sound.voice_mutes.is_muted(&p.name) {
+                    format!(" [{}]", tr("muted"))
+                } else {
+                    String::new()
+                };
+                let label = format!(
+                    "{} (#{}){you} - {}{}{silenced}",
+                    p.name,
+                    p.id,
+                    describe(app, p, &tr),
+                    role_word(p, &tr)
+                );
                 // (a page of their own for every other player: their voice is muted there, and
                 // for whoever may act on them they are sent away; nobody acts on themselves)
                 if p.id != my_id {
@@ -110,33 +187,82 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
                 let n = bans(app).len();
                 out.push((format!("{} ({n})...", tr("Banned machines")), "bans".into()));
             } else {
-                out.push(noop(tr("Only the host and the server's admins can send players away")));
+                out.push(noop(tr(
+                    "Only the host and the server's admins can send players away",
+                )));
             }
             out.push((tr("Back"), "back".into()));
             out
         }
         ListKind::PlayerPage(t) => {
             let Some(p) = list.iter().find(|p| p.id == t.id && p.conn == t.conn) else {
-                return vec![(tr("That player is no longer here: pick them again"), "list".into())];
+                return vec![(
+                    tr("That player is no longer here: pick them again"),
+                    "list".into(),
+                )];
             };
             let muted = app.sound.voice_mutes.is_muted(&p.name);
             let mut out = vec![
-                noop(format!("{} (#{}) - {}{}", p.name, p.id, describe(p, &tr), role_word(p, &tr))),
+                noop(format!(
+                    "{} (#{}) - {}{}",
+                    p.name,
+                    p.id,
+                    describe(app, p, &tr),
+                    role_word(p, &tr)
+                )),
                 // (a mute is this player's own: by name, kept between sessions)
                 if muted {
-                    (tr("Voice chat: muted. Hear them again"), format!("vunmute {}", t.tag()))
+                    (
+                        tr("Voice chat: muted. Hear them again"),
+                        format!("vunmute {}", t.tag()),
+                    )
                 } else {
-                    (tr("Voice chat: audible. Mute them"), format!("vmute {}", t.tag()))
+                    (
+                        tr("Voice chat: audible. Mute them"),
+                        format!("vmute {}", t.tag()),
+                    )
                 },
             ];
+            // (#2859) the conductor of our bus: the player who sells the tickets and gives the
+            // change at our cash desk while we drive (only somebody riding in the bus)
+            if let Some(lan) = app.net.lan.as_ref() {
+                let bus = app.player.as_ref().map(|p| &p.vehicle);
+                // (#2859) the two crew labels are player-facing: every language in app.yml
+                // needs them, or a translated player sees the English key instead.
+                if omsi_lan::passenger::aboard_inside(lan, p.id, bus) {
+                    out.push(if app.net.crew.is_conductor(p.id) {
+                        (
+                            tr("No longer the conductor of my bus"),
+                            format!("crew none {}", t.tag()),
+                        )
+                    } else {
+                        (
+                            tr("Make them the conductor of my bus"),
+                            format!("crew take {}", t.tag()),
+                        )
+                    });
+                }
+            }
             // (an admin's: silencing a player's voice for the whole session, or taking them away)
-            let acts = rights.is_some() && !(rights == Some(Role::Moderator) && p.admin == Some(Role::Admin));
+            let acts = rights.is_some()
+                && !(rights == Some(Role::Moderator) && p.admin == Some(Role::Admin));
             if acts {
-                for (label, command) in [("go to", "goto"), ("bring here", "bring"), ("repair and refuel their bus", "service repair"), ("put their bus back on its wheels", "unstick")] {
+                for (label, command) in [
+                    ("go to", "goto"),
+                    ("bring here", "bring"),
+                    ("repair and refuel their bus", "service repair"),
+                    ("put their bus back on its wheels", "unstick"),
+                ] {
                     out.push((tr(label), format!("run {command} {}", tag(app, *t))));
                 }
-                out.push((tr("Silence their voice chat for everybody"), format!("run vmute {}", tag(app, *t))));
-                out.push((tr("Allow their voice chat again"), format!("run vunmute {}", tag(app, *t))));
+                out.push((
+                    tr("Silence their voice chat for everybody"),
+                    format!("run vmute {}", tag(app, *t)),
+                ));
+                out.push((
+                    tr("Allow their voice chat again"),
+                    format!("run vunmute {}", tag(app, *t)),
+                ));
                 out.push((tr("Send away..."), format!("do kick {}", t.tag())));
                 out.push((tr("Ban this machine..."), format!("do ban {}", t.tag())));
             }
@@ -144,25 +270,65 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             out
         }
         ListKind::PlayerDo(verb, t) => {
-            let Some(p) = list.iter().find(|p| p.id == t.id && p.conn == t.conn) else { return vec![(tr("That player is no longer here: pick them again"), "list".into())] };
+            let Some(p) = list.iter().find(|p| p.id == t.id && p.conn == t.conn) else {
+                return vec![(
+                    tr("That player is no longer here: pick them again"),
+                    "list".into(),
+                )];
+            };
             let who = format!("{} (#{})", p.name, p.id);
             let why = reason();
-            let mut out = vec![noop(tr(if verb == "ban" { "Ban the machine of {who}" } else { "Send away {who}" }).replace("{who}", &who))];
-            out.push((format!("{}: {}", tr("Reason"), if why.is_empty() { tr("none") } else { tr(why) }), "reason".into()));
+            let mut out = vec![noop(
+                tr(if verb == "ban" {
+                    "Ban the machine of {who}"
+                } else {
+                    "Send away {who}"
+                })
+                .replace("{who}", &who),
+            )];
+            out.push((
+                format!(
+                    "{}: {}",
+                    tr("Reason"),
+                    if why.is_empty() { tr("none") } else { tr(why) }
+                ),
+                "reason".into(),
+            ));
             let tg = tag(app, *t);
-            let r = if why.is_empty() { String::new() } else { format!(" {why}") };
+            let r = if why.is_empty() {
+                String::new()
+            } else {
+                format!(" {why}")
+            };
             if verb == "ban" {
                 // the session's own list, or (the admin's) all the owner's sessions - for a day, a week, or for good
-                for (scope_label, scope, owner) in [(tr("This session"), "session", false), (tr("All my sessions"), "all", true)] {
+                for (scope_label, scope, owner) in [
+                    (tr("This session"), "session", false),
+                    (tr("All my sessions"), "all", true),
+                ] {
                     if owner && rights != Some(Role::Admin) {
                         continue;
                     }
-                    for (span, h) in [(tr("for a day"), "24h"), (tr("for a week"), "7d"), (tr("for good"), "")] {
-                        let hours = if h.is_empty() { String::new() } else { format!(" {h}") };
-                        out.push((format!("{scope_label} - {span}"), format!("run hwban {tg} {scope}{hours}{r}")));
+                    for (span, h) in [
+                        (tr("for a day"), "24h"),
+                        (tr("for a week"), "7d"),
+                        (tr("for good"), ""),
+                    ] {
+                        let hours = if h.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" {h}")
+                        };
+                        out.push((
+                            format!("{scope_label} - {span}"),
+                            format!("run hwban {tg} {scope}{hours}{r}"),
+                        ));
                     }
                 }
-                out.push((tr("Only for this run (by name and address, not the machine)"), format!("run ban {tg}{r}")));
+                out.push((
+                    tr("Only for this run (by name and address, not the machine)"),
+                    format!("run ban {tg}{r}"),
+                ));
             } else {
                 out.push((tr("Send away now"), format!("run kick {tg}{r}")));
             }
@@ -170,20 +336,51 @@ pub(crate) fn items(app: &App, kind: &ListKind) -> Vec<(String, String)> {
             out
         }
         ListKind::BanList => {
-            let mut out = vec![noop(tr("Banned machines (a ban holds the machine, not the name)"))];
+            let mut out = vec![noop(tr(
+                "Banned machines (a ban holds the machine, not the name)",
+            ))];
             let now = omsi_admin::unix_now();
             let bans = bans(app);
             if bans.is_empty() {
                 out.push(noop(tr("Nobody is banned")));
             }
             for b in &bans {
-                let until = b.until.map(|u| format!(", {}", tr(&format!("ends in {}", omsi_lan::admin::ban::span(u.saturating_sub(now)))))).unwrap_or_else(|| format!(", {}", tr("for good")));
-                let name = if b.name.is_empty() { tr("unknown name") } else { b.name.clone() };
-                let reason = if b.reason.is_empty() { String::new() } else { format!(" - {}", b.reason) };
-                let label = format!("{name} [{}{until}]{reason}", if b.scope == "all" { tr("all sessions") } else { tr("this session") });
+                let until = b
+                    .until
+                    .map(|u| {
+                        format!(
+                            ", {}",
+                            tr(&format!(
+                                "ends in {}",
+                                omsi_lan::admin::ban::span(u.saturating_sub(now))
+                            ))
+                        )
+                    })
+                    .unwrap_or_else(|| format!(", {}", tr("for good")));
+                let name = if b.name.is_empty() {
+                    tr("unknown name")
+                } else {
+                    b.name.clone()
+                };
+                let reason = if b.reason.is_empty() {
+                    String::new()
+                } else {
+                    format!(" - {}", b.reason)
+                };
+                let label = format!(
+                    "{name} [{}{until}]{reason}",
+                    if b.scope == "all" {
+                        tr("all sessions")
+                    } else {
+                        tr("this session")
+                    }
+                );
                 // (the owner's list is the admin's: a moderator only sees it)
                 if rights == Some(Role::Admin) {
-                    out.push((format!("{} {label}", tr("Lift:")), format!("unban {}", b.id)));
+                    out.push((
+                        format!("{} {label}", tr("Lift:")),
+                        format!("unban {}", b.id),
+                    ));
                 } else {
                     out.push(noop(label));
                 }
@@ -211,15 +408,52 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
     match verb {
         "pick" => {
             REASON.store(0, Ordering::Relaxed);
-            target().map(ListKind::PlayerPage).or(Some(ListKind::PlayerList))
+            target()
+                .map(ListKind::PlayerPage)
+                .or(Some(ListKind::PlayerList))
         }
         "do" => {
             let (what, tg) = arg.split_once(' ')?;
             Some(ListKind::PlayerDo(what.to_string(), Target::parse_tag(tg)?))
         }
         "reason" => {
-            REASON.store((REASON.load(Ordering::Relaxed) + 1) % REASONS.len(), Ordering::Relaxed);
+            REASON.store(
+                (REASON.load(Ordering::Relaxed) + 1) % REASONS.len(),
+                Ordering::Relaxed,
+            );
             Some(kind.clone())
+        }
+        // (#2859) our bus's conductor: named by us alone, and told to the session
+        "crew" => {
+            let t = target()?;
+            let (what, tg) = arg.split_once(' ')?;
+            let peer = Target::parse_tag(tg)?.id;
+            let driver = app.net.lan.as_ref().map_or(0, |l| l.my_id);
+            if !app
+                .net
+                .crew
+                .assign(driver, (what == "take").then_some(peer))
+            {
+                log::warn!("LAN: player {peer} cannot be the conductor of our own bus");
+                return Some(ListKind::PlayerPage(t));
+            }
+            let line = omsi_lan::crew::announce(app.net.crew.conductor());
+            log::info!("LAN: our bus's crew: {line}");
+            if let Some(l) = app.net.lan.as_mut() {
+                let ids: Vec<u32> = l.peers().map(|p| p.pose.id).collect();
+                for id in ids {
+                    l.command(id, &line);
+                }
+            }
+            app.service_msg = Some((
+                match app.net.crew.conductor() {
+                    Some(_) => "They serve your bus's cash desk now",
+                    None => "Nobody serves your bus's cash desk now",
+                }
+                .to_string(),
+                3.0,
+            ));
+            Some(ListKind::PlayerPage(t))
         }
         // (the administration's own line, checked once more where it is done)
         "run" if rights(app).is_some() => {
@@ -239,7 +473,10 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
         // the player's own voice mute (by name, kept), and every other voice off
         "vmute" | "vunmute" => {
             let t = target()?;
-            if let Some(p) = players(app).into_iter().find(|p| p.id == t.id && p.conn == t.conn) {
+            if let Some(p) = players(app)
+                .into_iter()
+                .find(|p| p.id == t.id && p.conn == t.conn)
+            {
                 if !app.sound.voice_mutes.set(&p.name, verb == "vmute") {
                     app.service_msg = Some(("The mute list is full".into(), 3.0));
                 }
@@ -248,7 +485,10 @@ pub(crate) fn run(app: &mut App, kind: &ListKind, action: &str) -> Option<ListKi
         }
         "vall" => {
             app.settings.voice_all_off = !app.settings.voice_all_off;
-            crate::game_lists::remember_setting("voice_all_off", &(app.settings.voice_all_off as u8).to_string());
+            crate::game_lists::remember_setting(
+                "voice_all_off",
+                &(app.settings.voice_all_off as u8).to_string(),
+            );
             Some(ListKind::PlayerList)
         }
         "bans" => Some(ListKind::BanList),
@@ -269,7 +509,15 @@ pub(crate) fn back(kind: &ListKind) -> Option<ListKind> {
 }
 
 pub(crate) fn is_page(k: Option<&ListKind>) -> bool {
-    matches!(k, Some(ListKind::PlayerList | ListKind::PlayerPage(_) | ListKind::PlayerDo(..) | ListKind::BanList))
+    matches!(
+        k,
+        Some(
+            ListKind::PlayerList
+                | ListKind::PlayerPage(_)
+                | ListKind::PlayerDo(..)
+                | ListKind::BanList
+        )
+    )
 }
 
 /// Each frame: while a page is open, show the players as they are now (somebody joined or
@@ -279,7 +527,10 @@ pub(crate) fn tick(app: &mut App) {
     if !is_page(app.menus.list_kind.as_ref()) {
         return;
     }
-    let sig: Vec<(u32, u64, PlayerState)> = players(app).iter().map(|p| (p.id, p.conn, p.state)).collect();
+    let sig: Vec<(u32, u64, PlayerState)> = players(app)
+        .iter()
+        .map(|p| (p.id, p.conn, p.state))
+        .collect();
     let bans = bans(app).len();
     let key = (sig, bans);
     thread_local! {
@@ -317,7 +568,10 @@ mod tests {
         let t = Target { id: 3, conn: 9 };
         assert_eq!(back(&ListKind::PlayerList), None);
         assert_eq!(back(&ListKind::PlayerPage(t)), Some(ListKind::PlayerList));
-        assert_eq!(back(&ListKind::PlayerDo("ban".into(), t)), Some(ListKind::PlayerPage(t)));
+        assert_eq!(
+            back(&ListKind::PlayerDo("ban".into(), t)),
+            Some(ListKind::PlayerPage(t))
+        );
         assert_eq!(back(&ListKind::BanList), Some(ListKind::PlayerList));
     }
 }

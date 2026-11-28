@@ -20,7 +20,13 @@ pub struct Link {
 
 impl Link {
     pub fn new(loss: f64, latency: f64, jitter: f64, seed: u64) -> Link {
-        Link { loss, latency, jitter, rng: seed | 1, queue: Vec::new() }
+        Link {
+            loss,
+            latency,
+            jitter,
+            rng: seed | 1,
+            queue: Vec::new(),
+        }
     }
 
     fn next(&mut self) -> f64 {
@@ -41,7 +47,9 @@ impl Link {
 
     /// The datagrams that arrive by `now`, in the order they arrive.
     pub fn deliver(&mut self, now: f64) -> Vec<Vec<u8>> {
-        let (mut due, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.queue).into_iter().partition(|(t, _)| *t <= now);
+        let (mut due, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.queue)
+            .into_iter()
+            .partition(|(t, _)| *t <= now);
         self.queue = rest;
         due.sort_by(|a, b| a.0.total_cmp(&b.0));
         due.into_iter().map(|(_, d)| d).collect()
@@ -62,7 +70,15 @@ pub struct Loopback {
 
 impl Loopback {
     pub fn new(down: Link, up: Link) -> Loopback {
-        Loopback { sync: ClientSync::new(1), client: ClientTable::default(), down, up, now: 0.0, bytes_down: 0, bytes_up: 0 }
+        Loopback {
+            sync: ClientSync::new(1),
+            client: ClientTable::default(),
+            down,
+            up,
+            now: 0.0,
+            bytes_down: 0,
+            bytes_up: 0,
+        }
     }
 
     /// A perfect network.
@@ -74,7 +90,10 @@ impl Loopback {
     /// arrives is taken in, the answers go back.
     pub fn step(&mut self, table: &TrafficTable, viewer: [f64; 3], dt: f32) {
         self.now += dt as f64;
-        for d in self.sync.publish(table, viewer, dt, (self.now * 1000.0) as u32, self.now) {
+        for d in self
+            .sync
+            .publish(table, viewer, dt, (self.now * 1000.0) as u32, self.now)
+        {
             self.bytes_down += d.len() as u64;
             self.down.send(self.now, d);
         }

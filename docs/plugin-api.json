@@ -175,6 +175,16 @@
       "permission": null
     },
     {
+      "name": "bus.cruise",
+      "group": "vehicle",
+      "since": "0.3.55",
+      "doc": "The speed the cruise control holds, km/h (`nil` while it is off). The player switches it with Num0.",
+      "params": [],
+      "returns": "number or nil",
+      "multi": false,
+      "permission": null
+    },
+    {
       "name": "bus.damage",
       "group": "vehicle",
       "since": "0.2.22",
@@ -519,6 +529,22 @@
       "permission": null
     },
     {
+      "name": "bus.set_cruise",
+      "group": "vehicle",
+      "since": "0.3.55",
+      "doc": "Switches the cruise control on to hold `kmh` (5 km/h or more), or off (`nil`). Like Num0, it is refused (false) while the bus goes slower than 5 km/h. It works the throttle and the brake the bus's scripts read, which a plugin's `set_var(\"Throttle\")` cannot: the player's pedals are written over it every step. The brake switches it off; the throttle pressed further wins while held.",
+      "params": [
+        {
+          "name": "kmh",
+          "type": "number",
+          "optional": true
+        }
+      ],
+      "returns": "boolean",
+      "multi": false,
+      "permission": "vehicle_write"
+    },
+    {
       "name": "bus.set_destination",
       "group": "vehicle",
       "since": "0.2.22",
@@ -725,6 +751,16 @@
       "returns": "boolean",
       "multi": false,
       "permission": "vehicle_write"
+    },
+    {
+      "name": "bus.track",
+      "group": "vehicle",
+      "since": "0.3.55",
+      "doc": "Where the player's rail vehicle (tram, metro, train) is on its track, as distances along it rather than x and y: `{lane, s, lane_length, forward, travelled}` - the track (an index into the map's lanes), the metres from its start and its length, whether the vehicle faces the track's direction, and the net metres it has moved along the tracks since it was put on them (they go down, below zero too, while it backs up). `nil` for a road vehicle. A plugin can work out block sections, distances to a signal or a stop, or a train protection system from it.",
+      "params": [],
+      "returns": "table or nil",
+      "multi": false,
+      "permission": null
     },
     {
       "name": "bus.trailers",
@@ -4865,6 +4901,70 @@
       "returns": "number or nil",
       "multi": false,
       "permission": null
+    },
+    {
+      "name": "ws.close",
+      "group": "network",
+      "since": "0.2.22",
+      "doc": "Closes the feed of `slot` and frees it for another one.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "integer",
+          "optional": false
+        }
+      ],
+      "returns": "true",
+      "multi": false,
+      "permission": "network_remote"
+    },
+    {
+      "name": "ws.open",
+      "group": "network",
+      "since": "0.2.22",
+      "doc": "Opens a read-only WebSocket feed to `url` in the first free slot. Only `wss://` addresses are opened, with no port of its own, no user name or password and no literal IP address, and only to a host the player allowed in `websocket-hosts.txt` in the plugins folder; the plugin never sends anything, it only drains what the server pushes. A plugin holds 3 feeds at the same time.",
+      "params": [
+        {
+          "name": "url",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "returns": "the feed's slot (0-2), or an error",
+      "multi": false,
+      "permission": "network_remote"
+    },
+    {
+      "name": "ws.poll",
+      "group": "network",
+      "since": "0.2.22",
+      "doc": "Takes what arrived in the feed of `slot` since the last call (oldest first, at most a few dozen are kept: a slow plugin loses the oldest). Each message is the text of one WebSocket message, at most 64 KB.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "integer",
+          "optional": false
+        }
+      ],
+      "returns": "a list of the text messages that arrived",
+      "multi": false,
+      "permission": "network_remote"
+    },
+    {
+      "name": "ws.state",
+      "group": "network",
+      "since": "0.2.22",
+      "doc": "What the feed of `slot` is doing: it connects on its own thread, so the game never waits, and a connection that breaks is opened again after 5 seconds.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "integer",
+          "optional": false
+        }
+      ],
+      "returns": "`connecting`, `open`, `reconnecting`, `failed` or `closed`",
+      "multi": false,
+      "permission": "network_remote"
     }
   ],
   "events": [
@@ -4900,9 +5000,10 @@
       "name": "key",
       "args": [
         "key",
-        "down"
+        "down",
+        "combo"
       ],
-      "doc": "A key went down (`true`) or came up: winit's name of it (`\"KeyH\"`, `\"F5\"`, `\"Numpad8\"`).",
+      "doc": "A key went down (`true`) or came up: winit's name of it (`\"KeyH\"`, `\"F5\"`, `\"Numpad8\"`), and the combination it made with the modifiers held, spelled as `input.hotkey` takes them (`\"Ctrl+KeyH\"`, `\"F5\"`).",
       "since": "0.1.10"
     },
     {
@@ -5394,6 +5495,14 @@
         "text"
       ],
       "doc": "A line was said in the LAN session's chat (by another player or this one).",
+      "since": "0.2.22"
+    },
+    {
+      "name": "chat_command",
+      "args": [
+        "text"
+      ],
+      "doc": "The player typed a `/`-line into the chat (`\"/login name pass\"`): while a plugin hears this, such a line is not said to the session at all (a password never reaches the other players). Say something back with `lan.chat`.",
       "since": "0.2.22"
     },
     {

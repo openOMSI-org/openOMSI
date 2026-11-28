@@ -2,7 +2,7 @@
 //! (negative indices, `v/vt/vn`, `v//vn`, polygons of any size), groups ignored, materials
 //! by `usemtl` with their `Kd`, `d`/`Tr` and `map_Kd`.
 
-use crate::import::{texture_name, Builder};
+use crate::import::{Builder, texture_name};
 use crate::{Material, Mesh, O3dError};
 use glam::{Vec2, Vec3};
 use std::collections::HashMap;
@@ -20,7 +20,8 @@ fn floats<'a>(it: impl Iterator<Item = &'a str>) -> Vec<f32> {
 pub fn parse_obj(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
     let text = String::from_utf8_lossy(bytes);
     let dir = path.parent().unwrap_or(Path::new(""));
-    let (mut pos, mut nor, mut uvs): (Vec<Vec3>, Vec<Vec3>, Vec<Vec2>) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut pos, mut nor, mut uvs): (Vec<Vec3>, Vec<Vec3>, Vec<Vec2>) =
+        (Vec::new(), Vec::new(), Vec::new());
     let mut b = Builder::default();
     let mut library: HashMap<String, Material> = HashMap::new();
     let mut slots: HashMap<String, u16> = HashMap::new();
@@ -55,7 +56,10 @@ pub fn parse_obj(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
             Some("vt") => {
                 let f = floats(it);
                 // (OBJ's v runs up the picture, Direct3D's down)
-                uvs.push(Vec2::new(f.first().copied().unwrap_or(0.0), 1.0 - f.get(1).copied().unwrap_or(0.0)));
+                uvs.push(Vec2::new(
+                    f.first().copied().unwrap_or(0.0),
+                    1.0 - f.get(1).copied().unwrap_or(0.0),
+                ));
             }
             Some("mtllib") => {
                 let file = line["mtllib".len()..].trim();
@@ -63,14 +67,20 @@ pub fn parse_obj(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
                 if let Ok(t) = omsi_cfg::vfs::read(&p) {
                     read_mtl(&String::from_utf8_lossy(&t), &p, &mut library);
                 } else {
-                    log::warn!("{}: material library {} not found", path.display(), p.display());
+                    log::warn!(
+                        "{}: material library {} not found",
+                        path.display(),
+                        p.display()
+                    );
                 }
             }
             Some("usemtl") => {
                 let name = line["usemtl".len()..].trim().to_string();
                 let next = b.mesh.materials.len() as u16;
                 let slot = *slots.entry(name.clone()).or_insert_with(|| {
-                    b.mesh.materials.push(library.get(&name).cloned().unwrap_or_default());
+                    b.mesh
+                        .materials
+                        .push(library.get(&name).cloned().unwrap_or_default());
                     next
                 });
                 current = Some(slot);
@@ -89,14 +99,22 @@ pub fn parse_obj(bytes: &[u8], path: &Path) -> Result<Mesh, O3dError> {
                         let i = if v < 0 { len as i64 + v } else { v - 1 };
                         (i >= 0 && (i as usize) < len).then_some(i as usize)
                     };
-                    let Some(pi) = index(parts.next(), pos.len()) else { return Err(err(format!("a face names a vertex the file does not have: {c}"))) };
+                    let Some(pi) = index(parts.next(), pos.len()) else {
+                        return Err(err(format!(
+                            "a face names a vertex the file does not have: {c}"
+                        )));
+                    };
                     let ti = index(parts.next(), uvs.len());
                     let ni = index(parts.next(), nor.len());
                     let key = (pi, ti.unwrap_or(usize::MAX), ni.unwrap_or(usize::MAX));
                     let v = match corner_vertex.get(&key) {
                         Some(v) => *v,
                         None => {
-                            let v = b.vertex(pos[pi], ni.map(|i| nor[i]).unwrap_or(Vec3::Y), ti.map(|i| uvs[i]).unwrap_or(Vec2::ZERO));
+                            let v = b.vertex(
+                                pos[pi],
+                                ni.map(|i| nor[i]).unwrap_or(Vec3::Y),
+                                ti.map(|i| uvs[i]).unwrap_or(Vec2::ZERO),
+                            );
                             missing.push(ni.is_none());
                             corner_vertex.insert(key, v);
                             v
@@ -131,7 +149,9 @@ fn read_mtl(text: &str, mtl: &Path, out: &mut HashMap<String, Material>) {
             name = Some(n);
             continue;
         }
-        let Some(m) = name.as_ref().and_then(|n| out.get_mut(n)) else { continue };
+        let Some(m) = name.as_ref().and_then(|n| out.get_mut(n)) else {
+            continue;
+        };
         match key {
             "Kd" => {
                 let f = floats(it);
@@ -178,7 +198,11 @@ mod tests {
     fn a_quad_with_a_material_and_negative_indices() {
         let dir = std::env::temp_dir().join(format!("omsi-o3d-obj-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("m.mtl"), "newmtl red\nKd 1 0 0\nnewmtl tex\nKd 0.5 0.5 0.5\nmap_Kd -s 1 1 1 wall.png\n").unwrap();
+        std::fs::write(
+            dir.join("m.mtl"),
+            "newmtl red\nKd 1 0 0\nnewmtl tex\nKd 0.5 0.5 0.5\nmap_Kd -s 1 1 1 wall.png\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("wall.png"), b"\x89PNG").unwrap();
         let obj = "mtllib m.mtl\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nusemtl tex\nf -4/1 -3/2 -2/3 -1/4\nusemtl red\nf 1 2 3\n";
         let p = dir.join("q.obj");
@@ -187,11 +211,18 @@ mod tests {
         assert_eq!(m.triangles.len(), 3);
         assert_eq!(m.materials.len(), 2);
         assert_eq!(m.materials[0].texture, "wall.png");
-        assert_eq!(omsi_cfg::model_texture("WALL.PNG"), Some(dir.join("wall.png")));
+        assert_eq!(
+            omsi_cfg::model_texture("WALL.PNG"),
+            Some(dir.join("wall.png"))
+        );
         assert_eq!(m.materials[1].diffuse, [1.0, 0.0, 0.0, 1.0]);
         // v runs down; the normals were made (facing the file's +z, Direct3D's -z)
         assert_eq!(m.vertices[2].uv, Vec2::new(1.0, 0.0));
-        assert!((m.vertices[0].normal - Vec3::new(0.0, 0.0, -1.0)).length() < 1e-5, "{:?}", m.vertices[0].normal);
+        assert!(
+            (m.vertices[0].normal - Vec3::new(0.0, 0.0, -1.0)).length() < 1e-5,
+            "{:?}",
+            m.vertices[0].normal
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

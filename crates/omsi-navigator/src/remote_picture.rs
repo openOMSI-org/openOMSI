@@ -1,8 +1,8 @@
 use super::panel::PanelLook;
 use super::*;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 const EVERY: f32 = 0.1;
 const MAX_SIDE: u32 = 1280;
@@ -45,8 +45,14 @@ pub struct RemoteFrame {
 
 pub(crate) fn fit(w: u32, h: u32) -> (u32, u32) {
     let (w, h) = (w.max(1) as f64, h.max(1) as f64);
-    let k = (MAX_SIDE as f64 / w).min(MAX_SIDE as f64 / h).min((MAX_PIXELS as f64 / (w * h)).sqrt()).min(1.0);
-    (((w * k).round() as u32).max(MIN_SIDE), ((h * k).round() as u32).max(MIN_SIDE))
+    let k = (MAX_SIDE as f64 / w)
+        .min(MAX_SIDE as f64 / h)
+        .min((MAX_PIXELS as f64 / (w * h)).sqrt())
+        .min(1.0);
+    (
+        ((w * k).round() as u32).max(MIN_SIDE),
+        ((h * k).round() as u32).max(MIN_SIDE),
+    )
 }
 
 fn copier() -> Option<(Sender<Readback>, Receiver<(wgpu::Buffer, RemoteFrame)>)> {
@@ -58,7 +64,19 @@ fn copier() -> Option<(Sender<Readback>, Receiver<(wgpu::Buffer, RemoteFrame)>)>
             for r in inbox {
                 let data = r.buffer.slice(..).get_mapped_range().to_vec();
                 r.buffer.unmap();
-                if outbox.send((r.buffer, RemoteFrame { width: r.w, height: r.h, row: r.row, bgra: r.bgra, data })).is_err() {
+                if outbox
+                    .send((
+                        r.buffer,
+                        RemoteFrame {
+                            width: r.w,
+                            height: r.h,
+                            row: r.row,
+                            bgra: r.bgra,
+                            data,
+                        },
+                    ))
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -93,7 +111,9 @@ impl Navigator {
                 self.remote_pic.done = Some(frame);
             }
         }
-        let Some(r) = self.remote_pic.pending.as_ref() else { return };
+        let Some(r) = self.remote_pic.pending.as_ref() else {
+            return;
+        };
         if r.state.load(Ordering::Acquire) == 0 {
             let _ = device.poll(wgpu::PollType::Poll);
         }
@@ -104,7 +124,11 @@ impl Navigator {
                 if self.remote_pic.copier.is_none() {
                     self.remote_pic.copier = copier();
                 }
-                self.remote_pic.copying = self.remote_pic.copier.as_ref().is_some_and(|(jobs, _)| jobs.send(r).is_ok());
+                self.remote_pic.copying = self
+                    .remote_pic
+                    .copier
+                    .as_ref()
+                    .is_some_and(|(jobs, _)| jobs.send(r).is_ok());
             }
             _ => self.remote_pic.pending = None,
         }
@@ -112,7 +136,9 @@ impl Navigator {
 
     pub(super) fn remote_picture_frame(&mut self, renderer: &Renderer, f: &NavFrame) {
         self.poll_remote_picture(&renderer.device);
-        let Some((w, h)) = self.remote_pic.want else { return };
+        let Some((w, h)) = self.remote_pic.want else {
+            return;
+        };
         self.remote_pic.t -= f.dt;
         if self.remote_pic.t > 0.0 || self.remote_pic.pending.is_some() || self.remote_pic.copying {
             return;
@@ -125,53 +151,127 @@ impl Navigator {
             other => {
                 if !self.remote_pic.warned {
                     self.remote_pic.warned = true;
-                    log::warn!("navigator: no picture for the remote cockpit from a {other:?} window");
+                    log::warn!(
+                        "navigator: no picture for the remote cockpit from a {other:?} window"
+                    );
                 }
                 return;
             }
         };
         let device = &renderer.device;
         if self.gpu.is_none() {
-            self.gpu = Some(Gpu::with_depth(device, format, map_samples(format), self.atlas.size));
+            self.gpu = Some(Gpu::with_depth(
+                device,
+                format,
+                map_samples(format),
+                self.atlas.size,
+            ));
         }
-        if self.remote_pic.target.as_ref().is_none_or(|t| (t.2, t.3) != (w, h)) {
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
+        if self
+            .remote_pic
+            .target
+            .as_ref()
+            .is_none_or(|t| (t.2, t.3) != (w, h))
+        {
+            let desc = wgpu::TextureDescriptor {
                 label: Some("navigator remote picture"),
-                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
-            });
+            };
+            let Some(texture) = renderer.try_create_transient_texture(&desc) else {
+                // A failed target is not a texture view. Retry after the capture interval
+                // once the renderer has had a chance to free GPU memory.
+                return;
+            };
             let view = texture.create_view(&Default::default());
             self.remote_pic.target = Some((texture, view, w, h));
         }
         renderer.queue.submit(renderer.take_deferred_commands());
         self.remote_pic.drawing = true;
         let mut targets = std::mem::take(&mut self.remote_pic.targets);
-        let view = self.remote_pic.target.as_ref().map(|t| t.1.clone()).unwrap();
+        let view = self
+            .remote_pic
+            .target
+            .as_ref()
+            .map(|t| t.1.clone())
+            .unwrap();
         let look = PanelLook::remote((w, h));
-        self.draw(renderer, &view, (w, h), h as f32, &look, Some(&mut targets), f);
+        self.draw(
+            renderer,
+            &view,
+            (w, h),
+            h as f32,
+            &look,
+            Some(&mut targets),
+            f,
+        );
         self.remote_pic.targets = targets;
         self.remote_pic.drawing = false;
-        let Some(drawn) = self.remote_pic.commands.take() else { return };
-        let row = (w * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let Some(drawn) = self.remote_pic.commands.take() else {
+            return;
+        };
+        let row = (w * 4).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
         let size = (row * h) as u64;
         self.remote_pic.spare.retain(|b| b.size() == size);
-        let buffer = self.remote_pic.spare.pop().unwrap_or_else(|| device.create_buffer(&wgpu::BufferDescriptor { label: Some("navigator remote picture"), size, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false }));
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("navigator remote picture") });
+        let buffer = match self.remote_pic.spare.pop() {
+            Some(buffer) => buffer,
+            None => {
+                let desc = wgpu::BufferDescriptor {
+                    label: Some("navigator remote picture"),
+                    size,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                };
+                let Some(buffer) = renderer.try_create_transient_buffer(&desc) else {
+                    // Do not submit a copy using a buffer the GPU failed to create.
+                    return;
+                };
+                buffer
+            }
+        };
+        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("navigator remote picture"),
+        });
         let texture = &self.remote_pic.target.as_ref().unwrap().0;
         enc.copy_texture_to_buffer(
             texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(h),
+                },
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
         );
         renderer.queue.submit([drawn, enc.finish()]);
         let state = Arc::new(AtomicU8::new(0));
         let s = state.clone();
-        buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| s.store(if r.is_ok() { 1 } else { 2 }, Ordering::Release));
-        self.remote_pic.pending = Some(Readback { buffer, row, w, h, bgra, state });
+        buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            s.store(if r.is_ok() { 1 } else { 2 }, Ordering::Release)
+        });
+        self.remote_pic.pending = Some(Readback {
+            buffer,
+            row,
+            w,
+            h,
+            bgra,
+            state,
+        });
     }
 }

@@ -47,7 +47,7 @@ impl World {
                 let selection = scenery_texture_selection(&o.ot, &|n| inst.var(n));
                 for (group, &index) in o.ot.dynamic_textures.iter().zip(&selection) {
                     for (_, file, dir) in group.choices.get(index).into_iter().flatten() {
-                        let mut dirs = o.ot.texture_dirs(&self.root);
+                        let mut dirs = self.object_texture_dirs(&o.ot);
                         dirs.insert(0, dir.clone());
                         push(file, &dirs, &mut names);
                     }
@@ -56,9 +56,18 @@ impl World {
             if o.lamp.is_none() {
                 for (_, _, overrides) in &o.ot.meshes {
                     for ov in overrides.iter().filter(|m| !m.item && m.freetex.is_some()) {
-                        let Some((_, var)) = &ov.freetex else { continue };
-                        if let Some(name) = resolve_scenery_freetex_name(var, ov, overrides, o.script.as_ref(), None, &o.strings) {
-                            push(name, &o.ot.texture_dirs(&self.root), &mut names);
+                        let Some((_, var)) = &ov.freetex else {
+                            continue;
+                        };
+                        if let Some(name) = resolve_scenery_freetex_name(
+                            var,
+                            ov,
+                            overrides,
+                            o.script.as_ref(),
+                            None,
+                            &o.strings,
+                        ) {
+                            push(name, &self.object_texture_dirs(&o.ot), &mut names);
                         }
                     }
                 }
@@ -67,7 +76,7 @@ impl World {
             if have_types.contains(&(key as usize)) || !seen.insert(key) {
                 continue;
             }
-            let dirs = o.ot.texture_dirs(&self.root);
+            let dirs = self.object_texture_dirs(&o.ot);
             for (_, mats, overrides) in
                 o.ot.meshes
                     .iter()
@@ -103,19 +112,24 @@ impl World {
             if have_splines.contains(&(Arc::as_ptr(st) as usize)) {
                 continue;
             }
-            let dirs = texture_dirs(&self.root, &st.dir);
+            let dirs = self.texture_dirs(&self.root, &st.dir);
             for t in &st.def.textures {
                 push(&t.file, &dirs, &mut names);
             }
         }
         for (ot, tex, ..) in &p.trees {
             if !have_trees.contains(&tex.to_ascii_lowercase()) {
-                push(tex, &ot.texture_dirs(&self.root), &mut names);
+                push(tex, &self.object_texture_dirs(ot), &mut names);
             }
         }
         // the painted ground layers (and their detail textures) of the tile, the masks moved to `paint` once cut
-        let ground_dirs = vec![self.root.clone()];
-        let layers = p.paint_masks.iter().map(|m| m.0).chain(p.paint.iter().map(|m| m.0)).chain(p.wall_paint.iter().map(|m| m.0));
+        let ground_dirs = self.ground_dirs();
+        let layers = p
+            .paint_masks
+            .iter()
+            .map(|m| m.0)
+            .chain(p.paint.iter().map(|m| m.0))
+            .chain(p.wall_paint.iter().map(|m| m.0));
         for layer in layers {
             if let Some(gt) = self.global.ground_textures.get(layer) {
                 push(&gt.texture, &ground_dirs, &mut names);
@@ -140,6 +154,10 @@ impl World {
             .collect()
     }
 
+    pub(super) fn ground_dirs(&self) -> Vec<PathBuf> {
+        vec![self.root.clone(), self.map_dir.clone()]
+    }
+
     /// The materials every tile shares: the plain ground, the water, the tree quad - made
     /// again when the season's textures changed (a snow weather came while driving: the tiles
     /// read again took the summer grass of the first ones, and the ground stayed green).
@@ -149,7 +167,7 @@ impl World {
             return;
         }
         let none: HashMap<PathBuf, Arc<TextureData>> = HashMap::new();
-        let ground_dirs = vec![self.root.clone()];
+        let ground_dirs = self.ground_dirs();
         let ground0 = self
             .global
             .ground_textures
@@ -251,7 +269,10 @@ impl World {
                 None,
                 env.map(|e| (e, 0.45)),
                 [0.0; 3],
-                omsi_render::MaterialExtra { water: true, ..Default::default() },
+                omsi_render::MaterialExtra {
+                    water: true,
+                    ..Default::default()
+                },
             )
         };
         let tree_mesh = renderer.add_mesh(scene, &tree_quad_mesh());
@@ -283,7 +304,7 @@ impl World {
         if gpu.types.contains_key(&key) {
             return key;
         }
-        let dirs = ot.texture_dirs(&self.root);
+        let dirs = self.object_texture_dirs(ot);
         let mut t = TypeGpu {
             ot: ot.clone(),
             meshes: Vec::new(),
@@ -302,254 +323,27 @@ impl World {
         for (mesh, o3d_mats, overrides) in &ot.meshes {
             let mut mats: Vec<MaterialId> = Vec::new();
             // (once a mesh: asked again for every slot, the 294 slots of a St-Servan crossing took 30 ms)
-            let override_slots: Vec<Option<usize>> = overrides.iter().map(|o| omsi_sim::vehicle::override_slot(o3d_mats, o)).collect();
+            let override_slots: Vec<Option<usize>> = overrides
+                .iter()
+                .map(|o| omsi_sim::vehicle::override_slot(o3d_mats, o))
+                .collect();
             for (slot, m) in o3d_mats.iter().enumerate() {
-                let tex_of = |gpu: &mut GpuCache,
-                              scene: &mut Scene,
-                              name: &str,
-                              t: &mut TypeGpu|
-                 -> Option<TextureId> {
-                    let (id, path) = gpu.texture(renderer, scene, name, &dirs, images)?;
-                    t.textures.push(path);
-                    Some(id)
-                };
-                let for_slot = |o: &&MaterialDef| {
-                    overrides.iter().zip(&override_slots).any(|(x, s)| std::ptr::eq(x, *o) && *s == Some(slot))
-                };
-                // a slot fed by [useTextTexture] / [useScriptTexture] gets a generated picture:
-                // the name in the mesh is a placeholder (the stop poles' Textfeld_1.bmp, the
-                // street signs' StrSchild_Text1.bmp), and looking for it on disk only wrote
-                // "Did not find texture file" into the log for every map
-                let generated = overrides
-                    .iter()
-                    .filter(|o| !o.item)
-                    .filter(for_slot)
-                    .any(|o| o.use_text_texture.is_some() || o.use_script_texture.is_some());
-                let tex = if is_null_texture(&m.texture) || generated {
-                    None
-                } else {
-                    tex_of(gpu, scene, &m.texture, &mut t)
-                };
-                let base_ov: Vec<MaterialDef> =
-                    overrides.iter().filter(|o| !o.item).cloned().collect();
-                let alpha = material_alpha(o3d_mats, slot, &base_ov);
-                let night = match overrides
-                    .iter()
-                    .filter(|o| !o.item && o.nightmap.is_some())
-                    .filter(for_slot)
-                    .find_map(|o| o.nightmap.clone())
-                {
-                    Some(n) => tex_of(gpu, scene, &n, &mut t),
-                    // OMSI's own night textures: a copy of the texture in the `night` folder
-                    // beside it, black but for the lit windows and signs, added at night as
-                    // the object's [NightMapMode] says. Every stock building has them (the
-                    // Buildings_RW1HH folder alone 60), and without them the city stood dark.
-                    None if !is_null_texture(&m.texture) => {
-                        let rel = night_texture_name(&m.texture);
-                        let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                        if night_texture_exists(&rel, &dirs_ref) {
-                            t.auto_night = true;
-                            tex_of(gpu, scene, &rel, &mut t)
-                        } else {
-                            None
-                        }
-                    }
-                    None => None,
-                };
-                let slot_ov: Vec<&MaterialDef> = overrides
-                    .iter()
-                    .filter(|o| !o.item)
-                    .filter(for_slot)
-                    .collect();
-                let (color, emissive, specular, ambient) =
-                    d3d_material(m, slot_ov.iter().find_map(|o| o.allcolor), tex.is_some());
-                // [matl_transmap]: transparency from a separate map (parked cars: body opaque, windows clear)
-                let transmap = match overrides
-                    .iter()
-                    .filter(|o| !o.item)
-                    .filter(for_slot)
-                    .find_map(|o| o.transmap.clone())
-                    .filter(|t| !t.trim().is_empty() && !t.trim().starts_with("\\S:"))
-                {
-                    Some(name) => {
-                        let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                        match tex_of(gpu, scene, &name, &mut t) {
-                            Some(id) => {
-                                let has_alpha = omsi_texture::find_texture(&name, &dirs_ref)
-                                    .map(|p| gpu.has_alpha(&p))
-                                    .unwrap_or(false);
-                                Some((id, has_alpha))
-                            }
-                            None => None,
-                        }
-                    }
-                    None => None,
-                };
-                // A separate transmap is a mask, not an automatic instruction to make the
-                // whole material transparent. Opaque body panels must stay opaque unless the
-                // model's `[matl_alpha]` or a material override explicitly says otherwise.
-                // A declared blend on a texture without alpha is opaque, as the splines take
-                // it, for a ground-layer object (`[rendertype] surface` / `on_surface`): the
-                // surface phases draw a blend without writing depth, so every spline after
-                // it showed through - the far roads and a bridge over NCCR's apartment
-                // blocks (`[matl_alpha] 2` on a 24-bit BMP), Westcountry's road signs. In
-                // Omsi.exe such a blend writes depth and its alpha is 1 throughout, the same
-                // picture. (Not with a transmap, an `[alphascale]` or a texture with alpha.)
-                let surface_phase = matches!(
-                    ot.sco.render_type,
-                    omsi_scenery::sco::RenderType::Surface | omsi_scenery::sco::RenderType::OnSurface
-                );
-                let faded = slot_ov.iter().any(|o| o.alphascale.as_ref().is_some_and(|v| !v.trim().is_empty()));
-                // A blend with no alpha to take it from is opaque, whatever the picture is
-                // made of: one with no alpha channel, one whose alpha channel has no
-                // transparent texel at all (the GG2 signs' `directions\*.png` pictures are
-                // fully opaque), and one whose texture is missing altogether (the fallback
-                // there is the opaque white). Omsi.exe's blend writes depth in all of them;
-                // left a no-write blend, the surface phases drawn after the slot came over
-                // it and ate it - the signs' blue faded away into the background, and so did
-                // the bare gantry panel. (Not a slot that has no texture on purpose:
-                // `[useTextTexture]` / `[useScriptTexture]` draw their own picture, which
-                // blends by its alpha.)
-                //
-                // A picture whose alpha is a cut-out (clear or solid, only its antialiased
-                // outline between: see `picture_blend_fade`) is the same case one step on -
-                // nothing to blend by but the cut-away part - and is drawn alpha-tested so
-                // that the solid part of the object writes depth.
-                let blend_fade = if !surface_phase || transmap.is_some() || faded || generated || is_null_texture(&m.texture) {
-                    None
-                } else if tex.is_none() {
-                    Some(super::staging::BlendFade::Solid)
-                } else {
-                    let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                    omsi_texture::find_texture(&m.texture, &dirs_ref).map(|p| super::staging::picture_blend_fade(&p))
-                };
-                let alpha = super::staging::blend_alpha(alpha, blend_fade);
-                // [matl_envmap]: the same reflection rule as on vehicles (factor x mask; a
-                // texture without an alpha channel reads as a full mask)
-                let envmap = match slot_ov.iter().find_map(|o| o.envmap.clone()) {
-                    Some((name, f)) => tex_of(gpu, scene, &name, &mut t).map(|id| (id, f)),
-                    None => None,
-                };
-                let env_mask = match slot_ov
-                    .iter()
-                    .find_map(|o| o.envmap_mask.clone())
-                    .filter(|_| envmap.is_some())
-                {
-                    Some(name) => tex_of(gpu, scene, &name, &mut t),
-                    None => None,
-                };
-                let bump = match slot_ov
-                    .iter()
-                    .find_map(|o| o.bumpmap.clone())
-                    .filter(|_| envmap.is_some() && !omsi_cfg::flags::OMSI_NO_BUMP.is_set())
-                {
-                    Some((name, f)) => {
-                        gpu.bump_texture(renderer, scene, &name, &dirs)
-                            .map(|(id, key)| {
-                                t.textures.push(key);
-                                (id, f)
-                            })
-                    }
-                    None => None,
-                };
-                let mut extra = material_extra(&slot_ov, env_mask, bump, specular);
-                extra.ambient = Some(ambient);
-                extra.no_map_lights = ot.sco.no_map_lighting;
-                // a route arrow ([helparrow]) is a guide over the world, not a light in it:
-                // left out of the Enhanced picture's glow as the bus's own screens are (its
-                // self-lit yellow bloomed like a lamp at night, #1615)
-                extra.screen |= ot.sco.is_help_arrow;
-                // windy trees: a plant's leaves (its cut-out or blended slots) bend in the wind
-                if alpha != AlphaMode::Opaque {
-                    if let Some(give) = vegetation_give_of(&ot.sco) {
-                        extra.sway = foliage_sway(&ot.meshes, mesh, slot as u32, give);
-                    }
-                }
-                if tex.is_some() {
-                    let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                    let c = self.textures.cfg(&m.texture, &dirs_ref);
-                    extra.moisture = c.wetness_kind();
-                    if c.terrain_mapping {
-                        t.terrain_slots.push((0, t.meshes.len(), slot));
-                    }
-                }
-                let address = tex_addressing(overrides.iter().filter(for_slot));
-                renderer.address_next.set(address);
-                renderer.light_map_next.set(ot.sco.light_map_mapping);
-                // OMSI_DEBUG_OBJMAT=<part of the object's file name>: how its slots are made
-                if let Some(f) = omsi_cfg::flags::OMSI_DEBUG_OBJMAT.var() {
-                    if ot.sco.path.to_string_lossy().to_ascii_lowercase().contains(&f.to_ascii_lowercase()) {
-                        log::info!("{} slot {slot} '{}': tex {} alpha {:?} color {:?} emissive {:?} night {} transmap {:?} envmap {:?} auto_night {}", ot.sco.path.display(), m.texture, tex.is_some(), alpha, color, emissive, night.is_some(), transmap.map(|t| t.1), envmap.map(|e| e.1), t.auto_night);
-                    }
-                }
-                // [matl_lightmap]: laid on the light as on a vehicle (a lamp's lens, a lit
-                // shelter or advertising pillar); switched by its variable per placement
-                // (`LampSlots`), on where nothing switches it. (Left out, a signal whose
-                // lenses are lit by their light maps stayed dark, #826.)
-                // ([matl_glow]: the material is its own light - its mask is bound here, in the
-                // light map's slot, see `MaterialExtra::glow`)
-                let light = match slot_ov.iter().find_map(|o| o.lightmap.clone()) {
-                    Some((name, _)) => tex_of(gpu, scene, &name, &mut t),
-                    None => glow_mask(&slot_ov).and_then(|name| tex_of(gpu, scene, name, &mut t)),
-                };
-                let base = renderer.add_material_extra(
-                    scene, tex, alpha, color, false, transmap, night, light, envmap, emissive, extra,
-                );
-                let base = gpu.material(renderer, scene, base);
-                t.materials.push(base);
-                // variant of a [matl_change]
-                let change_var = overrides
-                    .iter()
-                    .filter(|o| !o.item)
-                    .filter(for_slot)
-                    .find_map(|o| o.change.as_ref().map(|c| c.2.clone()));
-                let items: Vec<&MaterialDef> = overrides
-                    .iter()
-                    .filter(|o| o.item)
-                    .filter(for_slot)
-                    .collect();
-                if let (Some(var), false) = (change_var, items.is_empty()) {
-                    let it_night = match items.iter().find_map(|o| o.nightmap.clone()) {
-                        Some(n) => tex_of(gpu, scene, &n, &mut t).or(night),
-                        None => night,
-                    };
-                    let (ic, ie, is, ia) = d3d_material(
-                        m,
-                        items
-                            .iter()
-                            .find_map(|o| o.allcolor)
-                            .or(slot_ov.iter().find_map(|o| o.allcolor)),
-                        tex.is_some(),
-                    );
-                    let it_alpha = items.first().map(|o| alpha_mode(o.alpha)).unwrap_or(alpha);
-                    let mut it_extra = material_extra(&items, env_mask, bump, is);
-                    it_extra.ambient = Some(ia);
-                    it_extra.night_switched = items.iter().any(|o| o.nightmap.is_some());
-                    it_extra.no_z_write |= extra.no_z_write;
-                    it_extra.no_z_check |= extra.no_z_check;
-                    it_extra.glass |= extra.glass;
-                    renderer.address_next.set(address);
-                    renderer.light_map_next.set(ot.sco.light_map_mapping);
-                    let it_light = match items.iter().find_map(|o| o.lightmap.clone()) {
-                        Some((name, _)) => tex_of(gpu, scene, &name, &mut t).or(light),
-                        None => match glow_mask(&items) {
-                            Some(name) => tex_of(gpu, scene, name, &mut t).or(light),
-                            None => light,
-                        },
-                    };
-                    // (an item with no light map or glow of its own keeps its base's)
-                    if !own_light_slot(&items) {
-                        it_extra.glow = extra.glow;
-                    }
-                    let item = renderer.add_material_extra(
-                        scene, tex, it_alpha, ic, false, transmap, it_night, it_light, envmap, ie,
-                        it_extra,
-                    );
-                    let item = gpu.material(renderer, scene, item);
-                    t.materials.push(item);
-                    t.variants.push((t.meshes.len(), slot, base, item, var));
-                }
-                mats.push(base);
+                mats.push(Self::type_gpu_slot(
+                    renderer,
+                    scene,
+                    gpu,
+                    &self.textures,
+                    ot,
+                    &dirs,
+                    images,
+                    &mut t,
+                    mesh,
+                    o3d_mats,
+                    overrides,
+                    &override_slots,
+                    slot,
+                    m,
+                ));
             }
             let id = gpu.add_mesh(renderer, scene, mesh);
             scene.meshes[id].source = Some(ot.sco.path.display().to_string());
@@ -562,9 +356,310 @@ impl World {
                 },
             ));
         }
-        self.type_gpu_lods(renderer, scene, gpu, ot, &mut t, (&dirs, images), ground_mat);
+        self.type_gpu_lods(
+            renderer,
+            scene,
+            gpu,
+            ot,
+            &mut t,
+            (&dirs, images),
+            ground_mat,
+        );
         gpu.types.insert(key, t);
         key
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn type_gpu_slot(
+        renderer: &Renderer,
+        scene: &mut Scene,
+        gpu: &mut GpuCache,
+        textures: &TextureCache,
+        ot: &Arc<ObjectType>,
+        dirs: &[PathBuf],
+        images: &HashMap<PathBuf, Arc<TextureData>>,
+        mut t: &mut TypeGpu,
+        mesh: &MeshData,
+        o3d_mats: &[omsi_o3d::Material],
+        overrides: &[MaterialDef],
+        override_slots: &[Option<usize>],
+        slot: usize,
+        m: &omsi_o3d::Material,
+    ) -> MaterialId {
+        let tex_of = |gpu: &mut GpuCache,
+                      scene: &mut Scene,
+                      name: &str,
+                      t: &mut TypeGpu|
+         -> Option<TextureId> {
+            let (id, path) = gpu.texture(renderer, scene, name, dirs, images)?;
+            t.textures.push(path);
+            Some(id)
+        };
+        let for_slot = |o: &&MaterialDef| {
+            overrides
+                .iter()
+                .zip(override_slots)
+                .any(|(x, s)| std::ptr::eq(x, *o) && *s == Some(slot))
+        };
+        // a slot fed by [useTextTexture] / [useScriptTexture] gets a generated picture:
+        // the name in the mesh is a placeholder (the stop poles' Textfeld_1.bmp, the
+        // street signs' StrSchild_Text1.bmp), and looking for it on disk only wrote
+        // "Did not find texture file" into the log for every map
+        let generated = overrides
+            .iter()
+            .filter(|o| !o.item)
+            .filter(for_slot)
+            .any(|o| o.use_text_texture.is_some() || o.use_script_texture.is_some());
+        let tex = if is_null_texture(&m.texture) || generated {
+            None
+        } else {
+            tex_of(gpu, scene, &m.texture, &mut t)
+        };
+        let base_ov: Vec<MaterialDef> = overrides.iter().filter(|o| !o.item).cloned().collect();
+        let alpha = material_alpha(o3d_mats, slot, &base_ov);
+        let night = match overrides
+            .iter()
+            .filter(|o| !o.item && o.nightmap.is_some())
+            .filter(for_slot)
+            .find_map(|o| o.nightmap.clone())
+        {
+            Some(n) => tex_of(gpu, scene, &n, &mut t),
+            // OMSI's own night textures: a copy of the texture in the `night` folder
+            // beside it, black but for the lit windows and signs, added at night as
+            // the object's [NightMapMode] says. Every stock building has them (the
+            // Buildings_RW1HH folder alone 60), and without them the city stood dark.
+            None if !is_null_texture(&m.texture) => {
+                let rel = night_texture_name(&m.texture);
+                let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
+                if night_texture_exists(&rel, &dirs_ref) {
+                    t.auto_night = true;
+                    tex_of(gpu, scene, &rel, &mut t)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+        let slot_ov: Vec<&MaterialDef> = overrides
+            .iter()
+            .filter(|o| !o.item)
+            .filter(for_slot)
+            .collect();
+        let (color, emissive, specular, ambient) =
+            d3d_material(m, slot_ov.iter().find_map(|o| o.allcolor), tex.is_some());
+        // [matl_transmap]: transparency from a separate map (parked cars: body opaque, windows clear)
+        let transmap = match overrides
+            .iter()
+            .filter(|o| !o.item)
+            .filter(for_slot)
+            .find_map(|o| o.transmap.clone())
+            .filter(|t| !t.trim().is_empty() && !t.trim().starts_with("\\S:"))
+        {
+            Some(name) => {
+                let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
+                match tex_of(gpu, scene, &name, &mut t) {
+                    Some(id) => {
+                        let has_alpha = omsi_texture::find_texture(&name, &dirs_ref)
+                            .map(|p| gpu.has_alpha(&p))
+                            .unwrap_or(false);
+                        Some((id, has_alpha))
+                    }
+                    None => None,
+                }
+            }
+            None => None,
+        };
+        // A separate transmap is a mask, not an automatic instruction to make the
+        // whole material transparent. Opaque body panels must stay opaque unless the
+        // model's `[matl_alpha]` or a material override explicitly says otherwise.
+        // A declared blend on a texture without alpha is opaque, as the splines take
+        // it, for a ground-layer object (`[rendertype] surface` / `on_surface`): the
+        // surface phases draw a blend without writing depth, so every spline after
+        // it showed through - the far roads and a bridge over NCCR's apartment
+        // blocks (`[matl_alpha] 2` on a 24-bit BMP), Westcountry's road signs. In
+        // Omsi.exe such a blend writes depth and its alpha is 1 throughout, the same
+        // picture. (Not with a transmap, an `[alphascale]` or a texture with alpha.)
+        let surface_phase = matches!(
+            ot.sco.render_type,
+            omsi_scenery::sco::RenderType::Surface | omsi_scenery::sco::RenderType::OnSurface
+        );
+        let faded = slot_ov
+            .iter()
+            .any(|o| o.alphascale.as_ref().is_some_and(|v| !v.trim().is_empty()));
+        // A blend with no alpha to take it from is opaque, whatever the picture is
+        // made of: one with no alpha channel, one whose alpha channel has no
+        // transparent texel at all (the GG2 signs' `directions\*.png` pictures are
+        // fully opaque), and one whose texture is missing altogether (the fallback
+        // there is the opaque white). Omsi.exe's blend writes depth in all of them;
+        // left a no-write blend, the surface phases drawn after the slot came over
+        // it and ate it - the signs' blue faded away into the background, and so did
+        // the bare gantry panel. (Not a slot that has no texture on purpose:
+        // `[useTextTexture]` / `[useScriptTexture]` draw their own picture, which
+        // blends by its alpha.)
+        //
+        // A picture whose alpha is a cut-out (clear or solid, only its antialiased
+        // outline between: see `picture_blend_fade`) is the same case one step on -
+        // nothing to blend by but the cut-away part - and is drawn alpha-tested so
+        // that the solid part of the object writes depth.
+        let blend_fade = if !surface_phase
+            || transmap.is_some()
+            || faded
+            || generated
+            || is_null_texture(&m.texture)
+        {
+            None
+        } else if tex.is_none() {
+            Some(super::staging::BlendFade::Solid)
+        } else {
+            let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
+            omsi_texture::find_texture(&m.texture, &dirs_ref)
+                .map(|p| super::staging::picture_blend_fade(&p))
+        };
+        let alpha = super::staging::blend_alpha(alpha, blend_fade);
+        // [matl_envmap]: the same reflection rule as on vehicles (factor x mask; a
+        // texture without an alpha channel reads as a full mask)
+        let envmap = match slot_ov.iter().find_map(|o| o.envmap.clone()) {
+            Some((name, f)) => tex_of(gpu, scene, &name, &mut t).map(|id| (id, f)),
+            None => None,
+        };
+        let env_mask = match slot_ov
+            .iter()
+            .find_map(|o| o.envmap_mask.clone())
+            .filter(|_| envmap.is_some())
+        {
+            Some(name) => tex_of(gpu, scene, &name, &mut t),
+            None => None,
+        };
+        let bump = match slot_ov
+            .iter()
+            .find_map(|o| o.bumpmap.clone())
+            .filter(|_| envmap.is_some() && !omsi_cfg::flags::OMSI_NO_BUMP.is_set())
+        {
+            Some((name, f)) => gpu
+                .bump_texture(renderer, scene, &name, dirs)
+                .map(|(id, key)| {
+                    t.textures.push(key);
+                    (id, f)
+                }),
+            None => None,
+        };
+        let mut extra = material_extra(&slot_ov, env_mask, bump, specular);
+        extra.pbr = mesh_pbr(extra.pbr, m);
+        extra.ambient = Some(ambient);
+        extra.no_map_lights = ot.sco.no_map_lighting;
+        // a route arrow ([helparrow]) is a guide over the world, not a light in it:
+        // left out of the Enhanced picture's glow as the bus's own screens are (its
+        // self-lit yellow bloomed like a lamp at night, #1615)
+        extra.screen |= ot.sco.is_help_arrow;
+        // windy trees: a plant's leaves (its cut-out or blended slots) bend in the wind
+        if alpha != AlphaMode::Opaque {
+            if let Some(give) = vegetation_give_of(&ot.sco) {
+                extra.sway = foliage_sway(&ot.meshes, mesh, slot as u32, give);
+            }
+        }
+        if tex.is_some() {
+            let dirs_ref: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
+            let c = textures.cfg(&m.texture, &dirs_ref);
+            extra.moisture = c.wetness_kind();
+            if c.terrain_mapping {
+                t.terrain_slots.push((0, t.meshes.len(), slot));
+            }
+        }
+        let address = tex_addressing(overrides.iter().filter(for_slot));
+        renderer.address_next.set(address);
+        renderer.light_map_next.set(ot.sco.light_map_mapping);
+        // OMSI_DEBUG_OBJMAT=<part of the object's file name>: how its slots are made
+        if let Some(f) = omsi_cfg::flags::OMSI_DEBUG_OBJMAT.var() {
+            if ot
+                .sco
+                .path
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .contains(&f.to_ascii_lowercase())
+            {
+                log::info!(
+                    "{} slot {slot} '{}': tex {} alpha {:?} color {:?} emissive {:?} night {} transmap {:?} envmap {:?} auto_night {}",
+                    ot.sco.path.display(),
+                    m.texture,
+                    tex.is_some(),
+                    alpha,
+                    color,
+                    emissive,
+                    night.is_some(),
+                    transmap.map(|t| t.1),
+                    envmap.map(|e| e.1),
+                    t.auto_night
+                );
+            }
+        }
+        // [matl_lightmap]: laid on the light as on a vehicle (a lamp's lens, a lit
+        // shelter or advertising pillar); switched by its variable per placement
+        // (`LampSlots`), on where nothing switches it. (Left out, a signal whose
+        // lenses are lit by their light maps stayed dark, #826.)
+        // ([matl_glow]: the material is its own light - its mask is bound here, in the
+        // light map's slot, see `MaterialExtra::glow`)
+        let light = match slot_ov.iter().find_map(|o| o.lightmap.clone()) {
+            Some((name, _)) => tex_of(gpu, scene, &name, &mut t),
+            None => glow_mask(&slot_ov).and_then(|name| tex_of(gpu, scene, name, &mut t)),
+        };
+        let base = renderer.add_material_extra(
+            scene, tex, alpha, color, false, transmap, night, light, envmap, emissive, extra,
+        );
+        let base = gpu.material(renderer, scene, base);
+        t.materials.push(base);
+        // variant of a [matl_change]
+        let change_var = overrides
+            .iter()
+            .filter(|o| !o.item)
+            .filter(for_slot)
+            .find_map(|o| o.change.as_ref().map(|c| c.2.clone()));
+        let items: Vec<&MaterialDef> = overrides
+            .iter()
+            .filter(|o| o.item)
+            .filter(for_slot)
+            .collect();
+        if let (Some(var), false) = (change_var, items.is_empty()) {
+            let it_night = match items.iter().find_map(|o| o.nightmap.clone()) {
+                Some(n) => tex_of(gpu, scene, &n, &mut t).or(night),
+                None => night,
+            };
+            let (ic, ie, is, ia) = d3d_material(
+                m,
+                items
+                    .iter()
+                    .find_map(|o| o.allcolor)
+                    .or(slot_ov.iter().find_map(|o| o.allcolor)),
+                tex.is_some(),
+            );
+            let it_alpha = items.first().map(|o| alpha_mode(o.alpha)).unwrap_or(alpha);
+            let mut it_extra = material_extra(&items, env_mask, bump, is);
+            it_extra.pbr = mesh_pbr(it_extra.pbr, m);
+            it_extra.ambient = Some(ia);
+            it_extra.night_switched = items.iter().any(|o| o.nightmap.is_some());
+            it_extra.no_z_write |= extra.no_z_write;
+            it_extra.no_z_check |= extra.no_z_check;
+            it_extra.glass |= extra.glass;
+            renderer.address_next.set(address);
+            renderer.light_map_next.set(ot.sco.light_map_mapping);
+            let it_light = match items.iter().find_map(|o| o.lightmap.clone()) {
+                Some((name, _)) => tex_of(gpu, scene, &name, &mut t).or(light),
+                None => match glow_mask(&items) {
+                    Some(name) => tex_of(gpu, scene, name, &mut t).or(light),
+                    None => light,
+                },
+            };
+            // (an item with no light map or glow of its own keeps its base's)
+            if !own_light_slot(&items) {
+                it_extra.glow = extra.glow;
+            }
+            let item = renderer.add_material_extra(
+                scene, tex, it_alpha, ic, false, transmap, it_night, it_light, envmap, ie, it_extra,
+            );
+            let item = gpu.material(renderer, scene, item);
+            t.materials.push(item);
+            t.variants.push((t.meshes.len(), slot, base, item, var));
+        }
+        base
     }
 
     /// The lower levels of detail of an object type on the GPU (plain materials).
@@ -586,7 +681,9 @@ impl World {
         // say [LOD] 0.1 (the signal) before [LOD] 1 (its low version): taken as size bands
         // the low version stood in close up and the signal vanished in the distance; and a
         // model with a single [LOD] 0.5 is drawn at any size.
-        let mins: Vec<f32> = std::iter::once(ot.lod0_min).chain(ot.lower_lods.iter().map(|l| l.0)).collect();
+        let mins: Vec<f32> = std::iter::once(ot.lod0_min)
+            .chain(ot.lower_lods.iter().map(|l| l.0))
+            .collect();
         let band = |i: usize| -> (f32, f32) {
             let lo = if i + 1 == mins.len() { 0.0 } else { mins[i] };
             (lo, mins[..i].iter().copied().fold(f32::MAX, f32::min))
@@ -689,7 +786,9 @@ impl World {
             self.poles.lock().retain(|k, _| !poles.contains(k));
             self.help_arrows.lock().remove(&key);
             self.parked_objects.lock().retain(|_, p| p.tile != key);
-            self.departed_objects.lock().retain(|_, (p, _, _)| p.tile != key);
+            self.departed_objects
+                .lock()
+                .retain(|_, (p, _, _)| p.tile != key);
             self.edit_objects.lock().retain(|_, o| o.tile != key);
             freed = self.gpu.lock().release_tile(renderer, scene, tg) > 0;
         }
@@ -756,19 +855,35 @@ impl World {
                         if !path.to_string_lossy().ends_with("#bump") {
                             attach_pbr(renderer, scene, &path, id);
                         }
-                        gpu.textures.insert(
-                            path.clone(),
-                            TexEntry::uploaded(id, img, scene),
-                        );
+                        gpu.textures
+                            .insert(path.clone(), TexEntry::uploaded(id, img, scene));
                         // the tile holds the texture until its object types take it over
-                        if slow && t_item.elapsed().as_millis() > 8 { log::info!("upload: texture {} ({}x{} {:?}) took {} ms", path.display(), img.width, img.height, img.format, t_item.elapsed().as_millis()); }
+                        if slow && t_item.elapsed().as_millis() > 8 {
+                            log::info!(
+                                "upload: texture {} ({}x{} {:?}) took {} ms",
+                                path.display(),
+                                img.width,
+                                img.height,
+                                img.format,
+                                t_item.elapsed().as_millis()
+                            );
+                        }
                         u.tg.shared_textures.push(path);
                     }
                 }
             } else if let Some(ot) = u.types.pop() {
                 let before = (gpu.sync_decodes, gpu.sync_decode_secs);
                 let key = self.type_gpu(renderer, scene, gpu, &ot, &u.prepared.images, ground_mat);
-                if slow && t_item.elapsed().as_millis() > 8 { log::info!("upload: object type {} took {} ms ({} meshes, {} textures decoded here in {:.0} ms)", ot.model_dir.display(), t_item.elapsed().as_millis(), ot.meshes.len(), gpu.sync_decodes - before.0, (gpu.sync_decode_secs - before.1) * 1000.0); }
+                if slow && t_item.elapsed().as_millis() > 8 {
+                    log::info!(
+                        "upload: object type {} took {} ms ({} meshes, {} textures decoded here in {:.0} ms)",
+                        ot.model_dir.display(),
+                        t_item.elapsed().as_millis(),
+                        ot.meshes.len(),
+                        gpu.sync_decodes - before.0,
+                        (gpu.sync_decode_secs - before.1) * 1000.0
+                    );
+                }
                 if !u.tg.types.contains(&key) {
                     gpu.types.get_mut(&key).unwrap().users += 1;
                     u.tg.types.push(key);

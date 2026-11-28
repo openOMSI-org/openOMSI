@@ -10,13 +10,22 @@ pub fn ws_url(target: &str) -> Option<String> {
     if bare && t.contains('\\') {
         return None;
     }
-    let input = if bare { format!("https://{t}") } else { t.to_string() };
+    let input = if bare {
+        format!("https://{t}")
+    } else {
+        t.to_string()
+    };
     let parsed = ureq::get(&input).request_url().ok()?;
     let mut url = parsed.as_url().clone();
     if bare {
         let host = url.host_str()?;
         let name = host.strip_suffix(".trycloudflare.com")?;
-        if !name.split('.').all(|label| !label.is_empty() && label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')) {
+        if !name.split('.').all(|label| {
+            !label.is_empty()
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        }) {
             return None;
         }
     }
@@ -45,9 +54,17 @@ pub fn ws_url(target: &str) -> Option<String> {
 pub fn http_base(target: &str) -> Option<String> {
     let parsed = ureq::get(&ws_url(target)?).request_url().ok()?;
     let mut url = parsed.as_url().clone();
-    let scheme = if url.scheme() == "wss" { "https" } else { "http" };
+    let scheme = if url.scheme() == "wss" {
+        "https"
+    } else {
+        "http"
+    };
     url.set_scheme(scheme).ok()?;
-    let path = url.path().strip_suffix("/ws").unwrap_or(url.path()).to_string();
+    let path = url
+        .path()
+        .strip_suffix("/ws")
+        .unwrap_or(url.path())
+        .to_string();
     url.set_path(&path);
     url.set_query(None);
     url.set_fragment(None);
@@ -70,10 +87,12 @@ pub fn web_bases(target: &str) -> Vec<String> {
     }
     // (an IPv6 address is written in brackets with a port: [::1]:27025)
     let (host, port) = match t.rsplit_once(':') {
-        Some((h, p)) if !h.is_empty() && (!h.contains(':') || h.ends_with(']')) => match p.parse::<u16>() {
-            Ok(p) => (h.to_string(), Some(p)),
-            Err(_) => (t.to_string(), None),
-        },
+        Some((h, p)) if !h.is_empty() && (!h.contains(':') || h.ends_with(']')) => {
+            match p.parse::<u16>() {
+                Ok(p) => (h.to_string(), Some(p)),
+                Err(_) => (t.to_string(), None),
+            }
+        }
         _ if t.contains(':') && !t.starts_with('[') => (format!("[{t}]"), None),
         _ => (t.to_string(), None),
     };
@@ -101,8 +120,17 @@ pub fn web_bases(target: &str) -> Vec<String> {
 /// Does an openOMSI server answer at the web address `base` within `within`? (A joining
 /// game tries a server's direct address this way before it gives up its tunnel for it.)
 pub fn reachable(base: &str, within: std::time::Duration) -> bool {
-    let agent = ureq::AgentBuilder::new().timeout(within).user_agent("openOMSI").build();
-    agent.get(&format!("{}/status", base.trim_end_matches('/'))).call().ok().and_then(|r| r.into_string().ok()).and_then(|b| super::ServerInfo::from_json(&b)).is_some()
+    let agent = ureq::AgentBuilder::new()
+        .timeout(within)
+        .user_agent("openOMSI")
+        .build();
+    agent
+        .get(&format!("{}/status", base.trim_end_matches('/')))
+        .call()
+        .ok()
+        .and_then(|r| r.into_string().ok())
+        .and_then(|b| super::ServerInfo::from_json(&b))
+        .is_some()
 }
 
 #[cfg(test)]
@@ -117,30 +145,117 @@ mod tests {
                 assert_eq!(ws_url(&target), Some(format!("{ws}://example.org/ws")));
                 assert_eq!(http_base(&target), Some(format!("{http}://example.org")));
             }
-            assert_eq!(ws_url(&format!("{ws}://example.org?token=abc#local")), Some(format!("{ws}://example.org/ws?token=abc")));
-            assert_eq!(ws_url(&format!("{ws}://example.org/custom/?token=abc")), Some(format!("{ws}://example.org/custom/?token=abc")));
-            assert_eq!(ws_url(&format!("{http}://example.org/prefix/?token=abc")), Some(format!("{ws}://example.org/prefix/ws?token=abc")));
-            assert_eq!(http_base(&format!("{ws}://example.org/prefix/ws?token=abc#local")), Some(format!("{http}://example.org/prefix")));
+            assert_eq!(
+                ws_url(&format!("{ws}://example.org?token=abc#local")),
+                Some(format!("{ws}://example.org/ws?token=abc"))
+            );
+            assert_eq!(
+                ws_url(&format!("{ws}://example.org/custom/?token=abc")),
+                Some(format!("{ws}://example.org/custom/?token=abc"))
+            );
+            assert_eq!(
+                ws_url(&format!("{http}://example.org/prefix/?token=abc")),
+                Some(format!("{ws}://example.org/prefix/ws?token=abc"))
+            );
+            assert_eq!(
+                http_base(&format!("{ws}://example.org/prefix/ws?token=abc#local")),
+                Some(format!("{http}://example.org/prefix"))
+            );
         }
-        assert_eq!(ws_url("https://abc.trycloudflare.com").as_deref(), Some("wss://abc.trycloudflare.com/ws"));
-        assert_eq!(ws_url("abc.trycloudflare.com").as_deref(), Some("wss://abc.trycloudflare.com/ws"));
-        assert_eq!(ws_url("http://10.0.0.2:27025/").as_deref(), Some("ws://10.0.0.2:27025/ws"));
+        assert_eq!(
+            ws_url("https://abc.trycloudflare.com").as_deref(),
+            Some("wss://abc.trycloudflare.com/ws")
+        );
+        assert_eq!(
+            ws_url("abc.trycloudflare.com").as_deref(),
+            Some("wss://abc.trycloudflare.com/ws")
+        );
+        assert_eq!(
+            ws_url("http://10.0.0.2:27025/").as_deref(),
+            Some("ws://10.0.0.2:27025/ws")
+        );
         assert_eq!(ws_url("192.168.1.4:27015"), None);
-        assert_eq!(ws_url("abc.trycloudflare.com/ws").as_deref(), Some("wss://abc.trycloudflare.com/ws"));
-        assert_eq!(ws_url("abc.trycloudflare.com:443/ws").as_deref(), Some("wss://abc.trycloudflare.com/ws"));
-        assert_eq!(ws_url("ABC.TryCloudflare.com/ws").as_deref(), Some("wss://abc.trycloudflare.com/ws"));
-        assert_eq!(ws_url("me@abc.trycloudflare.com/ws").as_deref(), Some("wss://me@abc.trycloudflare.com/ws"));
-        for bogus in ["play.example.org/abc.trycloudflare.com/", "play.example.org?abc.trycloudflare.com", "play.example.org#abc.trycloudflare.com", "play.example.org:1/abc.trycloudflare.com/", "evil.example\\.trycloudflare.com/ws", "abc.trycloudflare.com@evil.example/ws", "abc.trycloudflare.com:1@evil.example/ws", "evil.example%5C.trycloudflare.com/ws", "evil example.trycloudflare.com", ".trycloudflare.com", "a..trycloudflare.com", "abc.trycloudflare.com:x/ws"] {
+        assert_eq!(
+            ws_url("abc.trycloudflare.com/ws").as_deref(),
+            Some("wss://abc.trycloudflare.com/ws")
+        );
+        assert_eq!(
+            ws_url("abc.trycloudflare.com:443/ws").as_deref(),
+            Some("wss://abc.trycloudflare.com/ws")
+        );
+        assert_eq!(
+            ws_url("ABC.TryCloudflare.com/ws").as_deref(),
+            Some("wss://abc.trycloudflare.com/ws")
+        );
+        assert_eq!(
+            ws_url("me@abc.trycloudflare.com/ws").as_deref(),
+            Some("wss://me@abc.trycloudflare.com/ws")
+        );
+        for bogus in [
+            "play.example.org/abc.trycloudflare.com/",
+            "play.example.org?abc.trycloudflare.com",
+            "play.example.org#abc.trycloudflare.com",
+            "play.example.org:1/abc.trycloudflare.com/",
+            "evil.example\\.trycloudflare.com/ws",
+            "abc.trycloudflare.com@evil.example/ws",
+            "abc.trycloudflare.com:1@evil.example/ws",
+            "evil.example%5C.trycloudflare.com/ws",
+            "evil example.trycloudflare.com",
+            ".trycloudflare.com",
+            "a..trycloudflare.com",
+            "abc.trycloudflare.com:x/ws",
+        ] {
             assert_eq!(ws_url(bogus), None);
         }
-        assert_eq!(http_base("https://abc.trycloudflare.com").as_deref(), Some("https://abc.trycloudflare.com"));
-        assert_eq!(web_bases("192.168.1.4:27015"), ["http://192.168.1.4:27015", "http://192.168.1.4:27025", "https://192.168.1.4"]);
-        assert_eq!(web_bases("play.example.org"), ["http://play.example.org:27025", "https://play.example.org", "http://play.example.org"]);
-        assert_eq!(web_bases("play.example.org:47015"), ["http://play.example.org:47015", "http://play.example.org:47025", "https://play.example.org", "http://play.example.org:27025"]);
-        assert_eq!(web_bases("play.example.org:65535"), ["http://play.example.org:65535", "https://play.example.org", "http://play.example.org:27025"]);
-        assert_eq!(web_bases("http://play.example.org:47015"), ["http://play.example.org:47015"]);
-        assert_eq!(web_bases("https://play.example.org"), ["https://play.example.org"]);
+        assert_eq!(
+            http_base("https://abc.trycloudflare.com").as_deref(),
+            Some("https://abc.trycloudflare.com")
+        );
+        assert_eq!(
+            web_bases("192.168.1.4:27015"),
+            [
+                "http://192.168.1.4:27015",
+                "http://192.168.1.4:27025",
+                "https://192.168.1.4"
+            ]
+        );
+        assert_eq!(
+            web_bases("play.example.org"),
+            [
+                "http://play.example.org:27025",
+                "https://play.example.org",
+                "http://play.example.org"
+            ]
+        );
+        assert_eq!(
+            web_bases("play.example.org:47015"),
+            [
+                "http://play.example.org:47015",
+                "http://play.example.org:47025",
+                "https://play.example.org",
+                "http://play.example.org:27025"
+            ]
+        );
+        assert_eq!(
+            web_bases("play.example.org:65535"),
+            [
+                "http://play.example.org:65535",
+                "https://play.example.org",
+                "http://play.example.org:27025"
+            ]
+        );
+        assert_eq!(
+            web_bases("http://play.example.org:47015"),
+            ["http://play.example.org:47015"]
+        );
+        assert_eq!(
+            web_bases("https://play.example.org"),
+            ["https://play.example.org"]
+        );
         assert_eq!(web_bases("::1")[0], "http://[::1]:27025");
-        assert_eq!(web_bases("[::1]:27025"), ["http://[::1]:27025", "http://[::1]:27035", "https://[::1]"]);
+        assert_eq!(
+            web_bases("[::1]:27025"),
+            ["http://[::1]:27025", "http://[::1]:27035", "https://[::1]"]
+        );
     }
 }

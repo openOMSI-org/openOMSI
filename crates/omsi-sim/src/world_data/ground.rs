@@ -7,7 +7,7 @@ use crate::rigid::GroundProbe;
 use glam::DVec3;
 use hashbrown::HashMap;
 use omsi_geometry::TileSurface;
-use omsi_map::{tile_size, Terrain};
+use omsi_map::{Terrain, tile_size};
 use std::sync::Arc;
 
 /// The ground of the loaded tiles: terrain and surface rasters (roads) by tile coordinate.
@@ -54,12 +54,18 @@ pub fn surface_flush() -> f32 {
 
 /// The tile that holds world (x, y).
 pub fn tile_key(x: f64, y: f64) -> (i32, i32) {
-    ((x / tile_size()).floor() as i32, (y / tile_size()).floor() as i32)
+    (
+        (x / tile_size()).floor() as i32,
+        (y / tile_size()).floor() as i32,
+    )
 }
 
 /// World (x, y) within tile `key`.
 fn local(key: (i32, i32), x: f64, y: f64) -> (f32, f32) {
-    ((x - key.0 as f64 * tile_size()) as f32, (y - key.1 as f64 * tile_size()) as f32)
+    (
+        (x - key.0 as f64 * tile_size()) as f32,
+        (y - key.1 as f64 * tile_size()) as f32,
+    )
 }
 
 impl GroundTiles {
@@ -121,7 +127,11 @@ pub fn probe_tile(
             if n > zs.len() {
                 s.drive.probe(lx, ly, lim)
             } else {
-                zs[..n].iter().fold(omsi_geometry::Probe::default(), |p, &z| p.merge(omsi_geometry::Probe::of(z, lim)))
+                zs[..n]
+                    .iter()
+                    .fold(omsi_geometry::Probe::default(), |p, &z| {
+                        p.merge(omsi_geometry::Probe::of(z, lim))
+                    })
             }
         };
         probe = below(top as f32);
@@ -183,7 +193,11 @@ pub fn probe_tile(
     // it is probed from; nearer the ground than that the wheel rolls on the road beside it
     // (where the wall's top met the road the wheels went up onto it and rode along it)
     if let Some(s) = surface {
-        let walls = if n > zs.len() { s.drive.probe_walls(lx, ly, f32::MAX).below } else { walls };
+        let walls = if n > zs.len() {
+            s.drive.probe_walls(lx, ly, f32::MAX).below
+        } else {
+            walls
+        };
         if let (Some(zw), Some(g)) = (walls, probe.below) {
             if zw > g + WALL_TOP_STEP {
                 probe.above = Some(probe.above.map_or(zw, |a| a.min(zw)));
@@ -233,7 +247,9 @@ impl WorldData {
     /// of its texel, and a bus put down beside a wall (an entry point on a pavement, London)
     /// stood on the wall's top and floated there.
     pub fn stand_height(&self, x: f64, y: f64, near: f64) -> Option<f64> {
-        self.drive_probe(x, y, near + 1.5).below.filter(|g| near - g < 3.0)
+        self.drive_probe(x, y, near + 1.5)
+            .below
+            .filter(|g| near - g < 3.0)
     }
 
     /// The ground under a point of the outside camera's arm: the highest face of the roads,
@@ -258,12 +274,26 @@ impl WorldData {
     pub fn wet_road_at(&self, x: f64, y: f64, wetness: f32) -> f32 {
         let key = tile_key(x, y);
         let (lx, ly) = local(key, x, y);
-        let on_road = self.ground.surfaces.get(&key).is_some_and(|s| s.sample_road(lx, ly).is_some());
+        let on_road = self
+            .ground
+            .surfaces
+            .get(&key)
+            .is_some_and(|s| s.sample_road(lx, ly).is_some());
         if on_road {
             wetness.clamp(0.0, 1.0)
         } else {
             0.0
         }
+    }
+
+    /// Whether the rain is kept off the road at world (x, y, z), `z` the road's height there:
+    /// something the picture draws as ground - a bridge deck, a canopy over a forecourt, the
+    /// ground over a tunnel - stands 1.5 to 60 m over it. Enhanced keeps the road dry there
+    /// (its dry map, which has the roofs of buildings as well: those are not ground here, so
+    /// a tyre in a depot hall still throws spray), and the tyres throw no spray from it.
+    pub fn roofed_at(&self, x: f64, y: f64, z: f64) -> bool {
+        self.drawn_ground(x, y, z + 60.0)
+            .is_some_and(|g| g > z + 1.5)
     }
 
     /// Local visible road plane under a vehicle: the exact faces where there are any (raster
@@ -272,10 +302,14 @@ impl WorldData {
         let height = self.camera_ground(position.x, position.y, position.z + 0.35)?;
         let key = tile_key(position.x, position.y);
         let (x, y) = local(key, position.x, position.y);
-        let normal = self.ground.surfaces.get(&key)
+        let normal = self
+            .ground
+            .surfaces
+            .get(&key)
             .and_then(|s| s.drive.surface_below(x, y, height as f32 + 0.002))
             .filter(|(z, _)| (*z as f64 - height).abs() < 0.005)
-            .map(|(_, n)| n).unwrap_or(glam::Vec3::Z);
+            .map(|(_, n)| n)
+            .unwrap_or(glam::Vec3::Z);
         Some((height, normal))
     }
 
@@ -286,8 +320,17 @@ impl WorldData {
     pub fn walk_height(&self, x: f64, y: f64) -> Option<f64> {
         let key = tile_key(x, y);
         let (lx, ly) = local(key, x, y);
-        let surface = self.ground.surfaces.get(&key).and_then(|s| s.sample(lx, ly)).map(|h| h as f64);
-        let terrain = self.ground.terrains.get(&key).map(|t| t.sample(lx, ly) as f64);
+        let surface = self
+            .ground
+            .surfaces
+            .get(&key)
+            .and_then(|s| s.sample(lx, ly))
+            .map(|h| h as f64);
+        let terrain = self
+            .ground
+            .terrains
+            .get(&key)
+            .map(|t| t.sample(lx, ly) as f64);
         let rough = match (surface, terrain) {
             (Some(s), Some(t)) => Some(s.max(t)),
             (s, t) => s.or(t),
@@ -324,7 +367,9 @@ impl WorldData {
         let probe = self.drive_probe(x, y, near + reach);
         match probe.below {
             Some(b) if near - b < 3.0 => Some(b),
-            _ => self.walk_height(x, y).filter(|z| *z < near + reach.max(0.5)),
+            _ => self
+                .walk_height(x, y)
+                .filter(|z| *z < near + reach.max(0.5)),
         }
     }
 }
@@ -344,7 +389,8 @@ impl crate::rigid::Ground for LiveGround {
     /// for every one of the few hundred points its tyres ask for.
     fn session(&self) -> Box<dyn Fn(f64, f64, f64) -> GroundProbe + '_> {
         let world = self.0.snapshot();
-        let tiles: std::cell::RefCell<Vec<TileRefs>> = std::cell::RefCell::new(Vec::with_capacity(4));
+        let tiles: std::cell::RefCell<Vec<TileRefs>> =
+            std::cell::RefCell::new(Vec::with_capacity(4));
         Box::new(move |x, y, top| {
             let key = tile_key(x, y);
             let mut tiles = tiles.borrow_mut();
@@ -369,7 +415,9 @@ mod tests {
 
     /// A flat road face 20 m square at height `z` in tile (0, 0), and the terrain at `h`.
     fn tile(z: f32, h: f32) -> (TileSurface, Terrain) {
-        let x = format!("xof 0303txt 0032\nMesh {{\n4;\n100;{z};100;,\n120;{z};100;,\n100;{z};120;,\n120;{z};120;;\n2;\n3;0,2,1;,\n3;1,2,3;;\n}}\n");
+        let x = format!(
+            "xof 0303txt 0032\nMesh {{\n4;\n100;{z};100;,\n120;{z};100;,\n100;{z};120;,\n120;{z};120;;\n2;\n3;0,2,1;,\n3;1,2,3;;\n}}\n"
+        );
         let road = omsi_geometry::mesh_from_o3d(&omsi_o3d::xfile::parse_x(x.as_bytes()).unwrap());
         let mut surface = TileSurface::new(128);
         surface.add_drive_mesh(&road, &Mat4::IDENTITY, DVec3::ZERO, 0, 0);
@@ -381,7 +429,9 @@ mod tests {
 
     fn wheel(z: f32, h: f32) -> f64 {
         let (s, t) = tile(z, h);
-        probe_tile(Some(&s), Some(&t), (0, 0), 110.0, 110.0, 5.0).below.unwrap()
+        probe_tile(Some(&s), Some(&t), (0, 0), 110.0, 110.0, 5.0)
+            .below
+            .unwrap()
     }
 
     /// Ground drawn over a road face carries the wheel as Omsi.exe's highest face does - a
@@ -390,7 +440,11 @@ mod tests {
     /// and in between the wheel rises without a step.
     #[test]
     fn drawn_ground_over_a_buried_road_face_carries_the_wheel() {
-        assert!((wheel(-0.67, 0.1) - 0.1).abs() < 1e-4, "{}", wheel(-0.67, 0.1));
+        assert!(
+            (wheel(-0.67, 0.1) - 0.1).abs() < 1e-4,
+            "{}",
+            wheel(-0.67, 0.1)
+        );
         assert!((wheel(0.0, 0.06) - 0.0).abs() < 1e-4);
         assert!((wheel(0.0, BURIED_FACE) - BURIED_FACE as f64).abs() < 1e-4);
         let mut last = 0.0;

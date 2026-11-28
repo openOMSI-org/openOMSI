@@ -19,6 +19,7 @@ fn d3d_material_colours() {
         emissive: [0.0; 3],
         specular_power: 96.0,
         texture: "int_glass.tga".into(),
+        metallic_roughness: None,
     };
     let (color, emissive, specular, ambient) = d3d_material(&m, None, true);
     // textured: the texture's alpha alone counts
@@ -60,17 +61,32 @@ fn d3d_material_colours() {
 /// and a later `[matl]` without one keeps the mode.
 #[test]
 fn later_matl_of_the_same_slot_sets_its_alpha() {
-    let mats = [omsi_o3d::Material { texture: "Chain.dds".into(), ..Default::default() }];
+    let mats = [omsi_o3d::Material {
+        texture: "Chain.dds".into(),
+        ..Default::default()
+    }];
     let def = |alpha: Option<i32>| MaterialDef {
         texture: "chain.dds".into(),
         alpha: alpha.unwrap_or(0),
         alpha_set: alpha.is_some(),
         ..Default::default()
     };
-    assert_eq!(material_alpha(&mats, 0, &[def(None), def(Some(1))]), AlphaMode::Test);
-    assert_eq!(material_alpha(&mats, 0, &[def(Some(1)), def(None)]), AlphaMode::Test);
-    assert_eq!(material_alpha(&mats, 0, &[def(Some(2)), def(Some(0))]), AlphaMode::Opaque);
-    assert_eq!(material_alpha(&mats, 0, &[def(None), def(None)]), AlphaMode::Opaque);
+    assert_eq!(
+        material_alpha(&mats, 0, &[def(None), def(Some(1))]),
+        AlphaMode::Test
+    );
+    assert_eq!(
+        material_alpha(&mats, 0, &[def(Some(1)), def(None)]),
+        AlphaMode::Test
+    );
+    assert_eq!(
+        material_alpha(&mats, 0, &[def(Some(2)), def(Some(0))]),
+        AlphaMode::Opaque
+    );
+    assert_eq!(
+        material_alpha(&mats, 0, &[def(None), def(None)]),
+        AlphaMode::Opaque
+    );
 }
 
 #[test]
@@ -222,14 +238,26 @@ fn material_extra_from_commands() {
         tex_address: omsi_model::TexAddress::Clamp,
         ..roller.clone()
     };
-    assert_eq!(material_extra(&[&roller, &clamped], None, None, [0.0; 4]).border, None);
+    assert_eq!(
+        material_extra(&[&roller, &clamped], None, None, [0.0; 4]).border,
+        None
+    );
     // the slot's last addressing command decides how its textures repeat
     use omsi_render::TexAddressing as R;
-    let mirror = MaterialDef { tex_address: omsi_model::TexAddress::Mirror, ..roller.clone() };
-    let once = MaterialDef { tex_address: omsi_model::TexAddress::MirrorOnce, ..roller.clone() };
+    let mirror = MaterialDef {
+        tex_address: omsi_model::TexAddress::Mirror,
+        ..roller.clone()
+    };
+    let once = MaterialDef {
+        tex_address: omsi_model::TexAddress::MirrorOnce,
+        ..roller.clone()
+    };
     let plain = MaterialDef::default();
     assert_eq!(tex_addressing([&plain].into_iter()), R::Wrap);
-    assert_eq!(tex_addressing([&clamped, &mirror, &plain].into_iter()), R::Mirror);
+    assert_eq!(
+        tex_addressing([&clamped, &mirror, &plain].into_iter()),
+        R::Mirror
+    );
     assert_eq!(tex_addressing([&mirror, &once].into_iter()), R::MirrorOnce);
     assert_eq!(tex_addressing([&once, &roller].into_iter()), R::Clamp);
 }
@@ -256,7 +284,14 @@ fn scenery_freetex_name_resolution() {
         &["from_script.bmp".into()],
     );
     let from_strings = vec!["from_strings.bmp".to_string()];
-    let name = resolve_scenery_freetex_name("Textur", &ov1, &overrides, Some(&script), None, &from_strings);
+    let name = resolve_scenery_freetex_name(
+        "Textur",
+        &ov1,
+        &overrides,
+        Some(&script),
+        None,
+        &from_strings,
+    );
     assert_eq!(name, Some("from_script.bmp"));
 
     // 2. Fallback to strings by explicit numeric index (e.g. var = "1")
@@ -265,9 +300,11 @@ fn scenery_freetex_name_resolution() {
     assert_eq!(name, Some("quoted_one.bmp"));
 
     // 3. Fallback to strings by freetex declaration order
-    let name_first = resolve_scenery_freetex_name("Textur", &overrides[0], &overrides, None, None, &strings);
+    let name_first =
+        resolve_scenery_freetex_name("Textur", &overrides[0], &overrides, None, None, &strings);
     assert_eq!(name_first, Some("zero.bmp"));
-    let name_second = resolve_scenery_freetex_name("Textur2", &overrides[1], &overrides, None, None, &strings);
+    let name_second =
+        resolve_scenery_freetex_name("Textur2", &overrides[1], &overrides, None, None, &strings);
     assert_eq!(name_second, Some("quoted_one.bmp"));
 
     // 4. Returns None when no matching string exists
@@ -287,12 +324,26 @@ fn scenery_freetex_name_resolution() {
         &[String::new()],
     );
     assert_eq!(
-        resolve_scenery_freetex_name("Textur", &ov1, &overrides, Some(&empty_script), None, &strings),
+        resolve_scenery_freetex_name(
+            "Textur",
+            &ov1,
+            &overrides,
+            Some(&empty_script),
+            None,
+            &strings
+        ),
         None
     );
     // a variable the object does not declare keeps the positional fallback
     assert_eq!(
-        resolve_scenery_freetex_name("Textur2", &ov1, &overrides, Some(&empty_script), None, &strings),
+        resolve_scenery_freetex_name(
+            "Textur2",
+            &ov1,
+            &overrides,
+            Some(&empty_script),
+            None,
+            &strings
+        ),
         Some("zero.bmp")
     );
 }
@@ -303,21 +354,42 @@ fn scenery_freetex_name_resolution() {
 /// `[matl_*]` commands do. A `[matl_lightmap]` keeps the slot: no glow then.
 #[test]
 fn matl_glow_gives_a_material_its_own_light() {
-    let plain = MaterialDef { texture: "body.dds".into(), ..Default::default() };
+    let plain = MaterialDef {
+        texture: "body.dds".into(),
+        ..Default::default()
+    };
     assert_eq!(material_extra(&[&plain], None, None, [0.0; 4]).glow, 0.0);
     assert_eq!(glow_mask(&[&plain]), None);
-    let lit = MaterialDef { texture: "body.dds".into(), glow: Some(("mask.png".into(), 20.0)), ..Default::default() };
+    let lit = MaterialDef {
+        texture: "body.dds".into(),
+        glow: Some(("mask.png".into(), 20.0)),
+        ..Default::default()
+    };
     assert_eq!(material_extra(&[&lit], None, None, [0.0; 4]).glow, 5.0);
     assert_eq!(glow_mask(&[&lit]), Some("mask.png"));
     // 6 is the `Led glow` slider's own default level
-    let softer = MaterialDef { texture: "body.dds".into(), glow: Some(("soft.png".into(), 6.0)), ..Default::default() };
-    assert_eq!(material_extra(&[&lit, &softer], None, None, [0.0; 4]).glow, 1.5);
+    let softer = MaterialDef {
+        texture: "body.dds".into(),
+        glow: Some(("soft.png".into(), 6.0)),
+        ..Default::default()
+    };
+    assert_eq!(
+        material_extra(&[&lit, &softer], None, None, [0.0; 4]).glow,
+        1.5
+    );
     assert_eq!(glow_mask(&[&lit, &softer]), Some("soft.png"));
     // a negative value lights nothing (it is not a light that can be subtracted)
-    let odd = MaterialDef { texture: "body.dds".into(), glow: Some(("m.png".into(), -3.0)), ..Default::default() };
+    let odd = MaterialDef {
+        texture: "body.dds".into(),
+        glow: Some(("m.png".into(), -3.0)),
+        ..Default::default()
+    };
     assert_eq!(material_extra(&[&odd], None, None, [0.0; 4]).glow, 0.0);
     // the light map keeps its slot
-    let mapped = MaterialDef { lightmap: Some(("l.bmp".into(), "lights".into())), ..lit.clone() };
+    let mapped = MaterialDef {
+        lightmap: Some(("l.bmp".into(), "lights".into())),
+        ..lit.clone()
+    };
     assert_eq!(material_extra(&[&mapped], None, None, [0.0; 4]).glow, 0.0);
     assert_eq!(glow_mask(&[&mapped]), None);
     assert!(own_light_slot(&[&mapped]) && own_light_slot(&[&lit]) && !own_light_slot(&[&plain]));
@@ -328,19 +400,25 @@ fn matl_glow_gives_a_material_its_own_light() {
 /// material.
 #[test]
 fn a_text_texture_glows_as_its_slot_does() {
-    let lit = omsi_o3d::Material { emissive: [0.8, 0.8, 0.6], ..Default::default() };
+    let lit = omsi_o3d::Material {
+        emissive: [0.8, 0.8, 0.6],
+        ..Default::default()
+    };
     let plain = omsi_o3d::Material::default();
     assert_eq!(text_emissive(&[], Some(&lit)), [0.8, 0.8, 0.6]);
     assert_eq!(text_emissive(&[], Some(&plain)), [0.0; 3]);
     assert_eq!(text_emissive(&[], None), [0.0; 3]);
-    assert_ne!(text_material_key("k".into(), &[], Some(&lit)), text_material_key("k".into(), &[], Some(&plain)));
+    assert_ne!(
+        text_material_key("k".into(), &[], Some(&lit)),
+        text_material_key("k".into(), &[], Some(&plain))
+    );
 }
 /// A `[matl_alpha] 2` slot's picture decides how the slot is drawn: nothing to blend by
 /// (opaque), a cut-out (the parked HK buses' bodies, drawn alpha-tested so the object writes
 /// depth), or real partial transparency (a soft shadow blob, a translucent side: a blend).
 #[test]
 fn a_pictures_alpha_decides_how_a_blend_is_drawn() {
-    use super::staging::{picture_blend_fade, BlendFade};
+    use super::staging::{BlendFade, picture_blend_fade};
     let dir = std::env::temp_dir().join(format!("omsi_blend_fade_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let write = |name: &str, alphas: &[u8]| {
@@ -358,27 +436,45 @@ fn a_pictures_alpha_decides_how_a_blend_is_drawn() {
         p
     };
     // 255 throughout: the GG2 signs' pictures, nothing to blend by
-    assert_eq!(picture_blend_fade(&write("solid.tga", &[255; 64])), BlendFade::Solid);
+    assert_eq!(
+        picture_blend_fade(&write("solid.tga", &[255; 64])),
+        BlendFade::Solid
+    );
     // a cut-out: clear and solid, with one antialiased outline texel (the buses: 0.3-0.5 %
     // of the texels are like it)
     let mut cut = vec![255u8; 64];
     cut[..4].fill(0);
     cut[4] = 128;
-    assert_eq!(picture_blend_fade(&write("cutout.tga", &cut)), BlendFade::Cutout);
+    assert_eq!(
+        picture_blend_fade(&write("cutout.tga", &cut)),
+        BlendFade::Cutout
+    );
     // real partial transparency: glass, a feathered road border, a soft shadow blob
-    assert_eq!(picture_blend_fade(&write("glass.tga", &[128; 64])), BlendFade::Partial);
+    assert_eq!(
+        picture_blend_fade(&write("glass.tga", &[128; 64])),
+        BlendFade::Partial
+    );
     // a missing picture keeps the blend it declared
-    assert_eq!(picture_blend_fade(&dir.join("absent.tga")), BlendFade::Partial);
+    assert_eq!(
+        picture_blend_fade(&dir.join("absent.tga")),
+        BlendFade::Partial
+    );
     std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
 fn only_a_flat_shadow_mesh_is_drawn_as_a_shadow_blob() {
-    use glam::Vec3;
     use crate::vehicles::shadow_blob;
+    use glam::Vec3;
     assert!(shadow_blob(true, &[]));
-    assert!(shadow_blob(true, &[Vec3::new(0.0, 0.0, 0.02), Vec3::new(2.0, 5.0, 0.05)]));
-    assert!(!shadow_blob(true, &[Vec3::new(0.0, 0.0, 0.3), Vec3::new(0.5, 1.7, 1.4)]));
+    assert!(shadow_blob(
+        true,
+        &[Vec3::new(0.0, 0.0, 0.02), Vec3::new(2.0, 5.0, 0.05)]
+    ));
+    assert!(!shadow_blob(
+        true,
+        &[Vec3::new(0.0, 0.0, 0.3), Vec3::new(0.5, 1.7, 1.4)]
+    ));
     assert!(!shadow_blob(false, &[]));
 }
 
@@ -404,4 +500,163 @@ fn portuguese_panes_are_glass() {
         false,
         true
     ));
+}
+
+#[test]
+fn reflective_car_body_stays_solid_while_unnamed_pane_on_non_body_mesh_is_see_through() {
+    use crate::vehicles::is_reflective_body;
+    assert!(is_reflective_body(true, false, false, true, true, false));
+    assert!(!is_reflective_body(false, false, false, true, true, false));
+    assert!(!is_reflective_body(true, true, false, true, true, false));
+    assert!(!is_reflective_body(true, false, true, true, true, false));
+}
+
+#[test]
+fn envmapped_atlas_window_on_body_named_mesh_is_see_through() {
+    use crate::vehicle_materials::{ALPHA_MASK, slot_is_clear_window, slot_is_see_through};
+    use crate::vehicles::is_reflective_body;
+    use glam::Vec2;
+    use omsi_geometry::MeshData;
+
+    let mesh = MeshData {
+        positions: vec![],
+        normals: vec![],
+        uvs: vec![
+            Vec2::new(0.1, 0.1),
+            Vec2::new(0.1, 0.2),
+            Vec2::new(0.2, 0.1),
+        ],
+        ranges: vec![(0, 3, 0)],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    let paint = vec![40u8; ALPHA_MASK * ALPHA_MASK];
+    let mut atlas = vec![255u8; ALPHA_MASK * ALPHA_MASK];
+    for (x, y) in [
+        (25, 25),
+        (25, 51),
+        (51, 25),
+        (25, 38),
+        (38, 25),
+        (38, 38),
+        (34, 34),
+    ] {
+        atlas[y * ALPHA_MASK + x] = 0;
+    }
+
+    assert!(slot_is_see_through(&mesh, 0, &paint));
+    assert!(!slot_is_clear_window(&mesh, 0, &paint));
+    assert!(is_reflective_body(true, false, false, true, true, false));
+    assert!(slot_is_see_through(&mesh, 0, &atlas));
+    assert!(slot_is_clear_window(&mesh, 0, &atlas));
+    assert!(!is_reflective_body(true, false, false, true, true, true));
+}
+
+#[test]
+fn envmapped_atlas_window_clear_away_from_centroid_stays_see_through() {
+    use crate::vehicle_materials::{ALPHA_MASK, slot_is_clear_window, slot_is_see_through};
+    use crate::vehicles::is_reflective_body;
+    use glam::Vec2;
+    use omsi_geometry::MeshData;
+
+    let mesh = MeshData {
+        positions: vec![],
+        normals: vec![],
+        uvs: vec![
+            Vec2::new(0.1, 0.1),
+            Vec2::new(0.1, 0.2),
+            Vec2::new(0.2, 0.1),
+        ],
+        ranges: vec![(0, 3, 0)],
+        indices: vec![0, 1, 2],
+        ..Default::default()
+    };
+    let mut atlas = vec![255u8; ALPHA_MASK * ALPHA_MASK];
+    for (x, y) in [(25, 25), (25, 51), (51, 25), (25, 38), (38, 25), (38, 38)] {
+        atlas[y * ALPHA_MASK + x] = 0;
+    }
+    atlas[34 * ALPHA_MASK + 34] = 40;
+
+    assert!(slot_is_see_through(&mesh, 0, &atlas));
+    assert!(slot_is_clear_window(&mesh, 0, &atlas));
+    assert!(!is_reflective_body(true, false, false, true, true, true));
+}
+
+/// The PBR factors (openOMSI) reach the renderer's material: the last of each command of a
+/// slot, the base colour from sRGB to linear; a slot without them has none (as before).
+#[test]
+fn pbr_factors_of_a_slot() {
+    let plain = MaterialDef::default();
+    assert!(!material_extra(&[&plain], None, None, [0.0; 4]).pbr.any());
+    let a = MaterialDef {
+        base_color: Some([1.0, 0.5, 0.0]),
+        metallic: Some(1.0),
+        roughness: Some(0.5),
+        ..Default::default()
+    };
+    let b = MaterialDef {
+        roughness: Some(0.1),
+        ..Default::default()
+    };
+    let p = material_extra(&[&a, &b], None, None, [0.0; 4]).pbr;
+    assert_eq!(p.metallic, Some(1.0));
+    assert_eq!(p.roughness, Some(0.1));
+    assert_eq!(p.normal_strength, None);
+    let c = p.base_color.unwrap();
+    assert_eq!(c[0], 1.0);
+    assert!((c[1] - 0.214).abs() < 0.001, "{c:?}");
+    assert_eq!(c[2], 0.0);
+}
+
+/// `[matl_emissive]` (openOMSI) reaches the renderer's material: none without it; the colour
+/// linear, the temperature's colour where one is given, the luminance in radiance units, the
+/// texture in the light map's slot unless that holds a light map, driven only without one.
+#[test]
+fn emission_of_a_slot() {
+    assert_eq!(
+        material_extra(&[&MaterialDef::default()], None, None, [0.0; 4]).emission,
+        None
+    );
+    let lamp = MaterialDef {
+        emission: Some(omsi_model::Emission {
+            color: [1.0, 0.5, 0.0],
+            strength: 8.0,
+            variable: Some("lights_main".into()),
+            texture: Some("lamp_e.png".into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let e = material_extra(&[&lamp], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert_eq!(e.scale, 8.0);
+    assert!(!e.physical && e.textured && e.dimmed && !e.tinted);
+    assert!((e.color[1] - 0.214).abs() < 0.001);
+    assert_eq!(glow_mask(&[&lamp]), Some("lamp_e.png"));
+    let bulb = MaterialDef {
+        emission: Some(omsi_model::Emission {
+            kelvin: Some(3200.0),
+            filament: true,
+            nits: Some(2.0e7),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let e = material_extra(&[&bulb], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert!(e.physical && e.tinted && e.dimmed && !e.textured);
+    assert_eq!(e.scale, 2000.0);
+    assert!(e.color[0] > e.color[2]);
+    let lit = MaterialDef {
+        lightmaps: vec![("l.bmp".into(), "lights".into())],
+        lightmap: Some(("l.bmp".into(), "lights".into())),
+        ..lamp.clone()
+    };
+    let e = material_extra(&[&lit], None, None, [0.0; 4])
+        .emission
+        .unwrap();
+    assert!(!e.textured && !e.dimmed);
+    assert_eq!(glow_mask(&[&lit]), None);
 }

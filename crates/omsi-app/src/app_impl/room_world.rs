@@ -126,18 +126,8 @@ impl App {
     fn enable_room_population(&mut self) {
         if self.session.humans.is_none() {
             let mut humans = humans::Humans::new(&self.args.root, &mut self.gfx.sim_view.people);
-            humans.exact_fare = self.settings.exact_fare;
-            humans.visual_hailing =
-                self.settings.passenger_hailing && self.settings.passenger_animation == "enhanced";
-            humans.bad_driving = self.settings.pax_bad_driving;
-            humans.boarding = self.settings.boarding.clone();
-            humans.stand_chance = self.settings.standing_chance;
-            humans.short_rides_stand = self.settings.pax_short_rides_stand;
-            humans.voices = match self.settings.pax_voices.as_str() {
-                "off" => 2,
-                "tickets" => 1,
-                _ => 0,
-            };
+            // connections stay off in a room, as before
+            humans.apply_settings(&self.settings, false);
             if let Some(p) = self.player.as_mut() {
                 humans.set_cabin(&mut p.vehicle);
                 humans.ticket_key = ticket_key_name(&self.args.root, &p.bindings);

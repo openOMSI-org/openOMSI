@@ -59,7 +59,12 @@ pub(super) fn bake_light_map(lamps: &[BakeLamp], origin: DVec3) -> omsi_texture:
             px[k] = (t[k] * 255.0) as u8;
         }
     }
-    omsi_texture::Image { width: SIDE as u32, height: SIDE as u32, rgba, has_alpha: false }
+    omsi_texture::Image {
+        width: SIDE as u32,
+        height: SIDE as u32,
+        rgba,
+        has_alpha: false,
+    }
 }
 
 /// The part of a `.map.LM.bmp` that covers its own tile, resampled to the picture's full
@@ -91,13 +96,22 @@ pub(super) fn own_tile_of_light_map(img: &omsi_texture::Image) -> omsi_texture::
             }
         }
     }
-    omsi_texture::Image { width: img.width, height: img.height, rgba, has_alpha: img.has_alpha }
+    omsi_texture::Image {
+        width: img.width,
+        height: img.height,
+        rgba,
+        has_alpha: img.has_alpha,
+    }
 }
 
 /// Give the lamps of a tile the hue its light map (the tile's own part, see
 /// [`own_tile_of_light_map`]; north at the top row) shows under them, where the map is lit
 /// there at all; their brightness stays.
-pub(super) fn tint_lights_from_light_map(lights: &mut [omsi_render::PointLight], img: &omsi_texture::Image, origin: DVec3) {
+pub(super) fn tint_lights_from_light_map(
+    lights: &mut [omsi_render::PointLight],
+    img: &omsi_texture::Image,
+    origin: DVec3,
+) {
     let ts = omsi_map::tile_size();
     let (w, h) = (img.width as i64, img.height as i64);
     if w == 0 || h == 0 {
@@ -117,7 +131,9 @@ pub(super) fn tint_lights_from_light_map(lights: &mut [omsi_render::PointLight],
             for x in (cx - reach).max(0)..=(cx + reach).min(w - 1) {
                 let i = ((y * w + x) * 4) as usize;
                 let c = [img.rgba[i], img.rgba[i + 1], img.rgba[i + 2]];
-                if c.iter().map(|&v| v as u32).sum::<u32>() > best.iter().map(|&v| v as u32).sum::<u32>() {
+                if c.iter().map(|&v| v as u32).sum::<u32>()
+                    > best.iter().map(|&v| v as u32).sum::<u32>()
+                {
                     best = c;
                 }
             }
@@ -126,7 +142,11 @@ pub(super) fn tint_lights_from_light_map(lights: &mut [omsi_render::PointLight],
         if peak < 40.0 {
             continue;
         }
-        let hue = [best[0] as f32 / peak, best[1] as f32 / peak, best[2] as f32 / peak];
+        let hue = [
+            best[0] as f32 / peak,
+            best[1] as f32 / peak,
+            best[2] as f32 / peak,
+        ];
         let bright = l.color.iter().cloned().fold(0.0f32, f32::max);
         l.color = [hue[0] * bright, hue[1] * bright, hue[2] * bright];
     }

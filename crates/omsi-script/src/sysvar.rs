@@ -81,6 +81,9 @@ impl SysVar {
     }
 
     pub fn from_name(s: &str) -> Option<SysVar> {
-        SysVar::ALL.iter().copied().find(|v| v.name().eq_ignore_ascii_case(s))
+        SysVar::ALL
+            .iter()
+            .copied()
+            .find(|v| v.name().eq_ignore_ascii_case(s))
     }
 }

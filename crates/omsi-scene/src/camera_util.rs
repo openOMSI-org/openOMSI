@@ -120,6 +120,67 @@ pub fn mirror_in_view(eye: DVec3, radius: f32, view: &(Camera, f32)) -> bool {
     d.dot(r).abs() <= z.max(0.0) * tan_x + slack_x && d.dot(u).abs() <= z.max(0.0) * tan_y + slack_y
 }
 
+/// The mirrors to draw and the order to draw them in: `seen`, plus every mirror `shows(j, i)`
+/// (the picture of mirror `j` holds mirror `i`'s glass, or its camera) among the `count` of
+/// the vehicle, but none of `skip` - and the mirrors a drawn mirror shows come first, because
+/// a picture drawn before the mirror it shows would show the frame before.
+///
+/// A mirror reflected in another is drawn then although the main view does not hold it: the
+/// interior mirror over the doors shows the door mirrors, and looking into it left them
+/// standing still until they were looked at directly (#3043). One level only - a mirror shown
+/// by a mirror shown by another waits for its turn like any other.
+pub fn mirror_draw_plan(
+    seen: &[usize],
+    skip: &[usize],
+    count: usize,
+    mut shows: impl FnMut(usize, usize) -> bool,
+) -> Vec<usize> {
+    let mut plan: Vec<usize> = seen.to_vec();
+    let direct = plan.len();
+    for k in 0..direct {
+        let j = seen[k];
+        for i in 0..count {
+            if i == j || plan.contains(&i) || skip.contains(&i) {
+                continue;
+            }
+            if shows(j, i) {
+                plan.push(i);
+            }
+        }
+    }
+    // (what a mirror of the plan shows goes before it; the order of the rest stays as it was)
+    let keys: Vec<u8> = plan
+        .iter()
+        .map(|&i| u8::from(!plan.iter().any(|&j| j != i && shows(j, i))))
+        .collect();
+    let mut order: Vec<usize> = (0..plan.len()).collect();
+    order.sort_by_key(|&k| keys[k]);
+    order.into_iter().map(|k| plan[k]).collect()
+}
+
+/// The mirrors drawn in one turn: the ones of `plan` held by the chosen mirror, then that
+/// mirror. The turn is taken by `seen[k % seen.len()]` - the mirrors in the picture - and not
+/// by the mirrors `mirror_draw_plan` added for them: those are drawn with the mirror that
+/// shows them and must not take a turn of their own as well (#4341).
+pub fn mirror_turn_plan(
+    seen: &[usize],
+    plan: &[usize],
+    k: usize,
+    holds: impl Fn(usize, usize) -> bool,
+) -> Vec<usize> {
+    let mut draw = Vec::new();
+    let Some(&picked) = seen.get(k % seen.len().max(1)) else {
+        return draw;
+    };
+    for &i in plan {
+        if i != picked && holds(picked, i) {
+            draw.push(i);
+        }
+    }
+    draw.push(picked);
+    draw
+}
+
 /// A mirror's camera as Omsi.exe aims it, every frame (0x6f6468 -> 0x7ed0e8): the yaw and
 /// pitch of an `[add_camera_reflexion]` are not where it looks but which way the mirror's
 /// face is turned - (cos p sin y, cos p cos y, sin p) in the vehicle's frame (0x7edfd0); the
@@ -130,24 +191,51 @@ pub fn mirror_in_view(eye: DVec3, radius: f32, view: &(Camera, f32)) -> bool {
 /// which happened to fit a mirror facing straight back at the driver and no other: the left
 /// mirrors, the kerb-side blind-spot mirrors and the door monitors of many buses looked into
 /// the saloon or at the sky.)
-pub fn mirror_view(v: &omsi_sim::VehicleInstance, c: &omsi_vehicle::Camera, eye: DVec3, off: [f32; 2]) -> omsi_vehicle::Camera {
+pub fn mirror_view(
+    v: &omsi_sim::VehicleInstance,
+    c: &omsi_vehicle::Camera,
+    eye: DVec3,
+    off: [f32; 2],
+) -> omsi_vehicle::Camera {
     mirror_view_in(v.position, v.body_rotation(), c, eye, off)
 }
 
 /// [`mirror_view`] for a camera of a body at `position`, turned by `rot` (a rear section's).
 /// A `[add_camera_reflexion_static]` camera (`fixed`) is no mirror: it looks along its own
 /// yaw and pitch (and the player's turn of it), wherever the eye is.
-pub fn mirror_view_in(position: DVec3, rot: glam::Mat4, c: &omsi_vehicle::Camera, eye: DVec3, off: [f32; 2]) -> omsi_vehicle::Camera {
+pub fn mirror_view_in(
+    position: DVec3,
+    rot: glam::Mat4,
+    c: &omsi_vehicle::Camera,
+    eye: DVec3,
+    off: [f32; 2],
+) -> omsi_vehicle::Camera {
     if c.fixed {
-        return omsi_vehicle::Camera { yaw: c.yaw + off[0], pitch: (c.pitch + off[1]).clamp(-89.0, 89.0), ..c.clone() };
+        return omsi_vehicle::Camera {
+            yaw: c.yaw + off[0],
+            pitch: (c.pitch + off[1]).clamp(-89.0, 89.0),
+            ..c.clone()
+        };
     }
-    let at = position + rot.transform_point3(glam::Vec3::new(c.pos[0], c.pos[1], c.pos[2])).as_dvec3();
+    let at = position
+        + rot
+            .transform_point3(glam::Vec3::new(c.pos[0], c.pos[1], c.pos[2]))
+            .as_dvec3();
     let d = rot.inverse().transform_vector3((at - eye).as_vec3());
-    let Some(d) = d.try_normalize() else { return c.clone() };
-    let (y, p) = ((c.yaw + off[0]).to_radians(), (c.pitch + off[1]).to_radians());
+    let Some(d) = d.try_normalize() else {
+        return c.clone();
+    };
+    let (y, p) = (
+        (c.yaw + off[0]).to_radians(),
+        (c.pitch + off[1]).to_radians(),
+    );
     let m = glam::Vec3::new(p.cos() * y.sin(), p.cos() * y.cos(), p.sin());
     let r = d - m * (2.0 * d.dot(m));
-    omsi_vehicle::Camera { yaw: r.x.atan2(r.y).to_degrees(), pitch: mirror_pitch_deg(r), ..c.clone() }
+    omsi_vehicle::Camera {
+        yaw: r.x.atan2(r.y).to_degrees(),
+        pitch: mirror_pitch_deg(r),
+        ..c.clone()
+    }
 }
 
 /// The pitch Omsi.exe gives a mirror camera looking along `r` (0x7efc60, arcsine 0x45a3d4):
@@ -162,8 +250,16 @@ fn mirror_pitch_deg(r: glam::Vec3) -> f32 {
 /// A mirror camera as the player has set it: moved by a shift (bus frame, m) and with
 /// `dfov` degrees added to its field of view (a mirror that gives none draws with 50).
 pub fn adjusted(c: &omsi_vehicle::Camera, s: [f32; 3], dfov: f32) -> omsi_vehicle::Camera {
-    let fov = if dfov.abs() > 0.01 { (if c.fov > 1.0 { c.fov } else { 50.0 } + dfov).clamp(8.0, 110.0) } else { c.fov };
-    omsi_vehicle::Camera { pos: [c.pos[0] + s[0], c.pos[1] + s[1], c.pos[2] + s[2]], fov, ..c.clone() }
+    let fov = if dfov.abs() > 0.01 {
+        (if c.fov > 1.0 { c.fov } else { 50.0 } + dfov).clamp(8.0, 110.0)
+    } else {
+        c.fov
+    };
+    omsi_vehicle::Camera {
+        pos: [c.pos[0] + s[0], c.pos[1] + s[1], c.pos[2] + s[2]],
+        fov,
+        ..c.clone()
+    }
 }
 
 #[cfg(test)]
@@ -176,11 +272,19 @@ mod tests {
         for heading in [0.0f32, 40.0, 135.0, 260.0] {
             let pitch = |deg: f32| {
                 let (h, e) = (heading.to_radians(), deg.to_radians());
-                super::mirror_pitch_deg(glam::Vec3::new(h.sin() * e.cos(), h.cos() * e.cos(), e.sin()))
+                super::mirror_pitch_deg(glam::Vec3::new(
+                    h.sin() * e.cos(),
+                    h.cos() * e.cos(),
+                    e.sin(),
+                ))
             };
             let want = |deg: f32| deg.to_radians().tan().clamp(-1.0, 1.0).asin().to_degrees();
             for deg in [0.0, 12.0, -30.0, 44.0, -60.0] {
-                assert!((pitch(deg) - want(deg)).abs() < 1e-3, "{heading} {deg}: {}", pitch(deg));
+                assert!(
+                    (pitch(deg) - want(deg)).abs() < 1e-3,
+                    "{heading} {deg}: {}",
+                    pitch(deg)
+                );
             }
             assert!((pitch(-30.0) + 35.264).abs() < 1e-2);
         }
@@ -191,8 +295,18 @@ mod tests {
     /// where it is pointed, wherever the eye is, turned by the player's offset.
     #[test]
     fn a_static_camera_does_not_follow_the_eye() {
-        let mirror = omsi_vehicle::Camera { pos: [1.2, 5.0, 2.0], fov: 30.0, yaw: 180.0, ..Default::default() };
-        let cctv = omsi_vehicle::Camera { fixed: true, yaw: 90.0, pitch: -40.0, ..mirror.clone() };
+        let mirror = omsi_vehicle::Camera {
+            pos: [1.2, 5.0, 2.0],
+            fov: 30.0,
+            yaw: 180.0,
+            ..Default::default()
+        };
+        let cctv = omsi_vehicle::Camera {
+            fixed: true,
+            yaw: 90.0,
+            pitch: -40.0,
+            ..mirror.clone()
+        };
         let views = |c: &omsi_vehicle::Camera| {
             [DVec3::new(0.0, 4.0, 2.0), DVec3::new(-0.5, 3.0, 2.2)]
                 .map(|eye| super::mirror_view_in(DVec3::ZERO, Mat4::IDENTITY, c, eye, [0.0; 2]))
@@ -201,7 +315,70 @@ mod tests {
         let [a, b] = views(&mirror);
         assert!((a.0 - b.0).abs() > 1.0, "{a:?} {b:?}");
         assert_eq!(views(&cctv), [(90.0, -40.0); 2]);
-        let turned = super::mirror_view_in(DVec3::ZERO, Mat4::IDENTITY, &cctv, DVec3::ZERO, [5.0, -60.0]);
+        let turned = super::mirror_view_in(
+            DVec3::ZERO,
+            Mat4::IDENTITY,
+            &cctv,
+            DVec3::ZERO,
+            [5.0, -60.0],
+        );
         assert_eq!((turned.yaw, turned.pitch), (95.0, -89.0));
+    }
+
+    /// The interior mirror over the doors (0) shows the two door mirrors (1, 2): with only the
+    /// interior one in the picture, all three are drawn, the door mirrors first (#3043).
+    #[test]
+    fn a_mirror_seen_in_another_is_drawn_before_it() {
+        let shows = |j: usize, i: usize| j == 0 && (i == 1 || i == 2);
+        assert_eq!(super::mirror_draw_plan(&[0], &[], 3, shows), vec![1, 2, 0]);
+        // (the door mirrors in the picture themselves: each drawn once, the interior one last)
+        assert_eq!(
+            super::mirror_draw_plan(&[0, 1, 2], &[], 3, shows),
+            vec![1, 2, 0]
+        );
+        // (and a mirror the interior one does not show waits for its turn)
+        assert_eq!(super::mirror_draw_plan(&[0], &[], 4, shows), vec![1, 2, 0]);
+    }
+
+    /// A mirror left out of the turns (`skip`: the panels drawn every frame) is not brought
+    /// in by the one showing it.
+    #[test]
+    fn a_skipped_mirror_is_not_drawn_for_another_mirror() {
+        let shows = |j: usize, i: usize| j == 0 && (i == 1 || i == 2);
+        assert_eq!(super::mirror_draw_plan(&[0], &[2], 3, shows), vec![1, 0]);
+        // (nothing shows anything: the plan is what was seen, in its order)
+        assert_eq!(
+            super::mirror_draw_plan(&[1, 0, 2], &[], 3, |_, _| false),
+            vec![1, 0, 2]
+        );
+        assert!(super::mirror_draw_plan(&[], &[], 3, shows).is_empty());
+    }
+
+    /// The door mirrors (1, 2) are drawn with the interior mirror (0) that shows them. They do
+    /// not take turns of their own as well: that drew some mirrors twice per refresh cycle while
+    /// the interior mirror waited for its turn, and cost the frame rate (#4341).
+    #[test]
+    fn a_mirror_drawn_for_another_takes_no_turn_of_its_own() {
+        let seen = [0];
+        let plan = super::mirror_draw_plan(&seen, &[], 3, |j, i| j == 0 && (i == 1 || i == 2));
+        let holds = |j: usize, i: usize| j == 0 && (i == 1 || i == 2);
+        for k in 0..6 {
+            assert_eq!(
+                super::mirror_turn_plan(&seen, &plan, k, holds),
+                vec![1, 2, 0]
+            );
+        }
+        // (two mirrors in the picture: only they take turns; one shows nothing extra)
+        let seen = [0, 3];
+        let plan = super::mirror_draw_plan(&seen, &[], 4, |j, i| j == 0 && (i == 1 || i == 2));
+        assert_eq!(
+            super::mirror_turn_plan(&seen, &plan, 0, holds),
+            vec![1, 2, 0]
+        );
+        assert_eq!(
+            super::mirror_turn_plan(&seen, &plan, 1, |_, _| false),
+            vec![3]
+        );
+        assert!(super::mirror_turn_plan(&[], &[], 0, holds).is_empty());
     }
 }

@@ -35,7 +35,11 @@ pub fn parse_f64(s: &str) -> f64 {
                     break;
                 }
             }
-            t[..end].parse::<f64>().ok().filter(|v| v.is_finite()).unwrap_or(0.0)
+            t[..end]
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite())
+                .unwrap_or(0.0)
         }
     }
 }
@@ -43,11 +47,7 @@ pub fn parse_f64(s: &str) -> f64 {
 pub fn parse_f32(s: &str) -> f32 {
     // (a double beyond f32's range would become infinite)
     let v = parse_f64(s) as f32;
-    if v.is_finite() {
-        v
-    } else {
-        0.0
-    }
+    if v.is_finite() { v } else { 0.0 }
 }
 
 pub fn parse_i64(s: &str) -> i64 {
