@@ -191,10 +191,18 @@ pub fn vehicle_lights(
                 continue;
             }
             let turn = |name: &Option<String>| name.as_deref().map_or(0.0, |n| value_of(n));
-            let local = cookie_direction(Vec3::from(c.dir), turn(&c.yaw), turn(&c.pitch));
-            let at = origin + rot.transform_point3(Vec3::from(c.pos)).as_dvec3();
-            let d = rot.transform_vector3(local).normalize_or_zero();
-            push_cookie(lights, at, d, c, on, cookie_picture_id(dir, &c.picture));
+            for (pos, local, share) in cookie_lamps(c, turn(&c.yaw), turn(&c.pitch)) {
+                let at = origin + rot.transform_point3(pos).as_dvec3();
+                let d = rot.transform_vector3(local).normalize_or_zero();
+                push_cookie(
+                    lights,
+                    at,
+                    d,
+                    c,
+                    on * share,
+                    cookie_picture_id(dir, &c.picture),
+                );
+            }
         }
     }
     // [interiorlight]s light only the meshes listing them and the passengers (per-instance
@@ -297,6 +305,30 @@ fn cookie_direction(dir: Vec3, yaw_deg: f32, pitch_deg: f32) -> Vec3 {
         return d;
     }
     glam::Quat::from_axis_angle(right.normalize(), pitch_deg.to_radians()) * d
+}
+
+/// A cookie lamp's places and directions in its vehicle's frame (x right, y ahead, z up),
+/// with the offsets already applied and each lamp's share of the light. A Sobol flag of 0 asks
+/// for a twin across the axis; its place and direction are mirrored, but its offsets are not,
+/// so both beams steer the same way.
+fn cookie_lamps(
+    c: &omsi_model::SpotlightCookie,
+    yaw_deg: f32,
+    pitch_deg: f32,
+) -> Vec<(Vec3, Vec3, f32)> {
+    let sides: &[f32] = if c.mirrored { &[1.0, -1.0] } else { &[1.0] };
+    sides
+        .iter()
+        .map(|side| {
+            let pos = Vec3::new(c.pos[0] * side, c.pos[1], c.pos[2]);
+            let dir = Vec3::new(c.dir[0] * side, c.dir[1], c.dir[2]);
+            (
+                pos,
+                cookie_direction(dir, yaw_deg, pitch_deg),
+                1.0 / sides.len() as f32,
+            )
+        })
+        .collect()
 }
 
 /// The lights of a `[spotlight_cookie]` at `at` shining along `d`, switched to `on` (0..1),
@@ -759,6 +791,29 @@ mod cookie_tests {
         let up = cookie_direction(ahead, 0.0, 10.0);
         assert!(up.z > 0.17 && up.z < 0.18 && up.x.abs() < 1e-5, "{up:?}");
         assert_eq!(cookie_direction(ahead, 0.0, 0.0), ahead);
+    }
+
+    /// Sobol's flag of 0 asks for two lamps: their places and directions are mirrored across
+    /// the axis, but a cornering offset steers both the same way.
+    #[test]
+    fn a_sobol_cookie_lights_a_twin_that_steers_the_same_way() {
+        let c = omsi_model::SpotlightCookie {
+            pos: [0.72, 5.82, 0.68],
+            dir: [-0.1, 1.0, 0.0],
+            mirrored: true,
+            ..Default::default()
+        };
+        let lamps = cookie_lamps(&c, 10.0, 0.0);
+        assert_eq!(lamps.len(), 2);
+        assert_eq!(lamps[0].2, 0.5);
+        assert_eq!(lamps[0].0.x, -lamps[1].0.x);
+        assert_eq!(lamps[0].0.y, lamps[1].0.y);
+        assert!(lamps[0].1.x > 0.0 && lamps[1].1.x > 0.0, "both steer right");
+        let one = omsi_model::SpotlightCookie {
+            mirrored: false,
+            ..c
+        };
+        assert_eq!(cookie_lamps(&one, 10.0, 0.0).len(), 1);
     }
 
     /// A cookie lamp is a classic spot and an enhanced one with its picture; without a
