@@ -4467,6 +4467,12 @@
 "straight on": "tout droit"
 "to the left": "vers la gauche"
 "to the right": "vers la droite"
+"Call the police": "Appeler la police"
+"No accident to report": "Aucun accident à signaler"
+"Stop and switch on the hazard lights first": "Arrêtez-vous d'abord et allumez les feux de détresse"
+"The police have taken up the accident": "La police a pris en charge l'accident"
+"You left the scene of the accident without calling the police": "Vous avez quitté les lieux de l'accident sans appeler la police"
+"Accident! Stop, switch on the hazard lights and call the police": "Accident ! Arrêtez-vous, allumez les feux de détresse et appelez la police"
 "Lights on in a downpour": "Lumières allumées sous l'averse"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "De jour, sous une forte pluie, certaines fenêtres des maisons s'allument, car il fait assez sombre pour allumer la lumière"
 
@@ -4518,3 +4524,6 @@
 "Only for due trips": "Seulement pour les courses prévues"
 "Passengers wait for open doors": "Les passagers attendent les portes ouvertes"
 "IBIS stop follows the duty": "L'arrêt IBIS suit le service"
+
+"Traction": "Traction"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "À quel point le moteur du bus que vous conduisez est fort (tramways et trolleybus aussi)"

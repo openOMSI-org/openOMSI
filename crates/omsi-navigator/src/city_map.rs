@@ -91,15 +91,16 @@ fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
 impl Navigator {
     /// Where OMSI 2's dynamic route arrows stand on the route ahead (the `nav_dynamic_arrows`
     /// setting): every junction lane of the next `reach` metres with the way through it
-    /// (`L`, `R`, or `dn` for straight on), and the stops of the trip ahead with their
-    /// names (`busstop`). Each: a key that stays the same while it is ahead, the place,
-    /// the heading, the kind and its text.
-    /// `stop_pose` gives a stop object's place and heading where its tile is loaded.
+    /// (`L`, `R`, or `dn` for straight on). Each: a key that stays the same while it is ahead,
+    /// the place, the heading, the kind and its text.
+    /// `stop_pose` is kept so callers need not change with the route stops; no bus-stop helper
+    /// is put down any more: the map already draws one H at every stop, and a second at the
+    /// stops of the player's route looked like a doubled symbol (#3739).
     pub fn arrow_spots(
         &self,
         traffic: Option<&Network>,
         reach: f64,
-        stop_pose: &dyn Fn(i64) -> Option<(DVec3, f64)>,
+        _stop_pose: &dyn Fn(i64) -> Option<(DVec3, f64)>,
     ) -> Vec<(u64, DVec3, f64, &'static str, String)> {
         let mut out = Vec::new();
         if !self.arrows {
@@ -179,23 +180,6 @@ impl Navigator {
             }
             prev_end = Some(h1);
             acc += len as f64;
-        }
-        // The stop's helper: Omsi.exe puts `routearrows_busstop.sco` on the stop object
-        // itself, at its place and with its rotation (0x61fc04: the station record's
-        // position +0x3c and quaternion +0x54) - where and how the mapper set the stop down,
-        // not turned to the bus as it comes.
-        for (k, (p, name, h, id)) in self.stop_spots.iter().enumerate() {
-            let (p, h) = stop_pose(*id).unwrap_or((*p, *h));
-            let d = (p - self.bus_at).truncate().length();
-            if d < reach && k < 2 {
-                out.push((
-                    (1u64 << 40) + p.x.to_bits().rotate_left(7) ^ p.y.to_bits() ^ h.to_bits(),
-                    p,
-                    h,
-                    "busstop",
-                    name.clone(),
-                ));
-            }
         }
         out
     }

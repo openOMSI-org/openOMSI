@@ -18,6 +18,7 @@ pub mod ibis;
 pub mod image_decode;
 pub mod incidents;
 pub mod input;
+pub mod livery;
 pub mod particles;
 pub mod people;
 pub mod physics;

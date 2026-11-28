@@ -5,19 +5,6 @@ use super::*;
 use crate::ai_traffic::TrafficSim;
 use crate::traffic::Network;
 
-/// The bus stands next to the kerb: the pole's offset less half a bus width and a gap; only
-/// where the pole is clearly off the lane (a bay).
-///
-/// A pole further off than a bay's width stands behind the pavement or the verge (the
-/// stop objects of many maps are placed there): the bus stays in its lane at the kerb then.
-/// Taken as a bay up to 4 m wide, the bus pulled out over the kerb onto the grass.
-///
-/// Not at all, now: a timetable bus stays on its path at the stop, as OMSI's do (a
-/// map's bus bay is a spline of its own that the route runs through). The pole's offset
-/// says nothing about where the kerb is - most stand behind the pavement - and a bus
-/// moved 1.6 m to the right of its lane drove along with its right wheels on the pavement.
-/// A box on the *opposite* side or more than 8 m from its authored route lane cannot be
-/// reached as a bay: following that offset sends the bus across the NCC median/platform.
 /// Stops moved `shift` metres back along `route` (the lanes the stops' route indices less
 /// `base` count in): where the vehicle's origin comes to rest (`bus_service::stop_shift`).
 /// One that comes to lie before the route's first lane keeps a distance below zero on it.
@@ -56,8 +43,9 @@ pub fn bay_offset(lat: f32) -> f32 {
 /// where traffic keeps left), from the box's offset `lat` off the path (right positive);
 /// a railway vehicle keeps to its track. OMSI clamps it only to the room beside other
 /// vehicles, not to a kerb: the bus pulls into the bay whether or not a path leads there
-/// (#241). (openOMSI kept it on its path before - a map whose box stood behind the
-/// pavement had its buses on the pavement - but OMSI does the same there.)
+/// (#241). The box's offset says nothing about where the kerb is, though: on ordinary
+/// stops whose pole stands behind the pavement the bus climbed the kerb (#3728).
+/// `place_stops` keeps the alignment but limits it to the lane's width.
 pub(crate) fn bay_for(
     lat: f32,
     ty: &crate::VehicleType,
@@ -92,8 +80,35 @@ pub(crate) fn bay_for(
     }
 }
 
-/// The stops' raw box offsets (see `bay_offset`) made the vehicle's bay offsets, and the
-/// stops moved to where its origin comes to rest (`shift_stops`).
+/// How far a docking bus keeps its body off the lane's edge (m).
+const KERB_CLEARANCE: f32 = 0.2;
+
+/// Keep the bus's body within the lane while it docks (#3728). The stop's pole may stand
+/// behind the pavement, but the side of the bus facing it must stop short of the kerb:
+/// what is left of the lane on that side is the room its origin has to move over. A lane
+/// narrower than the vehicle leaves no room, so the bus serves the stop from the middle.
+pub(crate) fn bay_in_lane(bay: f32, ty: &crate::VehicleType, lane_width: f32) -> f32 {
+    if bay.abs() < 1e-6 || !lane_width.is_finite() || lane_width <= 0.0 {
+        return bay;
+    }
+    let bb = ty
+        .def
+        .bounding_box
+        .unwrap_or([2.5, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    let hw = bb[0] * 0.5;
+    // The bounding box's lateral centre shifts the flank on the bay's side.
+    let flank = (if bay < 0.0 { hw - bb[3] } else { hw + bb[3] }).max(0.0);
+    let room = lane_width * 0.5 - flank - KERB_CLEARANCE;
+    if !room.is_finite() || room <= 0.0 {
+        0.0
+    } else {
+        bay.clamp(-room, room)
+    }
+}
+
+/// The stops' raw box offsets (see `bay_offset`) made the vehicle's bay offsets, limited
+/// to the lane the stop is on, and the stops moved to where its origin comes to rest
+/// (`shift_stops`).
 pub fn place_stops(
     net: &Network,
     route: &[usize],
@@ -104,6 +119,16 @@ pub fn place_stops(
 ) {
     for st in stops.iter_mut() {
         st.2 = bay_for(st.2, ty, rail, net.left_hand, st.5);
+        if !rail {
+            if let Some(lane) =
+                st.0.checked_sub(base)
+                    .and_then(|ri| route.get(ri))
+                    .copied()
+                    .and_then(|li| net.lanes.get(li))
+            {
+                st.2 = bay_in_lane(st.2, ty, lane.width);
+            }
+        }
     }
     shift_stops(
         net,

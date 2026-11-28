@@ -557,11 +557,13 @@ impl App {
         if self.settings.mirror_size == 0 {
             self.gfx.mirror_budget = 0.0;
             self.gfx.mirrors_seen = 0;
+            self.gfx.mirror_debt = 0;
         } else if self.settings.mirror_refresh == "every" && !vr_active {
             // every mirror in the picture every frame: the street goes by in them as smoothly
             // as through the windscreen (in turns, each picture was a step behind, and the
             // steps grew with the speed - the mirrors seemed to shake)
             self.gfx.mirror_budget = 0.0;
+            self.gfx.mirror_debt = 0;
             let mirror_view = if self.settings.triple.enabled {
                 None
             } else {
@@ -573,7 +575,7 @@ impl App {
                 .is_some_and(|p| (p.vehicle.position - cam.position).length() < 12.0);
             if let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) {
                 if self.cam.in_cab || near {
-                    self.gfx.mirrors_seen = render_mirrors(
+                    let redraw = render_mirrors(
                         r,
                         scene,
                         w,
@@ -583,10 +585,12 @@ impl App {
                         mirror_view,
                         on_screen,
                     );
+                    self.gfx.mirrors_seen = redraw.seen;
                 }
             }
         } else if self.settings.mirror_refresh == "off" {
             self.gfx.mirror_budget = 0.0;
+            self.gfx.mirror_debt = 0;
             if let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) {
                 let since = match &self.gfx.frozen_mirrors {
                     Some(m) if m.bus == p.uid => m.since,
@@ -598,7 +602,7 @@ impl App {
                     || (since < MIRROR_FREEZE_REDRAW && next >= MIRROR_FREEZE_REDRAW)
                     || p.mirrors_dirty
                 {
-                    self.gfx.mirrors_seen = render_mirrors(
+                    let redraw = render_mirrors(
                         r,
                         scene,
                         w,
@@ -608,6 +612,7 @@ impl App {
                         None,
                         on_screen,
                     );
+                    self.gfx.mirrors_seen = redraw.seen;
                 }
                 self.gfx.frozen_mirrors = Some(FrozenMirrors {
                     bus: p.uid,
@@ -675,13 +680,12 @@ impl App {
                     self.gfx.mirrors_seen.clamp(1, 2),
                 )
             };
-            let mut drawn = 0;
             if vr_active && draw_limit > 0 && draw_limit == mirrors {
                 // Prepare the cameras and textures only once when all
                 // mirrors are due, including the Every frame mode.
                 if let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) {
                     self.gfx.mirror_turn = self.gfx.mirror_turn.wrapping_add(draw_limit);
-                    self.gfx.mirrors_seen = render_mirrors(
+                    let redraw = render_mirrors(
                         r,
                         scene,
                         w,
@@ -691,25 +695,39 @@ impl App {
                         mirror_view,
                         on_screen,
                     );
-                    drawn = draw_limit;
+                    self.gfx.mirrors_seen = redraw.seen;
+                    self.gfx.mirror_debt = 0;
                 }
-            }
-            while (self.cam.in_cab || near) && drawn < draw_limit {
-                let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) else {
-                    break;
-                };
-                drawn += 1;
-                self.gfx.mirror_turn = self.gfx.mirror_turn.wrapping_add(1);
-                self.gfx.mirrors_seen = render_mirrors(
-                    r,
-                    scene,
-                    w,
-                    p,
-                    lighting,
-                    MirrorPick::Turn(self.gfx.mirror_turn, skip),
-                    mirror_view,
-                    on_screen,
-                );
+            } else {
+                // A mirror showing others takes their pictures with it. Charge every picture
+                // to the redraw budget: a mirror drawn for another must not also take a turn,
+                // or it refreshes faster than the setting allows (#4341).
+                let allowance = draw_limit.saturating_sub(self.gfx.mirror_debt);
+                let mut drawn = 0;
+                while (self.cam.in_cab || near) && drawn < allowance {
+                    let (Some(w), Some(p)) = (self.world.as_ref(), self.player.as_ref()) else {
+                        break;
+                    };
+                    self.gfx.mirror_turn = self.gfx.mirror_turn.wrapping_add(1);
+                    let redraw = render_mirrors(
+                        r,
+                        scene,
+                        w,
+                        p,
+                        lighting,
+                        MirrorPick::Turn(self.gfx.mirror_turn, skip),
+                        mirror_view,
+                        on_screen,
+                    );
+                    self.gfx.mirrors_seen = redraw.seen;
+                    drawn += redraw.drawn.max(1);
+                }
+                self.gfx.mirror_debt = self
+                    .gfx
+                    .mirror_debt
+                    .saturating_add(drawn)
+                    .saturating_sub(draw_limit)
+                    .min(128);
             }
         }
         self.gfx.mirror_panel_cams = panel_cams;

@@ -6,6 +6,9 @@
 //! and sound like, and taking the lanes and the vehicle types from the world, is omsi-app's
 //! `traffic` (its `Traffic` is a `TrafficSim` with its pictures and sounds).
 
+pub mod accident;
+#[cfg(test)]
+mod accident_tests;
 pub mod admission;
 pub mod berths;
 pub mod blind_spot;
@@ -32,6 +35,8 @@ pub mod lateral;
 mod lateral_tests;
 pub mod light_paths;
 pub mod lights;
+#[cfg(test)]
+mod livery_tests;
 pub mod mirror;
 pub mod model;
 pub mod obstacles;
@@ -154,6 +159,9 @@ pub struct TrafficSim {
     pub(crate) lane_weight_sums: (usize, Vec<f64>),
     pub rng: u64,
     pub scheme_salt: u64,
+    /// The livery of the bus the player drives: the random traffic of the same vehicle file
+    /// draws another paint, number and plate (see `omsi_sim::livery`, #3477).
+    pub player_livery: Option<crate::livery::PlayerLivery>,
     scheme_sets: std::sync::Mutex<HashMap<std::path::PathBuf, Vec<usize>>>,
     /// Target number of cars around the camera.
     pub target: usize,
@@ -331,6 +339,7 @@ pub struct TrafficSim {
     /// Cars the last `tick` took off the road (their ids): their sounds and pictures are
     /// for the game to let go (see omsi-app's `Traffic::tick`).
     pub retired: Vec<u64>,
+    pub accident: accident::Accidents,
     /// The cars that honked since the game last asked (`horn`): id and whether it is a heavy
     /// vehicle. The stock cars' sounds have nothing on `ev_AI_Horn`, so the game plays
     /// OMSI's own AI horn for them.
