@@ -279,7 +279,7 @@ pub(crate) fn encode_batches_in<'a, E: mx::RenderEncoder>(
         if b.material != material {
             // (the material's row in the table, and its textures' places in the heap)
             let binding = &scene.materials[b.material as usize].binding;
-            pass.set_buffer_offset(1, 2, MaterialTable::offset(binding.row.index));
+            pass.set_buffer_offset(1, 2, scene.material_table.offset(binding.row.index));
             let slots = scene.material_table.immediates(binding);
             pass.set_immediates(0, bytemuck::cast_slice(&slots));
             material = b.material;

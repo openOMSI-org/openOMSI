@@ -304,25 +304,36 @@ pub(crate) struct MaterialTable {
     /// `@group(1)`: the table, read at each draw's dynamic offset
     pub(crate) group: mx::BindGroup,
     pub(crate) rows: Arc<std::sync::Mutex<MaterialRows>>,
+    pub(crate) stride: u64,
     data: Vec<u8>,
 }
 
-/// A row of the material table: a `MaterialUniform` at an offset uniform buffers may start at.
+/// Minimum row stride of the material table; larger device `min_uniform_buffer_offset_alignment`
+/// values round up from this via `MaterialTable::row_stride_for`.
 pub(crate) const MATERIAL_ROW_BYTES: u64 = 256;
 
 impl MaterialTable {
+    pub(crate) fn row_stride_for(min_alignment: u64) -> u64 {
+        let min_bytes = (std::mem::size_of::<MaterialUniform>() as u64).max(MATERIAL_ROW_BYTES);
+        let align = min_alignment.max(1);
+        min_bytes.div_ceil(align) * align
+    }
+
     pub(crate) fn new(device: &mx::Device, rows: u64) -> MaterialTable {
-        assert!(std::mem::size_of::<MaterialUniform>() as u64 <= MATERIAL_ROW_BYTES);
-        let (buffer, group) = Self::make(device, rows * MATERIAL_ROW_BYTES);
+        let stride =
+            Self::row_stride_for(device.limits().min_uniform_buffer_offset_alignment as u64);
+        assert!(std::mem::size_of::<MaterialUniform>() as u64 <= stride);
+        let (buffer, group) = Self::make(device, rows * stride, stride);
         MaterialTable {
             buffer,
             group,
             rows: Default::default(),
+            stride,
             data: Vec::new(),
         }
     }
 
-    fn make(device: &mx::Device, size: u64) -> (mx::Buffer, mx::BindGroup) {
+    fn make(device: &mx::Device, size: u64, stride: u64) -> (mx::Buffer, mx::BindGroup) {
         let buffer = device
             .create_buffer(&mx::BufferDescriptor {
                 label: Some("material table"),
@@ -337,7 +348,7 @@ impl MaterialTable {
                 resource: mx::BindingResource::Buffer(mx::BufferBinding {
                     buffer: &buffer,
                     offset: 0,
-                    size: Some(MATERIAL_ROW_BYTES),
+                    size: Some(stride),
                 }),
             }],
         });
@@ -361,8 +372,8 @@ impl MaterialTable {
     }
 
     /// Where row `row` starts (the draw's `set_buffer_offset`).
-    pub(crate) fn offset(row: u32) -> u64 {
-        row as u64 * MATERIAL_ROW_BYTES
+    pub(crate) fn offset(&self, row: u32) -> u64 {
+        row as u64 * self.stride
     }
 
     /// Write `uniform` at `row`, growing the table (true: it is a new buffer and bind group).
@@ -373,15 +384,19 @@ impl MaterialTable {
         row: u32,
         uniform: &MaterialUniform,
     ) -> bool {
-        let at = Self::offset(row) as usize;
+        let at = self.offset(row) as usize;
+        let stride = self.stride as usize;
         let bytes = bytemuck::bytes_of(uniform);
-        if self.data.len() < at + MATERIAL_ROW_BYTES as usize {
-            self.data.resize(at + MATERIAL_ROW_BYTES as usize, 0);
+        if self.data.len() < at + stride {
+            self.data.resize(at + stride, 0);
         }
         self.data[at..at + bytes.len()].copy_from_slice(bytes);
         if self.data.len() as u64 > self.buffer.size() {
-            (self.buffer, self.group) =
-                Self::make(device, (self.data.len() as u64 * 2).max(1 << 18));
+            (self.buffer, self.group) = Self::make(
+                device,
+                (self.data.len() as u64 * 2).max(1 << 18),
+                self.stride,
+            );
             queue
                 .write_buffer(&self.buffer, 0, &self.data)
                 .expect("mX: a queue write");
