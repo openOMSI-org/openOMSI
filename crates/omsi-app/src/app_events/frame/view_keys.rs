@@ -281,6 +281,71 @@ fn mirror_keys(cx: &mut ViewKeysCx, dt: f32) -> bool {
     ctrl_alt
 }
 
+/// Grounded photo camera: never select a roof simply because it is the highest surface.
+/// Use short steps so a slow frame cannot skip a thin wall.
+fn walk_photo_camera(
+    w: &crate::scene::World,
+    mut at: glam::DVec3,
+    motion: glam::DVec3,
+) -> glam::DVec3 {
+    use glam::DVec2;
+    use omsi_sim::collision::Obb;
+    if !at.is_finite() || !motion.is_finite() || motion.length_squared() < 1e-12 {
+        return at;
+    }
+    let steps = (motion.length() / 0.12).ceil().clamp(1.0, 32.0) as usize;
+    let step = motion / steps as f64;
+    for _ in 0..steps {
+        let mut next = at + step;
+        let feet = at.z - 1.7;
+        let Some(g) = w.camera_ground(next.x, next.y, feet + 0.45) else {
+            break;
+        };
+        // Limit climbing to a normal kerb/stair step. Test the swept body below as
+        // well: lifting the collision probe with the new floor alone can let it
+        // step onto the top of a wall before that wall is checked.
+        if !g.is_finite() || g - feet > 0.30 || feet - g > 0.45 {
+            break;
+        }
+        next.z = g + 1.7;
+        let probe = Obb {
+            center: next.truncate(),
+            half: DVec2::splat(0.22),
+            heading: 0.0,
+            z0: feet.min(g) + 0.30,
+            z1: at.z.max(next.z) + 0.12,
+            velocity: DVec2::ZERO,
+            mass: 0.0,
+            pole: None,
+            id: -1,
+        };
+        let blocked = w.data.peek().lists.collision.obstacles_near(&probe)
+            .iter().any(|o| {
+                if o.z0 >= probe.z1 || o.z1 <= probe.z0 {
+                    return false;
+                }
+                let (s, c) = o.heading.sin_cos();
+                let penetration = |point: DVec2| {
+                    let d = point - o.center;
+                    let x = o.half.x + 0.22 - d.dot(DVec2::new(c, -s)).abs();
+                    let y = o.half.y + 0.22 - d.dot(DVec2::new(s, c)).abs();
+                    x.min(y).max(0.0)
+                };
+                let depth = penetration(next.truncate());
+                // A camera already inside a broad map collision box may still leave it.
+                let old = if o.z0 < at.z + 0.12 && o.z1 > feet + 0.30 {
+                    penetration(at.truncate())
+                } else { 0.0 };
+                depth > 1e-5 && depth >= old - 1e-5
+            });
+        if blocked {
+            break;
+        }
+        at = next;
+    }
+    at
+}
+
 /// The free camera's flight (and the walk with `ego`).
 fn free_camera(cx: &mut ViewKeysCx, dt: f32) {
     // (the free camera flies; with no bus it is the view too - but not out of the
@@ -330,9 +395,9 @@ fn free_camera(cx: &mut ViewKeysCx, dt: f32) {
             // walking: along the ground at eye height, 1.4 m/s (running 4.5)
             let flat = Vec3::new(v.x, v.y, 0.0).normalize_or_zero();
             let pace = if boost > 1.0 { 4.5 } else { 1.4 };
-            cam.position += (flat * pace * dt).as_dvec3();
-            if let Some(g) = cx.world.world.as_ref().and_then(|w| w.walk_height(cam.position.x, cam.position.y)) {
-                cam.position.z = g + 1.7;
+            let motion = (flat * pace * dt.clamp(0.0, 0.25)).as_dvec3();
+            if let Some(w) = cx.world.world.as_ref() {
+                cam.position = walk_photo_camera(w, cam.position, motion);
             }
         } else {
             // (a finger on the screen's stick: as far as it is pushed, the harder at the edge,
