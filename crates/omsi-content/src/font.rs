@@ -186,6 +186,17 @@ impl TextAlign {
     }
 }
 
+/// Horizontal layout for lines separated by `@` in a bitmap-font text texture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MultilineAlignment {
+    /// Share an origin only for blank-line-separated blocks with right-padded rows.
+    Automatic,
+    /// Align each line independently using the requested text orientation.
+    PerLine,
+    /// Use the widest line's origin, preserving indentation between lines.
+    SharedOrigin,
+}
+
 /// A loaded font with its glyph bitmaps, ready to draw text into RGBA images.
 pub struct FontAtlas {
     pub font: Font,
@@ -255,6 +266,28 @@ impl FontAtlas {
         rgb: [u8; 3],
         align: TextAlign,
     ) -> Vec<u8> {
+        self.render_aligned_with_multiline(
+            text,
+            w,
+            h,
+            full_color,
+            rgb,
+            align,
+            MultilineAlignment::Automatic,
+        )
+    }
+
+    /// Render with an explicit layout policy for lines separated by `@`.
+    pub fn render_aligned_with_multiline(
+        &self,
+        text: &str,
+        w: u32,
+        h: u32,
+        full_color: bool,
+        rgb: [u8; 3],
+        align: TextAlign,
+        multiline: MultilineAlignment,
+    ) -> Vec<u8> {
         // '@' breaks the text into lines, one glyph height each, from the top: the SD202's
         // matrix hands over "   NORDSPITZE   @   BAUERNHOF    @NORDSP.BAUERNH. " for a
         // 512x128 texture whose meshes map the lines separately. Drawn as one line and
@@ -269,15 +302,77 @@ impl FontAtlas {
             let mut out = vec![0u8; (w * h * 4) as usize];
             let lines: Vec<&str> = text.split('@').collect();
             let top = (h as i32 - glyph_h * lines.len() as i32) / 2;
-            // Center multiline rows as a unit so shorter lines preserve their indentation.
-            let line_x = (align.orientation != 2).then(|| {
-                let width = lines
-                    .iter()
-                    .map(|line| self.text_width(line))
-                    .max()
-                    .unwrap_or(0);
-                align.offset(w as i32, width, self.font.gap)
-            });
+            let mut line_x = vec![None; lines.len()];
+            if align.orientation != 2 {
+                match multiline {
+                    MultilineAlignment::PerLine => {}
+                    MultilineAlignment::SharedOrigin => {
+                        let width = lines
+                            .iter()
+                            .map(|line| self.text_width(line))
+                            .max()
+                            .unwrap_or(0);
+                        line_x.fill(Some(align.offset(w as i32, width, self.font.gap)));
+                    }
+                    MultilineAlignment::Automatic => {
+                        let mut start = 0;
+                        while start < lines.len() {
+                            if lines[start].trim().is_empty() {
+                                start += 1;
+                                continue;
+                            }
+                            let mut end = start + 1;
+                            while end < lines.len() && !lines[end].trim().is_empty() {
+                                end += 1;
+                            }
+                            let block = &lines[start..end];
+                            let right_padded = block.iter().filter(|line| {
+                                line.chars().last().is_some_and(char::is_whitespace)
+                            });
+                            let right_padded_count = right_padded.count();
+                            let shortest = block
+                                .iter()
+                                .map(|line| line.chars().count())
+                                .min()
+                                .unwrap_or(0);
+                            let longest = block
+                                .iter()
+                                .map(|line| line.chars().count())
+                                .max()
+                                .unwrap_or(0);
+                            let single_label_with_padded_rows =
+                                block.len() >= 3 && right_padded_count == block.len() - 1;
+                            // A label followed by padded entries uses one shared list origin.
+                            if block.len() > 1
+                                && right_padded_count == block.len()
+                                && shortest.saturating_mul(3) >= longest.saturating_mul(2)
+                            {
+                                let width = block
+                                    .iter()
+                                    .map(|line| self.text_width(line))
+                                    .max()
+                                    .unwrap_or(0);
+                                line_x[start..end].fill(Some(align.offset(
+                                    w as i32,
+                                    width,
+                                    self.font.gap,
+                                )));
+                            } else if single_label_with_padded_rows {
+                                for (index, line) in block.iter().enumerate() {
+                                    if line.chars().last().is_some_and(char::is_whitespace) {
+                                        line_x[start + index] = Some(align.offset(
+                                            w as i32,
+                                            self.text_width(line),
+                                            self.font.gap,
+                                        ));
+                                    }
+                                }
+                            }
+                            start = end;
+                        }
+                    }
+                }
+            }
             for (i, line) in lines.iter().enumerate() {
                 self.render_unscaled_at(
                     line,
@@ -287,7 +382,7 @@ impl FontAtlas {
                     rgb,
                     align,
                     top + i as i32 * glyph_h,
-                    line_x,
+                    line_x[i],
                     &mut out,
                 );
             }
@@ -314,6 +409,21 @@ impl FontAtlas {
         out
     }
 
+    fn alignment_width(&self, text: &str, align: TextAlign) -> i32 {
+        let visible = text.trim_end();
+        // A padded single-glyph field uses its trailing spaces to place the symbol.
+        let padded_single_glyph = visible.chars().count() == 1 && visible.len() < text.len();
+        let measured = if matches!(align.orientation, 1 | 2)
+            || text.chars().next().is_some_and(char::is_whitespace)
+            || padded_single_glyph
+        {
+            text
+        } else {
+            visible
+        };
+        self.text_width(measured)
+    }
+
     fn render_unscaled_at(
         &self,
         text: &str,
@@ -327,8 +437,9 @@ impl FontAtlas {
         out: &mut [u8],
     ) {
         let glyph_h = self.font.height.max(1) as i32;
-        let mut x =
-            line_x.unwrap_or_else(|| align.offset(w as i32, self.text_width(text), self.font.gap));
+        let mut x = line_x.unwrap_or_else(|| {
+            align.offset(w as i32, self.alignment_width(text, align), self.font.gap)
+        });
         for ch in text.chars() {
             // Explicit space glyphs can carry pixels in inverted bitmap fonts.
             let Some(g) = self.font.glyph(ch) else {
@@ -504,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn centered_multiline_text_uses_a_shared_horizontal_origin() {
+    fn centered_multiline_text_centers_each_line_by_default() {
         let font = Font {
             name: "multiline-origin-test".into(),
             height: 2,
@@ -528,6 +639,49 @@ mod tests {
         let alpha = vec![255; 3 * 2 * 4];
         let atlas = FontAtlas::new(font, 3, 2, alpha.clone(), alpha);
         let image = atlas.render("AB@A", 10, 4, false, [255, 255, 255]);
+        let left = |row: usize| {
+            (0..10)
+                .find(|&x| image[(row * 10 + x) * 4 + 3] != 0)
+                .unwrap()
+        };
+
+        assert_eq!(left(0), 3);
+        assert_eq!(left(2), 4);
+    }
+
+    #[test]
+    fn centered_multiline_text_can_share_an_origin() {
+        let font = Font {
+            name: "multiline-origin-test".into(),
+            height: 2,
+            gap: 0,
+            chars: vec![
+                FontChar {
+                    ch: 'A',
+                    x0: 0,
+                    x1: 1,
+                    y: 0,
+                },
+                FontChar {
+                    ch: 'B',
+                    x0: 1,
+                    x1: 3,
+                    y: 0,
+                },
+            ],
+            ..Default::default()
+        };
+        let alpha = vec![255; 3 * 2 * 4];
+        let atlas = FontAtlas::new(font, 3, 2, alpha.clone(), alpha);
+        let image = atlas.render_aligned_with_multiline(
+            "AB@A",
+            10,
+            4,
+            false,
+            [255; 3],
+            TextAlign::default(),
+            MultilineAlignment::SharedOrigin,
+        );
         let left = |row: usize| {
             (0..10)
                 .find(|&x| image[(row * 10 + x) * 4 + 3] != 0)
