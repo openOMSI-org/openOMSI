@@ -209,3 +209,22 @@ fn an_old_duty_file_loads_and_a_typed_plate_is_kept() {
     assert_eq!(back.plate, "B-AB 1234");
     assert!(back.comfortable_cabin_on_start);
 }
+
+#[test]
+fn moving_the_start_time_keeps_the_picked_trip() {
+    let mut c = super::Choice::default();
+    c.line = Some("5".into());
+    c.tour = Some("2".into());
+    c.time = 10 * 60;
+    c.start_trip = Some(("5".into(), "2".into(), 3, 10 * 60));
+    assert_eq!(super::picked_trip_of(&c), Some(3));
+    // coming five minutes early must not hand the duty back to the clock (#4334)
+    c.time -= 5;
+    assert_eq!(super::picked_trip_of(&c), Some(3));
+    // another tour is a different duty, and so is another line
+    c.tour = Some("3".into());
+    assert_eq!(super::picked_trip_of(&c), None);
+    c.tour = Some("2".into());
+    c.line = Some("7".into());
+    assert_eq!(super::picked_trip_of(&c), None);
+}
