@@ -66,20 +66,74 @@ pub(super) struct Base {
 
 impl Base {
     pub(super) const fn new(struct_type: StructType, struct_version: usize) -> Base {
-        Base { next: std::ptr::null_mut(), struct_type, struct_version }
+        Base {
+            next: std::ptr::null_mut(),
+            struct_type,
+            struct_version,
+        }
     }
 }
 
-const PREFERENCES: StructType = StructType { data1: 0x1ca10965, data2: 0xbf8e, data3: 0x432b, data4: [0x8d, 0xa1, 0x67, 0x16, 0xd8, 0x79, 0xfb, 0x14] };
-const RESOURCE: StructType = StructType { data1: 0x3a9d70cf, data2: 0x2418, data3: 0x4b72, data4: [0x83, 0x91, 0x13, 0xf8, 0x72, 0x1c, 0x72, 0x61] };
-const RESOURCE_TAG: StructType = StructType { data1: 0x4c6a5aad, data2: 0xb445, data3: 0x496c, data4: [0x87, 0xff, 0x1a, 0xf3, 0x84, 0x5b, 0xe6, 0x53] };
-pub(super) const VIEWPORT_HANDLE: StructType = StructType { data1: 0x171b6435, data2: 0x9b3c, data3: 0x4fc8, data4: [0x99, 0x94, 0xfb, 0xe5, 0x25, 0x69, 0xaa, 0xa4] };
-pub(super) const ADAPTER_INFO: StructType = StructType { data1: 0x0677315f, data2: 0xa746, data3: 0x4492, data4: [0x9f, 0x42, 0xcb, 0x61, 0x42, 0xc9, 0xc3, 0xd4] };
-const CONSTANTS: StructType = StructType { data1: 0xdcd35ad7, data2: 0x4e4a, data3: 0x4bad, data4: [0xa9, 0x0c, 0xe0, 0xc4, 0x9e, 0xb2, 0x3a, 0xfe] };
-const DLSS_OPTIONS: StructType = StructType { data1: 0x6ac826e4, data2: 0x4c61, data3: 0x4101, data4: [0xa9, 0x2d, 0x63, 0x8d, 0x42, 0x10, 0x57, 0xb8] };
-const VULKAN_INFO: StructType = StructType { data1: 0x0eed6fd5, data2: 0x82cd, data3: 0x43a9, data4: [0xbd, 0xb5, 0x47, 0xa5, 0xba, 0x2f, 0x45, 0xd6] };
-const FEATURE_REQUIREMENTS: StructType = StructType { data1: 0x66714097, data2: 0xac6d, data3: 0x4bc6, data4: [0x89, 0x15, 0x1e, 0x0f, 0x55, 0xa6, 0xb6, 0x1f] };
-const DLSS_OPTIMAL_SETTINGS: StructType = StructType { data1: 0xef1d0957, data2: 0xfd58, data3: 0x4df7, data4: [0xb5, 0x04, 0x8b, 0x69, 0xd8, 0xaa, 0x6b, 0x76] };
+const PREFERENCES: StructType = StructType {
+    data1: 0x1ca10965,
+    data2: 0xbf8e,
+    data3: 0x432b,
+    data4: [0x8d, 0xa1, 0x67, 0x16, 0xd8, 0x79, 0xfb, 0x14],
+};
+const RESOURCE: StructType = StructType {
+    data1: 0x3a9d70cf,
+    data2: 0x2418,
+    data3: 0x4b72,
+    data4: [0x83, 0x91, 0x13, 0xf8, 0x72, 0x1c, 0x72, 0x61],
+};
+const RESOURCE_TAG: StructType = StructType {
+    data1: 0x4c6a5aad,
+    data2: 0xb445,
+    data3: 0x496c,
+    data4: [0x87, 0xff, 0x1a, 0xf3, 0x84, 0x5b, 0xe6, 0x53],
+};
+pub(super) const VIEWPORT_HANDLE: StructType = StructType {
+    data1: 0x171b6435,
+    data2: 0x9b3c,
+    data3: 0x4fc8,
+    data4: [0x99, 0x94, 0xfb, 0xe5, 0x25, 0x69, 0xaa, 0xa4],
+};
+pub(super) const ADAPTER_INFO: StructType = StructType {
+    data1: 0x0677315f,
+    data2: 0xa746,
+    data3: 0x4492,
+    data4: [0x9f, 0x42, 0xcb, 0x61, 0x42, 0xc9, 0xc3, 0xd4],
+};
+const CONSTANTS: StructType = StructType {
+    data1: 0xdcd35ad7,
+    data2: 0x4e4a,
+    data3: 0x4bad,
+    data4: [0xa9, 0x0c, 0xe0, 0xc4, 0x9e, 0xb2, 0x3a, 0xfe],
+};
+const DLSS_OPTIONS: StructType = StructType {
+    data1: 0x6ac826e4,
+    data2: 0x4c61,
+    data3: 0x4101,
+    data4: [0xa9, 0x2d, 0x63, 0x8d, 0x42, 0x10, 0x57, 0xb8],
+};
+const VULKAN_INFO: StructType = StructType {
+    data1: 0x0eed6fd5,
+    data2: 0x82cd,
+    data3: 0x43a9,
+    data4: [0xbd, 0xb5, 0x47, 0xa5, 0xba, 0x2f, 0x45, 0xd6],
+};
+const FEATURE_REQUIREMENTS: StructType = StructType {
+    data1: 0x66714097,
+    data2: 0xac6d,
+    data3: 0x4bc6,
+    data4: [0x89, 0x15, 0x1e, 0x0f, 0x55, 0xa6, 0xb6, 0x1f],
+};
+const DLSS_OPTIMAL_SETTINGS: StructType = StructType {
+    data1: 0xef1d0957,
+    data2: 0xfd58,
+    data3: 0x4df7,
+    data4: [0xb5, 0x04, 0x8b, 0x69, 0xd8, 0xaa, 0x6b, 0x76],
+};
 
 const SDK_VERSION: u64 = (2 << 48) | (14 << 32) | (1 << 16) | 0xfedc;
 pub(super) const FEATURE_DLSS: u32 = 0;
@@ -354,7 +408,8 @@ type FnEvaluateFeature =
     unsafe extern "C" fn(u32, *const c_void, *const *const Base, u32, *mut c_void) -> i32;
 type FnFreeResources = unsafe extern "C" fn(u32, *const ViewportHandle) -> i32;
 pub(super) type FnUpgradeInterface = unsafe extern "C" fn(*mut *mut c_void) -> i32;
-type FnDlssGetOptimalSettings = unsafe extern "C" fn(*const DlssOptions, *mut DlssOptimalSettingsS) -> i32;
+type FnDlssGetOptimalSettings =
+    unsafe extern "C" fn(*const DlssOptions, *mut DlssOptimalSettingsS) -> i32;
 type FnDlssSetOptions = unsafe extern "C" fn(*const ViewportHandle, *const DlssOptions) -> i32;
 
 /// `sl::Result::eWarnOutOfVRAM`: a warning. The call did its work, the card is just over its
@@ -407,8 +462,6 @@ pub(super) fn result_name(r: i32) -> &'static str {
     ];
     NAMES.get(r as usize).copied().unwrap_or("?")
 }
-
-
 
 pub(super) fn check(what: &str, r: i32) -> Result<()> {
     static VRAM_WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -590,7 +643,12 @@ pub(super) fn load_fn<T: Copy>(module: HMODULE, name: &CStr) -> Result<T> {
     Ok(unsafe { std::mem::transmute_copy::<_, T>(&f) })
 }
 
-pub(super) fn init(module: HMODULE, dir: &std::path::Path, features: &'static [u32], render_api: u32) -> Result<(Vec<u16>, Vec<*const u16>)> {
+pub(super) fn init(
+    module: HMODULE,
+    dir: &std::path::Path,
+    features: &'static [u32],
+    render_api: u32,
+) -> Result<(Vec<u16>, Vec<*const u16>)> {
     let init: FnInit = load_fn(module, c"slInit")?;
     let plugin_dir = wide(dir);
     let plugin_paths = vec![plugin_dir.as_ptr()];
@@ -694,7 +752,8 @@ unsafe impl Send for Prepared {}
 static PREPARED: std::sync::Mutex<Option<Prepared>> = std::sync::Mutex::new(None);
 
 pub(super) fn open_interposer(dir: &std::path::Path) -> Result<HMODULE> {
-    let missing = omsi_cfg::upscaler_files::missing(dir, "dlss", omsi_cfg::upscaler_files::Api::Dx12);
+    let missing =
+        omsi_cfg::upscaler_files::missing(dir, "dlss", omsi_cfg::upscaler_files::Api::Dx12);
     if !missing.is_empty() {
         bail!(
             "{} not found in {} (they come with NVIDIA's Streamline SDK, bin/x64)",
@@ -844,9 +903,11 @@ impl Runtime {
             return (|| {
                 let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
                 let paths = init(module, &dir, &FEATURES, 1)?;
-                Self::start(module, &dir, Some(paths), Device::Dx12(raw_device)).inspect_err(|_| unsafe {
-                    shutdown();
-                })
+                Self::start(module, &dir, Some(paths), Device::Dx12(raw_device)).inspect_err(
+                    |_| unsafe {
+                        shutdown();
+                    },
+                )
             })()
             .inspect_err(|_| unsafe {
                 let _ = FreeLibrary(module);
@@ -858,13 +919,24 @@ impl Runtime {
         let prepared = PREPARED.lock().unwrap_or_else(|e| e.into_inner()).take().ok_or_else(|| anyhow!("on Vulkan DLSS takes its place from the next start of the game, chosen before it (its device extensions are given when the device is made); this run goes on without it"))?;
         let module = prepared.module;
         let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
-        Self::start(module, &game_dir(), Some(prepared.paths), Device::Vulkan(gpu)).inspect_err(|_| unsafe {
+        Self::start(
+            module,
+            &game_dir(),
+            Some(prepared.paths),
+            Device::Vulkan(gpu),
+        )
+        .inspect_err(|_| unsafe {
             shutdown();
             let _ = FreeLibrary(module);
         })
     }
 
-    fn start(module: HMODULE, dir: &std::path::Path, paths: Option<(Vec<u16>, Vec<*const u16>)>, device: Device) -> Result<Runtime> {
+    fn start(
+        module: HMODULE,
+        dir: &std::path::Path,
+        paths: Option<(Vec<u16>, Vec<*const u16>)>,
+        device: Device,
+    ) -> Result<Runtime> {
         let joined = paths.is_none();
         let shutdown: Fn0 = load_fn(module, c"slShutdown")?;
         let calls = Calls {
@@ -901,7 +973,11 @@ impl Runtime {
                 let mut raw = pacer.as_raw();
                 // (with frame generation the window's swap chain is Streamline's own and does the
                 // per-frame housekeeping when it presents: no stand-in)
-                let r = if joined { 0 } else { unsafe { upgrade_interface(&mut raw) } };
+                let r = if joined {
+                    0
+                } else {
+                    unsafe { upgrade_interface(&mut raw) }
+                };
                 let pacer = if joined {
                     None
                 } else if r == 0 && !raw.is_null() && raw != pacer.as_raw() {
@@ -946,11 +1022,32 @@ impl Runtime {
                 }
             }
         };
-        let get_optimal_settings: FnDlssGetOptimalSettings = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSGetOptimalSettings")?) };
-        let set_options: FnDlssSetOptions = unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSSetOptions")?) };
-        let api = if matches!(backend, Backend::Dx12 { .. }) { "DirectX 12" } else { "Vulkan" };
-        let api = if joined { "DirectX 12, with frame generation" } else { api };
-        log::info!("DLSS: Streamline {}.{}.{} and its DLSS plugin loaded from {} ({api})", SDK_VERSION >> 48, (SDK_VERSION >> 32) & 0xffff, (SDK_VERSION >> 16) & 0xffff, dir.display());
+        let get_optimal_settings: FnDlssGetOptimalSettings = unsafe {
+            std::mem::transmute(feature_fn(
+                module,
+                FEATURE_DLSS,
+                c"slDLSSGetOptimalSettings",
+            )?)
+        };
+        let set_options: FnDlssSetOptions =
+            unsafe { std::mem::transmute(feature_fn(module, FEATURE_DLSS, c"slDLSSSetOptions")?) };
+        let api = if matches!(backend, Backend::Dx12 { .. }) {
+            "DirectX 12"
+        } else {
+            "Vulkan"
+        };
+        let api = if joined {
+            "DirectX 12, with frame generation"
+        } else {
+            api
+        };
+        log::info!(
+            "DLSS: Streamline {}.{}.{} and its DLSS plugin loaded from {} ({api})",
+            SDK_VERSION >> 48,
+            (SDK_VERSION >> 32) & 0xffff,
+            (SDK_VERSION >> 16) & 0xffff,
+            dir.display()
+        );
         Ok(Runtime {
             module,
             shutdown,
@@ -1120,9 +1217,21 @@ impl Runtime {
         // (frame generation reads the depth and the motion at the window's present, with the
         // picture before the HUD; DLSS alone only until its evaluate is done)
         let generate = self._paths.is_none() && super::dlssg::wanted();
-        let hudless = inputs.hudless.filter(|_| generate && matches!(self.backend, Backend::Dx12 { .. }));
-        let lifecycle = if hudless.is_some() { VALID_UNTIL_PRESENT } else { VALID_UNTIL_EVALUATE };
-        let textures = [inputs.color, inputs.depth, inputs.motion, inputs.output, inputs.mask];
+        let hudless = inputs
+            .hudless
+            .filter(|_| generate && matches!(self.backend, Backend::Dx12 { .. }));
+        let lifecycle = if hudless.is_some() {
+            VALID_UNTIL_PRESENT
+        } else {
+            VALID_UNTIL_EVALUATE
+        };
+        let textures = [
+            inputs.color,
+            inputs.depth,
+            inputs.motion,
+            inputs.output,
+            inputs.mask,
+        ];
         let sizes = [(rw, rh), (rw, rh), (rw, rh), (ow, oh), (rw, rh)];
         // (the picture's resource is plain UNORM and drawn through an sRGB view: see
         // `temporal_targets`. DLSS takes its sRGB-encoded numbers as they are, as FSR 3 does:
@@ -1194,25 +1303,68 @@ impl Runtime {
         // (drawn last in a render pass, as the picture: `temporal_present`)
         let mut hud = match hudless {
             Some(h) => {
-                let r = unsafe { h.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| anyhow!("no Direct3D 12 resource under the picture before the HUD"))?;
+                let r = unsafe { h.as_hal::<wgpu_hal::api::Dx12>() }.ok_or_else(|| {
+                    anyhow!("no Direct3D 12 resource under the picture before the HUD")
+                })?;
                 let raw = unsafe { r.raw_resource() }.as_raw();
-                Some(blank(raw, D3D12_RESOURCE_STATE_RENDER_TARGET.0 as u32, dxgi_format(h.format()), (ow, oh)))
+                Some(blank(
+                    raw,
+                    D3D12_RESOURCE_STATE_RENDER_TARGET.0 as u32,
+                    dxgi_format(h.format()),
+                    (ow, oh),
+                ))
             }
             None => None,
         };
-        let render_extent = Extent { top: 0, left: 0, width: rw, height: rh };
-        let output_extent = Extent { top: 0, left: 0, width: ow, height: oh };
+        let render_extent = Extent {
+            top: 0,
+            left: 0,
+            width: rw,
+            height: rh,
+        };
+        let output_extent = Extent {
+            top: 0,
+            left: 0,
+            width: ow,
+            height: oh,
+        };
         let [c0, c1, c2, c3, c4] = &mut res;
-        let tag = |r: &mut Resource, kind: u32, extent: Extent, lifecycle: u32| ResourceTag { base: Base::new(RESOURCE_TAG, 1), resource: r, kind, lifecycle, extent };
+        let tag = |r: &mut Resource, kind: u32, extent: Extent, lifecycle: u32| ResourceTag {
+            base: Base::new(RESOURCE_TAG, 1),
+            resource: r,
+            kind,
+            lifecycle,
+            extent,
+        };
         let mut tags = vec![
-            tag(c0, BUFFER_SCALING_INPUT_COLOR, render_extent, VALID_UNTIL_EVALUATE),
+            tag(
+                c0,
+                BUFFER_SCALING_INPUT_COLOR,
+                render_extent,
+                VALID_UNTIL_EVALUATE,
+            ),
             tag(c1, BUFFER_DEPTH, render_extent, lifecycle),
             tag(c2, BUFFER_MOTION_VECTORS, render_extent, lifecycle),
-            tag(c3, BUFFER_SCALING_OUTPUT_COLOR, output_extent, VALID_UNTIL_EVALUATE),
-            tag(c4, BUFFER_BIAS_CURRENT_COLOR, render_extent, VALID_UNTIL_EVALUATE),
+            tag(
+                c3,
+                BUFFER_SCALING_OUTPUT_COLOR,
+                output_extent,
+                VALID_UNTIL_EVALUATE,
+            ),
+            tag(
+                c4,
+                BUFFER_BIAS_CURRENT_COLOR,
+                render_extent,
+                VALID_UNTIL_EVALUATE,
+            ),
         ];
         if let Some(h) = hud.as_mut() {
-            tags.push(tag(h, BUFFER_HUDLESS_COLOR, output_extent, VALID_UNTIL_PRESENT));
+            tags.push(tag(
+                h,
+                BUFFER_HUDLESS_COLOR,
+                output_extent,
+                VALID_UNTIL_PRESENT,
+            ));
         }
         let mut token: *const c_void = std::ptr::null();
         self.frame = self.frame.wrapping_add(1);
@@ -1334,7 +1486,10 @@ impl Drop for Runtime {
             } else {
                 let r = (self.shutdown)();
                 if r != 0 {
-                    log::warn!("DLSS: Streamline did not shut down cleanly: {}", result_name(r));
+                    log::warn!(
+                        "DLSS: Streamline did not shut down cleanly: {}",
+                        result_name(r)
+                    );
                 }
                 let _ = FreeLibrary(self.module);
             }

@@ -263,8 +263,7 @@ impl App {
             .map(|(a, b)| (a..b).contains(&self.started.elapsed().as_secs_f32()))
             .unwrap_or(false);
         let acquired = match s.acquire() {
-            omsi_render::Acquired::Success(_)
-            | omsi_render::Acquired::Suboptimal(_)
+            omsi_render::Acquired::Success(_) | omsi_render::Acquired::Suboptimal(_)
                 if hidden_now =>
             {
                 omsi_render::Acquired::Occluded
@@ -272,8 +271,9 @@ impl App {
             other => other,
         };
         let (frame, stand_in) = match acquired {
-            omsi_render::Acquired::Success(frame)
-            | omsi_render::Acquired::Suboptimal(frame) => (Some(frame), None),
+            omsi_render::Acquired::Success(frame) | omsi_render::Acquired::Suboptimal(frame) => {
+                (Some(frame), None)
+            }
             omsi_render::Acquired::Occluded
                 if omsi_cfg::flags::OMSI_RENDER_OCCLUDED.is_set()
                     || omsi_cfg::flags::OMSI_HIDDEN_WINDOW.is_set() =>

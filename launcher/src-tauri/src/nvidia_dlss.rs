@@ -2,7 +2,7 @@
 //! The AGPLv3 application contains no NVIDIA binaries. The player chooses to
 //! download the unmodified SDK directly from NVIDIA and accepts its terms.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 #[cfg(windows)]
 use std::path::PathBuf;
 

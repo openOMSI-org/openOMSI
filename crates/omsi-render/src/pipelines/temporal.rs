@@ -82,7 +82,12 @@ pub(crate) fn build(
     });
     let late_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("temporal late motion"),
-        bind_group_layouts: &[Some(&scene.camera_layout), Some(&scene.material_layout), Some(&glass_layout), Some(&motion_layout)],
+        bind_group_layouts: &[
+            Some(&scene.camera_layout),
+            Some(&scene.material_layout),
+            Some(&glass_layout),
+            Some(&motion_layout),
+        ],
         immediate_size: 0,
     });
     let motion_target = [Some(wgpu::ColorTargetState {

@@ -45,7 +45,10 @@ pub struct WindowFrame {
 
 impl From<wgpu::CurrentSurfaceTexture> for Acquired {
     fn from(c: wgpu::CurrentSurfaceTexture) -> Acquired {
-        let frame = |f: wgpu::SurfaceTexture| WindowFrame { texture: f.texture.clone(), surface: Some(f) };
+        let frame = |f: wgpu::SurfaceTexture| WindowFrame {
+            texture: f.texture.clone(),
+            surface: Some(f),
+        };
         match c {
             wgpu::CurrentSurfaceTexture::Success(f) => Acquired::Success(frame(f)),
             wgpu::CurrentSurfaceTexture::Suboptimal(f) => Acquired::Suboptimal(frame(f)),
@@ -59,12 +62,26 @@ impl From<wgpu::CurrentSurfaceTexture> for Acquired {
 }
 
 /// Frame generation's swap chain for `window`, or None (logged) where it cannot be made.
-fn own_swap_chain(window: &winit_window::Window, device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u32), vsync: bool, kind: temporal::FrameGenerationKind) -> Option<temporal::OwnSwapChain> {
+fn own_swap_chain(
+    window: &winit_window::Window,
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    size: (u32, u32),
+    vsync: bool,
+    kind: temporal::FrameGenerationKind,
+) -> Option<temporal::OwnSwapChain> {
     #[cfg(windows)]
     {
         use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
         let made = match window.window_handle().map(|h| h.as_raw()) {
-            Ok(RawWindowHandle::Win32(h)) => temporal::OwnSwapChain::new(device, windows::Win32::Foundation::HWND(h.hwnd.get() as *mut std::ffi::c_void), format, size, vsync, kind),
+            Ok(RawWindowHandle::Win32(h)) => temporal::OwnSwapChain::new(
+                device,
+                windows::Win32::Foundation::HWND(h.hwnd.get() as *mut std::ffi::c_void),
+                format,
+                size,
+                vsync,
+                kind,
+            ),
             _ => Err(anyhow!("no Win32 window")),
         };
         match made {
@@ -208,7 +225,16 @@ impl<'w> SurfaceState<'w> {
         frame_generation: Option<temporal::FrameGenerationKind>,
     ) -> Result<Self> {
         let surface = create_surface(instance, &window)?;
-        let own = frame_generation.and_then(|kind| own_swap_chain(&window, &renderer.device, renderer.format(), (width, height), vsync, kind));
+        let own = frame_generation.and_then(|kind| {
+            own_swap_chain(
+                &window,
+                &renderer.device,
+                renderer.format(),
+                (width, height),
+                vsync,
+                kind,
+            )
+        });
         let encode = srgb_encode::SrgbEncode::wanted(renderer, renderer.format());
         let modes = listed_modes(&surface, renderer);
         // (copied from only for a glass theme: `set_glass`)
@@ -234,15 +260,35 @@ impl<'w> SurfaceState<'w> {
         if own.is_none() {
             configure_surface(&surface, &renderer.device, &config)?;
         }
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: renderer.errors.device_lost.clone(), encode, glass: false, own, kind: frame_generation, generation: None, generation_refused: false })
+        Ok(SurfaceState {
+            surface: std::mem::ManuallyDrop::new(surface),
+            config,
+            lost: renderer.errors.device_lost.clone(),
+            encode,
+            glass: false,
+            own,
+            kind: frame_generation,
+            generation: None,
+            generation_refused: false,
+        })
     }
 
     /// The window's surface on a device whose renderer is still being built ([`Opened`]'s
     /// device and format): pictures without the renderer (a clear, an interface) can be
     /// shown until [`Self::adopt`] hands it over.
-    pub fn early(instance: &wgpu::Instance, window: Arc<winit_window::Window>, device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32, vsync: bool, frame_generation: Option<temporal::FrameGenerationKind>) -> Result<Self> {
+    pub fn early(
+        instance: &wgpu::Instance,
+        window: Arc<winit_window::Window>,
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+        vsync: bool,
+        frame_generation: Option<temporal::FrameGenerationKind>,
+    ) -> Result<Self> {
         let surface = create_surface(instance, &window)?;
-        let own = frame_generation.and_then(|kind| own_swap_chain(&window, device, format, (width, height), vsync, kind));
+        let own = frame_generation
+            .and_then(|kind| own_swap_chain(&window, device, format, (width, height), vsync, kind));
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -257,7 +303,17 @@ impl<'w> SurfaceState<'w> {
         if own.is_none() {
             configure_surface(&surface, device, &config)?;
         }
-        Ok(SurfaceState { surface: std::mem::ManuallyDrop::new(surface), config, lost: Default::default(), encode: None, glass: false, own, kind: frame_generation, generation: None, generation_refused: false })
+        Ok(SurfaceState {
+            surface: std::mem::ManuallyDrop::new(surface),
+            config,
+            lost: Default::default(),
+            encode: None,
+            glass: false,
+            own,
+            kind: frame_generation,
+            generation: None,
+            generation_refused: false,
+        })
     }
 
     /// The renderer built for the device this surface was made on ([`Self::early`]) takes
@@ -285,8 +341,18 @@ impl<'w> SurfaceState<'w> {
         if self.own.is_some() {
             return;
         }
-        let copy = on && renderer.adapter.as_ref().is_some_and(|a| self.surface.get_capabilities(a).usages.contains(wgpu::TextureUsages::COPY_SRC));
-        let usage = if copy { wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::RENDER_ATTACHMENT };
+        let copy = on
+            && renderer.adapter.as_ref().is_some_and(|a| {
+                self.surface
+                    .get_capabilities(a)
+                    .usages
+                    .contains(wgpu::TextureUsages::COPY_SRC)
+            });
+        let usage = if copy {
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
+        } else {
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+        };
         if self.config.usage != usage {
             self.config.usage = usage;
             self.surface.configure(&renderer.device, &self.config);
@@ -341,7 +407,10 @@ impl<'w> SurfaceState<'w> {
     pub fn acquire(&self) -> Acquired {
         match &self.own {
             Some(own) => match own.current() {
-                Some(texture) => Acquired::Success(WindowFrame { texture, surface: None }),
+                Some(texture) => Acquired::Success(WindowFrame {
+                    texture,
+                    surface: None,
+                }),
                 None => Acquired::Outdated,
             },
             None => self.surface.get_current_texture().into(),
@@ -362,7 +431,10 @@ impl<'w> SurfaceState<'w> {
     /// Frame generation set to `kind` where the window's swap chain can stay: it is that already,
     /// or only the count of NVIDIA's frames changes. False: the surface is to be made anew for
     /// `kind` (the swap chain is made with it), after [`Renderer::before_frame_generation`].
-    pub fn retarget_frame_generation(&mut self, kind: Option<temporal::FrameGenerationKind>) -> bool {
+    pub fn retarget_frame_generation(
+        &mut self,
+        kind: Option<temporal::FrameGenerationKind>,
+    ) -> bool {
         use temporal::FrameGenerationKind::Dlss;
         if self.kind == kind {
             return true;

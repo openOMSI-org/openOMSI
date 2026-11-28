@@ -740,7 +740,11 @@ impl Renderer {
     /// The upscaler the window's picture goes through now, as the frame rate names it: DLSS or
     /// FSR 3 while it runs, FSR 1 while it scales the picture up, else None (the standard one).
     pub fn upscaler_in_use(&self, width: u32, height: u32) -> Option<&'static str> {
-        match self.options.temporal.filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed) {
+        match self
+            .options
+            .temporal
+            .filter(|_| self.temporal_pipes.is_some() && !self.temporal_failed)
+        {
             Some(t) => Some(t.upscaler.label()),
             None => self.fsr_active(width, height).then_some("FSR 1"),
         }

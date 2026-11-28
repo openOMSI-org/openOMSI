@@ -39,10 +39,22 @@ fn the_settings_words_read_back() {
 
 #[test]
 fn the_frame_generation_words_read_back() {
-    assert_eq!(FrameGenerationKind::parse("fsr3"), Some(FrameGenerationKind::Fsr3));
-    assert_eq!(FrameGenerationKind::parse(" DLSS2X "), Some(FrameGenerationKind::Dlss(2)));
-    assert_eq!(FrameGenerationKind::parse("dlss3x"), Some(FrameGenerationKind::Dlss(3)));
-    assert_eq!(FrameGenerationKind::parse("dlss4x"), Some(FrameGenerationKind::Dlss(4)));
+    assert_eq!(
+        FrameGenerationKind::parse("fsr3"),
+        Some(FrameGenerationKind::Fsr3)
+    );
+    assert_eq!(
+        FrameGenerationKind::parse(" DLSS2X "),
+        Some(FrameGenerationKind::Dlss(2))
+    );
+    assert_eq!(
+        FrameGenerationKind::parse("dlss3x"),
+        Some(FrameGenerationKind::Dlss(3))
+    );
+    assert_eq!(
+        FrameGenerationKind::parse("dlss4x"),
+        Some(FrameGenerationKind::Dlss(4))
+    );
     for word in ["off", "", "dlss8x", "fsr4"] {
         assert_eq!(FrameGenerationKind::parse(word), None, "{word}");
     }

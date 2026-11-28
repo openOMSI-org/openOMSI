@@ -1265,7 +1265,10 @@ fn upscaler_rows(app: &App, file: &serde_json::Value) -> Vec<(String, String)> {
     let vulkan = cfg!(windows) && app.settings.graphics_api.eq_ignore_ascii_case("vulkan");
     let generation = !vulkan
         && app.settings.temporal_upscaling().is_some_and(|t| {
-            omsi_cfg::upscaler_files::wgpu_frame_generation_choices(&dir).into_iter().filter_map(omsi_render::FrameGenerationKind::parse).any(|k| k.takes(t.upscaler))
+            omsi_cfg::upscaler_files::wgpu_frame_generation_choices(&dir)
+                .into_iter()
+                .filter_map(omsi_render::FrameGenerationKind::parse)
+                .any(|k| k.takes(t.upscaler))
         });
     let pct = |v: f32| format!("{:.0} %", v * 100.0);
     [

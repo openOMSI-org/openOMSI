@@ -15,9 +15,9 @@ mod d3d12;
 mod dlssg;
 #[cfg(windows)]
 mod fidelityfx;
+mod frame;
 #[cfg(windows)]
 mod framegen;
-mod frame;
 #[cfg(target_os = "macos")]
 mod metalfx;
 #[cfg(target_os = "macos")]
@@ -113,7 +113,9 @@ impl FrameGenerationKind {
     /// DLSS or FSR 3, NVIDIA's with DLSS, Apple's with MetalFX.
     pub fn takes(self, upscaler: TemporalUpscaler) -> bool {
         match self {
-            FrameGenerationKind::Fsr3 => matches!(upscaler, TemporalUpscaler::Dlss | TemporalUpscaler::Fsr3),
+            FrameGenerationKind::Fsr3 => {
+                matches!(upscaler, TemporalUpscaler::Dlss | TemporalUpscaler::Fsr3)
+            }
             FrameGenerationKind::Dlss(_) => upscaler == TemporalUpscaler::Dlss,
             FrameGenerationKind::MetalFx => upscaler == TemporalUpscaler::MetalFx,
         }

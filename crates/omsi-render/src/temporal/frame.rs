@@ -3,9 +3,12 @@
 //! writes each pixel's motion (`motion.wgsl`), and `temporal_present` runs the upscaler on
 //! wgpu's queue, then the HUD at full size.
 
-use super::{fallback_render_size, fidelityfx, metalfx, streamline, FrameConstants, Inputs, TemporalQuality, TemporalUpscaler};
 #[cfg(target_os = "macos")]
 use super::GenerationInputs;
+use super::{
+    FrameConstants, Inputs, TemporalQuality, TemporalUpscaler, fallback_render_size, fidelityfx,
+    metalfx, streamline,
+};
 use crate::passes::FrameCtx;
 use crate::pipelines::common::uniform_buffer;
 use crate::*;
@@ -210,7 +213,14 @@ impl Renderer {
     /// pictures before the HUD.
     #[cfg(windows)]
     pub(crate) fn temporal_generation_inputs(&self) -> Vec<wgpu::Texture> {
-        self.temporal.as_ref().map_or_else(Vec::new, |d| d.keep.iter().flatten().cloned().chain(d.hudless.iter().map(|(h, _)| h.clone())).collect())
+        self.temporal.as_ref().map_or_else(Vec::new, |d| {
+            d.keep
+                .iter()
+                .flatten()
+                .cloned()
+                .chain(d.hudless.iter().map(|(h, _)| h.clone()))
+                .collect()
+        })
     }
 
     /// The running upscaler, its GPU work done, to go on in a renderer rebuilt on this device.
@@ -243,7 +253,14 @@ impl Renderer {
             self.temporal_kept = None;
         }
         let _ = crate::wait_gpu(&self.device, None);
-        log::info!("DLSS: let go of, to start again {}", if nvidia { "in frame generation's Streamline session" } else { "on a Streamline session of its own" });
+        log::info!(
+            "DLSS: let go of, to start again {}",
+            if nvidia {
+                "in frame generation's Streamline session"
+            } else {
+                "on a Streamline session of its own"
+            }
+        );
     }
 
     /// After [`Self::before_frame_generation`]: frame generation's Streamline session, once
@@ -400,11 +417,33 @@ impl Renderer {
             view_formats: &[self.format],
         });
         // (read back by the tests)
-        let readable = if cfg!(test) { wgpu::TextureUsages::COPY_SRC } else { wgpu::TextureUsages::empty() };
-        let motion = tex("temporal motion vectors", render, TEMPORAL_MOTION_FORMAT, targets | readable);
-        let mask = tex("temporal transparency mask", render, TEMPORAL_MASK_FORMAT, targets);
-        let output_tex = tex("temporal output", output, TEMPORAL_OUTPUT_FORMAT, targets | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC);
-        let color_view = color.create_view(&wgpu::TextureViewDescriptor { format: Some(self.format), ..Default::default() });
+        let readable = if cfg!(test) {
+            wgpu::TextureUsages::COPY_SRC
+        } else {
+            wgpu::TextureUsages::empty()
+        };
+        let motion = tex(
+            "temporal motion vectors",
+            render,
+            TEMPORAL_MOTION_FORMAT,
+            targets | readable,
+        );
+        let mask = tex(
+            "temporal transparency mask",
+            render,
+            TEMPORAL_MASK_FORMAT,
+            targets,
+        );
+        let output_tex = tex(
+            "temporal output",
+            output,
+            TEMPORAL_OUTPUT_FORMAT,
+            targets | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+        );
+        let color_view = color.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.format),
+            ..Default::default()
+        });
         let motion_view = motion.create_view(&Default::default());
         let mask_view = mask.create_view(&Default::default());
         let output_view = output_tex.create_view(&Default::default());
@@ -652,14 +691,35 @@ impl Renderer {
         let generate = self.frame_generation.clone().filter(|g| g.working());
         #[cfg(windows)]
         let hudless = generate.as_ref().map(|_| {
-            if d.hudless.first().is_none_or(|(h, _)| (h.width(), h.height()) != full) {
-                d.hudless = (0..2).map(|_| hudless_target(&self.device, full, target.texture().format())).collect();
+            if d.hudless
+                .first()
+                .is_none_or(|(h, _)| (h.width(), h.height()) != full)
+            {
+                d.hudless = (0..2)
+                    .map(|_| hudless_target(&self.device, full, target.texture().format()))
+                    .collect();
             }
             d.hudless[(d.frame % 2) as usize].clone()
         });
         #[cfg(not(windows))]
         let hudless: Option<(wgpu::Texture, wgpu::TextureView)> = None;
-        let inputs = Inputs { color: &t.color, depth: &ao.depth_tex, motion: &t.motion, mask: &t.mask, output: &t.output_tex, hudless: hudless.as_ref().map(|(h, _)| h), render_size: render, output_size: full, views: [&t.color_raw_view, &ao.depth_view, &t.motion_view, &t.mask_view, &t.output_view] };
+        let inputs = Inputs {
+            color: &t.color,
+            depth: &ao.depth_tex,
+            motion: &t.motion,
+            mask: &t.mask,
+            output: &t.output_tex,
+            hudless: hudless.as_ref().map(|(h, _)| h),
+            render_size: render,
+            output_size: full,
+            views: [
+                &t.color_raw_view,
+                &ao.depth_view,
+                &t.motion_view,
+                &t.mask_view,
+                &t.output_view,
+            ],
+        };
         let clock = std::time::Instant::now();
         let result = match &mut d.runtime {
             Runtime::Dlss(r) => r.evaluate(&self.queue, quality, &inputs, &constants),
@@ -714,7 +774,11 @@ impl Renderer {
                 bytemuck::cast_slice(&[render.0 as f32, render.1 as f32, 0.0, 0.0]),
             );
         }
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("temporal hud") });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("temporal hud"),
+            });
         // Frame generation: the same picture as the window's below the HUD, to the bit - it
         // tells the interface apart by what differs between the two. On Windows it was made
         // before the upscaler ran (NVIDIA's reads it there too); a Mac's is MetalFX's, which
@@ -722,7 +786,10 @@ impl Renderer {
         #[cfg(not(target_os = "macos"))]
         let hud_view = hudless.as_ref().filter(|_| ok).map(|(_, view)| view);
         #[cfg(target_os = "macos")]
-        let generation = self.frame_generation.clone().filter(|g| ok && g.working() && matches!(d.runtime, Runtime::MetalFx(_)));
+        let generation = self
+            .frame_generation
+            .clone()
+            .filter(|g| ok && g.working() && matches!(d.runtime, Runtime::MetalFx(_)));
         #[cfg(target_os = "macos")]
         let hudless = generation.as_ref().map(|_| {
             if d.hudless
@@ -828,7 +895,8 @@ impl Renderer {
             *stats.entry("upscale").or_default() += upscaled.as_secs_f64();
             *stats.entry("upscale hud").or_default() += (hud_done - upscaled).as_secs_f64();
             if self.frame_generation.is_some() {
-                *stats.entry("frame generation").or_default() += (clock.elapsed() - hud_done).as_secs_f64();
+                *stats.entry("frame generation").or_default() +=
+                    (clock.elapsed() - hud_done).as_secs_f64();
             }
         }
         if !ok {
