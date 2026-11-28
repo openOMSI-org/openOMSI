@@ -396,6 +396,7 @@ impl World {
         );
         self.help_arrows.lock().remove(&key);
         self.parked_objects.lock().retain(|_, p| p.tile != key);
+        self.parked_held.lock().drop_tile(key);
         self.departed_objects
             .lock()
             .retain(|_, (p, _, _)| p.tile != key);

@@ -867,21 +867,29 @@ impl World {
                 .chain(&lod_instances)
                 .copied()
                 .collect();
-            if self.departed.lock().contains(&collision_key) {
-                for inst in &instances {
-                    hide_instance(renderer, scene, *inst);
+            let object = ParkedObject {
+                tile: key,
+                pos,
+                heading: Pose { pos, rot: xf }.heading(),
+                sco: ot.sco.path.clone(),
+                instances,
+            };
+            // (held back by the cap: hidden until it comes out, see `ParkedHold`)
+            let object = self.parked_held.lock().set_object(collision_key, object);
+            match object {
+                Some(object) if !self.departed.lock().contains(&collision_key) => {
+                    self.parked_objects.lock().insert(collision_key, object);
                 }
-            } else {
-                self.parked_objects.lock().insert(
-                    collision_key,
-                    ParkedObject {
-                        tile: key,
-                        pos,
-                        heading: Pose { pos, rot: xf }.heading(),
-                        sco: ot.sco.path.clone(),
-                        instances,
-                    },
-                );
+                Some(object) => {
+                    for inst in &object.instances {
+                        hide_instance(renderer, scene, *inst);
+                    }
+                }
+                None => {
+                    for inst in all_instances.iter().chain(&lod_instances) {
+                        hide_instance(renderer, scene, *inst);
+                    }
+                }
             }
         }
         if editable {
