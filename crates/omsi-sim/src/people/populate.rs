@@ -231,6 +231,18 @@ impl PeopleSim {
         }
     }
 
+    /// Whether the stops fill by their own numbers rather than by the timetable's trips:
+    /// out on a free drive, or on a duty whose timetable has no trip due anywhere (#3841).
+    /// A player who turned that off in the settings keeps the timetable rule in either case.
+    fn stops_fill_by_numbers(&self) -> bool {
+        let working = self.duty.is_some()
+            && self
+                .due_dests
+                .as_ref()
+                .is_some_and(|d| !d.visits.is_empty());
+        self.free_drive_fill.fills(working)
+    }
+
     /// The stops near the player fill with people (sub_61bf94, every frame): a stop coming
     /// into range gets its people at once - its pass_enter mean times its own random factor
     /// times the passenger density (times the share its due trips ask for), at most one per
@@ -336,7 +348,7 @@ impl PeopleSim {
                     .is_some_and(|d| d.get(&id).is_none_or(|set| set.is_empty()));
                 // (in free drive the stops fill by their own numbers: nobody is working the
                 // timetable, so nothing is "due" anywhere, #2712)
-                let free = self.free_drive_fill.fills(self.duty.is_some());
+                let free = self.stops_fill_by_numbers();
                 let served = super::free_drive::stop_served(
                     self.stop_targets.is_some(),
                     free,
@@ -390,7 +402,7 @@ impl PeopleSim {
             return (None, None);
         };
         // (of the trips due here soon, `due_dests`; their weights made a whole again)
-        let free = self.free_drive_fill.fills(self.duty.is_some());
+        let free = self.stops_fill_by_numbers();
         let due = if free {
             None
         } else {

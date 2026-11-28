@@ -247,3 +247,223 @@ fn a_worked_timetable_fills_a_stop_to_the_share_its_trips_ask_for() {
     h.stops_tick(0.1, &world);
     assert_eq!(h.stops[&42].want, 0);
 }
+
+/// #3841: a player on a duty finds people at the stops even when no trip of the map's
+/// timetable is due anywhere (an early hour, or a tour that does not run today). The reporter
+/// saw the whole map empty on stock and modded maps alike.
+#[test]
+fn a_duty_with_no_trips_due_still_fills_its_stops() {
+    let (mut h, _) = pax_stops::brt_tests::setup("issue-3841-duty", None);
+    h.types = vec![h.people[0].ty.clone()];
+    h.pool_types = 1;
+    h.people.clear();
+    h.map_humans_done = true;
+    h.free_drive_fill = FreeDriveFill::Auto;
+    h.density = 1.0;
+    h.duty = Some((
+        Arc::new(DutyTrip {
+            name: "T".into(),
+            departure: 36_000.0,
+            terminus: "43".into(),
+            public: true,
+            stops: vec![(42, "42".into(), true), (43, "43".into(), true)],
+        }),
+        0,
+        false,
+    ));
+    let mut targets = HashMap::new();
+    targets.insert(42, vec![("43".into(), HashSet::from(["43".into()]))]);
+    h.stop_targets = Some(targets);
+    // The timetable is loaded, but no trip of it is due anywhere now (the reporter's
+    // "any map, any bus" case). The stops must still carry their own people.
+    h.due_dests = Some(crate::timetable_run::DueTrips::default());
+    let stop = h.stops.get_mut(&42).unwrap();
+    h.center = stop.pos;
+    stop.spots = (0..6)
+        .map(|k| WaitSpot {
+            pos: stop.pos + DVec3::X * k as f64,
+            face: 0.0,
+            height: 0.0,
+        })
+        .collect();
+    stop.taken = vec![false; 6];
+    stop.enter_max = 3.0;
+    stop.enter_min = 3.0;
+    stop.factor = 1.0;
+    stop.near = true;
+    stop.clock_ms = 15_001.0;
+    stop.dests = vec![("43".into(), 1.0)];
+    stop.lines = vec![("43".into(), HashSet::from(["43".into()]))];
+
+    let world = FlatWorld::default();
+    h.stops_tick(0.1, &world);
+    assert_eq!(
+        h.stops[&42].want, 3,
+        "no trip is due, so the stop fills by its own number"
+    );
+    let waiting: Vec<usize> = h
+        .people
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| matches!(&p.state, State::Pax(x) if x.stop == Some(42)))
+        .map(|(i, _)| i)
+        .collect();
+    assert!(
+        !waiting.is_empty(),
+        "a worked duty must have waiting people"
+    );
+    for i in waiting {
+        assert_eq!(h.pax(i).unwrap().dest.as_deref(), Some("43"));
+    }
+}
+
+/// The destinations of the people waiting at a stop, for the two phases below.
+fn waiting_dests(h: &PeopleSim, stop: i64) -> Vec<(Option<String>, Option<usize>)> {
+    h.people
+        .iter()
+        .filter_map(|p| match &p.state {
+            State::Pax(x) if x.stop == Some(stop) => Some((x.dest.clone(), x.line)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// #3841: the fallback is not a latch. Recomputed from the current `due_dests` on every tick,
+/// it gives way to the timetable as soon as a trip becomes due, with the trips' destinations
+/// and shares again. `dedicated` puts the stop in range of a LAN player of a server with no
+/// local player, where `anchors` replaces the camera instead of keeping the player's place.
+fn a_due_transition_resumes_timetable_destinations(name: &str, dedicated: bool) {
+    let (mut h, _) = pax_stops::brt_tests::setup(name, None);
+    h.types = vec![h.people[0].ty.clone()];
+    h.pool_types = 1;
+    h.people.clear();
+    h.map_humans_done = true;
+    h.free_drive_fill = FreeDriveFill::Auto;
+    h.density = 1.0;
+    h.duty = Some((
+        Arc::new(DutyTrip {
+            name: "T".into(),
+            departure: 36_000.0,
+            terminus: "43".into(),
+            public: true,
+            stops: vec![(42, "42".into(), true), (43, "43".into(), true)],
+        }),
+        0,
+        false,
+    ));
+    let mut targets = HashMap::new();
+    targets.insert(
+        42,
+        vec![(
+            "Timetable stop".into(),
+            HashSet::from(["Timetable stop".into()]),
+        )],
+    );
+    h.stop_targets = Some(targets);
+    // Before service starts the timetable is loaded, but no trip of it is due anywhere.
+    h.due_dests = Some(crate::timetable_run::DueTrips::default());
+    let pos = h.stops[&42].pos;
+    if dedicated {
+        h.players_only = true;
+        h.center = DVec3::new(1000.0, 1000.0, 0.0);
+        h.lan_centers = vec![pos];
+    } else {
+        h.center = pos;
+    }
+    let stop = h.stops.get_mut(&42).unwrap();
+    stop.spots = (0..6)
+        .map(|k| WaitSpot {
+            pos: pos + DVec3::X * k as f64,
+            face: 0.0,
+            height: 0.0,
+        })
+        .collect();
+    stop.taken = vec![false; 6];
+    stop.enter_max = 3.0;
+    stop.enter_min = 3.0;
+    stop.factor = 1.0;
+    // Start just out of range so the first tick is the stop coming into range, which fills
+    // it to its number at once.
+    stop.near = false;
+    stop.clock_ms = 15_001.0;
+    // Two of the stop's own destinations: only the due trip's one is to survive the switch.
+    stop.dests = vec![("Own stop".into(), 1.0), ("Timetable stop".into(), 1.0)];
+    stop.lines = vec![
+        ("Own stop".into(), HashSet::from(["Own stop".into()])),
+        (
+            "Timetable stop".into(),
+            HashSet::from(["Timetable stop".into()]),
+        ),
+    ];
+    let world = FlatWorld::default();
+    h.stops_tick(0.1, &world);
+    assert_eq!(
+        h.stops[&42].want, 3,
+        "with nothing due the stop fills by its own number"
+    );
+    let first_wave = waiting_dests(&h, 42);
+    assert_eq!(
+        first_wave.len(),
+        3,
+        "the empty due set still has waiting people"
+    );
+    assert!(
+        first_wave
+            .iter()
+            .any(|(dest, _)| dest.as_deref() == Some("Own stop")),
+        "before service starts even the stop's own destination is drawn"
+    );
+
+    // Service starts: the same stop now has a due call going on to one of its destinations.
+    let mut due = crate::timetable_run::DueTrips::default();
+    due.dests
+        .insert(42, HashSet::from(["Timetable stop".into()]));
+    due.visits.insert(
+        42,
+        vec![crate::timetable_run::DueVisit {
+            tour: 1,
+            departure: 0,
+            station: 0,
+            share: 1.0,
+        }],
+    );
+    h.due_dests = Some(due);
+    // The first wave has left; only people arriving now are looked at.
+    for i in (0..h.people.len()).rev() {
+        if matches!(&h.people[i].state, State::Pax(p) if p.stop == Some(42)) {
+            h.release(i);
+            let p = h.people.swap_remove(i);
+            h.retire(&p);
+        }
+    }
+    let stop = h.stops.get_mut(&42).unwrap();
+    stop.taken.fill(false);
+    // A fresh arrival at this stop, so the second wave is filled to its number as well.
+    stop.near = false;
+    stop.clock_ms = 15_001.0;
+    h.stops_tick(0.1, &world);
+    assert_eq!(
+        h.stops[&42].want, 3,
+        "the active trip asks for the whole stop again"
+    );
+    let resumed = waiting_dests(&h, 42);
+    assert_eq!(resumed.len(), 3, "the stop fills for the new trip");
+    for (dest, line) in &resumed {
+        assert_eq!(
+            dest.as_deref(),
+            Some("Timetable stop"),
+            "the timetable's destination, not the stop's own"
+        );
+        assert_eq!(*line, Some(1), "the line of that destination");
+    }
+}
+
+#[test]
+fn an_empty_due_set_gives_way_to_the_timetable_when_a_trip_starts() {
+    a_due_transition_resumes_timetable_destinations("issue-3841-transition", false);
+}
+
+#[test]
+fn a_dedicated_session_resumes_timetable_destinations_when_a_trip_starts() {
+    a_due_transition_resumes_timetable_destinations("issue-3841-transition-dedicated", true);
+}
