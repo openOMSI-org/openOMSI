@@ -212,12 +212,49 @@ impl App {
             "photo_mode" => self.enter_photo(),
             "quicksave" => self.quick_save(),
             "view_set_ego" => {
-                // on foot from where the camera is (beside the bus in the driver's view)
-                if let (Some(cam), Some(p)) = (self.camera.as_mut(), self.player.as_ref()) {
-                    if self.view != "free" {
+                // The walking camera needs a valid floor before the small-step movement
+                // guard can run. In particular F4 -> F11 must not keep the flying height.
+                let (Some(cam), Some(world)) = (self.camera.as_mut(), self.world.as_ref()) else {
+                    return true;
+                };
+                let mut at = cam.position;
+                let entering_from_bus = self.view != "free" && self.player.is_some();
+                if entering_from_bus {
+                    if let Some(p) = self.player.as_ref() {
                         let h = (p.vehicle.heading as f32 - 90.0).to_radians();
-                        cam.position = p.vehicle.position
+                        at = p.vehicle.position
                             + glam::DVec3::new(h.sin() as f64, h.cos() as f64, 0.0) * 2.5;
+                    }
+                }
+                // Use the nearby bus's road level (also on bridges or in tunnels), or
+                // the terrain level when coming from a distant flying camera. Never
+                // use the highest raster surface, which can be a station's roof.
+                let bus_floor = self.player.as_ref().and_then(|p| {
+                    let pos = p.vehicle.position;
+                    if (at.truncate() - pos.truncate()).length_squared() > 225.0 {
+                        return None;
+                    }
+                    world.camera_ground(pos.x, pos.y, pos.z + 0.6)
+                        .filter(|g| (g - pos.z).abs() <= 2.5)
+                });
+                let terrain = world.ground_terrain(at.x, at.y).filter(|g| g.is_finite());
+                let reference = bus_floor.or(terrain);
+                let floor = reference.filter(|g| g.is_finite()).and_then(|g| {
+                    world.camera_ground(at.x, at.y, g + 0.45)
+                        .filter(|z| z.is_finite() && *z >= g - 1.5 && *z <= g + 0.45)
+                }).or_else(|| terrain.and_then(|g| {
+                    world.camera_ground(at.x, at.y, g + 0.45)
+                        .filter(|z| z.is_finite() && *z >= g - 1.5 && *z <= g + 0.45)
+                }));
+                let Some(floor) = floor else {
+                    self.service_msg = Some(("On foot: ground is not loaded; try again nearby".into(), 5.0));
+                    return true;
+                };
+                at.z = floor + 1.7;
+                cam.position = at;
+                cam.roll = 0.0;
+                if entering_from_bus {
+                    if let Some(p) = self.player.as_ref() {
                         cam.yaw = p.vehicle.heading as f32;
                         cam.pitch = 0.0;
                     }
