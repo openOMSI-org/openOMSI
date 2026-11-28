@@ -183,10 +183,12 @@ impl Renderer {
             roof: None,
             roof_snow: None,
         });
+        let idx = scene.instances.len() - 1;
         if scene.bounds_known.get(mesh).copied().unwrap_or(false) {
-            scene.bounds_users.push(scene.instances.len() - 1);
+            scene.bounds_users.push(idx);
         }
-        scene.instances.len() - 1
+        scene.update_active_film(idx);
+        idx
     }
 
     pub fn add_surface_instance(
@@ -257,10 +259,12 @@ impl Renderer {
             roof: None,
             roof_snow: None,
         });
+        let idx = scene.instances.len() - 1;
         if scene.bounds_known.get(mesh).copied().unwrap_or(false) {
-            scene.bounds_users.push(scene.instances.len() - 1);
+            scene.bounds_users.push(idx);
         }
-        scene.instances.len() - 1
+        scene.update_active_film(idx);
+        idx
     }
 
     /// A vehicle's shadow blob: a surface instance (see `Instance::blob`).

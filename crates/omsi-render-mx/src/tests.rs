@@ -41,13 +41,19 @@ fn a_washed_pane_gets_a_glass_picture_without_rain() {
     );
     let mat = renderer.add_material(&mut scene, None, AlphaMode::Blend, [1.0; 4], true);
     scene.materials[mat].uniform.emissive[3] = 2.0;
-    let inst = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, &[mat]);
+    let plain = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0; 4], true);
+    let inst = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![mat]);
+    assert!(scene.has_film());
+    renderer.set_material(&mut scene, inst, 0, plain);
+    assert!(!scene.has_film());
+    renderer.set_material(&mut scene, inst, 0, mat);
+    assert!(scene.has_film());
     renderer.set_params(&mut scene, inst, &[0.0], true, &[]);
-    assert!(scene.active_film_instances.is_empty());
+    assert!(!scene.has_film());
     renderer.set_params(&mut scene, inst, &[0.5], true, &[]);
-    assert!(!scene.active_film_instances.is_empty());
+    assert!(scene.has_film());
     renderer.set_params(&mut scene, inst, &[0.5], false, &[]);
-    assert!(scene.active_film_instances.is_empty());
+    assert!(!scene.has_film());
 }
 
 /// The night meter takes the street the picture shows: from 30 m over a lot lit by a
