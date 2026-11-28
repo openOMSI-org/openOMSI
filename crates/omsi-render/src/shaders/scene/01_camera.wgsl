@@ -47,6 +47,7 @@ struct Camera {
     lod: vec4<f32>,           // x mip bias, y ground-prepass flag, z road sunlight glare, w air temperature (degC)
     // the classic picture's headlight (`CameraUniform::spot`, see `classic_spot`)
     spot: array<vec4<f32>, 4>,
+    wire_wind: vec4<f32>,
 };
 
 // 1 when the point lies inside the player's vehicle (its [boundingbox], shrunk a little so

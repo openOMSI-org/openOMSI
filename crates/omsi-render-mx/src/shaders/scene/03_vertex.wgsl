@@ -2,6 +2,7 @@ struct VsIn {
     @location(0) pos: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
+    @location(3) wire_wind: vec4<f32>,
     @builtin(instance_index) inst: u32,
 };
 struct VsOut {
@@ -175,6 +176,29 @@ fn tree_sway(local: vec3<f32>, m: mat4x4<f32>) -> vec3<f32> {
     return d;
 }
 
+// A wire's station weight is zero at either support. Use the crosswind, with
+// a spatially varying gust so neighbouring spans don't swing in lockstep.
+fn wire_sway(world: vec3<f32>, wire: vec4<f32>, ago: f32) -> vec3<f32> {
+    if (wire.z <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let side = normalize(wire.xy);
+    let wind = camera.wire_wind.xy;
+    let crosswind = clamp(dot(wind, side) / 15.0, -1.0, 1.0);
+    let map_xy = world_pattern_xy(world);
+    let gust_xy = (map_xy - camera.tree_wind.zw + wind * ago) * (6.2831853 / PATTERN_PERIOD);
+    let t = camera.post.y - ago;
+    let gust = 0.55 + 0.35 * sin(2.2 * t + dot(gust_xy, vec2<f32>(6.0, 3.0)))
+        + 0.10 * sin(3.7 * t + dot(gust_xy, vec2<f32>(-4.0, 10.0)));
+    // Keep this maximum in sync with omsi_geometry::WIRE_WIND_MAX_DISPLACEMENT.
+    return vec3<f32>(side * (0.08 * crosswind * wire.z * gust), 0.0);
+}
+
+fn scene_vertex_world(in: VsIn, m: mat4x4<f32>) -> vec4<f32> {
+    let world = m * vec4<f32>(in.pos, 1.0);
+    return world + vec4<f32>(tree_sway(in.pos, m) + wire_sway(world.xyz, in.wire_wind, 0.0), 0.0);
+}
+
 // Where a scene vertex lands on the screen: the main pass's and the depth passes' vertex
 // shaders (`vs_main`, `vs_depth`) both take it from here, so that their depths agree to the
 // last bit (the main pass tests against the depth the prepass left).
@@ -308,7 +332,7 @@ fn tree_card_fade(world: vec3<f32>) -> f32 {
 fn vs_main(in: VsIn) -> VsOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
-    let wp = m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0);
+    let wp = scene_vertex_world(in, m);
     var out: VsOut;
     out.clip = scene_clip(e, wp, (m * vec4<f32>(in.normal, 0.0)).xyz);
     out.world = wp.xyz;
@@ -379,7 +403,7 @@ struct ShadowIn {
 fn vs_depth(in: VsIn) -> DepthOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
-    let wp = m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0);
+    let wp = scene_vertex_world(in, m);
     var out: DepthOut;
     out.clip = scene_clip(e, wp, (m * vec4<f32>(in.normal, 0.0)).xyz);
     out.world = wp.xyz;

@@ -9,6 +9,7 @@ pub struct Vertex {
     pub pos: [f32; 3],
     pub normal: [f32; 3],
     pub uv: [f32; 2],
+    pub wire_wind: [i8; 4],
 }
 
 #[repr(C)]
@@ -87,6 +88,8 @@ pub(crate) struct CameraUniform {
     /// (Every shader's copy of this struct carries it, read or not - see the test
     /// `shaders_validate_and_match_the_uniforms`.)
     pub(crate) spot: [[f32; 4]; 4],
+    /// Weather wind in world XY (m/s), independent of the windy trees setting, and frame dt in z.
+    pub(crate) wire_wind: [f32; 4],
 }
 
 /// The period the sky's cloud patterns repeat with (m): 5 x the cloud field (14 km), 8 x

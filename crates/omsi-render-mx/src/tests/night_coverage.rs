@@ -193,6 +193,7 @@ fn check_night_coverage(samples: u32) {
                 let mesh = renderer.add_mesh(
                     &mut scene,
                     &MeshData {
+                        wire_wind: Vec::new(),
                         positions: vec![
                             Vec3::new(-2.0, y, -2.0),
                             Vec3::new(2.0, y, -2.0),

@@ -24,6 +24,7 @@ fn a_marking_on_a_long_road_stays_seen_at_every_distance() {
     .expect("test renderer");
     let mut scene = renderer.new_scene();
     let quad = |x0: f32, x1: f32, y0: f32, y1: f32| MeshData {
+        wire_wind: Vec::new(),
         positions: vec![
             Vec3::new(x0, y0, 0.0),
             Vec3::new(x1, y0, 0.0),
@@ -59,6 +60,7 @@ fn a_marking_on_a_long_road_stays_seen_at_every_distance() {
         renderer.add_mesh(
             &mut scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 normals: vec![Vec3::Z; positions.len()],
                 uvs: vec![glam::Vec2::ZERO; positions.len()],
                 positions,

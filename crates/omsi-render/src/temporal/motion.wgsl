@@ -44,13 +44,16 @@ fn vs_motion(in: VsIn) -> MotionOut {
     let local = vec4<f32>(in.pos, 1.0);
     let wp = m * local;
     var out: MotionOut;
-    let swayed = wp + vec4<f32>(tree_sway(in.pos, m), 0.0);
+    let wire = wire_sway(wp.xyz, in.wire_wind, 0.0);
+    let swayed = wp + vec4<f32>(tree_sway(in.pos, m) + wire, 0.0);
+    // Weather varies slowly over one frame. Rewind the gust using the current wind.
+    let wire_prev = vec4<f32>(wire_sway(wp.xyz, in.wire_wind, camera.wire_wind.z), 0.0);
     out.clip = scene_clip(e, swayed, (m * vec4<f32>(in.normal, 0.0)).xyz);
     out.world = swayed.xyz;
     let pr = inst_params[e * 2u];
     out.uv = in.uv + pr.zw;
     out.params = pr;
-    out.cur = motion.vp * wp;
+    out.cur = motion.vp * (wp + vec4<f32>(wire, 0.0));
     if (motion.params.z > 0.5 && f32(e) < motion.params.w) {
         let k = e * 4u;
         // (x's w carries the slot's draw order level, not the matrix: `model_matrix` drops it)
@@ -58,12 +61,12 @@ fn vs_motion(in: VsIn) -> MotionOut {
         // (an entry handed over to another object since: its old matrix is not this one's)
         let jump = pm[3].xyz + motion.origin_delta.xyz - m[3].xyz;
         if (dot(jump, jump) <= motion.origin_delta.w * motion.origin_delta.w) {
-            out.prev = motion.vp_prev * (pm * local);
+            out.prev = motion.vp_prev * (pm * local + wire_prev);
         } else {
-            out.prev = motion.vp_prev_here * wp;
+            out.prev = motion.vp_prev_here * (wp + wire_prev);
         }
     } else {
-        out.prev = motion.vp_prev_here * wp;
+        out.prev = motion.vp_prev_here * (wp + wire_prev);
     }
     if (pr.y < 0.5) {
         out.clip = vec4<f32>(0.0, 0.0, 2.0, 1.0);
@@ -143,7 +146,7 @@ struct MaskIn {
 fn vs_mask(in: VsIn) -> MaskOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
-    let wp = m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0);
+    let wp = scene_vertex_world(in, m);
     var out: MaskOut;
     out.clip = scene_clip(e, wp, (m * vec4<f32>(in.normal, 0.0)).xyz);
     let pr = inst_params[e * 2u];

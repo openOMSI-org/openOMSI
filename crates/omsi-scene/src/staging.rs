@@ -883,6 +883,9 @@ pub(super) fn split_spline_paint(
             for &k in &src.indices[start as usize..(start + count) as usize] {
                 let v = *vertices.entry(k).or_insert_with(|| {
                     out.positions.push(src.positions[k as usize]);
+                    if let Some(&wind) = src.wire_wind.get(k as usize) {
+                        out.wire_wind.push(wind);
+                    }
                     out.normals.push(
                         src.normals
                             .get(k as usize)

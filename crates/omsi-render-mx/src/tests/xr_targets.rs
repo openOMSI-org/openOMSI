@@ -35,6 +35,7 @@ impl EyeTargetsScene {
         let mesh = renderer.add_mesh(
             &mut scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: vec![
                     Vec3::new(0.0, -0.5, -0.5),
                     Vec3::new(0.0, 0.5, -0.5),

@@ -23,6 +23,7 @@ pub struct GpuMesh {
     pub ranges: Vec<(u32, u32, u32)>,
     pub bounds_center: Vec3,
     pub bounds_radius: f32,
+    pub(crate) has_wire_wind: bool,
     /// Back faces are culled (a content mesh, see `MeshData::one_sided`).
     pub one_sided: bool,
     /// Source asset for the optional draw-cost audit.
@@ -325,6 +326,7 @@ impl MeshPage {
             ranges: data.ranges.clone(),
             bounds_center: center,
             bounds_radius: radius,
+            has_wire_wind: !data.wire_wind.is_empty(),
             one_sided: data.one_sided,
             source: None,
             flats,
@@ -350,6 +352,7 @@ impl GpuMesh {
             ranges: Vec::new(),
             bounds_center: Vec3::ZERO,
             bounds_radius: 0.0,
+            has_wire_wind: false,
             one_sided: false,
             source: None,
             flats: Vec::new(),
@@ -364,10 +367,12 @@ pub(crate) fn mesh_vertices(data: &MeshData) -> Vec<Vertex> {
         .iter()
         .zip(&data.normals)
         .zip(&data.uvs)
-        .map(|((p, n), uv)| Vertex {
+        .enumerate()
+        .map(|(i, ((p, n), uv))| Vertex {
             pos: p.to_array(),
             normal: n.to_array(),
             uv: uv.to_array(),
+            wire_wind: data.wire_wind.get(i).copied().unwrap_or([0; 4]),
         })
         .collect()
 }
@@ -395,7 +400,12 @@ pub(crate) fn mesh_bounds(data: &MeshData) -> (Vec3, f32) {
         hi = Vec3::ZERO;
     }
     let center = (lo + hi) * 0.5;
-    (center, (hi - center).length())
+    let wind_margin = if data.wire_wind.is_empty() {
+        0.0
+    } else {
+        omsi_geometry::WIRE_WIND_MAX_DISPLACEMENT
+    };
+    (center, (hi - center).length() + wind_margin)
 }
 
 /// The meshes in one page of their own, sized to them (each in a page of its own where the
@@ -509,6 +519,7 @@ impl Renderer {
                 pos: p.to_array(),
                 normal: n.to_array(),
                 uv: uv.to_array(),
+                wire_wind: [0; 4],
             })
             .collect();
         let bytes: &[u8] = bytemuck::cast_slice(&verts);
@@ -517,6 +528,7 @@ impl Renderer {
             return;
         }
         m.pose = m.pose.wrapping_add(1);
+        m.has_wire_wind = false;
         // Deformation invalidates static planes; skinned geometry needs fresh metadata.
         let had_depth_planes = m.depth_normals.iter().any(|n| *n != Vec3::ZERO);
         m.depth_normals.clear();

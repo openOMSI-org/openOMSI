@@ -73,6 +73,7 @@ fn wall(r: &Renderer) -> Wall {
     let mesh = r.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-h, 0.0, -h),
                 Vec3::new(h, 0.0, -h),

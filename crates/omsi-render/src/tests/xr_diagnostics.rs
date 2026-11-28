@@ -27,6 +27,7 @@ fn xr_diagnostics_keep_views_separate_and_collect_each_readback_once() {
     let mesh = r.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-1.0, 5.0, -1.0),
                 Vec3::new(1.0, 5.0, -1.0),

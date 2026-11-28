@@ -728,6 +728,7 @@ fn fsr1_textures_keep_their_detail_with_the_mip_bias() {
         gpu_mips: true,
     };
     let wall = MeshData {
+        wire_wind: Vec::new(),
         positions: vec![
             Vec3::new(-10.0, 20.0, -2.0),
             Vec3::new(10.0, 20.0, -2.0),

@@ -334,6 +334,7 @@ impl Renderer {
         // (what each street lamp's tile draws, summed up: the tile is kept while it stays the
         // same, see `LampTiles`; bending foliage changes every frame)
         let windy = f.lighting.windy_trees;
+        let moving_wires = f.lighting.wind.truncate() != glam::Vec2::ZERO;
         let casters = |span: std::ops::Range<usize>,
                        out: &mut [Vec<DrawItem>; SHADOW_LISTS],
                        ranges: &mut Vec<(u8, u32, u32, usize, u32)>,
@@ -504,11 +505,17 @@ impl Renderer {
                                         .map(|c| (&c.to_local, scene.render_origin)),
                                 ),
                             );
-                            if windy
-                                && scene
-                                    .materials
-                                    .get(mat_id)
-                                    .is_some_and(|m| m.uniform.sway[0] >= 0.5)
+                            let wire_moves = moving_wires && m.has_wire_wind;
+                            if wire_moves {
+                                // Refresh the cached tile once when the wire comes to rest.
+                                sig.add(k, 1);
+                            }
+                            if wire_moves
+                                || (windy
+                                    && scene
+                                        .materials
+                                        .get(mat_id)
+                                        .is_some_and(|m| m.uniform.sway[0] >= 0.5))
                             {
                                 sig.volatile |= 1u64 << k;
                             }

@@ -21,9 +21,9 @@ fn enhanced_scene_compiles_with_optimized_fxc() {
             source: &*(shaders::scene_shader_for(false, ArrayPath::Storage)),
         })
         .expect("mX: a shader");
-    let attributes = mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
+    let attributes = mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Snorm8x4];
     let buffers = [mx::VertexBufferLayout {
-        array_stride: 32,
+        array_stride: std::mem::size_of::<Vertex>() as u64,
         step_mode: mx::VertexStepMode::Vertex,
         attributes: &attributes,
     }];

@@ -26,6 +26,7 @@ fn textures_shrunk_together_keep_their_picture() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-8.0, 4.0, -8.0),
                 Vec3::new(8.0, 4.0, -8.0),
@@ -156,6 +157,7 @@ fn instances_beyond_the_buffers_room_are_drawn_with_the_old_ones() {
         renderer.add_mesh(
             scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: vec![
                     Vec3::new(x0, 4.0, -2.0),
                     Vec3::new(x0 + 4.0, 4.0, -2.0),

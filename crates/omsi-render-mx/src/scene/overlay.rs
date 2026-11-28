@@ -410,6 +410,7 @@ mod tests {
             vec![0, 1, 2, 0, 2, 3]
         };
         MeshData {
+            wire_wind: Vec::new(),
             positions,
             normals: vec![Vec3::Z; 4],
             uvs: vec![glam::Vec2::ZERO; 4],

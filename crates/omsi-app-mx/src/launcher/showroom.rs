@@ -1267,6 +1267,7 @@ fn lathe(profile: &[Ring], centre: glam::Vec2) -> omsi_geometry::MeshData {
         }
     }
     omsi_geometry::MeshData {
+        wire_wind: Vec::new(),
         positions,
         normals,
         uvs,

@@ -28,6 +28,7 @@ fn renderer() -> Renderer {
 fn grid(cx: f32, cy: f32, z: f32, half: f32, n: u32, turn: f32, flip: bool) -> MeshData {
     let (s, c) = turn.to_radians().sin_cos();
     let mut m = MeshData {
+        wire_wind: Vec::new(),
         positions: Vec::new(),
         normals: Vec::new(),
         uvs: Vec::new(),
@@ -65,6 +66,7 @@ fn grid(cx: f32, cy: f32, z: f32, half: f32, n: u32, turn: f32, flip: bool) -> M
 /// `grids` as one mesh, a material slot each, in that order.
 fn slotted(grids: Vec<MeshData>) -> MeshData {
     let mut m = MeshData {
+        wire_wind: Vec::new(),
         positions: Vec::new(),
         normals: Vec::new(),
         uvs: Vec::new(),

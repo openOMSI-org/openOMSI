@@ -197,6 +197,7 @@ mod tests {
             Vec3::new(0.0, 0.0, 1.0 + h),
         ];
         MeshData {
+            wire_wind: Vec::new(),
             normals: vec![-Vec3::Y; 4],
             uvs: vec![
                 Vec2::new(0.0, 0.0),
@@ -263,6 +264,7 @@ mod tests {
             Vec3::new(1.0 + a.cos(), -a.sin(), 2.0),
         ];
         let d = MeshData {
+            wire_wind: Vec::new(),
             normals: vec![-Vec3::Y; 6],
             uvs: vec![Vec2::ZERO; 6],
             positions,

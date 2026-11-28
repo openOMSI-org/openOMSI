@@ -28,6 +28,8 @@ pub struct MeshData {
     pub positions: Vec<Vec3>,
     pub normals: Vec<Vec3>,
     pub uvs: Vec<Vec2>,
+    /// Optional packed wire wind data per vertex: lateral XY direction and span weight.
+    pub wire_wind: Vec<[i8; 4]>,
     /// (first index, index count, material slot)
     pub ranges: Vec<(u32, u32, u32)>,
     pub indices: Vec<u32>,
@@ -57,6 +59,12 @@ impl MeshData {
             out.positions.extend_from_slice(&mesh.positions);
             out.normals.extend_from_slice(&mesh.normals);
             out.uvs.extend_from_slice(&mesh.uvs);
+            if !mesh.wire_wind.is_empty() {
+                out.wire_wind.resize(base as usize, [0; 4]);
+                out.wire_wind.extend_from_slice(&mesh.wire_wind);
+            } else if !out.wire_wind.is_empty() {
+                out.wire_wind.resize(out.positions.len(), [0; 4]);
+            }
             for (i, &(start, count, slot)) in mesh.ranges.iter().enumerate() {
                 assert_eq!(slot, first.ranges[i].2);
                 ranges[i].extend(
@@ -88,6 +96,7 @@ impl MeshData {
         self.positions.capacity() * 12
             + self.normals.capacity() * 12
             + self.uvs.capacity() * 8
+            + self.wire_wind.capacity() * 4
             + self.indices.capacity() * 4
             + self.ranges.capacity() * 12
     }
@@ -475,15 +484,59 @@ pub fn build_spline_mesh(
     mirror: bool,
     origin: DVec3,
 ) -> MeshData {
+    extrude_spline(def, curve, mirror, origin, false)
+}
+
+/// Maximum raster displacement of an animated wire, in metres, for render bounds.
+pub const WIRE_WIND_MAX_DISPLACEMENT: f32 = 0.08;
+
+/// Build a drawable mesh for the Numazu wire, treating each map spline as one span.
+pub fn build_wire_wind_mesh(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    origin: DVec3,
+    file: &str,
+) -> Option<MeshData> {
+    let wire = file
+        .rsplit(['/', '\\'])
+        .next()
+        .is_some_and(|name| name.eq_ignore_ascii_case("JP_ElecWire_01.sli"));
+    wire.then(|| extrude_spline(def, curve, mirror, origin, true))
+}
+
+fn extrude_spline(
+    def: &Spline,
+    curve: &SplineCurve,
+    mirror: bool,
+    origin: DVec3,
+    wire: bool,
+) -> MeshData {
     let mut mesh = MeshData::default();
     if curve.length <= 0.0 {
         return mesh;
     }
     let mut n = spline_station_count(def, curve);
+    if wire {
+        // A short straight spline may have only its endpoints in the legacy mesh.
+        n = n.max(((curve.length / 2.0).ceil() as usize).clamp(4, 256));
+    }
     let patch = patchwork(def, curve, &mut n);
     let mirror_sign = if mirror { -1.0 } else { 1.0 };
     let curve = &curve.with_sli(def);
     let station = |i: usize| curve.length * i as f64 / n as f64;
+    let wire_stations: Vec<_> = if wire {
+        (0..=n)
+            .map(|i| {
+                let dir = SplineCurve::dir(curve.heading_at(station(i)));
+                let t = i as f64 / n as f64;
+                let snorm = |value: f64| (value.clamp(-1.0, 1.0) * 127.0).round() as i8;
+                [snorm(dir.y), snorm(-dir.x), snorm(4.0 * t * (1.0 - t)), 0]
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     for profile in &def.profiles {
         if profile.points.len() < 2 {
             continue;
@@ -525,6 +578,9 @@ pub fn build_spline_mesh(
                             mesh.positions.push((p - origin).as_vec3());
                             mesh.normals.push(Vec3::Z);
                             mesh.uvs.push(Vec2::new(pt.u, (v * mirror_sign) as f32));
+                            if wire {
+                                mesh.wire_wind.push(wire_stations[i + e]);
+                            }
                         }
                     }
                     for j in 0..pn - 1 {
@@ -557,6 +613,9 @@ pub fn build_spline_mesh(
                             pt.v_scale as f64 * (s + curve.tex_offset) * mirror_sign - whole
                         };
                         mesh.uvs.push(Vec2::new(pt.u, v as f32));
+                        if wire {
+                            mesh.wire_wind.push(wire_stations[i]);
+                        }
                     }
                 }
                 for i in 0..n as u32 {
@@ -1344,6 +1403,7 @@ mod ray_hit_tests {
     /// u runs with x, v runs down (v = 0 at z = 1).
     fn quad() -> MeshData {
         MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-1.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 1.0),

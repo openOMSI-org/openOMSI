@@ -43,6 +43,7 @@ struct Camera {
     lod: vec4<f32>,
     // (the classic picture's headlight, `CameraUniform::spot`: unread here)
     spot: array<vec4<f32>, 4>,
+    wire_wind: vec4<f32>,
 };
 
 // A hash of a lattice point, from its integer bits.

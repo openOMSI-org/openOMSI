@@ -142,6 +142,7 @@ fn memory_pressure_keeps_colour_and_cutout_alpha_on_the_gpu() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-4.0, 4.0, -4.0),
                 Vec3::new(4.0, 4.0, -4.0),
