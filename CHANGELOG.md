@@ -30,6 +30,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   now run on phones that tag their memory pointers, where the game stopped with "this platform
   is not compatible with a nan-boxed `JsValueInner`"
   ([#4382](https://github.com/openOMSI-org/openOMSI/issues/4382)).
+- **`[onlyone]` sounds no longer count towards the sound limit**: as in OMSI 2, a vehicle's or
+  object's `[onlyone]` entries are left out when `[sound_maxcount]` adds up the nearest sound
+  packs, so a bus with many of them no longer silences the traffic and the scenery sooner than
+  OMSI does.
 
 ## 0.3.59 - 2026-11-26
 

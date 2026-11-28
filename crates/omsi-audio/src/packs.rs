@@ -7,7 +7,8 @@
 //! from the camera over their range (0x74f4fc, see `pack_range`); the user's own
 //! vehicles go in at 0 (0x751398 hands their flag at +0x26c to 0x751010). The sort
 //! (0x7511b4) puts a pack after those with the same key. It then walks them nearest first
-//! (0x7512bc), adding up their `[sound]`/`[loopsound]` entries (TSoundPack +0x14): a pack
+//! (0x7512bc), adding up their `[sound]`/`[loopsound]` entries (TSoundPack +0x14, which
+//! the loader 0x74d774 counts up for each entry and down for each `[onlyone]`): a pack
 //! is too far when the entries of the packs heard before it are more than
 //! `[sound_maxcount]` and its key is not 0. A pack that is too far adds nothing. One that
 //! becomes too far stops all its sounds ("Stopped Sound ... too far": 0x74f224 sets +0x7e
@@ -58,6 +59,10 @@ pub(crate) fn pack_range<'a>(entries: impl IntoIterator<Item = &'a SoundEntry>) 
 }
 
 /// What a sound set is as a pack: its name, its entries and its range.
+///
+/// The entries are what the loader (0x74d774) counts at TSoundPack +0x14: one for each
+/// `[sound]` and `[loopsound]`, one less for each `[onlyone]` - such a sound plays from the
+/// nearest object only (see `soundset::only_one`), so its pack does not count it.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PackInfo {
     pub id: u64,
@@ -69,7 +74,7 @@ impl PackInfo {
     pub(crate) fn of(entries: &[SoundEntry]) -> PackInfo {
         PackInfo {
             id: next_pack_id(),
-            entries: entries.len(),
+            entries: entries.iter().filter(|e| !e.only_one).count(),
             range: pack_range(entries),
         }
     }
@@ -90,7 +95,7 @@ pub(crate) struct Pack {
     pub id: u64,
     /// Its distance from the camera over its range; 0 for the user's vehicles.
     pub key: f32,
-    /// How many `[sound]`/`[loopsound]` entries it has.
+    /// How many `[sound]`/`[loopsound]` entries it has, `[onlyone]` ones left out.
     pub entries: usize,
 }
 
@@ -351,5 +356,22 @@ mod tests {
         assert_eq!(pack_range(&[e(false, 90.0, 0)]), 10.0);
         assert_eq!(pack_range(&[e(true, 50.0, 4)]), 50.0);
         assert_eq!(pack_range(&[]), 10.0);
+    }
+
+    /// The loader (0x74d774) counts an entry at TSoundPack +0x14 and takes it off again for
+    /// its `[onlyone]`: a bus whose `[onlyone]` sounds would have put it past
+    /// `[sound_maxcount]` leaves the traffic heard, as in OMSI.
+    #[test]
+    fn an_onlyone_entry_does_not_count_for_sound_maxcount() {
+        let e = |only_one: bool| SoundEntry {
+            only_one,
+            ..Default::default()
+        };
+        let mut sounds = vec![e(false); 150];
+        sounds.extend(vec![e(true); 80]);
+        let bus = PackInfo::of(&sounds);
+        assert_eq!(bus.entries, 150);
+        let packs = vec![pack(bus.id, 0.0, bus.entries), pack(2, 0.5, 10)];
+        assert_eq!(cut(packs, 200), Vec::<u64>::new());
     }
 }
