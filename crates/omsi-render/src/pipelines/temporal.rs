@@ -10,15 +10,6 @@ use super::common::*;
 use super::scene::SceneBase;
 use crate::*;
 
-/// The most fragment textures the late motion takes: the scene's camera and material groups'
-/// with the ray-traced GI's (`PANE_MASK_TEXTURES`, as the pane mask) and the panes' mask.
-pub(crate) const LATE_MOTION_TEXTURES: u32 = super::scene::PANE_MASK_TEXTURES + 1;
-
-/// The fragment textures the late motion takes on this renderer: one fewer without the GI's.
-fn late_motion_textures() -> u32 {
-    LATE_MOTION_TEXTURES - u32::from(!gi_binding())
-}
-
 pub(crate) fn build(
     device: &wgpu::Device,
     scene: &SceneBase,
@@ -245,11 +236,14 @@ pub(crate) fn build(
     let glass = upscaler.glass_mask_entry();
     // (a device that takes fewer leaves the parts drawn after a cab's first pane the street's
     // motion, rather than the renderer failing)
-    let late = device.limits().max_sampled_textures_per_shader_stage >= late_motion_textures();
+    // (its fragment stage takes what the pane mask's does: the scene's camera and material
+    // groups and the panes' mask)
+    let need = super::scene::pane_mask_textures(gi_binding());
+    let late = device.limits().max_sampled_textures_per_shader_stage >= need;
     if !late {
         log::warn!(
             "temporal upscaling: the late motion takes {} textures in a shader stage, this device {}; drawing without it",
-            late_motion_textures(),
+            need,
             device.limits().max_sampled_textures_per_shader_stage
         );
     }

@@ -50,6 +50,8 @@ struct RuntimeSound {
     fired_curves: Option<f32>,
     /// An `[onlyone]` entry: the file it shares with the other objects' entries.
     only_one: Option<OnlyOne>,
+    /// A traction sound (the motor's loops, #3336): the settings' traction slider scales it.
+    traction: bool,
 }
 
 /// The places of an entry's variables in its set's table of variables read each frame: its
@@ -107,9 +109,33 @@ impl CurveInput {
     }
 }
 
+/// The words a sound file's name carries when the vehicle marks none of its entries with
+/// `[traction]` (`sound.cfg`'s keyword, openOMSI's own): the motor's loops of the electric
+/// buses, trams and trolleybuses (`traction_loop.wav`, `Fahrmotor.wav`, `inverter.wav` ...).
+const TRACTION_WORDS: [&str; 7] = [
+    "motor",
+    "traction",
+    "traktion",
+    "fahrmotor",
+    "inverter",
+    "vfd",
+    "triebwerk",
+];
+
+/// Does the file name say this is a traction sound (see `TRACTION_WORDS`)?
+fn looks_like_traction(file: &str) -> bool {
+    let name = file
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(file)
+        .to_lowercase();
+    TRACTION_WORDS.iter().any(|w| name.contains(w))
+}
+
 impl RuntimeSound {
     fn new(def: SoundEntry, clip: Option<Arc<Clip>>) -> RuntimeSound {
         let curve_inputs = def.vol_curves.iter().map(CurveInput::of).collect();
+        let traction = def.traction;
         RuntimeSound {
             clip,
             voice: None,
@@ -123,6 +149,7 @@ impl RuntimeSound {
             only_one: def
                 .only_one
                 .then(|| OnlyOne::new(def.file.trim().to_ascii_lowercase())),
+            traction,
             def,
         }
     }
@@ -132,6 +159,9 @@ pub struct SoundSet {
     sounds: Vec<RuntimeSound>,
     /// The `[sound_ai]`/`[sound_scenery]` share of this set (the settings' sliders).
     pub master: f32,
+    /// The share of the traction sounds (the settings' traction slider, #3336): 1 as the file
+    /// has them, and only the entries [`SoundSet::set_traction_gain`] takes for traction.
+    pub traction: f32,
     /// Folder of the sound config: files of `(T.F.)` triggers resolve against it.
     dir: std::path::PathBuf,
     /// The listener sits in this vehicle's interior (see [`SoundSet::set_inside`]).
@@ -299,10 +329,19 @@ impl SoundSet {
                 }
                 s
             })
-            .collect();
+            .collect::<Vec<_>>();
+        // a vehicle file that marks none of its entries guesses its traction sounds by their
+        // file names (`[traction]` is openOMSI's own keyword, #3336)
+        let mut sounds = sounds;
+        if !sounds.iter().any(|s| s.traction) {
+            for s in &mut sounds {
+                s.traction = looks_like_traction(&s.def.file);
+            }
+        }
         SoundSet {
             sounds,
             master: 1.0,
+            traction: 1.0,
             dir: dir.to_path_buf(),
             inside: false,
             amount: 0.0,
@@ -401,10 +440,20 @@ impl SoundSet {
         }
     }
 
+    /// The share of the traction sounds (the settings' slider, #3336): 1 leaves the file's
+    /// own volumes, 0 silences the motor's loops - and only them. Coupled parts follow.
+    pub fn set_traction_gain(&mut self, gain: f32) {
+        self.traction = gain.clamp(0.0, 2.0);
+        for (_, p) in &mut self.parts {
+            p.set_traction_gain(self.traction);
+        }
+    }
+
     /// Attach the sound set of coupled part `index` (built like this one: [`SoundSet::new`]
     /// for the player's bus, [`SoundSet::new_exterior`] for the others).
     pub fn add_part(&mut self, index: usize, mut part: SoundSet) {
         part.master = self.master;
+        part.traction = self.traction;
         part.inside = self.inside;
         part.amount = self.amount;
         part.muffled = self.muffled;
@@ -976,6 +1025,7 @@ impl SoundSet {
             amount: self.amount,
             cab: self.muffled,
             master: self.master,
+            traction: self.traction,
             doppler: !self.listener_vehicle,
             listener: Vec3::ZERO,
             now: std::time::Instant::now(),
@@ -1034,6 +1084,8 @@ struct Ctx {
     amount: f32,
     cab: bool,
     master: f32,
+    /// The set's traction share (the settings' slider, #3336).
+    traction: f32,
     doppler: bool,
     listener: Vec3,
     /// The engine's clock now (`AudioEngine::clock`): the wall clock, or a recording's
@@ -1136,7 +1188,14 @@ impl Ctx {
             (None, _) => 0.0,
         };
         // (an untriggered entry whose conditions fail is at volume 0)
-        let mut vol = if holds { def.volume * self.master } else { 0.0 };
+        // (a traction sound takes the settings' traction share: the motor of an electric bus,
+        // a tram's or a trolleybus's, #3336)
+        let share = if s.traction { self.traction } else { 1.0 };
+        let mut vol = if holds {
+            def.volume * self.master * share
+        } else {
+            0.0
+        };
         // A triggered sound takes the volume its curves give when it starts and keeps it
         // to its end, as the stock sound.cfg says of `[trigger]` entries ("Volumen und Pitch
         // [werden] nur einmalig beim Abspielstart zugewiesen"): the door hits of the SD200/

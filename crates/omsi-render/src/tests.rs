@@ -1,8 +1,62 @@
 use super::*;
+use crate::passes::glass_picture_needed;
 
 mod classic_spot;
 mod depth_metadata;
 mod freetex_reload;
+
+/// The washer can wet a windscreen on a dry day. The film then has to be drawn over a copy
+/// of the clean frame; with no rain or road wetness to ask for one it fell back to the sky's
+/// irradiance and showed a pale rectangle (#4222).
+#[test]
+fn a_washed_pane_gets_a_glass_picture_without_rain() {
+    assert!(!glass_picture_needed(0.0, 0.0, false));
+    assert!(glass_picture_needed(0.002, 0.0, false));
+    assert!(glass_picture_needed(0.0, 0.03, false));
+    assert!(glass_picture_needed(0.0, 0.0, true));
+
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+    desc.backends = wgpu::Backends::NOOP;
+    desc.backend_options.noop = wgpu::NoopBackendOptions { enable: true };
+    let renderer = pollster::block_on(Renderer::new_with(
+        &wgpu::Instance::new(desc),
+        None,
+        Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        RenderOptions {
+            msaa: 1,
+            render_scale: 1.0,
+            ..Default::default()
+        },
+    ))
+    .expect("noop renderer");
+    let mut scene = renderer.new_scene();
+    let mesh = renderer.add_mesh(
+        &mut scene,
+        &MeshData {
+            positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
+            normals: vec![Vec3::Z; 3],
+            uvs: vec![glam::Vec2::ZERO; 3],
+            indices: vec![0, 1, 2],
+            ranges: vec![(0, 3, 0)],
+            ..Default::default()
+        },
+    );
+    let mat = renderer.add_material(&mut scene, None, AlphaMode::Blend, [1.0; 4], true);
+    scene.materials[mat].uniform.emissive[3] = 2.0;
+    let plain = renderer.add_material(&mut scene, None, AlphaMode::Opaque, [1.0; 4], true);
+    let inst = renderer.add_instance(&mut scene, mesh, DVec3::ZERO, Mat4::IDENTITY, vec![mat]);
+    assert!(scene.has_film());
+    renderer.set_material(&mut scene, inst, 0, plain);
+    assert!(!scene.has_film());
+    renderer.set_material(&mut scene, inst, 0, mat);
+    assert!(scene.has_film());
+    renderer.set_params(&mut scene, inst, &[0.0], true, &[]);
+    assert!(!scene.has_film());
+    renderer.set_params(&mut scene, inst, &[0.5], true, &[]);
+    assert!(scene.has_film());
+    renderer.set_params(&mut scene, inst, &[0.5], false, &[]);
+    assert!(!scene.has_film());
+}
 
 /// The night meter takes the street the picture shows: from 30 m over a lot lit by a
 /// grid of street lamps, looking down at it, the eye adapts to the lit lot - not, as

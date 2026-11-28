@@ -4,6 +4,48 @@
 use super::*;
 
 impl App {
+    fn frame_name_tags(&self, hud: [f32; 4]) -> Vec<((f32, f32), String, String, f32)> {
+        let Some(s) = self.gfx.surface.as_ref() else {
+            return Vec::new();
+        };
+        let h = hud[3];
+        let mut tags = if self.settings.name_tags {
+            let voice = self.sound.voice.as_ref();
+            let speaks = |_name: &str, id: u32| voice.is_some_and(|v| v.speaks(id).is_some());
+            let on_radio = |_name: &str, id: u32| {
+                voice.is_some_and(|v| v.speaks(id) == Some(omsi_voice::Channel::Radio))
+            };
+            let rig = (self.settings.triple.enabled && !self.settings.vr_requested()).then(|| {
+                self.settings.triple.zoomed(
+                    s.config.width,
+                    s.config.height,
+                    self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0)
+                        * self.cam.zoom_hold.factor,
+                )
+            });
+            self.camera
+                .as_ref()
+                .map(|c| {
+                    lan::name_tags(
+                        &self.net.remotes,
+                        c,
+                        s.config.width as f32,
+                        h,
+                        rig.as_ref(),
+                        &speaks,
+                        &on_radio,
+                    )
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        for (pos, _, _, _) in &mut tags {
+            pos.0 -= hud[0];
+        }
+        tags
+    }
+
     /// The interface over the picture. The VR navigator's display (for the headset's
     /// picture).
     pub(super) fn frame_ui(&mut self, dt: f32) -> Option<crate::vr_navigator::Display> {
@@ -23,7 +65,17 @@ impl App {
         // the interface over the picture
         // (the pages of an open settings window)
         let menu_tabs = match self.menus.list_kind.as_ref() {
-            Some(k) if self.menus.chooser.is_some() => crate::game_lists::page_titles(self, k),
+            Some(k) if self.menus.chooser.is_some() => {
+                crate::game_lists::page_titles(self, k).map(|(titles, selected)| {
+                    (
+                        titles
+                            .into_iter()
+                            .map(|title| omsi_ui::tr(&title).into_owned())
+                            .collect(),
+                        selected,
+                    )
+                })
+            }
             _ => None,
         };
         if !(self.world.is_some() && self.renderer.is_some() && self.scene.is_some()) {
@@ -619,6 +671,15 @@ impl App {
         self.refresh_perf_overlay();
         // (the pause menu is the launcher toolkit's, `frame_shell`, unless a headset shows it)
         let shell_menu = self.shell_takes_mouse();
+        let tags = if self.renderer.is_some()
+            && self.scene.is_some()
+            && self.ui.is_some()
+            && self.gfx.surface.is_some()
+        {
+            self.frame_name_tags(hud)
+        } else {
+            Vec::new()
+        };
         let (Some(r), Some(scene)) = (self.renderer.as_ref(), self.scene.as_mut()) else {
             return;
         };
@@ -650,41 +711,6 @@ impl App {
                 }
             });
             ui.chat.hidden = self.net.remotes.chat.hidden;
-            let mut tags = if self.settings.name_tags {
-                let voice = self.sound.voice.as_ref();
-                let speaks = |_name: &str, id: u32| voice.is_some_and(|v| v.speaks(id).is_some());
-                let on_radio = |_name: &str, id: u32| {
-                    voice.is_some_and(|v| v.speaks(id) == Some(omsi_voice::Channel::Radio))
-                };
-                let rig =
-                    (self.settings.triple.enabled && !self.settings.vr_requested()).then(|| {
-                        self.settings.triple.zoomed(
-                            s.config.width,
-                            s.config.height,
-                            self.cam.view_zoom.get(&self.view).copied().unwrap_or(1.0)
-                                * self.cam.zoom_hold.factor,
-                        )
-                    });
-                self.camera
-                    .as_ref()
-                    .map(|c| {
-                        lan::name_tags(
-                            &self.net.remotes,
-                            c,
-                            s.config.width as f32,
-                            h,
-                            rig.as_ref(),
-                            &speaks,
-                            &on_radio,
-                        )
-                    })
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-            for (pos, _, _, _) in &mut tags {
-                pos.0 -= hud[0];
-            }
             // the vehicle chooser shows its vehicles in the menu's place (the menu
             // scrolls a long list)
             // the name of the cab's switch under the cursor, unless the interface
