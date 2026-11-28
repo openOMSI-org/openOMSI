@@ -27,6 +27,7 @@ fn unused_port() -> u16 {
 struct FixtureProcess {
     root: PathBuf,
     process: Child,
+    web_port: u16,
 }
 
 impl Drop for FixtureProcess {
@@ -94,7 +95,14 @@ fn start_fixture_with_chrono(
     );
     let process = spawn_fixture(&root, simulation);
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    (FixtureProcess { root, process }, addr)
+    (
+        FixtureProcess {
+            root,
+            process,
+            web_port,
+        },
+        addr,
+    )
 }
 
 fn spawn_fixture(root: &Path, simulation: bool) -> Child {
@@ -203,7 +211,7 @@ fn chrono_midnight_rebuild_keeps_two_connected_clients_and_manifest() {
 }
 
 #[test]
-fn both_lan_clients_automatically_reconnect_after_a_full_process_restart() {
+fn udp_and_websocket_clients_automatically_reconnect_after_a_full_process_restart() {
     let (mut server, addr) = start_fixture_mode(2, true);
     let world = WorldInfo {
         map: "Maps/Fixture/global.cfg".into(),
@@ -212,10 +220,25 @@ fn both_lan_clients_automatically_reconnect_after_a_full_process_restart() {
         ..Default::default()
     };
     let mut alpha = LanSession::join_addr(vec![addr], None, "alpha", world.clone()).unwrap();
-    let mut beta = LanSession::join_addr(vec![addr], None, "beta", world).unwrap();
+    let ws_url = format!("ws://127.0.0.1:{}/ws", server.web_port);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let bridge = loop {
+        match omsi_net::ws::WsClient::connect(&ws_url) {
+            Ok(bridge) => break bridge,
+            Err(error) => {
+                assert!(
+                    Instant::now() < deadline,
+                    "starting headless gateway: {error}"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    };
+    let mut beta = LanSession::join_addr(vec![bridge.local], None, "beta", world).unwrap();
     let pa = driver("alpha", 101.0);
     let pb = driver("beta", 202.0);
     let mut session = 0;
+    let mut reconnects = 0;
     for generation in 0..=1 {
         let deadline = Instant::now() + Duration::from_secs(15);
         loop {
@@ -229,6 +252,11 @@ fn both_lan_clients_automatically_reconnect_after_a_full_process_restart() {
             );
             alpha.tick(0.05, &pa);
             beta.tick(0.05, &pb);
+            let current = bridge.reconnects();
+            if current != reconnects {
+                reconnects = current;
+                beta.rehello();
+            }
             if alpha.connected
                 && beta.connected
                 && alpha.session == beta.session
@@ -242,6 +270,7 @@ fn both_lan_clients_automatically_reconnect_after_a_full_process_restart() {
         }
         assert_eq!(alpha.host_generation(), generation);
         assert_eq!(beta.host_generation(), generation);
+        assert_eq!(reconnects == 0, generation == 0);
         session = alpha.session;
         if generation == 0 {
             server
