@@ -48,6 +48,7 @@ fn the_pool_counts_local_people_and_never_recycles_riders_or_avatars() {
         why: "",
         puppet,
         remote,
+        remote_seat: None,
     };
     let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
     h.max_people = 2;
@@ -126,6 +127,7 @@ fn the_pool_takes_nobody_a_lan_player_could_see() {
         why: "",
         puppet: None,
         remote: false,
+        remote_seat: None,
     };
     let mut h = PeopleSim::new(Path::new("/nonexistent"), 200);
     h.center = DVec3::new(-1948.9, -174.7, 8.8);
@@ -201,6 +203,7 @@ fn clearing_the_waiting_keeps_riders_avatars_and_strollers() {
         why: "",
         puppet,
         remote: false,
+        remote_seat: None,
     };
     let waiting = || {
         let mut p = Pax::new(1.1, 0.5);

@@ -31,9 +31,27 @@ button.danger { background: var(--danger); border-color: var(--danger); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 10px 0; padding: 8px 12px; }
 legend { color: var(--muted); padding: 0 4px; }
+.tick-meter { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+.tick-heading { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+.tick-heading strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.tick-heading span { font-size: 13px; color: var(--muted); }
+#tps-bar { display: block; width: 100%; height: 11px; margin: 10px 0 6px; appearance: none; }
+#tps-bar[hidden] { display: none; }
+#tps-bar::-webkit-progress-bar { background: var(--line); border-radius: 6px; }
+#tps-bar::-webkit-progress-value { background: var(--ok); border-radius: 6px; }
+#tps-bar[data-health="warn"]::-webkit-progress-value { background: var(--warn); }
+#tps-bar[data-health="low"]::-webkit-progress-value { background: var(--danger); }
+#tps-bar::-moz-progress-bar { background: var(--ok); }
+#tps-bar[data-health="warn"]::-moz-progress-bar { background: var(--warn); }
+#tps-bar[data-health="low"]::-moz-progress-bar { background: var(--danger); }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
+.timings-scroll { overflow-x: auto; }
+#prof-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+#prof-table th, #prof-table td { padding: 5px 7px; border-bottom: 1px solid var(--line); text-align: right; }
+#prof-table th:first-child, #prof-table td:first-child { text-align: left; }
+#prof-table thead { color: var(--muted); }
 .list { list-style: none; margin: 8px 0; padding: 0; max-height: 340px; overflow: auto; border-top: 1px solid var(--line); }
 .list li { padding: 8px 4px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 #players li { cursor: pointer; }

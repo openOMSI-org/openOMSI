@@ -249,6 +249,14 @@ export const serverJoined = (answer) => ({
 
 /** Refresh once when opening the picker: saved server status can predate the
  * fleet catalogue, even when the game server is now running the latest build. */
+/** A verified server fleet is the only reason to block a player's launch
+ * while refreshing session details. For ordinary map-only sessions, the
+ * checked code and LAN WELCOME establish the session; a second gateway
+ * query can time out even when UDP works. */
+export function joinNeedsFleetRefresh(c = S.choice) {
+  return c?.lan_mode === 'join' && c?.lan_server?.fleet_version === 1;
+}
+
 export async function askJoined({ refresh = false } = {}) {
   const c = S.choice;
   if (c?.lan_mode !== 'join' || (!refresh && c.lan_server?.asked)) return c?.lan_server || null;
@@ -290,7 +298,9 @@ export function transportRefusal(map, vehicle) {
  * thousands of stock buses. */
 export const shownModes = (x) => (x?.transport || []).filter((m) => m !== 'bus' || (x.transport.length > 1));
 
-export const curMap = () => S.maps?.find((m) => m.file === S.choice?.map);
+// Server WELCOME paths and installed content may use different case or
+// Windows separators. This is the *same installed map*, not a missing map.
+export const curMap = () => S.maps?.find((m) => norm(m.file) === norm(S.choice?.map));
 export const curBus = () => selectableVehicles().find((v) => busFile(v.file) === busFile(S.choice?.bus));
 export const curLine = () => S.lines.list?.find((l) => l.name === S.choice?.line);
 // Old saved choices use the displayed number; new choices identify the variant.

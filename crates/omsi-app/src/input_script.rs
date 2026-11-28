@@ -14,6 +14,7 @@ pub(crate) use omsi_input::actions::is_game_action;
 /// How far (m) a click reaches a scenery object with a `[mouseevent]`.
 pub(crate) const SCENERY_OBJECT_REACH: f32 = 50.0;
 
+#[rustfmt::skip]
 impl App {
     pub(crate) fn passenger_request_key(
         &self,
@@ -192,10 +193,51 @@ impl App {
                 self.request_passenger_door();
                 return;
             }
+            if code == KeyCode::KeyT && pressed && !repeat && !alt && self.coop_fare_key(ctrl, shift_now) {
+                return;
+            }
+            // A dedicated conductor signal works even outside cabin keyboard mode.
+            // It asks the owner to sound a two-tone bell; it never closes the doors.
+            if code == KeyCode::KeyB && ctrl && alt && !shift_now
+                && self.view == "foot" && self.net.inside_remote.is_some()
+            {
+                if pressed && !repeat {
+                    self.request_coop_departure_signal();
+                }
+                return;
+            }
+            // The guest explicitly switches between walking and using the owner's
+            // keyboard.cfg bus keys. Chat, panels and ticket shortcuts stay available.
+            if pressed && !repeat && code == KeyCode::KeyJ && ctrl && alt && !shift_now
+                && self.view == "foot" && self.net.inside_remote.is_some()
+            {
+                self.net.coop_keyboard_mode = !self.net.coop_keyboard_mode;
+                self.service_msg = Some((
+                    if self.net.coop_keyboard_mode {
+                        "Co-op bus keyboard ON (driver authorization required). Ctrl+Alt+J or Esc to leave".into()
+                    } else {
+                        "Co-op bus keyboard OFF (walking controls restored)".into()
+                    },
+                    4.0,
+                ));
+                return;
+            }
+            if self.net.coop_keyboard_mode && code == KeyCode::Escape {
+                if pressed && !repeat {
+                    self.net.coop_keyboard_mode = false;
+                    self.service_msg = Some(("Co-op bus keyboard OFF".into(), 2.5));
+                }
+                return;
+            }
             // A remapped get-up key also steps out on foot, before the walker takes
             // G, Space, F1 or a movement key (and before driving-layout fallbacks).
             if pressed && !repeat && get_up_key(&self.input.game_keys, code, shift_now, ctrl, alt) {
                 self.game_action("get_up");
+                return;
+            }
+            // Consume cabin-mode keys before the walker applies them to movement.
+            // No driver axes or arbitrary script triggers are sent from here.
+            if self.coop_keyboard_key(code, pressed, repeat, ctrl, shift_now, alt) {
                 return;
             }
             // on foot, the walker's keys
@@ -646,6 +688,12 @@ impl App {
     ) -> bool {
         if pressed && !repeat {
             match code {
+                // The bus owner opts in before another player may act as conductor.
+                KeyCode::KeyK if ctrl && alt && !shift_now && self.net.lan.is_some() && self.player.is_some() && !self.chord_bound(code, shift_now, ctrl, alt) => {
+                    self.net.coop_cab_assistant = if self.net.coop_cab_assistant.is_some() { None } else { self.net.lan.as_ref().zip(self.player.as_ref()).and_then(|(lan, p)| omsi_lan::passenger::sole_aboard(lan, &p.vehicle)) };
+                    self.service_msg = Some((format!("Co-op assistant: {}", self.net.coop_cab_assistant.map_or_else(|| "none (requires a sole player aboard)".into(), |id| format!("player #{id}"))), 4.0));
+                    return true;
+                }
                 // OMSI's `toggel_mouse_ctrl` (O): steering and pedals with the mouse
                 KeyCode::KeyO
                     if !ctrl
@@ -1747,356 +1795,25 @@ pub(crate) fn dump_display_textures(vehicle: &omsi_sim::VehicleInstance, dir: &P
     }
 }
 
-/// `OMSI_INPUT="t=3 move 1045,826; t=3.2 press; ..."` → (time, command) pairs.
-pub(crate) fn parse_input_script() -> Vec<(f32, String)> {
-    let Some(v) = omsi_cfg::flags::OMSI_INPUT.var() else {
-        return Vec::new();
-    };
-    let mut out: Vec<(f32, String)> = v
-        .split(';')
-        .filter_map(|item| {
-            let item = item.trim();
-            let rest = item.strip_prefix("t=")?;
-            let (t, cmd) = rest.split_once(' ')?;
-            Some((t.trim().parse::<f32>().ok()?, cmd.trim().to_string()))
-        })
-        .collect();
-    out.sort_by(|a, b| a.0.total_cmp(&b.0));
-    out
-}
+pub(crate) use omsi_input::script_input::{
+    binding_is_key, flies_free_camera, get_up_key, key_left_free, parse_input_script,
+};
 
-/// The keys that fly the free camera (and, with no bus of one's own, the view).
-pub(crate) fn flies_free_camera(code: KeyCode) -> bool {
-    matches!(
-        code,
-        KeyCode::KeyW
-            | KeyCode::KeyA
-            | KeyCode::KeyS
-            | KeyCode::KeyD
-            | KeyCode::KeyQ
-            | KeyCode::KeyE
-            | KeyCode::Space
-            | KeyCode::ShiftLeft
-            | KeyCode::ArrowLeft
-            | KeyCode::ArrowRight
-            | KeyCode::ArrowUp
-            | KeyCode::ArrowDown
-    )
-}
-
-/// Whether the binding `b` is the key `code` (scan code `scan`) pressed with the other
-/// modifiers `m`: its own scan code or, for a Shift, Ctrl or Alt key, OMSI's code for either
-/// side ("Alt (both)"), and a modifier key's binding written with its own bit counts too
-/// (OMSI's files have "Shift (both)" with the Shift flag; #2003, #2392).
-pub(crate) fn binding_is_key(
-    b: &omsi_content::KeyBinding,
-    code: KeyCode,
-    scan: i32,
-    m: i32,
-) -> bool {
-    let ob = keys::own_modifier_bit(code);
-    (b.scan_code == scan || keys::both_code(code) == Some(b.scan_code))
-        && (b.matches(m) || ob != 0 && b.matches(m | ob))
-}
-
-fn get_up_key(
-    game: &[omsi_content::KeyBinding],
-    code: KeyCode,
-    shift: bool,
-    ctrl: bool,
-    alt: bool,
-) -> bool {
-    let modifier = omsi_content::input::chord(shift, ctrl, alt) & !keys::own_modifier_bit(code);
-    keys::dik_code(code).is_some_and(|scan| {
-        game.iter().any(|b| {
-            b.action.eq_ignore_ascii_case("get_up") && binding_is_key(b, code, scan, modifier)
-        })
-    })
-}
-
-#[cfg(test)]
-mod get_up_key_tests {
-    use super::*;
-    use omsi_content::{
-        KeyBinding,
-        input::{KEY_ALT, KEY_CTRL, KEY_SHIFT},
-    };
-
-    #[test]
-    fn remapped_get_up_keys_reach_the_action_before_walking_or_driving() {
-        let bound = |code, modifier| {
-            vec![KeyBinding {
-                action: "get_up".into(),
-                scan_code: keys::dik_code(code).unwrap(),
-                modifier,
-            }]
-        };
-        for code in [KeyCode::KeyG, KeyCode::KeyW, KeyCode::Space, KeyCode::F1] {
-            assert!(get_up_key(&bound(code, 0), code, false, false, false));
-        }
-        assert!(get_up_key(
-            &bound(KeyCode::KeyG, KEY_ALT),
-            KeyCode::KeyG,
-            false,
-            false,
-            true
-        ));
-        assert!(!get_up_key(
-            &bound(KeyCode::KeyG, KEY_ALT),
-            KeyCode::KeyG,
-            false,
-            false,
-            false
-        ));
-        let default = bound(KeyCode::KeyG, KEY_CTRL | KEY_SHIFT);
-        assert!(get_up_key(&default, KeyCode::KeyG, true, true, false));
-        assert!(
-            !get_up_key(&default, KeyCode::KeyG, true, false, false),
-            "Shift+G stays the seat key"
-        );
-        assert!(
-            !get_up_key(&[], KeyCode::KeyG, false, false, false),
-            "unbound G stays the seat key"
-        );
-        assert!(!get_up_key(
-            &bound(KeyCode::KeyW, 0),
-            KeyCode::KeyG,
-            false,
-            false,
-            false
-        ));
-        assert!(!get_up_key(
-            &[KeyBinding {
-                action: "get_up".into(),
-                ..Default::default()
-            }],
-            KeyCode::KeyG,
-            false,
-            false,
-            false
-        ));
-    }
-}
-
-/// `App::key_left_free` for a key's scan code.
-pub(crate) fn key_left_free(
-    scan: Option<i32>,
-    action: &str,
-    own: &std::collections::HashSet<i32>,
-    game: &[omsi_content::KeyBinding],
-) -> bool {
-    !scan.is_some_and(|s| own.contains(&s))
-        && !game
-            .iter()
-            .any(|b| b.scan_code != 0 && b.action.eq_ignore_ascii_case(action))
-}
-
-pub(crate) use omsi_input::keys::is_modifier;
-
-/// OS shortcuts can consume modifier key-ups without taking window focus. Winit then
-/// reports the released modifiers through `ModifiersChanged` (on macOS, also before
-/// the next ordinary key event). Remove those stale keys and return them so their
-/// normal release handlers run, including vehicle keys and Shift+number door buttons.
+/// Release OS-consumed modifier keys without exposing the input crate to the app's set type.
 pub(crate) fn release_inactive_modifiers(
     keys: &mut hashbrown::HashSet<KeyCode>,
     modifiers: winit::keyboard::ModifiersState,
 ) -> Vec<KeyCode> {
-    use winit::keyboard::ModifiersState as M;
-    let mut released = Vec::new();
-    for (flag, left, right) in [
-        (M::SHIFT, KeyCode::ShiftLeft, KeyCode::ShiftRight),
-        (M::CONTROL, KeyCode::ControlLeft, KeyCode::ControlRight),
-        (M::ALT, KeyCode::AltLeft, KeyCode::AltRight),
-        (M::SUPER, KeyCode::SuperLeft, KeyCode::SuperRight),
-    ] {
-        if !modifiers.contains(flag) {
-            for code in [left, right] {
-                if keys.remove(&code) {
-                    released.push(code);
-                }
-            }
-        }
-    }
-    released
+    omsi_input::script_input::release_inactive_modifiers(|code| keys.remove(&code), modifiers)
 }
 
 #[cfg(test)]
-mod key_tests {
-    use super::*;
-    use winit::keyboard::ModifiersState as M;
+mod get_up_key_tests;
 
-    #[test]
-    fn screenshot_modifier_release_without_focus_loss_restores_wasd() {
-        // Captured on macOS: Shift down, Cmd down, screenshot, ModifiersChanged(empty),
-        // W down. There was no Focused(false) or modifier KeyboardInput release.
-        let mut keys: hashbrown::HashSet<KeyCode> = [KeyCode::ShiftLeft, KeyCode::SuperLeft].into();
-        assert!(keys.contains(&KeyCode::ShiftLeft)); // W would reach the wipers.
-        let released = release_inactive_modifiers(&mut keys, M::empty());
-        assert_eq!(released, [KeyCode::ShiftLeft, KeyCode::SuperLeft]);
-        keys.insert(KeyCode::KeyW);
-        assert!(!shift_held_now(&keys));
-        assert_eq!(
-            fallback_action(KeyCode::KeyW, "wasd"),
-            Some(omsi_sim::input::EngineAction::Throttle)
-        );
-        assert!(release_inactive_modifiers(&mut keys, M::empty()).is_empty());
-        assert!(keys.contains(&KeyCode::KeyW));
-    }
+pub(crate) use omsi_input::keys::is_modifier;
 
-    #[test]
-    fn modifier_state_preserves_held_chords_and_releases_both_sides() {
-        let mut keys = [
-            KeyCode::ShiftLeft,
-            KeyCode::ShiftRight,
-            KeyCode::ControlRight,
-            KeyCode::AltRight,
-            KeyCode::SuperRight,
-            KeyCode::KeyW,
-        ]
-        .into();
-        assert_eq!(
-            release_inactive_modifiers(&mut keys, M::SHIFT | M::CONTROL),
-            [KeyCode::AltRight, KeyCode::SuperRight]
-        );
-        assert!(shift_held_now(&keys));
-        assert!(keys.contains(&KeyCode::ControlRight));
-        assert_eq!(
-            release_inactive_modifiers(&mut keys, M::empty()),
-            [
-                KeyCode::ShiftLeft,
-                KeyCode::ShiftRight,
-                KeyCode::ControlRight
-            ]
-        );
-        assert_eq!(keys, [KeyCode::KeyW].into());
-        // A modifier held while focus returns must not fabricate a new key press.
-        keys.clear();
-        assert!(release_inactive_modifiers(&mut keys, M::SHIFT).is_empty());
-        assert!(keys.is_empty());
-    }
-
-    /// A lone Shift, Ctrl or Alt bound in keyboard.cfg: its own code with no modifier (#1477),
-    /// OMSI's "both sides" code, and with its own bit as OMSI's files write it (#2003, #2392).
-    #[test]
-    fn a_modifier_key_is_a_key_of_its_own() {
-        use omsi_content::KeyBinding;
-        let kb = |k: i32, m: i32| KeyBinding {
-            action: "a".into(),
-            scan_code: k,
-            modifier: m,
-        };
-        assert!(binding_is_key(&kb(42, 0), KeyCode::ShiftLeft, 42, 0));
-        assert!(binding_is_key(&kb(90, 0), KeyCode::ShiftRight, 54, 0));
-        assert!(binding_is_key(&kb(90, 3), KeyCode::ShiftLeft, 42, 0));
-        assert!(binding_is_key(&kb(92, 0), KeyCode::AltRight, 184, 0));
-        assert!(!binding_is_key(&kb(92, 0), KeyCode::ControlLeft, 29, 0));
-        assert!(!binding_is_key(&kb(56, 0), KeyCode::AltRight, 184, 0));
-        // Ctrl held with a lone Shift binding: not that binding
-        assert!(!binding_is_key(
-            &kb(42, 0),
-            KeyCode::ShiftLeft,
-            42,
-            omsi_content::input::KEY_CTRL
-        ));
-        // an ordinary key: only its own code, only its chord
-        assert!(binding_is_key(&kb(22, 6), KeyCode::KeyU, 22, 6));
-        assert!(!binding_is_key(&kb(22, 6), KeyCode::KeyU, 22, 2));
-        assert!(!binding_is_key(&kb(22, 2), KeyCode::KeyU, 22, 6));
-    }
-
-    /// F1 given to a door and the driver's view moved to 1 (#701): F1 is not the view any more.
-    #[test]
-    fn a_built_in_view_key_steps_aside_for_the_players_own() {
-        use omsi_content::KeyBinding;
-        let kb = |a: &str, k: i32| KeyBinding {
-            action: a.into(),
-            scan_code: k,
-            modifier: 0,
-        };
-        let none = std::collections::HashSet::new();
-        assert!(super::key_left_free(
-            Some(59),
-            "view_set_driver",
-            &none,
-            &[]
-        ));
-        let own: std::collections::HashSet<i32> = [59].into();
-        assert!(!super::key_left_free(
-            Some(59),
-            "view_set_driver",
-            &own,
-            &[]
-        ));
-        assert!(!super::key_left_free(
-            Some(59),
-            "view_set_driver",
-            &none,
-            &[kb("view_set_driver", 2)]
-        ));
-        assert!(super::key_left_free(
-            Some(59),
-            "view_set_driver",
-            &none,
-            &[kb("view_set_passenger", 60)]
-        ));
-    }
-
-    #[test]
-    fn shared_pause_and_vehicle_binding_triggers_both_once_without_double_toggle() {
-        let mut app = crate::assemble_app(
-            <crate::cli::Args as clap::Parser>::parse_from(["openomsi"]),
-            Default::default(),
-        );
-        let (p_scan, f6_scan) = (
-            keys::dik_code(KeyCode::KeyP).unwrap(),
-            keys::dik_code(KeyCode::F6).unwrap(),
-        );
-        let vehicle = crate::schedule::tests::script_test_vehicle(
-            "{trigger:test_honk}\n(L.L.hits) 1 + (S.L.hits)\n{end}\n",
-            "hits\n",
-            "",
-        );
-        app.player = Some(crate::spawn::test_player(
-            vehicle,
-            vec![omsi_content::KeyBinding {
-                action: "test_honk".into(),
-                scan_code: p_scan,
-                modifier: 0,
-            }],
-        ));
-        app.input.own_keys.insert(p_scan);
-        app.input
-            .game_keys
-            .retain(|b| !b.action.eq_ignore_ascii_case("sim_pause"));
-        app.input.game_keys.push(omsi_content::KeyBinding {
-            action: "sim_pause".into(),
-            scan_code: p_scan,
-            modifier: 0,
-        });
-        app.dispatch_driving_key(None, KeyCode::KeyP, true, false, false, false, false);
-        assert!(app.paused && app.player.as_ref().unwrap().vehicle.var("hits") == Some(1.0));
-        for scan in [f6_scan, 0] {
-            app.paused = false;
-            app.input
-                .game_keys
-                .iter_mut()
-                .filter(|b| b.action.eq_ignore_ascii_case("sim_pause"))
-                .for_each(|b| b.scan_code = scan);
-            app.dispatch_driving_key(None, KeyCode::KeyP, true, false, false, false, false);
-            assert!(!app.paused);
-        }
-        assert_eq!(app.player.as_ref().unwrap().vehicle.var("hits"), Some(3.0));
-        app.dispatch_driving_key(None, KeyCode::F6, true, false, false, false, false);
-        assert!(!app.paused);
-        app.input
-            .game_keys
-            .iter_mut()
-            .filter(|b| b.action.eq_ignore_ascii_case("sim_pause"))
-            .for_each(|b| b.scan_code = f6_scan);
-        app.dispatch_driving_key(None, KeyCode::F6, true, false, false, false, false);
-        assert!(app.paused);
-    }
-}
+#[cfg(test)]
+mod key_tests;
 
 impl InputState {
     /// Whether a key the game gives `action` by itself (F1 the driver's view, O the mouse

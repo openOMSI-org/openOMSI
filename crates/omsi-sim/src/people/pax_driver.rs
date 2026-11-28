@@ -67,7 +67,9 @@ impl PeopleSim {
                 2 => self.say_ex(i, "TooBad_B", true),
                 _ => {
                     self.say_ex(i, "TooBad_C", true);
-                    self.set_task(i, Task::InBusToExit, buses, bus_ix, world);
+                    if self.bad_driving_alight {
+                        self.set_task(i, Task::InBusToExit, buses, bus_ix, world);
+                    }
                 }
             }
         }

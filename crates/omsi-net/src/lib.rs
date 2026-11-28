@@ -59,6 +59,9 @@
 //! WANT|<id>|p<id>,…                              client → host: descriptions lost on the way
 //! CLAIM|<id>|<person>,…                          client → host: waiting people its bus takes
 //! GRANT|<person>,… / DENY|<person>,…             host → client: handed over, or not
+//! PAXRETURN|<id>|<person>,…                      client → host: return granted people never boarded
+//! PAXBOARD|<id>|<person>,…                       client → host: passenger physically entered its bus
+//! PAXACK|<person>,…                              host → client: return accepted (safe to stop retrying)
 //! ```
 //!
 //! `<footprints>` are the vehicles standing near the place a client's bus was put at
@@ -97,6 +100,7 @@ pub use hardware_id::*;
 pub use join_target::{JoinTarget, describe_join, parse_join};
 pub mod addrs;
 pub mod bridge;
+mod pax_protocol;
 mod traffic_net;
 pub mod traffic_table;
 pub mod wire;
@@ -222,7 +226,9 @@ const CHAT_RATE: (f32, f32) = (1.0, 3.0);
 mod join_queue;
 mod parked;
 mod receive_budget;
+mod receive_text;
 mod receive_world;
+mod send_own;
 pub use join_queue::LOADING_ALIVE;
 pub use parked::{FIRST_PARKED_ID, is_parked};
 // ---------------------------------------------------------------------------------------
@@ -1386,6 +1392,8 @@ pub struct LanSession {
     /// Counts the welcomes after which the connection was (re)made: the game takes the
     /// host's world again when it changes.
     pub welcomes: u32,
+    /// Changes when an accepted welcome replaces the host's replication state.
+    host_generation: u32,
     /// Differences between the host's world and ours that remain (another map; a weather
     /// the game could not take over).
     pub warnings: Vec<String>,
@@ -1453,6 +1461,12 @@ pub struct LanSession {
     wants: Vec<(u32, Vec<world::EntityRef>)>,
     claims: Vec<(u32, Vec<u32>)>,
     grants: Vec<(Vec<u32>, bool)>,
+    /// Client explicitly returns unboarded grants; host validates peer and escrow.
+    pax_returns: Vec<(u32, Vec<u32>)>,
+    /// Client has physically boarded granted people (release host escrow).
+    pax_boarded: Vec<(u32, Vec<u32>)>,
+    /// Host acknowledged return IDs; the client may stop retrying.
+    pax_acks: Vec<u32>,
     world_seq: u16,
     /// People on foot of the clients' own (boarding and leaving their buses), as they send
     /// them up (host): (player, when it came, frame); and their descriptions.
@@ -1555,6 +1569,7 @@ impl LanSession {
             turned_away: None,
             welcome: None,
             welcomes: 0,
+            host_generation: 0,
             warnings: Vec::new(),
             spawn_settled: role == Role::Host,
             place: None,
@@ -1603,6 +1618,9 @@ impl LanSession {
             wants: Vec::new(),
             claims: Vec::new(),
             grants: Vec::new(),
+            pax_returns: Vec::new(),
+            pax_boarded: Vec::new(),
+            pax_acks: Vec::new(),
             world_seq: 0,
             world_up: Vec::new(),
             descs_up: Vec::new(),
@@ -2194,32 +2212,6 @@ impl LanSession {
         }
     }
 
-    /// Ask the host for the people waiting at a stop who are about to board our bus
-    /// (client): it answers with `GRANT` for those it hands over (they leave its world and
-    /// become ours) and `DENY` for the others (they boarded another bus meanwhile).
-    pub fn claim(&self, people: &[u32]) {
-        if let (Role::Client, Some(h), true) = (self.role, self.host, self.connected) {
-            for chunk in people.chunks(64) {
-                let ids: Vec<String> = chunk.iter().map(|i| i.to_string()).collect();
-                self.send(
-                    format!("CLAIM|{}|{}", self.my_id, ids.join(",")).as_bytes(),
-                    h,
-                );
-            }
-        }
-    }
-
-    /// Answer a player's claim (host).
-    pub fn answer_claim(&self, id: u32, granted: &[u32], denied: &[u32]) {
-        let Some(to) = self.peer_addr(id) else { return };
-        for (word, list) in [("GRANT", granted), ("DENY", denied)] {
-            for chunk in list.chunks(64).filter(|c| !c.is_empty()) {
-                let ids: Vec<String> = chunk.iter().map(|i| i.to_string()).collect();
-                self.send(format!("{word}|{}", ids.join(",")).as_bytes(), to);
-            }
-        }
-    }
-
     /// World frames that came since the last call, with when they came (client).
     pub fn take_world(&mut self) -> Vec<(Instant, world::WorldFrame)> {
         std::mem::take(&mut self.world_in)
@@ -2620,87 +2612,6 @@ impl LanSession {
 
     /// Our state (when due), our info (every two seconds or when it changed), the host's
     /// clock and a client's question about its spawn.
-    fn send_own(&mut self, dt: f32, mine: &Pose) {
-        let mut p = mine.clone();
-        p.id = self.my_id;
-        p.name = self.my_name.clone();
-        if p.bus.is_empty() {
-            p.flags &= !FLAG_VEHICLE;
-        }
-        // (the clock is left out of the comparison: an unchanged state is still unchanged)
-        p.sent_ms = 0;
-        let data = wire::encode_state(&p, PROTOCOL as u8, self.seq);
-        let body = &data[wire::STATE_HEADER..];
-        if body == self.last_state.as_slice() {
-            self.unchanged += dt;
-        } else {
-            self.unchanged = 0.0;
-        }
-        // a heartbeat without a vehicle, the full rate while anything changes, less when not
-        let interval = if p.flags & FLAG_VEHICLE == 0 {
-            self.heartbeat
-        } else if self.unchanged > 1.0 {
-            1.0 / IDLE_RATE_HZ
-        } else {
-            1.0 / RATE_HZ
-        };
-        // (the remainder is kept, so the rate holds on average whatever the frame times)
-        if self.send_acc + 1.0e-4 >= interval {
-            self.send_acc = (self.send_acc - interval).clamp(0.0, interval);
-            self.last_state = body.to_vec();
-            self.seq = self.seq.wrapping_add(1);
-            // stamped with the moment of the frame it shows (see `Pose::sent_ms`)
-            p.sent_ms = self.stamp_ms().max(1);
-            let data = wire::encode_state(&p, PROTOCOL as u8, self.seq);
-            match self.role {
-                Role::Host => self.broadcast(&data, None),
-                Role::Client => {
-                    if let Some(h) = self.host {
-                        self.send(&data, h);
-                    }
-                }
-            }
-        }
-        let info = p.encode_info();
-        // Sent when it changes, but no more often than INFO_MIN_GAP: a roller blind turning
-        // through its numbers or a pilot screen changes the `[matl_freetex]` pictures many
-        // times a second, and the host took ten messages a second and dropped the rest.
-        if (info != self.last_info && self.info_acc >= INFO_MIN_GAP) || self.info_acc >= INFO_EVERY
-        {
-            self.info_acc = 0.0;
-            match self.role {
-                Role::Host => self.broadcast(info.as_bytes(), None),
-                Role::Client => {
-                    if let Some(h) = self.host {
-                        self.send(info.as_bytes(), h);
-                    }
-                }
-            }
-            self.last_info = info;
-        }
-        if self.role == Role::Host && self.clock_acc >= CLOCK_EVERY {
-            self.clock_acc = 0.0;
-            self.broadcast(
-                format!("CLOCK|{}|{}", self.world.fields(), self.clock_speed).as_bytes(),
-                None,
-            );
-        }
-        if let (Role::Client, Some(at), None, Some(h)) =
-            (self.role, self.place, self.near.as_ref(), self.host)
-        {
-            if self.place_acc >= 1.0 {
-                self.place_acc = 0.0;
-                self.send(
-                    format!(
-                        "PLACE|{}|{:.2}|{:.2}|{:.2}|{:.1}|{:.1}|{:.1}",
-                        self.my_id, at.x, at.y, at.z, at.heading, at.length, at.width
-                    )
-                    .as_bytes(),
-                    h,
-                );
-            }
-        }
-    }
 
     fn receive(&mut self, gone: &mut Vec<u32>) {
         let started = Instant::now();
@@ -2820,219 +2731,7 @@ impl LanSession {
                 continue;
             };
             let parts: Vec<&str> = text.split('|').collect();
-            match (parts[0], self.role) {
-                ("DISCOVER", Role::Host) if addrs::is_local_peer(from) => {
-                    let msg = format!(
-                        "HERE|{PROTOCOL}|{}|{}|{}|{}",
-                        self.my_name,
-                        session_hex(self.session),
-                        clean_text(&self.world.map, 260),
-                        self.peers.len() + 1
-                    );
-                    self.send(msg.as_bytes(), from);
-                }
-                ("HELLO", Role::Host) => self.on_hello(&parts, from),
-                // Ignore unexpected addresses: they must not impersonate a host or
-                // end an in-progress join by injecting a fabricated welcome.
-                ("WELCOME", Role::Client) if self.accepts_host_source(from) => {
-                    self.on_welcome(&parts, from)
-                }
-                ("CHALLENGE", Role::Client)
-                    if self.host == Some(from)
-                        || (self.host.is_none() && self.candidates.contains(&from)) =>
-                {
-                    self.on_challenge(&parts)
-                }
-                ("REALM", Role::Client)
-                    if self.host == Some(from)
-                        || (self.host.is_none() && self.candidates.contains(&from)) =>
-                {
-                    self.on_realm(&parts)
-                }
-                // Temporary server-side capacity limits are not permanent rejections.
-                ("WAIT", Role::Client)
-                    if !self.connected
-                        && field(&parts, 1).parse::<u32>().ok() == Some(PROTOCOL)
-                        && self.accepts_host_source(from) =>
-                {
-                    self.on_waiting_slot(from, field(&parts, 3) == "starting");
-                }
-                ("REJECT", Role::Client) if self.accepts_host_source(from) => {
-                    let reason = clean_text(field(&parts, 2), 300);
-                    // Different candidate IPs may belong to different computers. Keep
-                    // trying those, but a refusal from the one machine whose ports we
-                    // are scanning is final, just like an explicit-port refusal.
-                    if self.host.is_none()
-                        && self
-                            .candidates
-                            .iter()
-                            .any(|candidate| candidate.ip() != from.ip())
-                    {
-                        if self.other_reject.is_none() {
-                            log::info!(
-                                "LAN: {from} turned us away ({reason}); still trying the host's other addresses"
-                            );
-                        }
-                        self.other_reject = Some(format!("{from}: {reason}"));
-                        continue;
-                    }
-                    if self.rejected.is_none() {
-                        log::warn!("LAN: the host turned us away: {reason}");
-                        self.events.push(LanEvent::Notice(format!(
-                            "the host turned us away: {reason}"
-                        )));
-                    }
-                    // (the game ends on a door closed before it ever played there, or on a ban;
-                    // a reconnect refused for now - the session full, say - leaves it playing
-                    // on to `/reconnect` later)
-                    if self.welcomes == 0 || reason.contains("sent you away") {
-                        self.turned_away = Some(reason.clone());
-                    }
-                    self.rejected = Some(reason);
-                    self.connected = false;
-                }
-                ("INFO", _) => self.on_info(&parts, from),
-                ("PLACE", Role::Host) => self.on_place(&parts, from),
-                ("NEAR", Role::Client) => {
-                    if field(&parts, 1).parse::<u32>().ok() == Some(self.my_id)
-                        && self.place.is_some()
-                    {
-                        self.near = Some(
-                            field(&parts, 2)
-                                .split(';')
-                                .filter_map(Footprint::decode)
-                                .take(MAX_FOOTPRINTS)
-                                .collect(),
-                        );
-                    }
-                }
-                ("CLOCK", Role::Client) => {
-                    let world = WorldInfo::from_fields(&parts, 1);
-                    // (after the world's fields: how fast the host's clock runs)
-                    let speed = field(&parts, 6)
-                        .parse::<f64>()
-                        .ok()
-                        .filter(|v| v.is_finite() && *v > 0.0 && *v <= 1000.0)
-                        .unwrap_or(1.0);
-                    self.clock_speed = speed;
-                    if !world.date.is_empty() {
-                        self.host_clock = Some(HostClock {
-                            world,
-                            at: Instant::now(),
-                            speed,
-                        });
-                    }
-                }
-                ("CHAT", Role::Host) => self.on_chat(&parts, from),
-                ("CMD", _) => self.on_command(&parts, from),
-                ("KICK", Role::Client) => {
-                    let reason = clean_text(field(&parts, 1), 200);
-                    log::warn!("LAN: the host sent us away: {reason}");
-                    self.events.push(LanEvent::Notice(format!(
-                        "the host sent you away: {reason}"
-                    )));
-                    self.rejected = Some(format!("the host sent you away: {reason}"));
-                    self.turned_away = Some(reason);
-                    self.connected = false;
-                }
-                ("WANT", Role::Host) | ("CLAIM", Role::Host) => {
-                    let Some(id) = field(&parts, 1).parse::<u32>().ok() else {
-                        continue;
-                    };
-                    if self
-                        .checked_peer(id, from, MESSAGE_RATE, PeerTraffic::Message)
-                        .is_none()
-                    {
-                        continue;
-                    }
-                    if parts[0] == "WANT" {
-                        let list = world::EntityRef::parse_list(field(&parts, 2));
-                        if !list.is_empty() && self.wants.len() < 64 {
-                            self.wants.push((id, list));
-                        }
-                    } else {
-                        let list: Vec<u32> = field(&parts, 2)
-                            .split(',')
-                            .filter_map(|x| x.trim().parse().ok())
-                            .take(64)
-                            .collect();
-                        if !list.is_empty() && self.claims.len() < 64 {
-                            self.claims.push((id, list));
-                        }
-                    }
-                }
-                ("DESC", Role::Host) => {
-                    let Some(id) = self
-                        .peers
-                        .iter()
-                        .find(|(_, p)| p.addr == Some(from))
-                        .map(|(id, _)| *id)
-                    else {
-                        continue;
-                    };
-                    if self
-                        .checked_peer(id, from, MESSAGE_RATE, PeerTraffic::Message)
-                        .is_none()
-                    {
-                        continue;
-                    }
-                    if let Some(d @ world::Desc::Person { .. }) = world::Desc::decode(&parts) {
-                        if self.descs_up.len() < 256 {
-                            self.descs_up.push((id, d));
-                        }
-                    }
-                }
-                ("DESC", Role::Client) => {
-                    if let Some(d) = world::Desc::decode(&parts) {
-                        self.world_received += n as u64;
-                        if self.descs.len() < 1024 {
-                            self.descs.push(d);
-                        }
-                    }
-                }
-                ("GRANT", Role::Client) | ("DENY", Role::Client) => {
-                    let list: Vec<u32> = field(&parts, 1)
-                        .split(',')
-                        .filter_map(|x| x.trim().parse().ok())
-                        .take(64)
-                        .collect();
-                    if !list.is_empty() {
-                        self.grants.push((list, parts[0] == "GRANT"));
-                    }
-                }
-                ("SAY", Role::Client) => {
-                    let (Some(id), name, text) = (
-                        field(&parts, 1).parse::<u32>().ok(),
-                        clean_text(field(&parts, 2), MAX_NAME),
-                        clean_text(field(&parts, 3), MAX_CHAT),
-                    ) else {
-                        continue;
-                    };
-                    if !text.is_empty() {
-                        log::info!("LAN chat <{name}> {text}");
-                        self.events.push(LanEvent::Chat {
-                            id,
-                            name,
-                            text,
-                            mine: false,
-                        });
-                    }
-                }
-                ("NOTE", Role::Client) => {
-                    let text = clean_text(field(&parts, 1), 200);
-                    if !text.is_empty() {
-                        log::info!("LAN: {text}");
-                        self.events.push(LanEvent::Notice(text));
-                    }
-                }
-                ("BYE", _) => self.on_bye(&parts, from, text, gone),
-                ("HELLO", Role::Client) | ("DISCOVER", Role::Client) => {}
-                // an older game that got past the hello somehow (or sends its poses blindly)
-                ("POSE", Role::Host) if !self.peers.values().any(|p| p.addr == Some(from)) => {
-                    self.reject(from, &format!("the host runs LAN protocol {PROTOCOL}, your game an older one - both players need the same version of the game"));
-                }
-                _ => {}
-            }
+            self.receive_text(&parts, from, n, text, gone);
         }
     }
 
@@ -3555,7 +3254,9 @@ impl LanSession {
             ));
             return;
         }
-        if let Some(secret) = admission::parse_secret(field(parts, 11)) {
+        let secret = admission::parse_secret(field(parts, 11));
+        let mut replaced = self.welcome.is_some() && self.session != session;
+        if let Some(secret) = secret {
             if u64::from_str_radix(field(parts, 12), 16).ok() != Some(self.nonce)
                 || self.retired_secrets.contains(&secret)
             {
@@ -3563,17 +3264,11 @@ impl LanSession {
             }
             if self.rebind_secret.is_some_and(|old| old != secret) {
                 self.retired_secrets.push(self.rebind_secret.unwrap());
-                self.peers.clear();
-                self.vars_in.clear();
-                self.schemas_in.clear();
-                self.cars_in.clear();
-                self.sounds = sounds::Sync::default();
-                self.var_receiver = vars::VarReceiver::default();
-                self.schema_receiver = vars::VarReceiver::default();
-                self.car_receiver = vars::VarReceiver::default();
-                self.reset_peer_sync(1);
-                self.connected = false;
+                replaced = true;
             }
+        }
+        if replaced {
+            self.reset_host_sync();
         }
         let host_name = clean_text(field(parts, 4), MAX_NAME);
         let world = WorldInfo::from_fields(parts, 5);
@@ -3592,7 +3287,7 @@ impl LanSession {
             }
         }
         self.my_id = id;
-        if let Some(s) = admission::parse_secret(field(parts, 11)) {
+        if let Some(s) = secret {
             self.rebind_secret = Some(s);
         }
         self.answer = None;
@@ -3639,6 +3334,11 @@ impl LanSession {
                 self.place_acc = 1.0;
             }
         }
+    }
+
+    /// Identity of the host replication state for session-local game mirrors.
+    pub fn host_generation(&self) -> u32 {
+        self.host_generation
     }
 
     /// Tell the others we are leaving.

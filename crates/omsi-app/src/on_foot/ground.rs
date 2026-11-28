@@ -6,7 +6,13 @@ use super::*;
 /// feet come to, a step up to 45 cm, steep ground climbed no more than a step above the last
 /// footing, a people's path's height where the ground disagrees with it; a step too high stays
 /// where it was (`next` is put back, the speed lost).
-pub(super) fn settle_on_ground(f: &mut OnFoot, w: &crate::scene::World, net: Option<&omsi_sim::traffic::Network>, z: f64, next: &mut DVec2) {
+pub(super) fn settle_on_ground(
+    f: &mut OnFoot,
+    w: &crate::scene::World,
+    net: Option<&omsi_sim::traffic::Network>,
+    z: f64,
+    next: &mut DVec2,
+) {
     // Steep ground (a bank, a wall's face the ground finds) is climbed no more than a
     // step above where the walker last stood on walkable ground: out of the bus under
     // a covered terminus the walker went up the bank beside it onto the deck, a few
@@ -24,7 +30,9 @@ pub(super) fn settle_on_ground(f: &mut OnFoot, w: &crate::scene::World, net: Opt
     let on_path = on_path.is_some();
     let gradient_at = |g: f64| ground_gradient(|x, y| w.walk_height_reach(x, y, g, 0.5), *next, g);
     // (the gradient is only needed for ground above a step over the footing)
-    let blocked = !on_path && ground.is_some_and(|g| g > footing + STEP && too_steep_to_climb(g, gradient_at(g), footing));
+    let blocked = !on_path
+        && ground
+            .is_some_and(|g| g > footing + STEP && too_steep_to_climb(g, gradient_at(g), footing));
     match ground {
         Some(g) if blocked || (!on_path && g - (z + f.lift) > STEP) => {
             // too high a step: stay (and lose the speed into it)

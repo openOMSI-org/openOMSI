@@ -3,7 +3,7 @@ import { useStore, set, remembered, remember, toast } from '../store.js';
 import { t, hhmm, longDate, language } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Notice, useConfirm } from '../ui.js';
-import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal, serverFleetSelection, canPreviewBus } from '../data.js';
+import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, joinNeedsFleetRefresh, transportRefusal, serverFleetSelection, canPreviewBus } from '../data.js';
 import { call } from '../api.js';
 import { BusPreview } from '../preview.js';
 import { BusList, BusOptions, withoutMaker } from './bus-list.js';
@@ -91,9 +91,12 @@ export function StartBar({ step, go }) {
     setArmed(0);
     setBusy(true);
     try {
-      if (c.lan_mode === 'join') {
-        // A previously saved server response may lack the new fleet metadata.
-        // Re-query before deciding whether an authenticated download is needed.
+      // An ordinary session's selected map and local bus need no second
+      // gateway query: LAN WELCOME verifies the host at game startup. Waiting
+      // here used to prevent the game from even launching if that optional
+      // status query stalled. Only verified server-fleet downloads need a
+      // synchronous catalogue refresh before asking for consent.
+      if (joinNeedsFleetRefresh(c)) {
         await askJoined({ refresh: true });
       }
       if (serverFleetSelection()) {

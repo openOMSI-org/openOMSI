@@ -1,6 +1,9 @@
 //! Vehicle material and texture sync, and the D3D material mapping.
 use super::*;
 
+#[path = "texture_ram_cache.rs"]
+mod texture_ram_cache;
+
 /// Give the `[smoothskin]` meshes of a vehicle instance copies of their own: their vertices
 /// are rewritten as the joint turns, which a mesh shared between every instance of the type
 /// (the AI pool, and the player's own set before this ran) cannot be. Called for the
@@ -407,6 +410,16 @@ pub fn attach_pbr(renderer: &Renderer, scene: &mut Scene, path: &Path, id: Textu
 
 /// The texture data for a key of the texture maps: a file, or a file's bump height map.
 pub(super) fn load_texture_key(key: &Path, compress: bool) -> Option<TextureData> {
+    if compress && !key.to_string_lossy().ends_with("#bump") {
+        // Also called by the background restoration workers. Keep the source compressed
+        // in bounded RAM so returning to a tile does not have to recompress it again.
+        texture_ram_cache::global().prepare_with(key, || load_texture_key_uncached(key, compress))
+    } else {
+        load_texture_key_uncached(key, compress)
+    }
+}
+
+fn load_texture_key_uncached(key: &Path, compress: bool) -> Option<TextureData> {
     let k = key.to_string_lossy();
     match k.strip_suffix("#bump") {
         Some(file) => omsi_texture::decode_file(Path::new(file))

@@ -2,6 +2,9 @@
 
 use super::*;
 
+mod client_world;
+
+#[rustfmt::skip]
 pub(super) fn options_pages(app: &App) -> Vec<Page> {
     let s = &app.settings;
     let file = settings_file();
@@ -38,9 +41,11 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "exact_fare", "Passengers pay the exact fare", "No change is given at the cash desk"),
         switch_row(app, "full_tank", "Start with a full tank", "Each new bus starts with its tank full (many maps have no petrol station); a saved situation keeps its own"),
         switch_row(app, "pax_bad_driving", "Passengers react to bad driving", "They complain about rough driving and may get off at the next stop"),
+        switch_row(app, "pax_bad_driving_alight", "Riders may leave after rough driving", "Off: passengers complain but stay aboard").filter(|_| s.pax_bad_driving),
         switch_row(app, "pax_stop_numbers_exact", "Read the map's passenger numbers exactly", "Passengers: a stop the map gives 0.7 to keeps 0.7 people instead of being rounded up to 1 before the density multiplies, so a quiet hour (density under 1) can leave a stop empty; off: OMSI 2's own rounding"),
         switch_row(app, "passenger_connections", "Passenger connections between lines", "Optional onward trips in single player only; disabled in multiplayer"),
         slider_row(app, "passenger_transfer_percent", "Connection chance", "Probability for eligible transfers; default 20%", &|v|format!("{v:.0}%")).filter(|_|s.passenger_connections),
+        switch_row(app, "passenger_ambient_talk", "Conversations between seated passengers", "Rare optional conversations using installed voice packs"),
         switch_row(app, "passenger_hailing", "Passengers signal approaching buses", "Optional visual hailing; only effective with supported natural animations"),
         switch_row(app, "passenger_mass", "Passengers add weight to the bus", "Each rider's weight, from their .hum file, is added to the bus where they sit or stand: a full bus pulls away, brakes and climbs as the heavier vehicle it is; off, the bus weighs what its file says"),
         slider_row(app, "passenger_weight_kg", "Passenger weight", "For passengers whose file gives no weight; default 75 kg", &|v| format!("{v:.0} kg")).filter(|_| s.passenger_mass),
@@ -382,6 +387,7 @@ fn add_graphics_action_rows(
     graphics.splice(at..at, upscaler_rows(app, file));
 }
 
+#[rustfmt::skip]
 pub(super) fn vehicle_pages(app: &App) -> Vec<Page> {
     let has = app.player.is_some();
     let server = crate::input_script::on_server(&app.args);
@@ -977,6 +983,8 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
             "Place and move objects in the world.",
             "editor",
         ));
+    } else {
+        client_world::add_server_world_rows(app, &mut time, &mut weather, &mut climate);
     }
     let mut people: Vec<(String, String)> = Vec::new();
     people.extend(slider_row(
@@ -1028,6 +1036,7 @@ pub(super) fn world_pages(app: &App) -> Vec<Page> {
 }
 
 /// The pages of the settings window `kind` (empty ones left out) and the one shown.
+#[rustfmt::skip]
 pub(super) fn pages_of(app: &App, kind: &ListKind) -> Option<(Vec<Page>, usize)> {
     let (pages, tab) = match kind {
         ListKind::Options(t) => (options_pages(app), *t),
@@ -1046,6 +1055,7 @@ pub(super) fn pages_of(app: &App, kind: &ListKind) -> Option<(Vec<Page>, usize)>
     Some((pages, tab))
 }
 
+#[rustfmt::skip]
 fn shown_in_mode(mode: &str, key: &str) -> bool {
     let mode = crate::settings::graphics_mode(mode);
     match key {
@@ -1115,6 +1125,7 @@ pub(crate) fn page_titles(app: &App, kind: &ListKind) -> Option<(Vec<String>, us
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests {
     use super::shown_in_mode;
     use crate::game_lists::{mode_of_session, text_in_mode};

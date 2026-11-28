@@ -62,6 +62,11 @@ pub(super) fn show_car_destination(
         .strip_prefix('#')
         .and_then(|n| n.parse::<usize>().ok());
     if let (Some(ti), Some(hof)) = (row, hof) {
-        crate::schedule::set_ai_destination_at(v, hof, line, ti, &[]);
+        if ti < hof.termini.len() {
+            crate::schedule::set_ai_destination_at(v, hof, line, ti, &[]);
+            return;
+        }
     }
+    // A line is still meaningful when the host has no matching destination row.
+    crate::schedule::set_ai_destination(v, hof, line, "", &[]);
 }

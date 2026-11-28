@@ -1,7 +1,9 @@
 //! The mouse: the cursor, the buttons, dragging switches, the pages on scenery objects.
 
 use super::*;
+use omsi_input::mouse_math::{drag_heading, look_deg_per_px, part_in_reach};
 
+#[rustfmt::skip]
 impl App {
     /// The cursor moved to (x, y) in physical pixels - from the window or an `OMSI_INPUT` script.
     /// The cursor moved, and the switch under it is named at once (touch input and
@@ -699,9 +701,10 @@ impl App {
             // a click anywhere else leaves the line and goes on to the game
             self.net.remotes.chat.blur();
         }
-        // in another player's bus: a passenger, whose clicks work nothing of it (they
-        // went to the driver's game, which worked its switches for them)
+        // On another player's bus, only model-defined cabin controls are
+        // forwarded; the owner authorizes the explicitly appointed assistant.
         if self.view == "foot" && self.net.inside_remote.is_some() {
+            self.click_remote_cabin(pressed);
             return;
         }
         // a page (`[htmltexture]`) on a scenery object: pressed and released like the bus's own
@@ -1087,116 +1090,16 @@ impl App {
     }
 }
 
-fn look_deg_per_px(fov_deg: f32) -> f32 {
-    fov_deg / 78.75
-}
-
-fn drag_heading(
-    press: [f32; 2],
-    release: [f32; 2],
-    from: glam::DVec2,
-    to: Option<glam::DVec2>,
-) -> Option<f64> {
-    let d = to.filter(|_| (release[0] - press[0]).hypot(release[1] - press[1]) > 12.0)? - from;
-    Some(d.x.atan2(d.y).to_degrees())
-}
+#[cfg(test)]
+mod drag_tests;
 
 #[cfg(test)]
-mod drag_tests {
-    use super::drag_heading;
-    use glam::DVec2;
-
-    #[test]
-    fn a_ctrl_drag_gives_the_heading_and_a_click_none() {
-        let from = DVec2::new(10.0, 10.0);
-        assert_eq!(
-            drag_heading(
-                [100.0, 100.0],
-                [105.0, 104.0],
-                from,
-                Some(DVec2::new(30.0, 10.0))
-            ),
-            None,
-            "under 12 px: a click"
-        );
-        assert_eq!(
-            drag_heading(
-                [100.0, 100.0],
-                [140.0, 100.0],
-                from,
-                Some(DVec2::new(30.0, 10.0))
-            ),
-            Some(90.0),
-            "east"
-        );
-        assert_eq!(
-            drag_heading(
-                [100.0, 100.0],
-                [100.0, 60.0],
-                from,
-                Some(DVec2::new(10.0, 40.0))
-            ),
-            Some(0.0),
-            "north"
-        );
-        assert_eq!(
-            drag_heading([100.0, 100.0], [140.0, 100.0], from, None),
-            None,
-            "let go off the map"
-        );
-    }
-}
-
-#[cfg(test)]
-mod look_tests {
-    #[test]
-    fn a_cursor_way_of_78_75_px_turns_by_the_field_of_view() {
-        assert!((78.75 * super::look_deg_per_px(60.0) - 60.0).abs() < 1e-4);
-    }
-}
+mod look_tests;
 
 /// A part of a vehicle (its origin, heading in degrees and `[boundingbox]`) is in reach of
 /// a person standing at `eye`: within 3 m of the box's half length round its centre.
-fn part_in_reach(eye: glam::DVec3, at: glam::DVec3, heading: f64, bb: Option<[f32; 6]>) -> bool {
-    let bb = bb.unwrap_or([2.5, 12.0, 3.0, 0.0, 0.0, 1.5]);
-    let h = heading.to_radians();
-    let (fwd, right) = (
-        glam::DVec2::new(h.sin(), h.cos()),
-        glam::DVec2::new(h.cos(), -h.sin()),
-    );
-    let centre = at + (right * bb[3] as f64 + fwd * bb[4] as f64).extend(bb[5] as f64);
-    let reach = (bb[0].max(bb[1]) as f64) * 0.5 + 3.0;
-    (eye - centre).length() < reach
-}
-
 #[cfg(test)]
-mod reach_tests {
-    use super::part_in_reach;
-    use glam::DVec3;
-
-    /// Standing by the rear section of an articulated bus, 17 m behind the front part's
-    /// origin: out of the front part's reach, in the rear one's.
-    #[test]
-    fn the_rear_section_is_reached_by_its_own_box() {
-        let front = [2.5, 11.0, 3.0, 0.0, -3.0, 1.5];
-        let rear = [2.5, 7.0, 3.0, 0.0, -3.5, 1.5];
-        let eye = DVec3::new(2.0, -17.0, 1.7);
-        assert!(!part_in_reach(eye, DVec3::ZERO, 0.0, Some(front)));
-        assert!(part_in_reach(
-            eye,
-            DVec3::new(0.0, -12.0, 0.0),
-            0.0,
-            Some(rear)
-        ));
-        // (the box's centre turns with the part: heading 180, the rear is ahead)
-        assert!(part_in_reach(
-            DVec3::new(-2.0, 17.0, 1.7),
-            DVec3::new(0.0, 12.0, 0.0),
-            180.0,
-            Some(rear)
-        ));
-    }
-}
+mod reach_tests;
 
 impl App {
     /// A key pressed while a MileZero song request is being typed: true when it was taken.
@@ -1227,42 +1130,4 @@ impl App {
 }
 
 #[cfg(all(test, windows))]
-mod vr_drag_tests {
-    use super::*;
-    use clap::Parser;
-
-    fn app() -> App {
-        crate::assemble_app(crate::Args::parse_from(["openomsi"]), Default::default())
-    }
-
-    #[test]
-    fn headset_mouse_moves_reach_the_held_control() {
-        let mut app = app();
-        app.input.cursor = (400.0, 300.0);
-        app.input.dragging = true;
-        app.xr.vr_cursor_physical = Some((100.0, 100.0));
-        app.on_vr_cursor_moved(102.0, 97.0);
-        assert_eq!(app.input.cursor, (402.0, 297.0));
-        assert_eq!(app.input.drag_delta, (2.0, -3.0));
-        // Multiple moves before the frame are accumulated, never replaced.
-        app.on_vr_cursor_moved(103.0, 98.0);
-        assert_eq!(app.input.drag_delta, (3.0, -2.0));
-    }
-
-    #[test]
-    fn cursor_warp_does_not_turn_the_control_or_move_the_virtual_pointer() {
-        let mut app = app();
-        app.input.cursor = (400.0, 300.0);
-        app.input.dragging = true;
-        app.xr.vr_cursor_physical = Some((990.0, 700.0));
-        app.xr.vr_cursor_warp_pending = Some((500.0, 400.0));
-        app.on_vr_cursor_moved(500.0, 400.0);
-        assert_eq!(app.input.cursor, (400.0, 300.0));
-        assert_eq!(app.input.drag_delta, (0.0, 0.0));
-        app.on_vr_cursor_moved(503.0, 398.0);
-        assert_eq!(app.input.drag_delta, (3.0, -2.0));
-        app.input.dragging = false;
-        app.on_vr_cursor_moved(506.0, 399.0);
-        assert_eq!(app.input.drag_delta, (3.0, -2.0));
-    }
-}
+mod vr_drag_tests;

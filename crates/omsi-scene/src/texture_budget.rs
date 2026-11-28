@@ -121,8 +121,9 @@ pub(super) fn queue_near_restores(
     near: f64,
     (mut card_room, mut squeezed_room): (u64, u64),
     t0: std::time::Instant,
-) -> usize {
+) -> (usize, bool) {
     let mut queued = 0;
+    let mut blocked = false;
     for (d, p) in entries {
         if *d >= near || queued >= 24 || pending.contains(p) || gpu.wants_restore.contains(p) {
             continue;
@@ -136,6 +137,7 @@ pub(super) fn queue_near_restores(
         let needed = texture_restore_cost(e);
         let peak = e.full_bytes.max(needed);
         if peak > card_room || (e.squeezed && needed > squeezed_room) {
+            blocked = true;
             continue;
         }
         card_room -= peak;
@@ -147,7 +149,48 @@ pub(super) fn queue_near_restores(
         gpu.wants_restore.push(p.clone());
         queued += 1;
     }
-    queued
+    // A nearby texture may not fit back at full resolution although a smaller
+    // GPU upload could fit. This fallback offers the closest reduced texture to
+    // the existing fit_upgrade path when no full restore has been queued.
+    //
+    // This is an admission estimate, not a one-mip upload cap: fit_upgrade may
+    // restore multiple levels if the upload-time GPU budget permits them.
+    // replace_texture briefly holds both allocations. Limit the fallback to
+    // one candidate per pass to avoid bursts near the memory limit.
+    if queued == 0 {
+        let partial = entries
+            .iter()
+            .filter(|(d, p)| *d < near && !pending.contains(p) && !gpu.wants_restore.contains(p))
+            .filter_map(|(d, p)| {
+                let e = gpu.textures.get(p)?;
+                if e.dropped == 0 || e.retry_after.is_some_and(|t| t > t0) {
+                    return None;
+                }
+                // One additional mip roughly quadruples the stored area. Use a
+                // conservative bound (with room for mip/block rounding); the upload size is checked again by
+                // fit_upgrade and the renderer before replacing any resource.
+                let peak = if e.bytes == 0 {
+                    e.full_bytes.min(128 * 128 * 4 * 4 / 3)
+                } else {
+                    e.full_bytes
+                        .min(e.bytes.saturating_mul(4).saturating_add(4096))
+                };
+                (peak > e.bytes
+                    && peak <= card_room
+                    && (!e.squeezed || peak.saturating_sub(e.bytes) <= squeezed_room))
+                    .then_some((*d, p))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((_, p)) = partial {
+            if let Some(e) = gpu.textures.get_mut(p) {
+                e.retry_after = None;
+                e.near_restore = true;
+                gpu.wants_restore.push(p.clone());
+                queued = 1;
+            }
+        }
+    }
+    (queued, blocked)
 }
 
 pub(super) fn ground_is_near(gpu: &GpuCache, near: &mut hashbrown::HashMap<TextureId, f64>) {

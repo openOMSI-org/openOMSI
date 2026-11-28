@@ -4,6 +4,7 @@ use super::*;
 
 /// The name of the weather in force (the file's name without its ending).
 /// The weather files (`Weather/*.owt`) of every content root, by name.
+#[rustfmt::skip]
 pub(super) fn weather_files() -> Vec<String> {
     let mut files: Vec<String> = omsi_cfg::read_dir_merged("Weather")
         .into_iter()
@@ -42,6 +43,7 @@ pub(crate) struct Dropdown {
 }
 
 /// The drop-down of the row `row` whose action is `id`, if that row has one.
+#[rustfmt::skip]
 pub(crate) fn dropdown_for(app: &App, row: usize, id: &str) -> Option<Dropdown> {
     let tr = |t: &str| omsi_ui::tr(t).into_owned();
     if app.metar_locked() && matches!(id, "weather" | "cloudkind" | "precipkind") {
@@ -159,6 +161,7 @@ pub(crate) fn dropdown_for(app: &App, row: usize, id: &str) -> Option<Dropdown> 
 }
 
 /// Do an entry of a drop-down.
+#[rustfmt::skip]
 pub(crate) fn dropdown_apply(app: &mut App, action: &str) {
     let (verb, arg) = action.split_once(' ').unwrap_or((action, ""));
     if app.metar_locked() && matches!(verb, "wx" | "cloud" | "precip") {
@@ -367,6 +370,7 @@ pub(super) fn weather_name(app: &App) -> String {
 
 /// The launcher's settings file as the lists show it: read once (until something is
 /// written), with the keys still waiting to be written on top.
+#[rustfmt::skip]
 pub(super) fn settings_file() -> serde_json::Value {
     let mut v = SETTINGS_CACHE
         .lock()
@@ -426,6 +430,7 @@ pub(super) fn select_options(key: &str) -> Vec<(&'static str, &'static str)> {
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests {
     use super::*;
     use clap::Parser;
@@ -653,6 +658,7 @@ pub(super) fn mode_of_session(
     }
 }
 
+#[rustfmt::skip]
 fn settings_in_mode(mode: &str) -> crate::settings::Settings {
     let file = settings_file();
     let text = omsi_launcher_lib::settings_to_text(&file, None);
@@ -666,6 +672,7 @@ fn settings_in_mode(mode: &str) -> crate::settings::Settings {
     s
 }
 
+#[rustfmt::skip]
 pub(super) fn text_in_mode(text: &str, mode: &str) -> crate::settings::Settings {
     // (the mode as the file spells it: Enhanced and ray tracing apart)
     let (graphics, rt) = match mode {

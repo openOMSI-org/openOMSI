@@ -59,6 +59,7 @@ fn bus_with_cabin_entries(tag: &str, cabin_entries: &str) -> (PeopleSim, BusNow)
         why: "",
         puppet: None,
         remote: false,
+        remote_seat: None,
     });
     h.stops.insert(
         42,
@@ -200,6 +201,7 @@ fn bus_with_hitched_trailer(tag: &str) -> (PeopleSim, BusNow) {
         why: "",
         puppet: None,
         remote: false,
+        remote_seat: None,
     });
     h.stops.insert(
         42,

@@ -1,26 +1,6 @@
 /// Script-side data belongs to the host's AI instance, including schedule_active.
 pub(super) fn ai_context(host: &omsi_sim::VehicleHost) -> omsi_net::ai_context::Context {
-    omsi_net::ai_context::Context {
-        active: host.schedule_active,
-        line: host.tt_line.clone(),
-        terminus: host.tt_terminus_index,
-        stops: host
-            .tt_stops
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                (
-                    host.tt_stop_ids.get(i).copied().unwrap_or(0),
-                    s.0.clone(),
-                    s.1,
-                    s.2,
-                )
-            })
-            .collect(),
-        index: host.tt_busstop_index,
-        delay: host.tt_delay,
-        system: host.system_values(),
-    }
+    omsi_lan::mirror::ai_context(host)
 }
 
 pub(crate) fn apply_ai_context(

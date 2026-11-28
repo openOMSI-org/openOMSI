@@ -1,0 +1,39 @@
+# Fast feedback for long integration PRs; runs independently of browser/launcher tests.
+name: Rust architecture quick checks
+
+on:
+  pull_request:
+    paths:
+      - "crates/**/*.rs"
+      - "crates/**/Cargo.toml"
+      - "scripts/format-check*.sh"
+      - "scripts/size-budget*"
+      - "scripts/arch-*"
+      - ".github/workflows/rust-quick-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      BASE: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Fetch PR base
+        run: git fetch --no-tags --depth=1 origin "$BASE"
+      - name: Formatting
+        run: bash scripts/format-check.sh
+      - name: File and function sizes
+        if: always()
+        run: bash scripts/size-budget.sh
+      - name: Crate layering and app growth
+        if: always()
+        run: bash scripts/arch-guard.sh

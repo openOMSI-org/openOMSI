@@ -8,9 +8,14 @@ impl App {
     pub(crate) fn tick_lan(&mut self, dt: f32) {
         let lan_tick_started = std::time::Instant::now();
         if self.net.lan.is_none() {
+            self.net.coop_cab_assistant = None;
+            self.net.coop_keyboard_mode = false;
             omsi_lan::commands::set_speed_limit_kmh(0);
             self.net.speed_limit_welcome = None;
             self.net.dedicated_teleport = None;
+        }
+        if self.net.inside_remote.is_none() {
+            self.net.coop_keyboard_mode = false;
         }
         self.enforce_host_session_bus();
         let walker = self.walker_pose();
@@ -40,6 +45,7 @@ impl App {
                     .unwrap_or(0),
             ));
             if !lan.connected {
+                self.net.coop_cab_assistant = None;
                 self.net.speed_limit_welcome = None;
                 self.net.dedicated_teleport = None;
                 omsi_lan::commands::set_speed_limit_kmh(0);
@@ -88,10 +94,6 @@ impl App {
             drawn: self.world.is_some() && self.renderer.is_some() && self.scene.is_some(),
         };
         let config = self.args.lan_config();
-        let host = AppLanHost {
-            args: &self.args,
-            world: self.world.as_deref(),
-        };
         if lan.role == omsi_net::Role::Host {
             // (#1464) the buses this session drives: a player who drives another is sent away
             // and told the list, as a dedicated server does with its server.cfg's `vehicles`
@@ -357,6 +359,24 @@ impl App {
     /// (`omsi_lan::commands::Command`), carried out here.
     pub(crate) fn lan_command(&mut self, from: u32, text: &str) {
         use omsi_lan::commands::Command;
+        // The owner sends this only after validating the cabin request.
+        // Ignore signals from strangers or a bus the local walker has left.
+        if text == "coop-signal-ack" {
+            if self.view == "foot"
+                && self.net.inside_remote == Some(from)
+                && self.remote_cabin_owner() == Some(from)
+            {
+                self.play_coop_departure_signal();
+                self.service_msg = Some(("Conductor departure signal sent".into(), 3.0));
+            }
+            return;
+        }
+        if text.starts_with("coop-") {
+            if let Some(action) = omsi_lan::coop_permissions::parse_cabin_action(text) {
+                self.receive_coop_cabin(from, action);
+            }
+            return;
+        }
         if let Some(request) = text.strip_prefix("pax_request ") {
             self.receive_passenger_door_request(from, request);
             return;
@@ -499,6 +519,109 @@ impl App {
             }
             command => crate::admin::carry_out(self, from, command),
         }
+    }
+
+    fn receive_coop_cabin(&mut self, from: u32, action: omsi_lan::coop_permissions::CabinAction) {
+        use omsi_lan::coop_permissions::{self, CabinAction};
+        let permitted = self.net.lan.as_ref().is_some_and(|lan| {
+            omsi_lan::passenger::may_work_cabin(
+                lan,
+                from,
+                self.player.as_ref().map(|p| &p.vehicle),
+                self.net.coop_cab_assistant,
+                &action,
+            )
+        });
+        if !permitted {
+            log::debug!("LAN: co-op cabin control denied for player {from}: {action:?}");
+            return;
+        }
+        if let CabinAction::Fare(fare) = action {
+            self.apply_coop_fare(fare);
+            return;
+        }
+        if let CabinAction::DepartureSignal = action {
+            // A bounded on-demand chime, never a physical door-close command.
+            // Only the vehicle owner approves it and rate-limits repeated requests.
+            let now = std::time::Instant::now();
+            if self.net.coop_departure_last.is_some_and(|last| {
+                now.saturating_duration_since(last) < std::time::Duration::from_millis(1500)
+            }) {
+                return;
+            }
+            self.net.coop_departure_last = Some(now);
+            self.play_coop_departure_signal();
+            self.service_msg = Some((
+                "Conductor: ready to close doors (check clearance)".into(),
+                4.0,
+            ));
+            if let Some(lan) = self.net.lan.as_mut() {
+                lan.command(from, "coop-signal-ack");
+            }
+            return;
+        }
+        let Some(player) = self.player.as_mut() else {
+            return;
+        };
+        let worked = match &action {
+            CabinAction::Door(index) => omsi_sim::door_keys::door_keys(&player.vehicle.ty)
+                .get(*index)
+                .map(|group| crate::player::door_group_to_fire(&mut player.vehicle, group))
+                .is_some_and(|events| {
+                    let any = !events.is_empty();
+                    for event in events {
+                        player.vehicle.trigger(&event);
+                    }
+                    any
+                }),
+            CabinAction::Window(index) => {
+                coop_permissions::click_cabin_window(&mut player.vehicle, *index)
+            }
+            CabinAction::DoorSwitch(event) => {
+                coop_permissions::click_auxiliary_switch(&mut player.vehicle, event)
+            }
+            CabinAction::Key(scan, modifiers) => {
+                // Never trust a trigger name sent over the network. Resolve the scan
+                // against this vehicle owner's installed keyboard.cfg.
+                let speed = player.vehicle.physics.speed * 3.6;
+                let actions: Vec<_> = player
+                    .bindings
+                    .iter()
+                    .filter(|b| b.scan_code == *scan && b.matches(*modifiers))
+                    .map(|b| &b.action)
+                    .filter(|action| {
+                        coop_permissions::keyboard_cabin_action(action)
+                            && coop_permissions::keyboard_cabin_speed_allowed(action, speed)
+                    })
+                    .cloned()
+                    .collect();
+                let mut any = false;
+                for name in actions {
+                    // Tap and release locally so a network dropout cannot leave an
+                    // owner's switch held indefinitely.
+                    let fired = player.action(&name, true);
+                    player.vehicle.update_scripts_only(0.0);
+                    player.action(&name, false);
+                    any |= fired;
+                }
+                any
+            }
+            CabinAction::Switch(event) => {
+                coop_permissions::click_auxiliary_switch(&mut player.vehicle, event)
+            }
+            CabinAction::Adjust(event, direction) => {
+                coop_permissions::adjust_auxiliary_switch(&mut player.vehicle, event, *direction)
+            }
+            CabinAction::Fare(_) | CabinAction::DepartureSignal => unreachable!(),
+        };
+        log::info!(
+            "LAN: co-op cabin action {action:?} from player {from}: {}",
+            if worked {
+                "applied"
+            } else {
+                "unsupported by vehicle model"
+            }
+        );
     }
 
     /// The host's world as LAN play asks for it: its clock (set or caught up with) and its

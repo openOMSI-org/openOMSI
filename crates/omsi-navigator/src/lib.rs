@@ -1373,6 +1373,7 @@ pub use omsi_mapdraw as mapmesh;
 pub use omsi_mapdraw::style;
 mod panel;
 mod screen;
+mod signal_countdown;
 pub use screen::Screen;
 mod duty;
 pub use duty::duty_parts;

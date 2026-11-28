@@ -34,8 +34,30 @@
   <div id="app" hidden>
     <section class="card" id="overview">
       <h2 data-t="overview">Server</h2>
+      <div class="tick-meter" role="group" aria-label="Server performance">
+        <div class="tick-heading"><strong id="tps-value">—</strong><span data-t="tps-label">Simulation ticks per second</span></div>
+        <progress id="tps-bar" max="60" value="0" aria-label="TPS" hidden></progress>
+        <p class="hint" data-t="tps-help">Actual completed simulation ticks per wall-clock second, not a configured FPS value.</p>
+      </div>
       <dl class="facts" id="facts"></dl>
       <p class="stale" id="stale" hidden data-t="stale">The server has not reported for a while: what you see may be old.</p>
+    </section>
+
+    <section class="card" id="profiler-card">
+      <h2 data-t="prof-title">Server timings</h2>
+      <p class="hint" data-t="prof-hint">Optional bounded tick/stage profiler. Only admins may start, stop or reset it.</p>
+      <div class="row">
+        <button type="button" id="prof-start" data-perm="world" data-t="prof-start">Start recording</button>
+        <button type="button" id="prof-stop" data-perm="world" data-t="prof-stop">Stop</button>
+        <button type="button" id="prof-reset" data-perm="world" data-t="prof-reset">Reset</button>
+      </div>
+      <p id="prof-status" class="hint" role="status"></p>
+      <div class="timings-scroll">
+        <table id="prof-table">
+          <thead><tr><th data-t="prof-stage">Stage</th><th data-t="prof-average">Avg (ms)</th><th data-t="prof-maximum">Max (ms)</th><th data-t="prof-share">Share</th></tr></thead>
+          <tbody id="prof-rows"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="card" id="players-card">

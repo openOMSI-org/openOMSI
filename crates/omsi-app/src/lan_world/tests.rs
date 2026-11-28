@@ -167,3 +167,20 @@ fn a_hosts_bus_tells_its_number_plate_and_depot_file() {
     v.host.hof = None;
     assert_eq!(super::car_meta(&v).hof, "", "no depot file: none named");
 }
+
+#[test]
+fn a_mirrored_ai_bus_keeps_its_line_without_a_destination_row() {
+    let osc = "{trigger:ai_scheduled_settarget}\n(L.$.SetLineTo) (S.$.shown)\n{end}\n";
+    let mut vehicle =
+        crate::schedule::tests::script_test_vehicle(osc, "AI_target_index\n", "SetLineTo\nshown\n");
+    super::display::show_car_destination(&mut vehicle, None, "76", "#-1");
+    assert_eq!(vehicle.str_var("SetLineTo"), "76");
+    assert_eq!(vehicle.str_var("shown"), "76");
+    super::display::show_car_destination(
+        &mut vehicle,
+        Some(&omsi_vehicle::Hof::default()),
+        "77",
+        "#12",
+    );
+    assert_eq!(vehicle.str_var("shown"), "77");
+}

@@ -82,6 +82,10 @@ jobs:
       - name: Build
         shell: cmd
         run: scripts\build-windows.cmd %TARGET%
+      - name: Build native headless test host
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: cargo build --locked --release --target $env:TARGET -p omsi-server --bin omsi-server
       # Microsoft's shader compiler for DirectX 12 (dxcompiler.dll, dxil.dll beside the
       # program): without it wgpu falls back to the old FXC, which is slow and refuses
       # some of the game's shaders. DirectX 12 is the way round a Vulkan driver that fails.
@@ -202,6 +206,16 @@ jobs:
           Copy-Item docs/SERVER.md dist/server/README.md
           New-Item -ItemType File -Force dist/server/.openomsi-content | Out-Null
           Compress-Archive -Path dist/server/* -DestinationPath "out/openOMSI-$env:OPENOMSI_VERSION-server-windows-${{ matrix.arch }}.zip"
+          # Completely separate from the legacy server ZIP; not a production release.
+          if ("${{ matrix.arch }}" -eq "x64") {
+            New-Item -ItemType Directory -Force dist/server-headless-test | Out-Null
+            Copy-Item "target/$env:TARGET/release/omsi-server.exe", scripts/server-headless/server-test.cfg, scripts/server-headless/server-simulation.cfg, scripts/server-headless/run-test.cmd, scripts/server-headless/run-simulation.cmd, LICENSE dist/server-headless-test/
+            Copy-Item docs/HEADLESS_SERVER_TEST.md dist/server-headless-test/README.md
+            Copy-Item docs/DEDICATED_SERVER_TIMINGS.md dist/server-headless-test/TIMINGS.md
+            Copy-Item scripts/server-headless/sample-process.ps1, scripts/server-headless/timings-report.py dist/server-headless-test/
+            Copy-Item scripts/server-headless/apply-update.ps1 dist/server-headless-test/
+            Compress-Archive -Path dist/server-headless-test/* -DestinationPath "out/openOMSI-$env:OPENOMSI_VERSION-headless-test-windows-x64.zip"
+          }
       - name: Installer
         shell: bash
         run: |
@@ -361,6 +375,10 @@ jobs:
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
         run: scripts/build-server.sh
+      - name: Build native headless test host
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=lld"
+        run: scripts/build-server-headless.sh
       - name: Validate shaders
         if: matrix.arch == 'x64'
         env:
@@ -373,6 +391,8 @@ jobs:
           cp LICENSE dist/server/
           (cd dist/linux && zip -qr "../../out/openOMSI-$OPENOMSI_VERSION-linux-${{ matrix.arch }}.zip" .)
           (cd dist/server && zip -qr "../../out/openOMSI-$OPENOMSI_VERSION-server-linux-${{ matrix.arch }}.zip" .)
+          # Trial binary is deliberately isolated from legacy production package.
+          (cd dist/server-headless-test && zip -qr "../../out/openOMSI-$OPENOMSI_VERSION-headless-test-linux-${{ matrix.arch }}.zip" .)
       - uses: actions/upload-artifact@v7
         with:
           # (a release keeps its files; a pull request's test builds are fetched within days)

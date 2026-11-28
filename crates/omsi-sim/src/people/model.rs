@@ -163,6 +163,8 @@ pub struct Person {
     pub puppet: Option<Puppet>,
     /// LAN play: one of the host's people, drawn where the host says (`mirror_set`).
     pub remote: bool,
+    /// Seat occupied by a mirrored LAN passenger, synchronized visually.
+    pub remote_seat: Option<usize>,
 }
 
 impl Person {
@@ -246,8 +248,7 @@ pub const CHAT_PAUSE: f64 = 12.0;
 /// How late the player's bus may be before its boarding passengers say so (s): five
 /// minutes, as Omsi.exe had it. The player may allow more (#2718).
 pub const LATE_TOLERANCE: f64 = 300.0;
-/// How still a bus has to stand before the stop's passengers walk to it, when
-/// [`PeopleSim::board_when_stopped`] is on (m/s; #2757).
+/// The maximum speed (m/s) treated as stopped for optional door-aware boarding.
 pub const BOARD_STOPPED_SPEED: f64 = 0.2;
 
 /// A cell of `PeopleSim::wall_cells`: when it was made, and its walls with their heights.
@@ -380,6 +381,10 @@ pub struct PeopleSim {
     pub voices: u8,
     /// When anybody last greeted or complained (seconds of `time`).
     pub last_chat: f64,
+    /// Rare optional seated passenger conversations, disabled by default.
+    pub ambient_talk: bool,
+    pub ambient_talk_at: f64,
+    pub ambient_talk_reply: Option<(u32, f64)>,
     /// Avatars (the player on foot, other players' walkers): key → person id, and what
     /// the game wants of each this frame.
     pub avatars: HashMap<u32, u32>,
@@ -461,6 +466,10 @@ pub struct PeopleSim {
     /// goes to their place instead of waiting at the desk for a ticket - and no ticket
     /// sound or ticket hand-over is made. Set by the app from the settings.
     pub no_ticket: bool,
+    /// When false, passengers may complain without leaving the bus early.
+    pub bad_driving_alight: bool,
+    /// Optional stop boarding gate; defaults to false to preserve OMSI behavior.
+    pub board_when_stopped: bool,
     /// How passengers board (`boarding` in the settings): `auto` - pay and take the
     /// ticket by themselves after a moment; `pay` - wait at the desk for the driver to
     /// sell it (and show a pass after `PAY_PATIENCE`); `walk` - no cash desk at all.
@@ -473,9 +482,6 @@ pub struct PeopleSim {
     /// (`standing_chance` in the settings).
     pub stand_chance: f32,
     pub short_rides_stand: bool,
-    /// Nobody walks to a bus that is still rolling in, nor to its shut doors: they wait at
-    /// the stop until it stands still with a door open (#2757). Off as OMSI had it.
-    pub board_when_stopped: bool,
     /// The driver pressed the ticket key (`ticket_give`): sell the requested ticket.
     pub give_ticket: bool,
     /// The key that sells a ticket, as the HUD names it.
@@ -506,6 +512,9 @@ pub struct PeopleSim {
     /// too, the stops there took the whole pool (`max_people`) for people nobody saw, and
     /// none were left for the stops and pavements around the players.
     pub players_only: bool,
+    /// Extra population pressure only around LAN players on the native host.
+    /// Defaults to 1 for graphical games; bounded by the usual 3x density cap.
+    pub lan_population_boost: f32,
     /// LAN play: the other players' buses this frame (`set_remote_buses`), for their riders
     /// to sit in. Nobody of ours boards them: their doors count as shut.
     pub remote_now: Vec<BusNow>,

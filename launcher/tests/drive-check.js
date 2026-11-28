@@ -3,7 +3,8 @@ import { hostLaunchStaysOnDrive } from './drive-mode-check.js';
 import { Tours } from '../ui/js/pages/drive-duty.js';
 import { BusPicker } from '../ui/js/pages/bus-picker.js';
 import { S, set, remember } from '../ui/js/store.js';
-import { applyTheme, choose, curTour, duty, resolveTour, transportRefusal, LAUNCHER_LAYOUTS } from '../ui/js/data.js';
+import { applyTheme, choose, curMap, curTour, duty, resolveTour, transportRefusal, joinNeedsFleetRefresh, LAUNCHER_LAYOUTS } from '../ui/js/data.js';
+import { selectSession } from '../ui/js/pages/session-selection.js';
 
 const OPTIONS = {
   Map: () => one('.page-drive .map-row'),
@@ -473,6 +474,51 @@ async function serverOnlyBusPicker() {
   return issues;
 }
 
+/** Ordinary legacy sessions must not block Join and drive on an optional
+ * gateway query; authenticated remote-fleet downloads still require it. */
+function joinPreflightRegression() {
+  const issues = [];
+  const check = (choice, expected, reason) => {
+    if (joinNeedsFleetRefresh(choice) !== expected) issues.push(reason);
+  };
+  check({ lan_mode: 'join', lan_server: { asked: true, fleet_version: 0 } }, false,
+    'confirmed legacy session must launch without a redundant server_query');
+  check({ lan_mode: 'join', lan_server: null }, false,
+    'session code without optional metadata must still launch');
+  check({ lan_mode: 'join', lan_server: { asked: true, fleet_version: 1 } }, true,
+    'authenticated server-only bus downloads must refresh their fleet catalogue');
+  check({ lan_mode: 'off', lan_server: { fleet_version: 1 } }, false,
+    'offline driving must not query a remote session');
+  check({ lan_mode: 'host', lan_server: { fleet_version: 1 } }, false,
+    'hosting must not query the remote fleet');
+
+  // Reproduce the real Windows case difference in a dedicated session:
+  // host announces Maps/Grundorf, local library stores maps/Grundorf.
+  // Without the canonical lookup, curMap() is falsy and "Join and drive"
+  // has disabled=true even though Grundorf and the selected bus exist.
+  const saved = { maps: S.maps, choice: S.choice, page: S.page, driveBeforeJoin: S.driveBeforeJoin };
+  try {
+    set({
+      maps: [{ file: 'maps/Grundorf/global.cfg', name: 'Grundorf', transport: ['bus'] }],
+      choice: { ...S.choice, lan_mode: 'off', map: 'Maps/Grundorf/global.cfg', bus: 'Vehicles/Local.bus', free: true },
+    });
+    if (curMap()?.file !== 'maps/Grundorf/global.cfg') {
+      issues.push('installed map is hidden by a different case in the server map path');
+    }
+    selectSession(
+      { lan_addr: 'OMSI-TEST-SESSION', lan_ws_fallback: null },
+      { map: 'Maps\\Grundorf\\global.cfg', name: 'Headless LAN test', vehicles: [], fleet_version: 0 }
+    );
+    if (S.choice.map !== 'maps/Grundorf/global.cfg' || S.choice.lan_map !== 'Maps/Grundorf/global.cfg') {
+      issues.push('joining must preserve the canonical installed map and the announced host path separately');
+    }
+    if (!curMap()) issues.push('selected session map must enable the installed-map launch prerequisite');
+  } finally {
+    set(saved);
+  }
+  return issues;
+}
+
 export async function run({ themes = ['dark', 'light'], layouts = LAUNCHER_LAYOUTS.map(([id]) => id), check = ['options', 'use'] } = {}) {
   const report = {};
   for (const theme of themes) for (const layout of layouts) {
@@ -500,6 +546,7 @@ export async function run({ themes = ['dark', 'light'], layouts = LAUNCHER_LAYOU
   report['duplicate tour numbers'] = await duplicateTourNumbers();
   report['duty date'] = await dateOutsideTheMapsYears();
   report['transport modes'] = transportModes();
+  report['LAN join preflight'] = joinPreflightRegression();
   report['server-only bus picker'] = await serverOnlyBusPicker();
   try { await hostLaunchStaysOnDrive(); report['host launch stays on Drive'] = []; }
   catch (e) { report['host launch stays on Drive'] = [e.message]; }

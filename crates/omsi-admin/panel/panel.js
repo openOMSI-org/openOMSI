@@ -20,6 +20,12 @@ const T = {
     waiting: "waiting", walking: "walking", aboard: "aboard", off: "off", density: "density", role: "Role",
     driving: "driving", on_foot: "on foot", aboard_of: "aboard #", joining: "joining", admin: "admin", moderator: "moderator",
     online: "online", noPlayers: "Nobody found.", noEvents: "Nothing yet.",
+    "tps-label": "Simulation ticks per second", "tps-help": "Measured from completed server ticks every wall-clock second. Updates with this panel.", "tps-warmup": "Measuring TPS…",
+    "prof-title": "Server timings", "prof-hint": "Opt-in profiling of tick latency and simulation stages; no player data collected.",
+    "prof-start": "Start recording", "prof-stop": "Stop", "prof-reset": "Reset",
+    "prof-stage": "Stage", "prof-average": "Avg (ms)", "prof-maximum": "Max (ms)", "prof-share": "Share",
+    "prof-off": "Profiler disabled", "prof-on": "Recording", "prof-queued": "Command queued for the server",
+    "prof-summary": "{state} · {ticks} ticks · avg {average} ms · p95 {p95} ms · p99 {p99} ms · max {maximum} ms",
     confirmKick: "Send away {name} (number {id}, connection {conn})?", confirmBan: "Send away {name} (number {id}, connection {conn}) for the rest of this server run?",
     confirmClear: "Take every AI car off the road?", unreachable: "The server does not answer. Trying again…",
     expired: "The session has ended: log in again.", queued: "queued", applied: "applied", pending: "pending", rejected: "rejected",
@@ -47,6 +53,12 @@ const T = {
     waiting: "esperando", walking: "andando", aboard: "a bordo", off: "desligado", density: "densidade", role: "Papel",
     driving: "dirigindo", on_foot: "a pé", aboard_of: "a bordo do #", joining: "entrando", admin: "admin", moderator: "moderador",
     online: "online", noPlayers: "Ninguém encontrado.", noEvents: "Nada ainda.",
+    "tps-label": "Ticks de simulação por segundo", "tps-help": "Medição real dos ticks concluídos por segundo. Atualiza com este painel.", "tps-warmup": "Medindo TPS…",
+    "prof-title": "Tempos do servidor", "prof-hint": "Perfilador ativável de latência e etapas da simulação; não coleta dados dos jogadores.",
+    "prof-start": "Iniciar gravação", "prof-stop": "Parar", "prof-reset": "Limpar",
+    "prof-stage": "Etapa", "prof-average": "Média (ms)", "prof-maximum": "Máx (ms)", "prof-share": "Participação",
+    "prof-off": "Profiler desativado", "prof-on": "Gravando", "prof-queued": "Comando colocado na fila do servidor",
+    "prof-summary": "{state} · {ticks} ticks · média {average} ms · p95 {p95} ms · p99 {p99} ms · máx {maximum} ms",
     confirmKick: "Expulsar {name} (número {id}, conexão {conn})?", confirmBan: "Expulsar {name} (número {id}, conexão {conn}) até o servidor reiniciar?",
     confirmClear: "Tirar todos os carros de IA das ruas?", unreachable: "O servidor não responde. Tentando de novo…",
     expired: "A sessão terminou: entre de novo.", queued: "na fila", applied: "aplicado", pending: "enviado", rejected: "recusado",
@@ -206,6 +218,14 @@ function render() {
   $("who").textContent = sess.actor + " · " + t(sess.role);
   const dl = $("facts");
   dl.replaceChildren();
+  const target = typeof s.target_tps === "number" && Number.isFinite(s.target_tps) && s.target_tps > 0 ? s.target_tps : 60;
+  const measured = typeof s.tps === "number" && Number.isFinite(s.tps) ? s.tps : null;
+  $("tps-value").textContent = measured === null ? t("tps-warmup") : measured.toFixed(1) + " / " + target.toFixed(0) + " TPS";
+  const bar = $("tps-bar");
+  bar.hidden = measured === null;
+  bar.max = target;
+  bar.value = measured === null ? 0 : Math.max(0, Math.min(target, measured));
+  bar.dataset.health = measured === null ? "warming" : measured >= target * 0.90 ? "good" : measured >= target * 0.70 ? "warn" : "low";
   fact(dl, t("map"), s.map);
   fact(dl, t("playersNow"), s.players + " / " + s.max_players);
   fact(dl, t("time"), s.time + "  ×" + s.clock_speed + (s.real_time ? " (" + t("lockedRT") + ")" : ""));
@@ -233,6 +253,31 @@ function render() {
   renderPlayers();
   renderBans();
   renderEvents();
+  renderProfiler();
+}
+
+function renderProfiler() {
+  const p = S.server && S.server.profiler;
+  const status = $("prof-status"), rows = $("prof-rows");
+  rows.replaceChildren();
+  if (!p) { status.textContent = t("prof-off"); return; }
+  status.textContent = t("prof-summary", {
+    state: t(p.enabled ? "prof-on" : "prof-off"),
+    ticks: p.ticks, average: p.avg_tick_ms.toFixed(2), p95: p.p95_tick_ms.toFixed(2),
+    p99: p.p99_tick_ms.toFixed(2), maximum: p.max_tick_ms.toFixed(2),
+  });
+  $("prof-start").disabled = !may("world") || p.enabled;
+  $("prof-stop").disabled = !may("world") || !p.enabled;
+  $("prof-reset").disabled = !may("world");
+  for (const stage of p.stages || []) {
+    const tr = document.createElement("tr");
+    for (const value of [stage.name, stage.avg_ms.toFixed(3), stage.max_ms.toFixed(3), stage.share_pct.toFixed(1) + "%"]) {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.append(td);
+    }
+    rows.append(tr);
+  }
 }
 
 function renderBans() {
@@ -377,6 +422,17 @@ function target() {
 
 function wire() {
   $("login-form").addEventListener("submit", login);
+  for (const action of ["start", "stop", "reset"]) {
+    $("prof-" + action).addEventListener("click", async () => {
+      const r = await api("POST", "/api/admin/profiler", { action });
+      if (r && r.status === 202) {
+        $("prof-status").textContent = t("prof-queued");
+        setTimeout(refresh, 600);
+      } else if (r) {
+        $("prof-status").textContent = r.data.error || String(r.status);
+      }
+    });
+  }
   $("logout").addEventListener("click", logout);
   $("lang").addEventListener("click", () => { lang = lang === "pt" ? "en" : "pt"; sessionStorage.setItem("lang", lang); translate(); });
   let typing = 0;

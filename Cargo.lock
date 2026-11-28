@@ -4026,6 +4026,7 @@ dependencies = [
  "omsi-scene",
  "omsi-scenery",
  "omsi-script",
+ "omsi-server",
  "omsi-settings-ui",
  "omsi-sim",
  "omsi-soundscape",
@@ -4841,6 +4842,33 @@ dependencies = [
  "log",
  "omsi-cfg",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "omsi-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glam",
+ "hashbrown 0.17.1",
+ "log",
+ "omsi-admin",
+ "omsi-cfg",
+ "omsi-career",
+ "omsi-content",
+ "omsi-geometry",
+ "omsi-lan",
+ "omsi-map",
+ "omsi-model",
+ "omsi-o3d",
+ "omsi-net",
+ "omsi-scenery",
+ "omsi-sim",
+ "omsi-vehicle",
+ "omsi-world",
+ "serde_json",
+ "sha2",
+ "ureq",
 ]
 
 [[package]]

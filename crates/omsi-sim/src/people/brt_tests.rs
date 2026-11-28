@@ -67,6 +67,7 @@ pub(crate) fn setup(name: &str, trailer: Option<f32>) -> (PeopleSim, BusNow) {
         why: "",
         puppet: None,
         remote: false,
+        remote_seat: None,
     });
     h.stops.insert(
         42,

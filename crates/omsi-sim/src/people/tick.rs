@@ -13,7 +13,12 @@ impl PeopleSim {
                 "t={:.1} slow people tick: {ms:.1} ms ({} people): {}",
                 self.time,
                 self.people.len(),
-                self.tick_stages.iter().filter(|s| s.1 >= 1.0).map(|(n, t)| format!("{n} {t:.1}")).collect::<Vec<_>>().join(", ")
+                self.tick_stages
+                    .iter()
+                    .filter(|s| s.1 >= 1.0)
+                    .map(|(n, t)| format!("{n} {t:.1}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
         if omsi_cfg::flags::OMSI_CHECK_WALLS.is_set() {
@@ -21,7 +26,9 @@ impl PeopleSim {
         }
         // OMSI_CHECK_GROUND=1: people on foot with a walkable surface over their heads'
         // reach above them, every two seconds (people "in the ground")
-        if omsi_cfg::flags::OMSI_CHECK_GROUND.is_set() && (self.time / 2.0).floor() != ((self.time - dt as f64) / 2.0).floor() {
+        if omsi_cfg::flags::OMSI_CHECK_GROUND.is_set()
+            && (self.time / 2.0).floor() != ((self.time - dt as f64) / 2.0).floor()
+        {
             for p in &self.people {
                 if !matches!(p.place, Place::Ground) || p.puppet.is_some() {
                     continue;
@@ -31,10 +38,23 @@ impl PeopleSim {
                 if let Some(f) = floor {
                     if f - p.position.z > 0.05 {
                         let detail = match &p.state {
-                            State::Pax(x) => format!(" st {} pax_state {} task {:?} pos.z {:.2}", x.st, x.pax_state, x.task, x.pos.z),
+                            State::Pax(x) => format!(
+                                " st {} pax_state {} task {:?} pos.z {:.2}",
+                                x.st, x.pax_state, x.task, x.pos.z
+                            ),
                             _ => String::new(),
                         };
-                        log::warn!("t={:.1} person {} ({}) {:.2} m under the floor at ({:.1}, {:.1}, {:.2}), top surface {:?}{detail}", self.time, p.id, p.state.name(), f - p.position.z, p.position.x, p.position.y, p.position.z, world.walk_height(p.position.x, p.position.y));
+                        log::warn!(
+                            "t={:.1} person {} ({}) {:.2} m under the floor at ({:.1}, {:.1}, {:.2}), top surface {:?}{detail}",
+                            self.time,
+                            p.id,
+                            p.state.name(),
+                            f - p.position.z,
+                            p.position.x,
+                            p.position.y,
+                            p.position.z,
+                            world.walk_height(p.position.x, p.position.y)
+                        );
                     }
                 }
             }
@@ -66,7 +86,8 @@ impl PeopleSim {
         macro_rules! stage {
             ($name:expr) => {{
                 let now = std::time::Instant::now();
-                self.tick_stages.push(($name, (now - mark).as_secs_f64() * 1000.0));
+                self.tick_stages
+                    .push(($name, (now - mark).as_secs_f64() * 1000.0));
                 mark = now;
             }};
         }
@@ -84,37 +105,18 @@ impl PeopleSim {
             self.tiles_changed(world);
         }
         stage!("tiles");
-        // tiles brought lanes: their pavements join the network, and stops without one look again
-        if let (Some(pn), Some(n)) = (self.ped.as_mut(), net) {
-            if pn.built < n.lanes.len() {
-                let added = pn.extend(n);
-                if added > 0 {
-                    let ids: Vec<(i64, DVec3)> = self.stops.iter().filter(|(_, s)| s.lane.is_none()).map(|(k, s)| (*k, s.pos)).collect();
-                    for (id, pos) in ids {
-                        let lane = self.ped.as_ref().and_then(|pn| pn.nearest(n, pos, 12.0)).map(|(l, s, _)| (l, s));
-                        self.stops.get_mut(&id).unwrap().lane = lane;
-                    }
-                }
-            }
-        }
-        if self.ped.is_none() {
-            if let Some(n) = net {
-                self.ped = Some(PedNet::build(n));
-                let ids: Vec<(i64, DVec3)> = self.stops.iter().map(|(k, s)| (*k, s.pos)).collect();
-                for (id, pos) in ids {
-                    let lane = self.ped.as_ref().and_then(|pn| pn.nearest(n, pos, 12.0)).map(|(l, s, _)| (l, s));
-                    self.stops.get_mut(&id).unwrap().lane = lane;
-                }
-            }
-        }
+        self.refresh_pedestrian_network(net);
         stage!("pedestrian network");
         let defer = std::mem::take(&mut self.defer_populate);
         if let Some(n) = net {
             self.stroll_timer -= dt;
             if self.stroll_timer <= 0.0 && !defer {
                 self.stroll_timer = 1.0;
-                let c = self.center;
-                self.populate_with(world, Some(n), c);
+                // No local camera exists on a headless host; use actual peer centers.
+                if !self.players_only {
+                    let c = self.center;
+                    self.populate_with(world, Some(n), c);
+                }
                 if !self.mirror {
                     if !self.players_only {
                         self.populate_on_foot(world, n, 1.0);
@@ -137,7 +139,8 @@ impl PeopleSim {
                 let accel = match self.bus_motion.get(&bn.id) {
                     Some(&(v0, h0, a0)) => {
                         let yaw_rate = crowd::angle_diff(h0, bn.heading).to_radians() / dt as f64;
-                        let raw = DVec2::new(bn.speed * yaw_rate, (bn.speed - v0) / dt as f64).clamp(DVec2::splat(-6.0), DVec2::splat(6.0));
+                        let raw = DVec2::new(bn.speed * yaw_rate, (bn.speed - v0) / dt as f64)
+                            .clamp(DVec2::splat(-6.0), DVec2::splat(6.0));
                         a0 + (raw - a0) * (1.0 - (-(dt as f64) / 0.2).exp())
                     }
                     None => DVec2::ZERO,
@@ -150,7 +153,8 @@ impl PeopleSim {
         let buses = Arc::new(buses);
         self.last_buses = buses.clone();
         let buses: &[BusNow] = &buses;
-        let bus_ix: HashMap<BusId, usize> = buses.iter().enumerate().map(|(i, b)| (b.id, i)).collect();
+        let bus_ix: HashMap<BusId, usize> =
+            buses.iter().enumerate().map(|(i, b)| (b.id, i)).collect();
         // the stops: which buses stand at them (sub_61f93c), who waits there (sub_61bf94)
         let at_stops = self.register_buses(buses, dt);
         self.claim_waiting();
@@ -165,7 +169,16 @@ impl PeopleSim {
         // the passengers (sub_6ffc7c)
         let mut taken_ticket = false;
         let mut remove: Vec<usize> = Vec::new();
-        self.pax_frame(dt, world, buses, &bus_ix, &at_stops, bus, &mut taken_ticket, &mut remove);
+        self.pax_frame(
+            dt,
+            world,
+            buses,
+            &bus_ix,
+            &at_stops,
+            bus,
+            &mut taken_ticket,
+            &mut remove,
+        );
         stage!("passengers");
         // the pedestrians: a crowd on the pavements (the cars around every player: the people
         // around the other LAN players wait for them at the kerb too)
@@ -181,30 +194,65 @@ impl PeopleSim {
                 }
                 let h = c.vehicle.heading.to_radians();
                 let fwd = DVec2::new(h.sin(), h.cos());
-                let bb = c.vehicle.ty.def.bounding_box.unwrap_or([2.0, 4.5, 1.6, 0.0, 0.0, 0.8]);
-                cars.push((c.vehicle.position.truncate(), fwd * c.state.speed as f64, bb[1] as f64 * 0.5));
+                let bb = c
+                    .vehicle
+                    .ty
+                    .def
+                    .bounding_box
+                    .unwrap_or([2.0, 4.5, 1.6, 0.0, 0.0, 0.8]);
+                cars.push((
+                    c.vehicle.position.truncate(),
+                    fwd * c.state.speed as f64,
+                    bb[1] as f64 * 0.5,
+                ));
                 if !matches!(c.vehicle.ty.def.kind, omsi_vehicle::VehicleKind::Other(3)) {
-                    let o = crate::collision::Obb::from_box(bb, c.vehicle.position, c.vehicle.heading);
-                    blocks.push(Block { center: o.center, half: o.half, heading: o.heading, vel: fwd * c.state.speed as f64 });
+                    let o =
+                        crate::collision::Obb::from_box(bb, c.vehicle.position, c.vehicle.heading);
+                    blocks.push(Block {
+                        center: o.center,
+                        half: o.half,
+                        heading: o.heading,
+                        vel: fwd * c.state.speed as f64,
+                    });
                     for t in &c.vehicle.trailers {
-                        let tb = t.ty.def.bounding_box.unwrap_or([2.5, 7.0, 3.0, 0.0, 0.0, 1.5]);
+                        let tb =
+                            t.ty.def
+                                .bounding_box
+                                .unwrap_or([2.5, 7.0, 3.0, 0.0, 0.0, 1.5]);
                         let o = crate::collision::Obb::from_box(tb, t.position, t.heading);
                         let th = t.heading.to_radians();
-                        blocks.push(Block { center: o.center, half: o.half, heading: o.heading, vel: DVec2::new(th.sin(), th.cos()) * c.state.speed as f64 });
+                        blocks.push(Block {
+                            center: o.center,
+                            half: o.half,
+                            heading: o.heading,
+                            vel: DVec2::new(th.sin(), th.cos()) * c.state.speed as f64,
+                        });
                     }
                 }
             }
         }
         for o in world.parked_boxes().iter() {
-            if self.anchors().any(|c| (o.center - c.truncate()).length() < 320.0) {
-                blocks.push(Block { center: o.center, half: o.half, heading: o.heading, vel: DVec2::ZERO });
+            if self
+                .anchors()
+                .any(|c| (o.center - c.truncate()).length() < 320.0)
+            {
+                blocks.push(Block {
+                    center: o.center,
+                    half: o.half,
+                    heading: o.heading,
+                    vel: DVec2::ZERO,
+                });
             }
         }
         if let Some(pb) = bus_ix.get(&BusId::Player).map(|&i| &buses[i]) {
             cars.push((pb.pos.truncate(), pb.fwd() * pb.speed, pb.half.y));
             for t in &pb.trailers {
                 let h = t.heading.to_radians();
-                cars.push((t.pos.truncate(), DVec2::new(h.sin(), h.cos()) * pb.speed, t.half.y));
+                cars.push((
+                    t.pos.truncate(),
+                    DVec2::new(h.sin(), h.cos()) * pb.speed,
+                    t.half.y,
+                ));
             }
             blocks.extend(pb.blocks());
         }
@@ -216,7 +264,9 @@ impl PeopleSim {
         wants.clear();
         for i in 0..self.people.len() {
             self.people[i].t_state += dt;
-            let w = if self.people[i].puppet.is_some() || matches!(self.people[i].state, State::Pax(_)) {
+            let w = if self.people[i].puppet.is_some()
+                || matches!(self.people[i].state, State::Pax(_))
+            {
                 Want::stand(None, Activity::Stand)
             } else if self.people[i].remote {
                 self.mirror_want(i, buses)
@@ -235,40 +285,7 @@ impl PeopleSim {
                 *g = true;
             }
         }
-        // a standing vehicle in the way: wait, then go round it
-        for i in 0..self.people.len() {
-            let p = &self.people[i];
-            if gone[i] || p.puppet.is_some() || p.remote || !matches!(p.state, State::Strolling(_)) {
-                continue;
-            }
-            let want = wants[i].vel;
-            let speed = want.length();
-            if speed < 0.2 {
-                self.people[i].car_wait = 0.0;
-                continue;
-            }
-            let ahead = p.position.truncate() + want / speed * 0.9;
-            let blocks = &self.scratch.blocks;
-            let stands_in_way = |b: &Block| {
-                b.vel.length() < 0.5 && b.near(ahead, BODY_OUTSIDE + 0.15) && {
-                    let (q, inside) = b.closest(ahead);
-                    inside || (ahead - q).length() < BODY_OUTSIDE + 0.15
-                }
-            };
-            let in_way = self.scratch.blocks_at(ahead).iter().any(|&k| stands_in_way(&blocks[k as usize]));
-            debug_assert_eq!(in_way, blocks.iter().any(stands_in_way), "the vehicle grid missed one in the way");
-            if !in_way {
-                self.people[i].car_wait = 0.0;
-                continue;
-            }
-            self.people[i].car_wait += dt;
-            if self.people[i].car_wait > 8.0 {
-                self.people[i].detour = self.people[i].detour.max(4.0);
-                self.people[i].car_wait = 0.0;
-            } else if self.people[i].detour <= 0.0 {
-                wants[i].vel = DVec2::ZERO;
-            }
-        }
+        self.avoid_standing_vehicles(dt, &gone, &mut wants);
         // the crowd of the pavements (passengers outside stand in it as they are)
         let mut walkers = std::mem::take(&mut self.scratch.walkers);
         walkers.clear();
@@ -297,7 +314,12 @@ impl PeopleSim {
         // the vehicles within 25 m of somebody of the crowd, in their order
         let mut near_blocks = std::mem::take(&mut self.scratch.near_blocks);
         self.scratch.blocks_near_crowd(&walkers, &mut near_blocks);
-        crowd::step(&mut walkers, &near_blocks, &CrowdParams::default(), dt as f64);
+        crowd::step(
+            &mut walkers,
+            &near_blocks,
+            &CrowdParams::default(),
+            dt as f64,
+        );
         self.scratch.near_blocks = near_blocks;
         let mut ground = std::mem::take(&mut self.scratch.ground);
         ground.clear();
@@ -331,7 +353,17 @@ impl PeopleSim {
             self.release(i);
             let p = self.people.swap_remove(i);
             if debug_pax() {
-                log::info!("t={:.1} pax {} taken away ({}){}", self.time, p.label(), p.state.name(), if self.seen(p.position) { " IN SIGHT" } else { "" });
+                log::info!(
+                    "t={:.1} pax {} taken away ({}){}",
+                    self.time,
+                    p.label(),
+                    p.state.name(),
+                    if self.seen(p.position) {
+                        " IN SIGHT"
+                    } else {
+                        ""
+                    }
+                );
             }
             self.retire(&p);
         }
@@ -340,10 +372,104 @@ impl PeopleSim {
         taken_ticket
     }
 
+    /// Extend the pavement graph as tiles arrive, then attach orphaned stops.
+    fn refresh_pedestrian_network(&mut self, net: Option<&Network>) {
+        // tiles brought lanes: their pavements join the network, and stops without one look again
+        if let (Some(pn), Some(n)) = (self.ped.as_mut(), net) {
+            if pn.built < n.lanes.len() {
+                let added = pn.extend(n);
+                if added > 0 {
+                    let ids: Vec<(i64, DVec3)> = self
+                        .stops
+                        .iter()
+                        .filter(|(_, s)| s.lane.is_none())
+                        .map(|(k, s)| (*k, s.pos))
+                        .collect();
+                    for (id, pos) in ids {
+                        let lane = self
+                            .ped
+                            .as_ref()
+                            .and_then(|pn| pn.nearest(n, pos, 12.0))
+                            .map(|(l, s, _)| (l, s));
+                        self.stops.get_mut(&id).unwrap().lane = lane;
+                    }
+                }
+            }
+        }
+        if self.ped.is_none() {
+            if let Some(n) = net {
+                self.ped = Some(PedNet::build(n));
+                let ids: Vec<(i64, DVec3)> = self.stops.iter().map(|(k, s)| (*k, s.pos)).collect();
+                for (id, pos) in ids {
+                    let lane = self
+                        .ped
+                        .as_ref()
+                        .and_then(|pn| pn.nearest(n, pos, 12.0))
+                        .map(|(l, s, _)| (l, s));
+                    self.stops.get_mut(&id).unwrap().lane = lane;
+                }
+            }
+        }
+    }
+
+    /// Keep strolling pedestrians out of stationary vehicles and set a detour
+    /// after a bounded wait. The crowd solver handles movement afterwards.
+    fn avoid_standing_vehicles(&mut self, dt: f32, gone: &[bool], wants: &mut [Want]) {
+        // a standing vehicle in the way: wait, then go round it
+        for i in 0..self.people.len() {
+            let p = &self.people[i];
+            if gone[i] || p.puppet.is_some() || p.remote || !matches!(p.state, State::Strolling(_))
+            {
+                continue;
+            }
+            let want = wants[i].vel;
+            let speed = want.length();
+            if speed < 0.2 {
+                self.people[i].car_wait = 0.0;
+                continue;
+            }
+            let ahead = p.position.truncate() + want / speed * 0.9;
+            let blocks = &self.scratch.blocks;
+            let stands_in_way = |b: &Block| {
+                b.vel.length() < 0.5 && b.near(ahead, BODY_OUTSIDE + 0.15) && {
+                    let (q, inside) = b.closest(ahead);
+                    inside || (ahead - q).length() < BODY_OUTSIDE + 0.15
+                }
+            };
+            let in_way = self
+                .scratch
+                .blocks_at(ahead)
+                .iter()
+                .any(|&k| stands_in_way(&blocks[k as usize]));
+            debug_assert_eq!(
+                in_way,
+                blocks.iter().any(stands_in_way),
+                "the vehicle grid missed one in the way"
+            );
+            if !in_way {
+                self.people[i].car_wait = 0.0;
+                continue;
+            }
+            self.people[i].car_wait += dt;
+            if self.people[i].car_wait > 8.0 {
+                self.people[i].detour = self.people[i].detour.max(4.0);
+                self.people[i].car_wait = 0.0;
+            } else if self.people[i].detour <= 0.0 {
+                wants[i].vel = DVec2::ZERO;
+            }
+        }
+    }
+
     /// Everybody's animation this frame (sub_626ae8): the passengers from what their task
     /// says (`PAX_State`, speed, the room height, the seat, the hand and the head), the
     /// pedestrians from their walk.
-    pub fn animate(&mut self, dt: f32, world: &dyn World, buses: &[BusNow], bus_ix: &HashMap<BusId, usize>) {
+    pub fn animate(
+        &mut self,
+        dt: f32,
+        world: &dyn World,
+        buses: &[BusNow],
+        bus_ix: &HashMap<BusId, usize>,
+    ) {
         let dt_ms = dt * 1000.0;
         for i in 0..self.people.len() {
             if let Some(pp) = self.people[i].puppet {
@@ -360,17 +486,28 @@ impl PeopleSim {
                     let own = |q: Vec3| -> Vec3 {
                         let v = q.as_dvec3() - x.pos;
                         let (s, c) = x.yaw.sin_cos();
-                        let local = Vec3::new((v.x * c - v.y * s) as f32, (v.x * s + v.y * c) as f32, v.z as f32);
+                        let local = Vec3::new(
+                            (v.x * c - v.y * s) as f32,
+                            (v.x * s + v.y * c) as f32,
+                            v.z as f32,
+                        );
                         crate::human_omsi::d3d(local)
                     };
                     let reach = (x.reach && x.inside.is_some()).then(|| own(x.reach_at));
                     let look = match (x.look_driver, bn) {
-                        (true, Some(b)) => b.cabin.data.driver_positions.first().map(|d| own(Vec3::from(d.pos) + Vec3::Z * 0.65)),
+                        (true, Some(b)) => b
+                            .cabin
+                            .data
+                            .driver_positions
+                            .first()
+                            .map(|d| own(Vec3::from(d.pos) + Vec3::Z * 0.65)),
                         _ => None,
                     };
                     let kind = x.pax_state.round().clamp(0.0, 2.0) as u8;
                     let pack = match (x.step_pack, bn) {
-                        (Some(k), Some(b)) => b.cabin.step_packs.get(k).cloned().map(|pk| (b.id, pk)),
+                        (Some(k), Some(b)) => {
+                            b.cabin.step_packs.get(k).cloned().map(|pk| (b.id, pk))
+                        }
                         _ => None,
                     };
                     (
@@ -386,6 +523,35 @@ impl PeopleSim {
                             dt_ms,
                         },
                         pack,
+                    )
+                }
+                _ if p.remote => {
+                    // LAN mirrors are State::Idle, but seated riders still need
+                    // the original OMSI seated skeleton, not its standing pose.
+                    let seat_height = p.mirrored_seat_height(buses);
+                    let v = p.vel.length() as f32;
+                    (
+                        AnimInput {
+                            kind: if seat_height.is_some() {
+                                2
+                            } else if p.activity == Activity::Walk {
+                                1
+                            } else {
+                                0
+                            },
+                            speed: v,
+                            moved: v * dt,
+                            room_height: if matches!(p.place, Place::Bus(..)) {
+                                2.1
+                            } else {
+                                pax::OUTSIDE_ROOM
+                            },
+                            seat_height: seat_height.unwrap_or(0.0),
+                            smooth: true,
+                            dt_ms,
+                            ..Default::default()
+                        },
+                        None,
                     )
                 }
                 _ => {
@@ -407,7 +573,12 @@ impl PeopleSim {
             let ev = p.anim.advance(&p.ty.omsi, &input);
             // a foot down inside a vehicle: the link's step sound (outside there are none)
             if let (true, Some((bus, pack))) = (ev.step, footstep) {
-                self.footfalls.push(Footfall { position: p.position, inside: true, own_bus: bus == BusId::Player, pack: Some(pack) });
+                self.footfalls.push(Footfall {
+                    position: p.position,
+                    inside: true,
+                    own_bus: bus == BusId::Player,
+                    pack: Some(pack),
+                });
             }
         }
     }

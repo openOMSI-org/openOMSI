@@ -18,7 +18,9 @@ pub mod headtrack;
 pub mod hpattern;
 pub mod keys;
 pub mod launcher_pads;
+pub mod mouse_math;
 pub mod pedal;
+pub mod script_input;
 pub mod stock_keys;
 pub mod tobii;
 
