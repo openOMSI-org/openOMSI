@@ -57,6 +57,7 @@ fn an_enabled_lightmap_keeps_its_texture_readable_at_night() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-4.0, 4.0, -4.0),
                 Vec3::new(4.0, 4.0, -4.0),

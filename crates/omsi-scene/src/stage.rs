@@ -981,6 +981,10 @@ impl World {
                 // height profiles (Moges' `embankment.sli`) is ground all the same.
                 let cuts_terrain =
                     !overhead_only(&st.def) || !st.def.height_profiles.is_empty() || drivable;
+                // Keep collision, ground fitting and acoustic geometry on the legacy mesh.
+                let draw_mesh = omsi_geometry::build_wire_wind_mesh(
+                    &st.def, &curve, s.mirror, origin, &s.file,
+                );
                 out.splines.push(StagedSpline {
                     shape,
                     terrain_profile: (aligned && cuts_terrain && !overlay).then(|| {
@@ -1002,7 +1006,7 @@ impl World {
                     casts_shadow,
                     sort_origin: curve.point_at(0.0),
                 });
-                meshes.push(Arc::new(mesh));
+                meshes.push(Arc::new(draw_mesh.unwrap_or(mesh)));
             }
         }
         (lanes, meshes)

@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn static_mesh_merge_preserves_geometry_uvs_and_material_order() {
     let a = MeshData {
+        wire_wind: Vec::new(),
         positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y, Vec3::Z],
         normals: vec![Vec3::Z; 4],
         uvs: vec![Vec2::ZERO, Vec2::X, Vec2::Y, Vec2::ONE],
@@ -666,6 +667,34 @@ fn strip(half: f32, v_scale: f32) -> Spline {
         ],
     });
     def
+}
+
+#[test]
+fn jp_elecwire_01_sways_between_fixed_ends() {
+    let def = strip(0.01, 1.0);
+    let curve = plain_curve(4.0, 0.0);
+    let legacy = build_spline_mesh(&def, &curve, false, DVec3::ZERO);
+    assert!(legacy.wire_wind.is_empty());
+    for file in ["JP_ElecWire.sli", "JP_ElecWire_02.sli", "my_JP_ElecWire_01.sli"] {
+        assert!(build_wire_wind_mesh(&def, &curve, false, DVec3::ZERO, file).is_none());
+    }
+    for file in [r"Numazu\JP_ElecWire_01.sli", "Numazu/jp_elecwire_01.SLI"] {
+        let wire = build_wire_wind_mesh(&def, &curve, false, DVec3::ZERO, file).unwrap();
+        assert_eq!(wire.wire_wind.len(), wire.positions.len());
+        assert!(wire.positions.len() > legacy.positions.len());
+        assert_eq!(wire.positions[..2], legacy.positions[..2]);
+        assert_eq!(wire.positions[wire.positions.len() - 2..], legacy.positions[2..]);
+        let weights: Vec<_> = wire.wire_wind.iter().map(|v| v[2]).collect();
+        assert_eq!(weights, [0, 0, 95, 95, 127, 127, 95, 95, 0, 0]);
+        assert!(wire.wire_wind.iter().all(|v| v[..2] == [127, 0]));
+
+        let batch = MeshData::merge_static(&[&legacy, &wire, &legacy]);
+        let end = legacy.positions.len() + wire.positions.len();
+        assert_eq!(batch.wire_wind.len(), batch.positions.len());
+        assert_eq!(batch.wire_wind[..legacy.positions.len()], [[0; 4]; 4]);
+        assert_eq!(batch.wire_wind[legacy.positions.len()..end], wire.wire_wind);
+        assert_eq!(batch.wire_wind[end..], [[0; 4]; 4]);
+    }
 }
 
 /// Omsi.exe counts a cross-section every half degree of turn, but never more than its

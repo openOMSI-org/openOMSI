@@ -25,8 +25,8 @@ pub(crate) struct SceneBase {
 /// The ground albedo picture's format (see `fs_ground`): sRGB, so that the layers blend as light.
 pub(crate) const GROUND_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
-const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 3] =
-    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
+const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 4] =
+    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Snorm8x4];
 
 impl SceneBase {
     /// `omit_enhanced`: the camera group without the enhanced path's textures (see

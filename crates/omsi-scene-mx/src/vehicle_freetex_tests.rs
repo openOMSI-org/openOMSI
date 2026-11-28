@@ -299,6 +299,7 @@ fn display_playback_keeps_pixels_and_msaa_with_bounded_gpu_storage() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &omsi_geometry::MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-4.0, 4.0, -4.0),
                 Vec3::new(4.0, 4.0, -4.0),

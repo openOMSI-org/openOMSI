@@ -77,6 +77,7 @@ impl Renderer {
         m.ranges.clear();
         m.bounds_center = Vec3::ZERO;
         m.bounds_radius = 0.0;
+        m.has_wire_wind = false;
         Self::mesh_slot_replaced(scene, id);
     }
 

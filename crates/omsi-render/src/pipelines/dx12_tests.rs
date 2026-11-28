@@ -20,9 +20,9 @@ fn enhanced_scene_compiles_with_optimized_fxc() {
             shaders::scene_shader_for(false, ArrayPath::Storage).into(),
         ),
     });
-    let attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
+    let attributes = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Snorm8x4];
     let buffers = [wgpu::VertexBufferLayout {
-        array_stride: 32,
+        array_stride: std::mem::size_of::<Vertex>() as u64,
         step_mode: wgpu::VertexStepMode::Vertex,
         attributes: &attributes,
     }];

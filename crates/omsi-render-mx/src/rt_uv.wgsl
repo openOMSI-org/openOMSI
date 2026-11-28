@@ -10,7 +10,7 @@ struct Job {
     at: u32,
 };
 
-// the mesh page's vertices (8 floats each: position, normal, uv) and indices
+// the mesh page's vertices (9 words each: position, normal, uv, packed wire wind) and indices
 @group(0) @binding(0) var<storage, read> uv_verts: array<f32>;
 @group(0) @binding(1) var<storage, read> uv_index: array<u32>;
 @group(0) @binding(2) var<storage, read_write> uv_out: array<vec4<u32>>;
@@ -39,7 +39,7 @@ fn cs_tri_uv(@builtin(global_invocation_id) gid: vec3<u32>) {
     var uv: array<vec2<f32>, 3>;
     var nn: array<u32, 3>;
     for (var k = 0u; k < 3u; k++) {
-        let v = (job.first_vertex + uv_index[job.first_index + t * 3u + k]) * 8u;
+        let v = (job.first_vertex + uv_index[job.first_index + t * 3u + k]) * 9u;
         uv[k] = vec2<f32>(uv_verts[v + 6u], uv_verts[v + 7u]);
         nn[k] = pack2x16snorm(oct_encode(vec3<f32>(uv_verts[v + 3u], uv_verts[v + 4u], uv_verts[v + 5u])));
     }

@@ -25,6 +25,7 @@ fn a_normal_map_tilts_the_surface_the_way_its_channels_say() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-20.0, 20.0, 0.0),
                 Vec3::new(20.0, 20.0, 0.0),

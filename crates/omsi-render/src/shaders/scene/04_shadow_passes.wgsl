@@ -14,7 +14,7 @@ fn shadow_caster_pos(e: u32, wp: vec4<f32>) -> vec4<f32> {
 fn vs_shadow(in: VsIn) -> ShadowOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
-    let wp = shadow_caster_pos(e, m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0));
+    let wp = shadow_caster_pos(e, scene_vertex_world(in, m));
     var out: ShadowOut;
     out.clip = camera.light_view_proj * wp;
     let pr = inst_params[e * 2u];
@@ -30,7 +30,7 @@ fn vs_shadow(in: VsIn) -> ShadowOut {
 fn vs_shadow_close(in: VsIn) -> ShadowOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
-    let wp = shadow_caster_pos(e, m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0));
+    let wp = shadow_caster_pos(e, scene_vertex_world(in, m));
     var out: ShadowOut;
     out.clip = camera.light_view_proj_close * wp;
     let pr = inst_params[e * 2u];
@@ -46,7 +46,7 @@ fn vs_shadow_close(in: VsIn) -> ShadowOut {
 fn vs_shadow_far(in: VsIn) -> ShadowOut {
     let e = draw_list[in.inst];
     let m = model_matrix(e);
-    let wp = shadow_caster_pos(e, m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0));
+    let wp = shadow_caster_pos(e, scene_vertex_world(in, m));
     var out: ShadowOut;
     out.clip = camera.light_view_proj_far * wp;
     let pr = inst_params[e * 2u];
@@ -69,7 +69,7 @@ fn vs_shadow_lamp(in: VsIn) -> ShadowOut {
     let e = raw & ((1u << LAMP_ENTRY_BITS) - 1u);
     let k = raw >> LAMP_ENTRY_BITS;
     let m = model_matrix(e);
-    let wp = m * vec4<f32>(in.pos, 1.0) + vec4<f32>(tree_sway(in.pos, m), 0.0);
+    let wp = scene_vertex_world(in, m);
     var out: ShadowOut;
     out.clip = camera.lamp_view_proj[k] * wp;
     let pr = inst_params[e * 2u];

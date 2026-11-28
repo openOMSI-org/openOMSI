@@ -90,6 +90,7 @@ fn lit_pixel(
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-half, 4.0, -half),
                 Vec3::new(half, 4.0, -half),

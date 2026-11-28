@@ -66,6 +66,7 @@ fn invisible_pane_scene(
         let wall = renderer.add_mesh(
             &mut scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: quad(8.0, 20.0).to_vec(),
                 normals: vec![-Vec3::Y; 4],
                 uvs: vec![glam::Vec2::ZERO; 4],
@@ -88,6 +89,7 @@ fn invisible_pane_scene(
                 let layer = renderer.add_mesh(
                     &mut scene,
                     &MeshData {
+                        wire_wind: Vec::new(),
                         positions: quad(y, half).to_vec(),
                         normals: vec![-Vec3::Y; 4],
                         uvs: vec![glam::Vec2::ZERO; 4],
@@ -109,6 +111,7 @@ fn invisible_pane_scene(
             let layers = renderer.add_mesh(
                 &mut scene,
                 &MeshData {
+                    wire_wind: Vec::new(),
                     positions: [quad(pane_at.0, pane_at.1), quad(second_at.0, second_at.1)]
                         .concat(),
                     normals: vec![-Vec3::Y; 8],

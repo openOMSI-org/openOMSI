@@ -158,7 +158,7 @@ impl Pipelines {
                     buffers: &[mx::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as u64,
                         step_mode: mx::VertexStepMode::Vertex,
-                        attributes: &mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
+                        attributes: &mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Snorm8x4],
                     }],
                 },
                 primitive: one_sided_primitive(cull),
@@ -203,7 +203,7 @@ impl Pipelines {
                             buffers: &[mx::VertexBufferLayout {
                                 array_stride: std::mem::size_of::<Vertex>() as u64,
                                 step_mode: mx::VertexStepMode::Vertex,
-                                attributes: &mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2],
+                                attributes: &mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Snorm8x4],
                             }],
                         },
                         primitive,
@@ -1104,6 +1104,7 @@ mod tests {
         let mesh = r.add_mesh(
             scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: positions.map(Vec3::from).to_vec(),
                 normals: vec![normal; 4],
                 uvs: vec![

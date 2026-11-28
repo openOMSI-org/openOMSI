@@ -323,6 +323,7 @@ fn tube(points: &[[f64; 3]], origin: DVec3, radius: f32) -> omsi_geometry::MeshD
     let uvs = vec![Vec2::ZERO; positions.len()];
     let count = indices.len() as u32;
     omsi_geometry::MeshData {
+        wire_wind: Vec::new(),
         positions,
         normals,
         uvs,

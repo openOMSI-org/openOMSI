@@ -798,6 +798,7 @@ impl Renderer {
                 lighting.air_temp.clamp(-40.0, 45.0),
             ],
             spot: classic_spot(&scene.lights, ro),
+            wire_wind: [lighting.wind.x, lighting.wind.y, f.dt, 0.0],
         };
         self.queue
             .write_buffer(&self.camera_buf, 0, bytemuck::bytes_of(&cu));

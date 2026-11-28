@@ -82,6 +82,7 @@ fn the_players_vehicle_keeps_a_lamp_behind_it_off_the_street_ahead() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-4.0, 4.0, -4.0),
                 Vec3::new(4.0, 4.0, -4.0),
@@ -159,6 +160,7 @@ fn quad(at: Vec3, axis: usize, half: Vec3) -> MeshData {
     let mut normal = Vec3::ZERO;
     normal[axis] = 1.0;
     MeshData {
+        wire_wind: Vec::new(),
         positions: vec![at - a - b, at + a - b, at + a + b, at - a + b],
         normals: vec![normal; 4],
         uvs: vec![glam::Vec2::ZERO; 4],

@@ -806,6 +806,7 @@ fn spline_batches_keep_materials_cells_shadows_and_long_segments_separate() {
     });
     let mesh = |x: f32, length: f32| {
         Arc::new(MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 glam::Vec3::new(x, 0.0, 0.0),
                 glam::Vec3::new(x + length, 0.0, 0.0),
@@ -932,6 +933,7 @@ fn spline_batches_keep_materials_cells_shadows_and_long_segments_separate() {
 fn ground_spline_batches_preserve_faces_and_uvs_with_local_bounds() {
     let mesh = |x: f32, z: f32, length: f32, one_sided: bool| {
         Arc::new(MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 glam::Vec3::new(x, 0.0, z),
                 glam::Vec3::new(x + length, 0.0, z),
@@ -1063,6 +1065,7 @@ fn a_flat_plain_object_is_paint_on_the_road() {
         let n = positions.len();
         (
             MeshData {
+                wire_wind: Vec::new(),
                 positions,
                 normals: vec![glam::Vec3::Z; n],
                 uvs: vec![glam::Vec2::ZERO; n],
@@ -1133,6 +1136,7 @@ fn painted_spline_stays_above_roads_and_below_raised_surfaces() {
         .expect("test renderer");
         let mut scene = renderer.new_scene();
         let plane = |half_width: f32| MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 glam::Vec3::new(-half_width, -1000.0, 0.0),
                 glam::Vec3::new(half_width, -1000.0, 0.0),
@@ -1366,6 +1370,7 @@ fn mixed_spline_keeps_asphalt_and_painted_ranges_apart() {
              [profile]\n1\n[profilepnt]\n1.23\n0.105\n0\n1\n[profilepnt]\n1.45\n0.105\n1\n1\n",
     ));
     let src = MeshData {
+        wire_wind: Vec::new(),
         positions: vec![
             glam::Vec3::ZERO,
             glam::Vec3::X,

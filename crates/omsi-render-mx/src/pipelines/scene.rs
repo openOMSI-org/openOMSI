@@ -20,8 +20,8 @@ pub(crate) struct SceneBase {
 /// The ground albedo picture's format (see `fs_ground`): sRGB, so that the layers blend as light.
 pub(crate) const GROUND_FORMAT: mx::TextureFormat = mx::TextureFormat::Rgba8UnormSrgb;
 
-const VERTEX_ATTRIBUTES: [mx::VertexAttribute; 3] =
-    mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
+const VERTEX_ATTRIBUTES: [mx::VertexAttribute; 4] =
+    mx::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2, 3 => Snorm8x4];
 
 impl SceneBase {
     /// `omit_enhanced`: the camera group without the enhanced path's textures (see

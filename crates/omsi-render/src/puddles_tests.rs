@@ -154,6 +154,7 @@ fn test_quad(
     let mesh = r.add_mesh(
         scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: positions.map(Vec3::from).to_vec(),
             normals: vec![normal; 4],
             uvs: vec![

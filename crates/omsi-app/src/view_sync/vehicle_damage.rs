@@ -462,6 +462,7 @@ mod vehicle_damage_tests {
     #[test]
     fn glass_cracks_are_colored_overlay_geometry_without_pane_holes() {
         let pane = omsi_geometry::MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 glam::Vec3::new(0.0, -1.0, 0.0),
                 glam::Vec3::new(1.0, 1.0, 0.0),

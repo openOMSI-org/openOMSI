@@ -209,6 +209,7 @@ mod tests {
         }
         let count = indices.len() as u32;
         MeshData {
+            wire_wind: Vec::new(),
             normals: vec![Vec3::Z; positions.len()],
             uvs: vec![Vec2::ZERO; positions.len()],
             positions,

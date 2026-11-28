@@ -108,6 +108,7 @@ fn enhanced_respects_material_ambient() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-8.0, 4.0, -8.0),
                 Vec3::new(8.0, 4.0, -8.0),
@@ -213,6 +214,7 @@ fn surface_bias_keeps_raised_floors_visible_at_a_distance() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-1000.0, -1000.0, 0.0),
                 Vec3::new(1000.0, -1000.0, 0.0),
@@ -315,6 +317,7 @@ fn enhanced_untextured_keeps_its_colour() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-8.0, 4.0, -8.0),
                 Vec3::new(8.0, 4.0, -8.0),
@@ -492,6 +495,7 @@ fn enhanced_masked_and_uncut_ground_share_lighting() {
         let mesh = renderer.add_mesh(
             &mut scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: vec![
                     Vec3::new(left, -5.0, z),
                     Vec3::new(right, -5.0, z),
@@ -794,6 +798,7 @@ fn msaa_depth_prepass_preserves_layered_surfaces() {
         let mesh = renderer.add_mesh(
             scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: vec![
                     Vec3::new(-4.0, -4.0, z),
                     Vec3::new(4.0, -4.0, z),
@@ -1035,6 +1040,7 @@ fn terrain_paint_fast_path_preserves_composition() {
         let mesh = renderer.add_mesh(
             scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: vec![
                     Vec3::new(left, bottom, z),
                     Vec3::new(right, bottom, z),
@@ -1478,6 +1484,7 @@ fn presurface_reveals_excavation_before_terrain_is_drawn() {
         renderer.add_mesh(
             scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: vec![
                     Vec3::new(-half, y, -half),
                     Vec3::new(half, y, -half),
@@ -1752,6 +1759,7 @@ fn stacked_panes_hide_each_other_in_model_order_where_they_write_depth() {
     let wall = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: quad(8.0, 20.0).to_vec(),
             normals: vec![-Vec3::Y; 4],
             uvs: vec![glam::Vec2::ZERO; 4],
@@ -1772,6 +1780,7 @@ fn stacked_panes_hide_each_other_in_model_order_where_they_write_depth() {
     let panes = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: [quad(2.0, 4.0), quad(4.0, 8.0)].concat(),
             normals: vec![-Vec3::Y; 8],
             uvs: vec![glam::Vec2::ZERO; 8],
@@ -1920,6 +1929,7 @@ fn vanilla_sphere_map_is_read_where_direct3d_generates_it() {
         let mesh = renderer.add_mesh(
             scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: vec![
                     c - along - across,
                     c + along - across,
@@ -1996,6 +2006,7 @@ fn flares_show_through_the_glass_of_the_vehicle_the_camera_is_in() {
     .expect("test renderer");
     let mut scene = renderer.new_scene();
     let quad = |y: f32, half: f32| MeshData {
+        wire_wind: Vec::new(),
         positions: vec![
             Vec3::new(-half, y, -half),
             Vec3::new(half, y, -half),

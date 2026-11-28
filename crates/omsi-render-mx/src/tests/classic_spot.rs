@@ -25,6 +25,7 @@ fn classic_spot_does_not_light_its_own_vehicle() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-0.6, 4.0, 0.5),
                 Vec3::new(0.6, 4.0, 0.5),
@@ -194,6 +195,7 @@ fn classic_spot_preserves_vertex_lit_pool() {
             let mesh = renderer.add_mesh(
                 &mut scene,
                 &MeshData {
+                    wire_wind: Vec::new(),
                     normals: vec![-Vec3::Y; positions.len()],
                     uvs: vec![glam::Vec2::ZERO; positions.len()],
                     ranges: vec![(0, indices.len() as u32, 0)],

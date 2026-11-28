@@ -149,6 +149,9 @@ pub(super) fn terrain_ground(
                 let p = src.positions[k as usize];
                 let local = xf.transform_point3(p).as_dvec3() / tile_size() + to_tile;
                 ground.positions.push(p);
+                if let Some(&wind) = src.wire_wind.get(k as usize) {
+                    ground.wire_wind.push(wind);
+                }
                 ground.normals.push(
                     src.normals
                         .get(k as usize)

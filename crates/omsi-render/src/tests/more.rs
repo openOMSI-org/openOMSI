@@ -1849,6 +1849,7 @@ fn transparent_led_layer_preserves_the_glow_mask() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-2.0, 4.0, -0.5),
                 Vec3::new(2.0, 4.1, -0.5),
@@ -1957,6 +1958,7 @@ fn display_behind_a_pane_keeps_its_pixel_contrast() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-2.0, 4.0, -1.0),
                 Vec3::new(2.0, 4.0, -1.0),
@@ -2262,6 +2264,7 @@ fn a_lamp_behind_a_wall_does_not_dazzle_and_one_in_view_still_does() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-6.0, -5.0, -1.0),
                 Vec3::new(6.0, -5.0, -1.0),
@@ -2446,6 +2449,7 @@ fn a_mesh_left_out_for_want_of_a_page_draws_nothing_and_the_rest_of_the_picture_
     .expect("test renderer");
     let mut scene = renderer.new_scene();
     let quad = |z: f32| MeshData {
+        wire_wind: Vec::new(),
         positions: vec![
             Vec3::new(-4.0, -4.0, z),
             Vec3::new(4.0, -4.0, z),
@@ -2568,6 +2572,7 @@ fn the_reflection_strength_scales_what_an_envmapped_surface_mirrors() {
     let mesh = renderer.add_mesh(
         &mut scene,
         &MeshData {
+            wire_wind: Vec::new(),
             positions: vec![
                 Vec3::new(-3.0, 5.0, -3.0),
                 Vec3::new(3.0, 5.0, -3.0),
@@ -2682,6 +2687,7 @@ fn envmapped_paint_with_normals_off_its_faces_mirrors_no_more_than_with_sound_on
         let mesh = renderer.add_mesh(
             &mut scene,
             &MeshData {
+                wire_wind: Vec::new(),
                 positions: vec![
                     Vec3::new(-3.0, 5.0, -3.0),
                     Vec3::new(3.0, 5.0, -3.0),

@@ -32,6 +32,7 @@ fn box_mesh(c: Vec3, h: Vec3) -> MeshData {
     }
     let count = indices.len() as u32;
     MeshData {
+        wire_wind: Vec::new(),
         uvs: vec![Vec2::ZERO; positions.len()],
         positions,
         normals,

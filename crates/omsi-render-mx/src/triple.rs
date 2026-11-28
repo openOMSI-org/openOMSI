@@ -366,6 +366,7 @@ mod tests {
                 let up = right.cross(ray);
                 let centre = ray * 10.0;
                 let quad = MeshData {
+                    wire_wind: Vec::new(),
                     positions: vec![
                         centre - right - up,
                         centre + right - up,

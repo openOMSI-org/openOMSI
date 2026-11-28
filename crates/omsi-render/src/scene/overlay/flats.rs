@@ -198,6 +198,7 @@ mod tests {
             vec![0, 1, 2, 0, 2, 3]
         };
         MeshData {
+            wire_wind: Vec::new(),
             positions,
             normals: vec![Vec3::Z; 4],
             uvs: vec![Vec2::ZERO; 4],
@@ -233,6 +234,7 @@ mod tests {
         }
         let (vertex_count, index_count) = (positions.len(), indices.len());
         let support = MeshData {
+            wire_wind: Vec::new(),
             positions,
             indices,
             normals: vec![Vec3::Z; vertex_count],
@@ -262,6 +264,7 @@ mod tests {
         }
         let vertex_count = positions.len();
         let mesh = MeshData {
+            wire_wind: Vec::new(),
             positions,
             ranges: vec![(0, indices.len() as u32, 0)],
             indices,
