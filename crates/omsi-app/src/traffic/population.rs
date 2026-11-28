@@ -365,8 +365,11 @@ impl Traffic {
                     .get(c.state.lane)
                     .map(|l| l.kind == LaneKind::Street)
                     .unwrap_or(false);
+            let loose = c.body.is_loose();
             let remove = if unloaded {
                 true
+            } else if loose {
+                false
             } else if at_edge {
                 // (its trip comes back with the tiles; kept until nobody saw it, a bus stood
                 // with its passengers at the far end of a straight road for good)
@@ -419,7 +422,11 @@ impl Traffic {
             } else {
                 false
             };
-            if remove && sleeps_instead && !at_end {
+            if remove && loose {
+                let c = self.sim.leave_scene(i);
+                self.drop_sounds(c.id);
+                self.events.push(TrafficEvent::Released { id: c.id });
+            } else if remove && sleeps_instead && !at_end {
                 let id = self.sim.put_to_sleep(i);
                 asleep += 1;
                 self.drop_sounds(id);

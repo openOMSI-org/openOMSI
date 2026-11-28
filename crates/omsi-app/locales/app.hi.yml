@@ -3307,6 +3307,12 @@
 "straight on": "सीधे"
 "to the left": "बाईं ओर"
 "to the right": "दाईं ओर"
+"Call the police": "पुलिस को बुलाएँ"
+"No accident to report": "रिपोर्ट करने के लिए कोई दुर्घटना नहीं"
+"Stop and switch on the hazard lights first": "पहले रुकें और हैज़र्ड लाइट चालू करें"
+"The police have taken up the accident": "पुलिस ने दुर्घटना दर्ज कर ली"
+"You left the scene of the accident without calling the police": "आप पुलिस को बुलाए बिना दुर्घटना स्थल से चले गए"
+"Accident! Stop, switch on the hazard lights and call the police": "दुर्घटना! रुकें, हैज़र्ड लाइट चालू करें और पुलिस को बुलाएँ"
 "Lights on in a downpour": "मूसलाधार बारिश में रोशनी"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "दिन में तेज़ बारिश के दौरान कुछ घरों की खिड़कियों में रोशनी जलती है, क्योंकि इतना अंधेरा हो जाता है कि बत्ती जलानी पड़े"
 
@@ -3359,3 +3365,6 @@
 "Only for due trips": "केवल निर्धारित यात्राओं के लिए"
 "Passengers wait for open doors": "यात्री खुले दरवाज़ों का इंतज़ार करते हैं"
 "IBIS stop follows the duty": "IBIS स्टॉप ड्यूटी के अनुसार"
+
+"Traction": "कर्षण"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "आप चलाने वाली बस के मोटर की कितनी तेज़ आवाज़ है (ट्राम और ट्रॉलीबस भी)"

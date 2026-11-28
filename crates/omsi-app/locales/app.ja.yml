@@ -3361,6 +3361,12 @@
 "straight on": "直進"
 "to the left": "左へ"
 "to the right": "右へ"
+"Call the police": "警察を呼ぶ"
+"No accident to report": "届け出る事故はありません"
+"Stop and switch on the hazard lights first": "まず停車してハザードランプを点けてください"
+"The police have taken up the accident": "警察が事故を処理しました"
+"You left the scene of the accident without calling the police": "警察を呼ばずに事故現場を離れました"
+"Accident! Stop, switch on the hazard lights and call the police": "事故です！停車してハザードランプを点け、警察を呼んでください"
 "Lights on in a downpour": "豪雨時の窓明かり"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "日中の激しい雨では、明かりをつけるほど暗くなるため、家々の窓の一部に明かりがともります"
 
@@ -3412,3 +3418,6 @@
 "Only for due trips": "予定の便のみ"
 "Passengers wait for open doors": "乗客はドアが開くのを待つ"
 "IBIS stop follows the duty": "IBISの停留所を勤務に合わせる"
+
+"Traction": "牽引"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "運転中のバスのモーターの音の大きさ（路面電車とトロリーバスも）"

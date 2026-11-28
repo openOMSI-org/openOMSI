@@ -175,7 +175,7 @@ fn a_draw_after_growth_binds_each_material_at_its_dynamic_row_offset() {
     assert_eq!(
         recorder.offsets(),
         rows.iter()
-            .map(|&row| MaterialTable::offset(row))
+            .map(|&row| scene.material_table.offset(row))
             .collect::<Vec<_>>(),
         "each draw after growth must select its row at the table's dynamic offset"
     );
@@ -209,9 +209,11 @@ fn the_puddle_vehicle_pass_binds_a_nonzero_row_after_growth() {
     assert_eq!(
         recorder.offsets(),
         vec![
-            MaterialTable::offset(row),
-            MaterialTable::offset(row),
-            MaterialTable::offset(scene.materials[first].binding.row.index),
+            scene.material_table.offset(row),
+            scene.material_table.offset(row),
+            scene
+                .material_table
+                .offset(scene.materials[first].binding.row.index),
         ],
         "the chassis and the first vehicle batch must draw at the grown row"
     );
@@ -298,4 +300,19 @@ fn a_kept_bundle_after_growth_is_reused_with_the_new_table() {
         "a bundle recorded after growth, with a nonzero row, is kept"
     );
     assert_eq!(r.device.bindless_buffers_in_use(), 0);
+}
+
+#[test]
+fn material_table_row_stride_respects_uniform_alignment() {
+    assert_eq!(MaterialTable::row_stride_for(64), MATERIAL_ROW_BYTES);
+    assert_eq!(MaterialTable::row_stride_for(256), MATERIAL_ROW_BYTES);
+    assert_eq!(MaterialTable::row_stride_for(512), 512);
+    assert_eq!(MaterialTable::row_stride_for(1024), 1024);
+
+    let r = renderer();
+    let table = MaterialTable::new(&r.device, 2);
+    let min_align = r.device.limits().min_uniform_buffer_offset_alignment as u64;
+    assert!(table.stride >= min_align.max(MATERIAL_ROW_BYTES));
+    assert_eq!(table.stride % min_align.max(1), 0);
+    assert_eq!(table.offset(3), 3 * table.stride);
 }

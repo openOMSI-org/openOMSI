@@ -3322,6 +3322,12 @@
 "straight on": "rovně"
 "to the left": "doleva"
 "to the right": "doprava"
+"Call the police": "Zavolat policii"
+"No accident to report": "Žádná nehoda k nahlášení"
+"Stop and switch on the hazard lights first": "Nejprve zastavte a zapněte výstražná světla"
+"The police have taken up the accident": "Policie nehodu sepsala"
+"You left the scene of the accident without calling the police": "Opustili jste místo nehody, aniž byste zavolali policii"
+"Accident! Stop, switch on the hazard lights and call the police": "Nehoda! Zastavte, zapněte výstražná světla a zavolejte policii"
 "Lights on in a downpour": "Světla při lijáku"
 "By day in a heavy rain some of the houses' windows are lit, as it gets dark enough to switch the light on": "Za silného deště se ve dne rozsvítí některá okna domů, protože je dost tma na rozsvícení"
 
@@ -3374,3 +3380,6 @@
 "Only for due trips": "Jen pro spoje dle jízdního řádu"
 "Passengers wait for open doors": "Cestující čekají na otevřené dveře"
 "IBIS stop follows the duty": "Zastávka IBIS podle služby"
+
+"Traction": "Trakce"
+"How loud the motor of the bus you drive is (trams and trolleybuses too)": "Jak hlasitý je motor autobusu, který řídíte (také u tramvají a trolejbusů)"

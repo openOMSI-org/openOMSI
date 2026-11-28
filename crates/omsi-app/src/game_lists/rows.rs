@@ -130,8 +130,8 @@ pub(super) fn steps_of(verb: &str) -> Option<Vec<f32>> {
         "chat_size" => (5..=30).map(|v| v as f32 * 0.1).collect(),
         "ui_opacity" => (4..=20).map(|v| v as f32 * 0.05).collect(),
         "voice_volume" | "voice_mic_gain" => (0..=40).map(|v| v as f32 * 0.05).collect(),
-        "vol_ai" | "vol_scenery" | "vol_ambient" | "radio_speaker" | "radio_hiss"
-        | "radio_dropouts" => (0..=20).map(|v| v as f32 * 0.05).collect(),
+        "vol_ai" | "vol_scenery" | "vol_traction" | "vol_ambient" | "radio_speaker"
+        | "radio_hiss" | "radio_dropouts" => (0..=20).map(|v| v as f32 * 0.05).collect(),
         "wheel_range" => (6..=60).map(|v| v as f32 * 30.0).collect(),
         "cab_wheel_rotation" => std::iter::once(0.0)
             .chain((6..=60).map(|v| v as f32 * 30.0))

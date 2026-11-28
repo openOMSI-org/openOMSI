@@ -149,6 +149,7 @@ pub(super) fn options_pages(app: &App) -> Vec<Page> {
         switch_row(app, "ambient", "Ambience", "The place, the weather, the birds of the season and the town's life, from real recordings"),
         slider_row(app, "vol_ambient", "Ambience volume", "How loud the ambience is", &pct),
         slider_row(app, "vol_scenery", "Surroundings", "How loud the sounds of the scenery are", &pct),
+        slider_row(app, "vol_traction", "Traction", "How loud the motor of the bus you drive is (trams and trolleybuses too)", &pct),
         switch_row(app, "doppler", "Doppler effect", "Approaching sounds higher, receding ones lower"),
         switch_row(app, "audio_surround", "5.1 sound (five speakers)", "On a 5.1 system each sound comes from the speakers where it is: a door from the side it opens on, the engine from behind the cab. Two speakers only: off"),
         pick("pax_voices", "Passenger voices", "What passengers say"),
