@@ -565,6 +565,31 @@ mod tests {
     }
 
     #[test]
+    fn a_fresh_plugin_with_a_local_alias_shows_and_saves_its_settings() {
+        let data = tmp("data-fresh-alias");
+        let plugins = tmp("plugins-fresh-alias");
+        std::fs::write(
+            plugins.join("warning.lua"),
+            r#"local plugin = omsi.plugin
+local s = plugin.settings({
+  { key = "limit", type = "number", label = "Warn above", default = 50, min = 20, max = 120, step = 5 },
+}, "Speed warning")"#,
+        )
+        .unwrap();
+        let dirs = vec![plugins.clone()];
+        let s = status_in(&data, &dirs);
+        assert_eq!(s["plugins"][0]["title"], "Speed warning");
+        assert_eq!(s["plugins"][0]["settings"][0]["key"], "limit");
+        save_settings_in(&dirs, "warning.lua", &json!({"limit": 80})).unwrap();
+        assert_eq!(
+            read_json(&plugins.join("warning.data/settings.json")),
+            Some(json!({"limit": 80.0}))
+        );
+        let _ = std::fs::remove_dir_all(&data);
+        let _ = std::fs::remove_dir_all(&plugins);
+    }
+
+    #[test]
     fn a_number_rounded_to_its_step_stays_in_range() {
         let setting = json!({"type": "number", "min": 0, "max": 10, "step": 4});
         assert_eq!(fit(&setting, &json!(10)), Some(json!(10.0)));

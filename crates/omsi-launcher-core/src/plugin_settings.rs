@@ -184,8 +184,8 @@ fn tokens(src: &str) -> Vec<Token> {
     out
 }
 
-/// The text of `omsi.plugin.settings(...)` or `plugin.settings(...)`, without any other code
-/// from the plugin.
+/// The declaration's arguments as `omsi.plugin.settings(...)`, without any other code from the
+/// plugin. A `plugin` alias is normalized because the sandbox only binds `omsi`.
 fn call_expression(src: &str) -> Option<String> {
     let t = tokens(src);
     for (i, w) in t.windows(4).enumerate() {
@@ -198,10 +198,10 @@ fn call_expression(src: &str) -> Option<String> {
         {
             continue;
         }
-        let mut start = w[0].start;
-        if i >= 2 && named(&t[i - 2], "omsi") && t[i - 1].kind == Kind::Dot {
-            start = t[i - 2].start;
-        }
+        // The source may spell this `omsi.plugin.settings(...)`, `plugin.settings(...)` or
+        // through a local alias (`local plugin = omsi.plugin`). Only `omsi` is bound in the
+        // sandbox, so evaluate the canonical callee with the declaration's own arguments.
+        let open = w[3].start;
         let mut depth = 0;
         for tok in &t[i + 3..] {
             if tok.kind == Kind::Open {
@@ -209,8 +209,8 @@ fn call_expression(src: &str) -> Option<String> {
             } else if tok.kind == Kind::Close {
                 depth -= 1;
                 if depth == 0 {
-                    let text = &src[start..tok.end];
-                    return (text.len() <= MAX_EXPRESSION).then(|| text.to_string());
+                    let text = format!("omsi.plugin.settings{}", &src[open..tok.end]);
+                    return (text.len() <= MAX_EXPRESSION).then_some(text);
                 }
             }
         }
