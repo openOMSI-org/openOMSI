@@ -2,6 +2,17 @@
 
 use super::*;
 
+/// A `.owt` loaded at once starts with that preset's own road wetness, just as it does at
+/// session start. One arriving through the weather cycle keeps the film already on the road:
+/// the frame's rain/sun model dries or soaks it from there (#3878).
+fn wetness_after_preset(current: f32, to: &omsi_content::weather::Weather, secs: f32) -> f32 {
+    if secs <= 1.0 {
+        crate::weather_setup::initial_wetness(to)
+    } else {
+        current
+    }
+}
+
 impl App {
     /// Change the weather in force by hand: `f` changes a copy of it, which takes the place of
     /// the weather at once (a change on its way and the weather cycle stop: this is the
@@ -165,6 +176,7 @@ impl App {
         let from = self.session.weather.clone().unwrap_or_default();
         self.args.weather = file.clone();
         let (to, model) = crate::weather_setup::load_weather_run(&self.args);
+        self.session.wetness = wetness_after_preset(self.session.wetness, &to, secs);
         self.session.sky.model = model;
         let name = to.name.clone();
         self.session.weather_blend = Some(crate::weather_cycle::Blend::new(from, to, secs));
@@ -483,5 +495,33 @@ impl App {
             omsi_ui::i18n::tr_fill_words("Weather: {name}", &[("{name}", &name)]),
             4.0,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_preset_loaded_at_once_takes_its_own_ground_wetness() {
+        let mut dry = omsi_content::weather::Weather::default();
+        dry.ground_wet = [0.0; 3];
+        assert_eq!(wetness_after_preset(0.9, &dry, 1.0), 0.0);
+    }
+
+    #[test]
+    fn a_weather_cycle_keeps_the_current_road_film() {
+        let mut dry = omsi_content::weather::Weather::default();
+        dry.ground_wet = [0.0; 3];
+        assert_eq!(wetness_after_preset(0.9, &dry, 240.0), 0.9);
+        assert_eq!(wetness_after_preset(0.9, &dry, 60.0), 0.9);
+    }
+
+    #[test]
+    fn a_rainy_preset_loaded_at_once_starts_with_its_rain() {
+        let mut rain = omsi_content::weather::Weather::default();
+        rain.precip = vec![2.0, 255.0];
+        rain.ground_wet = [0.0; 3];
+        assert_eq!(wetness_after_preset(0.0, &rain, 1.0), 1.0);
     }
 }
