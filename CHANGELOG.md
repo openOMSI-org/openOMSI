@@ -21,6 +21,10 @@ promoted to stable releases (see [docs/VERSIONING.md](docs/VERSIONING.md)); the 
   rear section samples the road under both axles, instead of only the axle farthest from the
   joint, so a bump under the third axle moves the body instead of leaving that spring rigid
   ([#2945](https://github.com/openOMSI-org/openOMSI/issues/2945)).
+- **Enhanced+ reflections on polished curved metal**
+  ([#3144](https://github.com/openOMSI-org/openOMSI/issues/3144)): a ray meeting another traced
+  surface now restores the probe reflection the picture had there, so a headlamp's concave
+  reflector no longer wears black or grey patches that move with the camera.
 - **Mouse steering works the pedals again after it is switched off and on**: a cursor report
   queued before the steering point was centred stays stale until the echo of that move arrives,
   while the first deliberate move after it is counted - and a refused cursor move no longer
