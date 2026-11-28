@@ -142,6 +142,7 @@ impl RigidBody {
             omega: Vec3::ZERO,
             wheels,
             wheel_axle,
+            tag_axle_steering: None,
             steer_deg: 0.0,
             kappa: 0.0,
             max_steer_deg,
@@ -226,9 +227,28 @@ impl RigidBody {
         let Some(w) = self.wheels.get(i) else {
             return 0.0;
         };
-        ((w.attach.y - self.rot_pnt_long) * self.kappa)
+        let curvature = self.kappa * self.tag_steering_multiplier(i);
+        ((w.attach.y - self.rot_pnt_long) * curvature)
             .atan()
             .clamp(-1.05, 1.05)
+    }
+
+    /// The selected axle uses independently scaled curvature; all other axles are unchanged.
+    fn tag_steering_multiplier(&self, wheel: usize) -> f32 {
+        let Some(profile) = self.tag_axle_steering else {
+            return 1.0;
+        };
+        if self.wheel_axle.get(wheel).copied() == Some(profile.axle) {
+            profile.multiplier_at(self.forward_speed() * 3.6)
+        } else {
+            1.0
+        }
+    }
+
+    /// Install a validated runtime override. This affects this vehicle only.
+    pub fn set_tag_axle_steering(&mut self, profile: Option<TagAxleSteering>) {
+        let axles = self.wheel_axle.iter().copied().max().map_or(0, |n| n + 1);
+        self.tag_axle_steering = profile.filter(|p| p.axle > 0 && p.axle < axles);
     }
 
     /// Forward speed (m/s) in the body frame.
@@ -827,7 +847,7 @@ impl RigidBody {
     }
 
     /// Point every axle at the centre of the turn the steering asks for.
-    fn steer_axles(&mut self, steer: f32) {
+    pub(super) fn steer_axles(&mut self, steer: f32) {
         // The steering sets the curvature the bus turns on (`steer` 1 = the full lock of
         // `[inv_min_turnradius]`) and every axle points at the centre of that turn on the
         // `[rot_pnt_long]` line, as OMSI does it. How fast the curvature may change is the
@@ -840,14 +860,27 @@ impl RigidBody {
             .iter()
             .map(|w| w.attach.y)
             .fold(f32::MIN, f32::max);
-        for w in self.wheels.iter_mut() {
+        let tag_override = self.tag_axle_steering.map(|profile| {
+            (
+                profile.axle,
+                profile.multiplier_at(self.forward_speed() * 3.6),
+            )
+        });
+        let wheel_axle = &self.wheel_axle;
+        for (i, w) in self.wheels.iter_mut().enumerate() {
             // each tyre square to the line from the centre of the turn to itself - the inner
             // one turned further than the outer (Ackermann). With both at the axle's angle the
             // tyres of an axle pulled against each other through the side constraint: the
             // scrub ate the drive, 60 % steering left a twentieth of the push and full lock
             // none ("the engine revs but the bus gets slower the more I steer")
-            let across = (1.0 - w.attach.x * kappa).max(0.2);
-            w.steer = ((w.attach.y - self.rot_pnt_long) * kappa / across)
+            // The explicitly selected axle can countersteer independently.
+            let multiplier = match tag_override {
+                Some((axle, multiplier)) if wheel_axle.get(i).copied() == Some(axle) => multiplier,
+                _ => 1.0,
+            };
+            let wheel_kappa = kappa * multiplier;
+            let across = (1.0 - w.attach.x * wheel_kappa).max(0.2);
+            w.steer = ((w.attach.y - self.rot_pnt_long) * wheel_kappa / across)
                 .atan()
                 .clamp(-1.05, 1.05);
             w.steered = w.steer != 0.0;

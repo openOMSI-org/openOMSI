@@ -1236,12 +1236,7 @@ impl State {
     }
 
     pub fn picked_trip(&self) -> Option<usize> {
-        let (line, tour, index, time) = self.choice.start_trip.as_ref()?;
-        // (at the real time the clock moves on, and the trip picked stays: the bus waits for it)
-        (self.choice.line.as_ref() == Some(line)
-            && self.choice.tour.as_ref() == Some(tour)
-            && (*time == self.choice.time || self.real_time()))
-        .then_some(*index)
+        picked_trip_of(&self.choice)
     }
 
     /// The start time follows the computer's clock (`use_real_time`).
@@ -1264,6 +1259,14 @@ impl State {
         self.choice.start_trip = Some((line, tour, index, self.choice.time));
         self.touched();
     }
+}
+
+/// The trip picked to start the duty with: kept while its line and tour stay chosen. The start
+/// time may move a few minutes earlier so the driver can board and set up (#4334); the fourth
+/// field of `start_trip` is only the time the trip was picked at, not a condition.
+fn picked_trip_of(c: &Choice) -> Option<usize> {
+    let (line, tour, index, _) = c.start_trip.as_ref()?;
+    (c.line.as_ref() == Some(line) && c.tour.as_ref() == Some(tour)).then_some(*index)
 }
 
 /// Whether the game started from here (its process `pid`) is in a list of games.

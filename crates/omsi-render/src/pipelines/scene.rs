@@ -344,6 +344,13 @@ pub(crate) struct Prepass {
 
 pub(crate) const PANE_MASK_TEXTURES: u32 = 17;
 
+/// The masked prefill layout uses the camera and material groups plus one pane depth texture.
+/// Traced GI adds binding 22 to the camera group (`gi_binding`), so the same layout then needs
+/// one more sampled texture in the fragment stage (#4329).
+pub(crate) fn pane_mask_textures(gi_binding: bool) -> u32 {
+    PANE_MASK_TEXTURES + u32::from(gi_binding)
+}
+
 pub(crate) struct PaneMaskPipelines {
     pub layout: wgpu::BindGroupLayout,
     pub panes: [wgpu::RenderPipeline; 4],
@@ -384,10 +391,11 @@ pub(crate) fn prepass(
         .map(|(kind, cull)| make_prepass_samples(kind, cull, msaa, true, rt_gbuf()))
     });
     let eye_pipelines = None;
+    let need = pane_mask_textures(crate::gi_binding());
     let pane_mask = (msaa > 1
         && enhanced
         && MULTISAMPLED_SHADING.load(std::sync::atomic::Ordering::Relaxed)
-        && device.limits().max_sampled_textures_per_shader_stage >= PANE_MASK_TEXTURES)
+        && device.limits().max_sampled_textures_per_shader_stage >= need)
         .then(|| pane_mask(device, scene, msaa));
     Prepass {
         pipelines,

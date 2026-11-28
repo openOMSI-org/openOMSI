@@ -202,6 +202,7 @@ impl Renderer {
         }
         i.visible = visible;
         if changed {
+            scene.update_active_film(instance);
             Self::mark_changed(scene, instance);
         }
     }
