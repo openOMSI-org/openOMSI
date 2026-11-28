@@ -507,8 +507,14 @@ mod tests {
         let mut dry = omsi_content::weather::Weather::default();
         dry.ground_wet = [0.0; 3];
         assert_eq!(wetness_after_preset(0.9, &dry, 1.0), 0.0);
-        // A weather arriving through the cycle still dries at the frame's own pace.
+    }
+
+    #[test]
+    fn a_weather_cycle_keeps_the_current_road_film() {
+        let mut dry = omsi_content::weather::Weather::default();
+        dry.ground_wet = [0.0; 3];
         assert_eq!(wetness_after_preset(0.9, &dry, 240.0), 0.9);
+        assert_eq!(wetness_after_preset(0.9, &dry, 60.0), 0.9);
     }
 
     #[test]
