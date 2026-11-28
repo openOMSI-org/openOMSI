@@ -1938,6 +1938,51 @@ fn nan_obstacle_leaves_the_bus_alone() {
     );
 }
 
+#[test]
+fn tag_axle_override_changes_only_selected_axle() {
+    let mut def = bus();
+    let mut tag = def.axles[1].clone();
+    tag.long = -4.22;
+    tag.driven = false;
+    def.axles.push(tag);
+    let mut rb = RigidBody::from_definition(&def, &[]);
+    rb.set_tag_axle_steering(Some(TagAxleSteering {
+        axle: 2,
+        multiplier: 1.5,
+        fade_start_kmh: 15.0,
+        fade_end_kmh: 40.0,
+    }));
+    rb.steer_axles(0.5);
+    let (front, middle, rear) = (rb.wheels[0].steer, rb.wheels[2].steer, rb.wheels[4].steer);
+    assert!(front > 0.0);
+    assert!(middle.abs() < 0.01);
+    assert!(rear < 0.0);
+    let expected_rear = ((def.axles[2].long - rb.rot_pnt_long) * rb.kappa * 1.5
+        / (1.0 - rb.wheels[4].attach.x * rb.kappa * 1.5))
+        .atan();
+    assert!((rear - expected_rear).abs() < 0.001);
+    rb.velocity = Vec3::Y * (45.0 / 3.6);
+    rb.steer_axles(0.5);
+    assert!(rb.wheels[4].steer.abs() < 1e-5);
+    assert!((rb.wheels[0].steer - front).abs() < 1e-5);
+    rb.set_tag_axle_steering(None);
+    rb.steer_axles(0.5);
+    assert!(rb.wheels[4].steer < -0.001);
+}
+
+#[test]
+fn tag_steering_profile_fades_at_speed() {
+    let p = TagAxleSteering {
+        axle: 2,
+        multiplier: 1.5,
+        fade_start_kmh: 15.0,
+        fade_end_kmh: 40.0,
+    };
+    assert_eq!(p.multiplier_at(0.0), 1.5);
+    assert_eq!(p.multiplier_at(15.0), 1.5);
+    assert!((p.multiplier_at(27.5) - 0.75).abs() < 1e-5);
+    assert_eq!(p.multiplier_at(-40.0), 0.0);
+}
 /// #4014: with the people aboard as its load, a bus pulls away more slowly on the same drive.
 #[test]
 fn a_loaded_body_pulls_away_more_slowly() {

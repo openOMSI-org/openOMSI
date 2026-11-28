@@ -5,6 +5,13 @@ use super::*;
 
 const AO_PREPASS_REACH: f32 = 250.0;
 
+/// Whether the frame needs the copy of the clean picture the rain films look through. A
+/// film washed on by the wipers is shown even when the weather is dry: without the copy it
+/// has only the sky's irradiance to draw and paints the pane as a pale rectangle (#4222).
+pub(crate) fn glass_picture_needed(rain: f32, wetness: f32, active_film: bool) -> bool {
+    rain > 0.001 || wetness > 0.02 || active_film
+}
+
 impl Renderer {
     /// The test hooks and the fallbacks after a GPU error. False: the device is gone and
     /// nothing is drawn.
@@ -177,7 +184,7 @@ impl Renderer {
         let enhanced_view = lighting.enhanced && self.hdr_pass.is_some() && !env.no_enhanced;
         let glass_on = with_overlays
             && scene.glass_slot.is_some()
-            && (lighting.rain > 0.001 || lighting.wetness > 0.02)
+            && glass_picture_needed(lighting.rain, lighting.wetness, scene.has_film())
             && !env.no_glass_picture;
         let scaled = (width, height) != (full_w, full_h)
             || vanilla_fxaa

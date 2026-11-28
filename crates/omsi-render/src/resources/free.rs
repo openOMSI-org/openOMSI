@@ -236,6 +236,11 @@ impl Renderer {
         inst.base = scene.instances[into].base;
         scene.instances[into] = inst;
         scene.bounds_users_stale = true;
+        if scene.active_film_instances.remove(&new) {
+            scene.active_film_instances.insert(into);
+        } else {
+            scene.active_film_instances.remove(&into);
+        }
         Self::mark_changed(scene, into);
         into
     }
