@@ -223,6 +223,23 @@ impl Renderer {
         })
     }
 
+    /// Before a rebuild drops what frame generation reads (the depth, the motion and the pictures
+    /// before the HUD, read at the window's present after wgpu is done with them): its work done,
+    /// on Windows on the vendor's queues too.
+    pub(crate) fn settle_frame_generation(&self) {
+        let Some(g) = &self.frame_generation else {
+            return;
+        };
+        #[cfg(windows)]
+        {
+            g.pause();
+            g.hold(self.temporal_generation_inputs());
+            let _ = crate::wait_gpu(&self.device, None);
+        }
+        #[cfg(not(windows))]
+        g.wait();
+    }
+
     /// The running upscaler, its GPU work done, to go on in a renderer rebuilt on this device.
     pub(crate) fn temporal_runtime(&mut self) -> Option<Runtime> {
         let mut d = self.temporal.take()?;

@@ -442,22 +442,10 @@ impl Renderer {
     }
 
     pub(crate) fn rebuild_in_place(&mut self, scene: &mut Scene, options: RenderOptions) {
-        // (frame generation reads the depth, the motion and the pictures before the HUD at the
-        // window's present, after wgpu is done with them - on Windows on the vendor's queues:
-        // its work is waited for before they go)
-        if let Some(g) = &self.frame_generation {
-            #[cfg(windows)]
-            {
-                g.pause();
-                g.hold(self.temporal_generation_inputs());
-                let _ = crate::wait_gpu(&self.device, None);
-            }
-            #[cfg(not(windows))]
-            g.wait();
-        }
         // (the same device: the upscaler goes on, and Streamline on Vulkan could not start again;
         // without one in the new options it is dropped here, with its context and textures -
         // unless it is to be tried again, see `fall_back_without_upscaler`)
+        self.settle_frame_generation();
         let upscaler = self
             .temporal_runtime()
             .or_else(|| self.temporal_kept.take())
