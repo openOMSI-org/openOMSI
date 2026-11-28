@@ -95,7 +95,6 @@ fn apply_optional_bus_visual(
             && !p.puppet
             && p.hidden.is_none()
             && matches!(p.place, Place::Ground)
-            && p.hail_moving
             && p.hail_target.is_some()
             && (p.position - camera).length_squared() < 300.0 * 300.0;
         let (signal_requested, full_requested) = omsi_sim::human::visual_hail_action(
@@ -103,14 +102,17 @@ fn apply_optional_bus_visual(
             p.hail_reaction_enabled,
             p.hail_full,
         );
+        // The arm stays up for a bus that has stopped at the stop; only the full-bus
+        // acknowledgement is for one still approaching (#4356).
+        let approaching = eligible && p.hail_moving;
         // Keep this gate across temporary target loss; only actual room
         // in the same bus permits a new full-bus acknowledgement.
         let allowed = p.hail_bus.is_some_and(|id| {
             st.full_gate
-                .allow(id, p.hail_full, eligible && full_requested, dt)
+                .allow(id, p.hail_full, approaching && full_requested, dt)
         });
         let signalling = eligible && signal_requested;
-        let reacting = eligible && full_requested && allowed;
+        let reacting = approaching && full_requested && allowed;
         st.hail_strength +=
             ((signalling as u8 as f32) - st.hail_strength).clamp(-dt * 2.8, dt * 2.8);
         st.full_look_strength +=

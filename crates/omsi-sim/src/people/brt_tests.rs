@@ -470,13 +470,35 @@ fn optional_hailing_is_cosmetic_and_ignores_out_of_service_buses() {
         ),
         before
     );
-    // Do not hail while walking towards an already chosen door: the torso
-    // turn could visibly drag the feet despite changing no boarding task.
+    // A passenger committed to a bus still hails it while standing at the gather
+    // point or a shut door, but not on the way there: turning a walking pose would
+    // visibly drag the feet (#4356).
     for task in [Task::ToBus, Task::WalkingToBus] {
         h.pax_mut(0).unwrap().task = task;
         h.pax_mut(0).unwrap().bus = Some(bus.id);
+        h.pax_mut(0).unwrap().st = 1;
         assert_eq!(h.visual_hail_bus(0, std::slice::from_ref(&bus)), None);
+        for st in [2, 3] {
+            h.pax_mut(0).unwrap().st = st;
+            assert_eq!(
+                h.visual_hail_bus(0, std::slice::from_ref(&bus)),
+                Some((bus.id, true, bus.pos))
+            );
+        }
+        h.pax_mut(0).unwrap().bus = None;
+        assert_eq!(h.visual_hail_bus(0, std::slice::from_ref(&bus)), None);
+        h.pax_mut(0).unwrap().bus = Some(bus.id);
     }
+    // A bus that has stopped in the stop still gets the arm, even though its speed
+    // no longer marks it as approaching for the full-bus reaction.
+    bus.speed = 0.0;
+    h.pax_mut(0).unwrap().task = Task::ToBus;
+    h.pax_mut(0).unwrap().st = 3;
+    assert_eq!(
+        h.visual_hail_bus(0, std::slice::from_ref(&bus)),
+        Some((bus.id, false, bus.pos))
+    );
+    bus.speed = 4.0;
     h.pax_mut(0).unwrap().task = Task::WaitingForBus;
     bus.takes = Takes::Nobody;
     assert_eq!(h.visual_hail_bus(0, std::slice::from_ref(&bus)), None);

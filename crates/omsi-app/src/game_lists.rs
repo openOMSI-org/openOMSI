@@ -1665,6 +1665,9 @@ pub(crate) fn run_move(app: &mut App, kind: &ListKind, action: &str, mv: Move) -
             Some(kind.clone())
         }
         ListKind::Vehicle(_) => {
+            if verb.starts_with("tag_") && option_do(app, verb, arg, mv) {
+                return Some(kind.clone());
+            }
             if matches!(mv, Move::Next) {
                 match verb {
                     "custom_number_edit" => {
