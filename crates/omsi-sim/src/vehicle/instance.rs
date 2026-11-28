@@ -23,6 +23,19 @@ impl VehicleInstance {
             .unwrap_or_default()
     }
 
+    /// The compression of every sprung wheel of every coupled part, for force feedback (#3745).
+    /// The part writes the negative of this into the leading bus's `Axle_Suspension_*` variables
+    /// each frame, while its `RigidBody` has no wheels of its own.
+    pub fn trailer_bump_travel(&self, out: &mut Vec<f32>) {
+        for part in &self.trailers {
+            for axle in &part.axle_ids.suspension {
+                for &id in axle.iter().flatten() {
+                    out.push(-self.state.vars[id as usize]);
+                }
+            }
+        }
+    }
+
     pub fn new(ty: Arc<VehicleType>, host: VehicleHost) -> VehicleInstance {
         let program = ty.program.clone();
         let mut state = State::new(&program);

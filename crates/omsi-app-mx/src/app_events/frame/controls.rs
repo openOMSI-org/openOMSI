@@ -118,7 +118,7 @@ impl App {
         let kmh = driving
             .map(|p| p.vehicle.physics.velocity_kmh())
             .unwrap_or(0.0);
-        let wheel_bump = ctl.wheel_bump(driving.and_then(|p| p.vehicle.rigid.as_ref()), kmh, dt);
+        let wheel_bump = ctl.wheel_bump(driving.map(|p| &p.vehicle), kmh, dt);
         ctl.feedback(crate::controllers::FfInput {
             on: driving.is_some(),
             kmh,
