@@ -208,6 +208,11 @@ pub(crate) struct Player {
     /// The triggers a controller button's door action (`door_<n>`, `doors_all`) fired, by
     /// action: let go, their `_off` is fired (see [`Player::door_key`]).
     pub(crate) door_buttons: hashbrown::HashMap<String, Vec<String>>,
+    /// Vehicle triggers with a matching `_off` pressed since the last frame: a tap that
+    /// releases before the next `{frame}` needs that frame run before the flag is cleared
+    /// (#3905). A real frame clears this set, so a held key gains no extra zero-timegap frame
+    /// (#3800).
+    pub(crate) pending_trigger_frames: hashbrown::HashSet<String>,
     /// Parts at the end of the train coupled by hand (they can be uncoupled; an articulated
     /// bus's own rear section cannot).
     pub(crate) hand_coupled: usize,
@@ -446,6 +451,7 @@ impl Player {
         );
         for name in &fire {
             self.vehicle.trigger(name);
+            self.mark_momentary_trigger(name);
         }
         fire
     }
@@ -464,13 +470,37 @@ impl Player {
         );
         for name in &fired {
             self.vehicle.trigger(name);
+            self.mark_momentary_trigger(name);
         }
         fired
+    }
+
+    /// A trigger with a matching `_off` is a momentary button whose `{frame}` script turns the
+    /// press into an action. Remember it until the next real frame, so a release in the same
+    /// frame can let that script see the flag first (#3905).
+    fn mark_momentary_trigger(&mut self, name: &str) {
+        if self.vehicle.has_trigger(&format!("{name}_off")) {
+            self.pending_trigger_frames
+                .insert(name.to_ascii_lowercase());
+        }
+    }
+
+    /// Run the `{frame}` the flag of a keyed momentary button needs before its `_off` fires.
+    /// Only a tap with no real frame since the press is pending; a held key has already been
+    /// updated by `tick` and must not get a second, zero-timegap frame (#3800).
+    fn release_momentary_triggers(&mut self, names: &[String]) {
+        if names.iter().any(|name| {
+            self.pending_trigger_frames
+                .remove(&name.to_ascii_lowercase())
+        }) {
+            self.vehicle.update_scripts_only(0.0);
+        }
     }
 
     /// A door key let go: the `_off` of the triggers it fired (the push buttons of the
     /// automatic doors are held between the two).
     pub(crate) fn door_key_off(&mut self, fired: &[String]) {
+        self.release_momentary_triggers(fired);
         for name in fired {
             let off = format!("{name}_off");
             if self.vehicle.ty.program.trigger(&off).is_some() {
@@ -579,7 +609,18 @@ impl Player {
         } else {
             0
         };
-        if self.vehicle.trigger(&format!("{name}{suffix}")) {
+        if !pressed
+            && self
+                .pending_trigger_frames
+                .remove(&name.to_ascii_lowercase())
+        {
+            self.vehicle.update_scripts_only(0.0);
+        }
+        let fired = self.vehicle.trigger(&format!("{name}{suffix}"));
+        if pressed && fired {
+            self.mark_momentary_trigger(name);
+        }
+        if fired {
             if headlights {
                 self.headlights_with_side_lights(lamps_before);
             }
@@ -1267,6 +1308,8 @@ impl Player {
             self.vehicle.host.trigger_mark(),
         );
         self.vehicle.update(dt);
+        // The frame has now seen any flag a key pressed this frame set.
+        self.pending_trigger_frames.clear();
         if let Some(keep) = kept_indicator(
             self.blinker_cancel,
             lever,
@@ -1744,3 +1787,51 @@ mod held_repeat_tests {
 
 #[cfg(test)]
 mod steering_view_tests;
+
+#[cfg(test)]
+mod momentary_trigger_tests {
+    use super::Player;
+
+    fn door_button_player() -> Player {
+        let mut vehicle = crate::schedule::tests::script_test_vehicle(
+            "{trigger:bus_doorfront0}\n1 (S.L.button)\n{end}\n\
+             {trigger:bus_doorfront0_off}\n0 (S.L.button)\n{end}\n\
+             {frame}\n(L.L.button) (S.L.door_target)\n(L.S.Timegap) (S.L.gap_seen)\n{end}\n",
+            "button\ndoor_target\ngap_seen\n",
+            "",
+        );
+        vehicle.host.clock.timegap = 1.0 / 60.0;
+        vehicle.set_var("gap_seen", 1.0 / 60.0);
+        crate::spawn::test_player(vehicle, vec![])
+    }
+
+    #[test]
+    fn a_door_trigger_tapped_within_one_frame_reaches_the_frame_script() {
+        let mut p = door_button_player();
+        p.action("bus_doorfront0", true);
+        assert_eq!(p.vehicle.var("button"), Some(1.0));
+        p.action("bus_doorfront0", false);
+        assert_eq!(
+            p.vehicle.var("door_target"),
+            Some(1.0),
+            "the flag must be seen before `_off` clears it (#3905)"
+        );
+        assert_eq!(p.vehicle.var("gap_seen"), Some(0.0));
+        assert_eq!(p.vehicle.var("button"), Some(0.0));
+    }
+
+    #[test]
+    fn a_door_trigger_held_over_a_frame_gets_no_extra_zero_timegap_frame() {
+        let mut p = door_button_player();
+        p.action("bus_doorfront0", true);
+        p.tick(1.0 / 60.0, None, true, false, 0.0);
+        assert_eq!(p.vehicle.var("door_target"), Some(1.0));
+        assert_eq!(p.vehicle.var("gap_seen"), Some(1.0 / 60.0));
+        p.action("bus_doorfront0", false);
+        assert_eq!(
+            p.vehicle.var("gap_seen"),
+            Some(1.0 / 60.0),
+            "a held key already had its frame (#3800)"
+        );
+    }
+}
