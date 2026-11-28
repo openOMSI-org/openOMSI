@@ -9052,3 +9052,10 @@ _version: 2
   en: "Traction"
 "How loud the motor of the bus you drive is (trams and trolleybuses too)":
   en: "How loud the motor of the bus you drive is (trams and trolleybuses too)"
+
+"Time format":
+  en: "Time format"
+"24-hour":
+  en: "24-hour"
+"12-hour (AM/PM)":
+  en: "12-hour (AM/PM)"

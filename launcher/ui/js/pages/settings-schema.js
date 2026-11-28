@@ -453,6 +453,8 @@ const general = {
         { type: 'custom', id: 'theme' },
         { type: 'custom', id: 'launcher_layout' },
         { type: 'custom', id: 'launcher_size', help: 'Grows with the window; this sets how big it is' },
+        { type: 'select', key: 'units', label: 'Units', options: [['metric', 'Metric (km/h, km, °C)'], ['uk', 'British (mph, miles, yards, °C)'], ['us', 'American (mph, miles, feet, °F)']] },
+        { type: 'select', key: 'time_format', label: 'Time format', options: [['24h', '24-hour'], ['12h', '12-hour (AM/PM)']] },
         { type: 'select', key: 'language', label: 'Language', raw: true, options: (s, boot) => (boot?.languages || []).map((l) => [l.code, l.name]) },
         // (texts nobody has translated: translated on this machine)
         { type: 'toggle', key: 'machine_translation', label: 'Translate the remaining texts automatically (offline, downloads 620 MB once)' },

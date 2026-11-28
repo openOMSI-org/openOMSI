@@ -1076,13 +1076,7 @@ fn timetable_rows(
 ) -> Option<crate::ui::TimetableView> {
     let d = duty?;
     let trip = d.trips.get(d.trip_index)?;
-    let hm = |t: f64| {
-        format!(
-            "{:02}:{:02}",
-            ((t / 3600.0) as i64).rem_euclid(24),
-            ((t % 3600.0) / 60.0) as i64
-        )
-    };
+    let hm = |t: f64| crate::units::ClockFormat::now().time(t, false);
     let line = if trip.line.trim().is_empty() {
         d.line.trim()
     } else {
@@ -1262,12 +1256,7 @@ fn info_line(
 ) -> crate::ui::InfoBar {
     let t = clock.time;
     let mut data = InfoLineData {
-        time: format!(
-            "{:02}:{:02}:{:02}",
-            ((t / 3600.0) as i64).rem_euclid(24),
-            ((t % 3600.0) / 60.0) as i64,
-            (t % 60.0) as i64
-        ),
+        time: crate::units::ClockFormat::now().time(t, true),
         ..Default::default()
     };
     if let Some(p) = player {

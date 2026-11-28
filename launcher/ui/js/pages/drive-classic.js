@@ -1,6 +1,6 @@
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import { useStore, set, remembered, remember, toast } from '../store.js';
-import { t, hhmm, longDate, language } from '../i18n.js';
+import { t, clockTime, longDate, language } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Notice, useConfirm } from '../ui.js';
 import { choose, curMap, curBus, curLine, curTour, pickedTrip, start, loadSituations, weatherName, mapName, noServerBus, askJoined, transportRefusal, serverFleetSelection, canPreviewBus } from '../data.js';
@@ -110,7 +110,7 @@ export function StartBar({ step, go }) {
   };
   const entry = m && c.entry >= 0 ? m.entry_points[c.entry] : null;
   const where = joined && c.lan_map ? mapName(c.lan_map.replace(/\\/g, '/')) : m ? m.friendly || m.name : '';
-  const when = joined ? `${c.lan_server?.time || ''} ${t("(the server's clock)")}` : `${hhmm(c.time)}, ${longDate(c.date)}`;
+  const when = joined ? `${c.lan_server?.time || ''} ${t("(the server's clock)")}` : `${clockTime(c.time, s.settings?.time_format)}, ${longDate(c.date)}`;
   // (and the trip the duty begins with: when it runs and how long it is, as the game's own launcher said)
   const service = c.free ? t('Free drive') : [line && `${t('Line')} ${line.name}`, tour && `${t('Tour')} ${tour.number}`, trip && `${hms(trip.departure)} - ${hms(trip.arrival)}`, trip?.km > 0 && `${trip.km.toFixed(1)} km`].filter(Boolean).join(' | ');
   const place = entry && t('starting at {place}', { place: entryName(entry) });

@@ -176,6 +176,13 @@ impl Transit {
 }
 
 impl OnFoot {
+    pub(crate) fn can_touch_sit(&self) -> bool {
+        self.cam == FootCam::First
+            && self.seat.is_none()
+            && self.inside.is_some()
+            && self.transit.is_none()
+    }
+
     /// After the people's tick, aboard a bus: the walker and the eyes where the bus is
     /// this frame. The walk above placed them on the bus as the people had it a frame
     /// before, and the camera eased after that: at speed the saloon trembled round the
@@ -950,7 +957,7 @@ impl App {
 
     /// G on foot: into a seat by the nearest door (the own bus's front door: the wheel),
     /// or up from the seat and out.
-    fn use_seat(&mut self) {
+    pub(crate) fn use_seat(&mut self) {
         let Some(f) = self.session.on_foot.as_ref() else {
             return;
         };

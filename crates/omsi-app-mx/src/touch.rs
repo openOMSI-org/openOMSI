@@ -63,6 +63,7 @@ enum Btn {
     CloseMenu,
     /// On foot: down on the knees and up again (C).
     Kneel,
+    Sit,
     /// The voice chat's talk keys, held: nearby, and the radio.
     VoiceNearby,
     VoiceRadio,
@@ -581,6 +582,17 @@ impl App {
                 .filter(|f| f.cam == crate::on_foot::FootCam::First && f.seat.is_none())
             {
                 let kr = 26.0 * u;
+                if f.can_touch_sit() {
+                    push(
+                        &mut b,
+                        Btn::Sit,
+                        rb(w - pad - kr, h - pad - kr * 3.0 - 12.0 * u, kr),
+                        "airline_seat_recline_normal",
+                        "Sit down",
+                        false,
+                        true,
+                    );
+                }
                 push(
                     &mut b,
                     Btn::Kneel,
@@ -1577,6 +1589,17 @@ impl App {
             }
             Btn::Pause => self.toggle_pause(),
             Btn::Kneel => self.kneel(),
+            Btn::Sit => {
+                if down
+                    && self
+                        .session
+                        .on_foot
+                        .as_ref()
+                        .is_some_and(|f| f.can_touch_sit())
+                {
+                    self.use_seat();
+                }
+            }
             Btn::FreeCam => {
                 self.input.touch.panel = false;
                 if self.view == "free" {

@@ -1161,3 +1161,26 @@ fn vol_traction_round_trips_through_launcher_and_settings() {
     assert!((back["vol_traction"].as_f64().unwrap() - 0.35).abs() < 1e-6);
     assert!((Settings::from_text("vol_traction=2.5\n").vol_traction - 1.0).abs() < 1e-6);
 }
+
+#[test]
+fn display_units_and_clock_format_survive_launcher_and_game_saves() {
+    for units in ["metric", "uk", "us"] {
+        for time_format in ["12h", "24h"] {
+            let mut settings = omsi_launcher_lib::settings_from_text(None);
+            settings["units"] = serde_json::json!(units);
+            settings["time_format"] = serde_json::json!(time_format);
+            let saved = omsi_launcher_lib::settings_to_text(&settings, None);
+            let game = Settings::from_text(&saved);
+            assert_eq!(game.units, units);
+            assert_eq!(game.time_format, time_format);
+            let loaded = omsi_launcher_lib::settings_from_text(Some(&game.to_text()));
+            assert_eq!(loaded["units"], units);
+            assert_eq!(loaded["time_format"], time_format);
+        }
+    }
+    assert_eq!(
+        Settings::from_text("time_format=invalid\n").time_format,
+        "24h"
+    );
+    assert_eq!(Settings::from_text("").time_format, "24h");
+}

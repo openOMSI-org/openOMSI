@@ -1079,14 +1079,20 @@ impl Ui {
         let ink_2 = hud::text(self.hud.dim);
         let muted = hud::text(self.hud.muted);
         let hpx = (11.5 * s).round() as u32 | BOLD;
-        let time_w = 44.0 * s;
+        let time_w = self
+            .text
+            .width_bold(
+                &crate::units::ClockFormat::now().time(46740.0, false),
+                (13.0 * s).round(),
+            )
+            .max(44.0 * s);
         let exp_w = self
             .text
             .width_bold("Expected", (11.5 * s).round())
             .max(time_w)
             + 16.0 * s;
         let wide = (470.0 * s).min(f.width * 0.42).round();
-        let roomy = wide - 98.0 * s - time_w - exp_w >= 150.0 * s;
+        let roomy = wide - 54.0 * s - 2.0 * time_w - exp_w >= 150.0 * s;
         let w = if roomy {
             wide
         } else {
@@ -1223,7 +1229,7 @@ impl Ui {
         ));
         // the table's head
         let col_arr = x + pad;
-        let col_stop = x + pad + 58.0 * s;
+        let col_stop = x + pad + time_w + 14.0 * s;
         let hy = top + head_h + th_h * 0.5;
         let col_exp = x + w - pad;
         let col_dep = if roomy { col_exp - exp_w } else { col_exp };

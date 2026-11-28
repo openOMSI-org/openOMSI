@@ -468,7 +468,11 @@ impl App {
                 self.service_msg = Some((
                     omsi_ui::i18n::tr_fill(
                         "Clock: {time}",
-                        &[("{time}", &format!("{:02}:{:02}:{:02}", h, m, sec))],
+                        &[(
+                            "{time}",
+                            &crate::units::ClockFormat::now()
+                                .time((h * 3600 + m * 60 + sec) as f64, true),
+                        )],
                     ),
                     3.0,
                 ));

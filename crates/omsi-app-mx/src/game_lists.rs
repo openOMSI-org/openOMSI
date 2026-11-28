@@ -1241,7 +1241,7 @@ pub(crate) fn menu_extras(
             .to_string()
     };
     let head = |t: &str| Some((title(t), String::new()));
-    let hm = |m: f32| format!("{:02}:{:02}", (m / 60.0) as i32 % 24, (m % 60.0) as i32);
+    let hm = |m: f32| crate::units::ClockFormat::now().time(m as f64 * 60.0, false);
     // a trip's line and terminus
     let trip_of = |name: &str| -> (String, String) {
         schedule

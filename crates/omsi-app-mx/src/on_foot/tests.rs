@@ -249,3 +249,19 @@ fn foot_key_keeps_screenshot_chord_and_rebound_pause() {
     assert!(app.foot_key(KeyCode::KeyP, true, false, false, false));
     assert!(!app.foot_key(KeyCode::F6, true, false, false, false));
 }
+
+#[test]
+fn touch_sit_is_only_offered_standing_inside_a_bus() {
+    let mut f = walker();
+    assert!(!f.can_touch_sit());
+    f.inside = Some((BusId::Player, glam::Vec3::ZERO));
+    assert!(f.can_touch_sit());
+    f.seat = Some((BusId::Player, 0));
+    assert!(!f.can_touch_sit());
+    f.seat = None;
+    f.cam = FootCam::Free;
+    assert!(!f.can_touch_sit());
+    f.cam = FootCam::First;
+    f.transit = Some(Transit::walk(DVec3::ZERO, DVec3::X, None));
+    assert!(!f.can_touch_sit());
+}

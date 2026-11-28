@@ -154,3 +154,83 @@ mod tests {
         assert_eq!(Units::from_setting("whatever"), Metric);
     }
 }
+
+/// How the player's interface shows a time of day. Save files and scripts keep seconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClockFormat {
+    TwentyFour,
+    Twelve,
+}
+
+static CLOCK: AtomicU8 = AtomicU8::new(0);
+
+impl ClockFormat {
+    pub fn from_setting(v: &str) -> Self {
+        if v.trim().eq_ignore_ascii_case("12h") {
+            Self::Twelve
+        } else {
+            Self::TwentyFour
+        }
+    }
+
+    pub fn setting(self) -> &'static str {
+        match self {
+            Self::Twelve => "12h",
+            Self::TwentyFour => "24h",
+        }
+    }
+
+    pub fn set(self) {
+        CLOCK.store(self as u8, Ordering::Relaxed);
+    }
+
+    pub fn now() -> Self {
+        if CLOCK.load(Ordering::Relaxed) == 1 {
+            Self::Twelve
+        } else {
+            Self::TwentyFour
+        }
+    }
+
+    pub fn time(self, seconds: f64, with_seconds: bool) -> String {
+        let t = (seconds.floor() as i64).rem_euclid(86400);
+        let h = t / 3600;
+        let m = t / 60 % 60;
+        let shown_h = match self {
+            Self::Twelve => (h + 11) % 12 + 1,
+            Self::TwentyFour => h,
+        };
+        let mut text = format!("{shown_h:02}:{m:02}");
+        if with_seconds {
+            text.push_str(&format!(":{:02}", t % 60));
+        }
+        if self == Self::Twelve {
+            text.push_str(if h < 12 { " AM" } else { " PM" });
+        }
+        text
+    }
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::ClockFormat::*;
+    #[test]
+    fn midnight_noon_and_day_wrap_keep_the_correct_period() {
+        for (secs, twelve, full) in [
+            (0.0, "12:00 AM", "00:00:00"),
+            (43200.0, "12:00 PM", "12:00:00"),
+            (46800.0, "01:00 PM", "13:00:00"),
+            (86399.9, "11:59 PM", "23:59:59"),
+            (86400.0, "12:00 AM", "00:00:00"),
+            (-1.0, "11:59 PM", "23:59:59"),
+        ] {
+            assert_eq!(Twelve.time(secs, false), twelve);
+            assert_eq!(TwentyFour.time(secs, true), full);
+        }
+        assert_eq!(Twelve.time(43201.0, true), "12:00:01 PM");
+        for f in [Twelve, TwentyFour] {
+            assert_eq!(super::ClockFormat::from_setting(f.setting()), f);
+        }
+        assert_eq!(super::ClockFormat::from_setting("invalid"), TwentyFour);
+    }
+}

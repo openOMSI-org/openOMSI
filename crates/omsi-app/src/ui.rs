@@ -11,18 +11,19 @@ use omsi_render::{Renderer, Scene, TextureId};
 
 mod chat;
 mod hud;
-pub(crate) use hud::{window_size, SIZE_KEYS};
-mod menu;
+pub(crate) use hud::{SIZE_KEYS, window_size};
 mod information_bar;
+mod loading;
+mod menu;
 mod perf_panel;
 mod text;
-mod loading;
+mod timetable;
 
 pub use text::TextCache;
 mod mz;
-pub use mz::{MzState, MzView};
 pub use information_bar::{InfoBar, InfoItem, InfoItemStyle};
 use menu::*;
+pub use mz::{MzState, MzView};
 use text::*;
 
 // ---------------------------------------------------------------------------------------
@@ -105,22 +106,41 @@ impl Notice {
             "success" | "ok" => NoticeKind::Success,
             _ => NoticeKind::Info,
         };
-        let text = it.next().map(str::trim).filter(|t| !t.is_empty())?.to_string();
+        let text = it
+            .next()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())?
+            .to_string();
         let total = secs.clamp(2.0, 30.0);
-        Some((id, Notice { kind, text, left: total, total }))
+        Some((
+            id,
+            Notice {
+                kind,
+                text,
+                left: total,
+                total,
+            },
+        ))
     }
 
     /// A notice of the game's own: `kind`'s time.
     pub fn new(kind: NoticeKind, text: impl Into<String>) -> Notice {
         let total = kind.secs();
-        Notice { kind, text: text.into(), left: total, total }
+        Notice {
+            kind,
+            text: text.into(),
+            left: total,
+            total,
+        }
     }
 
     /// How far it is there (0 to 1, eased): coming in over `NOTICE_IN`, going over its last
     /// `NOTICE_OUT` - its opacity, and how much room it takes in the stack, so that the
     /// cards round it slide instead of jumping.
     pub fn alpha(&self) -> f32 {
-        let k = (self.left / NOTICE_OUT).min((self.total - self.left) / NOTICE_IN).clamp(0.0, 1.0);
+        let k = (self.left / NOTICE_OUT)
+            .min((self.total - self.left) / NOTICE_IN)
+            .clamp(0.0, 1.0);
         k * k * (3.0 - 2.0 * k)
     }
 }
@@ -128,7 +148,10 @@ impl Notice {
 /// A new notice in the list. The same text still on the screen stays its time again instead
 /// of standing twice; with more than `NOTICES_SHOWN` the oldest fades out to make room.
 pub fn push_notice(list: &mut Vec<Notice>, n: Notice) {
-    if let Some(o) = list.iter_mut().find(|o| o.kind == n.kind && o.text == n.text && o.left > NOTICE_OUT) {
+    if let Some(o) = list
+        .iter_mut()
+        .find(|o| o.kind == n.kind && o.text == n.text && o.left > NOTICE_OUT)
+    {
         // (its age kept: it does not fade in once more)
         o.total = o.total - o.left + n.total;
         o.left = n.total;
@@ -166,10 +189,18 @@ impl NoteWatch {
 
     /// This frame's lines: (key, text, kind). The key names the condition (its text may
     /// change with a value in it, a pressure or a sum, without being a new one).
-    pub fn frame(&mut self, dt: f32, lines: &[(String, String, NoticeKind)], list: &mut Vec<Notice>) {
+    pub fn frame(
+        &mut self,
+        dt: f32,
+        lines: &[(String, String, NoticeKind)],
+        list: &mut Vec<Notice>,
+    ) {
         self.now += dt.max(0.0);
         for (key, text, kind) in lines {
-            let fresh = self.seen.get(key).is_none_or(|&t| self.now - t > Self::REARM);
+            let fresh = self
+                .seen
+                .get(key)
+                .is_none_or(|&t| self.now - t > Self::REARM);
             self.seen.insert(key.clone(), self.now);
             if fresh && !text.trim().is_empty() {
                 push_notice(list, Notice::new(*kind, text.clone()));
@@ -183,7 +214,11 @@ impl NoteWatch {
 /// The part of a line of the game that names its condition: up to its first bracket or
 /// colon ("Parking brake is on  (. releases it)", "Air pressure is low (4.1 bar ...)").
 pub fn note_key(text: &str) -> String {
-    text.split(['(', ':']).next().unwrap_or(text).trim().to_string()
+    text.split(['(', ':'])
+        .next()
+        .unwrap_or(text)
+        .trim()
+        .to_string()
 }
 
 /// What the chat widget needs from the session each frame.
@@ -233,7 +268,11 @@ impl ChatWidget {
 /// drawn as it always was. With `window` off (`Settings::ui_scale_window`) it does not grow
 /// with the window at all.
 pub fn size_factor(height_px: f32, dpi: f32, size: f32, window: bool) -> f32 {
-    let grown = if window { (height_px / dpi.max(0.5) / 1080.0).clamp(1.0, 2.0) } else { 1.0 };
+    let grown = if window {
+        (height_px / dpi.max(0.5) / 1080.0).clamp(1.0, 2.0)
+    } else {
+        1.0
+    };
     grown * size
 }
 
@@ -275,7 +314,6 @@ pub struct Preview {
     /// a tour to take on later), when it can be set.
     pub time: Option<String>,
 }
-
 
 /// The timetable window of the trip driven: its line and terminus, the tour and trip, how
 /// late, the stops, and the trip after it.
@@ -518,16 +556,59 @@ impl Ui {
         }
         self.chat.rect[0] += x;
         self.chat.rect[2] += x;
-        for rect in self.mz.rect.iter_mut().chain(self.mz.play.iter_mut()).chain(self.mz.request.iter_mut()) {
+        for rect in self
+            .mz
+            .rect
+            .iter_mut()
+            .chain(self.mz.play.iter_mut())
+            .chain(self.mz.request.iter_mut())
+        {
             rect[0] += x;
             rect[2] += x;
         }
     }
     pub fn new() -> Option<Ui> {
-        Some(Ui { origin_x: 0.0, text: TextCache::new()?, chat: ChatWidget::default(), menu_rects: Vec::new(), menu_arrows: Vec::new(), menu_scroll_thumb: None, menu_scroll_track: None, menu_ctl: Vec::new(), dd_rects: Vec::new(), dd_top: 0, dd_rows: 8, dd_scroll: None, menu_side: Vec::new(), menu_pane: Vec::new(), menu_pane_start: 0, menu_pane_go: None, menu_pane_box: None, menu_pane_scroll: None, menu_time: Vec::new(), anim: Default::default(), anim_dt: 0.0, menu_overlay_range: 0..0, vr_cursor_overlay: None, vr_tooltip_overlay: None, menu_start: 0, menu_rows: 0, menu_row_h: 1.0, images: Default::default(), info_rect: None, perf: Default::default(), mz: Default::default(), hud: hud::Hud::new(false), grips: [None; 3], caps: [f32::MAX; 3], logo_marks: Default::default() })
+        Some(Ui {
+            origin_x: 0.0,
+            text: TextCache::new()?,
+            chat: ChatWidget::default(),
+            menu_rects: Vec::new(),
+            menu_arrows: Vec::new(),
+            menu_scroll_thumb: None,
+            menu_scroll_track: None,
+            menu_ctl: Vec::new(),
+            dd_rects: Vec::new(),
+            dd_top: 0,
+            dd_rows: 8,
+            dd_scroll: None,
+            menu_side: Vec::new(),
+            menu_pane: Vec::new(),
+            menu_pane_start: 0,
+            menu_pane_go: None,
+            menu_pane_box: None,
+            menu_pane_scroll: None,
+            menu_time: Vec::new(),
+            anim: Default::default(),
+            anim_dt: 0.0,
+            menu_overlay_range: 0..0,
+            vr_cursor_overlay: None,
+            vr_tooltip_overlay: None,
+            menu_start: 0,
+            menu_rows: 0,
+            menu_row_h: 1.0,
+            images: Default::default(),
+            info_rect: None,
+            perf: Default::default(),
+            mz: Default::default(),
+            hud: hud::Hud::new(false),
+            grips: [None; 3],
+            caps: [f32::MAX; 3],
+            logo_marks: Default::default(),
+        })
     }
 
     /// Draw the frame's interface: its overlays go after the HUD's in `scene.overlays`.
+    #[rustfmt::skip]
     pub fn draw(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, dt: f32) {
         let s = f.scale.max(0.5) * f.ui_scale;
         self.text.backdrop = f.opacity;
@@ -806,128 +887,11 @@ fn steer_cross_pixels(n: usize) -> Vec<u8> {
 }
 
 impl Ui {
-    /// The timetable window as the navigator's card: a header with the line on its red tag,
-    /// the terminus and how late, the tour and trip under it; then the stops as the
-    /// launcher's trips table (arrives, stop, departs), the stops passed muted, the next one
-    /// on a soft band of the route's colour with a bar at its left; the next trip at the end.
-    #[allow(clippy::too_many_arguments)]
-    fn draw_timetable(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, t: &TimetableView, top: f32, beside: f32, s: f32) {
-        let size = self.shown_size(1, f.sizes[1]);
-        let s = s * size;
-        let ink_1 = hud::text(self.hud.ink);
-        let ink_2 = hud::text(self.hud.dim);
-        let muted = hud::text(self.hud.muted);
-        let hpx = (11.5 * s).round() as u32 | BOLD;
-        let time_w = 44.0 * s;
-        let exp_w = self.text.width_bold("Expected", (11.5 * s).round()).max(time_w) + 16.0 * s;
-        let wide = (470.0 * s).min(f.width * 0.42).round();
-        let roomy = wide - 98.0 * s - time_w - exp_w >= 150.0 * s;
-        let w = if roomy { wide } else { (400.0 * s).min(f.width * 0.42).round() };
-        let x = (f.width - w - 16.0 * s - beside).max(16.0 * s).round();
-        let top = self.below_info(x, x + w, top, s).round();
-        let pad = (16.0 * s).round();
-        let px = (13.0 * s).round() as u32;
-        let lh = (30.0 * s).round();
-        let head_h = 64.0 * s;
-        let th_h = 26.0 * s;
-        let max_rows = (((f.height * 0.72 - head_h - th_h) / lh).floor() as usize).max(3);
-        let n = t.rows.len() + t.next.is_some() as usize;
-        let shown = n.min(max_rows);
-        // (from the stop before the next one on)
-        let next = t.rows.iter().position(|r| r.state == 1).unwrap_or(0);
-        let first = next.saturating_sub(1).min(n.saturating_sub(shown));
-        let h = (head_h + th_h + lh * shown as f32 + pad * 0.6).round();
-        self.hud_card(r, scene, [x, top, x + w, top + h], hud::RADIUS * s, self.text.backdrop, s);
-        // the header: the line's sign, the terminus, how late
-        let cy = top + pad + 11.0 * s;
-        let sign = self.text.label_op(r, scene, &t.line, (13.0 * s).round() as u32 | BOLD, [255, 255, 255, 0], 1.0);
-        let sw = (sign.w as f32 + 10.0 * s).max(30.0 * s).round();
-        let sh = (22.0 * s).round();
-        self.text.rounded(r, scene, [x + pad, cy - sh * 0.5, x + pad + sw, cy + sh * 0.5], 4.0 * s, hud::LINE);
-        let (sx, sy) = ((x + pad + (sw - sign.w as f32) * 0.5).round(), (cy - sign.h as f32 * 0.5).round());
-        scene.overlays.push((sign.tex, [sx, sy, sx + sign.w as f32, sy + sign.h as f32]));
-        let d = t.delay;
-        let (dtext, dcol) = {
-            let m = (d.abs() / 60.0) as i64;
-            let sec = (d.abs() % 60.0) as i64;
-            let sign = if d < 0.0 { "-" } else { "+" };
-            (format!("{sign}{m}:{sec:02}"), hud::delay_color(d as f32))
-        };
-        let dl = self.text.label_op(r, scene, &dtext, (13.0 * s).round() as u32 | BOLD, hud::text(dcol), 1.0);
-        let dx = (x + w - pad - 7.0 * s - dl.w as f32).round();
-        self.text.rounded(r, scene, [dx - 7.0 * s, cy - dl.h as f32 * 0.5 - 2.0 * s, dx + dl.w as f32 + 7.0 * s, cy + dl.h as f32 * 0.5 + 2.0 * s], hud::RADIUS * s, hud::tint(dcol, 41));
-        scene.overlays.push((dl.tex, [dx, (cy - dl.h as f32 * 0.5).round(), dx + dl.w as f32, (cy - dl.h as f32 * 0.5).round() + dl.h as f32]));
-        let tx = x + pad + sw + 10.0 * s;
-        let term = clip_to(&self.text, &t.terminus, 15.0 * s, dx - 10.0 * s - tx);
-        let tl = self.text.label_op(r, scene, &term, (15.0 * s).round() as u32 | BOLD, ink_1, 1.0);
-        scene.overlays.push((tl.tex, [tx.round(), (cy - tl.h as f32 * 0.5).round(), tx.round() + tl.w as f32, (cy - tl.h as f32 * 0.5).round() + tl.h as f32]));
-        let my = top + pad + 34.0 * s;
-        let icon_px = (14.0 * s).round() as u32;
-        if let Some(ic) = self.text.icon(r, scene, "departure_board", icon_px, self.hud.muted) {
-            let iy = (my - icon_px as f32 * 0.5).round();
-            scene.overlays.push((ic, [x + pad, iy, x + pad + icon_px as f32, iy + icon_px as f32]));
-        }
-        let ml = self.text.label_op(r, scene, &t.meta, (12.0 * s).round() as u32, muted, 1.0);
-        let mx = (x + pad + icon_px as f32 + 6.0 * s).round();
-        scene.overlays.push((ml.tex, [mx, (my - ml.h as f32 * 0.5).round(), mx + ml.w as f32, (my - ml.h as f32 * 0.5).round() + ml.h as f32]));
-        // the table's head
-        let col_arr = x + pad;
-        let col_stop = x + pad + 58.0 * s;
-        let hy = top + head_h + th_h * 0.5;
-        let col_exp = x + w - pad;
-        let col_dep = if roomy { col_exp - exp_w } else { col_exp };
-        let heads = [(omsi_ui::tr("Arrives"), col_arr, false), (omsi_ui::tr("Bus stop"), col_stop, false), (omsi_ui::tr("Departs"), col_dep, true), (omsi_ui::tr("Expected"), col_exp, true)];
-        for (txt, at, right) in heads.into_iter().take(if roomy { 4 } else { 3 }) {
-            let l = self.text.label_op(r, scene, &txt, hpx, muted, 1.0);
-            let lx = if right { at - l.w as f32 } else { at };
-            let ly = (hy - l.h as f32 * 0.5).round();
-            scene.overlays.push((l.tex, [lx.round(), ly, lx.round() + l.w as f32, ly + l.h as f32]));
-        }
-        // the rows
-        for k in first..first + shown {
-            let ry = top + head_h + th_h + lh * (k - first) as f32;
-            let band = [x + 6.0 * s, ry, x + w - 6.0 * s, ry + lh - 2.0 * s];
-            let (name, arr, dep, expected, state) = match t.rows.get(k) {
-                Some(row) => (row.name.clone(), row.arr.clone(), row.dep.clone(), if roomy { row.expected.clone() } else { String::new() }, row.state),
-                None => match t.next.as_ref() {
-                    Some((what, when)) => (format!("› {what}"), String::new(), when.clone(), String::new(), 3),
-                    None => continue,
-                },
-            };
-            if state == 1 {
-                self.text.rounded(r, scene, band, 4.0 * s, self.hud.shade(self.hud.accent, 0.16, self.text.backdrop));
-                self.text.rounded(r, scene, [band[0], band[1], band[0] + 3.0 * s, band[3]], 1.5 * s, self.hud.accent);
-            } else if (k - first) % 2 == 1 {
-                self.text.rounded(r, scene, band, 4.0 * s, self.hud.shade(self.hud.ink, 0.04, self.text.backdrop));
-            }
-            let (ink, time_ink) = match state {
-                0 | 3 => (muted, muted),
-                1 => (ink_1, hud::text(self.hud.accent)),
-                _ => (ink_2, ink_1),
-            };
-            let size = if state == 1 { px | BOLD } else { px };
-            let cy = ry + (lh - 2.0 * s) * 0.5;
-            for (txt, at, right, col) in [(&arr, col_arr, false, time_ink), (&dep, col_dep, true, time_ink), (&expected, col_exp, true, hud::text(dcol))] {
-                if txt.is_empty() {
-                    continue;
-                }
-                let l = self.text.label_op(r, scene, txt, size, col, 1.0);
-                let lx = if right { at - l.w as f32 } else { at };
-                let ly = (cy - l.h as f32 * 0.5).round();
-                scene.overlays.push((l.tex, [lx.round(), ly, lx.round() + l.w as f32, ly + l.h as f32]));
-            }
-            let name = clip_to(&self.text, &name, px as f32, col_dep - time_w - 8.0 * s - col_stop);
-            let l = self.text.label_op(r, scene, &name, size, ink, 1.0);
-            let ly = (cy - l.h as f32 * 0.5).round();
-            scene.overlays.push((l.tex, [col_stop.round(), ly, col_stop.round() + l.w as f32, ly + l.h as f32]));
-        }
-        self.hud_grip(r, scene, 1, [x, top, x + w, top + h], size, f, s);
-    }
-
     /// The notifications as the navigator's cards: no edge, a soft shadow, the kind's icon in
     /// its colour, the text wrapped to as many rows as it needs. A card comes in rising a
     /// little and fading, and goes fading while the room it took closes; the newest stands
     /// on top of the stack.
+    #[rustfmt::skip]
     fn draw_notices(&mut self, r: &Renderer, scene: &mut Scene, f: &Frame, s: f32) {
         if f.notices.is_empty() {
             return;
@@ -1075,7 +1039,8 @@ pub fn time_progress(u: f32) -> f32 {
     if u <= 1.0 {
         LOADING_EXPECTED_AT * u * (1.3 - 0.3 * u)
     } else {
-        LOADING_EXPECTED_AT + (LOADING_CREEP - LOADING_EXPECTED_AT) * (1.0 - 1.0 / (1.0 + (u - 1.0) * 3.0))
+        LOADING_EXPECTED_AT
+            + (LOADING_CREEP - LOADING_EXPECTED_AT) * (1.0 - 1.0 / (1.0 + (u - 1.0) * 3.0))
     }
 }
 
@@ -1089,7 +1054,11 @@ pub fn ease_progress(shown: f32, target: f32, ready: bool, dt: f32) -> f32 {
     if gap <= 0.0 {
         return shown;
     }
-    let (tau, floor, ceil) = if ready { (0.1, 1.0, 3.5) } else { (0.35, 0.12, 1.2) };
+    let (tau, floor, ceil) = if ready {
+        (0.1, 1.0, 3.5)
+    } else {
+        (0.35, 0.12, 1.2)
+    };
     (shown + (gap / tau).clamp(floor, ceil) * dt.clamp(0.0, 0.1)).min(target)
 }
 
@@ -1105,7 +1074,10 @@ impl Loading {
     /// A frame of the loading screen with the start area `real` of the way loaded.
     pub fn step(&mut self, real: f32, dt: f32) {
         if !self.drawn {
-            self.tip0 = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as usize).unwrap_or(0);
+            self.tip0 = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as usize)
+                .unwrap_or(0);
         }
         self.drawn = true;
         let dt = dt.clamp(0.0, 1.0);
@@ -1117,7 +1089,8 @@ impl Loading {
                 self.elapsed += dt;
                 let by_time = time_progress(self.elapsed / self.expected_secs());
                 // (the count, when it is ahead, eased: it comes in jumps)
-                let by_count = ease_progress(self.shown, real.clamp(0.0, 1.0) * LOADING_CREEP, false, dt);
+                let by_count =
+                    ease_progress(self.shown, real.clamp(0.0, 1.0) * LOADING_CREEP, false, dt);
                 self.shown = self.shown.max(by_time).max(by_count);
             }
             Some(_) if self.run_fresh => self.run_fresh = false,
@@ -1132,7 +1105,11 @@ impl Loading {
     }
 
     fn expected_secs(&self) -> f32 {
-        if self.expected > 0.5 { self.expected } else { LOADING_FIRST_GUESS }
+        if self.expected > 0.5 {
+            self.expected
+        } else {
+            LOADING_FIRST_GUESS
+        }
     }
 
     /// The world is there: the rest of the bar in `LOADING_RUN` seconds.
@@ -1186,11 +1163,19 @@ pub struct LoadTimes;
 impl LoadTimes {
     fn path() -> Option<std::path::PathBuf> {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
-        Some(std::path::PathBuf::from(home).join(".openomsi").join("cache").join("load-times.json"))
+        Some(
+            std::path::PathBuf::from(home)
+                .join(".openomsi")
+                .join("cache")
+                .join("load-times.json"),
+        )
     }
 
     fn read() -> serde_json::Map<String, serde_json::Value> {
-        Self::path().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+        Self::path()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default()
     }
 
     /// The expected time of loading `map`: the average of its last loads (none: never loaded).
@@ -1202,11 +1187,23 @@ impl LoadTimes {
     pub fn record(map: &str, secs: f32) {
         let Some(p) = Self::path() else { return };
         let mut all = Self::read();
-        let mut last: Vec<f32> = all.get(map).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_f64()).map(|x| x as f32).collect()).unwrap_or_default();
+        let mut last: Vec<f32> = all
+            .get(map)
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_f64())
+                    .map(|x| x as f32)
+                    .collect()
+            })
+            .unwrap_or_default();
         last.push(secs);
         let keep = last.len().saturating_sub(3);
         last.drain(..keep);
-        let last: Vec<f64> = last.iter().map(|x| (*x as f64 * 100.0).round() / 100.0).collect();
+        let last: Vec<f64> = last
+            .iter()
+            .map(|x| (*x as f64 * 100.0).round() / 100.0)
+            .collect();
         all.insert(map.to_string(), serde_json::json!(last));
         if let Some(dir) = p.parent() {
             let _ = std::fs::create_dir_all(dir);
@@ -1219,7 +1216,13 @@ impl LoadTimes {
 
 /// The average of the loads kept for a map.
 fn expected_of(v: &serde_json::Value) -> Option<f32> {
-    let t: Vec<f32> = v.as_array()?.iter().filter_map(|x| x.as_f64()).map(|x| x as f32).filter(|x| x.is_finite() && *x > 0.0).collect();
+    let t: Vec<f32> = v
+        .as_array()?
+        .iter()
+        .filter_map(|x| x.as_f64())
+        .map(|x| x as f32)
+        .filter(|x| x.is_finite() && *x > 0.0)
+        .collect();
     (!t.is_empty()).then(|| t.iter().sum::<f32>() / t.len() as f32)
 }
 
@@ -1228,7 +1231,11 @@ fn wrap(tc: &TextCache, text: &str, px: f32, width: f32) -> Vec<String> {
     let mut out = Vec::new();
     let mut line = String::new();
     for word in text.split_whitespace() {
-        let try_line = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
+        let try_line = if line.is_empty() {
+            word.to_string()
+        } else {
+            format!("{line} {word}")
+        };
         if tc.width(&try_line, px) > width && !line.is_empty() {
             out.push(std::mem::take(&mut line));
             line = word.to_string();
@@ -1271,9 +1278,19 @@ fn clip_to(tc: &TextCache, text: &str, px: f32, width: f32) -> String {
 fn wrap_rows(text: &str, width: f32, indent: f32, measure: &impl Fn(&str) -> f32) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
     let mut cur = String::new();
-    let room = |rows: &Vec<String>| if rows.is_empty() { width } else { width - indent };
+    let room = |rows: &Vec<String>| {
+        if rows.is_empty() {
+            width
+        } else {
+            width - indent
+        }
+    };
     for word in text.split(' ') {
-        let joined = if cur.is_empty() { word.to_string() } else { format!("{cur} {word}") };
+        let joined = if cur.is_empty() {
+            word.to_string()
+        } else {
+            format!("{cur} {word}")
+        };
         if measure(&joined) <= room(&rows) {
             cur = joined;
             continue;
@@ -1334,345 +1351,4 @@ fn tooltip_label(label: &str) -> std::borrow::Cow<'_, str> {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn cockpit_tooltips_use_complete_catalogue_labels_and_mouse_suffixes() {
-        let names = omsi_input::describe::ControlNames::from_table(
-            "ENG",
-            &[
-                ("parking_brake_toggle", "Parking Brake On/Off"),
-                ("bus_doorfront0", "Front Door, 1st Wing Open/Close"),
-            ],
-        );
-        crate::with_test_language("pt", || {
-            for (event, expected) in [
-                (
-                    "parking_brake_mouse",
-                    "Freio de estacionamento: ligar/desligar",
-                ),
-                (
-                    "parking_brake_2",
-                    "Freio de estacionamento: ligar/desligar 2",
-                ),
-                (
-                    "bus_doorfront0_external",
-                    "Porta dianteira, primeira folha: abrir/fechar (externo)",
-                ),
-                (
-                    "cp_heizregler_temp",
-                    "Controle de temperatura do aquecimento",
-                ),
-            ] {
-                assert_eq!(tooltip_label(&names.control(event)), expected, "{event}");
-            }
-            // A numbered full label takes precedence over the mouse suffix fallback.
-            assert_eq!(
-                tooltip_label("Ticket Printer: Select Ticket 2"),
-                "Impressora de bilhetes: selecionar bilhete 2"
-            );
-            for event in ["ALMEX_Funktion", "Zahltisch_Wechsler_0_05"] {
-                let label = names.control(event);
-                assert_eq!(tooltip_label(&label), label, "untranslated mod: {event}");
-            }
-        });
-        crate::with_test_language("ENG", || {
-            for event in [
-                "parking_brake_mouse",
-                "parking_brake_2",
-                "bus_doorfront0_external",
-            ] {
-                let label = names.control(event);
-                assert_eq!(tooltip_label(&label), label);
-            }
-        });
-    }
-
-    #[test]
-    fn cockpit_mouse_suffixes_use_the_selected_catalogue_language() {
-        // An existing Spanish text also works as a mod's control label.
-        let names = omsi_input::describe::ControlNames::from_table("ENG", &[("mod_toggle", "on")]);
-        crate::with_test_language("es", || {
-            assert_eq!(tooltip_label(&names.control("mod_2")), "activado 2");
-        });
-    }
-
-    /// The steering cross: white arms with a dark edge, open in the middle, nothing in the
-    /// corners - the same in all four directions.
-    #[test]
-    fn the_steering_cross_is_a_white_cross_with_a_dark_edge() {
-        let n = 34;
-        let px = super::steer_cross_pixels(n);
-        let at = |x: usize, y: usize| &px[(y * n + x) * 4..(y * n + x) * 4 + 4];
-        let c = n / 2;
-        assert_eq!(at(c, c)[3], 0, "the middle is open");
-        assert_eq!(at(0, 0)[3], 0, "the corners are empty");
-        for (x, y) in [(c, 6), (c, n - 7), (6, c), (n - 7, c)] {
-            assert_eq!(at(x, y), [255, 255, 255, 255], "arm at {x},{y}");
-        }
-        assert_eq!(at(c + 2, 6)[..3], [0, 0, 0], "the arm's edge is dark");
-    }
-
-    use super::*;
-
-    #[test]
-    fn a_server_notice_is_read_and_fades() {
-        let (id, n) = Notice::parse("a1b2 5 warn Service 15/5: departure at 06:07 | depot").unwrap();
-        assert_eq!(id, "a1b2");
-        assert_eq!((n.kind, n.text.as_str(), n.total, n.left), (NoticeKind::Warn, "Service 15/5: departure at 06:07 | depot", 5.0, 5.0));
-        // seconds held to 2 .. 30, an unknown kind is information
-        assert_eq!(Notice::parse("x 0.5 info hi").unwrap().1.total, 2.0);
-        assert_eq!(Notice::parse("x 600 whatever hi").unwrap().1, Notice { kind: NoticeKind::Info, text: "hi".into(), left: 30.0, total: 30.0 });
-        // no text, no seconds, nothing: not a notice
-        for bad in ["", "x", "x 5", "x 5 info", "x 5 info   ", "x five info hi", "x NaN info hi"] {
-            assert!(Notice::parse(bad).is_none(), "{bad}");
-        }
-        // fades in, stays, fades out (eased)
-        let mut n = Notice::parse("x 5 alert hi").unwrap().1;
-        assert_eq!(n.alpha(), 0.0);
-        n.left = 4.0;
-        assert_eq!(n.alpha(), 1.0);
-        n.left = 0.2;
-        assert!((n.alpha() - 0.5).abs() < 1e-6);
-        assert_eq!(Notice::parse("x 5 action hi").unwrap().1.kind, NoticeKind::Action);
-        // four at most: the oldest fade out to make room
-        let mut list = Vec::new();
-        for k in 0..6 {
-            push_notice(&mut list, Notice::parse(&format!("{k} 5 info n{k}")).unwrap().1);
-        }
-        let live: Vec<&str> = list.iter().filter(|n| n.left > NOTICE_OUT).map(|n| n.text.as_str()).collect();
-        assert_eq!(live, ["n2", "n3", "n4", "n5"]);
-        // the same text again stands once, for its time again, without fading in anew
-        let mut list = vec![Notice::new(NoticeKind::Action, "Doors are open")];
-        list[0].left = 2.0;
-        push_notice(&mut list, Notice::new(NoticeKind::Action, "Doors are open"));
-        assert_eq!(list.len(), 1);
-        assert_eq!((list[0].left, list[0].alpha()), (7.0, 1.0));
-    }
-
-    /// What the game tells the driver becomes a card when it starts, not every frame, and
-    /// again once it was gone for a while.
-    #[test]
-    fn a_note_becomes_a_notification_once_when_it_starts() {
-        let mut w = NoteWatch::default();
-        let mut list = Vec::new();
-        let brake = |v: f32| vec![(note_key(&format!("Air pressure is low ({v:.1} bar)")), format!("Air pressure is low ({v:.1} bar)"), NoticeKind::Action)];
-        assert_eq!(note_key("Parking brake is on  (. releases it)"), "Parking brake is on");
-        for k in 0..100 {
-            // (the pressure in the text changes, the condition is the same)
-            w.frame(0.016, &brake(4.0 + k as f32 * 0.01), &mut list);
-        }
-        assert_eq!(list.len(), 1);
-        // gone a moment (the throttle let go) and back: the same reason
-        w.frame(1.0, &[], &mut list);
-        w.frame(0.016, &brake(5.0), &mut list);
-        assert_eq!(list.len(), 1);
-        // gone for longer, and back: shown again
-        w.frame(NoteWatch::REARM + 0.5, &[], &mut list);
-        list.clear();
-        w.frame(0.016, &brake(5.0), &mut list);
-        assert_eq!(list.len(), 1);
-        assert_eq!(list[0].kind, NoticeKind::Action);
-    }
-
-    /// The loading bar goes along the expected time evenly, never stands still or goes back,
-    /// takes the real count when that is ahead, runs to its end in about a third of a second
-    /// once the world is there, and then fades.
-    #[test]
-    fn the_loading_bar_follows_the_expected_time_and_fades() {
-        assert_eq!(time_progress(0.0), 0.0);
-        assert!((time_progress(1.0) - 0.92).abs() < 1e-6);
-        let mut prev = 0.0;
-        for k in 1..=60 {
-            let p = time_progress(k as f32 * 0.05);
-            assert!(p > prev && p < 0.98, "{k}: {p}");
-            prev = p;
-        }
-        // half the time: about half the bar
-        assert!((time_progress(0.5) - 0.53).abs() < 0.03);
-        // a load of 4 s expected, the count standing at none: the bar goes on evenly
-        let mut l = Loading { expected: 4.0, ..Default::default() };
-        let mut shown = Vec::new();
-        for _ in 0..240 {
-            l.step(0.0, 1.0 / 60.0);
-            shown.push(l.shown());
-        }
-        assert!(shown.windows(2).all(|w| w[1] >= w[0]));
-        assert!(shown[119] > 0.4 && shown[119] < 0.65, "{}", shown[119]);
-        assert!(shown[239] > 0.8 && shown[239] <= 0.92, "{}", shown[239]);
-        // the count ahead of the time: the bar follows the count
-        l.step(0.97, 1.0);
-        assert!(l.shown() > 0.92);
-        // the world is there: the rest in about 0.35 s, then a moment, then the fade
-        l.finish();
-        let mut t = 0.0;
-        while l.shown() < 1.0 {
-            l.step(1.0, 1.0 / 60.0);
-            t += 1.0 / 60.0;
-        }
-        assert!(t < 0.4 + 1.0 / 60.0, "{t}");
-        assert_eq!(l.over_session(), Some(1.0));
-        for _ in 0..60 {
-            l.step(1.0, 1.0 / 60.0);
-        }
-        assert_eq!(l.over_session(), None);
-        // a map that needed no loading screen: nothing fades
-        let mut quiet = Loading::default();
-        quiet.finish();
-        assert_eq!(quiet.over_session(), None);
-        // the last three loads, averaged
-        assert_eq!(expected_of(&serde_json::json!([2.0, 4.0, 6.0])), Some(4.0));
-        assert_eq!(expected_of(&serde_json::json!([])), None);
-    }
-
-    #[test]
-    fn centre_hud_moves_menu_controls_and_chat_hitboxes_together() {
-        let mut ui = Ui::new().unwrap();
-        ui.menu_rects.push([20.0, 100.0, 900.0, 140.0]);
-        ui.menu_ctl.push(Some([600.0, 110.0, 860.0, 130.0]));
-        ui.menu_side.push([30.0, 100.0, 200.0, 140.0]);
-        ui.dd_rects.push([650.0, 150.0, 850.0, 180.0]);
-        ui.menu_arrows.push(Some([600.0, 640.0, 820.0]));
-        ui.chat.rect = [10.0, 800.0, 400.0, 1000.0];
-        ui.dd_scroll = Some(([850.0, 150.0, 860.0, 300.0], [844.0, 160.0, 864.0, 200.0]));
-        ui.menu_pane_scroll = Some((
-            [880.0, 150.0, 890.0, 700.0],
-            [874.0, 160.0, 894.0, 220.0],
-            40,
-            10,
-        ));
-        ui.shift_hitboxes(1920.0);
-        let track = ui.menu_ctl[0].unwrap();
-        assert_eq!((2650.0 - track[0]) / (track[2] - track[0]), 0.5);
-        assert!(ui.chat.contains(2020.0, 900.0));
-        assert!(!ui.chat.contains(100.0, 900.0));
-        assert_eq!(ui.dd_rects[0], [2570.0, 150.0, 2770.0, 180.0]);
-        assert_eq!(ui.menu_arrows[0], Some([2520.0, 2560.0, 2740.0]));
-        assert_eq!(ui.dd_scroll.unwrap().0[0], 2770.0);
-        assert_eq!(ui.menu_pane_scroll.unwrap().1[0], 2794.0);
-        ui.shift_hitboxes(-1920.0);
-        assert_eq!(ui.menu_ctl[0], Some([600.0, 110.0, 860.0, 130.0]));
-    }
-
-    #[test]
-    fn a_long_chat_line_goes_on_in_rows() {
-        // (10 px a character)
-        let m = |t: &str| t.chars().count() as f32 * 10.0;
-        // fits: one row, as it was
-        assert_eq!(wrap_rows("Anton: hello", 200.0, 20.0, &m), ["Anton: hello"]);
-        assert_eq!(wrap_rows("", 200.0, 20.0, &m), [""]);
-        // between words; the rows after the first are 20 px narrower
-        let rows = wrap_rows("Admin (private): take tour 13/1 at 04:47 from the depot", 200.0, 20.0, &m);
-        assert_eq!(rows, ["Admin (private):", "take tour 13/1 at", "04:47 from the", "depot"]);
-        assert!(rows[0].chars().count() <= 20 && rows[1..].iter().all(|r| r.chars().count() <= 18));
-        // nothing lost: the words come back in order
-        assert_eq!(rows.join(" "), "Admin (private): take tour 13/1 at 04:47 from the depot");
-        // a word longer than a row is cut inside
-        let rows = wrap_rows("x: https://example.org/a/very/long/link", 100.0, 20.0, &m);
-        assert_eq!(rows, ["x:", "https://", "example.", "org/a/ve", "ry/long/", "link"]);
-        assert_eq!(rows.concat(), "x:https://example.org/a/very/long/link");
-        // a box narrower than a character still ends (a character a row)
-        assert_eq!(wrap_rows("abc", 5.0, 0.0, &m), ["a", "b", "c"]);
-    }
-
-    #[test]
-    fn vr_settings_sidebar_keeps_back_clear() {
-        for scale in [0.5, 1.0, 2.0] {
-            for height in [220.0, 440.0] {
-                let pages_top = (72.0 + 6.0) * scale;
-                let back_top = (height - PAD - 6.0 - 38.0) * scale;
-                for pages in [7, 8, 10] {
-                    let step = vr_settings_sidebar_step(back_top - 6.0 * scale - pages_top, pages, scale);
-                    let last_bottom = pages_top + (pages - 1) as f32 * step + (step - 4.0 * scale).max(1.0);
-                    assert!(last_bottom < back_top);
-                }
-            }
-        }
-        assert_eq!(vr_settings_sidebar_step(1000.0, 8, 1.0), 42.0);
-    }
-
-    #[test]
-    fn text_renders_with_an_outline() {
-        let f = FontVec::try_from_vec(INTER.to_vec()).unwrap();
-        let img = render_text(&f, "Savva: hi", 20.0, [255, 255, 255, 220]);
-        assert!(img.width > 40 && img.height > 14);
-        // white text and dark outline pixels are both there
-        let px: Vec<&[u8]> = img.rgba.chunks(4).collect();
-        assert!(px.iter().any(|p| p[3] > 200 && p[0] > 200));
-        assert!(px.iter().any(|p| p[3] > 100 && p[0] < 40));
-    }
-
-    /// The Esc menu in Chinese, Korean and Thai: the system's fonts, not boxes.
-    #[test]
-    fn scripts_inter_lacks_come_from_the_system() {
-        let f = FontVec::try_from_vec(INTER.to_vec()).unwrap();
-        for t in ["继续", "繼續", "계속", "ดำเนินการต่อ"] {
-            if t.chars().next().and_then(omsi_ui::text::fallback_font).is_none() {
-                continue;
-            }
-            for c in t.chars() {
-                let g = font_for(&f, c);
-                assert!(!std::ptr::eq(g, &f) && g.glyph_id(c).0 != 0, "{t}: {c}");
-            }
-            let img = render_text(&f, t, 20.0, [255, 255, 255, 220]);
-            let ink = img.rgba.chunks(4).filter(|p| p[3] > 128 && p[0] > 128).count();
-            assert!(ink > 30, "{t}: {ink}");
-        }
-    }
-
-    /// Laid out for 1080p: a lower window as it always was, a taller one in proportion.
-    #[test]
-    fn the_interface_grows_with_tall_windows() {
-        assert_eq!(size_factor(900.0, 1.0, 1.0, true), 1.0);
-        assert_eq!(size_factor(1080.0, 1.0, 1.0, true), 1.0);
-        assert_eq!(size_factor(2160.0, 1.0, 1.0, true), 2.0);
-        assert_eq!(size_factor(4320.0, 1.0, 1.0, true), 2.0);
-        // (4K at 150 % display scaling is 1440 logical lines: with the screen's scale the
-        // same size as at 100 %)
-        assert!((1.5 * size_factor(2160.0, 1.5, 1.0, true) - 2.0).abs() < 1e-5);
-        assert_eq!(size_factor(1080.0, 1.0, 1.5, true), 1.5);
-        assert_eq!(size_factor(2160.0, 1.0, 0.5, true), 1.0);
-        // (switched off: the size alone)
-        assert_eq!(size_factor(2160.0, 1.0, 1.0, false), 1.0);
-        assert_eq!(size_factor(2160.0, 1.0, 1.25, false), 1.25);
-    }
-
-    /// A thinned panel's light texts get an outline; dark ones - the highlighted menu line's,
-    /// on the solid accent - do not (it came out as a smear round them, like a shadow).
-    #[test]
-    fn panel_texts_get_an_outline_only_where_it_helps() {
-        // (full panels: as asked)
-        assert_eq!(outline_for([235, 235, 235, 0], 1.0), 0);
-        // (thinned: the light text gets one, the dark text none)
-        assert!(outline_for([235, 235, 235, 0], 0.47) > 100);
-        assert!(outline_for([140, 140, 140, 0], 0.47) > 100);
-        assert_eq!(outline_for([20, 20, 20, 0], 0.47), 0);
-        // (texts with an outline of their own keep it)
-        assert_eq!(outline_for([255, 255, 255, 235], 0.47), 235);
-    }
-
-    #[test]
-    fn the_game_menu_grows_with_the_interface_size_as_far_as_it_fits() {
-        // (it ignored the setting: 1.5 drew the menu as 1.0 while the HUD grew)
-        assert_eq!(super::menu_scale_for(1.0, 1.0, 1280.0, 720.0, false), 1.0);
-        let s = super::menu_scale_for(1.0, 1.5, 1280.0, 720.0, false);
-        assert!(s > 1.1 && s < 1.5 && 880.0 * s + 24.0 <= 1280.0 && 600.0 * s <= 720.0 * 0.94 + 0.01, "{s}");
-        assert_eq!(super::menu_scale_for(1.0, 1.5, 3840.0, 2160.0, false), 1.5);
-        // never smaller than it always was, and the headset keeps its own size
-        assert_eq!(super::menu_scale_for(1.0, 1.5, 800.0, 500.0, false), 1.0);
-        assert_eq!(super::menu_scale_for(1.0, 1.5, 1920.0, 1080.0, true), 1.0);
-    }
-
-    #[test]
-    fn destinations_split_into_code_and_name() {
-        assert_eq!(super::code_and_name(" 13  BETRIEBSFAHRT"), Some(("13", "BETRIEBSFAHRT")));
-        assert_eq!(super::code_and_name("1001  Blanko.tga"), Some(("1001", "Blanko.tga")));
-        assert_eq!(super::code_and_name("Route number: 5..."), None);
-        assert_eq!(super::code_and_name("Line 76  (1 tours)"), None);
-    }
-
-    #[test]
-    fn chat_filter_stars_out_swearing() {
-        assert_ne!(filter_chat("you are a fucking idiot"), "you are a fucking idiot");
-        assert_eq!(filter_chat("next stop Rathaus Spandau"), "next stop Rathaus Spandau");
-    }
-}
+mod tests;
