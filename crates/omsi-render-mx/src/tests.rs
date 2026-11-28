@@ -33,7 +33,7 @@ fn a_washed_pane_gets_a_glass_picture_without_rain() {
         &MeshData {
             positions: vec![Vec3::ZERO, Vec3::X, Vec3::Y],
             normals: vec![Vec3::Z; 3],
-            uvs: vec![Vec2::ZERO; 3],
+            uvs: vec![glam::Vec2::ZERO; 3],
             indices: vec![0, 1, 2],
             ranges: vec![(0, 3, 0)],
             ..Default::default()
