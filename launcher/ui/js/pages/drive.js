@@ -3,7 +3,7 @@
 
 import { html, useState, useEffect, useRef } from '../../vendor/preact-htm.js';
 import { S, useStore, toast } from '../store.js';
-import { t, hhmm, language } from '../i18n.js';
+import { t, hhmm, clockTime, language } from '../i18n.js';
 import { call, contentUrl } from '../api.js';
 import { Button, Dialog } from '../ui.js';
 import { tourId, choose, realTime, realDate, launcherLayout } from '../data.js';
@@ -12,7 +12,7 @@ import { ClassicDrive } from './drive-classic.js';
 import { LayoutDrive } from './drive-layouts.js';
 
 /** HH:MM of seconds of the day (the timetables' unit). */
-export const hms = (s) => hhmm((s || 0) / 60);
+export const hms = (s) => clockTime((s || 0) / 60, S.settings?.time_format);
 
 /** An entry point's name, or its number when the map gives it none. */
 export const entryName = (e) => e.name?.trim() || `${t('Entry point')} ${e.index + 1}`;

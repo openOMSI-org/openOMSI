@@ -6,7 +6,7 @@ import { CabinTemperatureOption } from '../pages/drive-day.js';
 
 import { html, useState, useEffect } from '../../vendor/preact-htm.js';
 import { S, useStore, set } from '../store.js';
-import { t, hhmm, longDate } from '../i18n.js';
+import { t, clockTime, longDate } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Spinner, Toggle, Slider, useConfirm } from '../ui.js';
 import { BusPreview } from '../preview.js';
@@ -121,7 +121,7 @@ function MobileDrive() {
       ${v ? html`<${BusPreview} class="m-preview" look=${{ bus: v.file, paint: c.paint, map: c.map, weather: c.weather, time: c.time, date: c.date }} />` : html`<div class="viewer m-preview"><div class="state"><${Spinner} /></div></div>`}
       <div class="m-chips">
         <button class="m-chip" disabled=${joined} onClick=${() => setSheet('map')}><${Icon} name="map" size=${16} />${mapLabel}</button>
-        <button class="m-chip" disabled=${joined} onClick=${() => setSheet('time')}><${Icon} name="clock" size=${16} />${joined ? srv.time || '-' : hhmm(c.time)}</button>
+        <button class="m-chip" disabled=${joined} onClick=${() => setSheet('time')}><${Icon} name="clock" size=${16} />${joined ? srv.time || '-' : clockTime(c.time, S.settings?.time_format)}</button>
       </div>
       <div class="m-go">
         ${trip && !depotRun(trip) ? html`<div class="sign"><span class="no">${trip.line}</span><span class="to">${trip.terminus}</span></div>` : c.free && html`<div class="sign"><span class="no"><${Icon} name="route" /></span><span class="to">${t('Free drive')}</span></div>`}
@@ -151,7 +151,7 @@ function MobileDrive() {
         ${row('entry', 'person', 'Start at', c.entry < 0 ? t('Automatic') : (m?.entry_points[c.entry] ? entryName(m.entry_points[c.entry]) : '-'))}
       </div>
       <div class="m-group">
-        ${row('time', 'clock', 'Time and date', joined ? srv.time || '-' : `${hhmm(c.time)} - ${c.date}`, joined ? t("(the server's clock)") : rt(c), joined)}
+        ${row('time', 'clock', 'Time and date', joined ? srv.time || '-' : `${clockTime(c.time, S.settings?.time_format)} - ${c.date}`, joined ? t("(the server's clock)") : rt(c), joined)}
         ${row('weather', 'cloud', 'Weather', joined ? srv.weather || t("the map's (the server's)") : weatherName(c.weather, s.weather), null, joined)}
       </div>
       <div class="m-group m-pad">
@@ -300,7 +300,7 @@ function TimeSheet() {
   return html`<div class="m-time-sheet">
     <div class="m-dial">
       <button onClick=${() => step(-60)} disabled=${realTime()}>-1 h</button><button onClick=${() => step(-5)} disabled=${realTime()}>-5</button>
-      <b class="num">${hhmm(c.time)}</b>
+      <b class="num">${clockTime(c.time, S.settings?.time_format)}</b>
       <button onClick=${() => step(5)} disabled=${realTime()}>+5</button><button onClick=${() => step(60)} disabled=${realTime()}>+1 h</button>
       <button title=${t('Current time')} onClick=${() => choose({ time: localNow().time })} disabled=${realTime()}><${Icon} name="clock" /></button>
     </div>

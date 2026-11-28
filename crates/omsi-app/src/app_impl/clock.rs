@@ -181,7 +181,6 @@ pub(crate) fn shift_clock(cx: ShiftClockCx, secs: f64) {
     if let Some(p) = cx.player.player.as_mut() {
         p.vehicle.host.clock = cx.clock.clock.clone();
     }
-    let h = (t / 3600.0) as u32;
     *cx.ui.service_msg = Some(if secs.abs() >= 86400.0 {
         let (d, m) = cx.clock.clock.day_month();
         (
@@ -198,7 +197,7 @@ pub(crate) fn shift_clock(cx: ShiftClockCx, secs: f64) {
         (
             omsi_ui::i18n::tr_fill(
                 "Clock: {time}",
-                &[("{time}", &format!("{h:02}:{:02}", ((t / 60.0) as u32) % 60))],
+                &[("{time}", &crate::units::ClockFormat::now().time(t, false))],
             ),
             3.0,
         )

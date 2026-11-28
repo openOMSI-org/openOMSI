@@ -64,6 +64,7 @@ enum Btn {
     CloseMenu,
     /// On foot: down on the knees and up again (C).
     Kneel,
+    Sit,
     /// The voice chat's talk keys, held: nearby, and the radio.
     VoiceNearby,
     VoiceRadio,
@@ -947,6 +948,17 @@ impl App {
             }
             Btn::Pause => self.toggle_pause(),
             Btn::Kneel => self.kneel(),
+            Btn::Sit => {
+                if down
+                    && self
+                        .session
+                        .on_foot
+                        .as_ref()
+                        .is_some_and(|f| f.can_touch_sit())
+                {
+                    self.use_seat();
+                }
+            }
             Btn::FreeCam => {
                 self.input.touch.panel = false;
                 if self.view == "free" {

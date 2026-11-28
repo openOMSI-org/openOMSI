@@ -109,9 +109,7 @@ impl Navigator {
             left_w = w;
         }
         // --- top right: the time, the day and the temperatures (and the line)
-        let hh = (f.time / 3600.0) as i32 % 24;
-        let mm = ((f.time % 3600.0) / 60.0) as i32;
-        let time_text = format!("{hh:02}:{mm:02}");
+        let time_text = omsi_ui::units::ClockFormat::now().time(f.time, false);
         let day = wd.days[f.weekday.clamp(0, 6) as usize];
         let temp = format!("{:.0}° · {:.0}°", f.outside_temp, f.inside_temp);
         let tw = self.fonts.width(&time_text, 14.0 * s, Weight::Bold)

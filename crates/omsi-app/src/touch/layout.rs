@@ -293,6 +293,17 @@ impl App {
             .filter(|f| f.cam == crate::on_foot::FootCam::First && f.seat.is_none())
         {
             let kr = 26.0 * u;
+            if f.can_touch_sit() {
+                push(
+                    b,
+                    Btn::Sit,
+                    rb(w - pad - kr, h - pad - kr * 3.0 - 12.0 * u, kr),
+                    "airline_seat_recline_normal",
+                    "Sit down",
+                    false,
+                    true,
+                );
+            }
             push(
                 b,
                 Btn::Kneel,

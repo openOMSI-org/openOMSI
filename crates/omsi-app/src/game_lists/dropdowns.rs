@@ -616,6 +616,7 @@ pub(super) fn reload_settings(app: &mut App) {
     app.session.seat_bus.clear();
     crate::ui_language(&app.settings.language);
     crate::units::Units::from_setting(&app.settings.units).set();
+    crate::units::ClockFormat::from_setting(&app.settings.time_format).set();
     sync_live(app);
 }
 

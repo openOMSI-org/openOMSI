@@ -1,6 +1,6 @@
 import { html, useState, useEffect, useRef, useMemo } from '../../vendor/preact-htm.js';
 import { useStore } from '../store.js';
-import { t, hhmm, longDate } from '../i18n.js';
+import { t, clockTime, longDate } from '../i18n.js';
 import { Icon } from '../icons.js';
 import { Button, Field, Select, Toggle, Segmented, Picture, Notice, Spinner, Search } from '../ui.js';
 import { tourId, choose, curMap, curLine, curTour, pickedTrip, mapName, duty, busFile, realDate, loadIbis } from '../data.js';
@@ -136,7 +136,8 @@ function TourBus({ tour }) {
 }
 
 function NextDepartures({ lines }) {
-  const c = useStore().choice;
+  const s = useStore();
+  const c = s.choice;
   const now = c.time * 60;
   const upcoming = useMemo(() => {
     const out = [];
@@ -149,7 +150,7 @@ function NextDepartures({ lines }) {
   }, [lines, now]);
   if (!upcoming.length) return null;
   return html`<details class="next-tours">
-    <summary class="section-title">${t('Next departures from {time}', { time: hhmm(c.time) })}</summary>
+    <summary class="section-title">${t('Next departures from {time}', { time: clockTime(c.time, s.settings?.time_format) })}</summary>
     <div class="next-list">
       ${upcoming.map(({ l, x, trip }) => html`<button type="button" class=${'trip-row' + (l.name === c.line && tourId(x) === c.tour ? ' on' : '')} onClick=${() => (choose({ line: l.name, tour: tourId(x), start_trip: null }), pickTrip(trip))}>
         <span class="num time">${hms(trip.departure)}</span>

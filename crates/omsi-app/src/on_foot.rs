@@ -176,6 +176,13 @@ impl Transit {
 }
 
 impl OnFoot {
+    pub(crate) fn can_touch_sit(&self) -> bool {
+        self.cam == FootCam::First
+            && self.seat.is_none()
+            && self.inside.is_some()
+            && self.transit.is_none()
+    }
+
     /// After the people's tick, aboard a bus: the walker and the eyes where the bus is
     /// this frame. The walk above placed them on the bus as the people had it a frame
     /// before, and the camera eased after that: at speed the saloon trembled round the
@@ -950,7 +957,7 @@ impl App {
 
     /// G on foot: into a seat by the nearest door (the own bus's front door: the wheel),
     /// or up from the seat and out.
-    fn use_seat(&mut self) {
+    pub(crate) fn use_seat(&mut self) {
         let Some(f) = self.session.on_foot.as_ref() else {
             return;
         };
@@ -1354,17 +1361,26 @@ impl App {
 
 crate::app::stage_ctx!(
     /// Taking the wheel of a placed vehicle: its part of the game.
-    SeatCx { reads: [sound], writes: [people, player, ui, view] }
+    SeatCx {
+        reads: [sound],
+        writes: [people, player, ui, view]
+    }
 );
 
 crate::app::stage_ctx!(
     /// Back at the own bus's wheel: its part of the game.
-    WheelCx { reads: [player], writes: [people, ui, view] }
+    WheelCx {
+        reads: [player],
+        writes: [people, ui, view]
+    }
 );
 
 crate::app::stage_ctx!(
     /// The on-foot stage's part of the game: the walker, the other players' walkers.
-    OnFootCx { reads: [input, clock, world, traffic, sound, perf], writes: [people, player, ui, view, gfx, net] }
+    OnFootCx {
+        reads: [input, clock, world, traffic, sound, perf],
+        writes: [people, player, ui, view, gfx, net]
+    }
 );
 
 impl SeatCx<'_, '_> {

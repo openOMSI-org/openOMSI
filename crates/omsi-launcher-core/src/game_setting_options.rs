@@ -179,6 +179,7 @@ pub fn game_setting_options(key: &str) -> Vec<(&'static str, &'static str)> {
             ("50", "50%"),
             ("100", "Always"),
         ],
+        "time_format" => vec![("24h", "24-hour"), ("12h", "12-hour (AM/PM)")],
         "units" => vec![
             ("metric", "Metric (km/h, km, °C)"),
             ("uk", "British (mph, miles, yards, °C)"),

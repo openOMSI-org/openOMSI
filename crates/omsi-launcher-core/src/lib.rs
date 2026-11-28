@@ -3617,6 +3617,7 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
     // the people as drawn: the content's own, or the Rocketbox avatars (this computer only)
     v["character_models"] = json!("original");
     v["units"] = json!("metric");
+    v["time_format"] = json!("24h");
     // the trees' foliage bends and sways in the weather's wind
     v["windy_trees"] = json!(true);
     v["detailed_trees"] = json!(true);
@@ -4087,6 +4088,13 @@ pub fn settings_from_text_on(text: Option<&str>, phone: bool) -> Value {
                 })
             }
             "units" => v[&k] = json!(units_setting(val)),
+            "time_format" => {
+                v[&k] = json!(if val.trim().eq_ignore_ascii_case("12h") {
+                    "12h"
+                } else {
+                    "24h"
+                })
+            }
             "ctrl_off" => v[&k] = json!(val),
             // the axes with a dead zone of their own (#1344): read by the game with the same parser
             "ctrl_deadzone_axes" => v[&k] = json!(val.replace(['\n', '\r'], " ").trim()),
@@ -4745,8 +4753,22 @@ pub fn save_settings(v: &Value) -> Result<()> {
     Ok(())
 }
 
-/// The `settings.cfg` text for the page's values `v`; the lines of the `old` file that the
-/// page does not manage (keys of newer games, hand-written switches) are kept.
+/// Persist the unit and clock preferences alongside the other interface settings.
+fn write_display_settings(text: &mut String, v: &Value) {
+    text.push_str(&format!(
+        "time_format={}\n",
+        if v.get("time_format").and_then(|x| x.as_str()) == Some("12h") {
+            "12h"
+        } else {
+            "24h"
+        }
+    ));
+    text.push_str(&format!(
+        "units={}\n",
+        units_setting(v.get("units").and_then(|x| x.as_str()).unwrap_or("metric"))
+    ));
+}
+
 /// The `units` setting's value: `metric`, `uk` or `us` (the game's `units` module).
 fn units_setting(v: &str) -> &'static str {
     match v.trim().to_ascii_lowercase().as_str() {
@@ -4773,6 +4795,8 @@ fn weather_effects_text(v: &Value) -> String {
     )
 }
 
+/// The `settings.cfg` text for the page's values `v`; the lines of the `old` file that the
+/// page does not manage (keys of newer games, hand-written switches) are kept.
 pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
     let b = |k: &str, d: bool| v.get(k).and_then(|x| x.as_bool()).unwrap_or(d) as u8;
     // a number, also as the string a select gives
@@ -5425,10 +5449,7 @@ pub fn settings_to_text(v: &Value, old: Option<&str>) -> String {
             "original"
         }
     ));
-    text.push_str(&format!(
-        "units={}\n",
-        units_setting(v.get("units").and_then(|x| x.as_str()).unwrap_or("metric"))
-    ));
+    write_display_settings(&mut text, v);
     text.push_str(&format!(
         "head_tracking_source={}\ntobii_edges={}\nhead_tracking_smoothing={}\nhead_tracking_dead_zone={}\n",
         head_tracking_source(v.get("head_tracking_source").and_then(|x| x.as_str()).unwrap_or("auto")),

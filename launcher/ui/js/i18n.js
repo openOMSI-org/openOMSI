@@ -40,6 +40,14 @@ export function hhmm(minutes) {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
+/** A displayed clock; hhmm remains the machine-readable/input format. */
+export function clockTime(minutes, format = '24h') {
+  if (format !== '12h') return hhmm(minutes);
+  const m = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  const h = Math.floor(m / 60);
+  return `${String(h % 12 || 12).padStart(2, '0')}:${String(m % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 /** A date as the player's language writes it. */
 export function longDate(iso) {
   const d = new Date(iso + 'T12:00:00');

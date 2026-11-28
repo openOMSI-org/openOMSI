@@ -380,6 +380,7 @@ pub(crate) fn prepare(
     optimiser::recover_cut_short();
     ui_language(&settings::Settings::load().language);
     units::Units::from_setting(&settings::Settings::load().units).set();
+    units::ClockFormat::from_setting(&settings::Settings::load().time_format).set();
     // (a server has no interface to translate)
     mt::enable(settings::Settings::load().machine_translation && args.server.is_none());
     // the dedicated server: server.cfg decides the world, the rest is a host without a window
