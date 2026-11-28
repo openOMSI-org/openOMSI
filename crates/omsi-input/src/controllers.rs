@@ -2480,14 +2480,8 @@ pub fn button_number(pad: &gilrs::Gamepad, code: gilrs::ev::Code) -> Option<usiz
     if cfg!(target_os = "macos") && mac_axis_code(code.into_u32()) {
         return None;
     }
-    Some(code_button(code.into_u32()).unwrap_or_else(|| {
-        let mut codes: Vec<u32> = pad.state().buttons().map(|(c, _)| c.into_u32()).collect();
-        codes.sort_unstable();
-        codes
-            .iter()
-            .position(|c| *c == code.into_u32())
-            .unwrap_or(usize::MAX)
-    }))
+    code_button(code.into_u32())
+        .or_else(|| button_slots::stable_unknown_button(pad.name(), code.into_u32()))
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -2508,18 +2502,20 @@ fn with_declared<R>(name: &str, f: impl FnOnce(&[u32]) -> R) -> Option<R> {
 
 #[cfg(target_os = "linux")]
 fn declared_button_index(name: &str, code: u32) -> Option<usize> {
-    with_declared(name, |codes| button_index(codes, code & 0xFFFF)).flatten()
+    button_slots::with_declared(name, |codes| button_index(codes, code & 0xFFFF)).flatten()
 }
 
 /// The button number of an evdev key code of a device read from evdev (`evdev_buttons`).
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 pub fn evdev_button_number(name: &str, code: u32) -> Option<usize> {
-    declared_button_index(name, code).or_else(|| code_button(code))
+    declared_button_index(name, code)
+        .or_else(|| code_button(code))
+        .or_else(|| button_slots::stable_unknown_button(name, code))
 }
 
 #[cfg(target_os = "linux")]
 pub fn declared_button_count(name: &str) -> usize {
-    with_declared(name, button_count).unwrap_or(0)
+    button_slots::with_declared(name, button_count).unwrap_or(0)
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -2565,6 +2561,72 @@ fn declared_buttons(name: &str) -> Option<Vec<u32>> {
         .map(|(_, c)| c.clone())
 }
 
+#[cfg(target_os = "macos")]
+fn declared_buttons(name: &str) -> Option<Vec<u32>> {
+    use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFRetained, CFSet, CFString};
+    use objc2_io_kit::{IOHIDDevice, IOHIDElement, IOHIDElementType, IOHIDManager};
+    use std::ptr::NonNull;
+
+    fn string_prop(device: &IOHIDDevice, key: &str) -> Option<String> {
+        let v = device.property(&CFString::from_str(key))?;
+        v.downcast::<CFString>().ok().map(|s| s.to_string())
+    }
+
+    let manager = IOHIDManager::new(None, 0);
+    let matcher = |usage: i32| -> CFRetained<CFDictionary<CFString, CFNumber>> {
+        let (pk, uk) = (
+            CFString::from_static_str("DeviceUsagePage"),
+            CFString::from_static_str("DeviceUsage"),
+        );
+        let (pv, uv) = (CFNumber::new_i32(1), CFNumber::new_i32(usage));
+        CFDictionary::from_slices(&[&*pk, &*uk], &[&*pv, &*uv])
+    };
+    let matchers = CFArray::from_retained_objects(&[matcher(4), matcher(5), matcher(8)]);
+    unsafe { manager.set_device_matching_multiple(Some(matchers.as_opaque())) };
+    if manager.open(0) != 0 {
+        return None;
+    }
+    let set = manager.devices()?;
+    let set: &CFSet = &set;
+    let n = set.count();
+    let mut raw: Vec<*const std::ffi::c_void> = vec![std::ptr::null(); n.max(0) as usize];
+    unsafe { set.values(raw.as_mut_ptr()) };
+
+    for p in raw {
+        let Some(p) = NonNull::new(p as *mut IOHIDDevice) else {
+            continue;
+        };
+        let device: CFRetained<IOHIDDevice> = unsafe { CFRetained::retain(p) };
+        let dev_name = string_prop(&device, "Product").unwrap_or_default();
+        if !names_match(&dev_name, name) {
+            continue;
+        }
+        let Some(elements) = (unsafe { device.matching_elements(None, 0) }) else {
+            continue;
+        };
+        let elements: CFRetained<CFArray<IOHIDElement>> =
+            unsafe { CFRetained::cast_unchecked(elements) };
+        let mut codes = Vec::new();
+        let mut cookies = Vec::new();
+        for e in elements.iter() {
+            if cookies.contains(&e.cookie()) {
+                continue;
+            }
+            cookies.push(e.cookie());
+            let t = e.r#type();
+            let page = e.usage_page();
+            if t == IOHIDElementType::Input_Button || page == 9 {
+                let usage = e.usage();
+                codes.push((page << 16) | usage);
+            }
+        }
+        if !codes.is_empty() {
+            return Some(codes);
+        }
+    }
+    None
+}
+
 #[cfg(any(target_os = "linux", test))]
 pub fn key_bitmap_buttons(bitmap: &str) -> Vec<u32> {
     let words: Vec<u64> = bitmap
@@ -2577,7 +2639,7 @@ pub fn key_bitmap_buttons(bitmap: &str) -> Vec<u32> {
         .collect()
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn button_index(declared: &[u32], code: u32) -> Option<usize> {
     // (the table's numbers when every button is in it - but not for a device whose buttons
     // are all BTN_TRIGGER_HAPPY ones: its first button is the table's 17th, and it listed
@@ -2590,23 +2652,25 @@ fn button_index(declared: &[u32], code: u32) -> Option<usize> {
 }
 
 pub fn code_button(code: u32) -> Option<usize> {
+    // gilrs' D-pad (Button codes u32::MAX-3.. up, right, down, left) is the pad's hat,
+    // numbered as DirectInput's first hat
+    if code >= u32::MAX - 3 {
+        return Some(HAT_BUTTONS + (code - (u32::MAX - 3)) as usize);
+    }
     let (hi, lo) = (code >> 16, (code & 0xFFFF) as usize);
-    if cfg!(target_os = "macos") {
+    if cfg!(target_os = "macos") || (cfg!(test) && hi == 9) {
         (hi == 9 && lo >= 1).then(|| lo - 1)
     } else if cfg!(target_os = "linux") || cfg!(target_os = "android") {
         match lo {
             0x120..=0x12f => Some(lo - 0x120),
-            0x2c0..=0x2e7 => Some(16 + lo - 0x2c0),
+            0x2c0..=0x2ff => Some(16 + lo - 0x2c0),
             0x130..=0x13e => Some(lo - 0x130),
             0x100..=0x109 => Some(lo - 0x100),
+            0x150..=0x151 => Some(16 + 64 + lo - 0x150),
+            0x220..=0x223 => Some(HAT_BUTTONS + lo - 0x220),
             _ => None,
         }
     } else if cfg!(windows) {
-        // gilrs' D-pad (Button codes u32::MAX-3.. up, right, down, left) is the pad's hat,
-        // numbered as DirectInput's first hat
-        if code >= u32::MAX - 3 {
-            return Some(HAT_BUTTONS + (code - (u32::MAX - 3)) as usize);
-        }
         (hi == 0).then_some(lo)
     } else {
         None
@@ -2648,6 +2712,14 @@ pub const AXIS_SHAPES: [(&str, i32); 5] = [
     ("Bi-progressive", 8 | 0x10),
     ("Bi-degressive", 4 | 0x10),
 ];
+
+#[path = "controllers/button_slots.rs"]
+mod button_slots;
+
+#[cfg(test)]
+pub(crate) use button_slots::{
+    declared_button_ids, set_declared_buttons, stable_unknown_button_in,
+};
 
 #[cfg(test)]
 #[path = "controllers/unit_tests.rs"]

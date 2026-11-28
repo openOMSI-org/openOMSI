@@ -25,6 +25,8 @@ pub(crate) use ground::GroundPlan;
 pub(crate) use headlamp_shadow::{
     HEADLAMP_SHADOW_REACH, VehicleBox, headlamp_shadow, own_headlamp,
 };
+#[cfg(test)]
+pub(crate) use setup::glass_picture_needed;
 pub(crate) use shadow::{CabinMotion, LampTiles};
 pub(crate) use shadow_plan::ShadowPlan;
 

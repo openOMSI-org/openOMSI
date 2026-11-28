@@ -13,6 +13,7 @@ impl Traffic {
             return;
         }
         self.sim.mirror = on;
+        self.sim.accident_session_changed();
         if !on {
             let day_time = self.sim.day_time;
             for ctl in &mut self.sim.lights {

@@ -369,8 +369,15 @@ impl World {
             for (oi, (o, pose)) in q.objects.iter().zip(res.poses.iter()).enumerate() {
                 let Some(pose) = pose else { continue };
                 let ot = &o.ot;
-                // Editor-only helpers and trees do not cut terrain.
-                if ot.sco.tree.is_some() || ot.sco.only_editor || ot.sco.is_help_arrow {
+                // Editor-only helpers and trees do not cut terrain. A meshless `[surface]`
+                // object is still driven over in OMSI: its collision mesh is the road, not
+                // something painted above the ground (`StrSchaden3.sco`, #3515).
+                let invisible_drive =
+                    ot.sco.surface && ot.meshes.is_empty() && ot.collision.is_some();
+                if ot.sco.tree.is_some()
+                    || (ot.sco.only_editor && !invisible_drive)
+                    || ot.sco.is_help_arrow
+                {
                     continue;
                 }
                 for h in &ot.holes {
@@ -426,8 +433,11 @@ impl World {
                         }
                     }
                 }
-                // An explicit cutter is independent of the object's render meshes.
-                if ot.meshes.is_empty() {
+                // An explicit cutter is independent of the object's render meshes. An
+                // invisible `[surface]` object such as X10's `StrSchaden3.sco` has no
+                // render mesh at all, but OMSI still drives over its `[collision_mesh]`.
+                let meshless = ot.meshes.is_empty();
+                if meshless && !(ot.sco.surface && ot.collision.is_some()) {
                     continue;
                 }
                 // Laid on the ground (the terrain is cut under it): a `[surface]` object
@@ -436,26 +446,35 @@ impl World {
                 if !surface {
                     continue;
                 }
-                let meshes: Vec<&MeshData> = match res.warped.get(&oi) {
-                    Some(w) => w.iter().collect(),
-                    None => ot.meshes.iter().map(|(m, _, _)| m).collect(),
+                let meshes: Vec<&MeshData> = if meshless {
+                    ot.collision.iter().collect()
+                } else {
+                    match res.warped.get(&oi) {
+                        Some(w) => w.iter().collect(),
+                        None => ot.meshes.iter().map(|(m, _, _)| m).collect(),
+                    }
                 };
                 // What the wheels stand on is Omsi.exe's ground query (0x7a0814): the
                 // terrain, the splines, and of the objects only the `[surface]` ones
                 // (the tile's list of them, 0x79eb63) - and of those only the first
                 // `[mesh]` of the model, a ray cast down into it (0x5f9218 with only
-                // mesh 0). A collision mesh is never ground (it only shapes the crash
-                // body), nor is an object drawn as a ground layer without `[surface]`
-                // (the road markings), nor are the other meshes of a surface object
-                // (the Spandau depot's buildings stand on its yard, `Betr_S_Boden`,
-                // its first mesh). Every one of those lifted the wheels here: the bus
-                // hopped over markings, low collision meshes and whatever a surface
-                // object carried - bumps nobody could see.
-                let ground_mesh = ot
-                    .sco
-                    .surface
-                    .then(|| ot.mesh_def_index.iter().position(|&d| d == 0))
-                    .flatten();
+                // mesh 0). A collision mesh is never ground for an object with render
+                // meshes (it only shapes the crash body), nor is an object drawn as a
+                // ground layer without `[surface]` (the road markings), nor are the
+                // other meshes of a surface object (the Spandau depot's buildings stand
+                // on its yard, `Betr_S_Boden`, its first mesh). Every one of those
+                // lifted the wheels here: the bus hopped over markings, low collision
+                // meshes and whatever a surface object carried - bumps nobody could
+                // see. A meshless `[surface]` object is the exception: its collision
+                // mesh is the only mesh OMSI has to drive over.
+                let ground_mesh = if meshless {
+                    Some(0)
+                } else {
+                    ot.sco
+                        .surface
+                        .then(|| ot.mesh_def_index.iter().position(|&d| d == 0))
+                        .flatten()
+                };
                 for (k, mesh) in meshes.into_iter().enumerate() {
                     let b = mesh_bounds(mesh, &pose.rot, pose.pos);
                     if outside(&b) {
@@ -474,16 +493,34 @@ impl World {
                         // (its textures' `.surf` maps: cobbled junctions shake the bus too)
                         let dirs = ot.texture_dirs(&self.root);
                         let dirs: Vec<&Path> = dirs.iter().map(|p| p.as_path()).collect();
-                        let maps: Vec<_> = ot
-                            .meshes
-                            .get(k)
-                            .map(|m| m.1.iter().map(|m| surf_map(&m.texture, &dirs)).collect())
-                            .unwrap_or_default();
-                        let ids: Vec<u8> = ot
-                            .meshes
-                            .get(k)
-                            .map(|m| m.1.iter().map(|m| surface_id(&m.texture, &dirs)).collect())
-                            .unwrap_or_default();
+                        let (maps, ids): (Vec<_>, Vec<u8>) = if meshless {
+                            let materials = &ot.collision_materials;
+                            (
+                                materials
+                                    .iter()
+                                    .map(|m| surf_map(&m.texture, &dirs))
+                                    .collect(),
+                                materials
+                                    .iter()
+                                    .map(|m| surface_id(&m.texture, &dirs))
+                                    .collect(),
+                            )
+                        } else {
+                            (
+                                ot.meshes
+                                    .get(k)
+                                    .map(|m| {
+                                        m.1.iter().map(|m| surf_map(&m.texture, &dirs)).collect()
+                                    })
+                                    .unwrap_or_default(),
+                                ot.meshes
+                                    .get(k)
+                                    .map(|m| {
+                                        m.1.iter().map(|m| surface_id(&m.texture, &dirs)).collect()
+                                    })
+                                    .unwrap_or_default(),
+                            )
+                        };
                         ts.add_drive_mesh_surf(
                             mesh,
                             &pose.rot,

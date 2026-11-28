@@ -2,6 +2,44 @@
 
 use super::*;
 
+mod environment;
+use environment::option_set_environment;
+
+// Built-in steering profiles. These are gameplay tuning choices, not vehicle-specific
+// factory specifications. Profile 5 is a read-only indication of custom slider values.
+fn tag_preset_value(rb: &omsi_sim::rigid::RigidBody) -> f32 {
+    let Some(tag) = rb.tag_axle_steering else {
+        return 0.0;
+    };
+    let matches = |strength: f32, start: f32, end: f32| {
+        (tag.multiplier - strength).abs() < 0.001
+            && (tag.fade_start_kmh - start).abs() < 0.001
+            && (tag.fade_end_kmh - end).abs() < 0.001
+    };
+    if matches(0.5, 10.0, 30.0) {
+        1.0
+    } else if matches(1.0, 15.0, 40.0) {
+        2.0
+    } else if matches(1.5, 15.0, 40.0) {
+        3.0
+    } else if matches(2.0, 15.0, 40.0) {
+        4.0
+    } else {
+        5.0
+    }
+}
+
+pub(super) fn tag_preset_name(value: f32) -> &'static str {
+    match value.round() as i32 {
+        0 => "Original (off)",
+        1 => "Gentle · 0.5×",
+        2 => "Standard · 1.0×",
+        3 => "Agile · 1.5×",
+        4 => "Tight turns · 2.0×",
+        _ => "Custom",
+    }
+}
+
 /// The value of the slider setting `verb` (`arg`: the seat's axis).
 pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
     if let Some(field) = verb.strip_prefix("vr_nav_") {
@@ -9,6 +47,20 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
             app.vr_nav_profile().value(field)
         } else {
             None
+        };
+    }
+    if verb.starts_with("tag_") {
+        let rb = app.player.as_ref()?.vehicle.rigid.as_ref()?;
+        if verb == "tag_preset" {
+            return Some(tag_preset_value(rb));
+        }
+        let tag = rb.tag_axle_steering?;
+        return match verb {
+            "tag_axle" => Some((tag.axle + 1) as f32),
+            "tag_multiplier" => Some(tag.multiplier),
+            "tag_fade_start" => Some(tag.fade_start_kmh),
+            "tag_fade_end" => Some(tag.fade_end_kmh),
+            _ => None,
         };
     }
     let s = &app.settings;
@@ -49,6 +101,7 @@ pub(super) fn option_now(app: &App, verb: &str, arg: &str) -> Option<f32> {
         "voice_volume" => s.voice_volume,
         "voice_mic_gain" => s.voice_mic_gain,
         "vol_scenery" => s.vol_scenery,
+        "vol_traction" => s.vol_traction,
         "vol_ambient" => s.vol_ambient,
         "radio_speaker" | "radio_hiss" | "radio_dropouts" => {
             *crate::radio::fx_setting(&mut s.radio_fx.clone(), verb).1
@@ -113,6 +166,60 @@ pub(super) fn option_set(
     if let Some(field) = verb.strip_prefix("vr_nav_") {
         app.vr_nav_set(field, v);
         return None; // Stored per bus, never in the desktop settings file.
+    }
+    if verb.starts_with("tag_") {
+        if !super::menu_pages::tag_axle_available(app) {
+            return None;
+        }
+        if let Some(rb) = app.player.as_mut().and_then(|p| p.vehicle.rigid.as_mut()) {
+            if verb == "tag_preset" {
+                // Keep the chosen rear axle when switching between presets.
+                let axle = rb.tag_axle_steering.map_or_else(
+                    || rb.wheel_axle.iter().copied().max().unwrap_or(0),
+                    |p| p.axle,
+                );
+                let defaults = match v.round() as i32 {
+                    0 => None,
+                    1 => Some((0.5, 10.0, 30.0)),
+                    2 => Some((1.0, 15.0, 40.0)),
+                    3 => Some((1.5, 15.0, 40.0)),
+                    4 => Some((2.0, 15.0, 40.0)),
+                    // 'Custom' is an indicator, not a destructive preset.
+                    _ => return None,
+                };
+                rb.set_tag_axle_steering(defaults.map(
+                    |(multiplier, fade_start_kmh, fade_end_kmh)| omsi_sim::rigid::TagAxleSteering {
+                        axle,
+                        multiplier,
+                        fade_start_kmh,
+                        fade_end_kmh,
+                    },
+                ));
+                return None;
+            }
+            if let Some(mut profile) = rb.tag_axle_steering {
+                match verb {
+                    "tag_axle" => {
+                        let last = rb.wheel_axle.iter().copied().max().unwrap_or(1);
+                        profile.axle = (v.round().max(2.0) as usize - 1).min(last);
+                    }
+                    "tag_multiplier" => profile.multiplier = v.clamp(0.0, 2.0),
+                    "tag_fade_start" => {
+                        profile.fade_start_kmh = v.clamp(0.0, 79.0);
+                        profile.fade_end_kmh =
+                            profile.fade_end_kmh.max(profile.fade_start_kmh + 1.0);
+                    }
+                    "tag_fade_end" => {
+                        profile.fade_end_kmh = v.clamp(1.0, 80.0);
+                        profile.fade_start_kmh =
+                            profile.fade_start_kmh.min(profile.fade_end_kmh - 1.0);
+                    }
+                    _ => return None,
+                }
+                rb.set_tag_axle_steering(Some(profile));
+            }
+        }
+        return None; // Vehicle-local live setting, not a global preference.
     }
     match verb {
         "speed" => {
@@ -268,6 +375,15 @@ pub(super) fn option_set(
             app.settings.vol_scenery = (v * 100.0).round() / 100.0;
             Some(("vol_scenery", app.settings.vol_scenery.to_string()))
         }
+        "vol_traction" => {
+            app.settings.vol_traction = (v * 100.0).round() / 100.0;
+            if let Some(p) = app.player.as_mut() {
+                if let Some(ss) = p.sounds.as_mut() {
+                    ss.set_traction_gain(app.settings.vol_traction);
+                }
+            }
+            Some(("vol_traction", app.settings.vol_traction.to_string()))
+        }
         "vol_ambient" => {
             app.settings.vol_ambient = (v * 100.0).round() / 100.0;
             Some(("vol_ambient", app.settings.vol_ambient.to_string()))
@@ -299,31 +415,7 @@ pub(super) fn option_set(
                 app.settings.triple.distance_mm.to_string(),
             ))
         }
-        "triple_bezel_mm" => {
-            app.settings.triple.bezel_mm = v.clamp(0.0, 100.0);
-            Some(("triple_bezel_mm", app.settings.triple.bezel_mm.to_string()))
-        }
-        "triple_left_angle_deg" => {
-            app.settings.triple.left_angle_deg = v.clamp(0.0, 90.0);
-            Some((
-                "triple_left_angle_deg",
-                app.settings.triple.left_angle_deg.to_string(),
-            ))
-        }
-        "triple_right_angle_deg" => {
-            app.settings.triple.right_angle_deg = v.clamp(0.0, 90.0);
-            Some((
-                "triple_right_angle_deg",
-                app.settings.triple.right_angle_deg.to_string(),
-            ))
-        }
-        "triple_eye_height_mm" => {
-            app.settings.triple.eye_height_mm = v.clamp(-500.0, 500.0);
-            Some((
-                "triple_eye_height_mm",
-                app.settings.triple.eye_height_mm.to_string(),
-            ))
-        }
+        k if k.starts_with("triple_") => set_triple_option(app, k, v),
         "fov" => Some(set_camera_fov(&mut app.settings, v)),
         "steer_look_angle" => {
             app.settings.steer_look_angle = v.round();
@@ -405,100 +497,6 @@ pub(super) fn option_set(
     }
 }
 
-fn option_set_environment(
-    app: &mut App,
-    verb: &str,
-    _arg: &str,
-    v: f32,
-) -> Option<(&'static str, String)> {
-    match verb {
-        // the clock set directly: the hour or the minute (the seconds stay)
-        "hour" | "minute" => {
-            if app
-                .net
-                .lan
-                .as_ref()
-                .is_some_and(|l| l.role == omsi_net::Role::Client)
-            {
-                app.service_msg = Some(("In a LAN session the host sets the clock".into(), 3.0));
-                return None;
-            }
-            let t = app.clock.time;
-            let (h, m) = (
-                ((t / 3600.0) as i64).rem_euclid(24),
-                ((t / 60.0) as i64) % 60,
-            );
-            let (h, m) = if verb == "hour" {
-                (v.round() as i64, m)
-            } else {
-                (h, v.round() as i64)
-            };
-            let target = (h * 3600 + m * 60) as f64 + t % 60.0;
-            app.shift_clock(target - t);
-            None
-        }
-        // the weather, made by hand (what the preset was stays as it was but for this)
-        "visibility" => {
-            app.edit_weather(|w| w.fog.0 = v);
-            None
-        }
-        "rain_amt" => {
-            app.edit_weather(|w| {
-                w.precip[1] = (v * 255.0).round();
-                if v > 0.0 && w.precip[0] < 0.5 {
-                    w.precip[0] = 1.0;
-                }
-            });
-            None
-        }
-        "wet" => {
-            let mut c = custom_state(app);
-            c.road_wetness = v;
-            app.set_custom_weather(c);
-            None
-        }
-        "cloud_cover" => {
-            // (and the kind the cover stands nearest: the picture the sky is drawn with)
-            let v = v.clamp(0.0, 1.0);
-            app.edit_weather(|w| {
-                w.cloud_cover = Some(v);
-                w.clouds.0 = CLOUD_KINDS[crate::weather_setup::cloud_kind_nearest(v)]
-                    .id
-                    .to_string();
-                if v <= 0.0 {
-                    w.clouds.1 = 0.0;
-                }
-            });
-            None
-        }
-        "brightness" => {
-            let mut c = custom_state(app);
-            c.brightness = v;
-            app.set_custom_weather(c);
-            None
-        }
-        "humidity" => {
-            let mut c = custom_state(app);
-            c.humidity = v;
-            app.set_custom_weather(c);
-            None
-        }
-        "temp" => {
-            app.edit_weather(|w| w.temp.0 = v);
-            None
-        }
-        "wind_speed" => {
-            app.edit_weather(|w| w.wind.1 = v);
-            None
-        }
-        "wind_dir" => {
-            app.edit_weather(|w| w.wind.0 = v);
-            None
-        }
-        _ => set_graphics_brightness(app, verb, v),
-    }
-}
-
 fn set_head_tracking_option(app: &mut App, verb: &str, v: f32) -> Option<(&'static str, String)> {
     let s = &mut app.settings;
     let (key, to) = if verb == "head_tracking_smoothing" {
@@ -508,6 +506,37 @@ fn set_head_tracking_option(app: &mut App, verb: &str, v: f32) -> Option<(&'stat
     };
     *to = omsi_launcher_lib::head_tracking_value(key, Some(v as f64)) as f32;
     Some((key, to.to_string()))
+}
+
+fn set_triple_option(app: &mut App, key: &str, v: f32) -> Option<(&'static str, String)> {
+    let (key, field) = match key {
+        "triple_bezel_mm" => ("triple_bezel_mm", &mut app.settings.triple.bezel_mm),
+        "triple_left_angle_deg" => (
+            "triple_left_angle_deg",
+            &mut app.settings.triple.left_angle_deg,
+        ),
+        "triple_right_angle_deg" => (
+            "triple_right_angle_deg",
+            &mut app.settings.triple.right_angle_deg,
+        ),
+        "triple_eye_height_mm" => (
+            "triple_eye_height_mm",
+            &mut app.settings.triple.eye_height_mm,
+        ),
+        _ => return None,
+    };
+    let min = if key == "triple_eye_height_mm" {
+        -500.0
+    } else {
+        0.0
+    };
+    let max = match key {
+        "triple_bezel_mm" => 100.0,
+        "triple_eye_height_mm" => 500.0,
+        _ => 90.0,
+    };
+    *field = v.clamp(min, max);
+    Some((key, field.to_string()))
 }
 
 fn toggle_head_tracking_invert(
@@ -582,6 +611,11 @@ fn set_cab_wheel_rotation(app: &mut App, v: f32) -> (&'static str, String) {
 
 /// Whether the switch `id` is on (None: `id` is no switch).
 pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
+    if id == "tag_steering" {
+        let rb = app.player.as_ref()?.vehicle.rigid.as_ref()?;
+        return (rb.wheel_axle.iter().copied().max().unwrap_or(0) >= 2)
+            .then_some(rb.tag_axle_steering.is_some());
+    }
     let s = &app.settings;
     Some(match id {
         "passenger_connections" => s.passenger_connections,
@@ -731,6 +765,25 @@ pub(super) fn toggle_now(app: &App, id: &str) -> Option<bool> {
 
 /// Switch `id` on or off; the key and value to keep for the next game.
 pub(super) fn toggle_set(app: &mut App, id: &str, on: bool) -> Option<(&'static str, String)> {
+    if id == "tag_steering" {
+        if !super::menu_pages::tag_axle_available(app) {
+            return None;
+        }
+        if let Some(rb) = app.player.as_mut().and_then(|p| p.vehicle.rigid.as_mut()) {
+            if on {
+                let rear = rb.wheel_axle.iter().copied().max().unwrap_or(0);
+                rb.set_tag_axle_steering(Some(omsi_sim::rigid::TagAxleSteering {
+                    axle: rear,
+                    multiplier: 1.0,
+                    fade_start_kmh: 15.0,
+                    fade_end_kmh: 40.0,
+                }));
+            } else {
+                rb.set_tag_axle_steering(None);
+            }
+        }
+        return None;
+    }
     let bit = (on as u8).to_string();
     toggle_set_gameplay(app, id, on, bit)
 }

@@ -373,7 +373,13 @@ impl World {
             let controller = self.object_controller(&ot, o, pos, &index);
             // (a `[helparrow]` object goes on: it is put up hidden, and drawn while the route
             // arrows are on - see `World::show_help_arrows`)
-            if ot.sco.only_editor || ot.meshes.is_empty() {
+            // A meshless `[surface]` object with a `[collision_mesh]` still gives the wheels
+            // a road even though there is nothing to draw: X10's `StrSchaden3.sco` is such
+            // a road-damage plate. Keep only those meshless surfaces in the placed set so the
+            // terrain cut can raster their collision mesh; an editor-only object that still
+            // has a render mesh must stay hidden, as it was before.
+            let drive_only = ot.sco.surface && ot.collision.is_some() && ot.meshes.is_empty();
+            if (ot.sco.only_editor || ot.meshes.is_empty()) && !drive_only {
                 // invisible sound sources (ambient sound objects) and children of a
                 // crossing naming one of its lights still run their script
                 if let (Some(program), Some(light_parent)) = (
@@ -1550,6 +1556,7 @@ mod embedded_light_tests {
             holes: Vec::new(),
             deform: None,
             collision: None,
+            collision_materials: Vec::new(),
             paint: false,
             camera: Default::default(),
             collision_shape: Default::default(),
@@ -1836,6 +1843,7 @@ mod hidden_script_tests {
             holes: Vec::new(),
             deform: None,
             collision: None,
+            collision_materials: Vec::new(),
             paint: false,
             camera: Default::default(),
             collision_shape: Default::default(),
@@ -1946,6 +1954,7 @@ mod script_lamp_tests {
             holes: Vec::new(),
             deform: None,
             collision: None,
+            collision_materials: Vec::new(),
             paint: false,
             camera: Default::default(),
             collision_shape: Default::default(),
