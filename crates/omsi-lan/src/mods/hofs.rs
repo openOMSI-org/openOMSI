@@ -190,6 +190,14 @@ fn cached_with<K: std::hash::Hash + Eq + Clone, T: Clone, S: std::hash::BuildHas
         return t;
     }
     let settled = name.is_none_or(&settled);
+    // The worker may have completed between fetched() and settled(). Recheck
+    // before making the local fallback permanent for this session.
+    if settled {
+        if let Some(t) = name.and_then(&fetched).and_then(|p| host(&p)) {
+            cache.insert(key, (t.clone(), true));
+            return t;
+        }
+    }
     let t = provisional.unwrap_or_else(own);
     cache.insert(key, (t.clone(), settled));
     t
@@ -280,6 +288,27 @@ mod tests {
             Some(&(7, true)),
             "the host has none: ours is final"
         );
+    }
+
+    #[test]
+    fn completion_between_lookup_and_settled_keeps_the_hosts_file() {
+        use std::cell::Cell;
+        let completed = Cell::new(false);
+        let mut cache = hashbrown::HashMap::new();
+        let value = cached_with(
+            &mut cache,
+            1,
+            Some("Town"),
+            |_| completed.get().then(|| PathBuf::from("Town.hof")),
+            |_| {
+                completed.set(true);
+                true
+            },
+            |_| Some(99),
+            || 7,
+        );
+        assert_eq!(value, 99);
+        assert_eq!(cache.get(&1), Some(&(99, true)));
     }
 
     /// Another session's fetches are not this one's: a file, a failure or the count.

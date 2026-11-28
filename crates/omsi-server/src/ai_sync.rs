@@ -37,8 +37,15 @@ fn car_meta(v: &VehicleInstance) -> Meta {
         .and_then(|h| h.path.file_stem())
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
+    if let Some(h) = v.host.hof.as_ref().filter(|_| !hof.is_empty()) {
+        omsi_lan::mods::hofs::offer(&hof, &h.path);
+    }
+    let mut line = text("SetLineTo");
+    if line.is_empty() && v.host.schedule_active > 0.5 {
+        line = v.host.tt_line.clone();
+    }
     Meta {
-        line: text("SetLineTo"),
+        line,
         destination: format!("#{target}"),
         number: text("number"),
         ident: text("ident"),

@@ -987,6 +987,7 @@ impl Mirror {
             }
             m.points.clear();
             m.descs.clear();
+            m.hofs.clear();
             m.wanted.clear();
             m.offset = None;
             m.play = Default::default();
@@ -1360,9 +1361,6 @@ impl Mirror {
                 continue;
             };
             let meta = &row.meta;
-            if m.shown.get(&id) == Some(meta) {
-                continue;
-            }
             let car = &mut t.cars[i];
             // the fleet number and plate the host drew for it (a host older than that sends
             // none: they stay as they are)
@@ -1371,14 +1369,25 @@ impl Mirror {
                     car.vehicle.state.str_vars[k as usize] = text.clone();
                 }
             }
-            let (line, destination) = (&meta.line, &meta.destination);
-            if !line.is_empty() && destination.starts_with('#') && destination != "#-1" {
-                let hof = mirror_hof(&mut m.hofs, world, &car.vehicle.ty, &meta.hof);
-                if let Some(k) = car.vehicle.ty.program.str_var("Linie") {
-                    car.vehicle.state.str_vars[k as usize] = line.clone();
-                }
-                show_car_destination(&mut car.vehicle, hof.as_deref(), line, destination);
+            if m.shown.get(&id) == Some(meta) {
+                continue;
             }
+            let hof = mirror_hof(&mut m.hofs, world, &car.vehicle.ty, &meta.hof);
+            // A fallback HOF may have different row indices. Wait for the host's
+            // answer before committing the display or caching its metadata.
+            if !meta.hof.is_empty() && !omsi_lan::mods::hofs::settled(&meta.hof) {
+                continue;
+            }
+            car.vehicle.host.hof = hof.clone();
+            if let Some(k) = car.vehicle.ty.program.str_var("Linie") {
+                car.vehicle.state.str_vars[k as usize] = meta.line.clone();
+            }
+            show_car_destination(
+                &mut car.vehicle,
+                hof.as_deref(),
+                &meta.line,
+                &meta.destination,
+            );
             m.shown.insert(id, meta.clone());
         }
     }
