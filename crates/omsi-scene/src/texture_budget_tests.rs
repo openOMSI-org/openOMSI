@@ -568,3 +568,50 @@ fn over_budget_is_what_the_last_look_found() {
     world.update_texture_budget(&renderer, &mut scene, &centers, true);
     assert!(world.textures_over_budget());
 }
+
+#[test]
+fn a_budgeted_upgrade_does_not_allocate_the_same_or_a_smaller_picture() {
+    let old = data(512);
+    assert!(!texture_upgrade_worthwhile(
+        (512, 512),
+        old.gpu_bytes(),
+        &data(256),
+    ));
+    assert!(!texture_upgrade_worthwhile(
+        (512, 512),
+        old.gpu_bytes(),
+        &old,
+    ));
+    assert!(texture_upgrade_worthwhile(
+        (512, 512),
+        old.gpu_bytes(),
+        &data(1024),
+    ));
+    assert!(texture_upgrade_worthwhile(
+        (512, 512),
+        old.gpu_bytes() * 2,
+        &old,
+    ));
+}
+
+#[test]
+fn texture_upgrade_backpressure_preserves_requests_and_serves_both_queues() {
+    let mut regular = (0..40)
+        .map(|i| PathBuf::from(format!("regular-{i}")))
+        .collect::<Vec<_>>();
+    let mut freetex = vec![PathBuf::from("free")];
+    let mut restores = (0..40)
+        .map(|i| PathBuf::from(format!("restore-{i}")))
+        .collect::<Vec<_>>();
+    let (batch, selected_restores) =
+        texture_upgrade_batch(&mut regular, &mut freetex, &mut restores, 0);
+    assert!(batch.is_empty() && selected_restores.is_empty());
+    let (batch, selected_restores) =
+        texture_upgrade_batch(&mut regular, &mut freetex, &mut restores, 32);
+    assert_eq!(batch.len(), 32);
+    assert_eq!(selected_restores.len(), 16);
+    assert_eq!(regular.len() + freetex.len() + restores.len(), 49);
+    let (batch, _) = texture_upgrade_batch(&mut regular, &mut freetex, &mut restores, 64);
+    assert_eq!(batch.len(), 49);
+    assert!(regular.is_empty() && freetex.is_empty() && restores.is_empty());
+}

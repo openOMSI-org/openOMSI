@@ -157,6 +157,8 @@ pub(crate) struct PerfState {
     pub(crate) governor: (f32, u32, f32),
     /// Readings in a row at the smallest render scale still waiting for the card.
     pub(crate) governor_low: u32,
+    /// At most two sustained low-FPS advisories per session.
+    pub(crate) governor_warnings: u8,
     /// Cumulative presentation wait at the previous frame, independent of OMSI_PROFILE.
     pub(crate) governor_wait_prev: f64,
     /// OMSI_PROFILE: the first frame of play (the map loaded), which the warm-up counts from.
@@ -203,6 +205,7 @@ impl PerfState {
             worst_ms: 0.0,
             governor: (0.0, 0, 0.0),
             governor_low: 0,
+            governor_warnings: 0,
             governor_wait_prev: 0.0,
             play_started: None,
             cpu_mark: None,

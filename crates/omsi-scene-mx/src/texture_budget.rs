@@ -23,6 +23,31 @@ pub(super) fn fit_upgrade(data: &Arc<TextureData>, allowed: u64) -> Option<Arc<T
     Some(upload)
 }
 
+/// Avoid allocating another scenery texture unless it adds detail or saves storage.
+/// A compression upgrade at the same resolution is still worthwhile.
+pub(super) fn texture_upgrade_worthwhile(
+    (width, height): (u32, u32),
+    before: u64,
+    upload: &TextureData,
+) -> bool {
+    upload.width >= width
+        && upload.height >= height
+        && (upload.width > width || upload.height > height || upload.gpu_bytes() < before)
+}
+
+impl World {
+    /// A worker can finish after the budget has changed. Keep the resident image and
+    /// retry later rather than repeatedly allocating the same or a smaller image.
+    pub(super) fn defer_texture_restore(&self, path: &Path) {
+        if let Some(e) = self.gpu.lock().textures.get_mut(path) {
+            e.near_restore = false;
+            if e.dropped > 0 {
+                e.retry_after = Some(std::time::Instant::now() + std::time::Duration::from_secs(5));
+            }
+        }
+    }
+}
+
 pub(super) fn card_restore_room(video_limit: u64, card: omsi_render::GpuMemory) -> u64 {
     match card.cap(video_limit) {
         0 => u64::MAX,
@@ -96,8 +121,9 @@ pub(super) fn queue_near_restores(
     near: f64,
     (mut card_room, mut squeezed_room): (u64, u64),
     t0: std::time::Instant,
-) -> usize {
+) -> (usize, bool) {
     let mut queued = 0;
+    let mut blocked = false;
     for (d, p) in entries {
         if *d >= near || queued >= 24 || pending.contains(p) || gpu.wants_restore.contains(p) {
             continue;
@@ -111,6 +137,7 @@ pub(super) fn queue_near_restores(
         let needed = texture_restore_cost(e);
         let peak = e.full_bytes.max(needed);
         if peak > card_room || (e.squeezed && needed > squeezed_room) {
+            blocked = true;
             continue;
         }
         card_room -= peak;
@@ -122,7 +149,48 @@ pub(super) fn queue_near_restores(
         gpu.wants_restore.push(p.clone());
         queued += 1;
     }
-    queued
+    // A nearby texture may not fit back at full resolution although a smaller
+    // GPU upload could fit. This fallback offers the closest reduced texture to
+    // the existing fit_upgrade path when no full restore has been queued.
+    //
+    // This is an admission estimate, not a one-mip upload cap: fit_upgrade may
+    // restore multiple levels if the upload-time GPU budget permits them.
+    // replace_texture briefly holds both allocations. Limit the fallback to
+    // one candidate per pass to avoid bursts near the memory limit.
+    if queued == 0 {
+        let partial = entries
+            .iter()
+            .filter(|(d, p)| *d < near && !pending.contains(p) && !gpu.wants_restore.contains(p))
+            .filter_map(|(d, p)| {
+                let e = gpu.textures.get(p)?;
+                if e.dropped == 0 || e.retry_after.is_some_and(|t| t > t0) {
+                    return None;
+                }
+                // One additional mip roughly quadruples the stored area. Use a
+                // conservative bound (with room for mip/block rounding); the upload size is checked again by
+                // fit_upgrade and the renderer before replacing any resource.
+                let peak = if e.bytes == 0 {
+                    e.full_bytes.min(128 * 128 * 4 * 4 / 3)
+                } else {
+                    e.full_bytes
+                        .min(e.bytes.saturating_mul(4).saturating_add(4096))
+                };
+                (peak > e.bytes
+                    && peak <= card_room
+                    && (!e.squeezed || peak.saturating_sub(e.bytes) <= squeezed_room))
+                    .then_some((*d, p))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((_, p)) = partial {
+            if let Some(e) = gpu.textures.get_mut(p) {
+                e.retry_after = None;
+                e.near_restore = true;
+                gpu.wants_restore.push(p.clone());
+                queued = 1;
+            }
+        }
+    }
+    (queued, blocked)
 }
 
 pub(super) fn ground_is_near(gpu: &GpuCache, near: &mut hashbrown::HashMap<TextureId, f64>) {
@@ -173,5 +241,86 @@ impl World {
         let limit = self.texture_budget_bytes();
         let in_use = self.budget_checked.lock().in_use;
         limit > 0 && in_use > limit
+    }
+}
+
+/// Count cached pictures, dropped levels and due retries without allocating a new list.
+pub(super) fn texture_budget_snapshot(
+    gpu: &GpuCache,
+    t0: std::time::Instant,
+    last: Option<std::time::Instant>,
+) -> (u64, bool, bool) {
+    gpu.textures
+        .values()
+        .fold((0u64, false, false), |(b, d, r), e| {
+            let due = e
+                .retry_after
+                .is_some_and(|t| t <= t0 && last.is_none_or(|c| t > c));
+            (b + e.bytes, d || e.dropped > 0, r || due)
+        })
+}
+
+// Includes both workers and completed pictures awaiting the render thread.
+const MAX_PENDING_TEXTURE_UPGRADES: usize = 32;
+
+fn take_front<T>(queue: &mut Vec<T>, count: usize) -> Vec<T> {
+    let count = count.min(queue.len());
+    queue.drain(..count).collect()
+}
+
+/// Reserve part of the batch for restores without starving compression jobs.
+pub(super) fn texture_upgrade_batch(
+    regular: &mut Vec<PathBuf>,
+    freetex: &mut Vec<PathBuf>,
+    restores: &mut Vec<PathBuf>,
+    room: usize,
+) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let mut r = take_front(restores, room.div_ceil(2));
+    let mut w = take_front(regular, room - r.len());
+    w.extend(take_front(freetex, room - r.len() - w.len()));
+    r.extend(take_front(restores, room - r.len() - w.len()));
+    w.extend(r.iter().cloned());
+    (w, r)
+}
+
+impl World {
+    /// Backpressure: never decode an entire map's queued upgrades at once.
+    pub(super) fn take_texture_upgrade_batch(&self) -> (Vec<PathBuf>, Vec<PathBuf>) {
+        let room = MAX_PENDING_TEXTURE_UPGRADES.saturating_sub(self.upgrades_pending.lock().len());
+        if room == 0 {
+            return (Vec::new(), Vec::new());
+        }
+        let mut gpu = self.gpu.lock();
+        let GpuCache {
+            wants_upgrade,
+            wants_restore,
+            ..
+        } = &mut *gpu;
+        texture_upgrade_batch(
+            wants_upgrade,
+            &mut self.freetex_upgrades.lock(),
+            wants_restore,
+            room,
+        )
+    }
+
+    /// Count actual decoded payload bytes, not the estimated GPU footprint.
+    pub(super) fn texture_upgrade_summary(&self) -> String {
+        let pending = self.upgrades_pending.lock().len();
+        let done = self.upgrades_done.lock();
+        let ready = done.len();
+        let bytes: usize = done
+            .iter()
+            .flat_map(|(_, data, _)| data.levels.iter())
+            .map(|level| level.len())
+            .sum();
+        drop(done);
+        let gpu = self.gpu.lock();
+        let queued = gpu.wants_upgrade.len() + gpu.wants_restore.len();
+        let queued = queued + self.freetex_upgrades.lock().len();
+        format!(
+            "texture upgrades: {queued} queued, {pending} pending, {ready} ready ({:.1} MB decoded)",
+            bytes as f64 / 1e6,
+        )
     }
 }

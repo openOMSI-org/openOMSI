@@ -196,132 +196,7 @@ impl App {
                 }
             }
             self.perf.worst_ms = self.perf.worst_ms.max(raw_dt * 1000.0);
-            // Reduce resolution only when slow frames spend substantial time waiting
-            // for presentation or the GPU. Traffic, scripts and tile work can drop
-            // the frame rate too, but fewer pixels cannot make those stages faster.
-            // Keep the player's chosen scale and explicit fixed-scale override.
-            // A fast V-synced frame can wait for the next refresh without being
-            // GPU-bound. Count presentation wait only on slow frames.
-            if raw_dt > 0.02 {
-                self.perf.governor.2 += wait_this_frame;
-            }
-            self.perf.governor.0 += raw_dt;
-            self.perf.governor.1 += 1;
-            if self.perf.governor.0 >= 5.0 {
-                let fps = self.perf.governor.1 as f32 / self.perf.governor.0;
-                let wait_share = self.perf.governor.2 / self.perf.governor.0;
-                self.perf.governor = (0.0, 0, 0.0);
-                // Frame generation under Apple's 30 drawn frames a second: its generated frames
-                // cost the card more than they bring (an M2 at 2940x1846: 35 a second fell to 13
-                // with it). Off for this drive, as SSAO and the shadows below.
-                let settled = self
-                    .perf
-                    .generation_since
-                    .is_some_and(|t| t.elapsed().as_secs_f32() >= GENERATION_SETTLE);
-                if self.perf.generation_too_slow < GENERATION_SLOW_READINGS && settled {
-                    self.perf.generation_too_slow = if fps < 30.0 {
-                        self.perf.generation_too_slow + 1
-                    } else {
-                        0
-                    };
-                    if self.perf.generation_too_slow >= GENERATION_SLOW_READINGS {
-                        log::warn!(
-                            "frame rate {fps:.0} fps with frame generation: frame generation off to keep up"
-                        );
-                        let what = "frame generation off";
-                        self.service_msg = Some((
-                            format!("The graphics card cannot keep up: {what} for this drive"),
-                            4.0,
-                        ));
-                    }
-                }
-                let free = self.settings.scene_render_scale() <= 0.0
-                    && (self.settings.max_fps == 0 || self.settings.max_fps >= 50)
-                    && !omsi_cfg::flags::OMSI_FIXED_SCALE.is_set()
-                    && !self.optimiser_holds_frame_rate();
-                if let Some(r) = self
-                    .renderer
-                    .as_mut()
-                    .filter(|r| !free && r.dynamic_scale() < 1.0)
-                {
-                    r.set_dynamic_scale(1.0);
-                    log::info!(
-                        "the 3D picture is drawn at the full size of the window again (render scale no longer automatic)"
-                    );
-                }
-                if let (Some(r), true) = (self.renderer.as_mut(), free) {
-                    let s = r.dynamic_scale();
-                    let mut step = render_scale_step(fps, wait_share);
-                    // (up only after two readings in a row ask for it, 10 s: a step down
-                    // takes the wait for the card away, and the next reading alone asked
-                    // to go up again - a step up and down every 10 s, each one new targets
-                    // and a full upload of the instances, a stutter every time)
-                    // A step up that the next reading takes back doubles the readings the next
-                    // step up waits for (up to two minutes); one that holds brings them back to
-                    // two. A card at its limit went 85-100-85 % every 10 s for minutes (#2295).
-                    use std::sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed};
-                    static UP_READINGS: AtomicU8 = AtomicU8::new(0);
-                    static UP_NEEDED: AtomicU8 = AtomicU8::new(2);
-                    static WENT_UP: AtomicBool = AtomicBool::new(false);
-                    if WENT_UP.load(Relaxed) {
-                        UP_NEEDED.store(
-                            if step < 0.0 {
-                                UP_NEEDED.load(Relaxed).saturating_mul(2).min(24)
-                            } else {
-                                2
-                            },
-                            Relaxed,
-                        );
-                    }
-                    let ups = if step > 0.0 {
-                        UP_READINGS.load(Relaxed).saturating_add(1)
-                    } else {
-                        0
-                    };
-                    if step > 0.0 && ups < UP_NEEDED.load(Relaxed) {
-                        step = 0.0;
-                    }
-                    UP_READINGS.store(if step > 0.0 { 0 } else { ups }, Relaxed);
-                    r.set_dynamic_scale(s + step);
-                    WENT_UP.store(r.dynamic_scale() > s + 1e-3, Relaxed);
-                    if (r.dynamic_scale() - s).abs() > 1e-3 {
-                        log::info!(
-                            "frame rate {fps:.0} fps (presentation wait {:.0}%): the 3D picture is drawn at {:.0} % of the window now",
-                            wait_share * 100.0,
-                            r.dynamic_scale() * 100.0
-                        );
-                        self.perf.governor_low = 0;
-                    } else if step < 0.0 {
-                        // at the smallest scale and still waiting for the card: after
-                        // two such readings the picture gets lighter itself (a weak or
-                        // old graphics chip keeps a playable frame rate)
-                        // (not on a reading taken with frame generation on: it goes first, and
-                        // its slow frames once took SSAO and the shadows along with it)
-                        if self.perf.generation_since.is_none() {
-                            self.perf.governor_low += 1;
-                        }
-                        if self.perf.governor_low >= 2 && fps < 30.0 {
-                            self.perf.governor_low = 0;
-                            // (SSAO first, then the shadows; for this drive only)
-                            let what = r.lighten().or_else(|| {
-                                std::mem::replace(&mut self.settings.shadows, false)
-                                    .then_some("shadows off")
-                            });
-                            if let Some(what) = what {
-                                log::warn!(
-                                    "frame rate {fps:.0} fps at the smallest render scale: {what} to keep up"
-                                );
-                                self.service_msg = Some((
-                                    format!(
-                                        "The graphics card cannot keep up: {what} for this drive"
-                                    ),
-                                    4.0,
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
+            self.update_frame_governor(raw_dt, wait_this_frame);
         }
         if profiling {
             self.perf.profile_prev.clone_from(&self.perf.profile);
@@ -329,6 +204,135 @@ impl App {
         let dt = raw_dt.min(0.1);
         self.last = now;
         Some(FrameTime { now, raw_dt, dt })
+    }
+
+    /// Adjust automatic scale and advise on sustained low performance without disabling effects.
+    fn update_frame_governor(&mut self, raw_dt: f32, wait_this_frame: f32) {
+        // Reduce resolution only when slow frames spend substantial time waiting
+        // for presentation or the GPU. Traffic, scripts and tile work can drop
+        // the frame rate too, but fewer pixels cannot make those stages faster.
+        // Keep the player's chosen scale and explicit fixed-scale override.
+        // A fast V-synced frame can wait for the next refresh without being
+        // GPU-bound. Count presentation wait only on slow frames.
+        if raw_dt > 0.02 {
+            self.perf.governor.2 += wait_this_frame;
+        }
+        self.perf.governor.0 += raw_dt;
+        self.perf.governor.1 += 1;
+        if self.perf.governor.0 >= 5.0 {
+            let fps = self.perf.governor.1 as f32 / self.perf.governor.0;
+            let wait_share = self.perf.governor.2 / self.perf.governor.0;
+            self.perf.governor = (0.0, 0, 0.0);
+            // Frame generation under Apple's 30 drawn frames a second: its generated frames
+            // cost the card more than they bring (an M2 at 2940x1846: 35 a second fell to 13
+            // with it). Off for this drive.
+            let settled = self
+                .perf
+                .generation_since
+                .is_some_and(|t| t.elapsed().as_secs_f32() >= GENERATION_SETTLE);
+            if self.perf.generation_too_slow < GENERATION_SLOW_READINGS && settled {
+                self.perf.generation_too_slow = if fps < 30.0 {
+                    self.perf.generation_too_slow + 1
+                } else {
+                    0
+                };
+                if self.perf.generation_too_slow >= GENERATION_SLOW_READINGS {
+                    log::warn!(
+                        "frame rate {fps:.0} fps with frame generation: frame generation off to keep up"
+                    );
+                    let what = "frame generation off";
+                    self.service_msg = Some((
+                        format!("The graphics card cannot keep up: {what} for this drive"),
+                        4.0,
+                    ));
+                }
+            }
+            let free = self.settings.temporal_upscaling().is_none()
+                && self.settings.scene_render_scale() <= 0.0
+                && (self.settings.max_fps == 0 || self.settings.max_fps >= 50)
+                && !omsi_cfg::flags::OMSI_FIXED_SCALE.is_set()
+                && !self.optimiser_holds_frame_rate();
+            if let Some(r) = self
+                .renderer
+                .as_mut()
+                .filter(|r| !free && r.dynamic_scale() < 1.0)
+            {
+                r.set_dynamic_scale(1.0);
+                log::info!(
+                    "the 3D picture is drawn at the full size of the window again (render scale no longer automatic)"
+                );
+            }
+            if let (Some(r), true) = (self.renderer.as_mut(), free) {
+                let s = r.dynamic_scale();
+                let mut step = render_scale_step(fps, wait_share);
+                // (up only after two readings in a row ask for it, 10 s: a step down
+                // takes the wait for the card away, and the next reading alone asked
+                // to go up again - a step up and down every 10 s, each one new targets
+                // and a full upload of the instances, a stutter every time)
+                // A step up that the next reading takes back doubles the readings the next
+                // step up waits for (up to two minutes); one that holds brings them back to
+                // two. A card at its limit went 85-100-85 % every 10 s for minutes (#2295).
+                use std::sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed};
+                static UP_READINGS: AtomicU8 = AtomicU8::new(0);
+                static UP_NEEDED: AtomicU8 = AtomicU8::new(2);
+                static WENT_UP: AtomicBool = AtomicBool::new(false);
+                if WENT_UP.load(Relaxed) {
+                    UP_NEEDED.store(
+                        if step < 0.0 {
+                            UP_NEEDED.load(Relaxed).saturating_mul(2).min(24)
+                        } else {
+                            2
+                        },
+                        Relaxed,
+                    );
+                }
+                let ups = if step > 0.0 {
+                    UP_READINGS.load(Relaxed).saturating_add(1)
+                } else {
+                    0
+                };
+                if step > 0.0 && ups < UP_NEEDED.load(Relaxed) {
+                    step = 0.0;
+                }
+                UP_READINGS.store(if step > 0.0 { 0 } else { ups }, Relaxed);
+                r.set_dynamic_scale(s + step);
+                WENT_UP.store(r.dynamic_scale() > s + 1e-3, Relaxed);
+                if (r.dynamic_scale() - s).abs() > 1e-3 {
+                    log::info!(
+                        "frame rate {fps:.0} fps (presentation wait {:.0}%): the 3D picture is drawn at {:.0} % of the window now",
+                        wait_share * 100.0,
+                        r.dynamic_scale() * 100.0
+                    );
+                    self.perf.governor_low = 0;
+                }
+            }
+            // Presentation wait is a proxy, not a direct measurement of GPU use.
+            let low = !self.paused
+                && self.player.is_some()
+                && self.world.is_some()
+                && self.menus.menu.is_none()
+                && self.menus.game_menu.is_none()
+                && self.menus.list_kind.is_none()
+                && !self.optimiser_holds_frame_rate()
+                && self.perf.generation_since.is_none()
+                && fps < 30.0
+                && wait_share >= 0.4
+                && (self.settings.max_fps == 0 || self.settings.max_fps >= 30);
+            if low_fps_advisory(
+                &mut self.perf.governor_low,
+                &mut self.perf.governor_warnings,
+                low,
+            ) {
+                log::warn!(
+                    "sustained low frame rate {fps:.0} fps (GPU/presentation wait {:.0}%): graphics settings preserved",
+                    wait_share * 100.0
+                );
+                self.service_msg = Some((
+                    "Low graphics performance: consider reducing graphics quality".into(),
+                    4.0,
+                ));
+            }
+        }
     }
 
     /// The start menu (drawn here, nothing else this frame) and the map's first area still
@@ -406,5 +410,51 @@ impl App {
             return false;
         }
         true
+    }
+}
+
+/// Six consecutive five-second readings per advisory, at most twice per session.
+fn low_fps_advisory(streak: &mut u32, warnings: &mut u8, low: bool) -> bool {
+    if !low || *warnings >= 2 {
+        *streak = 0;
+        return false;
+    }
+    *streak += 1;
+    if *streak < 6 {
+        return false;
+    }
+    *streak = 0;
+    *warnings += 1;
+    true
+}
+
+#[cfg(test)]
+mod advisory_tests {
+    use super::low_fps_advisory;
+
+    #[test]
+    fn warns_twice_at_thirty_second_intervals() {
+        let (mut streak, mut warnings) = (0, 0);
+        for reading in 1..=24 {
+            assert_eq!(
+                low_fps_advisory(&mut streak, &mut warnings, true),
+                reading == 6 || reading == 12
+            );
+        }
+        assert_eq!(warnings, 2);
+    }
+
+    #[test]
+    fn a_healthy_reading_breaks_the_streak() {
+        let (mut streak, mut warnings) = (0, 0);
+        for _ in 0..5 {
+            assert!(!low_fps_advisory(&mut streak, &mut warnings, true));
+        }
+        assert!(!low_fps_advisory(&mut streak, &mut warnings, false));
+        for _ in 0..5 {
+            assert!(!low_fps_advisory(&mut streak, &mut warnings, true));
+        }
+        assert!(low_fps_advisory(&mut streak, &mut warnings, true));
+        assert_eq!(warnings, 1);
     }
 }

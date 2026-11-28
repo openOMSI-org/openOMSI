@@ -216,6 +216,14 @@ impl Renderer {
     ) {
         let (draw_shadows, redraw_near, redraw_far) =
             (sh.draw_shadows, sh.redraw_near, sh.redraw_far);
+        if draw_shadows && omsi_cfg::flags::OMSI_DEBUG_SHADOW_FAR.is_set() {
+            log::info!(
+                "shadow batches: near={} far={} close={}",
+                shadow_batches[0].len(),
+                shadow_batches[1].len(),
+                shadow_batches[2].len(),
+            );
+        }
         for cascade in [0usize, 1] {
             if !draw_shadows || (cascade == 1 && !redraw_far) {
                 continue;

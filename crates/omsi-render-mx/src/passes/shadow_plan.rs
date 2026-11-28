@@ -191,6 +191,25 @@ impl Renderer {
                 || far_origin != scene.render_origin
                 || far_sun.dot(sun) < 0.99999
                 || f.env.shadow_far_every_frame);
+        if f.env.debug_shadow_far && f.with_overlays && projection.is_none() {
+            log::info!(
+                "shadow state: temporal={} rt={} enabled={} draws={} near={} far={} moon={} requested={} size={} sun={:.3} intensity={:.3} render={}x{} frame_ms={:.2}",
+                f.temporal_frame,
+                f.rt_frame,
+                shadows,
+                draw_shadows,
+                redraw_near,
+                redraw_far,
+                moon_shadows,
+                lighting.shadows,
+                self.options.shadow_size,
+                sun.z,
+                lighting.sun_intensity,
+                f.width,
+                f.height,
+                f.dt * 1000.0,
+            );
+        }
         if redraw_far && f.env.debug_shadow_far {
             log::info!(
                 "far shadow redrawn: age {far_age} moved {far_moved} origin {} sun {:.6}",
